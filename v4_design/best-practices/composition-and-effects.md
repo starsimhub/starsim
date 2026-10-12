@@ -1,25 +1,26 @@
 # Composition and effects
 
-How one module modifies a quantity owned by another, and what runs when.
+How one module changes a quantity owned by another, and what runs when.
 
 ## Recommendation
 
-1. **A cross-module effect is a declaration, not a mutation.** `ss.Effect(when, what, multiply=)` replaces the arbitrary-Python connector for the common case.
-2. **Declare the combination rule, because it is a modeling decision.** Two interventions each reducing transmission by 40% might compose multiplicatively or additively, and the answer changes.
-3. **Multiplicative by default.**
-4. **A module declares what it reads and what it writes.** Silent writes to another module's state are the largest hole in the "no hidden behavior" goal. *[CK: agree, but let users do this if they want to, but provide good alternatives so they almost never do have to.]*
-5. **Declared transitions are order-independent within a step.** Only imperative code needs an execution order, and Starsim's `Loop` already makes that order inspectable. *[CK: I'm not sure how or if this would work in practice.]*
-6. **Keep one module abstraction.** `ss.Module` for diseases, networks, demographics, interventions, connectors, and analyzers is right.
+1. **The simple case is one line.** `ss.modify(target, multiply=, where=)` says "while this condition holds, scale that quantity". It replaces the hand-written connector for the common case.
+2. **Anything more complex is ordinary Python in a module's `step()`.** This is a first-class way to write an interaction, not a fallback. Real interactions often have several sources, several targets, probabilities, and scheduling, and a short `step()` is the clearest way to say that.
+3. **The base value is never overwritten.** A modified quantity has a base value and an effective value (base with the active modifiers applied). When a modifier ends, the original value comes back by itself.
+4. **Say how modifiers combine, because it is a modeling decision.** Multiplicative by default; `add=` and `set=` are available.
+5. **Do not require modules to declare what they read and write.** Declarations get forgotten and drift from the code. Record writes as they happen instead, so that `sim.what_modifies(x)` can answer the question.
+6. **Keep Starsim's ordered loop.** Modules run in a defined, printable order each step. Within-step chains (infection, then testing, then treatment) work because of that order, and two modules that depend on each other are fine.
+7. **Keep one module abstraction.** `ss.Module` for diseases, networks, demographics, interventions, connectors, and analyzers is right.
 
 ## Why
 
-### The Starsim connector problem, stated plainly
+### The Starsim connector problem
 
 From the [Starsim review](../approaches/starsim.md), a limitation:
 
 > **Connectors are unconstrained.** Cross-module interaction is "arbitrary Python that mutates another module's state". This is why multi-disease works at all, and it is also the largest hole in the "no hidden behavior" goal: `rel_trans[coinf] = 2.0` in one module silently overwrites whatever another module wrote.
 
-The worked example in that review is exactly the failure mode:
+The worked example in that review:
 
 ```python
 class HIVSyphConnector(ss.Connector):
@@ -28,11 +29,17 @@ class HIVSyphConnector(ss.Connector):
         self.sim.diseases.hiv.rel_trans[coinf] = 2.0
 ```
 
-Add a second connector that also writes `hiv.rel_trans` — a risk factor, a vaccine, a seasonal term — and the result depends on which ran last. Nothing declares that either one touches it. [LASER](../approaches/laser.md) has the same hazard in its strongest form: "All components write columns of one `LaserFrame`. This is fast and it is exactly the hazard Vivarium's `PopulationView` and value pipelines exist to prevent."
+There are three separate problems here, and they have different fixes:
 
-### Vivarium solved this
+- **Clobbering.** Add a second connector that also writes `hiv.rel_trans` (a risk factor, a vaccine, a seasonal term) and the result depends on which ran last. [LASER](../approaches/laser.md) has the same hazard: "All components write columns of one `LaserFrame`."
+- **Restoring.** The connector above never sets `rel_trans` back when syphilis clears. Code that does restore it usually copies the array first (`orig_rel_sus = rel_sus.copy()`), changes it, and copies it back later, which breaks as soon as anything else changed the array in between.
+- **Visibility.** Nothing tells you which modules touch `hiv.rel_trans`.
 
-From the [Vivarium review](../approaches/vivarium.md) — the entry exists in this collection for this one mechanism:
+The freedom to write arbitrary Python is not one of the problems. It is the reason multi-disease models can be written at all, and it stays.
+
+### Vivarium's value pipelines
+
+From the [Vivarium review](../approaches/vivarium.md):
 
 ```python
 builder.value.register_rate_producer("diarrhea.incidence_rate", source=self._base_rate)
@@ -41,27 +48,21 @@ builder.value.register_value_modifier("diarrhea.incidence_rate", modifier=self._
 
 > A component that produces a rate does not know who modifies it. A component that modifies a rate does not know who produces it — only its name. **Multiple modifiers compose by a declared rule**, not by whoever ran last.
 
-And in the model specification, a component whose entire declared purpose is "this modifies that":
+This is the mechanism that fixes clobbering and restoring together: the producer keeps the base value, modifiers are applied on top, and removing a modifier leaves the base intact. [epiworld](../approaches/epiworld.md) has a narrower version: a **tool** is a bundle of multiplicative effects on susceptibility, transmissibility, recovery, and death that an agent carries. [EMOD](../approaches/emod.md)'s `Waning_Config` is the same idea for a single product's efficacy over time.
 
-```yaml
-- RiskEffect('child_growth_failure', 'infected_with_diarrhea.incidence_rate')
-```
+What we do not take from Vivarium is the rest of the machinery (see [Rejected](#rejected)), or epiworld's fixed list of four targets. A fixed list is too restrictive: real models modify contact rates, care-seeking probabilities, progression rates, and parameters nobody anticipated.
 
-[epiworld](../approaches/epiworld.md) arrives at a more constrained version: a **tool** is a bundle of multiplicative effects on susceptibility, transmissibility, recovery, and death that an agent carries. Its review: "It is more constrained than Starsim's connectors and, for exactly that reason, does not have Starsim's last-write-wins problem."
+### The combination rule has to be stated
 
-[EMOD](../approaches/emod.md)'s `Waning_Config` is the same idea for a single product's efficacy over time.
+[`epidemics`](../approaches/epidemics.md) composes interventions **additively**, `C × (1 − (X + Y))` rather than `C × (1 − X)(1 − Y)`, because additive was judged easier for users to understand, and it wrote the decision down in a design-principles vignette. Its review: "Multiplicative composition is the more defensible modeling assumption and the more common one; the package chose the other and documented the choice and its rationale."
 
-### And `epidemics` proved the combination rule must be statable
-
-[`epidemics`](../approaches/epidemics.md) composes interventions **additively** — `C × (1 − (X + Y))`, not `C × (1 − X)(1 − Y)` — because additive was judged easier for users to understand, and it **wrote the decision down in a design-principles vignette**. Its review: "Multiplicative composition is the more defensible modelling assumption and the more common one; the package chose the other and documented the choice and its rationale."
-
-That is finding 9 of the [landscape review](../approaches/README.md#cross-cutting-findings): the combination rule is a modeling decision that must be statable. `epidemics` is the proof that a global default silently chosen would be wrong for someone.
+That is finding 9 of the [landscape review](../approaches/README.md#cross-cutting-findings): the combination rule is a modeling decision. Whatever the default is, it should be printed and changeable.
 
 ## The proposal
 
-### One line for the common case
+### One line for the simple case
 
-**Starsim today** (7 lines, opaque, last-write-wins):
+**Starsim today:**
 
 ```python
 class HIVSyphConnector(ss.Connector):
@@ -73,63 +74,152 @@ class HIVSyphConnector(ss.Connector):
 **Lingua franca:**
 
 ```python
-ss.Effect(syphilis.active, hiv.rel_trans, multiply=2.0)
+ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)
 ```
 
-Read as: *while syphilis is active, multiply HIV transmissibility by 2.* The first argument is a [predicate over agent or model state](interventions.md#eligibility-as-a-predicate); the second names the target quantity; the third is the effect and its combination rule. *[CK: I'm worried this isn't flexible enough. Very rarely are "effects" as simple as "one source state, one destination state, one multiplier". It's usually more like "Find people who are HIV positive, filter through a complex age/sex probability condition, and then schedule them for an HIV test on their next ANC visit." There might be 5 source states and 6 target states, with some things multipliers and other boolean flips etc. I don't see how you'd represent something like that in this framework.]*
-
-What this buys, all of it for free:
-
-- Two effects on `hiv.rel_trans` compose by the declared rule instead of by execution order.
-- `sim.what_modifies(hiv.rel_trans)` has an answer — Vivarium's "you can ask what modifies this and get an answer".
-- The effect is serializable, diffable, and diagrammable.
-- The compiler knows `syphilis` must run before `hiv` transmission, so the ordering is *derived* rather than declared. *[CK: but what if HIV prevalence affects syphilis transmision -- which it in fact does? I don't think this is workable in practice.]*
-
-### The combination rule
+Read as: *multiply HIV transmissibility by 2 where syphilis is active.* The first argument is the quantity to change; `multiply=` (or `add=`, `set=`) is the change; `where=` is the condition, written against real attributes in the same way as [eligibility](interventions.md#eligibility); `start=` and `stop=` limit it in time. Modifiers are passed to the sim like any connector:
 
 ```python
-ss.Effect(a, x, multiply=0.6)     # default: composes as 0.6 × 0.6 = 0.36
-ss.Effect(a, x, add=-0.4)         # epidemics-style additive
-ss.Effect(a, x, set=0.0)          # exclusive; errors if another 'set' applies
-ss.Effect(a, x, min=0.1)          # clamp
+sim = ss.Sim(
+    diseases   = [hiv, syphilis],
+    networks   = ss.MFNet(),
+    connectors = [
+        ss.modify(hiv.rel_trans,    multiply=2.0, where=syphilis.active),
+        ss.modify(syphilis.rel_sus, multiply=2.5, where=hiv.infected),
+    ],
+)
 ```
 
-Multiplicative is the default because it is the defensible assumption and because it commutes, so results do not depend on order. When two effects use incompatible rules on the same target, that is an error with both effects named — not a silent precedence.
+The two modifiers above depend on each other (HIV affects syphilis and syphilis affects HIV). That is a real feature of the epidemiology and it is not a problem: each reads the other's current state, and the [loop order](#execution-order) says which one is read first.
+
+What the one-line form gives you:
+
+- Two modifiers on `hiv.rel_trans` combine by a stated rule instead of by which ran last.
+- When syphilis clears, `hiv.rel_trans` goes back to its base value with no extra code.
+- `sim.what_modifies(hiv.rel_trans)` lists it.
+- It is data, so it can be saved in the model spec, compared, and drawn on a diagram.
+- It works in a compartmental run if the condition is a state or a stratification (the modifier is applied to the matching groups).
+
+### What can be modified
+
+Any named numeric quantity: any parameter or float state of any module. There is no fixed target list.
+
+```python
+ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)          # a per-agent state
+ss.modify(sir.pars.beta, multiply=ss.seasonal(amplitude=0.3, peak='January'))  # a parameter, everywhere
+ss.modify(school.pars.n_contacts, multiply=0.2, start='2020-03-15', stop='2020-06-01')
+ss.modify(hiv.progression.rate, multiply=0.1, where=hiv.on_art)       # a named transition's rate
+```
+
+`multiply=`, `add=`, and `set=` accept everything a parameter accepts (a number, `ss.seasonal(...)`, `ss.timeseries(...)`, `ss.by(age=...)`, a function), so a modifier can vary over time or between people. This covers [epiworld](../approaches/epiworld.md)'s tools, [EpiHiper](../approaches/epihiper.md)'s state properties, and [Epydemix](../approaches/epydemix.md)'s contact reductions with one function.
+
+### Base and effective values
+
+This is the answer to the copy-and-restore problem. **Starsim today**, for an intervention that halves susceptibility for a while when `rel_sus` already differs between agents:
+
+```python
+def start_protection(self, uids):
+    self.orig_rel_sus[uids] = sir.rel_sus[uids]    # remember what it was
+    sir.rel_sus[uids] *= 0.5
+
+def end_protection(self, uids):
+    sir.rel_sus[uids] = self.orig_rel_sus[uids]    # wrong if anything else changed it meanwhile
+```
+
+**Lingua franca:**
+
+```python
+ss.modify(sir.rel_sus, multiply=0.5, where=campaign.protected)
+```
+
+`sir.rel_sus` keeps its base values (heterogeneous or not). What the transmission step reads is the effective value: base, with every currently active modifier applied. Turning `campaign.protected` off for an agent removes the factor of 0.5 and nothing else, whatever other modifiers have come and gone in the meantime.
+
+This does not mean multiplying five arrays together on every timestep. The effective array is cached and recomputed only when a modifier's active set or value changes. A modifier that is switched off, or one whose condition did not change this step, costs nothing. A quantity with no modifiers is just its base array, as now.
+
+### Combining modifiers
+
+```python
+ss.modify(x, multiply=0.6, where=a)     # default: two of these give 0.6 × 0.6 = 0.36
+ss.modify(x, add=-0.4, where=a)         # epidemics-style additive
+ss.modify(x, set=0.0, where=a)          # replace the base value
+```
+
+When several modifiers apply to the same quantity for the same agent, they are applied in a fixed order: `set`, then `multiply`, then `add`. Multiplicative is the default because it is the usual modeling assumption and because it commutes, so the result does not depend on the order of the modifiers. `sim.what_modifies(x)` prints the modifiers and the rule:
 
 ```text
-EffectError: 'hiv.rel_trans' has two effects with incompatible combiners:
-  ss.Effect(syphilis.active, hiv.rel_trans, multiply=2.0)     [stisim.py:14]
-  ss.Effect(art.on_treatment, hiv.rel_trans, set=0.05)        [stisim.py:31]
-  'set' is exclusive. Use multiply= for both, or make one conditional on the other.
+>>> sim.what_modifies(hiv.rel_trans)
+hiv.rel_trans (base: 1.0 per agent)
+  modify  multiply=2.0   where=syphilis.active     [stisim.py:14]
+  modify  multiply=0.04  where=hiv.on_art          [stisim.py:31]
+  written directly by: RiskBehavior.step()         [risk.py:52]
+  effective = base × 2.0 × 0.04 where both apply
 ```
 
-### What can be a target
+### Complex interactions are a `step()`
 
-A closed set of named, modifiable quantities keeps this analysable. Following [EpiHiper](../approaches/epihiper.md)'s state properties and [epiworld](../approaches/epiworld.md)'s four tool effects: *[CK: as noted above, I think this will be too restrictive to be useful.]*
+Most real interactions are not "one condition, one target, one multiplier". A typical one: *find people who are HIV-positive and undiagnosed, select some of them with a probability that depends on age and sex, and test them at their next antenatal care (ANC) visit; start those who test positive on treatment.* There may be five source states and six targets, some of them multipliers and some of them boolean flips. Nothing about that fits a one-line modifier, and it should not have to.
 
-| Target | Meaning |
-|---|---|
-| `<disease>.rel_sus` | Susceptibility to acquiring |
-| `<disease>.rel_trans` | Infectiousness when infected |
-| `<disease>.<transition>.rate` / `.dur` | Progression speed |
-| `<disease>.<transition>.p` | Branching probability (e.g. severity) |
-| `<route>.contacts` | Contact rate on a mixing layer |
-| any declared `ss.Par` | Anything the modeler named |
-
-epiworld's tool is exactly the first, second, and a slice of the third; its review notes the constraint "is why it composes". We take the same constraint and widen it to any named parameter, which recovers the generality without recovering the hazard.
-
-### The escape hatch is still there
+Where the interaction is a delivery triggered by an event in another module, the [delivery keywords](interventions.md#delivery) cover it. `on=` says what triggers it, `eligible=` says who, and `coverage=` takes a function when the probability varies between people:
 
 ```python
-class Complicated(ss.Connector):
-    writes = [hiv.rel_trans]     # declared
-    def step(self):
-        ...
+def p_offer(sim, uids):
+    ppl = sim.people
+    return np.where(ppl.female[uids] & (ppl.age[uids] < 25), 0.9, 0.6)
+
+anc_testing = ss.screen(
+    hiv_test,
+    on          = anc.visit,                      # at each ANC visit
+    eligible    = hiv.infected & ~hiv.diagnosed,
+    coverage    = p_offer,
+    on_positive = ss.treat(art),
+)
 ```
 
-`writes = [...]` is [Vivarium](../approaches/vivarium.md)'s `PopulationView` — "a component states which columns it touches, and the framework enforces it. This is capability-based access control for model state, and nothing else in the review has it." A connector without a `writes` declaration gets a read-only view and a clear error, not a silent success. *[CK: that's fine, but the user has to remember to write `writes`. Or, worse, they write it, then someone else updates `step()` and forgets to update `writes`.]*
+Where it is not, or where you simply prefer to see the logic, write the module. This is the same thing in plain code:
 
-It pairs with [epymorph](../approaches/epymorph.md)'s declared `AttributeDef` requirements: reads declared as `requires`, writes declared as `writes`, both checked, both feeding the dependency graph.
+```python
+class ANCTesting(ss.Intervention):
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            p_offer     = ss.bernoulli(p=p_offer),
+            sensitivity = ss.bernoulli(p=0.98),
+        )
+        self.update_pars(**kwargs)
+        self.define_states(ss.BoolState('due_test'))
+
+    def step(self):
+        hiv = self.sim.diseases.hiv
+        anc = self.sim.demographics.anc
+
+        # Find, filter, and flag for a test at the next visit
+        candidates = (hiv.infected & ~hiv.diagnosed & ~self.due_test).uids
+        self.due_test[self.pars.p_offer.filter(candidates)] = True
+
+        # Test those who are flagged and have a visit on this step
+        tested   = (self.due_test & anc.visit).uids
+        positive = self.pars.sensitivity.filter(tested)
+        hiv.diagnosed[positive] = True
+        hiv.on_art[positive]    = True
+        self.due_test[tested] = False
+```
+
+This is Starsim as it is today: boolean state arrays combined with `&`, `|`, and `~`; `dist.filter(uids)` to select from a set with a probability (each agent has its own random number stream, so [common random numbers](stochasticity-and-reproducibility.md) hold); and direct reads and writes of other modules' state. The lingua franca does not add a layer over this. Its job here is to make sure the things `step()` needs are easy to reach and that what the code did can be seen afterwards.
+
+Two pieces of guidance for custom code, neither of them enforced:
+
+- **For booleans and events, write directly.** `hiv.diagnosed[positive] = True` has no combination problem.
+- **For scaling a number someone else owns, use a modifier and flip a flag.** Declare `ss.modify(hiv.rel_trans, multiply=0.04, where=self.suppressed)` once, and have `step()` set and clear `self.suppressed`. The base value stays intact, other modules' modifiers still apply, and there is nothing to restore. Writing `hiv.rel_trans[uids] = 0.04` directly is allowed, and changes the base value.
+
+A module with a custom `step()` runs in an agent-based sim. It also runs in a compartmental sim if the code happens to use only things that exist for groups (state counts, parameters, stratifications); otherwise that run stops and names what the code asked for.
+
+### Seeing who writes what
+
+Modules are not asked to declare what they read or write. A `writes = [...]` list is easy to forget, and worse, easy to leave unchanged when someone edits `step()` later, at which point it is wrong and trusted.
+
+Writes are observed instead. The state arrays already know when they are assigned to, so with tracking on they record which module wrote to them during a run. `sim.what_modifies(hiv.rel_trans)` then lists the modifiers on a quantity together with the modules seen writing it directly (the example output above). This is [Vivarium](../approaches/vivarium.md)'s "you can ask what modifies this and get an answer" without its `PopulationView` access control, and it cannot drift from the code because it comes from the code running.
+
+[epymorph](../approaches/epymorph.md)'s `AttributeDef`, where a module lists the data it needs, is kept as optional metadata (`requires=`): useful for generating a data-entry form or a checklist of inputs, never enforced as a restricted view.
 
 ### Execution order
 
@@ -137,52 +227,54 @@ Four positions in the review:
 
 | Framework | Treatment |
 |---|---|
-| [`individual`](../approaches/individual.md) | **Irrelevant.** Processes queue updates; the loop applies them after every process has run, so every process sees start-of-step state |
+| [`individual`](../approaches/individual.md) | **Queued.** Processes queue updates; the loop applies them after every process has run, so every process sees start-of-step state |
 | [Vivarium](../approaches/vivarium.md) | **Declared.** Named lifecycle phases (`time_step_prepare` → `time_step` → `time_step_cleanup` → `collect_metrics`) with per-component priorities |
-| [Starsim](../approaches/starsim.md) | **Inspectable.** `ss.Loop` is a data object: printable, `to_df()`-able, plottable, insertable-into |
+| [Starsim](../approaches/starsim.md) | **Ordered and inspectable.** `ss.Loop` is a data object: printable, `to_df()`-able, plottable, insertable-into |
 | [Mesa](../approaches/notes.md#mesa) | **A user-selected modeling decision**, with the options named |
 | Everyone else | Whatever order the code happens to run |
 
-Synthesis, in priority order:
+The lingua franca keeps Starsim's. Each step runs: start of step; demographics; disease state updates and progression; connectors; networks; interventions; transmission; deaths; results; analyzers; end of step. Within a type, modules run in the order they were given. The order is a data object (`sim.loop`) that can be printed, plotted with `sim.loop.plot_step_order()`, and inserted into.
 
-1. **Declared transitions are simultaneous.** All see start-of-step state; all are applied together. This is `individual`'s queued-update semantics, "the strongest correctness property of any agent-based framework in the review", and it means the whole declarative part of a model has no order dependence at all. *[CK: I don't like this. Consider infection onset, testing, and treatment. If you specify the order as infection.step() -> testing.step() -> treatment.step(), you can get the whole chain happening in one timestep. Otherwise, you create an artificial two-timestep delay for the fastest possible treatment.]*
-2. **Effects are resolved before the quantities they modify are read**, which is derivable from the declarations. *[CK: it's not clear to me if this solves another issue we run into, which is that you might have an agent-heterogeneous `rel_sus`, modify the array by some factor with an intervention, and then return to the original state. Currently, we sloppily copy `rel_sus` into eg `orig_rel_sus`, and then restore it when the intervention ends. Would be nice to handle this natively. But we also don't want to (I assume) be multiplying together 5 different `rel_sus` arrays on each timestep, when most of them are just 1.]*
-3. **Imperative code is ordered by Starsim's `Loop`**, which stays as it is — it is one of Starsim's better ideas and it directly serves the no-hidden-behavior goal.
-4. **Phases exist and are named** (Vivarium's contribution), so a module can say `phase='cleanup'` rather than fighting over a position in a list. *[CK: maybe, I'd have to see the implementation. Sounds like phases are just different locations in a list, though.]*
+The reasons for an ordered loop over queued updates:
 
-The cost, stated by `individual`'s review: within-step causal chains ("infect, then immediately test the newly infected") must be written as explicit sub-steps. That is the right trade, because it makes the chain visible.
+- **Within-step chains work.** With infection, testing, and treatment ordered that way, someone can be infected, tested, and treated in one step. With queued updates every link in the chain waits a step, which puts an artificial delay of two timesteps on the fastest possible treatment.
+- **Mutual dependence is fine.** HIV affects syphilis and syphilis affects HIV. Each module reads the other's current value and the order breaks the tie. The convention is to run last the disease whose results matter most, since it sees the most up-to-date state. Nothing needs to detect or reject the cycle.
+- **There is one ordering, not two.** A queue of simultaneous updates still needs a rule for which update wins when two conflict, and that rule is a second ordering on top of the module order.
+- **Named phases are positions in the list.** Vivarium's phases are a way of naming where in the order something runs. `sim.loop` already shows the positions and allows inserting at any of them.
+
+Three things keep the ordered loop from causing surprises:
+
+1. **Competing transitions inside one module are resolved together.** Transitions out of the same state that are written as rates compete as hazards in one multinomial draw, so the order in which they were declared does not bias the result.
+2. **Removals are deferred to the end of the step**, as Starsim's `people.request_death()` does. Agents flagged to die stay in the arrays until every module has stepped, so no module sees a population that changed size halfway through a step. Custom code that removes people should call `request_death()` and not delete them itself.
+3. **The size of any ordering effect shrinks with the timestep** (it is O(dt)), and `sim.check_dt()` reruns the model with a halved timestep and shows how much the results move.
 
 ### One module abstraction
 
-Starsim's `ss.Module` — the same lifecycle for diseases, networks, demographics, interventions, connectors, and analyzers — is what makes multi-disease and non-disease health states composable, and it is why FPsim (contraception, pregnancy, birth outcomes) fits in the same framework as HIV. Keep it.
-
-What changes is only that the module contract gains two fields:
-
-```python
-class MyModule(ss.Module):
-    requires = [...]   # epymorph's AttributeDef: what I read
-    writes   = [...]   # Vivarium's PopulationView: what I modify
-```
-
-Neither is required for a module that only declares transitions, because those are derivable.
+Starsim's `ss.Module`, with the same lifecycle for diseases, networks, demographics, interventions, connectors, and analyzers, is what makes multi-disease and non-disease health states composable, and it is why FPsim (contraception, pregnancy, birth outcomes) fits in the same framework as HIV. Keep it unchanged. The module contract gains no required fields.
 
 ## Trade-offs
 
-- **A closed target list means some effects need the escape hatch.** Accepted, and the escape hatch declares its writes, so the analysis survives.
-- **Declared reads and writes are boilerplate.** Mitigation: only imperative modules need them; declarative ones are inferred. If a module has no `step()`, it should never need either field.
-- **Derived ordering can be ambiguous.** Two modules that each read the other's output is a cycle, and the right response is an error naming both — which epymorph's and Vivarium's dependency graphs already do. *[CK: disagree -- this is fine, it rarely matters, and convention can break the deadlock, e.g. run syphilis before HIV because we care more that the HIV results are accurate.]*
-- **`individual`'s simultaneity is not free at scale.** Queued updates mean a second pass over the changed set. In practice this is cheap relative to the transmission step, and it is what buys order-independence. *[CK: I'm not sure it's worth it.]*
+- **Direct writes can still clobber each other.** Two modules that both assign `hiv.rel_trans[uids] = ...` behave as they do in Starsim today. The mitigation is that the better option is one line and `what_modifies()` shows both writers; nothing prevents it.
+- **Observed writes are only known after a run**, and only for code paths that ran. A module that writes to a quantity only in 2035 does not show up in a run that stops in 2030.
+- **Base and effective values are an implementation cost.** Every modifiable array needs a base, a cached effective value, and invalidation when a modifier's active set changes. Unmodified quantities must cost the same as they do now, which should be benchmarked.
+- **Results depend on module order**, by an amount that shrinks with the timestep. This is accepted in exchange for within-step chains and for a loop that is easy to explain. `sim.check_dt()` measures it.
+- **`set` then `multiply` then `add` is a convention.** Someone will want a different order. A function passed to `multiply=`, or a `step()`, covers it.
 
 ## Rejected
 
-- **Last-write-wins on shared state** (Starsim connectors today, LASER components). This is the specific defect being fixed.
-- **Additive composition as the global default** (`epidemics`). Documented honestly there; still clamps at 100% and still surprises. Multiplicative default, `add=` available.
-- **Execution order as the only mechanism** (EpiModel's `module.order`, LASER's component list, flepiMoP's pipeline). Order should settle what is genuinely ambiguous, not what is derivable. *[CK: hm, not convinced]*
-- **Vivarium's full pipeline machinery as user-facing vocabulary.** Value pipelines, combiners, post-processors, lifecycle phases, population views, lookup tables, artifacts, and the resource system are, per its own review, "a lot of machinery before the first line of epidemiology". Take the semantics; expose one line.
-- **Arbitrary state access without declaration.** Fast, unanalysable, and — as LASER's review notes — declared read/write sets "cost nothing at run time; they are compile-time information". *[CK: keep, as an escape hatch]*
+- **A fixed list of modifiable quantities** (epiworld's four tool effects). It makes analysis easier and it is too restrictive to be useful for real models.
+- **Required `reads`/`writes` declarations with enforced views** (Vivarium's `PopulationView`). People forget them, and they drift from the code. Observed writes give the same answer without the upkeep.
+- **Queued updates for everything** (`individual`). Removes order dependence and removes within-step chains with it. Deferred removals and joint resolution of competing hazards are the parts worth having.
+- **Ordering derived from declared dependencies, with cycles as errors.** Mutual dependence between diseases is normal, and a convention settles the order.
+- **Named lifecycle phases as user vocabulary** (Vivarium). The loop is already a list that can be printed and inserted into.
+- **Additive composition as the global default** (`epidemics`). Documented well there, but it clamps at 100% and surprises people. Multiplicative default, `add=` available.
+- **Vivarium's full pipeline machinery as user-facing vocabulary.** Value pipelines, combiners, post-processors, population views, lookup tables, artifacts, and the resource system are, per its own review, "a lot of machinery before the first line of epidemiology". Take the base-plus-modifiers idea and expose one function.
+- **Forbidding direct access to another module's state.** It is how complex interactions get written, and it stays available.
 
 ## Open questions
 
-- **Should `ss.Effect` be time-varying?** `ss.Effect(vaccinated, sir.rel_sus, multiply=ss.waning(0.1, halflife=ss.days(180)))` collapses effects and [EMOD](../approaches/emod.md)'s `Waning_Config` into one thing, which is appealing and may be doing too much. *[CK: as noted above, I think this barely scratches the surface of what "ss.Effect" would need to be doing.]*
-- **Where do effects between coordinates of one dimension go?** Cross-immunity between strains is an effect from `strain=alpha` on `strain=delta`'s susceptibility, which is a shape this mechanism does not obviously have. See [stratification.md](stratification.md).
-- **Does the effect graph need cycle-breaking, or should cycles simply be errors?** HIV raising syphilis susceptibility while syphilis raises HIV transmissibility is a real, non-pathological cycle over one timestep. Probably: cycles are fine across steps, errors within one. *[CK: disagree, cycles are fine. It shouldn't matter (very much).]*
+- **What does a direct write mean when modifiers are active?** The proposal above says it changes the base value. The alternative is that a direct write to a modified quantity warns. Changing the base is simpler and matches what the code says.
+- **Two `set=` modifiers on the same agent at the same time.** Probably the one that runs later in the loop wins and a note is printed. An error is the stricter option.
+- **Where do modifiers between coordinates of one stratification go?** Cross-immunity between strains is a modifier from `strain=alpha` on `strain=delta`'s susceptibility. When strains are separate diseases it is an ordinary `ss.modify`; when strain is a stratification the spelling is not settled. See [stratification.md](stratification.md).
+- **How much should write tracking cost, and should it be on by default?** Recording the writing module on each assignment is cheap but not free. The design has it on by default with a sim option to turn it off (`track_writes=False`); if benchmarks show a real cost, the default should flip.
+- **Is `on=` enough for event-triggered logic in custom modules?** Deliveries can be triggered by another module's events. Whether a custom `step()` needs a matching helper for "at this person's next visit", or whether a boolean flag as in the example above is enough, should be decided against a few real models.
