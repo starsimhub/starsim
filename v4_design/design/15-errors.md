@@ -1,213 +1,178 @@
-# Errors and warnings
+# Errors, warnings, and notes
 
-Error messages are part of the language. A refusal that does not say what to do instead is a bug.
+What the library says when something is wrong, doubtful, or guessed, and the list of every coded message.
 
-Justified by [best-practices/principles.md](../best-practices/principles.md) §Error messages are part of the language.
+Justified by [best-practices/principles.md](../best-practices/principles.md).
 
-## Why this is a specification and not a style guide
+## The policy
 
-A substantial fraction of models in this language will be written by an AI that will otherwise produce a wrong answer with complete confidence, and by epidemiologists who will read the message once and either fix the model or give up. Both audiences are served by the same thing: a message that names the rule, shows the offending declaration, and states the fix.
+**Prefer guessing a default and printing it to raising an error.** Most things a user leaves out have a sensible default, and stopping the run to ask for it helps nobody. An error is for the cases where there is no sensible guess: a name that does not exist, lengths that do not match, a request the run method cannot meet.
 
-The evidence that this pays is that the one framework in the landscape with numbered, documented, epidemiologically-specific error codes uses them to prevent real modeling bugs — stratified coverage delivering `1 − (1 − f)^P` instead of `f`, a count applied per cell instead of in total — that other frameworks commit silently.
+A message is read once, by an epidemiologist or by an AI writing a model for one. Either way it should say what is wrong in the user's own terms, show the line, and say what to do.
 
-## Required shape
+## Message shape
 
-Every error and warning MUST have:
+Every coded error SHOULD have:
 
-1. **A code and a name.** `E303 StratifiedCoverage`. The code is stable across versions and is documentable, searchable, and citable.
-2. **A one-line statement of what is wrong**, in the user's vocabulary, naming the declaration by the name the user gave it.
-3. **The offending declaration**, quoted, with its source location where available and a caret under the offending part.
-4. **The rule**, stated as a sentence about epidemiology or arithmetic, not about the implementation.
-5. **The fix**, as code the user could paste, or an explicit statement that there is no fix and why.
+1. **A code and a name**, such as `E602 UnknownParameter`. Codes are stable across versions so they can be searched for and documented.
+2. **One line saying what is wrong**, using the names the user gave things.
+3. **The declaration involved**, quoted, with a caret under the relevant part where that helps.
+4. **What to do about it**, as code the user could paste where possible, with the closest matching names for anything misspelled.
 
 ```text
-E102 WrongDimension: rate expression for transition 'recovery' has dimension
-     [dimensionless], expected [count/time].
-
-       recovery = ss.progression('I -> R', rate=ss.peryear(0.1) * ss.days(3))
-                                                                 ^^^^^^^^^^^
-       Multiplying a rate by a duration removes the time dimension.
-
-     A rate times a duration is an expected count, not a rate.
-     Did you mean p= rather than rate=?
+E102 WrongDimension: the rate for transition 'recovery' has no time dimension.
+       rate = ss.peryear(0.1) * ss.days(3)
+                               ^^^^^^^^^^^ multiplying by a duration removes the "per time"
+     A rate times a duration is an expected count, not a rate. Did you mean p= instead of rate=?
 ```
 
-Forbidden: `ValueError: shape mismatch`, `KeyError: 'beta'`, a traceback through library internals as the primary message, and any message that names an internal class the user did not write.
+Avoid `ValueError: shape mismatch`, `KeyError: 'beta'`, and a traceback through library internals as the main message. Notes are one line each and need only say what was assumed or done.
 
-## Severity
+## Levels
 
-| Level | Means | Behavior |
+| Level | Means | What happens |
 |---|---|---|
-| **Error** (`E`) | A guess would be wrong quietly | Raises. Never suppressible. |
-| **Warning** (`W`) | A guess was made that is usually right and occasionally load-bearing | Printed in `summary()`, collected in `sim.warnings`, suppressible individually by code |
-| **Note** | A default was filled in | Marked `[inferred]` in `summary()` only |
+| **Error** (`E`) | There is no sensible guess, or the request cannot be met | Raises an exception |
+| **Warning** (`W`) | The run can proceed, but something probably needs attention | Printed through Starsim's `ss.warn`; the run continues |
+| **Note** (`W`, marked "note" below) | Something was assumed, approximated, or is worth knowing | One printed line; `verbose=0` hides it |
 
-The rule for choosing: **an error is a claim that no guess is safe, and that claim has to be true.** Refusing to run when the answer could be guessed correctly 99% of the time discourages exactly the audience this language exists for.
+Guessed defaults are not coded at all: `describe()` marks them `[guessed]` ([01-objects.md](01-objects.md#describe)). Approximations made when a method is requested explicitly are uncoded one-line notes as well ([12-backends.md](12-backends.md#approximations)); they turn into `E804` only under `approx=False`.
 
-Warnings are suppressible **by code, individually, with a reason**: `ss.Sim(..., allow=['W102'])`. Blanket suppression is not available.
+Warnings and notes use Python's `warnings` machinery, as Starsim does today, so they can be filtered or turned into errors in the usual way. Notes keep a `W` code so that they can be looked up.
 
-## The catalogue
+## The catalog
 
-### E1xx — types and units
+Every code cited anywhere in this folder is listed here.
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E101` | `IncompatibleTypes` | An arithmetic combination not in the type lattice ([02-types.md](02-types.md)) |
-| `E102` | `WrongDimension` | An expression's dimension does not match its slot |
-| `E103` | `UntypedInTypedExpression` | A bare number combined with a typed quantity where the unit cannot be inferred |
-| `E104` | `InconsistentParameterKind` | One `ss.Par` used in slots of two different kinds |
-| `W101` | `UnitAssumed` | No unit was declared anywhere; days assumed |
-| `W102` | `LargeStep` | `rate × dt > 0.1`; the exponential conversion matters here |
+### 1xx: types and units
 
-### E2xx — structure
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E101` | `IncompatibleTypes` | error | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq` ([02](02-types.md#arithmetic)) |
+| `E102` | `WrongDimension` | error | A fully typed expression has the wrong dimension for its slot (a rate times a duration in `rate=`), or both `beta` and `n_contacts` carry a time unit ([06](06-routes.md#units)) |
+| `W101` | `UnitAssumed` | note | No unit was given anywhere; days were assumed |
+| `W102` | `LargeStep` | note | `rate × dt > 0.1` for a converted rate; says how far `rate × dt` is from `1 − exp(−rate × dt)` and points to `sim.check_dt()` |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E201` | `ReservedName` | A declaration name collides with a module attribute |
-| `E202` | `AmbiguousShorthand` | A dict-form tuple matches zero or two coercion rules |
-| `E203` | `AmbiguousEntryState` | More than one state has no inbound transition and none has `init` |
-| `E204` | `UnknownState` | A name in an arrow, `source=`, or `states=` does not resolve |
-| `E205` | `AmbiguousBranchSplit` | `p=` cannot be resolved as timing or as a split ([03](03-states-and-transitions.md)) |
-| `E206` | `DuplicateDeclaration` | Two declarations share a name |
-| `E207` | `EmptyModel` | A module declares no states and no transitions |
-| `W204` | `LikelyLatentState` | A transmission destination has an onward progression and sources no transmission — the SEIR shape with `source=` omitted |
-| `W206` | `AbsorbingState` | A state has no outbound transition and is not declared `absorbing=True` |
-| `W207` | `UnreachableState` | A state has no inbound transition and no `init` |
+### 2xx: states and transitions
 
-### E3xx — dimensions and stratification
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E201` | `ReservedName` | error | A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) |
+| `E204` | `UnknownState` | error | States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred |
+| `E205` | `BadBranchSplit` | error | Constant branch probabilities out of one state do not sum to 1 |
+| `E206` | `DuplicateDeclaration` | error | Two members of a module are given the same explicit name, or a state is an endpoint of transitions in two modules |
+| `E208` | `NonlinearExposure` | error | A rate is not linear in its bare states (`I ** 2`, `I / (I + K)`, or a term containing two bare states). Says to use `I.n` if a literal count was meant |
+| `E209` | `UndrivenTransition` | error | A transition reaches build time with no rate, no duration, and no `p=` |
+| `W207` | `UnreachableState` | note | A state has no transition into it and starts empty, which is usually a typo |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E301` | `UnknownTransition` | `adjust=` names a transition that does not exist |
-| `E302` | `BadSplit` | A population split does not sum to 1, or has the wrong length |
-| `E303` | `StratifiedCoverage` | A `coverage=` would be applied per stratum, delivering `1 − (1 − f)^P` |
-| `E304` | `StratifiedCount` | A `count` on a bare stratified transfer would multiply the intended total |
-| `E305` | `DuplicateStructuralDimension` | A second `age` or `strain` dimension |
-| `E306` | `InvalidAdjustment` | A negative multiplier, or one that drives a probability above 1 |
-| `E307` | `PartialStratificationMixing` | A mixing matrix over a dimension that does not cover every state |
-| `E308` | `StrainMixing` | A mixing matrix on a strain dimension |
-| `E309` | `StateSpaceTooLarge` | Over 10⁶ states in a compartmental backend |
-| `W304` | `IsolatedPatches` | A spatial dimension with no mobility |
-| `W309` | `LargeStateSpace` | Over 10⁴ states; names the dimensions and their sizes |
+### 3xx: stratification
 
-### E4xx — routes, mixing, and geography
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E301` | `UnknownTransition` | error | `adjust=` names a transition that does not exist. Lists the ones that do |
+| `E302` | `BadSplit` | error | `split=` has the wrong number of entries. (A split that does not sum to 1 is normalized, and `describe()` says so) |
+| `E305` | `DuplicateStructuralDimension` | error | The model is stratified by age twice, or by any dimension it already has |
+| `E306` | `InvalidAdjustment` | error | A negative multiplier in `adjust=`. (A multiplier that pushes a probability above 1 is clipped, with a note) |
+| `E307` | `PartialStratificationMixing` | error | A state that a dimension does not apply to is the origin or the source of a transmission, so there is no coordinate for those people to mix as |
+| `W309` | `LargeStateSpace` | warning | The stratified model has more than about 10,000 compartments. Names the dimensions and sizes and notes that an agent-based run does not grow this way |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E401` | `NoInfectiousSource` | A transmission whose `source` states can never be occupied |
-| `E402` | `NoGeography` | A mobility model with no geography to supply distances |
-| `E403` | `RouteMismatch` | A transmission restricted to a route that does not exist |
-| `E404` | `MalformedMixingMatrix` | Non-square, negative, or wrongly-sized for the dimension |
-| `W401` | `UnanchoredDensity` | Density dependence with no `n_ref` and a changing population |
-| `W402` | `TargetStatsNotRecovered` | `net.check()` finds realized statistics outside their interval |
+### 4xx: mixing and geography
 
-### E5xx — effects and composition
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E402` | `NoGeography` | error | A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances |
+| `E403` | `RouteMismatch` | error | A key of a per-layer `beta` dict matches no network or layer |
+| `W402` | `TargetStatsNotRecovered` | warning | `net.check()` finds that a network does not reproduce a target statistic it was given |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E501` | `UndeclaredWrite` | A module writes a quantity not in its `writes` |
-| `E502` | `IncompatibleCombiners` | Two active `set=` effects on one target |
-| `E503` | `EffectCycle` | Effects form a cycle within one step |
-| `E504` | `UnmodifiableTarget` | The target is not in the closed target list |
-| `E505` | `InvalidClamp` | `min=` above `max=` |
-| `W503` | `MixedCombiners` | `multiply=` and `add=` on one target; names the resolution order |
+### 5xx: modifiers
 
-### E6xx — parameters and data
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E504` | `UnmodifiableTarget` | error | The target of `ss.modify` or `ss.change` cannot be resolved to a named numeric quantity (a plain number, a boolean state, a name that does not exist). Lists the closest names |
+| `W502` | `OverlappingSet` | warning | Two `set=` modifiers are active for the same people at once; the one later in the loop is used. Names both |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E601` | `MissingRequirement` | A declared `ss.Needs` cannot be satisfied |
-| `E602` | `UnknownParameter` | An undeclared parameter name is assigned; lists near matches |
-| `E603` | `ShapeError` | A value's shape does not fit the model's dimensions |
-| `E604` | `UnvaluedParameter` | A declared `ss.Par` has no value from any source |
-| `E605` | `UnknownLocation` | A named location does not resolve; lists near matches and providers |
-| `E606` | `OutOfBounds` | A value outside its declared `bounds` |
-| `W601` | `StaleData` | A cached dataset is older than its provider's update interval |
+### 6xx: parameters and data
 
-### E7xx — results and observation
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E602` | `UnknownParameter` | error | A parameter name the module does not have is set, directly or through `ss.Sim(pars=...)`. Lists the closest names |
+| `E603` | `ShapeError` | error | A value's length does not match its stratification (four values for three age groups). Names the parameter, the transition, and both lengths |
+| `E604` | `UnvaluedParameter` | error | An `ss.par` has no value, no bounds to start from, and nothing supplied through `pars=` |
+| `E605` | `UnknownLocation` | error | A place name cannot be resolved by any data provider. Lists near matches and the providers searched |
+| `E606` | `OutOfBounds` | error | A parameter's value is outside its `bounds` |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E701` | `OutcomeUsedAsState` | Something in the process reads an outcome |
-| `E702` | `UnknownOutcomeSource` | An outcome's source names nothing |
-| `E703` | `OutcomeCycle` | Outcomes chain in a cycle |
-| `E704` | `DataMisaligned` | Observed data has no overlap with the simulated period |
-| `W701` | `NoDenominator` | A characteristic that looks like a proportion has no denominator |
+### 7xx: results and data
 
-### E8xx — capability and backend
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E702` | `UnknownOutcomeSource` | error | The source of an `ss.outcome` names nothing in the model |
+| `E703` | `OutcomeCycle` | error | Outcomes chain back to themselves |
+| `E704` | `DataMisaligned` | error | The data lies entirely outside the simulated period. (Data partly outside is used where it overlaps, with a note) |
+| `W705` | `UnknownDataColumn` | warning | A data column matches no result. It is reported once, with the closest result names, and ignored |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E801` | `ResolutionUnset` | `n > 10⁶` with no `n_agents` given |
-| `E802` | `DwellTimeUnrepresentable` | No exact realization in the chosen backend; lists the alternatives |
-| `E803` | `TimeVaryingRateUnsupported` | A backend cannot handle a time-varying rate and would otherwise freeze it |
-| `E804` | `CapabilityError` | Any refused (element × method) combination; names the element and the reason |
-| `E805` | `UnderivedClosure` | A network-to-compartmental conversion for which no closure has been derived |
-| `W1201` | `SmallCounts` | `sde` or `ode` with a compartment below ~20 |
-| `W1202` | `ExtinctionPossible` | `ode` where the epidemic could plausibly go extinct |
-| `W1203` | `LeapConditionMarginal` | Tau-leaping with propensities changing appreciably over τ |
-| `W1204` | `DiscretizationCoarse` | `binomial` with `rate × dt` above 0.1 |
-| `W1205` | `MeanFieldSubstituted` | A network route run under a compartmental method with a named closure |
-| `W1206` | `ScaledPopulation` | `n_agents < n`; names the scale factor and the variance inflation |
+### 8xx and 12xx: run methods
 
-### E9xx — reproducibility
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E804` | `CapabilityError` | error | The requested run method cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
+| `W1201` | `SmallCounts` | note | `ode` or `sde` with a compartment holding only a few people |
+| `W1202` | `ExtinctionPossible` | note | `ode` on a model where the epidemic could plausibly die out by chance |
+| `W1203` | `LeapConditionMarginal` | note | `tau` with rates changing quickly within a leap |
+| `W1204` | `DiscretizationCoarse` | note | `binomial` or `abm` with `rate × dt` large |
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E901` | `ResultExists` | Writing a different result to an existing run identity |
-| `E902` | `CRNContractViolated` | A CRN-keyed draw that is not a per-agent inverse CDF, when `crn_strict=True` |
-| `W901` | `CRNNotHeld` | The same, as the default warning; names the draw |
-| `W902` | `CacheHit` | A run was served from cache rather than recomputed |
-| `W903` | `UncheckedConvergence` | A method with a convergence condition, run without `check_dt()` |
+Each of the four notes names the quantity involved and a method that would not have the problem ([12-backends.md](12-backends.md#the-methods)).
 
-### E10xx — execution
+### 9xx: reproducibility
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E1001` | `ConflictingUpdate` | Two queued updates write different values to the same quantity and index |
-| `E1002` | `ModuleCycle` | Two modules each read the other's output within a step |
-| `E1003` | `RunAfterFinish` | `run()` on a completed sim without `reset=True` |
-| `W1001` | `ExplicitOrdering` | `substep()` was called; the model has an ordering dependence |
-| `W1002` | `CoarseFlow` | A module's `dt` is coarser than the output grid |
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E901` | `ResultExists` | error | Only when result caching is on: a different result would overwrite a stored one with the same run hash |
 
-### E11xx — interventions and delivery
+### 10xx: execution
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E1101` | `UnknownProduct` | A delivery names a product that does not exist |
-| `E1102` | `MissingDimension` | A transfer names a dimension the model does not have |
-| `W1101` | `CoverageUnreachable` | Coverage cannot be met from the eligible population; reports the achieved fraction |
-| `W1102` | `NoHysteresis` | A threshold trigger with no `min_duration`; policies will flap at the step frequency |
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E1003` | `RunAfterFinish` | error | `run()` is called on a sim that has already finished. Copy the sim or build a new one |
+| `W1002` | `CoarseFlow` | note | A flow from a module with a coarse `dt` is requested on a finer grid and has been spread evenly across the interval |
 
-### E13xx — inference
+### 11xx: interventions
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E1301` | `NothingToFit` | `calibrate()` with no parameter carrying `bounds` or `prior` |
-| `E1302` | `NoLikelihood` | `calibrate()` with no outcome carrying `data` and `likelihood` |
-| `E1303` | `StageGateFailed` | A staged fit failed its convergence gate; the sequence stops |
-| `W1301` | `AtBound` | A best-fit value at or near a declared bound |
-| `W1302` | `Unidentifiable` | Free parameters that enter the model only as a product |
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E1102` | `MissingDimension` | error | An `ss.transfer` names a stratification the model does not have. (A boolean coordinate that does not exist yet is created instead) |
 
-### E14xx — schema and IR
+### 13xx: calibration
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E1401` | `SchemaTooNew` | The document's major version exceeds the reader's |
-| `E1402` | `NormalizationNotIdempotent` | An internal invariant failed; always a bug in the implementation |
-| `W1401` | `LossyExport` | An export dropped or approximated declarations; lists them |
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E1301` | `NothingToFit` | error | `calibrate()` is called and no parameter has `bounds` |
+| `E1302` | `NoData` | error | `calibrate()` is called and no result has data |
+| `W1301` | `AtBound` | warning | A best-fit value is at or near one of its bounds |
+| `W1302` | `Unidentifiable` | note | Two fitted parameters appear in the model only as a product, or are almost perfectly correlated in the fit |
+| `W1303` | `StageStopped` | warning | A stage of a staged fit did not converge; the sequence stops and the last completed fit is returned |
 
-### E16xx — interoperation
+### 14xx and 16xx: model spec and other formats
 
-| Code | Name | Raised when |
-|---|---|---|
-| `E1601` | `UnclassifiableRate` | An imported rate expression cannot be classified into the transition vocabulary |
-| `E1602` | `AmbiguousDenominator` | An imported model's dependence convention cannot be determined |
-| `W1601` | `ImportIncomplete` | Constructs in the source could not be translated; lists them by name |
+| Code | Name | Level | When |
+|---|---|---|---|
+| `E1401` | `SchemaTooNew` | error | A model spec was written by a newer major version than the reader |
+| `W1401` | `LossyExport` | warning | An export to another format left something out or changed it. Lists each item |
+| `W1601` | `ImportIncomplete` | warning | An import could not translate something in the source. Lists each item by name |
 
-## Documentation obligation
+## Conditions without a code
 
-Every code in this catalogue MUST have a documentation page reachable offline at the shipped version, containing the rule, a minimal failing example, the fix, and the reasoning. `ss.explain('E303')` prints it. A code whose page says only what the message says has not been documented.
+Some mistakes are ordinary Python usage errors and raise a plain `TypeError` or `ValueError` with a message in the same shape. They can be given codes later if they turn out to be common:
 
-This is the AI-native requirement applied to errors: an agent that reads stale or absent documentation writes broken models, and the error catalogue is the part of the documentation it will read most.
+- giving both `rate=` and `dur=` to a transition, or more than one of `multiply=`, `add=`, `set=` to `ss.modify`;
+- a positional value after an arrow string (`ss.transmission('S -> I', 0.05)`);
+- a set of sources without parentheses (`S | I | R >> D @ mu`);
+- an unknown key in a product's `efficacy` dict (the message lists the valid keys);
+- using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`.
 
+## Removed since the first draft
+
+The first draft had about 75 codes. Most of the ones that went were errors for mechanisms that no longer exist (queued updates, the closure ladder, declared reads and writes, the dict shorthand, predicate rank) or refusals that are now a guessed default or a printed approximation. In particular: a missing `n_agents` is guessed; a spatial dimension without mobility is an ordinary model; coverage and capacity on a stratified model are behaviors the library is required to get right ([05](05-dimensions.md#coverage-and-counts-on-a-stratified-model)), not errors; and running a network model as an ODE prints a note.
+
+## Documentation
+
+Every code SHOULD have a documentation page, shipped with the library and readable offline, giving a minimal example that triggers it and the fix. Every code MUST have a test that triggers exactly it ([18-conformance.md](18-conformance.md)); a code with no test is removed from this list.

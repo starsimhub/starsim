@@ -1,140 +1,201 @@
 # Execution
 
-The run loop: phases, interleaving, queued updates, and what "simultaneous" means.
+The run loop: what is called in what order each step, how modules with different timesteps interleave, and what is and is not affected by order.
 
 Justified by [best-practices/composition-and-effects.md](../best-practices/composition-and-effects.md) §Execution order and [best-practices/agent-based.md](../best-practices/agent-based.md).
 
 ## The governing rule
 
-> **Within a step, everything reads start-of-step state and all changes are applied together.**
+> **Modules run in a defined, printable order each step, and each one sees the changes made by those before it.**
 
-Declaration order MUST NOT affect results. Module order MUST NOT affect results except for modules that define `step()`. This is the strongest correctness property available to an agent-based framework, and it is achievable because updates are queued rather than applied in place.
+This is Starsim's loop, kept. Three consequences:
 
-The cost, stated once: a within-step causal chain — "infect, then immediately test the newly infected" — must be written as two sub-steps. That is the right trade, because it makes the chain visible where it would otherwise be an accident of ordering.
+- **Within-step chains work.** If infection runs before testing and testing before treatment, a person can be infected, tested, and treated in one step. Nothing has to be split into sub-steps.
+- **Mutual dependence between modules is fine.** HIV can change syphilis transmission while syphilis changes HIV transmission. Each reads the other's current value, and the order decides who goes first. There is no cycle error.
+- **Module order is a modeling choice.** Its effect on results is O(dt): it shrinks as the timestep shrinks, and `sim.check_dt()` measures it ([11-random.md](11-random.md) §Convergence). The usual convention is to run last the module whose accuracy matters most, because it sees the most up-to-date state.
 
-## Phases
+Order does not arise in a compartmental ODE run: all declared flows are evaluated together from the current state (see [Order under each run method](#order-under-each-run-method)).
 
-Each module step is decomposed into named phases. Phases run in this order across all modules at a given time; that is, every module's `routes` phase runs before any module's `transitions` phase.
+## The order of calls in one step
 
-| # | Phase | What happens | May write |
+The loop calls these functions, in this order, at every step. This is the order in `starsim/loop.py`; nothing here is new.
+
+| # | Called on | Function | What happens |
 |---|---|---|---|
-| 1 | `prepare` | advance time, ageing, module bookkeeping | own state |
-| 2 | `routes` | contact structure realized for this step (edges drawn, matrices resolved, commuters placed) | own state |
-| 3 | `effects` | every `ss.Effect` condition evaluated; targets resolved by the combiner rules | effect targets |
-| 4 | `transitions` | every declared transition evaluated against start-of-step state | queue only |
-| 5 | `process` | `step()` methods and `ss.process` escape hatches, in `Loop` order | queue only |
-| 6 | `apply` | all queued updates applied | everything |
-| 7 | `observe` | results accumulated, outcomes emitted, analyzers run | results only |
-| 8 | `cleanup` | end-of-step bookkeeping, deaths finalized | own state |
+| 1 | sim | `start_step()` | Advance the sim's distributions to this step; print progress |
+| 2 | every module | `start_step()` | Advance each module's distributions; per-step bookkeeping |
+| 3 | plain `ss.Module`s | `step()` | Modules that are none of the types below |
+| 4 | demographics | `step()` | Births and immigration add agents; background deaths are requested |
+| 5 | diseases | `step_state()` | Disease state updates: every declared transition that is not contact-mediated (progression, branching, `ss.transfer`, disease deaths) |
+| 6 | connectors | `step()` | Cross-module code |
+| 7 | networks | `step()` | Add and remove edges; mixing pools and `ss.Mobility` update who meets whom |
+| 8 | interventions | `step()` | Deliveries, products, parameter changes |
+| 9 | diseases | `step()` | Transmission: every contact-mediated transition |
+| 10 | people | `step_die()` | Requested deaths take effect (see [Removals](#removals-are-deferred)) |
+| 11 | people, then every module | `update_results()` | Counts, flows, declared results and `ss.outcome`s for this step |
+| 12 | analyzers | `step()` | Analyzers read the finished step |
+| 13 | every module, people, sim | `finish_step()` | Remove dead agents; increment the time index |
 
-A module declares its phase with `phase=`; the default is `main`, which maps to `process`. Only the framework schedules phases 3, 4, 6, and 7.
+The reasons for this order are Starsim's: new agents exist before diseases initialize them; states update before networks, so that a state change can alter who is eligible for contact; networks update before interventions, so that an intervention can alter the final network for the step; and interventions run before transmission, so that someone vaccinated today is protected today.
 
-Phase 3 must precede phase 4: effects resolve before the quantities they modify are read. This ordering is derived from the declarations rather than configured, and a module that reads a modified quantity in phase 2 receives its unmodified value, which `summary()` notes if it ever happens.
+### Order within a type
 
-## Queued updates
+**Within a type, modules run in the order given.** `ss.Sim(diseases=[syphilis, hiv])` runs syphilis before HIV in rows 5 and 9; `interventions=[screen, treat]` runs screening before treatment in row 8. There is no other ordering mechanism: no priorities, no phases, no dependency graph.
+
+### Where declared transitions run
+
+A disease built from declared transitions ([03-states-and-transitions.md](03-states-and-transitions.md)) needs no `step()` written by the user. The library puts each transition in one of the two disease rows by its kind, which is derived from its rate:
+
+- **Not contact-mediated** (the rate mentions no state): row 5, `step_state()`. This covers `ss.progression`, branching, dwell times that elapse this step, `ss.transfer`, and `ss.death` declared on the disease.
+- **Contact-mediated** (the rate mentions a state): row 9, `step()`, after networks and interventions have run.
+- **`ss.birth` declared on a disease** adds agents at row 4, with the demographics modules, so that they are initialized with everyone else at row 5.
+- **`ss.Compartments` modules** (aggregate quantities such as a mosquito population or an environmental reservoir) are scheduled like diseases: flows whose rates mention no state at row 5, the rest at row 9.
+- **A plain function passed to `ss.Disease(...)`** as a keyword is called at the end of that disease's row 9. A subclass that overrides `step()` or `step_state()` replaces the corresponding row, as in Starsim.
+
+### Where `ss.modify` is evaluated
+
+A modifier ([07-effects.md](07-effects.md)) has no row of its own. The effective value of a modified quantity is its base value combined with the modifiers currently active, and the library keeps that value up to date as follows:
+
+1. The effective value is cached.
+2. The cache is marked stale when something a modifier depends on changes: a state used in its `where=` gains or loses members, the sim passes its `start=` or `stop=`, or a base value is assigned.
+3. A stale value is recomputed the next time the quantity is read, before the read returns.
+4. A modifier whose amount varies in time (`multiply=ss.seasonal(...)`, a waning curve, a function) is marked stale once per step, at row 2.
+
+So a modifier with a `where=` on a state always reflects that state as it is at the moment of the read, whatever the module order. (A `when=` function is the exception: it is called once per step, at the modifier's place among the connectors or interventions; see [07-effects.md](07-effects.md).) A modifier that is inactive or constant costs nothing per step. Because the base value is never overwritten, the original value comes back when a modifier ends.
+
+Example: `ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)`. If syphilis is listed before HIV, a person who acquires syphilis at row 9 of this step has doubled HIV transmissibility when HIV transmission runs later in row 9 of the same step. If syphilis is listed after HIV, the doubling is first used one step later. Both are valid; the difference is O(dt).
+
+## A within-step chain
 
 ```python
-class Custom(ss.Module):
-    def step(self):
-        newly = (sir.I & (ss.age < 5)).uids
-        self.queue(sir.severe, newly, True)
+import starsim as ss
+
+sir    = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.05),
+    recovery  = ss.progression('I -> R', dur=10),
+)
+test   = ss.Test(sensitivity=0.9, specificity=0.98)
+drug   = ss.Treatment(efficacy=0.95)
+screen = ss.screen(test, coverage=0.2, on_positive=ss.treat(drug))
+
+sim = ss.Sim(sir, interventions=screen, unit='day', dt=1, stop=100)
 ```
 
-`queue(target, index, value)` records an update to be applied in phase 6. Direct assignment to another module's state outside of `queue()` raises `E501 UndeclaredWrite` unless the quantity is in `writes`, and even then the write lands in the queue.
+Testing and treatment happen in the same step: the follow-up given as `on_positive=` runs immediately, inside the screening call at row 8, for the people who tested positive. Follow-ups chain to any depth this way.
 
-**Conflict detection.** Two queued updates writing different values to the same quantity and the same index within one step raise `E1001 ConflictingUpdate`, naming both modules, the quantity, and the number of affected agents. This is the error that last-write-wins silently swallows, and it is the reason queuing is worth its cost.
+Infection is at row 9, after interventions, so with the default order a person infected today is first eligible for screening tomorrow. To put screening after transmission, so that infection, testing, and treatment can all happen in one step, move it in the loop:
 
-Competing transitions out of a state are *not* a conflict: they are resolved as competing hazards ([03-states-and-transitions.md](03-states-and-transitions.md)) before anything is queued, and the queue receives one outcome per agent.
+```python
+sim.init()
+sim.loop.insert(screen, label='sir.step')   # run screening right after sir's transmission
+sim.run()
+```
 
-## Competing hazards
+Which of the two is right depends on what a step represents in the model. With a one-day step the difference is a day; with a one-month step it may matter, and `sim.check_dt()` will show it.
 
-Where several transitions leave the same state, the total exit hazard is the sum and the split is proportional:
+## The loop is a data object
+
+```python
+sim.loop                 # the plan: every (time, module, function) entry in execution order
+print(sim.loop.to_df())  # as a table: time, ti, func_order, label, module, func_name
+sim.loop.plot()          # as a diagram
+sim.loop.insert(fn, label='sir.step')                 # call fn(sim) after sir.step at every step
+sim.loop.insert(fn, label='sir.step', before=True)    # ... or before it
+sim.loop.insert(fn, match_fn=lambda plan: (plan.label == 'sir.step') & (plan.time > ss.date('2021-01-01')))
+```
+
+This is Starsim's `ss.Loop`, unchanged apart from one addition: `insert()` also accepts a module, which moves that module's `step()` to the given position (as in the screening example above). The loop exists after `sim.init()`. Labels are `'<module name>.<function name>'`; `sim.loop.to_df().label.unique()` lists them.
+
+Whatever the order is, it can be printed, and it is the only thing that determines what runs when.
+
+## Competing hazards are resolved jointly
+
+Order between modules is a choice. Order between the transitions inside one module is not something a user should have to think about, so it does not affect results: **transitions out of the same state that are evaluated in the same call compete in one draw.**
 
 ```
-h_total = Σ_k h_k
-p_exit  = 1 − exp(−h_total · dt)
+h_total = sum_k h_k
+p_exit  = 1 - exp(-h_total * dt)
 P(via k | exit) = h_k / h_total
 ```
 
-In a discrete-time backend this MUST be implemented as a single multinomial draw, not as sequential binomials. Sequential binomials give the first-evaluated transition an advantage of order `h·dt`, which is a declaration-order dependence hiding inside an implementation detail — precisely what this document exists to prevent.
+In a discrete-time run this MUST be implemented as a single multinomial draw per source state, not as sequential binomial draws. Sequential draws give the first-declared transition an advantage of order `h * dt`, which would make results depend on declaration order.
+
+Details:
+
+- Transitions out of one state that carry `p=` are a split decided on entry to the state, not a competition ([03-states-and-transitions.md](03-states-and-transitions.md) §Branching); the split is one draw as well.
+- A state with both spontaneous exits (row 5) and a contact-mediated exit (row 9) resolves the spontaneous ones jointly first, and transmission then acts on whoever is still in the state. This is an ordering effect between rows, of size O(dt), and is the same in every agent-based or chain-binomial run.
+- Hazards from *different* modules acting on the same people (background mortality from a demographics module, disease mortality from a disease) are not pooled; they run in module order. Because deaths are deferred (next section), neither prevents the other from being recorded.
+
+## Removals are deferred
+
+Nobody is removed in the middle of a step. A module that kills an agent calls `sim.people.request_death(uids)`, which only records the request; the deaths take effect at row 10 (`step_die()`), after every module has run, and the agents are removed from the active population at row 13. This is Starsim's behavior, kept. A declared `ss.death` transition, and `I >> None @ rate`, do the same thing.
+
+Consequences: an agent who is requested to die at row 5 can still transmit at row 9 of that step and is still counted by any module that runs before row 10; two modules requesting the same death do not conflict; and custom code never sees arrays change length partway through a step. Emigration and other non-death removals use the same mechanism (`request_removal`).
 
 ## Per-module timesteps
 
-A module may declare its own `dt`. Modules with different timesteps are interleaved by **absolute time**:
+A module may have its own `dt`; one that gives none uses the sim's. Modules with different timesteps are interleaved by **absolute time**, which is what Starsim does:
 
 ```
-for each event time t in sorted(all module firing times):
-    for phase in 1..8:
-        for module m in modules due at t, in Loop order:
-            run phase of m
+plan = every (time, function) pair, for every function in the table above and every time on its module's own timeline
+sort plan by (time, position in the table above)
 ```
 
-A within-host progression module at `dt = 1 day` and a demographic module at `dt = 1 year` therefore coexist, and nothing in the landscape besides Starsim does this. A module that declares no `dt` inherits the sim's.
+So a disease at `dt=ss.days(1)` and a demographics module at `dt=ss.years(1)` share one sim: on most days only the disease's functions are in the plan, and on the days the demographics module is due it runs at its usual place in the order. When every module uses the sim's timeline, which is the common case, the plan is just the table repeated once per step.
 
-Quantities read across a timestep boundary are read at their most recent value; a yearly module reading a daily module's state sees that state as of its own firing time. Results are accumulated on the sim's output grid regardless of module timesteps, so a flow generated by a yearly module appears spread across the intervening output intervals with `W1002 CoarseFlow` noted once.
+- A module reading another module's state reads its current value, whichever timestep that module is on.
+- Rates and durations are converted using the `dt` of the module that uses them ([02-types.md](02-types.md)).
+- Results are reported on each module's own timeline, as in Starsim. A flow from a coarse module that is requested on a finer grid is spread evenly across the interval and noted once (`W1002 CoarseFlow`).
+- `sim.loop.plot_step_order()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
 
-## Sub-steps
+Events inside a step (a commuting population that mixes at work from 08:00 and at home from 18:00, say) use the same mechanism: give the network or `ss.Mobility` a sub-daily `dt`, and it appears in the plan at those times. See [06-routes.md](06-routes.md).
 
-A module or route may declare an offset within a step:
+## Order under each run method
 
-```python
-ss.Mobility(ss.gravity(...), kind='commute', at=ss.hours(8), returns=ss.hours(18))
-```
+| Method | Declared transitions | Everything else (interventions, `step()` code, results) |
+|---|---|---|
+| `'abm'`, `'binomial'` | Evaluated in the loop, at rows 5 and 9 | In the loop, in order |
+| `'ode'`, `'sde'` | All flows are evaluated together from the current state and integrated between loop times, so there is no order among them | Called at loop times, in loop order, on groups |
+| `'ctmc'`, `'tau'` | Events are drawn in continuous time between loop times; no order among flows | Called at loop times, in loop order, on groups |
 
-Sub-step offsets resolve to absolute times in the same loop, so they are the same mechanism as per-module timesteps with a second spelling. The commuting semantics are:
-
-1. At `at`, commuters' *mixing group* changes to the destination while their *residence coordinate* does not.
-2. Transmission during the away window uses the destination's route.
-3. At `returns`, mixing groups revert.
-
-An explicit sub-step may also be requested by a module that genuinely needs a within-step chain:
-
-```python
-sim.substep()      # apply the queue now and re-enter phases 3-6
-```
-
-Calling `substep()` is legal, is recorded in the `Loop`, and is flagged in `summary()` as an explicit ordering dependence.
-
-## The `Loop`
-
-The execution order is a data object, not an implementation detail:
-
-```python
-sim.loop                    # the ordered list of (time, module, phase) entries
-sim.loop.to_df()
-sim.loop.plot()
-sim.loop.insert(mod, after='sir.transitions')
-```
-
-This is retained from Starsim unchanged. It is what makes per-module timesteps and named phases tolerable to reason about: whatever the interleaving is, it is printable.
+In a compartmental ODE run the question "does recovery happen before or after infection?" has no meaning, which is one reason the simplest models behave identically however they are written. Things that happen at points in time (a campaign on a date, a custom function called each step) still happen in loop order in every method. See [12-backends.md](12-backends.md).
 
 ## Determinism
 
-Normative requirements for reproducibility ([11-random.md](11-random.md)):
+Requirements for reproducibility ([11-random.md](11-random.md)):
 
-1. Given the same IR, the same configuration, and the same seed, a backend MUST produce identical results across runs, machines, and process counts.
-2. Parallelism over replicates or scenarios MUST NOT change any individual result. A parallel run and a serial run MUST be bit-identical.
-3. Iteration over agents, edges, or groups MUST be in a defined order; set and dict iteration order MUST NOT influence any draw.
-4. Floating-point reduction order MUST be fixed, so that summing a force of infection over groups does not depend on thread count.
+1. Given the same model, the same settings, and the same seed, a run MUST produce identical results on repeated runs on the same machine and library versions, in serial or in parallel.
+2. Running replicates or scenarios in parallel MUST NOT change any individual result.
+3. Iteration over agents, edges, or groups MUST be in a defined order. Set and dict iteration order MUST NOT influence any draw.
+4. Sums whose order could depend on thread count (a force of infection summed over groups, for example) SHOULD use a fixed order. Bit-identical results across different machines or numerical libraries are a goal, not a requirement.
 
-Requirement 2 rules out a global RNG stream shared across workers, and is one of the reasons for per-distribution streams.
+Requirement 2 rules out one random number stream shared across workers, and is one of the reasons each distribution has its own.
 
-## Initialization
+## Building the sim
 
-Build order at `Sim.init()`:
+`sim.init()` builds the sim in this order (`sim.run()` calls it if it has not been called):
 
-1. Resolve declarations; infer states, kinds, units, and defaults.
-2. Apply dimensions in declaration order; generate structural transitions.
-3. Resolve data references and check requirements.
-4. Check dimensions of every rate expression; check shapes.
-5. Register effects; resolve the effect dependency graph; detect cycles.
-6. Compile to IR; normalize; compute hashes.
-7. Select the backend; run capability checks; raise or warn.
-8. Allocate state; seed initial conditions; initialize RNG streams.
-9. Print `summary()` unless suppressed.
+1. Resolve the declarations: states (declared or inferred), the kind of each transition, units, and defaults. Every guessed default is recorded for `describe()`.
+2. Expand stratifications into strata and generate the transitions between them.
+3. Load named data: parameters from data sources, and observed data attached to results by name.
+4. Check the dimension of every rate and the shape of every array-valued parameter.
+5. Register modifiers against their targets.
+6. Choose the run method if `method='auto'`, and work out any approximations an explicitly requested method needs ([12-backends.md](12-backends.md)).
+7. Write the model spec ([14-model-spec.md](14-model-spec.md)) and compute the run hash ([11-random.md](11-random.md)).
+8. Build the loop.
+9. Allocate state, set initial conditions, and initialize the random number streams.
+10. Print the run method with its reason, any approximations, and any assumed units, one line each (`verbose=0` hides them). `sim.describe()` prints the full resolved model at any time.
 
-Every error class in [15-errors.md](15-errors.md) is raised at the earliest step above that can detect it. Nothing that can be detected at step 4 waits until the first timestep.
+Problems are reported at the earliest step that can detect them ([15-errors.md](15-errors.md)): a typo in a state name is an error at step 1, not at the first timestep. The exception is user functions, which are not analyzed in advance; a function that asks for something the run method cannot provide is reported when it is first called ([12-backends.md](12-backends.md) §Functions).
 
 ## Finishing
 
-`finish()` runs once per module, in reverse `Loop` order, and may only write results. After it, the sim is frozen: results are read-only, and `run()` on a completed sim raises unless `reset=True`.
+After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim raises `E1003 RunAfterFinish`; copy the sim or build a new one to run again.
+
+## Rejected
+
+- **Queued updates** (every module reads start-of-step state and all changes are applied together at the end). It removes order effects, but it also removes within-step chains, needs its own tie-breaking rule when two modules write the same quantity, and adds a second pass. An explicit order is simpler to explain and to debug.
+- **Named phases.** A phase is a position in a list; the list is already printable and insertable-into.
+- **Ordering derived from declared dependencies.** Real models have mutual dependence (HIV and syphilis), so a derived order needs a cycle-breaking rule anyway. Convention plus an explicit order does the same job.
+- **Sequential draws for competing hazards.** Declaration order inside a module would bias results.
+- **Removing agents mid-step.** It invalidates indices held by other modules and hides deaths from modules that run later.

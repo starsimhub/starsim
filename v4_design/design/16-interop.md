@@ -1,122 +1,126 @@
-# Interoperation with other frameworks
+# Working with other frameworks
 
-Import from and export to the rest of the landscape. Distinct from paradigm conversion ([12-backends.md](12-backends.md)), which moves one model between execution modes; this moves a model between languages.
+Importing models from, and exporting them to, the other frameworks reviewed in [approaches](../approaches). This is different from changing the run method ([12-backends.md](12-backends.md)), which runs one model in different ways; this moves a model between languages.
 
-Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-conversion.md) §Interconversion and the reviews in [approaches](../approaches).
+Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-conversion.md) and the reviews in [approaches](../approaches).
 
-## The governing rule
+## The priority
 
-> **The authoring language is the artifact; the serialization is derived.**
+People have to want to write models in this language for any of this to matter. An interchange format that nobody writes in ends up as an export target that every tool supports partially. So the order is: first, a model should never be easier to write without the lingua franca than with it; then import and export.
 
-An interchange format that nobody authors in becomes a lossy export target, and partial conformance becomes the normal state — this is the documented history of the closest large-scale precedent. The consequence for this project is a requirement, not an aspiration: this has to be a genuinely pleasant authoring language first. Interoperation is a feature of a language people use, never a substitute for being one.
+## Everything goes through the model spec
 
-## The pivot
-
-All conversion goes through the IR ([14-ir.md](14-ir.md)). There is no direct framework-to-framework path and there MUST NOT be one: `n` frameworks need `2n` adapters, not `n²`.
+An importer reads another framework's model and produces a model spec ([14-model-spec.md](14-model-spec.md)). An exporter reads a model spec and writes another framework's format. There are no direct framework-to-framework converters, so each framework needs at most two adapters.
 
 ```
-EpiModel ─┐                              ┌─▶ SBML
-summer2  ─┤                              ├─▶ Petri-net AMR
-epipack  ─┼─▶  importer ─▶ IR ─▶ exporter┼─▶ odin
-epydemix ─┤                              ├─▶ mermaid / graphviz
-SBML     ─┘                              └─▶ a databook form
+EpiModel ─┐                                      ┌─▶ SBML
+summer2  ─┤                                      ├─▶ Petri net
+epipack  ─┼─▶ importer ─▶ model spec ─▶ exporter ┼─▶ odin
+epydemix ─┤                                      ├─▶ a diagram (Mermaid, Graphviz)
+SBML     ─┘                                      └─▶ a data-entry form
 ```
 
 ## Import
 
 ```python
-ss.load('model.xml',  format='sbml')
-ss.load('model.yaml', format='emulsion')
-ss.load('config.yml', format='flepimop')
-ss.load(epimodel_object)          # format inferred from the object
-ss.load('framework.xlsx', format='atomica')
+sir = ss.load('model.xml',  format='sbml')
+sir = ss.load('model.yaml', format='emulsion')
+sir = ss.load('config.yml', format='flepimop')
+sir = ss.load('framework.xlsx', format='atomica')
+sir = ss.load(summer_model)                 # a Python object from another framework; format taken from its type
 ```
 
-An importer MUST:
+The result is an ordinary model: `sir.describe()` prints it, and it can be stratified, run, and saved like one written by hand.
 
-1. Produce a **complete, normalized IR document** or fail. A partial import is not an import.
-2. Report every construct it could not translate, by name and source location, with `W1601 ImportIncomplete`.
-3. Mark every value it *inferred* rather than read, so that the imported model's `summary()` is as honest as a hand-written one's.
-4. Preserve names. A transition called `infection` in the source is called `infection` here.
-5. Never silently choose a route convention. If the source model's denominator convention is ambiguous, the importer asks or refuses; `beta * S * I / N` and `beta * S * I` are different models.
+An importer SHOULD:
 
-### Fidelity by source
+1. **Keep names.** A transition called `infection` in the source is called `infection` here.
+2. **Mark what it guessed.** Values the importer filled in are marked `[guessed]` in `describe()`, exactly as for a hand-written model.
+3. **Keep going.** Something that does not map onto a built-in piece is kept as a literal expression or a function (below), not dropped and not refused.
+4. **List what it could not translate at all**, by name (`W1601 ImportIncomplete`).
 
-| Source | Structure | Time | Interventions | Observation | Expected fidelity |
-|---|---|---|---|---|---|
-| **Starsim v3** | states declared, transitions in code | typed | full | calibration components | Structure requires lifting `set_prognoses` into transitions; interventions map directly. **Assisted, not automatic.** |
-| **epipack** | reaction tuples | untyped | none | none | Near-complete: 3-tuples → `progression`, 5-tuples → `transmission`. Rate expressions need the route convention resolved. |
-| **summer2** | named flow kinds, stratifications | untyped | parameter functions | requested outputs | High: the flow-kind vocabulary maps one-to-one, and `stratify_with` maps to `stratify`. |
-| **SimInf** | `mparse` transition strings | untyped | events | none | High for `u`; `E`/`N` select-and-shift matrices must be re-expressed as `ss.Mobility` and are the hard part. |
-| **odin** | `deriv`/`update`/`initial` | `dt` in scope | none | `data()` + likelihood | Medium: array-indexed models must be re-expressed as dimensions or imported as opaque. |
-| **EMULSION** | YAML state machine | untyped | none | none | High, and valuable: its shipped feature models are the paradigm-switch test corpus. |
-| **flepiMoP** | compartment product + `proportional_to` | dates | modifiers | **outcomes cascade** | Medium for structure, high for outcomes, which map directly to `ss.Outcome`. |
-| **EpiModel** | derivative function or `status` strings | steps | scenario table | `transmat` | Low for `dcm`; medium for `netsim`, where `inf.prob`/`act.rate` map exactly onto `beta`/`acts`. |
-| **Atomica** | transition matrix + characteristics | typed columns | programs | databook | High and worth doing: the framework workbook is nearly the IR already. |
-| **SBML / AMR / MIRA** | species and reactions | annotations | none | none | Medium: general reactions must be classified into the closed transition vocabulary, which is exactly what a Template taxonomy does. |
-| **EMOD / EpiHiper** | JSON campaigns and rules | typed | **full** | reporters | Low for structure, high for interventions: `Targeting_Config` and typed set algebra map onto `ss.Expr` cleanly. |
-| **epydemix / MetaCast / epymorph** | code | mixed | contact reductions | none | Medium; their contact and mobility data layers are more valuable as data providers than as model imports. |
+### Classifying rates on import
 
-The two entries worth the most effort first are **Starsim v3** (the migration path for existing users, and the one that has to work) and **EMULSION** (the paradigm-switch test corpus already exists there).
+Most frameworks write a transition as a general rate expression: `beta * S * I / N`, `gamma * I`, `mu * N`. There is one transition class here, so the importer's job is to write each one as `src >> dst @ rate` with the right kind of rate. The rules, in order:
 
-### Classification on import
+1. **Strip the source state.** A flow written as a total (`gamma * I` out of `I`) becomes a per-person rate (`gamma`).
+2. **A rate that mentions another state, divided by a population total, is exposure to that state.** `beta * S * I / N` out of `S` becomes `S >> I @ beta * I`. The bare `I` means exposure through the model's routes, which with no network is `I / N` ([06-routes.md](06-routes.md)).
+3. **A rate that mentions another state with no division by a total** (`beta * S * I`) is density-dependent mass action. It is imported the same way, with the mixing set to `dependence='density'` and `n_ref` chosen so the numbers match; the choice is printed.
+4. **A rate that mentions only parameters** is a spontaneous transition: `I >> R @ gamma`. With no source it is a birth, and with no destination a death.
+5. **Anything else is kept exactly as written, as a literal expression of counts**: `S >> I @ beta * W.n / (W.n + K)`. Counts (`.n`) are used literally, so any arithmetic the source framework could write can be carried over. This is correct by construction, and it runs under every method.
+6. **If the source is code that cannot be turned into an expression** (an arbitrary R or Python function), it is kept as a function in the rate slot and the import says so. The model then runs wherever that function runs ([03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot)).
 
-The hardest import problem is the same in every source: **a general rate expression must be classified into the closed transition vocabulary**. `beta * S * I / N` is a transmission; `gamma * I` is a progression; `mu * N` is a birth. The rules:
+Rules 2 and 3 are guesses about what the source meant, and the difference matters when the population changes. The importer prints which it chose for each transition, and `describe()` shows the result. If an expression matches neither pattern cleanly, rule 5 applies: the literal form loses nothing, it only means the transition will not pick up a network or contact matrix if one is added later.
 
-1. A rate expression mentioning a state other than the source is a `transmission`, with that state as `source`.
-2. Dividing by a population total indicates frequency dependence; not dividing indicates density dependence. If it is unclear, refuse (`E1601 UnclassifiableRate`) and show the expression.
-3. An expression mentioning only the source state is a `progression`.
-4. An expression mentioning no state is a `birth` if it has no source and a per-capita `death` otherwise.
-5. Anything else is imported as `ss.process` with its expression recorded verbatim in `meta`, and the resulting capability loss is reported.
+### What to expect from each source
 
-Rule 5 is what keeps imports honest: an import that cannot classify a rate produces a model that runs agent-based and refuses ODE, which is exactly what should happen, rather than a guess.
+| Source | What it gives | How well it imports |
+|---|---|---|
+| **Starsim v3** | States declared, transitions in `step()` code, interventions, calibration components | Runs unchanged, since existing Starsim modules are valid modules. Turning `step()` logic into declared transitions is assisted, not automatic |
+| **epipack** | Reaction tuples | Nearly complete: 3-tuples are spontaneous transitions, 5-tuples are contact-mediated |
+| **summer2** | Named flow kinds, stratifications, requested outputs | Good: each flow kind is one transition with the matching rate, `stratify_with` becomes `stratify`, adjustments become `adjust=` |
+| **SimInf** | `mparse` transition strings, a continuous state `v`, events | Good for the compartments; `v` becomes an `ss.Compartments` module; scheduled events become `ss.Mobility(data=...)` or interventions, which is the harder part |
+| **odin** | `deriv`/`update`/`initial` equations, `data()` with a likelihood | Fair: scalar models classify by the rules above; array-indexed models need their indices turned into stratifications or are kept as literal expressions |
+| **EMULSION** | A YAML state machine | Good, and useful: its shipped models already exercise switching between compartmental and individual-based runs |
+| **flepiMoP** | Compartment products, `proportional_to` rates, modifiers, an outcomes chain | Fair for structure, good for outcomes, which map directly to `ss.outcome` |
+| **EpiModel** | A derivative function (`dcm`) or network modules (`netsim`) | `dcm` models are code, so they import as functions; `netsim` is better, since `inf.prob` and `act.rate` are `beta` and the network's acts |
+| **Atomica** | A transition matrix, characteristics, programs, a databook | Good: the framework workbook is close to `sir.transitions` and the databook to `sim.needs(to=...)` |
+| **SBML, Petri-net formats** | Species and reactions | Fair: reactions are classified by the rules above; anything else is a literal expression |
+| **EMOD, EpiHiper** | JSON campaigns and rule files | Poor for disease structure (it is in compiled code); good for interventions, whose targeting maps onto `eligible=` conditions |
+| **epydemix, MetaCast, epymorph** | Python code | Fair; their contact and mobility datasets are more valuable as data providers for `ss.contacts` and `ss.Mobility` |
+
+The two worth doing first are **Starsim v3**, because existing users need it to work, and **EMULSION**, because its example models are a ready-made test of running one model several ways.
 
 ## Export
 
 ```python
-ss.save(model, 'model.json')                    # IR: complete, round-trips
-ss.save(model, 'model.sbml',  format='sbml')
-ss.save(model, 'model.json',  format='petrinet')
-ss.save(model, 'model.R',     format='odin')
-ss.save(model, 'model.md',    format='mermaid')
-ss.save(model, 'form.csv',    format='databook')
+sim.to_json('sim.json')                              # the model spec: complete, and loads back
+ss.save('model.xml', sim, format='sbml')
+ss.save('model.json', sim, format='petrinet')
+ss.save('model.R', sim, format='odin')
+ss.save('model.md', sim, format='mermaid')
 ```
 
-Only the IR format is lossless. Every other export MUST report what it dropped, at declaration granularity:
+Only the model spec is complete. Every other format carries less, and each export MUST print what was left out or changed, one line per declaration (`W1401 LossyExport`):
 
 ```text
-ss.save(model, 'model.sbml')
-  ! dropped: ss.SexualNet route (no SBML representation)
-  ! dropped: 2 effects with agent-rank conditions
-  ! approximated: lognormal dwell time on 'recovery' -> Erlang(k=2), KS distance 0.04
-  kept: 3 states, 2 transitions, 1 dimension
+>>> ss.save('model.xml', sim, format='sbml')
+exported to SBML: 3 states, 2 transitions, 1 stratification (age, written out as 9 species)
+not exported: network 'mf' (SBML has no networks)
+not exported: function 'clearance' (Python code)
+changed: lognormal dwell time on 'recovery' written as 11 Erlang stages
 ```
 
-A silent lossy export is the same category error as a silent paradigm approximation, and is treated the same way.
+An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported ([14-model-spec.md](14-model-spec.md#functions)).
 
-## Ontology annotation
+The data-entry form (Atomica's databook) is produced by `sim.needs(to='form.csv')` ([04-parameters.md](04-parameters.md#requirements)), and the diagram by `sir.diagram()`.
 
-Nobody except a dedicated ontology tool can tell whether two models' compartments mean the same thing. That is why `ontology=` on a state ([03-states-and-transitions.md](03-states-and-transitions.md)) earns its place as an **optional** field: it is exactly what automated model merging needs, and requiring it on every compartment is real friction for every user who is not merging models.
+## Comparing two models
 
-Importers SHOULD populate it when the source has it. Exporters MUST emit it when present. Nothing in the language may require it.
-
-## Model comparison
-
-Once two models are IR, comparing them is mechanical:
+Since both are data, comparing them is mechanical:
 
 ```python
-ss.diff(model_a, model_b)          # structural diff, declaration by declaration
-ss.diff(run_a, run_b)              # the five-level hash diff (11-random.md)
+ss.diff(sim_a, sim_b)
 ```
 
-Structural diff reports added, removed, and changed declarations in the user's vocabulary — "transition `hospitalization` added", "`recovery` dwell time Exp(10 d) → Erlang(k=3, 10 d)" — not a JSON patch. This is what makes model review possible in the way code review is possible, and it is a capability none of the frameworks in the landscape has.
+```text
+model:    transition 'hospitalization' added; 'recovery' dwell time exponential(10 days) -> gamma(shape 3, mean 10 days)
+pars:     beta 0.05 -> 0.08
+config:   same
+scenario: baseline -> vaccine
+```
 
-## The vignette obligation
+The report is in the user's terms (states, transitions, parameters), not a diff of JSON text. The same function compares an imported model with its hand-written translation.
 
-The claim that this language can express the landscape is empirical. [vignettes](../vignettes) translates the [examples](../examples) corpus into this specification, and each translation is a test:
+## The vignette test
 
-1. The translation runs.
-2. Its results match the original framework's to a stated tolerance ([18-conformance.md](18-conformance.md)).
-3. Where the translation is not faithful, the vignette says so and names the construct that did not survive.
+Whether this language can express what the other frameworks do is something to test, not assert. [vignettes](../vignettes) translates the [examples](../examples) corpus into the lingua franca, and each translation is checked four ways:
 
-Point 3 is not a failure condition. A catalogue of what does not translate, with reasons, is a more useful deliverable than a claim that everything does.
+1. **It runs.**
+2. **It matches.** Its results agree with the original framework's to a stated tolerance ([18-conformance.md](18-conformance.md)).
+3. **It is no longer.** The lingua franca version has no more lines of model code than the original.
+4. **It is no slower.** It takes no more wall-clock time to run than the original.
+
+Points 3 and 4 are the north star: a model should never be easier to write without the lingua franca than with it, and each main framework's own examples should be implementable in no more lines and no more compute time. How lines and time are measured is in [18-conformance.md](18-conformance.md#13-north-star).
+
+Where a translation fails any of the four, the vignette says which and why. A list of what does not translate well, with reasons, is a useful result: it says where the design needs work.

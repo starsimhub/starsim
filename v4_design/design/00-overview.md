@@ -1,126 +1,140 @@
 # Overview
 
-The language on one page, then the object model behind it.
-
-Everything here is specified in detail elsewhere in this folder; this document exists so that the shape of the whole is visible before the parts.
+The language on one page, then the object model behind it. Everything here is specified in detail elsewhere in this folder.
 
 ## The whole language in one model
 
 ```python
 import starsim as ss
 
-# --- the disease: states and transitions ---------------------------------
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+# --- ingredients: parameters and states -----------------------------------
+beta = ss.par(0.05, bounds=[0.01, 0.5])     # per day; it has bounds, so it can be fitted
+dur  = ss.days(10)
+S, I, R = ss.states('S I R')
+
+# --- the disease: transitions, written like the equations ------------------
+infection = S >> I @ beta * I               # "S goes to I at rate beta times I"
+recovery  = I >> R @ dur                    # a duration after @ is a mean dwell time
+cases     = ss.outcome(infection, p=0.5, delay=ss.days(5))    # half of infections are reported, 5 days later
+sir = ss.Disease(infection, recovery, cases, init_prev=0.01)  # names come from the variable names
+
+# --- a stratification: age, with the mixing that goes with it --------------
+sir = sir.stratify(age=[0, 15, 65])         # returns a new model
+
+# --- a sim, with data attached to results by name --------------------------
+kw  = dict(networks=ss.contacts('Kenya'), total_pop=50e6, unit='day', start='2020-01-01', stop='2021-01-01')
+sim = ss.Sim(sir, data='weekly_cases.csv', **kw)     # the file has a column called 'cases'
+sim.describe()                              # the resolved model, with every guessed default marked
+sim.run()                                   # method='auto': prints "method: ode (every part has a compartmental form)"
+sim.plot()                                  # results, with the data drawn over 'cases'
+
+# --- calibration: fit what has bounds to what has data ---------------------
+fit = sim.calibrate()
+
+# --- an intervention, and scenarios ----------------------------------------
+masks = ss.modify(sir.pars.beta, multiply=0.6, start='2020-03-15')
+sims  = ss.parallel(
+    baseline = fit.sim,                     # the calibrated sim
+    masks    = ss.Sim(sir, pars=fit.pars, interventions=masks, **kw),
 )
-
-# --- a dimension: age, with the mixing that goes with it -----------------
-sir.stratify(age=[0, 15, 65], mixing=ss.contacts('Kenya'))
-
-# --- the surveillance system, separate from the disease ------------------
-sir.observe(
-    cases = ss.Outcome(sir.infection, p=0.5, delay=ss.days(5),
-                       data='data/weekly_cases.csv', every=ss.weeks(1),
-                       likelihood=ss.neg_binomial(k=ss.Par(bounds=[0.1, 100]))),
-)
-
-# --- an intervention -----------------------------------------------------
-masks = ss.Effect(ss.time > ss.date('2020-03-15'), sir.beta, multiply=0.6)
-
-# --- scenarios, and a run ------------------------------------------------
-sims = ss.parallel(
-    baseline = ss.Sim(sir, start='2020-01-01', stop='2021-01-01'),
-    masks    = ss.Sim(sir, start='2020-01-01', stop='2021-01-01', interventions=masks),
-)
-sims.run()
-sims.plot()
+sims.plot()                                 # ss.parallel runs the sims
 ```
 
-Every line above is normative: each construct is specified, each default is printed by `summary()`, and each is available in all four paradigms except where [12-backends.md](12-backends.md) says otherwise.
+The short form of the same disease, for when nothing needs a name, is two lines:
 
-## The five things a model is made of
+```python
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.05),
+    recovery  = ss.progression('I -> R', dur=10),
+)
+ss.Sim(sir, unit='day').run().plot()
+```
 
-| Thing | Class | Answers | Specified in |
+## What a model is made of
+
+| Thing | Written as | Answers | Specified in |
 |---|---|---|---|
-| **State** | `ss.State` | What can someone be? | [03](03-states-and-transitions.md) |
-| **Transition** | `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.process` | How do they move between states? | [03](03-states-and-transitions.md) |
-| **Dimension** | `Model.stratify()` | What else varies — age, place, risk, strain? | [05](05-dimensions.md) |
-| **Route** | `ss.Route` and subclasses | Who contacts whom, how often? | [06](06-routes.md) |
-| **Effect** | `ss.Effect` | What modifies what, and how do modifications compose? | [07](07-effects.md) |
+| **State** | `ss.State`, `ss.states('S I R')` | What can someone be? | [03](03-states-and-transitions.md) |
+| **Transition** | `S >> I @ rate`, or `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`; all are `ss.Transition` | How do they move between states? | [03](03-states-and-transitions.md) |
+| **Parameter** | a number, or `ss.par(...)` when it needs a name, bounds, or a source | How fast, how likely, how long? | [02](02-types.md), [04](04-parameters.md) |
+| **Stratification** | `sir.stratify(age=...)` | What else varies: age, place, risk, strain? | [05](05-dimensions.md) |
+| **Mixing** | `ss.Sim(networks=...)` | Who contacts whom, and how often? | [06](06-routes.md) |
+| **Interaction** | `ss.modify(...)`, or Python in a module's `step()` | What changes what? | [07](07-effects.md) |
 
-Interventions ([08](08-interventions.md)) are built from transfers and effects. Results and the observation model ([09](09-results.md)) are declared alongside, never inside, the disease. Nothing else is a first-class concept.
-
-## The four claims
-
-The specification exists to make four claims checkable rather than aspirational.
-
-1. **The model is data.** A model compiles to the intermediate representation in [14-ir.md](14-ir.md) before it computes anything. Everything downstream — dimension checking, stratification, diagrams, ODE generation, gradients, hashing, format translation — is a function of that representation. [Justification: best-practices/model-structure.md]
-2. **The paradigm is a run-time choice.** `run(method='ode' | 'ctmc' | 'tau' | 'binomial' | 'sde' | 'abm')` selects a backend; the model text does not change. [12-backends.md](12-backends.md)
-3. **Nothing is silently approximated.** Every conversion is exact, approximate-with-a-named-closure, or refused by name. `Model.capabilities()` reports which, before anything runs. [12-backends.md](12-backends.md), [15-errors.md](15-errors.md)
-4. **Defaults are guessed and printed.** `summary()` shows every inferred state, dwell-time distribution, unit, denominator convention, and combination rule. A guess the user can see is not hidden behavior. [01-objects.md](01-objects.md) §Summary
+Interventions ([08](08-interventions.md)) are a product or a change to a quantity, plus a delivery. Results ([09](09-results.md)) are automatic for every state and transition, extra ones are declared with the model, and data attaches to them by name. Calibration ([13](13-inference.md)) fits parameters that have bounds to results that have data.
 
 ## The object model
 
 ```
-ss.Sim                          a model, a population, a route set, a timeline, a method
- ├── model:  ss.Module          one or more; ss.Disease is the common case
- │     ├── ss.State             declared or inferred from transitions
- │     ├── ss.Transition        transmission | progression | birth | death | transfer | process
- │     ├── ss.Dimension         added by stratify(); age, patch, strain, or plain
- │     └── ss.Outcome           the observation model
- ├── people: ss.People          size, demography, and per-agent attributes
- ├── mixing: ss.Route           Homogeneous | MixingPool | RandomNet | SexualNet | Network | Mobility
- ├── effects: ss.Effect         cross-module modifications, with declared combiners
- └── results: ss.Result         auto-generated per state and per transition
+ss.Sim                          modules, a population, mixing, a timeline, a method
+ ├── modules                    one or more ss.Module
+ │     ├── ss.Disease           states people are in, and transitions between them
+ │     │     ├── ss.State           declared, or inferred from arrow strings
+ │     │     ├── ss.Transition      contact-mediated or spontaneous (derived from its rate)
+ │     │     ├── ss.par             named parameters, in sir.pars
+ │     │     └── results            n_<state>, one flow per transition, ss.outcome, ratios
+ │     ├── ss.Compartments      states that are counts: reservoirs, vectors
+ │     ├── ss.Demographics      births, deaths, pregnancy
+ │     ├── ss.Intervention      ss.vaccinate, ss.screen, ss.treat, ss.change
+ │     └── ss.Connector, ss.Analyzer
+ ├── people:   ss.People        size, demography, per-agent attributes
+ ├── networks: ss.Network, ss.MixingPool, ss.Mobility     none given means homogeneous mixing
+ ├── modifiers: ss.modify       changes to named quantities while a condition holds
+ ├── loop                       the order modules run in each step (sim.loop)
+ └── results                    sim.results, with data attached by name
 ```
 
 `ss.Module` is the single module abstraction: diseases, networks, demographics, interventions, connectors, and analyzers are all modules with the same lifecycle. This is Starsim's, unchanged. [01-objects.md](01-objects.md)
 
-## Three verbosities, one vocabulary
+## One vocabulary, several lengths
 
-The same model, written three ways. Any keyword accepted by one form is accepted by the others and means the same thing. [01-objects.md §The equivalence rule](01-objects.md#the-equivalence-rule)
+The same transition can be written three ways, and a module can be built with a constructor or as a class. All of them produce the same model. [01-objects.md §The equivalence rule](01-objects.md#the-equivalence-rule)
 
 ```python
-# 1. Dict — for the SIR-shaped majority
-sir = dict(infection=('S -> I', 0.05), recovery=('I -> R', ss.days(10)))
+# Arrow strings: states inferred
+infection = ss.transmission('S -> I', beta=0.05)
 
-# 2. Constructors — the canonical form
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
-)
+# Operators: states declared
+S, I, R   = ss.states('S I R')
+infection = S >> I @ 0.05 * I
 
-# 3. Class — when there is behavior that is not a transition
+# Fully explicit
+infection = ss.Transition(S, I, rate=0.05 * I, name='infection')
+
+# A class, when there is behavior that is not a transition
 class SIR(ss.Disease):
-    infection = ss.transmission('S -> I', beta=0.05)
-    recovery  = ss.progression('I -> R', dur=ss.days(10))
+    S, I, R   = ss.states('S I R')
+    infection = S >> I @ 0.05 * I
+    recovery  = I >> R @ ss.days(10)
 
     def step(self):
         super().step()
-        self.log_something_bespoke()
+        self.do_something_bespoke()
 ```
 
-Subclassing adds behavior. It never adds vocabulary.
+Subclassing adds behavior. It does not add vocabulary.
 
-## What the compiler does
+## Four properties the design aims for
 
-```
-model text  ──parse──▶  object graph  ──normalize──▶  IR  ──lower──▶  backend
-                             │                        │                  │
-                        inference               canonical form       ode / ctmc /
-                     (states, kinds,           (hashing, diff,       tau / binomial /
-                      units, defaults)          serialization,        sde / abm
-                             │                   translation)            │
-                             ▼                        ▼                  ▼
-                        summary()               hash(), save()       results
-```
+1. **The model is data.** States and transitions are objects, so the diagram, the equations, the stratified model, the hash, and the saved file are all derived from them. The serialized form is the model spec ([14-model-spec.md](14-model-spec.md)).
+2. **The method is chosen for you, and can be changed.** `method='auto'` picks the simplest, fastest representation that can run the model exactly: an ODE if every part has a compartmental form, agents otherwise. `method='ode' | 'ctmc' | 'tau' | 'binomial' | 'sde' | 'abm'` asks for one. For simple models this is a free run-time choice; for complex models the method is effectively part of the specification. [12-backends.md](12-backends.md)
+3. **Approximations are stated.** Under `'auto'` nothing is approximated. When a method is asked for that the model does not natively fit, the library uses the standard approximation where one exists and says so in one line; it stops only when there is no sensible approximation. `sir.methods()` shows which methods can run a model before anything runs.
+4. **Defaults are guessed and printed.** `describe()` shows every inferred state, source of infection, dwell-time distribution, unit, and mixing assumption. [01-objects.md §`describe()`](01-objects.md#describe)
 
-Four stages, specified in [01](01-objects.md) (parse), [03](03-states-and-transitions.md)–[09](09-results.md) (inference), [13](14-ir.md) (normalize), and [12](12-backends.md) (lower). Errors are raised at the earliest stage that can detect them, which for almost everything is before the first timestep. [15-errors.md](15-errors.md)
+## What happens at build time
+
+Nothing is computed when a model is written. `sim.init()`, which `sim.run()` calls if it has not been called already, does four things in order:
+
+1. **Resolve defaults.** Names are assigned; states are inferred from arrow strings if none were declared; sources of infection, units of bare numbers, initial conditions, dwell-time distributions, and the mixing are filled in where they were not given. Every guess is recorded so that `describe()` can mark it.
+2. **Check.** Unknown state and parameter names, shapes that do not match their stratification, branch probabilities that do not sum to 1, values outside their bounds. Problems that can be found here are reported here, before the first timestep, by code and name ([15-errors.md](15-errors.md)).
+3. **Build the model spec.** The resolved model is written out as plain data ([14-model-spec.md](14-model-spec.md)): this is what gets hashed, saved, compared, drawn, and exported.
+4. **Pick the method.** Under `method='auto'`, the library checks whether every part has a compartmental form (trying any user functions on groups) and chooses an ODE or agents accordingly; under an explicit method it works out what, if anything, has to be approximated. The choice, the reason, and any approximation are printed.
+
+Then `sim.run()` steps through the loop ([10-execution.md](10-execution.md)), in which modules run in a defined, printable order.
 
 ## Reading order
 
-- Implementing the language: [01](01-objects.md) → [02](02-types.md) → [03](03-states-and-transitions.md) → [13](14-ir.md) → [10](10-execution.md) → [12](12-backends.md).
-- Writing a backend: [13](14-ir.md) → [12](12-backends.md) → [10](10-execution.md) → [17](18-conformance.md).
-- Writing models: [00](00-overview.md) → [03](03-states-and-transitions.md) → [06](06-routes.md) → [08](08-interventions.md) → [09](09-results.md).
+- Writing models: this page → [03](03-states-and-transitions.md) → [04](04-parameters.md) → [06](06-routes.md) → [08](08-interventions.md) → [09](09-results.md).
+- Implementing the language: [01](01-objects.md) → [02](02-types.md) → [03](03-states-and-transitions.md) → [14](14-model-spec.md) → [10](10-execution.md) → [12](12-backends.md).
+- Adding a run method: [14](14-model-spec.md) → [12](12-backends.md) → [10](10-execution.md) → [18](18-conformance.md).
 - Reviewing the design: [17-vocabulary.md](17-vocabulary.md) for the total surface, then [19-open-questions.md](19-open-questions.md) for what is not settled.

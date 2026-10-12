@@ -1,12 +1,12 @@
 # Parameters and data
 
-Declaration, typing, provenance, shapes, and the requirement contract.
+Where values live, `ss.par`, the forms a value can take, shapes, optional requirements, and named data.
 
 Justified by [best-practices/parameters-and-distributions.md](../best-practices/parameters-and-distributions.md).
 
-## The default: no parameter block at all
+## The default: values live inline
 
-In a two-transition model, a parameters block is ceremony:
+A parameter used once lives in the transition that uses it. There is no parameter block to fill in.
 
 ```python
 sir = ss.Disease(
@@ -15,182 +15,162 @@ sir = ss.Disease(
 )
 ```
 
-The values live in the transitions that use them, and both are addressable — `sir.infection.beta` and `sir.recovery.dur` are the canonical paths, usable as effect targets and as calibration targets. Naming a parameter is for when it is used twice, fitted, or documented.
+Both values are addressable through their transition, as `sir.infection.beta` and `sir.recovery.dur`, for modifiers ([07-effects.md](07-effects.md)), `ss.change` ([08-interventions.md](08-interventions.md)), and inspection. Name a parameter when it is reused, fitted, or documented.
 
-## `ss.Par`
+## `ss.par`
 
 ```python
-ss.Par(
-    value  = None,        # scalar, ss.Quantity, ss.Dist, ss.timeseries, or callable
-    *,
-    kind   = None,        # 'rate' | 'dur' | 'prob' | 'freq' | 'count' | None (inferred from use)
-    bounds = None,        # [lo, hi]: the admissible range, and the calibration search space
-    prior  = None,        # an ss.Dist: the prior for Bayesian inference
-    source = None,        # free text: where this number came from
+ss.par(
+    value  = None,        # any form on the ladder below
+    bounds = None,        # [lo, hi]: the allowed range, and the search range for fitting
+    prior  = None,        # a distribution: the prior, for posterior methods
+    source = None,        # free text: where the number came from
     doc    = None,        # free text: what it means
-    unit   = None,        # overrides the sim's unit for this parameter only
 )
 ```
 
 ```python
+beta = ss.par(0.05, bounds=[0.001, 0.5], source='Ferguson et al. 2020, Table 2')
+dur  = ss.par(ss.days(10), bounds=[3, 30])
+
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    beta      = ss.Par(0.05, bounds=[0.001, 0.5], source='Ferguson et al. 2020, Table 2'),
-    dur_inf   = ss.Par(ss.days(10), bounds=[3, 30]),
-    infection = ss.transmission('S -> I', beta=beta),
-    recovery  = ss.progression('I -> R', dur=dur_inf),
+    infection = S >> I @ beta * I,
+    recovery  = I >> R @ dur,
 )
 ```
 
-`bounds` is what makes calibration declarative ([13-inference.md](13-inference.md)): the inference layer reads the range and the kind, and transforms automatically — probabilities on a logit scale, rates on a log scale — without the user specifying it.
+An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates. In the string form it is passed the same way: `ss.transmission('S -> I', beta=beta)`.
 
-`source` is one optional line that answers the question every reviewer of a modeling analysis asks. It costs nothing when unused, it is carried into `summary()` and into the parameter hash, and the models that matter most are the ones where someone bothered.
+- **Names.** A named parameter is collected into the module's `pars`, Starsim's parameter container, under its name: `sir.pars.beta`. The name is the keyword if it was passed as one (`ss.Disease(beta=ss.par(0.05), ...)`), else the variable it is bound to, by the same lookup as for transitions ([01-objects.md](01-objects.md#names)). A plain Python number used in a rate is just a number; wrap it in `ss.par` to make it addressable by name.
+- **`bounds`** is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data ([13-inference.md](13-inference.md)). The scale used for the search (log for rates and durations, logit for probabilities) follows from the slot the parameter is used in. Bounds given as bare numbers are in the unit of the value. A value outside its bounds raises `E606 OutOfBounds`.
+- **`prior`** is needed only for posterior methods. Without one, a parameter with bounds is treated as uniform over them.
+- **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()` and saved in the model spec.
+- **The type** of a parameter (rate, duration, probability) comes from the slot it is used in ([02-types.md](02-types.md)) or from its typed value. There is no `kind=` argument.
+- **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises `E604 UnvaluedParameter`.
 
-`kind` is normally inferred from the slot the parameter is used in ([02-types.md](02-types.md)). It is stated explicitly when a parameter is declared before it is used, or is used in more than one slot. A parameter used in two slots of different kinds raises `E104 InconsistentParameterKind`.
-
-### Declaration is required; unknown names are refused
-
-Assigning an undeclared parameter name on a module MUST raise `E602 UnknownParameter`, naming the module and listing the closest declared names. This is Starsim's `define_pars` locking, kept: a misspelled parameter name is a silent behavioral difference in every framework that permits it.
+Setting a parameter name that the module does not have raises `E602 UnknownParameter`, listing the closest names. This is Starsim's existing behavior and it is kept, because a misspelled parameter that is silently ignored is one of the hardest bugs to find:
 
 ```text
 E602 UnknownParameter: 'sir' has no parameter 'dur_inff'.
      Did you mean 'dur_inf'?
-     Declared parameters: beta, dur_inf
+     Parameters: beta, dur_inf
 ```
 
-## The parameter ladder
+## The ladder
 
-Every parameter slot accepts every rung. The slot's *kind* is fixed; its *form* is not.
+Every slot that takes a value accepts every form below. The slot fixes what the value means; the form is free.
 
 ```python
-beta = 0.05                                      # bare number, unit from context
-beta = ss.perday(0.05)                           # typed
-beta = ss.lognorm(mean=0.05, std=0.01)           # a distribution: heterogeneity
-beta = ss.timeseries({2020: 0.05, 2021: 0.02})   # time-varying
-beta = ss.timeseries('beta.csv', mode='linear')  # from a file
+beta = 0.05                                          # a number; unit from the sim
+beta = ss.perday(0.05)                               # a typed quantity
+beta = ss.lognorm_ex(mean=0.05, std=0.01)            # a distribution: varies between agents
+beta = ss.timeseries({2020: 0.05, 2021: 0.02})       # varies in time
+beta = ss.timeseries('beta.csv', mode='linear')      # the same, from a file
 beta = ss.seasonal(mean=0.05, amplitude=0.3, peak='January')
-beta = ss.by(age=[0.08, 0.05, 0.03])             # one per stratum
-beta = lambda mod, sim, uids: ...                # escape hatch, priced
+beta = ss.by(age=[0.08, 0.05, 0.03])                 # one value per stratum
+beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03      # a function
 ```
 
-`ss.timeseries` interpolation modes are `constant`, `linear`, and `spline`, which is odin's set and is sufficient.
+- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, or `'spline'`.
+- A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the run method provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
+- The forms combine: `ss.by(age=[...])` may hold time series, and a function may return any of the others' values.
+- Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a source.
 
-Every backend MUST handle every rung or refuse by name. In particular, a time-varying rate under an exact continuous-time method requires the inhomogeneous-Poisson algorithm, and a backend that cannot do it MUST raise `E803 TimeVaryingRateUnsupported` rather than freezing the rate at its initial value. A rate is an expression in time and state, and each backend is responsible for handling that correctly or refusing.
+Every run method handles every form or says that it cannot. In particular a time-varying rate under an exact continuous-time method (`'ctmc'`) needs the time-inhomogeneous algorithm; a method MUST NOT freeze the rate at its starting value.
 
-### Heterogeneity versus uncertainty
+### A distribution as a value, a distribution as a prior
 
-A distribution in a parameter slot means one of two things, and the **slot** disambiguates. They MUST NOT be conflated:
+A distribution means two different things depending on where it is put, and the place decides:
 
 ```python
-ss.progression('I -> R', dur=ss.lognorm(mean=ss.days(10), std=ss.days(3)))   # heterogeneity
-ss.Par(prior=ss.lognorm(mean=0.05, std=0.01))                                 # uncertainty
+ss.progression('I -> R', dur=ss.lognorm_ex(mean=10, std=3, unit='days'))    # variation between people
+ss.par(0.05, prior=ss.lognorm_ex(mean=0.05, std=0.01))                      # uncertainty about one number
 ```
 
-The first gives each agent its own dwell time and becomes Erlang stages in a compartmental backend. The second is a prior over a single value and is used only by calibration. A vector-valued parameter is never implicitly a time series in one place and a sensitivity sweep in another.
+The first gives each agent their own dwell time (and becomes stages in a compartmental run). The second is a prior over a single value and is used only by calibration.
 
 ## Shapes
 
-Dimensional types say what a number means; shapes say how many of them there are and along which axis. A language spanning agents, patches, strata, and time needs both.
+Types say what a number means; shapes say how many there are and along which stratification.
 
 ```python
-beta = 0.05                            # scalar: the same everywhere
-beta = ss.by(age=[0.08, 0.05, 0.03])   # shape (age,)
-beta = ss.by(patch=matrix)             # shape (patch, patch)
-beta = ss.by(age=..., patch=...)       # shape (age, patch)
+beta = 0.05                                    # the same everywhere
+beta = ss.by(age=[0.08, 0.05, 0.03])           # one per age group
+beta = ss.by(age=[0.08, 0.05, 0.03], sex=[1.0, 0.8])     # one per age group and sex: the product of the two
+beta = ss.by(table)                            # a dataframe with a column per stratification and a value column
 ```
 
-Shapes are inferred from the value and checked against the model's dimensions at build time. Broadcasting over omitted dimensions is permitted and is named in the error when a shape does not fit:
+`ss.by` names the stratification each axis belongs to, so values never depend on the order strata happen to be stored in. A value with fewer axes than the model is used for every level of the missing ones; `describe()` shows this (`beta: by age (3); the same for every patch (47)`). A value whose length does not match its stratification, such as four values for three age groups, raises `E603 ShapeError`, naming the parameter, the transition, and both lengths.
 
-```text
-E603 ShapeError: 'beta' for transition 'infection' has shape (age=3,)
-      but the model is stratified by (age=3, patch=47).
-      Broadcasting over 'patch' is assumed. To be explicit, write
-        ss.by(age=[...], patch=[...])
-      or leave 'patch' out to broadcast, which is what is happening now.
-```
+`ss.by` replaces the separate global and local parameter concepts of other frameworks (SimInf's `gdata`/`ldata`, MetaCast's `universal_params`/`subpop_params`) and replaces string-built parameter names such as `'beta_[high,vaccinated]'`, which are not part of the language.
 
-A shape that is wrong rather than merely incomplete — `(age=4,)` against `age=3` — is an error with no fix offered except the correct shape.
+## Values kept outside the model
 
-`ss.by` supersedes the parallel global/local parameter concepts (SimInf's `gdata`/`ldata`, MetaCast's `universal_params`/`subpop_params`) with one mechanism, and it supersedes string-concatenated parameter names entirely. A name like `'beta_[high,vaccinated]'` MUST NOT appear anywhere in the language.
-
-## Where values live
-
-Values live inline by default. The split is available and is not required:
+Values live inline by default. They can also be supplied separately, which is useful for a set of country-specific values or a fitted parameter set:
 
 ```python
-sir = ss.Disease(
-    beta      = ss.Par(kind='rate', bounds=[0.001, 2.0], doc='transmission rate'),
+beta = ss.par(bounds=[0.001, 2.0], doc='transmission rate')
+sir  = ss.Disease(
     infection = ss.transmission('S -> I', beta=beta),
     recovery  = ss.progression('I -> R', dur=ss.days(10)),
 )
-
-sim = ss.Sim(sir, pars='params/kenya_2024.csv')
+sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
 ```
 
-A `ss.Par` with no value and no external source raises `E604 UnvaluedParameter` at build time, naming the parameter and the files searched. External parameter files may be CSV, TOML, JSON, or a dict; the format is a convenience and carries no semantics.
+`pars=` takes a dict or a file (CSV, TOML, or JSON) of values by name (`beta`, or `sir.beta` when there is more than one module). Names it does not recognize raise `E602 UnknownParameter`.
 
 Either way, `sim.hash()` reports the factored run identity ([11-random.md](11-random.md)):
 
 ```text
-model=8f3a21  pars=c47e90  config=1b6d55  scenario=baseline  seed=1
+model=8f3a21  pars=c47e90  config=1b6d55  scenario=baseline  fit=none  seed=1
 ```
 
-Separating structural identity from parameter values is right; requiring two files for an SIR is not. The hashes are computed the same way whichever form was used, so the reviewer's question — *did the model change, or did the numbers?* — is answered without mandating a file layout.
+so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file.
 
 ## Requirements
 
-A module declares its data interface as data, so it can be checked before anything runs and so a data-entry form can be generated from it.
-
-```python
-ss.Needs(
-    name,
-    *,
-    shape  = None,     # 'scalar' | 'age' | 'patch' | 'age x age' | 'T x patch' | ...
-    kind   = None,     # a type from 02-types.md
-    source = None,     # a suggested provider, e.g. 'socialmixr:POLYMOD'
-    doc    = None,
-    default = None,    # if given, the requirement is optional
-)
-```
+A module MAY list the data it needs. This is optional metadata, used to tell the user what to supply and to generate a data-entry form. It is not enforced: a module can read anything, and a module that lists nothing works as before.
 
 ```python
 class MyNetwork(ss.Network):
     requires = [
-        ss.Needs('population',     shape='patch', source='UN WPP 2024'),
+        ss.Needs('population',     shape='patch',     source='UN WPP 2024'),
         ss.Needs('contact_matrix', shape='age x age', source='socialmixr:POLYMOD'),
     ]
 ```
 
+`ss.Needs(name, shape=, source=, doc=, default=)` describes one item. For modules made only of states, transitions, and parameters, the list is generated from the parameters, so nothing has to be written.
+
 ```python
-sim.needs()                 # the requirements table for this model
-sim.needs(to='form.csv')    # a data-entry form with exactly these fields, units, and labels
+sim.needs()                 # the table of what this sim needs, and which items are still missing
+sim.needs(to='form.csv')    # a data-entry form with those fields, units, and labels
 ```
 
-`needs(to=...)` is Atomica's databook generated from the framework, which is the single most effective accessibility mechanism in the landscape. The generated form is a contract: filling it in is sufficient to run the model.
-
-Requirements are **enforced**, not advisory. A module reads through a view containing exactly what it declared; reading anything else raises `E601 MissingRequirement`. This is what keeps the generated form honest — a module that quietly reads something it did not declare would produce a form that is missing a field.
+`needs(to=...)` is Atomica's databook, generated from the model. Because the list is optional, the form is as complete as the declarations are; items a module reads without listing do not appear in it.
 
 ## Named data
 
-A reference to data is part of the model. A language that can express a contact matrix but cannot say *which* contact matrix, from *which* source, for *which* place, has moved the problem rather than solved it.
+A reference to data is part of the model: not just a contact matrix, but which one, from which source, for which place.
 
 ```python
 ss.People('Kenya', year=2024)                     # size, age structure, sex ratio
-ss.contacts('Kenya', source='prem_2021')          # a contact matrix
+ss.contacts('Kenya', source='prem_2021')          # an age contact matrix, as mixing pools
 ss.geo('Kenya', level='county')                   # names, populations, centroids, adjacency
-ss.data('data/weekly_cases.csv')                  # an observation series
+ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to results by column name
 ```
 
-Requirements:
+- Data is fetched on first use and cached locally; the cache key includes the source and its version.
+- The resolved source, version, and retrieval date are shown by `describe()` and contribute to the parameter hash, so a re-run against changed upstream data can be detected.
+- Providers are pluggable, so a group can add its own sources.
+- A place name that cannot be resolved raises `E605 UnknownLocation`, listing near matches and the providers searched.
 
-- Resolution is **pull-with-cache**, not bundle. Data is fetched on first use, cached locally, and the cache key includes the source and version.
-- The resolved source, version, and retrieval date MUST appear in `summary()` and MUST contribute to the parameter hash, so that a re-run against changed upstream data is *detectable* rather than silent.
-- The provider interface MUST be pluggable. Bundled providers MUST include at least one country that is not the one the developers live in.
-- A named location that cannot be resolved raises `E605 UnknownLocation` listing near matches and the providers searched.
+How data is matched to results is in [09-results.md](09-results.md).
 
-## Rejected
+## Not included
 
-- **Open parameter lists.** A parameter that springs into existence on first use is a typo that becomes a silent behavioral difference.
-- **Mandatory value/model separation.** The capability is right; requiring two files for an SIR is not.
-- **String-concatenated parameter names.** Shapes do this job properly.
-- **A `use_defaults` flag** that leaves much of a model's behavior invisible in its files. Defaults here are guessed aggressively and printed exhaustively, which sounds similar and is the opposite policy.
-- **More than eleven core distributions.** See [17-vocabulary.md](17-vocabulary.md).
+- **Parameters that spring into existence on first use.** A typo then becomes a silent change in behavior; see `E602` above.
+- **A required split between model and values.** The split is available; two files for an SIR are not required.
+- **String-built parameter names.** `ss.by` does this job.
+- **Required, enforced data declarations.** Requirements are metadata.
+- **A `use_defaults` switch** that hides a model's behavior. Defaults here are guessed and printed.

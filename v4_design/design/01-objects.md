@@ -1,232 +1,282 @@
 # Objects and construction
 
-The class hierarchy, how models are constructed, and the rules that keep the short form and the long form the same language.
+The class hierarchy, how models are constructed, how things get their names, and the rule that keeps the short form and the long form the same language.
 
 Justified by [best-practices/principles.md](../best-practices/principles.md) and [best-practices/model-structure.md](../best-practices/model-structure.md).
 
 ## The hierarchy
 
 ```
-ss.Base                     serialization, hashing, summary, equality
- ├── ss.Module              lifecycle: init → step → finish; owns states, transitions, results
- │    ├── ss.Disease        the common case; states and transitions
- │    ├── ss.Route          contact structure (see 06-routes.md)
- │    ├── ss.Demographics   births, deaths, ageing, migration
- │    ├── ss.Intervention   products and delivery (see 08-interventions.md)
- │    ├── ss.Connector      imperative cross-module code; must declare `writes`
- │    └── ss.Analyzer       observation only; may not write
- ├── ss.Sim                 a model plus a population, a timeline, and a method
- ├── ss.Declaration         anything valid as a keyword in a Module body
- │    ├── ss.State
- │    ├── ss.Transition     transmission | progression | birth | death | transfer | process
- │    ├── ss.Par
- │    ├── ss.Outcome
- │    └── ss.Continuous
- ├── ss.Effect              a declared modification of a named quantity
- ├── ss.Expr                a predicate or arithmetic expression over model state
- ├── ss.Quantity            a typed number (see 02-types.md)
- │    ├── ss.dur  ss.rate  ss.prob  ss.freq  ss.count
- │    └── ss.Dist           a distribution, which is a Quantity-valued random variable
- └── ss.Result              a named time series with units and provenance
+ss.Sim                      modules, a population, a timeline, and a run method
+ss.People                   the population: size, demography, per-agent attributes
+ss.Module                   lifecycle: init → step → finalize; owns states, transitions, parameters, results
+ ├── ss.Disease             states that people are in, and the transitions between them
+ ├── ss.Compartments        states that are counts (reservoirs, vectors); same transition syntax
+ ├── ss.Network             who contacts whom: ss.RandomNet, ss.MFNet, ss.StaticNet, ...
+ ├── ss.MixingPool          group-level mixing; also ss.MixingPools, ss.Mobility
+ ├── ss.Demographics        births, deaths, pregnancy, migration
+ ├── ss.Intervention        products and their delivery (08-interventions.md)
+ ├── ss.Connector           cross-module code in step()
+ └── ss.Analyzer            extra results
+ss.State                    something a person (or a count) can be in
+ss.Transition               a movement between states; built by >> and @, or by
+                            ss.transmission, ss.progression, ss.birth, ss.death, ss.transfer
+ss.par                      a named parameter with bounds, prior, and provenance
+ss.dur, ss.per, ss.prob, ss.freq     time types (base classes ss.TimePar, ss.Rate); 02-types.md
+ss.Dist                     distributions: ss.normal, ss.lognorm_ex, ...
+ss.Result                   a named time series
 ```
 
-`ss.Module` MUST be the only module abstraction. Diseases, networks, demographics, interventions, connectors, and analyzers differ in what they declare, never in how they are scheduled or initialized. This is Starsim's design and it is kept unchanged; it is what makes multi-disease models and non-disease health states composable.
+`ss.Module` is the only module abstraction. Diseases, networks, demographics, interventions, connectors, and analyzers differ in what they contain, not in how they are initialized or scheduled. This is Starsim's design, kept unchanged; it is what makes multi-disease models and non-disease health states composable. Existing Starsim modules, written as subclasses with `step()`, remain valid modules.
+
+## Naming conventions
+
+**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names.
+
+| | Examples |
+|---|---|
+| CamelCase | `ss.Sim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Compartments`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.Calibration`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Test`, `ss.Treatment` |
+| lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; functions `ss.parallel`, `ss.stratify`, `ss.compare_models` |
+
+Methods that describe the model are `describe()`, `diagram()`, `equations()`, and `methods()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.
 
 ## Constructing a model
 
-### Form 2 is canonical
+There are two ways to construct a module, and inside either one, three ways to spell a transition ([03-states-and-transitions.md](03-states-and-transitions.md)).
+
+### The constructor form
 
 ```python
 ss.Disease(
-    <name> = <declaration>,      # one keyword per state, transition, parameter, or outcome
-    ...,
-    name  = None,                # module name; defaults to the variable name, then the class name
-    dt    = None,                # this module's timestep; defaults to the sim's (10-execution.md)
-    phase = 'main',              # execution phase (10-execution.md)
+    *transitions,            # positional: transitions and outcomes, named from their variable names
+    name = None,             # the module's name
+    dt   = None,             # this module's timestep; defaults to the sim's
+    init_prev = None,        # initial prevalence (03-states-and-transitions.md)
+    **members,               # one keyword per state, transition, parameter, result, or function
 )
 ```
 
-Every keyword whose value is an `ss.Declaration` becomes a member of the module under that name. **The keyword is the name**, and that name is used everywhere else: in results (`sim.results.infection`), in effects (`ss.Effect(..., sir.beta, ...)`), in adjustments (`adjust={'recovery': ...}`), in the IR, and in error messages.
-
-Names MUST be valid Python identifiers and MUST be unique within a module. A name that collides with a reserved attribute of `ss.Module` (`step`, `init`, `results`, `summary`, `stratify`, `observe`, `name`, `dt`, `phase`, `requires`, `writes`) MUST raise `E201 ReservedName`.
-
-### Form 1: the dict
-
-A `dict` passed where a module is expected is expanded to `ss.Disease(**d)`. Values that are not `ss.Declaration` instances are coerced by these rules, and by no others:
-
-| Value shape | Coerced to | Condition |
-|---|---|---|
-| `('A -> B', q)` where `q` is a rate or bare number | `ss.transmission('A -> B', beta=q)` | the arrow's source is a susceptible state — that is, a state with no inbound transition |
-| `('A -> B', q)` where `q` is a duration | `ss.progression('A -> B', dur=q)` | always |
-| `('A -> B', q)` where `q` is a probability | `ss.progression('A -> B', p=q)` | always |
-| a number, `ss.Quantity`, or `ss.Dist` | `ss.Par(value)` | always |
-| a `dict` | a nested module | always |
-
-The first row is the only inference that depends on model context, and it is deliberately narrow: it resolves the SIR/SIS/SEIR shapes and nothing else. If both rules could apply, or neither, the coercion MUST raise `E202 AmbiguousShorthand` naming the tuple and showing the two explicit spellings. The shorthand is for the common case; it is not a general syntax.
+The short form is two lines, with states inferred from the arrows:
 
 ```python
-sir = dict(infection=('S -> I', 0.05), recovery=('I -> R', ss.days(10)))
-ss.Sim(sir).run()
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.05),
+    recovery  = ss.progression('I -> R', dur=10),
+)
 ```
 
-### Form 3: the class
+The operator form declares the ingredients first and then passes the transitions positionally:
 
-Class attributes that are `ss.Declaration` instances are collected in definition order and are equivalent to the same keywords passed to the constructor. Subclasses inherit their parents' declarations; a subclass may override a declaration by rebinding the name, and may add behavior by defining methods.
+```python
+beta = 0.05
+dur  = ss.days(10)
+
+S, I, R   = ss.states('S I R')
+infection = S >> I @ beta * I
+recovery  = I >> R @ dur
+sir = ss.Disease(infection, recovery)
+```
+
+What a keyword's value is decides what it becomes:
+
+| Value | Becomes |
+|---|---|
+| an `ss.State` | a state |
+| an `ss.Transition` | a transition |
+| an `ss.par`, number, typed quantity, or distribution | a parameter in `sir.pars` |
+| an `ss.outcome`, or a ratio of states such as `I / N` | a result ([09-results.md](09-results.md)) |
+| a plain function | custom behavior, called every step ([03](03-states-and-transitions.md#custom-per-step-behavior)) |
+
+`ss.Compartments` is constructed the same way.
+
+### Names
+
+The keyword is the name. When there is no keyword, a transition's name is looked up in this order:
+
+1. the keyword it was passed under (`ss.Disease(infection=...)`);
+2. its own `name=` argument (`ss.Transition(S, I, rate=beta * I, name='infection')`);
+3. the name of the variable it is bound to in the code that called the constructor (`infection = S >> I @ beta * I` then `ss.Disease(infection, recovery)`);
+4. a fallback built from its endpoints: `S_to_I`.
+
+Rule 3 is found by looking for the object among the caller's local and global variables when the module is constructed. It is a convenience and it can miss: a transition written inline (`ss.Disease(S >> I @ beta * I)`) or built in a loop has no variable, so it gets the fallback name, and `describe()` shows the names that were used. If two fallback names collide, the later ones get a numeric suffix (`S_to_I_2`).
+
+States and `ss.par` objects are named by the same lookup (a state from `ss.states('S I R')` already has its name). A module's name is its `name=`, else the variable it is bound to where it is passed to `ss.Sim`, else the lowercased class name as in Starsim; this is why `sir = ss.Disease(...)` gives `sim.diseases.sir` and `sim.results.sir`.
+
+The name is then used everywhere: `sir.infection`, the results, `ss.modify` and `ss.change` targets, the model spec, and messages. Names are Python identifiers and are unique within a module. Two members given the same explicit name raise `E206 DuplicateDeclaration`, and a name that collides with an attribute of `ss.Module` (`step`, `init_pre`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, and so on) raises `E201 ReservedName`.
+
+### The class form
+
+Class attributes that are states, transitions, parameters, or outcomes are collected in definition order and mean the same as the same keywords passed to the constructor. Subclasses inherit them, may replace one by rebinding its name, and may add behavior by defining methods.
 
 ```python
 class SEIR(ss.Disease):
-    infection = ss.transmission('S -> E', beta=0.05, source='I')
-    latency   = ss.progression('E -> I', dur=ss.days(3))
-    recovery  = ss.progression('I -> R', dur=ss.days(10))
+    beta = ss.par(0.05, bounds=[0.01, 0.5])
+
+    S, E, I, R = ss.states('S E I R')
+    infection  = S >> E @ beta * I
+    latency    = E >> I @ ss.days(3)
+    recovery   = I >> R @ ss.days(10)
+
+    def step(self):
+        super().step()                       # the declared transitions
+        self.count_something_bespoke()       # anything else
 ```
 
-Inside a class body, a declaration may reference an earlier one by name, because it is an ordinary Python name at that point:
+Use the class form when there is behavior that is not a transition, or when the model is going into a library. A module that only has states, transitions, parameters, and results never needs to define a method.
 
-```python
-class SIR(ss.Disease):
-    I         = ss.State(init=0.01, infectious=True)
-    infection = ss.transmission('S -> I', beta=0.05)
-    recovery  = ss.progression('I -> R', dur=ss.days(10))
-    prevalence = I / ss.N                       # a characteristic; see 09-results.md
-```
+### Library models
+
+Starsim's `dict(type='sir', beta=0.1)` and `ss.SIR(beta=0.1)` are kept as the way to ask for a model from the library. A library model is an ordinary module: `describe()` prints it in full and `equations()` works on it.
+
+The dict *tuple* shorthand from the first draft, `dict(infection=('S -> I', 0.05))`, is not part of the language. Guessing the kind of transition from the type of a bare value was ambiguous (it misclassifies SIRS, for example), and the two-line constructor form is as short.
 
 ### The equivalence rule
 
-This rule is normative and constrains every other document in this folder:
+> **Anything that can be written in one form can be written in the others, with the same keywords meaning the same thing. Subclassing adds behavior; it does not add vocabulary.**
 
-> **Any keyword accepted by the dict form MUST be accepted by the constructor form and the class form, and MUST mean the same thing. Any model expressible in the class form MUST have a constructor form and, unless it defines methods, a dict form. Subclassing adds behavior; it MUST NOT add vocabulary.**
+Concretely:
 
-Concretely: a feature MUST NOT be implemented as a method that only subclasses can call, if the same feature is reachable by keyword. A feature MUST NOT require the class form unless it is imperative code. Any proposal that violates this rule is rejected regardless of its other merits.
-
-The corollary for conformance: for every model in the test corpus, the three forms MUST produce byte-identical IR ([14-ir.md](14-ir.md)) and therefore identical model hashes. [18-conformance.md](18-conformance.md) §Form equivalence.
+- The three transition spellings (arrow-string constructors, operators, explicit `ss.Transition`) build the same objects. A keyword accepted by a shorthand constructor (`dur=`, `rate=`, `p=`, `stages=`) is accepted by `ss.Transition` and means the same thing.
+- The constructor form and the class form build the same module. A feature MUST NOT be reachable only as a method that subclasses can call if it could be a keyword, and MUST NOT require the class form unless it is imperative code.
+- For every model in the test corpus, the forms MUST produce the same model spec ([14-model-spec.md](14-model-spec.md)) and therefore the same model hash, once names agree. [18-conformance.md](18-conformance.md).
 
 ## `ss.Sim`
 
 ```python
 ss.Sim(
-    model,                       # a Module, dict, or list of either
-    *,
-    # --- population ---
-    people    = None,            # ss.People, or None to build from n
-    n         = 1e6,             # population size represented (semantic, all backends)
-    n_agents  = None,            # simulated agents (ABM only; defaults to n, see below)
-    mixing    = None,            # ss.Route or list of routes; defaults to ss.Homogeneous()
-    # --- time ---
-    start     = None,            # date, year, or 0
+    modules,                     # a module or a list of modules; diseases=, demographics=, etc. also work
+    # --- who ---
+    networks  = None,            # networks and mixing pools alike; none means homogeneous mixing
+    people    = None,            # an ss.People, e.g. ss.People('Kenya')
+    total_pop = None,            # size of the population represented
+    n_agents  = None,            # number of simulated agents; giving it makes the run agent-based
+    # --- when ---
+    start     = None,            # a date, a year, or 0
     stop      = None,
-    dt        = None,            # default timestep; modules may override
-    unit      = None,            # unit assumed for bare numbers (02-types.md)
-    # --- execution ---
-    method    = None,            # 'ode' | 'ctmc' | 'tau' | 'binomial' | 'sde' | 'abm' | 'stochastic'
-    n_reps    = 1,
-    rand_seed = 0,
-    crn_key   = 'slot',
-    # --- content ---
+    dt        = None,            # default timestep; modules may have their own
+    unit      = None,            # unit for bare numbers (02-types.md)
+    # --- how ---
+    method    = 'auto',          # 'auto' | 'ode' | 'ctmc' | 'tau' | 'binomial' | 'sde' | 'abm' | 'stochastic'
+    approx    = True,            # False makes any approximation an error
+    rand_seed = 1,
+    n_reps    = 1,               # replicates, for stochastic methods (09-results.md)
+    verbose   = None,            # 0 hides the notes
+    # --- what else ---
     interventions = None,
-    pars      = None,            # external parameter values (04-parameters.md)
-    results   = None,            # restrict the result set (09-results.md)
+    connectors    = None,
+    analyzers     = None,
+    data      = None,            # a file or dataframe with columns named like results (09-results.md)
+    pars      = None,            # parameter values by name (04-parameters.md)
+    results   = None,            # restrict which results are kept (09-results.md)
     label     = None,
+    **kwargs,                    # less common options: crn_key (11-random.md), track_writes (07-effects.md), solver (12-backends.md)
 )
 ```
 
-Only `model` is required. Every other argument has a default that is guessed and printed.
+Only the model is required; every other argument has a default that is guessed and printed. The keywords are Starsim's (`networks`, `n_agents`, `total_pop`, `rand_seed`, `data`), with `unit`, `method`, and `approx` added. One difference from Starsim today: the first positional argument is the model rather than a `pars` dict. A dict in that position is still read as Starsim reads it.
 
-### `n` versus `n_agents`
+`networks=` accepts networks and mixing pools alike. There is no `ss.Homogeneous`: homogeneous mixing is what happens when no network is given, and `ss.MixingPool(n_contacts=10)` sets a contact rate. See [06-routes.md](06-routes.md).
 
-These are different questions and MUST NOT be conflated.
+### `total_pop` and `n_agents`
 
-- **`n` is the size of the population being represented.** It is semantic: it appears in the ODE as the compartment total, in the CTMC as the state space size, and in the ABM as the population the agents stand for. It affects the answer.
-- **`n_agents` is simulation resolution.** It exists only in the agent-based backend and is a computational choice, like `dt`.
+- **`total_pop` is the size of the population being represented.** It is the total of the compartments in an ODE, and the population the agents stand for in an agent-based run.
+- **`n_agents` is how many agents are simulated.** It matters only in an agent-based run, and is a computational choice like `dt`.
 
-If `n_agents < n`, every result is scaled by `n / n_agents` and `summary()` MUST print the scale factor and a note that stochastic variance is inflated by it. If `n_agents` is unset it defaults to `n` when `n <= 1e6`, and otherwise raises `E801 ResolutionUnset`, because silently simulating 100 million agents and silently simulating 100 thousand are both wrong answers to an unasked question.
+Defaults, all printed by `describe()`:
 
-Starsim's current `n_agents` keyword maps to `n_agents`, and models that set it without setting `n` behave as before, with `n = n_agents`.
+- Neither given: `total_pop` is 10,000 (Starsim's default population).
+- Only `n_agents`: `total_pop = n_agents`, as in Starsim.
+- Only `total_pop`, in an agent-based run: `n_agents` is `total_pop` or 10,000, whichever is smaller.
+- When `n_agents < total_pop`, results are scaled by `total_pop / n_agents` and `describe()` prints the scale factor.
+
+### `method`
+
+`method='auto'` picks the simplest, fastest representation that can run the model exactly: if every piece has a compartmental form the model runs as a deterministic ODE, otherwise as agents. The choice and the reason are printed. A model becomes agent-based by containing something agent-based (an individual-level network, `n_agents=`, a per-agent function or attribute) or by asking (`method='abm'`). Under `'auto'` nothing is approximated; when a method is asked for explicitly and the model does not natively fit it, the library uses the standard approximation where there is one and says so in one line. See [12-backends.md](12-backends.md).
 
 ## Lifecycle
 
-Every module has the same three-phase lifecycle, and the phases are the same in every backend:
+Every module has the same lifecycle, and it is Starsim's:
 
-| Phase | Method | May do |
+| When | Method | What happens |
 |---|---|---|
-| Build | `init(sim)` | resolve declarations, allocate state, register effects, check requirements |
-| Run | `step()` | read start-of-step state; queue updates ([10-execution.md](10-execution.md)) |
-| Finish | `finish()` | finalize results |
+| Build (`sim.init()`) | `init_pre(sim)`, `init_post()` | resolve defaults, allocate state, set initial conditions |
+| Each step | `step()` | read the current state and change it |
+| Each step | `update_results()` | record results |
+| End | `finalize()` | finalize results |
 
-A module that declares only transitions, states, parameters, and outcomes MUST NOT need to define any of these. `step()` exists for the escape hatch and for genuinely imperative processes; a module that defines it is flagged in `capabilities()` ([12-backends.md](12-backends.md)).
+A module that only has states, transitions, parameters, and results does not define any of these.
+
+`step()` reads and writes the sim's current state directly. Modules run in a defined order each step (Starsim's: start of step, demographics, disease state updates, connectors, networks, interventions, transmission, deaths, results, analyzers, end of step), modules of one type run in the order given, and the order is a data object, `sim.loop`, that can be printed, plotted, and inserted into. There are no queued updates and no named phases: a module sees whatever the modules before it did this step, so infection, testing, and treatment can all happen within one step if ordered that way. [10-execution.md](10-execution.md) specifies the loop.
 
 ## The module contract
 
+A module is not required to declare what it reads or writes. Declarations of that kind get forgotten and drift from the code, so the library observes instead:
+
 ```python
-class MyModule(ss.Module):
-    requires = [ss.Needs('contact_matrix', shape='age x age')]   # what I read
-    writes   = [hiv.rel_trans]                                   # what I modify
+sim.what_modifies(hiv.rel_trans)     # the ss.modify() modifiers on it, and the modules seen writing to it
 ```
 
-- `requires` is checked at build time against the available data; a missing requirement raises `E601 MissingRequirement` naming the module, the attribute, and where it could come from. See [04-parameters.md](04-parameters.md).
-- `writes` grants write access. A module without a `writes` entry for a quantity receives a read-only view of it, and an attempt to write raises `E501 UndeclaredWrite`. See [07-effects.md](07-effects.md).
+Writes are recorded by the state arrays during a run (on by default; `track_writes=False` turns it off). Modules may read and write other modules' state directly. Scaling a quantity through `ss.modify` rather than overwriting it SHOULD be preferred, because modifiers combine by a stated rule and the base value is never lost ([07-effects.md](07-effects.md)); this is guidance, not something the library enforces.
 
-Both are inferred for declarative modules and MUST be written only by modules that define `step()`. A module with no `step()` that declares `requires` or `writes` is not an error, but `summary()` notes that the declarations are redundant.
+A module MAY list the data it needs, as optional metadata from which a data-entry form can be generated:
 
-## Naming conventions
+```python
+class MyNetwork(ss.Network):
+    requires = [ss.Needs('contact_matrix', shape='age x age')]
+```
 
-Normative, because consistency here is what makes the vocabulary memorable:
+This is never an enforced view of the data. See [04-parameters.md](04-parameters.md#requirements).
 
-| Kind of name | Convention | Examples |
-|---|---|---|
-| Classes: things with a lifecycle | `CamelCase` | `ss.Sim`, `ss.Disease`, `ss.RandomNet`, `ss.MixingPool`, `ss.Effect`, `ss.State` |
-| Constructors returning values | `lowercase` | `ss.transmission`, `ss.progression`, `ss.transfer`, `ss.days`, `ss.peryear`, `ss.lognorm`, `ss.gravity` |
-| Verbs: things that do something | `lowercase` | `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`, `ss.parallel`, `ss.diff`, `ss.export` |
-| Methods that declare | plural noun | `Model.results(...)`, `Model.observe(...)`, `Model.stratify(...)` |
-| Attributes that hold | plural noun | `sim.results`, `sim.transmissions` |
+## `describe()`
 
-This follows Starsim's existing split (`ss.SIR` and `ss.RandomNet` versus `ss.bernoulli` and `ss.peryear`) and extends it consistently.
+`describe()` prints the resolved model as text. It is what makes guessing defaults safe: every guess is shown, and marked as a guess. It replaces the first draft's model-level `summary()`; `sim.summarize()` and the `sim.summary` it fills are about results, as in Starsim.
 
-## `summary()`
+Every module implements `describe()`, and `sim.describe()` covers the whole sim. For a model it prints:
 
-`summary()` is load-bearing, not decorative. It is the mechanism that makes aggressive default-guessing safe, and it is therefore normative.
+1. every state, with its properties, and whether it was declared or inferred;
+2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`dwell ~ exponential(mean = 10 days)`, not `dur=10`), and its source of infection where there is one;
+3. every stratification, with its levels;
+4. the mixing: each network or pool, and whether it is frequency- or density-dependent;
+5. every modifier, with its target and how it combines;
+6. the run method and why it was chosen, and anything that was approximated;
+7. which parts restrict the choice of method (custom functions, per-agent attributes).
 
-Every object with declarations MUST implement `summary()`. It MUST print, for a model:
-
-1. Every state, with its properties and whether it was declared or inferred.
-2. Every transition, with its resolved kind, its rate or dwell-time distribution **as resolved** (`dwell ~ Exp(mean=10 days)`, not `dur=10`), and its source states where applicable.
-3. Every dimension, with its levels and its kind.
-4. Every route, with its denominator convention.
-5. Every effect, with its target and combiner.
-6. Every value that was **inferred rather than given**, marked as such.
-7. Every declaration that costs a capability, marked with `!` and the capability lost.
-
-It MUST NOT print values that were given explicitly and are unremarkable; the summary is a diff against the user's intent, not a dump.
+Everything guessed rather than given is marked `[guessed]`, with the rule that produced it.
 
 ```text
->>> sir.summary()
-Disease 'sir' — 3 states, 2 transitions
+>>> sim = ss.Sim(sir, stop=100)
+>>> sim.describe()
+Sim: 1 module, 10,000 people [guessed], 0 to 100 days
+method       ode [guessed: every part has a compartmental form]
+unit         day [guessed: no unit given]
 
-states       S, I, R                                        [inferred from transitions]
-             I infectious                                   [inferred: destination of 'infection']
-             init: S=1.0                                    [inferred]
+Disease 'sir': 3 states, 2 transitions
+states       S, I, R                                        [inferred from the arrows]
+             I infectious                                   [guessed: source of 'infection']
+             init: S = 1.0                                  [guessed: nothing given]
 
-infection    S -> I   transmission, source=I                [source inferred]
-             beta = 0.05/day  per contact                   [unit inferred: day]
-recovery     I -> R   progression
-             dwell ~ Exp(mean = 10 days)                    [inferred: scalar dur]
+infection    S -> I   contact-mediated, source I            [guessed: source is the destination]
+             beta = 0.05 per day                            [unit guessed]
+recovery     I -> R   spontaneous
+             dwell ~ exponential(mean = 10 days)            [guessed: scalar duration, unit guessed]
 
-route        Homogeneous(n_contacts=10), frequency-dependent [both inferred]
-results      n_S n_I n_R infection recovery cum_infection cum_recovery
+mixing       homogeneous, 1 contact per day, frequency-dependent   [guessed: no network given]
+results      n_S, n_I, n_R, and one flow per transition
 ```
 
-`summary(verbose=True)` additionally prints the per-step conversions ([02-types.md](02-types.md)), the compiled transition list, and the compartment or agent counts.
+`describe(verbose=True)` also prints the per-step conversions ([02-types.md](02-types.md)) and the generated sub-stages.
 
 ## Equality, copying, and identity
 
-- Two models are **equal** if their normalized IR is identical ([14-ir.md](14-ir.md)). Equality MUST NOT depend on construction form, declaration order, or variable names.
-- `copy()` MUST be deep for declarations and shallow for data references; a copied model that fetched `ss.People('Kenya')` MUST NOT re-fetch.
-- A model's identity for reproducibility is its four-level hash, not its Python object identity. See [11-random.md](11-random.md).
+- Two models are **equal** if their model specs are identical ([14-model-spec.md](14-model-spec.md)). Equality does not depend on which form was used to write the model or on the order of keywords.
+- `copy()` is deep for the model and shallow for data references, so a copied model that fetched `ss.People('Kenya')` does not fetch it again.
+- `stratify()` returns a new model and leaves the original untouched ([05-dimensions.md](05-dimensions.md)).
+- A run's identity for reproducibility is its factored hash, `sim.hash()`, not its Python object identity. See [11-random.md](11-random.md).
 
-## Rejected constructions
+## Not included
 
-Listed here because they will otherwise be proposed again:
-
-- **A registry of model types by string** (`ss.Sim(diseases='sir')`). Starsim accepts this today; it is retained only as sugar for the shipped library models, and it MUST resolve to an ordinary `ss.Disease` that `summary()` prints in full. A string that cannot be printed back as a model is a second language.
-- **Builder methods that mutate structure after construction** (`m.add_transition_flow(...)`). `stratify()` and `observe()` are the only structural mutators, and both are operators with defined IR semantics. Everything else is constructor keywords.
-- **Positional arguments beyond the first.** `ss.transmission('S -> I', 0.05)` is rejected in favor of `beta=0.05`; the arrow is the only positional argument in the language, and the dict shorthand's `(arrow, quantity)` tuple is the only exception.
+- **The dict tuple shorthand** and its coercion rules (above).
+- **Builder methods that change structure after construction** (`m.add_transition_flow(...)`). A model is constructed once; `stratify()` returns a new one.
+- **Positional values after an arrow.** `ss.transmission('S -> I', 0.05)` is not accepted; write `beta=0.05`. The arrow is the only positional argument of the shorthand constructors.
+- **Required `reads`/`writes` declarations, read-only views, and queued updates.** See the module contract and lifecycle above.
 - **A separate `Model` and `ModelBuilder`.** One class, constructed once.

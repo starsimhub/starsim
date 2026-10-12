@@ -1,172 +1,183 @@
-# Results and observation
+# Results and data
 
-What comes out, and how the model connects to data. The latent process and the observation process are separate.
+What comes out of a run, and how it is connected to data. There is one results concept: everything below is a result, lives in `sim.results`, and can be plotted, exported, selected by stratum, and compared with data.
 
 Justified by [best-practices/results-and-observation.md](../best-practices/results-and-observation.md).
 
-## Free by default
+## Automatic results
 
 ```python
-sim = ss.Sim(sir).run()
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.05),
+    recovery  = ss.progression('I -> R', dur=10),
+)
+sim = ss.Sim(sir, unit='day').run()
 
-sim.results.n_S, sim.results.n_I, sim.results.n_R    # one count per state
-sim.results.infection, sim.results.recovery          # one flow per transition
-sim.results.cum_infection                            # cumulative, free
+res = sim.results.sir
+res.n_S, res.n_I, res.n_R        # one count per state
+res.infection, res.recovery      # one flow per transition: the number of events in each step
+res.cum_infection                # cumulative
 ```
 
-Nothing was declared. The names are the keywords from the model text, which is why transitions are keyword arguments.
+Nothing was declared. Results live under the module that produced them, `sim.results.<module>.<result>`, as in Starsim, and this access form is used throughout the specification.
 
-Normatively, a build MUST generate:
+A build MUST generate, for every module with states and transitions:
 
-- `n_<state>` for every state, as a count at each output time;
-- `<transition>` for every named transition, as the **flow through that transition during the interval** — incidence, not a stock;
-- `cum_<transition>` for every named transition.
+- `n_<state>` for every state: the number of people in it at each time point;
+- `<transition>` for every named transition: the number of people who made that transition during each step (a flow, not a stock), named exactly as the transition is;
+- `cum_<transition>`: its running total.
 
-A transition's flow result is zeroed at the start of every output interval, so `sim.results.infection` is incidence per unit output time regardless of the internal timestep. Incidence per unit time is the single most commonly needed derived output in the field, and it MUST NOT require post-processing.
+Starsim's standard disease results are kept under their existing names, so code and data files written for Starsim carry over. For any disease with transmission, `new_infections` is the total flow through all its transmission transitions, `cum_infections` its running total, and `prevalence` the fraction of the population in its infected states. In the SIR above, `res.new_infections` and `res.infection` are the same series. A result declared by the user under one of these names replaces the default.
 
-Stratified models generate the same results with dimension indices, selectable by keyword:
-
-```python
-sim.results.infection.sel(age=0)
-sim.results.infection.sel(age=0, patch='Nairobi')
-sim.results.n_I.sel(strain='alpha')
-```
+Library diseases keep the result names they have today (`sim.results.sir.n_infected` for `ss.SIR`), because their states have those names.
 
 ## `ss.Result`
 
-A result carries a name, a label, its module, its shape, its timevec, its unit, and its provenance. This is what makes plots, exports, and generated forms self-describing, and it is retained from Starsim unchanged.
+A result carries its name, label, module, values, time vector, unit, and whether it is a flow or a stock. This is Starsim's `ss.Result`, unchanged, with two additions: selection by stratum, and attached data.
 
-`sel()` selects along dimension coordinates and `by()` converts the time frame. Selection is a method rather than a keyword subscript because keyword arguments in a subscript are not valid Python, and the language does not put expressions in strings to work around syntax.
+Because a result knows whether it is a flow or a stock, converting it to a coarser time step does the right thing without being told: `res.infection.resample('week')` sums, `res.n_I.resample('week')` takes the value at the end of the week, and a ratio is recomputed from its resampled parts. A result has one time vector; other time representations are conversions.
 
-Results carry **one** timevec and convert on request (`result.by('year')`, `result.by('date')`). Parallel time representations belong to the `Timeline`, not to every result.
+### Selecting strata
 
-## Characteristics
-
-A named combination of states with an optional denominator. It covers prevalence, coverage, and every cascade indicator in one form, and it unifies three things that are otherwise separate: what to fit to, what to plot, and what to report.
+On a stratified model every result has the model's dimensions, and `.sel()` selects along them:
 
 ```python
-sir.results(
-    prevalence    = sir.I / ss.N,
-    ever_infected = (sir.I + sir.R) / ss.N,
-    incidence_u5  = sir.infection.sel(age=0),
-    hosp_ratio    = sir.hosp / sir.cases,          # outcomes declared below
+sim.results.sir.new_infections.sel(age=0)                  # by position
+sim.results.sir.infection.sel(age='0-14', patch='Nairobi') # by label
+sim.results.sir.n_I.sel(strain='alpha')
+sim.results.sir.prevalence.sel(risk='high')
+```
+
+Without `.sel()`, a result is the total over all strata (for a ratio, the ratio of the totals). In an agent-based run, selecting on a continuous property uses the bins it was stratified with ([05-dimensions.md](05-dimensions.md)).
+
+## Declaring more results
+
+Extra results are declared with the model, as keywords, next to the transitions. There is no separate observation step.
+
+```python
+S, I, R   = ss.states('S I R')
+N         = S + I + R
+infection = S >> I @ 0.05 * I
+recovery  = I >> R @ ss.days(10)
+
+sir = ss.Disease(
+    infection, recovery,
+    prevalence    = I / N,
+    ever_infected = (I + R) / N,
+    cases  = ss.outcome(infection, p=0.5,  delay=ss.days(5)),
+    hosp   = ss.outcome(infection, p=0.05, delay=ss.days(7), duration=ss.days(10)),
+    deaths = ss.outcome('hosp',    p=0.2,  delay=ss.days(14)),
 )
 ```
 
-`ss.N` is the total population, always available and never declared. It is one of the few pieces of magic worth having, because making the user write the denominator by hand is what produces the missing-denominator class of error.
+### Ratios and combinations
 
-`Model.results(...)` **declares** characteristics; `sim.results` **holds** results. The two spellings are close and the distinction is real: one is a method on a model, the other an attribute on a run. Nothing else in the language reuses a name this way, and the alternative — a separate `characteristic=` keyword — would put a declaration in a constructor that cannot yet refer to the states it combines.
+In a result, a state stands for the number of people in it. A sum of states is a combined count, and a ratio of two is a proportion: `I / N` is a time series of prevalence. Flows can be used the same way (`infection / S` is the per-capita incidence). A ratio keeps its numerator and denominator, so selecting a stratum or resampling in time recomputes it correctly instead of averaging ratios.
 
-Characteristics are ordinary `ss.Result` objects thereafter: they can be plotted, exported, observed, and fitted to.
+These are ordinary results afterwards: `sim.results.sir.ever_infected`.
 
-A cascade is an ordered list of characteristics, and `ss.cascade([tested, diagnosed, treated, suppressed])` is a plotting function rather than a language feature.
+### `ss.outcome`
 
-## The observation model
-
-The disease is a disease; the surveillance system is declared separately. This separation is why the same disease model serves a hospital-burden question and a transmission question.
+An outcome is a reported quantity: a flow that has been thinned and delayed. It covers reported cases, hospital admissions, deaths, and similar series that are counted from the epidemic without being part of transmission.
 
 ```python
-sir.observe(
-    cases  = ss.Outcome(sir.infection, p=0.5,  delay=ss.days(5)),
-    hosp   = ss.Outcome(sir.infection, p=0.05, delay=ss.days(7), duration=ss.days(10)),
-    deaths = ss.Outcome('hosp',        p=0.2,  delay=ss.days(14)),
+ss.outcome(
+    source,               # a transition, another outcome, or a result expression; the object or its name
+    p          = 1.0,     # the fraction that is reported, or that goes on to this outcome
+    delay      = None,    # time from the source event to this one
+    duration   = None,    # if given, also produces n_<name>: the number currently in this outcome
+    likelihood = None,    # optional; see below
 )
 ```
 
-```python
-ss.Outcome(
-    source,               # a transition, a characteristic, or the name of another outcome
-    *,
-    p          = 1.0,     # ascertainment or branching probability; may be a distribution
-    delay      = None,    # reporting or progression delay; may be a distribution
-    duration   = None,    # if given, also produces a prevalence series
-    every      = None,    # emission schedule, e.g. ss.weeks(1)
-    data       = None,    # observed values to compare against
-    likelihood = None,    # how data relate to the projection
-    dispersion = None,    # shorthand for a negative-binomial k
-)
-```
+- **Outcomes chain.** The source of `deaths` above is the outcome `hosp`, so infection → hospitalization → death is three lines. A chain that loops back on itself raises `E703 OutcomeCycle`; a source that names nothing raises `E702 UnknownOutcomeSource`.
+- **`duration=` gives both series.** `hosp` is admissions per step and `n_hosp` is the number currently in hospital.
+- **`p=` and `delay=` accept the parameter ladder**, including distributions (reporting delays are not a single number) and `ss.by(age=[...])`. They can carry `bounds` and be fitted like any other parameter.
+- **An outcome does not change anyone's state.** If hospitalized people stop transmitting, hospitalization should be a state in the disease; if it only needs counting, it is an outcome. Both are legitimate, and the choice is a modeling decision. Outcomes can be read like any other result, for example by a [trigger](08-interventions.md#triggers) that responds to reported cases.
 
-Semantics:
+For results that span modules (all-cause deaths, a syndromic count over several diseases), declare the outcome on the sim: `ss.Sim(modules=[flu, rsv], ili=ss.outcome(flu.infection + rsv.infection, p=0.3))`; it appears as `sim.results.ili`.
 
-- **Outcomes chain.** A string source names another outcome, so the whole surveillance cascade — infection → case → hospitalization → death — is a few lines.
-- **`duration=` produces both series.** `hosp` is the incidence of hospitalization and `n_hosp` is the number currently hospitalized. The incidence/prevalence duality is generated, not hand-rolled.
-- **`p=` and `delay=` accept distributions**, because ascertainment varies and reporting delays are not point masses.
-- **Outcomes are observational only.** An outcome MUST NOT feed back into the process: nothing in the model may read an outcome. If hospitalized people are isolated and stop transmitting, hospitalization is a *state*, not an outcome, and the language says so with `E701 OutcomeUsedAsState` naming the reader. This rule is what keeps the separation meaningful.
+How the thinning and the delay are realized depends on the method:
 
-`observe()` is defined on `ss.Module` and is available on `ss.Sim`, which delegates to a sim-level module for outcomes that span several diseases (all-cause mortality, syndromic surveillance).
+| Method | `p=` | `delay=` |
+|---|---|---|
+| Agent-based | a draw per event | a delay sampled per event; the report is scheduled |
+| Deterministic compartmental | multiplies the flow | a convolution of the flow with the delay distribution, or Erlang stages |
+| Stochastic compartmental | a binomial draw from the flow | as deterministic, applied to the drawn counts |
 
-### Realization per backend
+## Data
 
-| Backend | Delay realization |
-|---|---|
-| Agent-based | sample a delay per event, schedule the report |
-| Compartmental | discrete-time convolution, or Erlang stages for the delay distribution |
-| Stochastic compartmental | as compartmental, with the thinning drawn |
-
-A delay distribution in a compartmental backend becomes Erlang stages — the same expansion as a dwell time ([03-states-and-transitions.md](03-states-and-transitions.md)), which is a consistency worth relying on rather than a coincidence.
-
-## The likelihood
-
-The likelihood lives with the outcome that produces the quantity, because it is a statement about how data relate to that process.
+Data is attached to results by name:
 
 ```python
-sir.observe(
-    cases = ss.Outcome(sir.infection, p=0.5, delay=ss.days(5),
-                       data='data/weekly_cases.csv',
-                       every=ss.weeks(1),
-                       likelihood=ss.neg_binomial(k=ss.Par(bounds=[0.1, 100]))),
-)
+sim = ss.Sim(sir, data='kenya_2020.csv', start='2020-01-01', stop='2020-12-31').run()
+sim.plot()
 ```
 
-- `data=` accepts a path, a dataframe, or an `ss.data(...)` reference; its provenance enters the parameter hash.
-- `likelihood=` accepts `ss.poisson()`, `ss.neg_binomial(k=)`, `ss.normal(std=)`, `ss.binomial(n=)`, or a callable.
-- Nuisance parameters of the likelihood — ascertainment `p`, dispersion `k` — are ordinary `ss.Par` objects with bounds, and are fitted alongside the process parameters.
-- **Multiple observation streams are ordinary, not a special case.** Clinical cases *and* environmental surveillance *and* seroprevalence are three more keyword arguments.
+- `data=` takes a file name or a data frame. It has a time column (`date`, `year`, `t`, or `time`) and one column per data series, **named like the result it corresponds to** (`cases`, `deaths`, `prevalence`). With several modules, a column is matched to the one module that has a result of that name, or is written `sir.cases` when the name is ambiguous.
+- A column that matches no result is reported (`W705 UnknownDataColumn`, listing the result names closest to it) and ignored. Data entirely outside the simulated period raises `E704 DataMisaligned`.
+- Data for particular strata is given in long form: extra columns named after dimensions (`age`, `patch`) say which stratum each row belongs to.
+- The data need not be on the model's time step. A flow (weekly reported cases) is compared with the model's flow summed over each data interval; a stock or ratio (a prevalence survey) is compared with the model's value at the data's time. The result already knows which it is. The interval assumed for flow data is the spacing of the data and is printed.
+- Results that have data are plotted with it automatically: `sim.plot()` draws the model as a line and the data as points.
+- The data's source and content enter the run hash ([11-random.md](11-random.md)).
 
-Once this exists, calibration has nothing left to declare ([13-inference.md](13-inference.md)). Under-reporting (`p=`), reporting delay (`delay=`), and reporting schedule (`every=`) are three different things and MUST remain distinct.
+This is all that calibration needs: `sim.calibrate()` fits every parameter that has `bounds` to every result that has data ([13-inference.md](13-inference.md)). Several data series (clinical cases, wastewater, seroprevalence) are more columns.
+
+### An optional likelihood
+
+Nobody has to write a likelihood to compare a model with data or to fit it; the default measure of fit is a normalized root-mean-square error per series. When a likelihood is wanted, it is attached to the result:
+
+```python
+cases = ss.outcome(infection, p=0.5, delay=ss.days(5),
+                   likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))
+seroprevalence = ss.outcome(R / N, likelihood=ss.normal(scale=0.02))
+```
+
+The model's value is the mean of the distribution and the user supplies the rest (here the dispersion, which is fitted). Any result can be given one by wrapping it in `ss.outcome`. A likelihood makes posterior methods available; [13-inference.md](13-inference.md) says what is done with it.
 
 ## Stochastic results are distributions
 
-For any stochastic method, the natural result object is a distribution over trajectories, not a trajectory.
+For a stochastic method the natural result is a distribution over trajectories.
 
 ```python
-sim = ss.Sim(sir, n_reps=100).run()
-sim.plot()                                     # median and interval by default
-sim.results.n_I.quantiles([0.025, 0.5, 0.975])
-sim.results.n_I.trajectories                   # still there
-sim.plot(style='trajectories')                 # one word away
+sim = ss.Sim(sir, method='stochastic', n_reps=100, unit='day').run()
+sim.plot()                                         # median and interval
+sim.results.sir.n_I.quantiles([0.025, 0.5, 0.975])
+sim.results.sir.n_I.trajectories                   # every replicate
+sim.plot(style='trajectories')
 ```
 
-Quantiles are the default because aggregating is what everyone does anyway; individual trajectories remain reachable because sometimes the spaghetti is the point — extinction, bimodality, and threshold behavior are invisible in a median.
+With `n_reps` above 1, each result holds all replicates; plotting and summaries show the median and an interval by default, and the individual trajectories stay available, because extinction, bimodality, and threshold behavior cannot be seen in a median.
 
-For methods where extinction is possible, the summary MUST report it, because it is the actual output of the paradigm:
+Where extinction is possible, the results summary (`sim.summarize()` in Starsim) SHOULD report it:
 
 ```text
 extinction: 41% of 500 replicates (median time 23 days)
 peak prevalence (among non-extinct): 87 [61, 118]
 ```
 
-## Transmission provenance
+## The transmission log
 
 ```python
-sim.transmissions      # infector, infectee, time, route, layer, and transition
+sim.transmissions      # one row per infection: infector, infectee, time, disease, and network
 ```
 
-Every infection event, recorded. It is cheap, it is generally useful, and it enables phylodynamic comparison and transmission-tree reconstruction. It MUST be part of the standard result set in any agent-based or network backend, and MUST be **absent** rather than empty in a compartmental one — an empty table invites the reader to conclude there were no transmissions.
+Every infection event in an agent-based run, as a table. It supports transmission trees, phylodynamic comparison, and counting secondary cases directly. The infector is known when transmission happened on a route that keeps contacts; for infections through a mixing pool or from a count (`W.n`), the row records the source group or state instead. A compartmental run has no individuals to record, and there `sim.transmissions` is absent, not empty, so that an empty table is never mistaken for "no transmission".
 
-## Requesting less
+## Requesting fewer results
 
 ```python
 ss.Sim(sir, results=['n_I', 'cases'])
 ```
 
-Restricts the result set to the named results and whatever they depend on. Result generation is a dependency graph, so pruning is exact rather than heuristic. The default is generous; at scale — stratified models with many dimensions — the default becomes a memory problem, and this is the release valve.
+keeps only the named results and whatever they are computed from. The default is everything, which is the right default until stratification multiplies it: a result per state and per transition, for every stratum, at every step, can be a lot of memory. Since results are declared, the library knows what each depends on and can drop the rest.
 
 ## Rejected
 
-- **Results created on first use.** No declaration means no typo protection and no way to prune.
-- **Reporters configured separately from the model.** The observation model is part of the model, and it hashes with the model.
-- **Post-processing scripts for incidence.** A zeroed accumulator per named transition closes this.
-- **A separate cascade analysis object.** An ordered list of characteristics is a plotting function.
-- **Six parallel time representations on every result.** One timevec, converted on request.
+- **A separate `observe()` step and a separate kind of object for derived quantities.** Ratios and outcomes are declared with the model and are results like any other.
+- **`data=` on each outcome.** One data file with columns named like results is simpler and is what gets plotted.
+- **A required likelihood.** Optional.
+- **Results created on first use.** Declared results give typo protection and make it possible to request fewer.
+- **Post-processing scripts for incidence.** Every named transition has a flow result.
+- **A separate cascade analysis object.** An ordered list of results is a plot.
+- **Several parallel time representations on every result.** One time vector, converted on request.

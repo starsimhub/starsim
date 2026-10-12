@@ -1,115 +1,181 @@
 # Conformance
 
-What an implementation must do to claim it implements this specification, and what must be tested for each claim in it.
+What has to be tested for the specification's claims to hold, and the models the tests run on.
 
-Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-conversion.md) §Test the conversion.
+Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-conversion.md) and by the north star in the [root README](../README.md).
 
-## The principle
+## The idea
 
-> **A conversion that is not tested is a conversion that is not claimed.**
+Each claim the specification makes ([README.md](README.md#what-the-specification-claims)) has a test suite here. A claim with no test should be treated as a hope.
 
-Every capability in [12-backends.md](12-backends.md)'s matrix is a claim. The matrix is machine-readable, so the test suite is generated from it: for every (element × method) cell marked exact, there is a test that it is exact; for every cell marked approximate, there is a test that the approximation is within its stated tolerance and that the approximation is *reported*; for every cell marked refused, there is a test that the specific error is raised.
+The tests are of three kinds:
+
+- **Asserted**: the test fails if the behavior is wrong (the three spellings give the same model spec; a modifier restores the base value).
+- **Recorded**: the result is a published number or table, not a pass or fail (how far an ODE approximation of a network model is from the agent-based run).
+- **Measured against the original**: lines of code and run time for each vignette, compared with the framework it came from.
 
 ## Levels
 
-An implementation states which levels it conforms to. Each level includes the ones above it.
+An implementation can be complete in stages. Each level includes the ones before it.
 
-| Level | Requires |
+| Level | Covers |
 |---|---|
-| **L0 Core** | The object model ([01](01-objects.md)), types ([02](02-types.md)), states and transitions ([03](03-states-and-transitions.md)), parameters ([04](04-parameters.md)), the IR ([14](14-ir.md)), the error catalogue ([15](15-errors.md)), and the agent-based backend |
-| **L1 Compartmental** | `ode`; exact `Homogeneous` and `MixingPool` routes; Erlang expansion; `equations()` |
-| **L2 Stochastic** | `ctmc`, `tau`, `binomial`, `sde`; automatic method selection with printed reasons; extinction reporting |
-| **L3 Structured** | dimensions ([05](05-dimensions.md)), effects ([07](07-effects.md)), interventions ([08](08-interventions.md)), the observation model ([09](09-results.md)) |
-| **L4 Spatial** | spatial dimensions, mobility models, commuting sub-steps, geography providers |
-| **L5 Inference** | calibration and sensitivity ([13](13-inference.md)) with at least optimization, MCMC, and a likelihood-free method |
-| **L6 Interoperable** | import and export ([16](16-interop.md)) for at least SBML and one framework, with lossiness reporting |
+| **Core** | Objects ([01](01-objects.md)), types ([02](02-types.md)), states and transitions ([03](03-states-and-transitions.md)), parameters ([04](04-parameters.md)), the ordered loop ([10](10-execution.md)), the model spec ([14](14-model-spec.md)), coded errors ([15](15-errors.md)), and `method='abm'` |
+| **Compartmental** | `method='ode'` and `'auto'`; mixing pools and contact matrices; Erlang stages; `equations()`; `ss.Compartments` |
+| **Stochastic** | `'ctmc'`, `'tau'`, `'binomial'`, `'sde'`, and `'stochastic'`; extinction reporting |
+| **Structured** | Stratification ([05](05-dimensions.md)), `ss.modify` and conditions ([07](07-effects.md)), interventions ([08](08-interventions.md)), results and data ([09](09-results.md)) |
+| **Spatial** | Patches, mobility models, commuting, geography |
+| **Inference** | Calibration, sensitivity, and model comparison ([13](13-inference.md)) |
+| **Interoperable** | Import and export for at least SBML and one framework ([16](16-interop.md)) |
 
-An implementation MUST NOT claim a level it does not fully meet, and MUST expose `ss.conformance()` returning its levels and its per-cell capability table.
-
-## Required test suites
+## Test suites
 
 ### 1. Form equivalence
 
-For every model in the corpus, the dict form, the constructor form, and the class form MUST produce byte-identical normalized IR and identical model hashes. ([01-objects.md](01-objects.md) §The equivalence rule)
+For every corpus model, the three spellings of its transitions (arrow-string constructors, operators, explicit `ss.Transition`) and the two ways of building the module (constructor and class) MUST produce the same model spec and the same model hash, once names agree. ([01-objects.md](01-objects.md#the-equivalence-rule))
 
-### 2. Normalization
+### 2. Normalization and round trip
 
-`normalize(normalize(x)) == normalize(x)` for every corpus model and every randomly permuted declaration order. Declaration order, module order, and variable names MUST NOT appear in any hash.
+- Normalizing a spec twice gives the same document as normalizing it once.
+- Reordering keywords, and the order in which transitions and parameters are passed, does not change the spec or any hash. Reordering states, modules, or stratifications does, because that order has meaning ([14-model-spec.md](14-model-spec.md#normalization)).
+- `ss.load(sim.to_json())` gives a sim with an identical spec, for every corpus model.
+- For every other export format, the printed list of what was left out matches what is actually missing from the file.
 
-### 3. Round-trip
+### 3. Agreement between methods, on simple models
 
-`load(save(m))` produces a model whose normalized IR equals `m`'s, for every corpus model, for the IR format. For every lossy format, the reported loss list MUST exactly match the set of declarations that do not survive.
+For each **simple** corpus model (marked below), run every method that `methods()` marks `yes` and compare.
 
-### 4. Cross-paradigm agreement
-
-The central empirical claim. For every corpus model and every pair of methods the capability matrix marks as mutually exact:
-
-| Comparison | Tolerance | Test |
+| Comparison | Agreement expected | How it is checked |
 |---|---|---|
-| `ode` vs `ctmc` | mean of 10³ CTMC replicates within 2 Monte Carlo standard errors of the ODE, at every output time, for `n ≥ 10⁵` | trajectory-wise |
-| `ode` vs `abm` with `Homogeneous` | as above, agents redrawn each step | trajectory-wise |
-| `ctmc` vs `tau` | distributions of peak size and peak time agree by two-sample Kolmogorov–Smirnov at α = 0.01 | distributional |
-| `binomial` vs `ctmc` | agreement improves monotonically as `dt → 0`, and `check_dt()` reports convergence | convergence |
-| Erlang dwell time, `ode` vs `abm` | dwell-time distributions agree by KS at α = 0.01 | distributional |
-| A dimension in `ode` vs the same as an agent property in `abm` | as the `ode`/`abm` row | trajectory-wise |
+| `ode` and `ctmc` | The mean of 1,000 `ctmc` replicates is within 2 Monte Carlo standard errors of the ODE at every output time, for `total_pop` of 100,000 or more | per time point |
+| `ode` and `abm` with homogeneous mixing or a mixing pool | The same, with the mean over agent-based replicates | per time point |
+| `ctmc` and `tau` | Distributions of peak size and peak time agree (two-sample Kolmogorov-Smirnov, α = 0.01) | distributions |
+| `binomial` and `ctmc` | The difference shrinks as `dt` shrinks, and `sim.check_dt()` reports it | convergence |
+| Erlang dwell time, `ode` and `abm` | Dwell-time distributions agree (Kolmogorov-Smirnov, α = 0.01) | distributions |
+| A stratification in `ode` and the same property per agent in `abm` | As the `ode` and `abm` row | per time point |
+| `ss.MixingPool(n_contacts=10)` in `ode` and `ss.RandomNet(n_contacts=10)` redrawn every step in `abm` | Agree in distribution as the population grows ([06-routes.md](06-routes.md#routes)) | convergence in `n_agents` |
 
-Where a method is marked approximate, the test asserts that the discrepancy is within the tolerance the implementation *reported*, not within a fixed constant. An implementation that reports a large discrepancy honestly passes; one that reports a small discrepancy and delivers a large one fails.
+These are assertions. The tolerances depend on population size and number of replicates and are stated per test with the reasoning, so that a failure means something.
 
-### 5. Refusals
+**Complex models are not asserted to agree.** For the corpus models that are approximated under some method (the sexual-network model as an ODE, a lognormal dwell time as stages), the suite runs both and **records** the difference in a published table: peak size, peak time, final size, and endemic prevalence under each method. An agent-based HIV model and its ODE approximation are expected to differ; the table says by how much, and a change in the table is reviewed like any other change in behavior.
 
-For every cell marked refused, the specific `E8xx` error is raised, at build time rather than at run time, with a message meeting the shape requirements of [15-errors.md](15-errors.md). A generic exception fails the test even if the run correctly does not proceed.
+### 4. Approximation notes
 
-### 6. The paradigm-switch boundary
+For every approximation in [12-backends.md](12-backends.md#the-standard-approximations):
 
-Take the shipped feature-model corpus of the one framework that already implements a one-word paradigm switch, push every model across `compartment`, `IBM`, and `hybrid`, and record where the switch stops working and why. **That boundary is the actual scope of this language's paradigm-independence claim**, and someone has already built the apparatus for measuring it. The result is a published table, not a pass/fail.
+- under `method='auto'`, the model runs without it (as agents), and the printed reason names the piece that made it agent-based;
+- under an explicit method, the run completes and prints exactly one line naming the piece and what it was approximated by;
+- with `approx=False`, the same request raises `E804 CapabilityError` naming the piece and the approximation that would have been used;
+- with `verbose=0` nothing is printed, and the note is still in `sim.describe()` and `sim.methods()`;
+- `methods()` shows `approx` for that ingredient under that method, before anything is run.
 
-### 7. Closure error
+For the things with no approximation (contact tracing, transmission trees, agent-only custom code), a compartmental method raises `E804` with a message in the shape [15-errors.md](15-errors.md) asks for.
 
-For network-to-compartmental conversion, parameterize each available closure from an actual generated network and measure the closure error against the exact simulation on that same network. The closure ladder is a decade of published mathematics; the test is whether the implementation's named closures reproduce the published error behavior.
+### 5. Functions: the try-it rule
 
-### 8. Determinism
+- A function that uses only counts, parameters, time, and stratification coordinates (`fn(sim)` reading `sim.people.age` on an age-stratified model) gives the same model under `'abm'` and `'ode'`, within the tolerance of suite 3.
+- A function that takes `uids`, or reads an attribute that is not a stratification, runs under `'abm'` and stops a compartmental run with `E804`, naming the function and what it asked for.
+- Under `'auto'`, the first kind of function leaves the model an ODE and the second makes it agent-based, with the function named in the printed reason.
+- The same three checks for a lazy condition (`eligible = (ppl.age > 65) & ~sir.vaccinated`), including the case where the threshold falls inside an age bin.
 
-For every corpus model: identical results across runs, machines, thread counts, and process counts, given the same IR, configuration, and seed. Parallel and serial runs bit-identical. ([10-execution.md](10-execution.md) §Determinism)
+### 6. The ordered loop
 
-### 9. CRN
+- **Order is as specified.** `sim.loop.to_df()` for each corpus model matches the table in [10-execution.md](10-execution.md#the-order-of-calls-in-one-step), with modules of one type in the order given.
+- **A within-step chain.** In the screening example of [10-execution.md](10-execution.md#a-within-step-chain), testing and treatment (`on_positive=`) happen in the same step. With the default order, a person infected on step `t` is first screened on step `t + 1`; after `sim.loop.insert(screen, label='sir.step')`, a person can be infected, tested, and treated on step `t`. Both are asserted from the event times.
+- **Each module sees what earlier ones did.** With `diseases=[syphilis, hiv]` and a modifier of HIV transmissibility conditional on syphilis, a new syphilis infection changes HIV transmission in the same step; with the order reversed, one step later.
+- **Mutual dependence runs.** Two diseases that each modify the other build and run with no error.
+- **Competing hazards are joint.** Reversing the order in which two transitions out of one state are declared does not change results in distribution; a sequential-draw implementation fails this at large `rate × dt`.
+- **Removals are deferred.** An agent whose death is requested during a step is still visible to every later module in that step and is gone at the next.
+- **Ordering effects are O(dt).** Swapping the order of two modules changes results by an amount that shrinks in proportion to `dt`, and `sim.check_dt()` reports it.
 
-- Paired scenarios differing only in an intervention: the variance of the paired difference is lower than the variance of the unpaired difference by the factor the implementation claims.
-- Every draw the summary marks CRN-safe is verified to be CRN-safe by re-running with a perturbation elsewhere in the model and asserting the draw is unchanged.
-- Every draw marked unsafe is verified to be unsafe, so the report is not merely conservative.
+### 7. `ss.modify`
 
-### 10. Error coverage
+- **Base and effective.** While a modifier is active, reading the array gives the effective value and `.base` gives the base. When the modifier's condition stops holding, or `stop=` passes, the effective value equals the base again, exactly, with no bookkeeping by the user.
+- **Combination.** Set, then multiply, then add, whatever order the modifiers were declared in. Two `set=` modifiers active for the same people give `W502` and the later one in the loop is used.
+- **Assignment goes to the base.** `arr[uids] = x` while a modifier is active changes the base, and the modifier still applies on top.
+- **Any named numeric quantity.** A parameter, a float state, a transition's slot, a network parameter, and a string path all work as targets; a boolean state or a plain number raises `E504`.
+- **Cost.** A modifier outside its `start`/`stop` period is not evaluated. A constant modifier with an unchanged active set does not trigger a recompute. Checked by counting recomputations.
+- **`what_modifies()`** lists every modifier on the target and every module observed assigning it.
 
-Every code in [15-errors.md](15-errors.md) has a minimal failing example that raises exactly it, and a documentation page reachable offline via `ss.explain(code)`. A code with no test is removed from the catalogue.
+### 8. Stratification
 
-### 11. Vignette fidelity
+- **The original is untouched.** After `sir_age = sir.stratify(age=[0, 15, 65])`, the spec and hash of `sir` are what they were before, and `ss.stratify(sir, age=[0, 15, 65])` gives a model identical to `sir_age`.
+- **Chained stratifications commute where they should.** Stratifying by age then risk, or risk then age, with multiplicative adjustments gives the same results.
+- **Coverage delivers `f`.** `coverage=0.7` on a model with `P` strata reaches 70% of the eligible people in total, not `1 − (1 − 0.7)^P`. Asserted on the vaccination corpus model with 1, 3, and 16 age groups; realized coverage is read from the delivery's results.
+- **Capacity is a total.** `capacity=50_000` delivers 50,000 doses however many strata there are, shared in proportion to the eligible population.
+- **Continuous properties stay continuous in an agent-based run** and are binned only for adjustments, conditions, and results.
+- **Space without mobility** builds and runs with no warning.
 
-For every model in [vignettes](../vignettes), the translation runs, and its results match the original framework's implementation to a stated tolerance. Where fidelity is not achieved, the vignette records which construct did not survive and why. ([16-interop.md](16-interop.md) §The vignette obligation)
+### 9. Defaults are printed
 
-### 12. Documentation currency
+Each corpus model has a published expected `describe()` output. Every default the library guessed appears in it, marked `[guessed]` with the rule that produced it. A change to that output is reviewed, because it is a change in what the model means. Specific checks: the assumed unit, the inferred states, the guessed source of infection in the string form, the exponential dwell time from a scalar duration, the homogeneous mixing default, and the placement of the initial population.
 
-The documentation MUST ship with the version, MUST be readable offline, and MUST be doc-tested: every code example in this folder and in the user documentation is executed in CI and its printed output compared. An agent that reads stale documentation writes broken models, and this is the only mechanism that prevents it.
+### 10. Reproducibility
+
+- The same model, settings, and seed give identical results on repeated runs on the same machine and library versions, in serial and in parallel. ([10-execution.md](10-execution.md#determinism))
+- Adding an unrelated module does not change another module's draws.
+- With common random numbers, the variance of the difference between a baseline and an intervention scenario is lower than without, and the draws `describe()` lists as paired are unchanged by a perturbation elsewhere in the model.
+- `sim.hash()` changes in exactly the part that was changed: a parameter value changes `pars` only, an added state changes `model`, an added intervention changes `scenario`.
+
+### 11. Errors
+
+Every code in [15-errors.md](15-errors.md) has a minimal example that triggers exactly it, and the message contains the name the user gave the thing and a suggested fix. A code with no test is removed from the catalog.
+
+### 12. Calibration
+
+- On the calibration corpus model, `sim.calibrate()` with no arguments recovers known parameter values from synthetic data to a stated tolerance, under each run method, using the method the library chose.
+- The printed output names the method and the reason. An Optuna fit reports no interval.
+- `fit.sim` is a run sim with the fitted values, and the original sim is unchanged.
+- `ss.compare_models` ranks the true generating model first on synthetic data from an SEIR.
+
+### 13. North star
+
+The claim: **a model should never be easier to write without the lingua franca than with it.** For each vignette in [vignettes](../vignettes), which translates one of a framework's own examples:
+
+| Measure | How | Requirement |
+|---|---|---|
+| **Results** | Compare the vignette's results with the original's, to a tolerance stated in the vignette | Agree |
+| **Lines of model code** | Count non-blank, non-comment lines needed to define and run the model, in both versions. Imports, plotting, and data loading are excluded from both. Lines longer than 100 characters count as two, so that length cannot be hidden in one long line | Lingua franca ≤ original |
+| **Wall-clock time** | Time one run of each on the same machine, at the same population size, timestep, and duration, taking the median of five runs after one warm-up run | Lingua franca ≤ original |
+
+The result is a published table with one row per vignette: framework, model, lines (original and lingua franca), time (original and lingua franca), and whether results agree. A row where the lingua franca is longer or slower is a defect in the design or the implementation and is listed as such, with the reason. It is not hidden, and it is not a reason to drop the vignette.
+
+The table SHOULD cover at least one example from each main framework: MEmilio, EpiModel, epydemix, summer2, SimInf, odin, EMULSION, flepiMoP, Atomica, LASER, and Starsim itself.
+
+Two notes on fairness. Time is compared for the run method closest to the original's (an ODE against an ODE, a network model against agents); where the original is compiled C++ or Rust, matching its speed from Python is a real requirement, which is why the compartmental methods generate array code ([12-backends.md](12-backends.md#how-a-model-is-built)). And the line count is of the model, not of the surrounding analysis, since that is what the claim is about.
+
+### 14. Documentation
+
+The documentation ships with the library version and is readable offline. Every code example in this folder and in the user documentation is run in continuous integration, and its printed output is compared with what the page shows.
 
 ## The corpus
 
-The conformance corpus MUST include at least:
+Models marked **simple** are used for the asserted method-agreement tests in suite 3.
 
-1. **SIR**, in all three forms, on every method.
-2. **SEIR** with `source='I'`, testing the one place the language asks for a word.
-3. **SIR with an Erlang dwell time**, testing the sub-compartment expansion.
-4. **An age-stratified model with a real contact matrix**, testing the stratification operator and the mixing restriction.
-5. **A metapopulation with gravity mobility**, testing the spatial dimension and commuting.
-6. **A vaccination model as a dimension plus a transfer**, testing that the disease model never mentions vaccination.
-7. **A two-disease model with an effect between them**, testing composition and the combiner rules.
-8. **A model with a full observation cascade and a likelihood**, testing calibration end to end.
-9. **A sexual-network model**, testing that compartmental methods refuse rather than approximate.
-10. **A model with an `ss.process` escape hatch**, testing that the capability loss is reported and enforced.
-11. **An environmental-transmission model** with `ss.Continuous`, testing the one place the per-contact factoring is extended.
-12. **A model with a threshold trigger**, testing hysteresis and the absence of flapping.
+| # | Model | What it tests |
+|---|---|---|
+| 1 | **SIR**, in all three spellings and as a class (simple) | Form equivalence; every method |
+| 2 | **SEIR**, in the operator form and in the string form with `source='I'` (simple) | The source of infection; the printed guess when `source=` is left out |
+| 3 | **SIR with an Erlang dwell time**, as `ss.gamma` with an integer shape and as `stages=3` (simple) | Sub-stages, exact in every method |
+| 4 | **SIR with a lognormal dwell time** | `'auto'` runs it as agents; `method='ode'` prints the stage approximation; `approx=False` raises `E804` |
+| 5 | **A branching model** with per-branch dwell times and a competing death hazard (simple) | Split on entry versus competing hazards |
+| 6 | **An age-stratified SIR with a real contact matrix** (simple) | `stratify`, `ss.contacts`, aging, re-binning; the original model left untouched |
+| 7 | **A model on patches with gravity mobility**, and the same patches with no mobility | Space as a stratification; commuting as a share of time |
+| 8 | **Vaccination as a stratification plus a transfer** | The disease never mentions vaccination; coverage delivers `f`; capacity is a total |
+| 9 | **Two diseases with `ss.modify` in both directions** (HIV and syphilis) | Mutual dependence; combination rules; base and effective values; `what_modifies()` |
+| 10 | **A sexual-network model** (`ss.MFNet`) | `'auto'` runs it as agents; `method='ode'` prints the partner-change approximation note and runs; `approx=False` raises `E804`; the difference is recorded |
+| 11 | **Cholera**: a disease plus an `ss.Compartments` water reservoir | Counts in rates; `'auto'` gives an ODE; adding `n_agents=` makes people agents while the water stays a count |
+| 12 | **A vector-borne model** (Ross-Macdonald malaria): humans plus an `ss.Compartments` mosquito population | Two populations coupled by counts; a seasonal inflow; humans as agents with mosquitoes as counts |
+| 13 | **Screening with follow-up treatment** | The within-step chain; `on_positive=`; moving a module with `sim.loop.insert` |
+| 14 | **A model with custom code**: a function in a rate slot that works on groups, one that needs `uids`, and a `step()` override | The try-it rule; what `'auto'` chooses; `E804` messages |
+| 15 | **A model with outcomes, data, and bounds** (cases, hospitalizations, deaths) | Results by name, data matching, `sim.calibrate()` end to end, `ss.compare_models` |
+| 16 | **A threshold-triggered intervention** with `min_duration=` | `when=` functions; no switching on and off every step |
+| 17 | **A TB model with a resistance stratification** and acquired resistance as a transfer with `states=` | Strain as a dimension; `ss.transfer` restricted to some states |
 
-Each corpus model MUST have a published expected `summary()` output, and a change to that output is a change that requires review. The summary is where every guessed default becomes visible, so a diff in the summary is a diff in the semantics.
+Each corpus model has a published expected `describe()` output (suite 9).
 
-## What conformance does not certify
+## What these tests do not show
 
-- That the model is a good model. Nothing here checks epidemiology.
-- That a fit converged. That is `fit.summary()`'s job, per run.
-- That an approximation is appropriate for the question being asked. The language reports the approximation; the choice remains the modeler's.
+- That a model is a good model. Nothing here checks the epidemiology.
+- That a particular fit converged. `fit.summary()` reports that for each fit.
+- That an approximation is good enough for the question being asked. The library says what was approximated and the recorded tables say roughly how much it matters; the judgment is the modeler's.
