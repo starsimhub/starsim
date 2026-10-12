@@ -188,7 +188,7 @@ class MyNetwork(ss.Network):
 
 ```python
 sim.needs()             # what this model requires, as a table
-sim.needs(to='form.csv')  # Atomica's databook: the data-entry contract, generated
+sim.needs(to='form.csv')  # Atomica's databook: the data-entry contract, generated  (deferred from v1; see design/19)
 ```
 
 This is optional metadata. A module without `requires` works exactly as before, and a module with it is not restricted to what it listed: it can still read anything in the sim. The declaration exists to produce the table and the form, not to police access. (Which modules write to which quantities is found by observing a run, not by declaration; see [composition-and-effects.md](composition-and-effects.md).)

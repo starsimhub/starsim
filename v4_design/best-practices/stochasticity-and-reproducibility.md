@@ -134,7 +134,7 @@ The two that generalize cheaply:
 ```python
 sim.check_dt()      # halve dt, re-run, report the change. A discrete-time model that
                     # moves when dt halves has not converged.
-sim.check_reps()    # is n_reps enough for the quantity being compared?
+sim.check_reps()    # is n_reps enough for the quantity being compared?  (deferred from v1; see design/19)
 ```
 
 For a stochastic model, `check_reps()` is the more commonly needed one and nothing in the review offers it. With CRN on, the required replicate count for a paired comparison is often an order of magnitude lower, and saying so concretely is worth more than a warning in the documentation.
@@ -143,7 +143,7 @@ For a stochastic model, `check_reps()` is the more commonly needed one and nothi
 
 Worth stating explicitly in the documentation because it is widely misunderstood: a fixed seed makes a *run* reproducible; the four hashes make an *analysis* reproducible. A paper reporting `rand_seed=1` and nothing else has reported almost nothing.
 
-[SimInf](../approaches/siminf.md)'s `package_skeleton()` — a command that turns a model into a distributable, installable, citable R package — is the other end of this and its review is right that it is "trivial once the model is data". `ss.export(sim, 'my_analysis/')` producing a directory with the model, the resolved parameters, the data references, the environment, and a runnable script is the same idea and should exist.
+[SimInf](../approaches/siminf.md)'s `package_skeleton()` — a command that turns a model into a distributable, installable, citable R package — is the other end of this and its review is right that it is "trivial once the model is data". `ss.export(sim, 'my_analysis/')` producing a directory with the model, the resolved parameters, the data references, the environment, and a runnable script is the same idea and should exist (deferred from v1; `to_json()` and `ss.save` cover it meanwhile).
 
 ## Trade-offs
 

@@ -182,7 +182,7 @@ class ANCTesting(ss.Intervention):
     def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            p_offer     = ss.bernoulli(p=p_offer),
+            p_offer     = ss.bernoulli(p=lambda mod, sim, uids: p_offer(sim, uids)),   # Starsim's callable pars take (module, sim, uids)
             sensitivity = ss.bernoulli(p=0.98),
         )
         self.update_pars(**kwargs)

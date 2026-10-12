@@ -122,8 +122,8 @@ ss.Transition('I', 'R', dur=ss.days(10), name='recovery')
 |---|---|
 | `ss.transmission('S -> I', beta=b, source='I')` | `ss.Transition('S', 'I', rate=b * I)` |
 | `ss.progression('I -> R', dur=d)` | `ss.Transition('I', 'R', dur=d)` |
-| `ss.birth('-> S', rate=r)` | `ss.Transition(None, 'S', rate=r)` |
-| `ss.death('I ->', rate=r)` | `ss.Transition('I', None, rate=r)` |
+| `ss.birth('-> S', rate=r)` | `ss.Transition(None, 'S', rate=r * N.n)`: an inflow rate is a total count per unit time, not a per-capita hazard, so the per-capita birth rate is scaled by the population |
+| `ss.death('I ->', rate=r)` | `ss.Transition('I', None, rate=r)`; the arrow is optional, and `ss.death(rate=r)` applies to every state |
 | `ss.transfer(risk='low -> high', rate=r)` | A move between strata; see [stratification.md](stratification.md) |
 
 On capitalization, which follows Starsim's existing habit (`ss.Dist` and `ss.normal`, `ss.Rate` and `ss.perday`): modules and base classes are CamelCase (`ss.Disease`, `ss.State`, `ss.Transition`); the concrete pieces you put inside a module are lowercase (`ss.transmission`, `ss.par`, `ss.days`).
@@ -180,11 +180,11 @@ Several sources are a sum: `S >> I @ beta * (I + 0.5 * A)` for an asymptomatic s
 
 ```python
 # Cholera: infection from a water reservoir, with dose response
+W = ss.states('W')
 water = ss.Compartments(
-    shedding = ss.Transition(None, 'W', rate=shed * I.n),
-    decay    = ss.Transition('W', None, rate=ss.perday(0.3)),
+    shedding = ss.Transition(None, W, rate=shed * I.n),   # an inflow rate is a total per unit time
+    decay    = ss.Transition(W, None, rate=ss.perday(0.3)),
 )
-W = water.W
 infection = S >> I @ beta * W.n / (W.n + K)
 ```
 
@@ -192,14 +192,15 @@ infection = S >> I @ beta * W.n / (W.n + K)
 # Malaria: humans are infected by mosquitoes, mosquitoes by humans
 Sv, Ev, Iv = ss.states('Sv Ev Iv')
 mosquitoes = ss.Compartments(
-    biting     = Sv >> Ev @ a * c * Ih.n / Nh,
+    biting     = Sv >> Ev @ a * c * Ih.prev,
     incubation = Ev >> Iv @ ss.days(10),
     death      = ss.death(rate=ss.perday(0.1)),
 )
+Nh = (Sh + Eh + Ih + Rh).n
 human_infection = Sh >> Eh @ a * b * Iv.n / Nh
 ```
 
-(`Sh`, `Eh`, `Ih` are the human disease's states and `Nh` the human population size; `a`, `b`, `c` are the biting rate and the two transmission probabilities.)
+(`Sh`, `Eh`, `Ih`, `Rh` are the human disease's states, `Ih.prev` the fraction of humans infectious, and `Nh` the human population size; `a`, `b`, `c` are the biting rate and the two transmission probabilities.)
 
 `ss.Compartments` is a module whose states are counts rather than agents: a water reservoir, a mosquito population, a wastewater signal. It uses the same transition syntax and can sit in the same sim as agent-based modules, per patch if the model is spatial. [SimInf](../approaches/siminf.md)'s split between discrete compartments and continuous node-level variables is the precedent, and its `SISe` models are this pattern. [CK: "Compartments" is a bad name since just sounds like SIR compartments.]
 

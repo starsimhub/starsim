@@ -127,7 +127,7 @@ malaria = ss.Disease(
     recovery  = Ih >> Rh @ ss.days(100),
 )
 mosquitoes = ss.Compartments(
-    emergence  = None >> Sv @ ss.perday(5_000),
+    emergence  = None >> Sv @ ss.perday(5_000),   # an inflow rate is a total per unit time, not a per-capita hazard
     infection  = Sv >> Ev @ a * c * Ih.n / Nh,
     incubation = Ev >> Iv @ ss.days(10),
     mortality  = (Sv | Ev | Iv) >> None @ ss.days(10),

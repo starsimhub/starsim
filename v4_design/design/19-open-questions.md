@@ -34,6 +34,11 @@ Sources: the open-questions sections of the documents in [best-practices](../bes
 | Population size | Starsim's `total_pop` (people represented) and `n_agents` (agents simulated) | [01](01-objects.md#total_pop-and-n_agents) |
 | The serialized form | The model spec, JSON, from `to_json()`. Functions are recorded by name and source text | [14](14-model-spec.md) |
 | Reproducibility | Starsim's per-distribution streams and common random numbers, plus a five-part run hash. Result caching is optional and off by default | [11](11-random.md) |
+| Default unit for bare numbers | Decided by `start=`: years for `start=2020`, days for a date string, otherwise days and printed; `unit=` overrides | [02](02-types.md#bare-numbers) |
+| Where `method=` is given | Either `ss.Sim(method=)` or `sim.run(method=)`; the second wins | [12](12-backends.md) |
+| Results read during a run | A "so far" view, so `new[-7:]` in a trigger is the last seven steps | [09](09-results.md#ssresult), [08](08-interventions.md#triggers) |
+| Declaring states | `S = ss.State()` in a class body; `S, I, R = ss.states()` at module level, with `ss.states('S I R')` as the fallback | [03](03-states-and-transitions.md#ssstate) |
+| Vocabulary trimmed | `ss.Needs`/`requires=`/`sim.needs()`, `ss.export`, `check_reps`, and the movement models beyond `ss.gravity` are deferred | [17](17-vocabulary.md), section C below |
 
 ## B. Open
 
@@ -43,7 +48,6 @@ Each of these is specified one way and could reasonably go the other.
 
 | Question | Current guess | Alternative |
 |---|---|---|
-| **Default unit for bare numbers** | Days, printed | Years, which is Starsim's default today; or decided by `start=` (years for `start=2020`, days for a date string). This one affects every example and should be settled first |
 | **A bare number after `@`** | A rate: `I >> R @ 0.1` | A duration: `I >> R @ 10`. Tempting, but magnitude cannot tell them apart safely |
 | **`init` as a fraction or a count** | Below 1 a fraction, above 1 a count; the remainder goes to the first state | Separate keywords |
 | **Where `init_prev` puts people** | Through the infection transition, so `E` in an SEIR | Directly into the infectious state |
@@ -72,12 +76,15 @@ Each of these is specified one way and could reasonably go the other.
 | **Reproducibility across machines** | Identical on the same machine and versions is required; bit-identical across machines is a goal | Required |
 | **An unmatched data column** | Reported once and ignored (`W705`) | An error; [09](09-results.md) currently says error and [13](13-inference.md) says ignored |
 | **What `sim.calibrate()` returns** | Called `fit` here; presumably a slimmed-down `ss.Calibration` | A new, smaller class |
+| **Inflow rates** | The rate of a transition out of `None` is a total count per unit time; `ss.birth(rate=r)` multiplies by `N.n` for the user | A `ss.freq` type required on inflows, so that a hazard put there is caught |
 
-### B2. How far should `ss.Compartments` go?
+### B2. How far should `ss.Compartments` go, and what is it called?
 
 Counts with transitions are enough for a water reservoir and a Ross-Macdonald mosquito population. Not settled:
 
-- Whether it needs its own stratifications beyond space (mosquito species, larval stages by habitat), or should stay deliberately small.
+- **The name.** Cliff: "Compartments" is a bad name, since it just sounds like SIR compartments. Candidates that say "counts, not people": `ss.Counts`, `ss.Stocks`, `ss.Pool` (clashes with `ss.MixingPool`), `ss.Reservoir` (right for water, wrong for mosquitoes).
+- **Whether it is a class at all.** Cliff asks whether complex vector models could "just use regular states". One way to read that: the thing that makes a module's states counts is not a second kind of population but a per-module run method. `ss.Compartments` already has one (it advances deterministically inside an agent-based sim unless given `method='binomial'`), so the same thing could be spelled `ss.Disease(..., method='ode')` or a generic `ss.Module(..., method=...)` with its states over its own population rather than over `sim.people`. That removes a class, gives vector populations the ordinary `stratify` (species, larval stage, patch), and is the per-level mixed method that section C currently defers. What it costs is that "a module whose states are counts" becomes a property to look up rather than a class to recognize. Agreed (2026-10-12): keep one class for v1 under a better name, and write the malaria and dengue vignettes before deciding whether the per-module method replaces it. The name itself is still to be chosen.
+- Whether it needs its own stratifications beyond space (mosquito species, larval stages by habitat), or should stay deliberately small. Cliff: yes, it will need to support complex vector models, certainly different species.
 - A reservoir per patch alongside agents assigned to patches: the count has to be indexed by the same `patch` dimension the agents use. This should follow from stratification and needs a worked example.
 - Whether a vector population with its own age structure and interventions (bed nets, larviciding) is still an `ss.Compartments`, or is by then a second `ss.Disease`-like population.
 
@@ -100,7 +107,7 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 
 ### B6. Stratification details
 
-- **Marking a dimension as strain-like.** `strain`, `variant`, `genotype`, `serotype`, and `resistance` are recognized by name, with `kind='strain'` as the override. Is a list of names the right mechanism?
+- **Marking a dimension as strain-like.** `strain`, `variant`, `genotype`, `serotype`, and `resistance` are recognized by name, with `kind='strain'` as the override. Is a list of names the right mechanism? The alternative is to put the kind on the value rather than beside it (`resistance=ss.strain(['DS', 'MDR'])`), which reads as a declaration and needs no list; bare lists would still work for the recognized names.
 - **Cross-immunity within a strain dimension** is an `immunity=` matrix on `stratify`. Between two diseases it is an `ss.modify`. If a second kind of within-dimension interaction turns up, the two should become one mechanism.
 - **Stratifying only some transitions**, not just some states. It may be a sign the model wanted two transitions.
 - **Should `ss.transfer` take the delivery keywords?** A campaign with coverage and years but no product can be written as a transfer or as `ss.vaccinate` with a minimal product. One should be the documented way.
@@ -140,6 +147,16 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 - Should the spec be able to write out expanded strata and sub-stages for readers that cannot apply the rules themselves?
 - Loading a spec that contains functions: rebuild them from the recorded source text only when asked, or require the defining script? ([14](14-model-spec.md#functions))
 
+### B12. Declaring states without repeating their names
+
+Cliff would really like to avoid `S, I, R = ss.states('S I R')`, where the names are typed twice. The options:
+
+- **In a class body, done.** `S = ss.State()` learns its name through `__set_name__`, with no magic ([03](03-states-and-transitions.md#ssstate)). This is the form the class-form examples now use.
+- **At module level, the string stays** unless the names are read from the assignment itself: `S, I, R = ss.states()` can be made to work by inspecting the caller's bytecode for the unpacking assignment (the `varname` package does exactly this). It is one step more magical than the name-from-variable lookup that `ss.Disease(infection, recovery)` already relies on, because it has to find the *target* of an assignment that has not happened yet, and it can fail in a REPL, under `exec`, and across Python versions. If the existing lookup is acceptable, this probably is too, and the string form remains as the fallback.
+- **Infer the states from the transitions.** Not possible in the operator form, because `S >> I` needs `S` and `I` to exist first; it is what the arrow-string form already does.
+
+Agreed (2026-10-12): `S = ss.State()` in class bodies, `ss.states()` with no argument by bytecode inspection, and `ss.states('S I R')` kept as the fallback; now in [03](03-states-and-transitions.md#ssstate). What remains open is only how robust the bytecode inspection turns out to be.
+
 ## C. Deferred: not in v1
 
 | Item | Note |
@@ -154,6 +171,10 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 | **Joint likelihoods with correlation between data series** | Series are treated as independent, and the output says so |
 | **Edge-level eligibility** | Networks already say who is in contact with whom |
 | **Preallocated agent arrays** | An optimization to benchmark before building; it would not change what the user writes |
+| **`requires=` / `ss.Needs` / `sim.needs()`** | Optional metadata for generating a data-entry form (Atomica's databook). One use case and three names; the design stays in [04](04-parameters.md#requirements) for when a vignette needs it |
+| **`ss.export`** | A folder that reproduces a run. `to_json()`, `ss.save`, and the run hash cover reproduction meanwhile |
+| **`sim.check_reps()`** | Estimating how many replicates a comparison needs. `check_dt()` stays |
+| **Movement models beyond gravity** (`ss.radiation`, `ss.stouffer`, `ss.competing_destinations`) | A matrix or a movement register covers them until a vignette needs one by name |
 
 ## D. Risks
 

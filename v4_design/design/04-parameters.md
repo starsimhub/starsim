@@ -130,6 +130,8 @@ so the question "did the model change, or did the numbers?" has an answer whethe
 
 ## Requirements
 
+Deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)): the attribute and the class below had different names, and the feature serves one use case (Atomica's databook). It is kept here as the design for when a vignette needs it.
+
 A module MAY list the data it needs. This is optional metadata, used to tell the user what to supply and to generate a data-entry form. It is not enforced: a module can read anything, and a module that lists nothing works as before.
 
 ```python

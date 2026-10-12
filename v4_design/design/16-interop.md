@@ -93,7 +93,7 @@ changed: lognormal dwell time on 'recovery' written as 11 Erlang stages
 
 An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported ([14-model-spec.md](14-model-spec.md#functions)).
 
-The data-entry form (Atomica's databook) is produced by `sim.needs(to='form.csv')` ([04-parameters.md](04-parameters.md#requirements)), and the diagram by `sir.diagram()`.
+The diagram is produced by `sir.diagram()`. A generated data-entry form (Atomica's databook, `sim.needs(to='form.csv')` in [04-parameters.md](04-parameters.md#requirements)) is deferred from v1.
 
 ## Comparing two models
 

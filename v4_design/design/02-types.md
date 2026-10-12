@@ -103,7 +103,7 @@ infection: beta = 0.05 per day  [unit guessed: day]
 
 Rule 4 is a guess, and it is printed because a model whose numbers are per year and which is run per day is wrong by a factor of 365. The library does not try to guess the unit from the size of the number: 0.05 is plausible per day and per year.
 
-Starsim's own default unit is the year, not the day. Which of the two the lingua franca should assume is an open question ([19-open-questions.md](19-open-questions.md)). Examples in this specification do not depend on the answer: they give `unit=` or `dt=`, or use typed values.
+Starsim's own default unit is the year, not the day. The lingua franca decides from `start=`: a year (`start=2020`) means years, a date string (`start='2020-01-01'`) means days, and with neither the unit is the day and the choice is printed. `unit=` overrides all three. Examples in this specification do not depend on the rule: they give `unit=` or `dt=`, or use typed values.
 
 The default timestep is one unit.
 
@@ -166,5 +166,4 @@ Adding a type is a real cost to every user who has to learn it, so the set shoul
 
 ## Open questions
 
-- Whether the default unit for bare numbers is the day (this document) or the year (Starsim today). See [19-open-questions.md](19-open-questions.md).
 - Whether `ss.prob` keeps its period in the model spec or is normalized to a per-step value at build time. The first is more faithful; the second is smaller.

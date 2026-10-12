@@ -31,7 +31,7 @@ ss.Result                   a named time series
 
 ## Naming conventions
 
-**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names.
+**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names. Products (`ss.Vaccine`, `ss.Test`, `ss.Treatment`) are CamelCase because they are modules, as Starsim's `ss.Product` is; the deliveries that hand them out (`ss.vaccinate`, `ss.screen`, `ss.treat`) are pieces and are lowercase.
 
 | | Examples |
 |---|---|
@@ -112,7 +112,10 @@ Class attributes that are states, transitions, parameters, or outcomes are colle
 class SEIR(ss.Disease):
     beta = ss.par(0.05, bounds=[0.01, 0.5])
 
-    S, E, I, R = ss.states('S E I R')
+    S = ss.State()                           # in a class body a state learns its own name
+    E = ss.State()
+    I = ss.State()
+    R = ss.State()
     infection  = S >> E @ beta * I
     latency    = E >> I @ ss.days(3)
     recovery   = I >> R @ ss.days(10)
@@ -222,7 +225,7 @@ A module MAY list the data it needs, as optional metadata from which a data-entr
 
 ```python
 class MyNetwork(ss.Network):
-    requires = [ss.Needs('contact_matrix', shape='age x age')]
+    requires = [ss.Needs('contact_matrix', shape='age x age')]   # optional metadata, deferred from v1
 ```
 
 This is never an enforced view of the data. See [04-parameters.md](04-parameters.md#requirements).

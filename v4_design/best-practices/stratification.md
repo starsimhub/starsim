@@ -66,7 +66,7 @@ stratify(by = age)
 sir_age = sir.stratify(
     age    = [0, 15, 65],                       # bin edges, or a list of labels
     split  = [0.3, 0.55, 0.15],                 # population split; defaults to the demography
-    adjust = {'recovery': [1.5, 1.0, 0.5]},     # per-group multipliers on named transitions
+    adjust = {'recovery': [1.5, 1.0, 0.5]},     # per-group multipliers on the hazard of named transitions (1.5 = faster recovery, even if given as dur=)
 )
 sim = ss.Sim(sir_age, networks=ss.contacts('Kenya'), unit='day').run()   # who meets whom, by age
 ```
@@ -103,7 +103,7 @@ Both summer2 and camdl are recognizing the same thing: **dimensions are not inte
 | Dimension | What it implies | Declared as |
 |---|---|---|
 | `age` | Aging flows between adjacent groups, at the right rate | `sir.stratify(age=[0, 15, 65])` |
-| `patch` (space) | Separate populations. Movement between them only if a mobility model is given | `sir.stratify(patch=['north', 'south'])`, plus `ss.Mobility(...)` in `networks=` if people move |
+| `patch` (space) | Separate populations. Movement between them only if a mobility model is given | `sir.stratify(patch=['north', 'south'])`, plus `mobility=ss.gravity(...)` on the same call if people move |
 | `strain` | Infection is strain-specific: strain A infects with strain A | `flu.stratify(strain=['H1N1', 'H3N2'])` |
 | anything else | Nothing | `sir.stratify(risk=['low', 'high'])` |
 

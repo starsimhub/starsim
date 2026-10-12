@@ -58,6 +58,17 @@ I    = ss.State(init=0.01)
 V    = ss.State(rel_sus=0.2, label='Vaccinated')
 ```
 
+Inside a class body a state is declared without repeating its name, because Python tells a class attribute what it was called (`__set_name__`):
+
+```python
+class SIR(ss.Disease):
+    S = ss.State()
+    I = ss.State(init=0.01)
+    R = ss.State()
+```
+
+At module level there is no such hook, so `ss.states('S I R')` names the states once, as `sympy.symbols` does. `S, I, R = ss.states()` with no argument SHOULD also work, by reading the names from the unpacking assignment in the caller's bytecode (as the `varname` package does); it is one step more magical than the name-from-variable lookup the rest of the language relies on, and where it cannot find the names (a REPL, `exec`, an unsupported Python version) it raises an error that says to pass the string ([19-open-questions.md](19-open-questions.md#b12-declaring-states-without-repeating-their-names)).
+
 `rel_sus` and `rel_trans` on a state are properties of being in that state, so a partially protective vaccine state is two numbers on a declaration rather than multipliers threaded through transmission code. They multiply with the per-agent `rel_sus` and `rel_trans` that [07-effects.md](07-effects.md) describes.
 
 A state belongs to the module whose transitions move people into or out of it. A state that appears only inside another module's rate (for example a water reservoir `W` in a disease's infection rate) is a reference, not a member. A state that is an endpoint of transitions in two modules raises `E206 DuplicateDeclaration`. States are ordered by when they were created, so "the first declared state" is the first name in the first `ss.states(...)` call.
@@ -108,13 +119,14 @@ A transition's name is used for its results, for addressing it (`sir.infection`)
 ## Arrow strings and the shorthand constructors
 
 ```
-arrow       ::= [source] "->" [dest_list]
+arrow       ::= [source] arrow_op [dest_list]
+arrow_op    ::= "->" | "-->" | ">>"
 dest_list   ::= name ("|" name)*
 source      ::= name
 name        ::= python_identifier
 ```
 
-Whitespace is ignored. An arrow string carries names and a direction and nothing else; rates are Python objects, never text. An empty source is an inflow and an empty destination an outflow.
+Whitespace is ignored and the arrow may be spelled `->`, `-->`, or `>>`, so `'I -> R'`, `'I->R'`, and `'I >> R'` are the same string. An arrow string carries names and a direction and nothing else; rates are Python objects, never text. An empty source is an inflow and an empty destination an outflow.
 
 The lowercase constructors return an `ss.Transition`. Each is a shorter way of writing the explicit form:
 
@@ -365,7 +377,7 @@ The other way is to subclass and override `step()`, as in Starsim ([01-objects.m
 
 ## `ss.Compartments`
 
-An `ss.Compartments` module holds states that are **counts**, not people: an environmental reservoir, a mosquito population, a wastewater signal. It uses the same states and the same transition syntax as `ss.Disease`, and lives in the same sim as agent-based modules. It is how environmental and vector-borne transmission are written.
+An `ss.Compartments` module holds states that are **counts**, not people: an environmental reservoir, a mosquito population, a wastewater signal. It uses the same states and the same transition syntax as `ss.Disease`, and lives in the same sim as agent-based modules. It is how environmental and vector-borne transmission are written. (The name is under review, since "compartments" also describes the states of an SIR; see [19-open-questions.md](19-open-questions.md#b2-how-far-should-sscompartments-go-and-what-is-it-called).)
 
 It differs from `ss.Disease` in three ways: its states are never individual agents, whatever the run method; they are not part of the human population (they do not count toward `N`, age, or sit on networks); and they may be stratified only by dimensions that make sense for a count, usually space (`water.stratify(patch=...)`).
 

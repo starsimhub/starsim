@@ -110,7 +110,7 @@ decay     = W >> None @ ss.perday(0.3)
 cholera = ss.Disease(infection, recovery)
 water   = ss.Compartments(shedding, decay)
 
-sim = ss.Sim(modules=[cholera, water], total_pop=10_000, unit='day')
+sim = ss.Sim([cholera, water], total_pop=10_000, unit='day')
 sim.run(method='stochastic')
 ```
 

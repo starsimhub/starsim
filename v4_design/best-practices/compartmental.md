@@ -160,7 +160,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.3 * I
 recovery  = I >> R @ ss.days(10)
 
-sir = ss.Disease(infection, recovery, frac_infected = I.n / (S.n + I.n))
+sir = ss.Disease(infection, recovery, frac_infected = I / (S + I))   # in a result a bare state is its count; in a rate it is exposure
 ```
 
 `I.prev` is the common case, the fraction of the whole population in `I`. This is [MIRA](../approaches/notes.md#askem-model-representation-amr--mira)'s `counts_to_dimensionless`, done as an output option and not as a property of the model: the dynamics are the same either way.

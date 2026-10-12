@@ -236,7 +236,7 @@ A function can be used in place of a class when no state is needed: a plain func
 
 A module does not declare what it reads or writes. Declarations of that kind get forgotten and drift away from the code, and an out-of-date declaration is worse than none. What a module actually wrote is recorded and shown by `what_modifies()`.
 
-`ss.Needs` and `requires=` remain as optional metadata that says what input data a module expects, for generating data-entry forms ([04-parameters.md](04-parameters.md)). They are never enforced as access control: a module can read anything in the sim.
+`ss.Needs` and `requires=` (deferred from v1) are optional metadata that says what input data a module expects, for generating data-entry forms ([04-parameters.md](04-parameters.md)). They are never enforced as access control: a module can read anything in the sim.
 
 ## Execution order
 

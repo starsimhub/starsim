@@ -108,7 +108,7 @@ Stop, because a guess would be wrong quietly:
 
 Note what is *not* on that list: asking for a run method the model does not exactly fit. That gets the standard approximation and a one-line note, not an error; see principle 8 and [paradigm-conversion.md](paradigm-conversion.md).
 
-And in every case, **describe the resolved model**. `sim.describe()` shows the states, the transitions with their dwell-time distributions, the networks, the run method, and the defaults that were filled in. A guess the user can see is not hidden behavior; a guess they cannot see is. (`sim.summary()` and `sim.plot()` keep their Starsim meanings: they are about results.)
+And in every case, **describe the resolved model**. `sim.describe()` shows the states, the transitions with their dwell-time distributions, the networks, the run method, and the defaults that were filled in. A guess the user can see is not hidden behavior; a guess they cannot see is. (`sim.summarize()` and `sim.plot()` keep their Starsim meanings: they are about results.)
 
 ## Plain Python is part of the language
 

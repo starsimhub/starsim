@@ -73,7 +73,7 @@ All Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps
 
 **`ss.by`** (one value per stratum), **`ss.timeseries`** (varies in time), **`ss.seasonal`** (a yearly cycle). The other forms a parameter can take (a number, a typed quantity, a distribution, a function) need no names of their own.
 
-### Mixing and space: 13
+### Mixing and space: 10
 
 | Name | What it is |
 |---|---|
@@ -83,7 +83,7 @@ All Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps
 | **`ss.contacts`** | A named contact matrix as mixing pools: `ss.contacts('Kenya')` |
 | **`ss.geo`** | A named geography: names, populations, centroids, distances |
 | **`ss.Mobility`** | Movement between patches from a matrix, a data file, or a movement model |
-| **`ss.gravity`** **`ss.radiation`** **`ss.stouffer`** **`ss.competing_destinations`** | Movement models |
+| **`ss.gravity`** | Movement model (radiation, Stouffer, and competing destinations are deferred; a matrix covers them) |
 
 ### Interactions and interventions: 8
 
@@ -94,26 +94,26 @@ All Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps
 | **`ss.Vaccine`** **`ss.Test`** **`ss.Treatment`** | Products (Starsim's `ss.Vx`, `ss.Dx`, `ss.Tx`, which remain as aliases) |
 | **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** | Deliveries |
 
-### Running, comparing, saving: 6
+### Running, comparing, saving: 5
 
-`ss.parallel` (run several sims as scenarios), **`ss.compare_models`** (fit and compare by out-of-sample prediction), **`ss.diff`** (what differs between two sims), **`ss.export`** (a folder that reproduces a run), `ss.load`, `ss.save`.
+`ss.parallel` (run several sims as scenarios), **`ss.compare_models`** (fit and compare by out-of-sample prediction), **`ss.diff`** (what differs between two sims), `ss.load`, `ss.save`. (`ss.export`, a folder that reproduces a run, is deferred.)
 
-### Optional metadata: 1
+### Optional metadata: 0
 
-**`ss.Needs`**: one item of input data a module expects, for generating data-entry forms. Never enforced.
+`ss.Needs` and `requires=`, for generating data-entry forms, are deferred ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)).
 
 ### Types you get back or subclass: 6
 
 `ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, `ss.Calibration`. All Starsim's. Users rarely construct these; `sim.calibrate()` returns the calibration object that this specification calls `fit`.
 
-### Methods and attributes: 40 distinct names
+### Methods and attributes: 38 distinct names
 
 | On | Names |
 |---|---|
 | A model (`ss.Disease`, `ss.Compartments`, any module) | **`describe`** **`diagram`** **`equations`** **`methods`** **`transitions`** **`stratify`** `to_json` `copy` `pars` **`R0`** |
 | A state or a sum of states | **`n`** **`prev`** |
 | A modifiable array | **`base`** |
-| `ss.Sim` | `init` `run` `plot` `summary` `to_df` `loop` `results` **`describe`** **`methods`** `to_json` **`hash`** **`calibrate`** **`sensitivity`** **`check_dt`** **`check_reps`** **`what_modifies`** **`needs`** **`transmissions`** **`crn_report`** |
+| `ss.Sim` | `init` `run` `plot` `summary` `to_df` `loop` `results` **`describe`** **`methods`** `to_json` **`hash`** **`calibrate`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`transmissions`** **`crn_report`** |
 | `sim.loop` | `insert` `to_df` `plot` `plot_step_order` |
 | A result | **`sel`** **`sum`** `resample` **`quantiles`** **`trajectories`** |
 | A network | **`check`** |
@@ -132,18 +132,18 @@ Names that repeat across rows (`plot`, `summary`, `to_df`, `describe`, `methods`
 | Time | 22 | 0 |
 | Distributions | 13 | 0 |
 | Parameter forms | 3 | 3 |
-| Mixing and space | 13 | 7 |
+| Mixing and space | 10 | 4 |
 | Interactions and interventions | 8 | 8 |
-| Running, comparing, saving | 6 | 3 |
-| Optional metadata | 1 | 1 |
+| Running, comparing, saving | 5 | 2 |
+| Optional metadata | 0 | 0 |
 | Types you get back or subclass | 6 | 0 |
-| **`ss.` names** | **93** | **35** |
-| Methods and attributes | 40 | 27 |
-| **Total** | **133** | **62** |
+| **`ss.` names** | **88** | **29** |
+| Methods and attributes | 38 | 25 |
+| **Total** | **126** | **54** |
 
 The two-line SIR uses five of them: `ss.Disease`, `ss.transmission`, `ss.progression`, `ss.Sim`, and `run` (six with `plot`). The operator form swaps the two constructors for `ss.states` and adds `ss.days` if the duration is typed. A stratified, calibrated national model with interventions uses perhaps forty.
 
-The total is about the same as the first draft's (134). What changed is what the names are: 58 of the 93 `ss.` names are ones a Starsim user already knows, and the ones removed (below) were mostly new concepts, while the ones added are mostly methods for looking at a model.
+The total is a little below the first draft's (134). What changed is what the names are: 58 of the 88 `ss.` names are ones a Starsim user already knows, and the ones removed (below) were mostly new concepts, while the ones added are mostly methods for looking at a model.
 
 ## Keywords
 
@@ -202,6 +202,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.Effect` | Renamed and split: scaling a quantity is one thing, complex logic another | `ss.modify`, or Python in `step()` |
 | `ss.Expr`, and `ss.age`, `ss.sex`, `ss.uid`, `ss.time`, `ss.year`, `ss.weekday`, `ss.has`, `ss.scheduled` | A second set of names for things the sim already has | Conditions on the real attributes: `(ppl.age > 65) & ~sir.vaccinated`, or a function of the sim |
 | `ss.Continuous` | A special kind of state and route for reservoirs | `ss.Compartments`, with counts (`W.n`) in rates |
+| `ss.Needs`/`requires=`/`sim.needs()`, `ss.export`, `check_reps`, `ss.radiation`/`ss.stouffer`/`ss.competing_destinations` | Deferred from v1 after the October review: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | `to_json()` and `ss.save`; `check_dt`; a mobility matrix |
 | `ss.process` | A penalty-box name for custom code | A plain function as a keyword, or `step()` |
 | `ss.Homogeneous` | Not needed | No network given, or `ss.MixingPool(n_contacts=10)` |
 | `ss.SexualNet`, `ss.Network(edges=)` | Starsim already has names | `ss.MFNet` and Starsim's other networks; `ss.StaticNet(edges=...)` |

@@ -187,7 +187,7 @@ water = ss.Compartments(              # the reservoir: a count, not agents
     decay    = W >> None @ ss.days(30),
 )
 
-sim = ss.Sim(modules=[cholera, water], n_agents=10_000, unit='day')
+sim = ss.Sim([cholera, water], n_agents=10_000, unit='day')
 ```
 
 `I.n` and `W.n` are plain counts, used literally in the rates. Each module reads the other's current count; the people are simulated as agents and the reservoir as a number. Vector-borne transmission has the same shape, with mosquito states in the `ss.Compartments` module and `a * b * Iv.n / Nh` in the human infection rate.

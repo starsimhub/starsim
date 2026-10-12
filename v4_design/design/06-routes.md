@@ -96,7 +96,7 @@ water = ss.Compartments(
     decay    = W >> None @ ss.days(30),
 )
 
-sim = ss.Sim(modules=[cholera, water], n_agents=10_000, unit='day')
+sim = ss.Sim([cholera, water], n_agents=10_000, unit='day')
 ```
 
 Because `n_agents` is given, people are agents and the water is a count updated alongside them in the same sim. Without it, every piece has a compartmental form and `method='auto'` runs the pair as an ODE. Stratifying both modules by the same geography gives one reservoir per patch ([05-dimensions.md](05-dimensions.md#space)).
@@ -123,7 +123,7 @@ mosquitoes = ss.Compartments(
     death      = (Sv | Ev | Iv) >> None @ ss.days(14),
 )
 
-sim = ss.Sim(modules=[malaria, mosquitoes], unit='day')
+sim = ss.Sim([malaria, mosquitoes], unit='day')
 ```
 
 The humans can be agents (`n_agents=`) while the mosquitoes stay counts.
@@ -224,14 +224,11 @@ Movement models are given by name and parameters; a matrix or a data file is als
 
 ```python
 ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0)    # distances and populations come from the geography
-ss.radiation()                            # parameter-free
-ss.stouffer(k=0.5, a=1.0)
-ss.competing_destinations(k=0.5, a=1.0, b=1.0, c=2.0, delta=0.1)
 ss.Mobility(matrix=M)                     # a matrix you already have
 ss.Mobility(data='movements.csv')         # a movement register: columns date, from, to, n, [states]
 ```
 
-`ss.gravity()` on a dimension with no geography raises `E402 NoGeography`: there are no distances to compute it from, and no reasonable guess. In a movement register, `states` defaults to all disease states, sampled in proportion to how many are in each at the origin; naming states covers selective movement (only healthy animals are sold).
+Other named models (radiation, Stouffer, competing destinations, as in LASER) are deferred until a vignette needs one ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); a matrix covers them meanwhile. `ss.gravity()` on a dimension with no geography raises `E402 NoGeography`: there are no distances to compute it from, and no reasonable guess. In a movement register, `states` defaults to all disease states, sampled in proportion to how many are in each at the origin; naming states covers selective movement (only healthy animals are sold).
 
 ### Commuting and migration
 
@@ -252,7 +249,7 @@ Under `commute`, a person's home patch does not change. They spend a share `away
 
 This is the standard time-share form of a commuting model. It needs no change to the timestep and works in every method. It does not represent the time of day; a model that needs daytime and nighttime mixing uses a sub-daily `dt` with separate layers.
 
-Commuting couples patches without mixing their populations; migration does both. If `kind=` is not given, a gravity, radiation, or similar model is treated as `commute` and a movement register as `migrate`, and the choice is printed.
+Commuting couples patches without mixing their populations; migration does both. If `kind=` is not given, a gravity model or matrix is treated as `commute` and a movement register as `migrate`, and the choice is printed.
 
 Travelers in transit (in neither their home patch nor their destination) are out of scope for v1. A model that needs them can add a transit patch by hand.
 

@@ -146,10 +146,11 @@ Before adding an intervention class, check whether it is one of the two primitiv
 **Vaccination can be a transfer between strata** ([stratification.md](stratification.md)). [Epydemix](../approaches/epydemix.md) and [MEmilio](../approaches/memilio.md)'s `secirvvs` add vaccinated copies of the compartments by hand; here it is one line:
 
 ```python
+sir_vax = sir.stratify(vaccinated=[False, True], adjust={'infection': [1.0, 0.15]})   # 85% protection, declared once
 ss.transfer(vaccinated=True, rate=ss.peryear(0.3))
 ```
 
-For a boolean, write the value people move to. The disease model never mentions vaccination; `rel_sus` for the vaccinated stratum is declared once on the stratification, following [EpiHiper](../approaches/epihiper.md)'s state properties. Use `ss.vaccinate` (below) when there is a product with efficacy, waning, and cost, or a campaign with coverage.
+For a boolean, write the value people move to. The disease model never mentions vaccination; the vaccinated stratum's protection is declared once on the stratification as a multiplier on the infection hazard, following [EpiHiper](../approaches/epihiper.md)'s state properties. Use `ss.vaccinate` (below) when there is a product with efficacy, waning, and cost, or a campaign with coverage.
 
 **A contact reduction is a modifier** ([composition-and-effects.md](composition-and-effects.md)):
 
@@ -187,8 +188,8 @@ A product is the thing delivered: a vaccine, a diagnostic, a treatment. [EMOD](.
 
 ```python
 bcg = ss.Vaccine(
-    efficacy = dict(acquisition=0.85, severity=0.5),
-    waning   = ss.exp_decay(halflife=ss.years(5)),
+    efficacy = dict(acquisition=0.85, severity=0.5),   # keys: acquisition, transmission, mortality, or a transition name (here `severity`)
+    waning   = ss.years(5),                            # a duration means exponential decay with that mean; a function or series gives any shape
     cost     = 12.50,
 )
 
@@ -262,7 +263,7 @@ sims = ss.parallel(
 sims.plot()
 ```
 
-A baseline is the world as it is, so it contains whatever is really in place (ART, for HIV). Each scenario is a complete sim that says exactly what it contains; nothing is switched on or off implicitly. Because [common random numbers](stochasticity-and-reproducibility.md) are on, the difference between two scenarios is the effect of the intervention and not noise.
+(Starsim's `ss.parallel` takes sims positionally today; the keyword labels are a proposed addition.) A baseline is the world as it is, so it contains whatever is really in place (ART, for HIV). Each scenario is a complete sim that says exactly what it contains; nothing is switched on or off implicitly. Because [common random numbers](stochasticity-and-reproducibility.md) are on, the difference between two scenarios is the effect of the intervention and not noise.
 
 ## Trade-offs
 

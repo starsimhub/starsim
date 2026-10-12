@@ -77,7 +77,7 @@ M = row_normalizer(gravity(pops, distances, k=0.5, a=1.0, b=1.0, c=2.0), 0.1)
 
 ```python
 ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0)   # distances and populations come from the geo
-ss.radiation()                            # parameter-free
+ss.radiation()                            # parameter-free  (radiation, stouffer, competing_destinations: deferred from v1; a matrix covers them)
 ss.stouffer(k=0.5, a=1.0)
 ss.competing_destinations(k=0.5, a=1.0, b=1.0, c=2.0, delta=0.1)
 ss.Mobility(matrix=M)                     # a matrix you already have, still allowed
@@ -147,7 +147,7 @@ catchments = ss.geo(shapefile='catchments.shp', pop='catchment_pop.csv')
 covid      = ss.Disease(infection, recovery).stratify(patch=catchments)
 wastewater = ss.Compartments(shedding, decay).stratify(patch=catchments)
 
-sim = ss.Sim(modules=[covid, wastewater], unit='day', data='wastewater.csv')
+sim = ss.Sim([covid, wastewater], unit='day', data='wastewater.csv')
 ```
 
 Nobody moves in this model. `I.n` in the shedding rate is the count of infectious people in the same catchment, because both modules are stratified by `patch`. `n_W` is produced per catchment and can be compared with measured concentrations by name ([results-and-observation.md](results-and-observation.md)). The same pattern, with mosquito states in place of `W` and rainfall as a per-patch time series, is environmentally driven malaria.

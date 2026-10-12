@@ -35,6 +35,8 @@ Library diseases keep the result names they have today (`sim.results.sir.n_infec
 
 A result carries its name, label, module, values, time vector, unit, and whether it is a flow or a stock. This is Starsim's `ss.Result`, unchanged, with two additions: selection by stratum, and attached data.
 
+During a run, a result read from inside the sim (by a trigger, a modifier, or custom code) is a view of the steps completed so far: `res.n_I[-1]` is the latest value and `res.infection[-7:]` the last seven steps, even though the storage is preallocated for the whole run. After the run it is the full series.
+
 Because a result knows whether it is a flow or a stock, converting it to a coarser time step does the right thing without being told: `res.infection.resample('week')` sums, `res.n_I.resample('week')` takes the value at the end of the week, and a ratio is recomputed from its resampled parts. A result has one time vector; other time representations are conversions.
 
 ### Selecting strata
@@ -95,7 +97,7 @@ ss.outcome(
 - **`p=` and `delay=` accept the parameter ladder**, including distributions (reporting delays are not a single number) and `ss.by(age=[...])`. They can carry `bounds` and be fitted like any other parameter.
 - **An outcome does not change anyone's state.** If hospitalized people stop transmitting, hospitalization should be a state in the disease; if it only needs counting, it is an outcome. Both are legitimate, and the choice is a modeling decision. Outcomes can be read like any other result, for example by a [trigger](08-interventions.md#triggers) that responds to reported cases.
 
-For results that span modules (all-cause deaths, a syndromic count over several diseases), declare the outcome on the sim: `ss.Sim(modules=[flu, rsv], ili=ss.outcome(flu.infection + rsv.infection, p=0.3))`; it appears as `sim.results.ili`.
+For results that span modules (all-cause deaths, a syndromic count over several diseases), declare the outcome on the sim: `ss.Sim([flu, rsv], ili=ss.outcome(flu.infection + rsv.infection, p=0.3))`; it appears as `sim.results.ili`.
 
 How the thinning and the delay are realized depends on the method:
 

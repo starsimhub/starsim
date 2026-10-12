@@ -124,21 +124,13 @@ When it is on, reusing a stored result is reported in one line, and a stored res
 
 ```python
 sim.check_dt()      # halve dt, re-run, and report the change in every result
-sim.check_reps()    # estimate how many replicates a comparison needs
 ```
 
-- `check_dt()` re-runs the sim at half the timestep and reports how much each result moves. In a discrete-time run this covers every effect that is O(dt): the rate-to-probability conversion, the delay of one step between modules, and the effect of module order ([10-execution.md](10-execution.md)). If the results of interest do not move, none of these matters for this model at this timestep.
-- `check_reps()` uses the observed variance between replicates to estimate the number needed for a stated comparison at a stated precision. With CRN on, the number needed for a paired comparison is often far lower, and the report says so.
-
-Neither runs automatically. `describe()` mentions them in one line for run methods that have a timestep or random draws.
+`check_dt()` re-runs the sim at half the timestep and reports how much each result moves. In a discrete-time run this covers every effect that is O(dt): the rate-to-probability conversion, the delay of one step between modules, and the effect of module order ([10-execution.md](10-execution.md)). If the results of interest do not move, none of these matters for this model at this timestep. It does not run automatically; `describe()` mentions it in one line for run methods that have a timestep. A companion `check_reps()`, estimating from the variance between replicates how many a stated comparison needs, is deferred ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)).
 
 ## Export
 
-```python
-ss.export(sim, 'analysis/')
-```
-
-Writes a folder containing the model spec, the parameter values, the data references with their versions, the list of installed package versions, the run hash, and a script that reruns it. This is what lets someone else reproduce an analysis on another machine.
+A run is reproduced from its model spec (`sim.to_json()`), its data, and the run hash. A single `ss.export(sim, 'analysis/')` that writes all of these plus the package versions and a rerun script into one folder is deferred ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); `ss.save` and `to_json()` cover it meanwhile.
 
 ## Rejected
 

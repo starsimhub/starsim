@@ -173,12 +173,12 @@ ss.change(sir.pars.beta, at=[ss.days(30), ss.days(60)], to=[0.02, 0.05])
 ```python
 def many_cases(sim):
     new = sim.results.sir.new_infections
-    return new[max(0, sim.ti - 7):sim.ti].sum() > 1000
+    return new[-7:].sum() > 1000   # inside a run, a result holds only the steps so far
 
 ss.modify(school.pars.n_contacts, multiply=0.2, when=many_cases, min_duration=ss.weeks(4))
 ```
 
-The function is called each step, at the intervention's place in the loop, and can read anything in the sim, including results up to the previous step. `min_duration=` keeps the intervention on for at least that long once the function first returns `True`; without it, a threshold policy switches on and off every few steps as the quantity crosses the threshold, so a threshold trigger SHOULD have one.
+The function is called each step, at the intervention's place in the loop, and can read anything in the sim, including results up to the previous step. During a run a result is a view of the steps completed so far, so `new[-7:]` is the last seven steps and not the preallocated future ([09-results.md](09-results.md#ssresult)). `min_duration=` keeps the intervention on for at least that long once the function first returns `True`; without it, a threshold policy switches on and off every few steps as the quantity crosses the threshold, so a threshold trigger SHOULD have one.
 
 ## Scenarios
 
