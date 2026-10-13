@@ -4,7 +4,7 @@
 
 1. **One concept covers age, space, risk, strain, and vaccination status.** They are all dimensions; the difference is which structure they carry, not what kind of thing they are.
 2. **Every dimension is an agent property; not every agent property is a dimension.** A property becomes a dimension when you stratify by it. Continuous properties (age, CD4 count) are binned for that purpose and stay continuous in an agent-based run.
-3. **Stratification is an operator applied to a finished model.** `sir.stratify(age=[0, 15, 65])` returns a new, stratified model and leaves the original untouched, so the two can be compared. `ss.stratify(sir, age=[0, 15, 65])` is the same thing. [CK: hm, i wonder if we need to support the case where not the full stratification matrix is needed. for example, stratify females by age but not males.]
+3. **Stratification is an operator applied to a finished model.** `sir.stratify(age=[0, 15, 65])` stratifies `sir`; `inplace=False` returns a stratified copy and leaves the original untouched, so the two can be compared. A property of people (age, sex, place) is usually stratified once for the whole sim, `sim.stratify(age=[0, 15, 65])`; a dimension that belongs to one disease (strain, resistance) on that disease.
 4. **The base model does not mention strata; the stratification supplies multiplicative adjustments.**
 5. **Some dimensions carry structure.** Age implies aging. Space may have movement between patches, or none. Strain changes who can infect whom.
 6. **Strain can be a dimension or a second disease.** Support both, and say when each fits.
@@ -63,26 +63,32 @@ stratify(by = age)
 **Lingua franca**: one call, one keyword per adjustment:
 
 ```python
-sir_age = sir.stratify(
+sir.stratify(
     age    = [0, 15, 65],                       # bin edges, or a list of labels
     split  = [0.3, 0.55, 0.15],                 # population split; defaults to the demography
     adjust = {'recovery': [1.5, 1.0, 0.5]},     # per-group multipliers on the hazard of named transitions (1.5 = faster recovery, even if given as dur=)
 )
-sim = ss.Sim(sir_age, networks=ss.contacts('Kenya'), unit='day').run()   # who meets whom, by age
+sim = ss.Sim(sir, networks=ss.contacts('Kenya'), unit='day').run()   # who meets whom, by age
 ```
 
-`stratify` returns a new model. `sir` is unchanged, so the stratified and unstratified versions can be run side by side:
+`stratify` changes the model it is called on, which is what is wanted nearly every time, and returns it, so the call can also go straight into `ss.Sim(sir.stratify(age=[0, 15, 65]))`. Stratifying twice by the same dimension is an error, which is what a re-run notebook cell will hit. To keep the unstratified model for a side-by-side comparison, ask for a copy:
 
 ```python
-ss.parallel(plain=ss.Sim(sir, unit='day'), by_age=sim)
+sir_age = sir.stratify(age=[0, 15, 65], inplace=False)     # sir is unchanged
+ss.parallel(plain=ss.Sim(sir, unit='day'), by_age=ss.Sim(sir_age, networks=ss.contacts('Kenya'), unit='day'))
 ```
 
 `ss.stratify(sir, age=[0, 15, 65])` is the function form of the same call.
 
-Results can be selected by group, and this now means "incidence in children":
+A stratified result is still one result, with a dimension for each stratification. It is the total until a group is selected, so nobody sums `I_0_female_low` through `I_55_male_high` by hand ([results-and-observation.md](results-and-observation.md)):
 
 ```python
-sim.results.sir.infection.sel(age=0)
+res = sim.results.sir
+res.n_I                                # everyone in I
+res.n_I.select(age=0)                  # the youngest group
+res.n_I.select(sex='female', risk='high')
+res.n_I.by('age')                      # one series per age group
+res.infection.select(age=0)            # "incidence in children"
 ```
 
 The base model says "recovery takes `dur_inf`"; the stratification says "×1.5 for children". Neither knows about the other. That factoring is summer2's, and it is the reason one model text serves many structures.
@@ -90,9 +96,34 @@ The base model says "recovery takes `dur_inf`"; the stratification says "×1.5 f
 Stratifications compose, each applied to the result of the last:
 
 ```python
-sir_age      = sir.stratify(age=[0, 15, 65])
-sir_age_risk = sir_age.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
+sir.stratify(age=[0, 15, 65])
+sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
 ```
+
+### Stratifying the sim or the disease
+
+Age, sex, and place are properties of people, and every disease in a sim has to agree on them: a contact matrix by age makes no sense if two diseases use different age groups. So a people property is normally stratified once, on the sim, and every module gets it:
+
+```python
+sim = ss.Sim([flu, rsv], networks=ss.contacts('Kenya'), unit='day')
+sim.stratify(age=[0, 5, 18, 65])       # or ss.Sim(..., stratify=dict(age=[0, 5, 18, 65]))
+```
+
+Strain, drug resistance, and vaccination status against one pathogen belong to one disease, and are stratified there, as are per-disease adjustments (`flu.stratify(age=..., adjust={...})` on a sim already stratified by the same age groups just adds the adjustments). Two diseases in one sim stratified by the same people property with different groups is an error that suggests stratifying the sim.
+
+A contact matrix whose age groups are not the model's is handled by the library: aggregated to the model's groups in a compartmental run, used as it is by agents ([population-and-mixing.md](population-and-mixing.md#layers)).
+
+### Stratifying part of the model
+
+By default every state is split, in every group. Two keywords narrow that:
+
+```python
+hiv.stratify(cd4=[0, 200, 350, 500], states=[I])               # only the infected have a CD4 stage
+sir.stratify(sex=['female', 'male'])
+sir.stratify(age=[15, 25, 35, 50], where=dict(sex='female'))   # age groups for women only
+```
+
+`states=` restricts which states are split, and `where=` restricts which existing groups are. The second gives a ragged model (four age groups of women, one group of men), and selecting an age group then selects women only. In an agent-based run neither keyword changes much, since every agent has an age and a sex regardless; they matter for the number of compartments in a compartmental run.
 
 ### Dimensions that carry structure
 
@@ -103,7 +134,7 @@ Both summer2 and camdl are recognizing the same thing: **dimensions are not inte
 | Dimension | What it implies | Declared as |
 |---|---|---|
 | `age` | Aging flows between adjacent groups, at the right rate | `sir.stratify(age=[0, 15, 65])` |
-| `patch` (space) | Separate populations. Movement between them only if a mobility model is given | `sir.stratify(patch=['north', 'south'])`, plus `mobility=ss.gravity(...)` on the same call if people move |
+| `patch` (space) | Separate populations. Movement between them only if a mobility model is given | `sim.stratify(patch=['north', 'south'])`, plus `mobility=ss.gravity(...)` on the same call if people move |
 | `strain` | Infection is strain-specific: strain A infects with strain A | `flu.stratify(strain=['H1N1', 'H3N2'])` |
 | anything else | Nothing | `sir.stratify(risk=['low', 'high'])` |
 
@@ -118,7 +149,7 @@ Both are supported, because they fit different situations.
 **A dimension**, when the strains share one natural history and differ in a few numbers. Drug-resistant TB is the standard case: the same states, the same progression, different treatment outcomes, and a flow from one strain to the other.
 
 ```python
-tb_dr = tb.stratify(
+tb.stratify(
     resistance = ['DS', 'MDR'],
     adjust     = {'treatment_success': [1.0, 0.6]},
     acquired   = ss.transfer(resistance='DS -> MDR', rate=ss.peryear(0.02), states=['on_treatment']),
@@ -168,32 +199,35 @@ The individual does not change disease state; they change group, for all disease
 The same declaration, realized two ways:
 
 ```python
-sir_risk = sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
+sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
 ```
 
-| Run method | What it does |
+| Solver | What it does |
 |---|---|
-| Compartmental (`'ode'`, `'ctmc'`, ...) | Splits `S`, `I`, `R` into `S_low`, `S_high`, … and splits every transition, applying the adjustment |
+| Compartmental (`'ode'`, `'gillespie'`, ...) | Splits `S`, `I`, `R` into `S_low`, `S_high`, … and splits every transition, applying the adjustment |
 | Agent-based | Adds a per-agent `risk` property with the given split, and scales `rel_sus` by the adjustment |
 
-Nothing in the model text changes. This is why an EMOD Individual Property and a camdl stratum are the same declaration. [CK: how is it kept manageable if there are a lot of strata? if i want to know the total number of infectious people, i don't want to manually have to sum over `res.I_0_female_low` through to `res.I_55_male_high`. if you can think of how it would work, great! but i'm struggling to think of how to sensibly collapse the potentially very many compartments into meaningful groupings, since the user indeed might want to know `res.I`, `res.I_female`, `res.I_high`, `res.I_female_high`, etc....]
+Nothing in the model text changes. This is why an EMOD Individual Property and a camdl stratum are the same declaration. The split compartments are internal: results are read by dimension (`res.n_I.select(risk='high')`), in the same way under both solvers, and never by a compartment's generated name.
 
 In an agent-based run a continuous property stays continuous. The bins are used only where something needs groups: a compartmental run, a per-group parameter, or a result selected by group.
 
 ```python
-hiv_cd4 = hiv.stratify(cd4=[0, 200, 350, 500])   # agents keep their exact CD4 count
+hiv.stratify(cd4=[0, 200, 350, 500])   # agents keep their exact CD4 count
 ```
 
 ### Restrictions, checked and explained
 
 summer2 enforces: a mixing matrix requires a *complete* stratification; `AgeStratification` may be applied once; `StrainStratification` may be applied once; strains cannot carry a mixing matrix. Its review is right that "a mixing matrix requires a complete stratification is a correctness property, not an implementation limit".
 
-camdl's errors are the model for how to deliver these. E238 rejects a `count` on a bare stratified transfer "because it would multiply the intended total by the number of cells"; E239 rejects a bare endpoint inside an indexed family "because realized coverage would be `1 − (1 − f)^P` rather than `f`". From its review: "Each of these is a real modeling bug that other frameworks silently commit." [CK: not sure i understand the example below ... why wouldn't all states be stratified by default?]
+camdl's errors are the model for how to deliver these. E238 rejects a `count` on a bare stratified transfer "because it would multiply the intended total by the number of cells"; E239 rejects a bare endpoint inside an indexed family "because realized coverage would be `1 − (1 − f)^P` rather than `f`". From its review: "Each of these is a real modeling bug that other frameworks silently commit."
+
+All states are stratified by default, so most of these cannot arise unless the user narrowed the stratification with `states=`. When they did:
 
 ```text
+>>> sir.stratify(age=[0, 15, 65], states=[S, I])
 StratifyError: contact matrix by 'age' given, but 'age' does not cover every infectious state.
   'Ia' is not stratified by age, so there is no age for the people in 'Ia' to mix as.
-  Fix: sir.stratify(age=..., states='all'), or use a network that does not depend on age.
+  Fix: leave out states= to stratify every state, or use a network that does not depend on age.
 ```
 
 ### Adjustments are multiplicative only
@@ -203,10 +237,11 @@ summer2 has `Multiply` and `Overwrite`. Its own implications section asks "consi
 ## Trade-offs
 
 - **Stratification is order-dependent even with multiplicative adjustments**, because the *set of transitions* being adjusted changes as strata are added. summer2 enforces ordering constraints "but they are not derivable from the model text — you have to know them". `describe()` prints the resolved stratified model, and combinations that are wrong are errors.
-- **Returning a new model means remembering to use it.** `sir.stratify(age=...)` on a line by itself does nothing to `sir`. This is how NumPy and pandas behave, and it is what makes side-by-side comparison possible. [CK: hm. i think a la pandas we could have `inplace=True` by default, because i think this will be the standard case.]
+- **Stratifying in place loses the unstratified model** unless a copy was asked for with `inplace=False`. In place is the default because it is the usual case, and a line like `sir.stratify(age=...)` that silently did nothing to `sir` would be the more common mistake.
 - **Two ways to do strains is one more decision for the user.** The rule of thumb above covers most cases; the two give the same answer where they overlap.
 - **The operator only supports what it implements.** odin's arrays are maximally general and maximally laborious. Anything it does not cover can be written as explicit per-group transitions; `describe()` shows a hand-written transition alongside the generated ones.
 - **Strata multiply.** Age (16) × risk (2) × strain (3) × patch (47) is 4,512 compartments, and someone will do it by accident. Print the compartment count at build time, and note that an agent-based run does not grow this way, which is a good reason to switch.
+- **Two places to stratify is one more decision.** The sim for people properties, the disease for its own dimensions. Stratifying a disease by age in a one-disease sim does the same thing as stratifying the sim, so the choice only matters when there are several modules.
 - **A continuous property in an agent-based run and its binned version in a compartmental run are not the same model.** Binning is an approximation, and the run says so in one line ([paradigm-conversion.md](paradigm-conversion.md)).
 
 ## Rejected
@@ -215,7 +250,7 @@ summer2 has `Multiply` and `Overwrite`. Its own implications section asks "consi
 - **`Overwrite` adjustments** (summer2), for the reason above.
 - **Stratification by writing out the compartments** ([epipack](../approaches/epipack.md), [Epydemix](../approaches/epydemix.md)). "Age structure means writing out `S_child`, `S_adult` and every process between them by hand."
 - **A separate metapopulation concept.** Space is a dimension, with or without movement, not a different kind of model. See [metapopulation.md](metapopulation.md).
-- **Stratifying in place.** A `stratify` that changed the model it was called on would lose the unstratified version. [CK: see above for `inplace` suggestion]
+- **Always returning a new model.** An earlier draft did, following NumPy. Pandas' `inplace` keyword covers both uses, and in place is the common one.
 - **Every agent property as a dimension.** Dimensions multiply compartments; properties do not have to.
 - **`'no -> yes'` arrows for boolean dimensions.** `vaccinated=True` says the same thing.
 - **Ontology-identified strata as a requirement** (MIRA's `context` keyed to ontologies). Optional.
@@ -224,5 +259,7 @@ summer2 has `Multiply` and `Overwrite`. Its own implications section asks "consi
 
 - **Marking a dimension as strain-like.** A dimension named `strain` passes on the infector's strain. `resistance` in the TB example needs the same behavior, and the name alone does not say so. Either a short list of recognized names or a keyword on `stratify` is needed.
 - **Cross-immunity between strains of one dimension.** With two diseases it is an `ss.modify` between them. Within a strain dimension it is an interaction between groups of the same dimension, which needs a spelling (probably a matrix keyword on `stratify`).
-- **Where does per-agent continuous heterogeneity sit?** `rel_sus` drawn from `ss.lognorm_ex(mean=1, std=0.3)` is an agent property and not a dimension. A compartmental run can represent it only by binning it into a dimension or by using the mean. Under `method='auto'` such a model runs as agents; what an explicit `method='ode'` should do needs deciding.
+- **Where does per-agent continuous heterogeneity sit?** `rel_sus` drawn from `ss.lognorm_ex(mean=1, std=0.3)` is an agent property and not a dimension. A compartmental run can represent it only by binning it into a dimension or by using the mean. Under `solver='auto'` such a model runs as agents. An explicit `solver='ode'` uses the mean and says so; binning it into a dimension (`sir.stratify(rel_sus=[...])`) is the way to keep the heterogeneity in a compartmental run.
 - **Partial stratification of transitions**, not just states: camdl's `only = [R]`. Does the operator need it, or is it a sign the model wanted two transitions?
+- **Ragged stratifications.** `where=` makes groups that exist for some people and not others. Selecting, plotting, and exporting such results (is the age of a man missing, or "all ages"?) needs working through on a real model before the keyword is promised.
+- **States that are not people.** A water reservoir is split by `patch` and not by `age`; mosquito states are split by species with `states=`. The rule proposed is that people dimensions skip states that are not people ([model-structure.md](model-structure.md#transmission-that-is-not-person-to-person)), and it needs checking on a malaria model.

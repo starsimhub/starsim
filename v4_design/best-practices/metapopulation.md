@@ -44,11 +44,14 @@ Not every spatial model is about people moving. Wastewater surveillance needs in
 ```python
 kenya = ss.geo('Kenya', level='county')
 
-sir_kenya = sir.stratify(patch=kenya)                                                   # patches, nobody moves
-sir_kenya = sir.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))  # patches coupled by travel
+sim   = ss.Sim(sir, unit='day')
+
+sim.stratify(patch=kenya)                                                   # patches, nobody moves
+# or
+sim.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))  # patches coupled by travel
 ```
 
-That is the whole metapopulation declaration. It uses the [stratification operator](stratification.md) unchanged. `stratify` returns a new model and leaves `sir` as it was, so the spatial and non-spatial versions can be run side by side. `mobility=` is optional, in the same way that an age stratification may or may not come with aging. Patches without mobility are a valid model and produce no warning.
+That is the whole metapopulation declaration. It uses the [stratification operator](stratification.md) unchanged. Where someone lives is a property of people, like age, so it is the sim that is stratified, and every module in it gets the same patches. (In a sim with one disease, `sir.stratify(patch=kenya)` does the same thing.) `stratify` works in place; to run the spatial and non-spatial versions side by side, build two sims and stratify one. `mobility=` is optional, in the same way that an age stratification may or may not come with aging. Patches without mobility are a valid model and produce no warning.
 
 The disease is untouched, which is epymorph's point:
 
@@ -58,11 +61,12 @@ sir = ss.Disease(
     recovery  = ss.progression('I -> R', dur=ss.days(10)),
 )
 
-sir_kenya = sir.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))
-ss.Sim(sir_kenya, networks=ss.contacts('Kenya'), unit='day').run()
+sim = ss.Sim(sir, networks=ss.contacts('Kenya'), stratify=dict(age=[0, 15, 65]), unit='day')
+sim.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))
+sim.run()
 ```
 
-Disease, movement, geography, and mixing are four independent declarations. Any one can be swapped. Every part of this model has a compartmental form, so `auto` runs it as an ODE; `method='abm'` runs the same model with agents, where the patch is an agent property.
+Disease, movement, geography, and mixing are four independent declarations. Any one can be swapped. Every part of this model has a compartmental form, so `auto` runs it as an ODE; `solver='abm'` runs the same model with agents, where the patch is an agent property.
 
 ### Mobility models by name
 
@@ -84,7 +88,7 @@ ss.Mobility(matrix=M)                     # a matrix you already have, still all
 ss.Mobility(data='movements.csv')         # SimInf's register
 ```
 
-Distances and populations are supplied by the geography, so `ss.gravity(...)` does not need them passed in.
+Distances and populations are supplied by the geography, so `ss.gravity(...)` does not need them passed in. The generators are implemented in the library. LASER's migration module is the model for them and not a dependency ([population-and-mixing.md](population-and-mixing.md)).
 
 ### Movement data as events
 
@@ -124,7 +128,7 @@ ss.geo('USA', level='county', year=2020)
 ss.geo(shapefile='my_districts.shp', pop='pop.csv')
 ```
 
-with the source recorded in `sim.describe()` and in the [run hash](stochasticity-and-reproducibility.md). epymorph's US-centricity is a limitation to avoid, not to copy: the geography interface should be a protocol with pluggable sources, and the bundled set should include somewhere that is not the United States on day one.
+with the source recorded in `sim.describe()` and in the [run hash](stochasticity-and-reproducibility.md). The data comes from [`starsim_data`](https://github.com/starsimhub/starsim_data): what is small and common is bundled, and the rest is fetched on demand and cached. epymorph's US-centricity is a limitation to avoid, not to copy: the geography interface should be a protocol with pluggable sources, and the bundled set should include somewhere that is not the United States on day one.
 
 ### Per-patch parameters
 
@@ -132,25 +136,24 @@ with the source recorded in `sim.describe()` and in the [run hash](stochasticity
 
 ### Per-patch environmental quantities
 
-The other thing a spatial model without movement needs is a quantity that lives in each patch and is not a person: virus in a catchment's wastewater, mosquitoes in a district. **SimInf** holds these in its continuous per-node state `v`, updated by a C function after each step. **Lingua franca**: an `ss.Compartments` module, stratified by the same geography. It holds counts per patch, uses the same transition syntax as a disease, and its counts can appear in disease rates and in results.
+The other thing a spatial model without movement needs is a quantity that lives in each patch and is not a person: virus in a catchment's wastewater, mosquitoes in a district. **SimInf** holds these in its continuous per-node state `v`, updated by a C function after each step. **Lingua franca**: an ordinary state in the disease, which the library recognizes as a count and not people because no transition connects it to the states people move through ([model-structure.md](model-structure.md#transmission-that-is-not-person-to-person)). It uses the same transition syntax as every other state, and its count can appear in rates and in results.
 
 ```python
-S, I, R = ss.states('S I R')
-W       = ss.states('W')                  # viral copies in wastewater, per catchment
+S, I, R, W = ss.states(4)                 # W is viral copies in wastewater: a count, not people
 
 infection = S >> I @ ss.perday(0.3) * I
 recovery  = I >> R @ ss.days(10)
-shedding  = None >> W @ ss.perday(1e9) * I.n   # copies shed per infectious person per day
-decay     = W >> None @ ss.perday(0.5)
+shedding  = ss.null >> W @ ss.perday(1e9) * I.n   # copies shed per infectious person per day
+decay     = W >> ss.null @ ss.perday(0.5)
 
+covid      = ss.Disease(infection, recovery, shedding, decay)
 catchments = ss.geo(shapefile='catchments.shp', pop='catchment_pop.csv')
-covid      = ss.Disease(infection, recovery).stratify(patch=catchments)
-wastewater = ss.Compartments(shedding, decay).stratify(patch=catchments)
 
-sim = ss.Sim([covid, wastewater], unit='day', data='wastewater.csv')
+sim = ss.Sim(covid, unit='day', data='wastewater.csv')
+sim.stratify(patch=catchments)
 ```
 
-Nobody moves in this model. `I.n` in the shedding rate is the count of infectious people in the same catchment, because both modules are stratified by `patch`. `n_W` is produced per catchment and can be compared with measured concentrations by name ([results-and-observation.md](results-and-observation.md)). The same pattern, with mosquito states in place of `W` and rainfall as a per-patch time series, is environmentally driven malaria.
+Nobody moves in this model. Stratifying by `patch` splits `W` along with the people, because a patch is a place and the water is in one; stratifying by age or sex would leave `W` alone, since those are properties of people. `I.n` in the shedding rate is then the count of infectious people in the same catchment. `n_W` is one result with a `patch` dimension (`sim.results.covid.n_W.select(patch='north')`), and it is compared with measured concentrations by name ([results-and-observation.md](results-and-observation.md)). The same pattern, with mosquito states in place of `W` and rainfall as a per-patch time series, is environmentally driven malaria.
 
 ## Trade-offs
 
@@ -174,5 +177,5 @@ Nobody moves in this model. `I.n` in the shedding rate is the count of infectiou
 
 - **Does space need conveniences that other dimensions do not?** Space is a dimension, with or without movement; that much is settled. But LASER's review argues from an eradication-scale perspective that a subnational planning audience asks spatial questions all the time, and its `node_id`-in-the-core choice is not obviously wrong. Maps as a default plot and per-patch data loading are the likely candidates.
 - **What does a patch mean in an agent-based run?** An agent property, per [stratification.md](stratification.md). But LASER's node-level force of infection with a migration matrix is a *third* thing: agents in patches with aggregate coupling. That is probably `ss.MixingPool` grouped by patch, and it should be confirmed on a LASER example.
-- **How are counts matched between modules with different stratifications?** In the wastewater example both modules are stratified by patch, so `I.n` means "in this catchment". If the disease is also stratified by age and the wastewater is not, the natural rule is to match on shared dimensions and sum over the rest. The same question is raised in [stochastic-compartmental.md](stochastic-compartmental.md).
+- **How are counts matched between states with different stratifications?** In the wastewater example `I` and `W` are both split by patch, so `I.n` means "in this catchment". If the sim is also stratified by age, `I` is split by age and `W` is not (it is not people), and the natural rule is to match on the dimensions the two share and sum over the rest. The same question is raised in [stochastic-compartmental.md](stochastic-compartmental.md).
 - **Adaptive or behavior-driven mobility** (people stop traveling during an epidemic) is an `ss.modify` on the mobility ([composition-and-effects.md](composition-and-effects.md)), which the mechanism supports but nobody in the review does declaratively.

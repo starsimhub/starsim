@@ -9,7 +9,7 @@ Two statements define success, and every recommendation in this folder should be
 1. **A model should never be easier to write without the lingua franca than with it.**
 2. **For each of the main frameworks (MEmilio, EpiModel, Epydemix, and the rest), its own examples can be written in the lingua franca in no more lines of code, and run in no more time, than the original.**
 
-The second is measurable, and [vignettes](../vignettes) is where it gets measured: lines of model code and wall-clock time, original against translation. [CK: a partial exception is that some frameworks have very specific built-ins, e.g. `interventions=close_schools_uk()`; this doesn't count, or rather, we are allowed to count the lines of code in `close_schools_uk()` as part of our total.]
+The second is measurable, and [vignettes](../vignettes) is where it gets measured: lines of model code and wall-clock time, original against translation. One allowance: where the original calls a built-in that is specific to one situation (`interventions=close_schools_uk()`), the lines inside that built-in count as part of the original. We are matching what the framework lets a modeler say, not its library of ready-made cases.
 
 ## Recommendation
 
@@ -19,9 +19,9 @@ The second is measurable, and [vignettes](../vignettes) is where it gets measure
 4. **One vocabulary, several lengths.** The two-line form, the operator form, and the class form are the same words written at different lengths. Never delete the short form to enable a feature that only the long form needs; support both.
 5. **Complexity belongs in the library.** What the user writes may be tiny and what the library does with it may be large.
 6. **Plain Python is always available, and it is not second class.** Real models have parts that are easiest to say as a function or a `step()` method. Those parts work everywhere they can, and the library says where they cannot.
-7. **Expressions are Python, never strings.** A string may name a state or draw an arrow (`'S -> I'`); it never carries a formula. [CK: I think so, but see Polars expressions, and Atomica strings. i'm not convinced that we should NEVER allow string expressions, but agree we would need strong reason to allow them.]
+7. **Expressions are Python, not strings.** A string may name a state or draw an arrow (`'S -> I'`). A formula in a string (Atomica's, or a Polars-style expression) is not ruled out forever, but it gives up checking, completion, and error messages that point at the mistake, so it would need a strong reason and none has come up yet.
 8. **Approximate rather than refuse, and say what was approximated.** A coarser model that runs is more useful than a refusal, as long as the user is told.
-9. **A feature that only pays off in one framework's use case does not go in.** A vocabulary nobody can hold is a vocabulary nobody uses correctly. [CK: true, but the user is realistically going to be an AI most of the time.]
+9. **A feature that only pays off in one framework's use case does not go in.** Most models will be written by an AI, which can hold any vocabulary. The person who has to read the model and decide whether it is right cannot, and it is the reader that the size of the vocabulary has to fit.
 
 ## Why: the audience is the binding constraint
 
@@ -62,14 +62,14 @@ sir = ss.Disease(
 beta = 0.05
 dur  = ss.days(10)
 
-S, I, R   = ss.states('S I R')
+S, I, R   = ss.states(3)
 infection = S >> I @ beta * I
 recovery  = I >> R @ dur
 sir = ss.Disease(infection, recovery)
 
 # 3. A class, when there is behavior that is not a transition
 class SIR(ss.Disease):
-    S, I, R   = ss.states('S I R')
+    S, I, R   = ss.states(3)
     infection = S >> I @ 0.05 * I
     recovery  = I >> R @ ss.days(10)
 
@@ -92,12 +92,13 @@ Guess, and print it:
 | Which state is infectious, when not written | States flagged `infectious`, else the destination of the transmission | Right for SIR and SIS. It cannot be checked, so it is printed; the operator form `beta * I` makes it explicit |
 | Initial conditions | Everyone in the first state; `init_prev` or one `init=` seeds the rest | [odin](../approaches/odin.md) infers the state set from `initial()`; nobody should have to write both 0.99 and 0.01 |
 | Dwell-time distribution | Exponential, when a scalar duration or a rate is given | It is what every ODE means, and what [EMULSION](../approaches/emulsion.md) already assumes; the difference is that we *print* it |
-| Units of a bare number | The sim's unit | Starsim and [Epydemix](../approaches/epydemix.md) both do this today |
+| Units of a bare number | The sim's unit, taken from `unit=`, `dt`, the dates, or the typed values; if nothing has a unit, time is in timesteps | Starsim and [Epydemix](../approaches/epydemix.md) apply the sim's unit today; most frameworks surveyed count in steps. See [time-and-units.md](time-and-units.md) |
 | Mixing, when no network is given | Homogeneous, so `beta` is the textbook transmission rate | It is what an unadorned SIR means |
-| How the model is run | The simplest method that represents it exactly: an ODE if it can be one, agents otherwise | See [paradigm-conversion.md](paradigm-conversion.md) |
+| How the model is run | The simplest solver that represents it faithfully: an ODE if it can be one, agents otherwise | See [paradigm-conversion.md](paradigm-conversion.md) |
 | How modifiers combine | Multiplicatively | See [composition-and-effects.md](composition-and-effects.md) |
 | Results | A count for every state, a flow for every named transition | Starsim's automatic `n_<state>` results; [camdl](../approaches/camdl.md)'s `incidence(transition)` |
-| Goodness of fit | Normalized root-mean-square error against any data supplied | See [calibration.md](calibration.md); nobody should need a likelihood to fit a model |
+| Goodness of fit | Normalized absolute error against any data supplied | See [calibration.md](calibration.md); nobody should need a likelihood to fit a model |
+| Which states are people | Every state connected to the first one by transitions; a state connected to none of them (a reservoir, a vector population) holds a count | See [model-structure.md](model-structure.md#transmission-that-is-not-person-to-person) |
 
 Stop, because a guess would be wrong quietly:
 
@@ -106,9 +107,9 @@ Stop, because a guess would be wrong quietly:
 - A mixing matrix on a partial stratification ([summer2](../approaches/summer2.md) enforces this and is right to).
 - A misspelled state or parameter name, when names were declared.
 
-Note what is *not* on that list: asking for a run method the model does not exactly fit. That gets the standard approximation and a one-line note, not an error; see principle 8 and [paradigm-conversion.md](paradigm-conversion.md).
+Note what is *not* on that list: asking for a solver the model does not exactly fit. That gets the standard approximation and a one-line note, not an error; see principle 8 and [paradigm-conversion.md](paradigm-conversion.md).
 
-And in every case, **describe the resolved model**. `sim.describe()` shows the states, the transitions with their dwell-time distributions, the networks, the run method, and the defaults that were filled in. A guess the user can see is not hidden behavior; a guess they cannot see is. (`sim.summarize()` and `sim.plot()` keep their Starsim meanings: they are about results.)
+And in every case, **describe the resolved model**. `sim.describe()` shows the states, the transitions with their dwell-time distributions, the networks, the solver, and the defaults that were filled in. A guess the user can see is not hidden behavior; a guess they cannot see is. (`sim.summarize()` and `sim.plot()` keep their Starsim meanings: they are about results.)
 
 ## Plain Python is part of the language
 
@@ -157,5 +158,5 @@ Each of these looked good in isolation. Each costs more than it returns.
 
 - **Checks happen when the sim is built, not earlier.** camdl catches a dimensional error before anything runs; we catch it at `sim.init()`. That is later than a compiled language manages and far earlier than any Python framework in the review manages today.
 - **The declared forms cover the common structure, not everything.** [summer2](../approaches/summer2.md) accepts the same limit and it is why its stratification operator works at all. Whatever falls outside is written as a function, and the library reports what it can no longer do with that part.
-- **Guessing defaults means people need to look at the described model.** If they do not, some guesses will go unnoticed. Mitigation: the description is short, it marks what was guessed, and the one-line notes about the run method and any approximation are printed on `run()`.
-- **Approximating instead of refusing means two runs of "the same model" can differ for reasons the user did not think about.** Mitigation: `method='auto'` never approximates, every approximation is named when it happens, and `approx=False` turns approximations into errors for anyone who wants that.
+- **Guessing defaults means people need to look at the described model.** If they do not, some guesses will go unnoticed. Mitigation: the description is short, it marks what was guessed, and the one-line notes about the solver and any approximation are printed on `run()`.
+- **Approximating instead of refusing means two runs of "the same model" can differ for reasons the user did not think about.** Mitigation: `solver='auto'` never approximates the mixing (the one thing it will do unasked is represent a dwell time by sub-stages, and it says so), every approximation is named when it happens, and `approx=False` turns approximations into errors for anyone who wants that.

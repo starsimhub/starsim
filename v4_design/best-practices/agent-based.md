@@ -3,7 +3,7 @@
 ## Recommendation
 
 1. **Keep Starsim's architecture: typed per-agent state arrays, persistent UIDs, vectorized operations, one module abstraction.** It is the best agent-based specification surface in the review and does not need replacing.
-2. **The disease declaration is the same as in every other run method.** A model is agent-based when it contains something agent-based (an individual-level network, `n_agents=`, per-agent custom code) or when the user asks for `method='abm'`.
+2. **The disease declaration is the same as under every other solver.** A model is agent-based when it contains something agent-based (an individual-level network, `n_agents=`, per-agent custom code) or when the user asks for `solver='abm'`.
 3. **Keep Starsim's ordered loop.** Modules run in a defined, printable order. Only two things are resolved jointly: removals are deferred to the end of the step, and competing hazards within a module are drawn together.
 4. **"Select a set, thin it with a probability, act on the result" is the basic agent-based operation, and Starsim already has it:** boolean state arrays plus `dist.filter(uids)`. Keep that idiom; do not add a new primitive for it.
 5. **Dwell times become scheduled events.** This is the agent-based realization of the same declaration that becomes Erlang stages in an ODE.
@@ -52,7 +52,7 @@ sim = ss.Sim(sir, n_agents=50_000, networks=ss.RandomNet(n_contacts=ss.poisson(1
 sim.run()
 ```
 
-Identical to the [compartmental](compartmental.md) declaration except for the network and the agent count. The unit of the lognormal is given once, for the whole distribution. The lognormal dwell time is what agent-based execution gives you: it is sampled directly, where an ODE run would approximate it with Erlang stages.
+Identical to the [compartmental](compartmental.md) declaration except for the network and the agent count. The unit of the lognormal is given once, for the whole distribution. The lognormal dwell time is what agent-based execution gives you: it is sampled directly, where a compartmental run would represent it with Erlang stages.
 
 What an agent-based run does with each declaration:
 
@@ -68,7 +68,7 @@ What an agent-based run does with each declaration:
 Three notes on the names in this table:
 
 - **Capitalization follows Starsim's existing rule** (`ss.Dist` vs `ss.normal`, `ss.Rate` vs `ss.perday`): modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Network`, and the two graph classes `ss.State` and `ss.Transition`); the concrete pieces you put inside a module are lowercase (`ss.transmission`, `ss.progression`, `ss.modify`, `ss.outcome`, `ss.days`, `ss.normal`).
-- **`sir.stratify(...)` and `ss.stratify(sir, ...)` are the same thing**, and both are supported. Both return a new stratified model and leave `sir` as it was.
+- **`sir.stratify(...)` and `ss.stratify(sir, ...)` are the same thing**, and both are supported. Both stratify `sir` in place and return it; `inplace=False` returns a stratified copy and leaves `sir` as it was.
 - **There is one transition class, `ss.Transition`.** `ss.transmission` and `ss.progression` are shorthand constructors for it that read well in the two-line SIR. In the operator form there is no distinction to make: `S >> I @ beta * I` is contact-mediated because its rate mentions a state, and `I >> R @ ss.days(10)` is not. Every slot (`rate=`, `beta=`, `dur=`, `p=`) also accepts a function of the sim, so a transmission function can be as complex as it needs to be; see [model-structure.md](model-structure.md).
 
 ### Select, thin, act
@@ -118,26 +118,26 @@ Everything else takes effect immediately, so a module sees the changes made by t
 
 Starsim's `ti_*` arrays, `individual`'s `TargetedEvent`, and [LASER](../approaches/laser.md)'s `SortedQueue` are the same mechanism, chosen for the same reason: avoid scanning every agent for something that applies to few.
 
-One declaration serves every run method:
+One declaration serves every solver:
 
 ```python
 ss.progression('I -> R', dur=ss.gamma(a=2, scale=5, unit='days'))
 ```
 
-| Run method | Realization |
+| Solver | Realization |
 |---|---|
 | `'abm'` | Sample a time per agent, schedule the event |
 | `'ode'` | Erlang sub-compartments (two stages here; exact for an integer shape, a stated approximation otherwise) |
-| `'ctmc'`, `'tau'`, `'binomial'` | Sub-states |
+| `'gillespie'`, `'tau'`, `'binomial'` | Sub-states |
 
-`stages=k` on the transition asks for `k` sub-stages in every method, including agent-based. [EpiHiper](../approaches/epihiper.md) declares dwell-time distributions; [MEmilio](../approaches/memilio.md) needed four model families for them. See [paradigm-conversion.md](paradigm-conversion.md).
+`stages=k` on the transition asks for `k` sub-stages under every solver, including agent-based. [EpiHiper](../approaches/epihiper.md) declares dwell-time distributions; [MEmilio](../approaches/memilio.md) needed four model families for them. See [paradigm-conversion.md](paradigm-conversion.md).
 
 ### Dimensions are agent properties
 
 [EMOD](../approaches/emod.md)'s Individual Properties, user-defined categorical attributes declared in demographics, targetable by interventions and transitionable between values, are the agent-based spelling of a stratification dimension. Treating the two as one concept is the unification proposed in [stratification.md](stratification.md):
 
 ```python
-sir_risk = sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
+sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
 # Agents:       a per-agent 'risk' property, usable in eligibility conditions and in ss.modify(where=)
 # Compartments: S_low, S_high, ... with the adjustment applied
 ```
@@ -145,7 +145,7 @@ sir_risk = sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
 The relationship runs one way. Every dimension is an agent property; most agent properties (a viral load, a time of last test, a household ID) are never dimensions. A property becomes a dimension when you stratify by it, and a continuous property is binned for that purpose:
 
 ```python
-hiv_cd4 = hiv.stratify(cd4=[0, 200, 350, 500])    # e.g. for treatment eligibility by CD4 count
+hiv.stratify(cd4=[0, 200, 350, 500])    # e.g. for treatment eligibility by CD4 count
 ```
 
 In an agent-based run `cd4` and `age` stay continuous per-agent values, and the bins are used for whatever was declared on them (eligibility, adjustments, results). In a compartmental run the bins are the groups.
@@ -170,34 +170,33 @@ Whether it is worth building is an empirical question. Starsim's arrays grow in 
 
 ### Aggregate quantities alongside agents
 
-Some things in an agent-based model are not agents: a mosquito population, an environmental reservoir, a wastewater concentration. They are counts, possibly one per patch. These are `ss.Compartments` modules: states that are counts, written with the same transition syntax, living in the same sim as the agent-based modules.
+Some things in an agent-based model are not agents: a mosquito population, an environmental reservoir, a wastewater concentration. They are counts, possibly one per patch. In the lingua franca they are ordinary states of the disease, declared and used like any other. What sets them apart is that they are not people: no transition connects them to the states people move through, so no person can ever be in one. The library reads that from the transitions, prints it in `describe()` as a guess, and `ss.State(people=False)` says it outright ([model-structure.md](model-structure.md#transmission-that-is-not-person-to-person)). A state that is not people holds a plain count and is never turned into agents.
 
 The closest thing in the review is [SimInf](../approaches/siminf.md)'s `u`/`v` split: `u` holds the integer compartment counts, `v` holds continuous per-node variables such as environmental contamination, and its built-in `SISe` models couple an SIS disease to a continuous environmental compartment that is updated by a function after each time step. Its review recommends adopting the split and notes that Starsim's `FloatArr` plays a similar role per agent but that nothing does per node. In the lingua franca, with people as agents and the reservoir as a count:
 
 ```python
 beta, K, xi = 0.5, 1e5, 10            # per day; half-saturation concentration; shedding per infected person per day
-S, I, R, W  = ss.states('S I R W')
+S, I, R, W  = ss.states(4)            # W is bacteria in the water: a count, not people
 
-cholera = ss.Disease(                 # people
+cholera = ss.Disease(
     infection = S >> I @ beta * W.n / (W.n + K),
     recovery  = I >> R @ ss.days(5),
-)
-water = ss.Compartments(              # the reservoir: a count, not agents
-    shedding = None >> W @ xi * I.n,
-    decay    = W >> None @ ss.days(30),
+    shedding  = ss.null >> W @ xi * I.n,
+    decay     = W >> ss.null @ ss.days(30),
 )
 
-sim = ss.Sim([cholera, water], n_agents=10_000, unit='day')
+sim = ss.Sim(cholera, n_agents=10_000, unit='day')
 ```
 
-`I.n` and `W.n` are plain counts, used literally in the rates. Each module reads the other's current count; the people are simulated as agents and the reservoir as a number. Vector-borne transmission has the same shape, with mosquito states in the `ss.Compartments` module and `a * b * Iv.n / Nh` in the human infection rate.
+`I.n` and `W.n` are plain counts, used literally in the rates. `S`, `I`, and `R` become boolean arrays over the 10,000 agents. `W` stays one number: it is not part of `total_pop`, it has no age or sex, and it is updated each step from its inflow and outflow. Vector-borne transmission has the same shape, with mosquito states in the same disease and `a * b * Iv.n / Nh` in the human infection rate; `n_agents=` then makes the humans agents while the mosquitoes stay three numbers ([population-and-mixing.md](population-and-mixing.md#transmission-that-is-not-person-to-person)).
 
 ## Trade-offs
 
 - **Results depend on module order**, by an amount that shrinks with the timestep. `sim.check_dt()` shows how much. This is accepted in exchange for within-step chains.
 - **Agent-based execution is the expensive one.** Starsim's review notes that a custom `step()` written naively is slow. Declared transitions are vectorized by the library; only custom code is at risk, and the profiler should point at it by name.
-- **Some things only exist here.** Partnership histories, contact tracing, transmission trees, and per-individual dwell times have no compartmental analogue. That is a reason to use agents, and `sir.methods()` should say so positively and not only as "no" in the other columns.
-- **Mixing agents and counts in one sim needs care at the boundary.** An `ss.Compartments` module is deterministic or stochastic by its own setting, and the agent side is always stochastic. The combination is well defined, but it should be printed.
+- **Some things only exist here.** Partnership histories, contact tracing, transmission trees, and per-individual dwell times have no compartmental analogue. That is a reason to use agents, and `sir.solvers()` should say so positively and not only as "no" in the other columns.
+- **Mixing agents and counts in one sim needs care at the boundary.** The agent side is always stochastic. A state that holds a count can be advanced deterministically or by random draws, which makes no difference for a reservoir of billions of bacteria and a real one for a few hundred mosquitoes. Either is well defined; which one was used should be printed.
+- **Which states are people is a guess.** It is right for every example here, and `describe()` marks the states it took to be counts so that a wrong guess is visible.
 
 ## Rejected
 
@@ -214,5 +213,6 @@ sim = ss.Sim([cholera, water], n_agents=10_000, unit='day')
 ## Open questions
 
 - **Within-host state.** Viral load, CD4 count, and immune waning are continuous per-agent trajectories. Today they are float agent properties updated in `step()`, which works, and they can be stratifications once binned (CD4 for treatment eligibility). More native support would be worth having, for example declaring a trajectory as a function of time since infection and letting the library update it. The shape of that is not settled.
-- **Per-patch `ss.Compartments` with agents.** A reservoir per patch, with agents assigned to patches, needs the count state to be indexed by the same `patch` dimension the agents use. This should follow from [stratification.md](stratification.md) and needs a worked example.
+- **Counts in an agent-based run: deterministic or random?** See Trade-offs. A default by size (random draws while the count is small) is the likely answer, and it is not settled.
+- **Per-patch count states with agents.** A reservoir per patch, with agents assigned to patches, needs the count state to be indexed by the same `patch` dimension the agents use. This should follow from [stratification.md](stratification.md) and needs a worked example.
 - **Contact tracing** needs the contact history, which only routes that keep individual contacts (networks) can provide. That is the intended scope: nobody traces contacts through an environmental reservoir or a mixing pool. [EoN](../approaches/eon.md)'s conditional link transmission and [epipack](../approaches/epipack.md)'s cascading link events are the two treatments in the review; both are network-only. What is open is how much history a network should keep by default.

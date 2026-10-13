@@ -3,11 +3,11 @@
 ## Recommendation
 
 1. **Nothing extra should need declaring.** If parameters carry bounds and results have data, calibration is `sim.calibrate()`.
-2. **Nobody has to think about likelihoods to fit a model.** The default goodness of fit is a normalized root-mean-square error per data series, combined with equal weights. A likelihood is optional, and giving one enables posterior methods.
-3. **Choose the method from the model, and print the choice.** Least squares for a deterministic model, ABC-SMC for a stochastic compartmental one, Optuna for an expensive agent-based one. One keyword overrides it.
+2. **Nobody has to think about likelihoods to fit a model.** The default goodness of fit is the normalized absolute error (the mean absolute difference between model and data, divided by the mean of the data) per data series, combined with equal weights. It assumes no noise model. Other measures are available by name, a likelihood is optional, and giving one enables posterior methods.
+3. **Choose the fitting method from the model, and print the choice.** A local optimizer for a deterministic model (with exact gradients from automatic differentiation when the model is large enough to need them), ABC-SMC for a stochastic compartmental one, Optuna for an expensive agent-based one. One keyword overrides it.
 4. **Fitting settings are separate from the model but normally live in the same script.** They do not change what the model is, so they hash separately; keeping them next to the model stops the two drifting apart.
 5. **Do better than Starsim's `CalibComponent`.** Data attaches to results by name; the rest is inferred.
-6. **Adopt staged fitting with convergence gates** for the cases that need it.
+6. **Adopt staged fitting with convergence gates** for the cases that need it: `method=` takes a list of fitting methods, run in order, each starting from the previous one's best fit.
 7. **Report whether it converged**, not just the best-fit parameters.
 8. **Common random numbers make calibration cheaper**; say so and use them.
 9. **Comparing models is part of v1.** `ss.compare_models([sim_sir, sim_seir], data=df)` fits each and compares how well they predict data they were not fitted to.
@@ -71,7 +71,7 @@ fit = sim.calibrate()
 
 | Model | Method | Framework |
 |---|---|---|
-| Deterministic ODE | Least squares (gradient-based or simplex); NUTS if a likelihood is given | [camdl](../approaches/camdl.md) (analytic gradients by source-to-source differentiation), [summer2](../approaches/summer2.md) (JAX autodiff over the whole model) |
+| Deterministic ODE | A local optimizer (gradient-based or simplex); NUTS if a likelihood is given | [camdl](../approaches/camdl.md) (analytic gradients by source-to-source differentiation), [summer2](../approaches/summer2.md) (JAX autodiff over the whole model) |
 | Stochastic compartmental, no likelihood | ABC-SMC | [Epydemix](../approaches/epydemix.md), [SimInf](../approaches/siminf.md) |
 | Stochastic compartmental, likelihood given | Particle filter + particle MCMC | [odin](../approaches/odin.md)/dust/monty, [SimInf](../approaches/siminf.md), [epymorph](../approaches/epymorph.md) |
 | Agent-based, expensive | Optuna (point estimate); ABC when affordable | [Starsim](../approaches/starsim.md), [epiworld](../approaches/epiworld.md) (LFMCMC) |
@@ -87,7 +87,7 @@ ABC-SMC is the default for stochastic compartmental models. This is likely to be
 
 [odin](../approaches/odin.md) puts the likelihood in the model file, in two lines (`cases <- data()`, `cases ~ Poisson(incidence)`), and gets a particle filter from dust and MCMC from monty. [camdl](../approaches/camdl.md) does the same, plus a separate `fit.toml` with named stages. Both are right that when there is a likelihood it belongs with the quantity it describes. Both also require one before anything can be fitted, and most epidemiologists fitting a model to case counts do not start from a likelihood. They start from "make the curve go through the points".
 
-So the lingua franca starts there too. A normalized root-mean-square error is less rigorous than a likelihood: it does not weight points by their expected noise and it does not give a posterior on its own. It is simple, it has no settings, and it is what the user would have written by hand. The likelihood is there when wanted.
+So the lingua franca starts there too. A normalized absolute error is less rigorous than a likelihood: it does not weight points by their expected noise and it does not give a posterior on its own. It is simple, it has no settings, it is not thrown off by one bad data point, and it is what [Covasim](../approaches/notes.md#covasim--hpvsim--stisim--fpsim) used by default. The likelihood is there when wanted.
 
 Against that: [summer2](../approaches/summer2.md), [epipack](../approaches/epipack.md), [MEmilio](../approaches/memilio.md), [EMOD](../approaches/emod.md), [EpiHiper](../approaches/epihiper.md), [`individual`](../approaches/individual.md), and [LASER](../approaches/laser.md) have no built-in comparison to data at all, so every project rebuilds it.
 
@@ -96,11 +96,11 @@ Against that: [summer2](../approaches/summer2.md), [epipack](../approaches/epipa
 ### The whole interface
 
 ```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.par(0.05, bounds=[0.01, 0.5])),
-    recovery  = ss.progression('I -> R', dur=ss.par(10, bounds=[3, 30])),
-    cases     = ss.outcome('infection', p=0.5, delay=5),
-)
+infection = ss.transmission('S -> I', beta=ss.par(0.05, bounds=[0.01, 0.5]))
+recovery  = ss.progression('I -> R', dur=ss.par(10, bounds=[3, 30]))
+cases     = ss.outcome(0.5 * infection, delay=ss.days(5))    # half of infections are reported, five days later
+
+sir = ss.Disease(transitions=[infection, recovery], outcomes=[cases])
 
 sim = ss.Sim(sir, data='weekly_cases.csv', start='2020-01-01', stop='2020-12-31', unit='day')
 fit = sim.calibrate()
@@ -108,36 +108,43 @@ fit = sim.calibrate()
 
 `weekly_cases.csv` has a date column and a `cases` column. The column name matches the result name, so the data is attached to that result: `sim.plot()` shows the two together, and `calibrate()` fits every parameter that has `bounds` to every result that has data. Because `cases` is a flow, simulated cases are summed over each interval between data points before comparing (weekly data against a daily model works with no extra settings); a stock such as prevalence is read at the data's dates.
 
-`sim.calibrate(pars=['beta'])` restricts what moves (parameters are named by their slot, `infection.beta`, or just `beta` when that is unambiguous). `sim.calibrate(method='abc')` overrides the method.
+`sim.calibrate(pars=['beta'])` restricts what moves (parameters are named by their slot, `infection.beta`, or just `beta` when that is unambiguous). `sim.calibrate(method='abc')` overrides the fitting method. (`method=` here is how the model is fitted; how it is run is the sim's `solver=`.)
 
 ### Goodness of fit
 
-For each data series, the default mismatch is the root-mean-square difference between model and data, divided by the mean of the data. Dividing by the mean puts a series of thousands of weekly cases and a series of prevalence fractions on the same scale, so they can be added. The total is the weighted sum, with equal weights unless told otherwise:
+For each data series, the default mismatch is the mean absolute difference between model and data, divided by the mean of the data:
+
+mismatch = mean(|model − data|) / mean(data)
+
+This is the normalized absolute error, and it is [Covasim](../approaches/notes.md#covasim--hpvsim--stisim--fpsim)'s default. It is nonparametric: nothing is assumed about how the data are distributed around the model, so there is no noise model to choose. Because the differences are not squared, one bad reporting week (a holiday backlog, a batch of late reports) counts in proportion to its size and does not dominate the fit the way it dominates a squared error. Real surveillance data has such weeks, which is why this and not the root-mean-square error is the default. Dividing by the mean puts a series of thousands of weekly cases and a series of prevalence fractions on the same scale, so they can be added. The total is the weighted sum, with equal weights unless told otherwise:
 
 ```python
 sim  = ss.Sim(sir, data='cases_and_deaths.csv', unit='day')   # columns: date, cases, deaths
 fit  = sim.calibrate()                                        # equal weights
 fit2 = sim.calibrate(weights=dict(cases=1, deaths=3))         # trust the deaths more
+fit3 = sim.calibrate(gof='rmse')                              # normalized root-mean-square error instead
 ```
+
+`gof=` names the measure. `'rmse'` penalizes large misses more heavily, which suits clean data where a large miss means a wrong model. The summary always says which measure was used.
 
 To use a likelihood instead, attach one to the result. The model's value is the mean; the distribution supplies the noise:
 
 ```python
-cases = ss.outcome('infection', p=0.5, delay=5,
+cases = ss.outcome(0.5 * infection, delay=ss.days(5),
                    likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))   # n: dispersion, fitted
 ```
 
 That is camdl's `weekly_cases ~ neg_binomial(mean = rho * projected, r = k)`. With a likelihood on every fitted result, posterior methods (NUTS, particle MCMC) become available and are chosen automatically.
 
-### Choosing the method
+### Choosing the fitting method
 
 A deterministic model:
 
 ```text
 >>> fit = sim.calibrate()
 model: deterministic (ode), 2 free parameters, 1 data series (cases, 52 points)
-fit: normalized RMSE
-method: least squares, Nelder-Mead  (override with method=)
+fit: normalized absolute error
+method: Nelder-Mead  (override with method=)
 ...
 converged: yes (63 evaluations)
 infection.beta   0.052
@@ -145,11 +152,11 @@ recovery.dur     9.3 days
 note: point estimates only. For uncertainty, add a likelihood or use method='abc'.
 ```
 
-The same model run with `method='stochastic'`:
+The same model run with `solver='stochastic'`:
 
 ```text
-model: stochastic compartmental (binomial), 2 free parameters, 1 data series
-fit: normalized RMSE
+model: stochastic compartmental (gillespie), 2 free parameters, 1 data series
+fit: normalized absolute error
 method: ABC-SMC, 5 generations, 500 particles  (override with method=)
 ...
 infection.beta   0.052  [0.047, 0.058]
@@ -160,43 +167,54 @@ And as an agent-based model:
 
 ```text
 model: agent-based, 2 free parameters, 1 data series
-fit: normalized RMSE
-method: Optuna TPE, 200 trials, 4 replicates each  (override with method=)
-note: common random numbers on: paired evaluation needs fewer replicates
+fit: normalized absolute error
+method: Optuna TPE, 200 trials, 4 runs each  (override with method=)
+note: common random numbers on: paired evaluation needs fewer runs
 note: Optuna gives a best estimate, not a posterior. No intervals are reported.
 ```
 
-The method is chosen from things the library already knows about the model: whether it is deterministic, whether a likelihood was given, and how long one run takes. The note about common random numbers matters in practice: with paired evaluation the objective is much less noisy, which is a benefit of [the CRN machinery](stochasticity-and-reproducibility.md) that is rarely stated.
+The fitting method is chosen from things the library already knows about the model: whether it is deterministic, whether a likelihood was given, and how long one run takes. The note about common random numbers matters in practice: with paired evaluation the objective is much less noisy, which is a benefit of [the CRN machinery](stochasticity-and-reproducibility.md) that is rarely stated.
 
-For deterministic models with more than a few parameters, gradients come from JAX, which is also what makes the ODE runs fast ([summer2](../approaches/summer2.md) does this). Small models use plain SciPy.
+### Gradients
+
+For an ODE model the library can get the exact gradient of the fit with respect to every free parameter. The ODE solver runs through JAX, which differentiates the whole run automatically ([summer2](../approaches/summer2.md) does this); [camdl](../approaches/camdl.md) gets the same thing by differentiating the model symbolically. Nothing is asked of the user. With gradients, a gradient-based optimizer (L-BFGS) replaces the simplex search, which matters once there are more than a few parameters, and with a likelihood the samplers that need gradients (HMC, NUTS) become available.
+
+A function in a rate is differentiable if it is written with array operations that JAX can trace (arithmetic, `np.where`, `np.exp`; not a Python `if` on a value that depends on a parameter). One that is not falls back to a gradient-free method, with a line saying which function caused it. A model with two or three parameters does not need any of this and uses plain SciPy.
+
+Gradients are for fitting and sensitivity. Symbolic Jacobians, fixed points, and eigenvalues are a different thing and stay out ([compartmental.md](compartmental.md)).
 
 ### Fitting settings
 
-Method, number of trials, chains, and gates are arguments to `calibrate()`, in the same script as the model:
+The fitting method, number of trials, chains, and gates are arguments to `calibrate()`, in the same script as the model:
 
 ```python
-fit = sim.calibrate(method='optuna', trials=500, reps=4)
+fit = sim.calibrate(method='optuna', trials=500, n_runs=4)
 ```
 
 camdl separates `.camdl` from `fit.toml` "to keep structural identity separate from fitting configuration"; [flepiMoP](../approaches/flepimop.md) puts everything in one document. The lingua franca keeps the conceptual separation and not the second file. Bounds, data, and any likelihood are part of the model, because they are statements about the system and how it is observed. The fitting procedure is not: changing the number of Optuna trials does not change the model, so it has its own entry in the [run hash](stochasticity-and-reproducibility.md). Keeping both in one script means the settings cannot drift from the model they were tuned for.
 
 ### Staged fitting
 
-camdl's `fit.toml` has named stages with convergence gates. The case that needs this is real (find the mode cheaply, then characterize the posterior around it) and it should not require a script:
+No single fitting method is good at everything. A global search finds roughly where the best fit is and is poor at pinning it down. A local optimizer pins it down quickly and gets stuck if it starts in the wrong place. A posterior sampler says how uncertain the answer is and wastes most of its time if it starts far from the answer. The usual practice is therefore to run them one after another, each starting from where the last one finished. Done by hand that is three calls and some code to pass the result along. Here it is a list:
 
 ```python
 fit = sim.calibrate(method=[
-    dict(method='optuna', trials=500),
-    dict(method='nuts', draws=2000),
+    dict(method='optuna', trials=500),     # 1. a cheap global search: find roughly where the best fit is
+    dict(method='lbfgs'),                  # 2. a local refinement, starting from the best trial of stage 1
+    dict(method='nuts', draws=2000),       # 3. a posterior sampler, starting from the optimum of stage 2
 ])
 ```
 
-`method=` takes a list, and each stage starts from where the previous one ended. A stage that does not converge stops the sequence, says so, and returns the last good fit, rather than feeding a bad starting point into an expensive sampler.
+Each entry in the list is one fitting method with its own settings, written as it would be for a single `calibrate()` call. They run in the order given, and each stage starts from the previous stage's best fit. The result is one `fit` object: the estimates and intervals come from the last stage, and the earlier stages are kept in `fit.stages` for inspection. A one-stage list is the same as not using a list. (This example needs an ODE model with a likelihood on `cases`, since NUTS is the last stage; a two-stage `['optuna', 'lbfgs']` needs neither, and a bare name is enough when a stage has no settings.)
+
+Between stages there is a check, the "convergence gate": did the stage just finished actually converge? If it did not (Optuna's best value was still improving at the last trial, the optimizer hit its iteration limit), the sequence stops there, says which stage failed and why, and returns the last good fit. The point is to avoid handing a bad starting point to an expensive sampler and finding out two hours later.
+
+This is camdl's `fit.toml`, which has named stages with convergence gates, without the second file.
 
 ### Report the fit
 
 ```python
-fit.summary()      # estimates, intervals where the method gives them, convergence diagnostics
+fit.summarize()    # estimates, intervals where the method gives them, convergence diagnostics
 fit.plot()         # trajectories against data, one panel per data series
 fit.pars           # the fitted values
 fit.sim            # the calibrated sim, ready to run or to build scenarios from
@@ -210,7 +228,7 @@ camdl's standard is the target: "Convergence is a checked claim, not an assumpti
 
 ```python
 comparison = ss.compare_models([sim_sir, sim_seir], data='weekly_cases.csv')
-comparison.summary()
+comparison.summarize()
 ```
 
 ```text
@@ -234,11 +252,12 @@ It needs nothing new, because the bounds and the results already exist.
 ## Trade-offs
 
 - **Automatic method selection can be wrong.** It is printed, and it is one keyword to override. The alternative, where the user chooses from five methods on their first day, is worse.
-- **Normalized RMSE is not a statistical model of the data.** It treats every point in a series as equally noisy, and dividing by the mean behaves badly for a series that is mostly zeros. It is the default because it is simple and needs no decisions; the summary says which measure was used, and a likelihood is one keyword away.
+- **The normalized absolute error is not a statistical model of the data.** It treats every point in a series as equally noisy, and dividing by the mean behaves badly for a series that is mostly zeros. It is the default because it is simple, needs no decisions, and is hard to throw off; the summary says which measure was used, and `gof=` or a likelihood is one keyword away.
+- **An absolute error is not smooth where the model passes through a data point.** Gradient-based optimizers cope with this in practice, and somewhat less cleanly than with a squared error. `gof='rmse'` is the smooth alternative, and the price is sensitivity to outliers.
 - **Weights are arbitrary.** Equal weights across series is a convention, not a truth. A joint likelihood is the principled alternative and needs the correlation between series, which is rarely known. Weights are the v1 answer.
 - **Optuna is not an inference method.** It gives a point estimate and a search history, not a posterior, and the summary must not present its trial spread as an interval.
 - **ABC needs many runs.** Fine for a compartmental model that runs in milliseconds; for an agent-based model it is used only when the run time allows, and the printout says how many runs it will take.
-- **Gradients are an implementation project.** camdl gets them from symbolic differentiation; summer2 gets them from JAX. Wrapping JAX for the compartmental methods is the cheaper route and worth taking, since it also makes ODE runs fast.
+- **Gradients are an implementation project, and they constrain how functions are written.** camdl gets them from symbolic differentiation; summer2 gets them from JAX. Running the ODE solver through JAX is the cheaper route and worth taking, since it also makes ODE runs fast. A user function that JAX cannot trace still runs; it only loses the gradient.
 
 ## Rejected
 
@@ -251,7 +270,7 @@ It needs nothing new, because the bounds and the results already exist.
 
 ## Open questions
 
-- **The normalization.** Dividing RMSE by the mean of the data is one choice; the range or the standard deviation are others, and count data with many zeros may want a different default.
+- **Is the normalized absolute error the right default?** What is wanted is a sensible nonparametric default that holds up under realistic epidemiological noise: reporting backlogs, weekend effects, counts spanning orders of magnitude between the start and the peak of an epidemic. The normalized absolute error is the proposal because it is simple and already in use. The alternatives worth testing on real data are the median in place of the mean (more robust still), comparing on a square-root or log scale (so the early epidemic counts as much as the peak), and normalizing by the range or by each data point instead of by the mean. Count data with many zeros may want a different default from any of these.
 - **Likelihoods on results that are not outcomes.** `likelihood=` is shown on `ss.outcome`. A ratio such as `prevalence = I / N` needs somewhere to put one too.
 - **Joint likelihoods with correlation between series** are out of v1.
 - **`beta` and the contact rate.** When a network or mixing pool supplies the contacts ([population-and-mixing.md](population-and-mixing.md)), `beta` is per contact, and incidence data identifies only the product of `beta` and the contact rate. Giving bounds to one and fixing the other is the simple answer; fitting the product by name may be worth a spelling.

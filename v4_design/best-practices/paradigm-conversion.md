@@ -1,16 +1,16 @@
 # Paradigm conversion
 
-Running one model text as an ODE, as a stochastic compartmental model, or with agents, and what happens when the model does not fit the method that was asked for.
+Running one model text as an ODE, as a stochastic compartmental model, or with agents, and what happens when the model does not fit the solver that was asked for.
 
 ## Recommendation
 
-1. **One model text; `method=` selects how it runs.** For a simple model this is a free run-time choice. For a complex model the paradigm is effectively part of the specification: a model with an individual-level network or per-agent logic is an agent-based model.
-2. **`method='auto'` picks the simplest, fastest representation that runs the model exactly**, and prints what it picked. A user may still ask for agents on a simple model, for example to study elimination.
-3. **`auto` never approximates. An explicitly requested method uses the standard approximation where one exists, and says so in one line.** It does not refuse.
+1. **One model text; `solver=` selects how it runs.** For a simple model this is a free run-time choice. For a complex model the paradigm is effectively part of the specification: a model with an individual-level network or per-agent logic is an agent-based model.
+2. **`solver='auto'` picks the simplest, fastest representation that keeps the model's mixing and its individual-level structure as written**, and prints what it picked. A user may still ask for agents on a simple model, for example to study elimination.
+3. **`auto` never approximates the mixing and never drops individual-level structure. The one thing it does unasked is represent a non-exponential dwell time with Erlang stages, and it says so. An explicitly requested solver uses the standard approximation where one exists, and says so in one line.** It does not refuse.
 4. **Stop only when there is no sensible approximation**: individual contact tracing, transmission trees, custom code that only makes sense for agents.
 5. **Functions work wherever the things they use exist.** A function that only uses state counts, parameters, time, and stratifications runs in an ODE as well as with agents. No static analysis: try it and report.
-6. **`methods()` shows which run methods can run a model**, as a coarse table.
-7. **Test agreement between methods on simple models.** For complex models, report what was approximated; do not promise equivalence.
+6. **`solvers()` shows which solvers can run a model**, as a coarse table.
+7. **Test agreement between solvers on simple models.** For complex models, report what was approximated; do not promise equivalence.
 8. **Think in axes, not in a list of paradigms.** Aggregation, stochasticity, dwell time, and space are four independent axes.
 
 ## Why
@@ -43,7 +43,7 @@ Much of the published modeling of sexually transmitted infections is compartment
 
 ### Simple models and complex models are different
 
-A two-line SIR can be run any way, and choosing is a matter of the question being asked. A national HIV model with age-disparate partnerships, a care cascade, and contact tracing cannot: its structure decides how it runs. So `method=` being a free choice is a property of simple models. For complex ones the useful features are that the vocabulary stays the same, that the parts which do have a compartmental form can be reused, and that the library says plainly what an ODE version would leave out.
+A two-line SIR can be run any way, and choosing is a matter of the question being asked. A national HIV model with age-disparate partnerships, a care cascade, and contact tracing cannot: its structure decides how it runs. So `solver=` being a free choice is a property of simple models. For complex ones the useful features are that the vocabulary stays the same, that the parts which do have a compartmental form can be reused, and that the library says plainly what an ODE version would leave out.
 
 ## The proposal
 
@@ -56,39 +56,57 @@ sir = ss.Disease(
 )
 pool = ss.MixingPool(n_contacts=10)
 
-ss.Sim(sir, networks=pool, total_pop=5000, unit='day').run()                 # auto: ODE
-ss.Sim(sir, networks=pool, total_pop=5000, unit='day').run(method='ctmc')    # Gillespie
-ss.Sim(sir, networks=pool, total_pop=5000, unit='day').run(method='abm')     # agents, same mixing
+ss.Sim(sir, networks=pool, total_pop=5000, unit='day').run()                     # auto: ODE
+ss.Sim(sir, networks=pool, total_pop=5000, unit='day').run(solver='gillespie')   # exact stochastic
+ss.Sim(sir, networks=pool, total_pop=5000, unit='day').run(solver='abm')         # agents, same mixing
 ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), n_agents=5000, unit='day').run()   # auto: agents
 ```
 
-The disease is the same object in all four. The first three are the same model run three ways; `method='abm'` on a simple model is what you want when the question is about chance, such as whether an infection is eliminated. The fourth is a different model (contacts are individual pairs), and `auto` runs it with agents because a random network has no exact compartmental form.
+The disease is the same object in all four. The first three are the same model run three ways; `solver='abm'` on a simple model is what you want when the question is about chance, such as whether an infection is eliminated. The fourth is a different model (contacts are individual pairs), and `auto` runs it with agents because a random network has no exact compartmental form.
 
-Each run prints one line saying which method was used and why:
+Each run prints one line saying which solver was used and why:
 
 ```text
-method: ode (every part of this model has a compartmental form)
+solver: ode (every part of this model has a compartmental form)
 ```
 
 ```text
-method: abm (RandomNet is an individual-level network)
+solver: abm (RandomNet is an individual-level network)
 ```
 
 ### The approximation policy
 
 Three cases.
 
-**`auto`: nothing is approximated.** If every piece has a compartmental form the model runs as an ODE, otherwise with agents.
+**`auto`: the mixing and the individuals are never approximated.** If every piece has a compartmental form the model runs as an ODE, otherwise with agents. A network of individual contacts, a per-agent attribute, or per-agent code makes the model agent-based; `auto` never swaps a network for rates between groups or a distribution of `rel_sus` for its mean.
 
-**An explicit method the model does not natively fit: the standard approximation, with a one-line note.**
+Dwell times are the one exception. A dwell time that is not exponential does not, by itself, make a model agent-based: `auto` represents it with Erlang stages and says so.
 
 ```python
-sim = ss.Sim(hiv, networks=ss.MFNet(), unit='year')
-sim.run(method='ode')
+seir = ss.Disease(
+    infection = ss.transmission('S -> E', beta=0.3, source='I'),
+    latency   = ss.progression('E -> I', dur=ss.lognorm_ex(mean=5, std=2, unit='days')),
+    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+)
+ss.Sim(seir, unit='day').run()
 ```
 
 ```text
-method: ode
+solver: ode (every part of this model has a compartmental form)
+  note: 'latency' has a lognormal dwell time, represented by 6 Erlang stages (mean 5 days kept; std 2.04 instead of 2 days)
+```
+
+A gamma dwell time with an integer shape is an Erlang distribution, so the stages are exact and the note says so. Anything else is matched on its mean and, as closely as a whole number of stages allows, its variance. The reason for the exception is that staging a dwell time is what a compartmental modeler would do by hand (it is the standard linear chain trick), it keeps everything else about the model intact, and the alternative is that one lognormal turns a four-line SEIR into an agent-based model. `solver='abm'` samples the dwell time directly, and `stages=k` sets the number of stages by hand.
+
+**An explicit solver the model does not natively fit: the standard approximation, with a one-line note.**
+
+```python
+sim = ss.Sim(hiv, networks=ss.MFNet(), unit='year')
+sim.run(solver='ode')
+```
+
+```text
+solver: ode
   note: MFNet approximated by partner-change rates between sex/risk groups
   note: 'acute' has a lognormal dwell time, approximated by 4 Erlang stages
 ```
@@ -96,11 +114,11 @@ method: ode
 **No sensible approximation: stop, and say what was asked for.**
 
 ```text
-Cannot run 'hiv' with method='ode': the intervention 'partner_notification' traces each person's own contacts, and a compartmental model has groups, not individuals.
-  Run with method='abm', or remove 'partner_notification' to run as an ODE.
+Cannot run 'hiv' with solver='ode': the intervention 'partner_notification' traces each person's own contacts, and a compartmental model has groups, not individuals.
+  Run with solver='abm', or remove 'partner_notification' to run as an ODE.
 ```
 
-`approx=False` makes any approximation an error, for users who want only exact runs. `verbose=0` hides the notes.
+The notes are printed by default. `approx=True` says the approximations are accepted and silences them. `approx=False` makes any approximation an error, for users who want only exact runs; under `auto` it means a model with a non-exponential, non-Erlang dwell time runs with agents, as it would have before.
 
 The standard approximations:
 
@@ -108,9 +126,9 @@ The standard approximations:
 |---|---|---|
 | Sexual network | ODE or stochastic compartmental | Partner-change rates between sex/risk/age groups (below) |
 | Random or other contact network | ODE or stochastic compartmental | Homogeneous mixing at the network's mean contact rate, within any declared groups |
-| Non-exponential, non-Erlang dwell time | ODE or stochastic compartmental | Erlang stages matching the mean and, as closely as possible, the variance; the difference is printed |
-| Per-agent continuous attribute (`rel_sus` drawn from a distribution) | ODE or stochastic compartmental | Binned into groups, with the bins printed |
-| Very large population | exact CTMC | Not substituted; `method='stochastic'` picks tau-leaping and says so ([stochastic-compartmental.md](stochastic-compartmental.md)) |
+| Non-exponential, non-Erlang dwell time | ODE or stochastic compartmental (including under `auto`) | Erlang stages matching the mean and, as closely as possible, the variance; the difference is printed |
+| Per-agent continuous attribute (`beta` or `rel_sus` drawn from a distribution) | ODE or stochastic compartmental | The mean is used, with a note. To keep the variation, the user bins it into a dimension (`sir.stratify(rel_sus=[...])`), and then nothing is approximated |
+| Very large population | exact Gillespie | Not substituted; `solver='stochastic'` picks tau-leaping and says so ([stochastic-compartmental.md](stochastic-compartmental.md)) |
 
 ### Sexually transmitted infections as an ODE
 
@@ -129,9 +147,9 @@ Compare **Atomica**, where the user writes the force of infection by hand as a s
 
 A user who wants the compartmental STI model as the model, and not as an approximation of a network, writes it that way from the start with a stratification and a mixing pool between the groups ([population-and-mixing.md](population-and-mixing.md), [stratification.md](stratification.md)). Then `auto` runs it as an ODE and there is nothing to approximate.
 
-### Functions in any method
+### Functions in any solver
 
-Any slot that takes a number also takes a function of the sim. A function is tried on whatever the run method provides: agents in an agent-based run, groups (one row per stratum) in a compartmental run.
+Any slot that takes a number also takes a function of the sim. A function is tried on whatever the solver provides: agents in an agent-based run, groups (one row per stratum) in a compartmental run.
 
 ```python
 def cautious(sim):
@@ -150,20 +168,20 @@ ss.Sim(sir, networks=ss.MixingPool(n_contacts=10), total_pop=5000, unit='day').r
 A function that reaches for something only agents have stops the compartmental run with a message naming it:
 
 ```text
-Cannot run 'sir' with method='ode': the function 'superspreaders' asked for sim.people.n_friends, which is a per-agent attribute and not a stratification.
-  Run with method='abm', or stratify by n_friends.
+Cannot run 'sir' with solver='ode': the function 'superspreaders' asked for sim.people.n_friends, which is a per-agent attribute and not a stratification.
+  Run with solver='abm', or stratify by n_friends.
 ```
 
 Under `auto`, a function like that simply makes the model agent-based, with the reason printed. Fully custom code (a function passed to `ss.Disease`, or an overridden `step()`) follows the same rule.
 
-EMULSION is the comparison: behavior its YAML cannot express goes into a separate Python add-on module, and its review notes that "any model using them loses the 'model is a document' property". Here a function is an ordinary part of the model, and the same function is tried in every method.
+EMULSION is the comparison: behavior its YAML cannot express goes into a separate Python add-on module, and its review notes that "any model using them loses the 'model is a document' property". Here a function is an ordinary part of the model, and the same function is tried with every solver.
 
-### `methods()`
+### `solvers()`
 
 Before running anything:
 
 ```python
-hiv.methods()
+hiv.solvers()
 ```
 
 ```text
@@ -176,7 +194,7 @@ partner_notification             no (traces individual contacts)   no (traces in
 auto would choose: abm
 ```
 
-One row per ingredient that matters (each network, each non-exponential dwell time, each custom function), one column per method, and entries of "yes", "approx (how)", or "no (why)". Ingredients that run everywhere are not listed. The stochastic compartmental methods share a column unless they differ. `sim.methods()` gives the same table for the whole sim. For functions the table is filled in by trying them, so it is produced at build time.
+One row per ingredient that matters (each network, each non-exponential dwell time, each custom function), one column per solver, and entries of "yes", "approx (how)", or "no (why)". Ingredients that run everywhere are not listed. The stochastic compartmental solvers share a column unless they differ. `sim.solvers()` gives the same table for the whole sim. For functions the table is filled in by trying them, so it is produced at build time.
 
 The table is coarse on purpose. It is meant to answer "can I run this as an ODE, and what would I lose?" in a few lines.
 
@@ -184,13 +202,15 @@ The table is coarse on purpose. It is meant to answer "can I run this as an ODE,
 
 **Exact.** The same mathematics, run differently.
 
-- Homogeneous or contact-matrix mixing: ODE, CTMC, chain-binomial, agents.
+- Homogeneous or contact-matrix mixing: ODE, Gillespie, chain-binomial, agents.
 - Exponential dwell time: a rate, or a sampled time.
 - Erlang dwell time (or any dwell time with `stages=k`): sub-compartments, or a sampled time.
 - A stratification: a compartment axis, or an agent property.
 - A function that only uses counts, parameters, time, and stratifications.
 
-**Approximated, when explicitly asked for, with a note.** The table of standard approximations above.
+**Approximated by `auto`, with a note.** A dwell time that is neither exponential nor Erlang, represented by fitted Erlang stages. Nothing else.
+
+**Approximated, when explicitly asked for, with a note.** The rest of the table of standard approximations above.
 
 **Not possible.** Stops with a message.
 
@@ -199,13 +219,13 @@ The table is coarse on purpose. It is meant to answer "can I run this as an ODE,
 
 ### Test the agreement
 
-Whether methods agree is an empirical question, so it is a test suite, and the landscape supplies the instruments:
+Whether solvers agree is an empirical question, so it is a test suite, and the landscape supplies the instruments:
 
 - **EMULSION's shipped feature models.** Its review proposes exactly this: "take the shipped feature models, push each one across `compartment` / `IBM` / `hybrid`, and record where the switch stops working and why. That boundary is the actual scope of the lingua franca's paradigm-independence claim, and someone has already built the apparatus for measuring it."
 - **epipack's three modes** on the same tuples, as a cheap regression baseline.
 - **camdl's Richardson dt-convergence audit**, to distinguish "it ran" from "it converged".
 
-Concretely: for every simple model in [vignettes](../vignettes), run every method that `methods()` marks "yes" and assert agreement within a stated tolerance (the mean of the stochastic runs against the ODE, at a population large enough for the comparison to be fair). Runs marked "approx" are tested differently: the test records how far the approximation is from the agent-based result, so that the size of the difference is known and regressions are caught, without asserting that the two are equal.
+Concretely: for every simple model in [vignettes](../vignettes), run every solver that `solvers()` marks "yes" and assert agreement within a stated tolerance (the mean of the stochastic runs against the ODE, at a population large enough for the comparison to be fair). Runs marked "approx" are tested differently: the test records how far the approximation is from the agent-based result, so that the size of the difference is known and regressions are caught, without asserting that the two are equal.
 
 For complex real-world models, exact equivalence between paradigms is neither provable nor the aim. What the library owes the user there is the list of what was approximated.
 
@@ -219,17 +239,19 @@ The consequence is the [principles.md](principles.md) rule restated: this has to
 
 ## Trade-offs
 
-- **An approximated run is a different model, and a one-line note is easy to miss.** A user may compare an ODE run of a network model with its agent-based run and be surprised that they differ. The note, `methods()`, and `approx=False` are the protections; the note should also be stored with the results so that it survives into saved output.
+- **An approximated run is a different model, and a one-line note is easy to miss.** A user may compare an ODE run of a network model with its agent-based run and be surprised that they differ. The note, `solvers()`, and `approx=False` are the protections; the note should also be stored with the results so that it survives into saved output.
 - **Each standard approximation has to be chosen, implemented, and maintained.** Deriving partner-change rates and a mixing matrix from a sexual network is real work per network class. Networks without one fall into "not possible" until someone writes it, with a message that says so.
+- **`auto` staging a dwell time means the default run of such a model is not exactly the model as written.** The mean is kept and the variance is close, and the note gives both, but a result that depends on the tail of the distribution (a long incubation period in a few people) is not reproduced by a handful of stages. `solver='abm'` or `approx=False` runs it as written.
 - **`auto` can change paradigm when the model changes slightly.** Adding a network or a per-agent function to an ODE model makes it agent-based, which changes run time and makes results stochastic. The printed reason names the ingredient that caused it.
 - **The try-it rule finds problems at build time, not when the model is written.** A function that fails on groups is reported when the sim is initialized. That is later than a static check would be, and much simpler for the user: there is nothing to declare.
-- **`methods()` is a testing obligation.** Every "yes" is a claim. Most entries follow from the kind of ingredient and the method, so the number of distinct cases is small.
+- **`solvers()` is a testing obligation.** Every "yes" is a claim. Most entries follow from the kind of ingredient and the solver, so the number of distinct cases is small.
 
 ## Rejected
 
 - **Refusing to run when a standard approximation exists** (camdl's strict capability checks). There are plenty of valid ODE models of sexually transmitted infections; the library should produce one when asked.
-- **Approximating under `auto`.** The default should never change the model. Approximation happens only when the user names a method.
-- **Approximating without saying so.** The note is one line and can be hidden with `verbose=0`, but it is on by default.
+- **Approximating the mixing or the individuals under `auto`.** The default never replaces a network with rates between groups, or people who differ with their average. That happens only when the user names a solver.
+- **An `auto` that never approximates anything.** An earlier draft had this rule, and under it a single lognormal dwell time forced an agent-based run of an otherwise compartmental model: slower, noisier, and not what someone writing an SEIR expects. Erlang stages are the standard compartmental treatment of a dwell time, so `auto` uses them and says so.
+- **Approximating without saying so.** The note is one line and can be silenced with `approx=True`, but it is on by default.
 - **A menu of network approximations for the user to choose from.** EoN shows how many there are. One standard approximation per ingredient is enough; anyone who needs more accuracy uses agents.
 - **A separate model per paradigm** (MEmilio, EpiModel).
 - **Paradigm as a fixed property of every model** (EMULSION's `aggregation_type` written into the model file). For simple models it is a run-time choice.
@@ -239,8 +261,9 @@ The consequence is the [principles.md](principles.md) rule restated: this has to
 
 ## Open questions
 
-- **Mixing methods within one run (deferred, not in v1).** In plain words: sometimes most of a model is well described by smooth average behavior, but one part of it is a rare chance event. The standard example is a country that has nearly eliminated polio. Transmission inside a large population can be run as an ODE, but an imported case arrives perhaps a few times a year, and whether one arrives this month is a matter of chance that an ODE cannot represent (it would add a steady trickle of 0.01 cases per day). A hybrid run would treat that one transition as discrete random events and everything else as an ODE. [Catalyst.jl](../approaches/notes.md#modelingtoolkitjl--catalystjl) does this per reaction and [EMULSION](../approaches/emulsion.md) has a `'hybrid'` setting. If we add it, it would be a `method=` keyword on the transition, for example `ss.transmission('S -> I', beta=1e-6, method='ctmc')`. For now, the way to ask this kind of question is to run the whole model with a stochastic method or with agents.
-- **Agents inside patches, patches as compartments, or the reverse.** A related idea from EMULSION and MEmilio: different levels of one model run in different ways (individual animals inside herds that are tracked only as counts). Also deferred. The existing way to combine the two is an `ss.Compartments` module inside an agent-based sim ([agent-based.md](agent-based.md)).
+- **Mixing solvers within one run (deferred, not in v1).** In plain words: sometimes most of a model is well described by smooth average behavior, but one part of it is a rare chance event. The standard example is a country that has nearly eliminated polio. Transmission inside a large population can be run as an ODE, but an imported case arrives perhaps a few times a year, and whether one arrives this month is a matter of chance that an ODE cannot represent (it would add a steady trickle of 0.01 cases per day). A hybrid run would treat that one transition as discrete random events and everything else as an ODE. [Catalyst.jl](../approaches/notes.md#modelingtoolkitjl--catalystjl) does this per reaction and [EMULSION](../approaches/emulsion.md) has a `'hybrid'` setting. If we add it, it would be a `solver=` keyword on the transition, for example `ss.transmission('S -> I', beta=1e-6, solver='gillespie')`. For now, the way to ask this kind of question is to run the whole model with a stochastic solver or with agents.
+- **Agents inside patches, patches as compartments, or the reverse.** A related idea from EMULSION and MEmilio: different levels of one model run in different ways (individual animals inside herds that are tracked only as counts). Also deferred. The existing way to combine the two is states that are not people inside an agent-based sim: the people are agents, and a reservoir or a vector population stays a count ([agent-based.md](agent-based.md)).
 - **What tolerance counts as agreement for simple models?** It depends on population size and the number of stochastic runs. It needs to be stated per test, with the reasoning, so a failure means something.
 - **Which approximation is "standard" for each network class?** Partner-change rates between groups is clear for sexual networks. For a static network with very uneven numbers of contacts, the mean contact rate may be a poor summary, and the note should probably say so.
-- **Should `auto` ever pick a stochastic compartmental method?** As written it chooses between ODE and agents. A small population with a purely compartmental model is a case where the ODE is exact as mathematics and still a poor description; a printed hint may be enough.
+- **How many Erlang stages may `auto` add?** A dwell time with a small variance needs many stages (the number is roughly the mean squared over the variance), and stages multiply with strata. There should be a cap, above which `auto` either uses the cap and prints the variance it got or runs with agents; which of those, and where the cap sits, is not settled.
+- **Should `auto` ever pick a stochastic compartmental solver?** As written it chooses between ODE and agents. A small population with a purely compartmental model is a case where the ODE is exact as mathematics and still a poor description; a printed hint may be enough.

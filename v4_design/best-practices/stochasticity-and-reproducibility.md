@@ -4,11 +4,8 @@
 
 1. **Keep Starsim's per-distribution RNG streams.** Adding or reordering a module must not perturb another module's draws.
 2. **Keep common random numbers, and make the CRN contract explicit and checked** rather than documented in comments.
-3. **Key common random numbers on declared agent attributes, not only on a slot index** — Vivarium's formulation generalizes better. [CK: really? i need convincing]
-4. **Adopt camdl's factored run identity**: model, parameters, config, scenario, and fit hashed separately.
-5. **Offer content-addressed result caching as an option, off by default.** With it on, an identical re-run is a cache hit and results cannot be silently overwritten. [CK: i guess? not sure i see the value in this yet]
-6. **State the RNG semantics of an array draw in the specification.** odin's rule is the kind of ambiguity that produces silently wrong models.
-7. **Convergence is a claim to be checked**, not an assumption.
+3. **Give every run an identity**: model, parameters, config, scenario, and seed hashed separately, returned by `sim.hash()`. It is a cheap by-product of the model being data, and it adds to the commit hash; it does not replace it.
+4. **Convergence is a claim to be checked**, not an assumption.
 
 ## Why
 
@@ -33,7 +30,7 @@ randomness:
     key_columns: ['entrance_time', 'age']
 ```
 
-Vivarium's version is the more general formulation, and its review says why: "Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalizes better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly." [CK: hm ... really? i haven't found this, but i could be convinced ... maybe the slot approach could be the default, but could be overridden by the user if desired. i'd need to see an example where vivarium's approach is easier or more robust than starsim's.]
+Vivarium's keys are configurable, and its review argues that this "generalizes better to comparing scenarios with different population sizes". We could not construct a case where it does (see [Rejected](#rejected)), so Starsim's slot stays the only key.
 
 Meanwhile [EpiModel](../approaches/epimodel.md), [odin](../approaches/odin.md), [epipack](../approaches/epipack.md), and most others have no CRN at all, "so paired scenario comparison is unavailable and small intervention effects need many replicates."
 
@@ -51,27 +48,17 @@ The implication drawn there: "In a language with declared transitions, the condi
 
 > camdl enforces this through a factored run identity: model hash, params hash, config hash, scenario hash, fit hash. A reviewer asking "is this a structural change or a parameter sweep?" reads the level hashes rather than diffing files… Runs are content-addressed by their exact inputs, so an identical re-run is a cache hit rather than a recomputation, and results cannot be silently overwritten.
 
-Its review calls this "a reproducibility mechanism the lingua franca should copy outright", and the [approaches README](../approaches/README.md) agrees: it "solves a problem every framework in this review has and none of the others addresses". [CK: ok, but how often is a reviewer confused about whether something is a structural change or a parameter sweep ...? feels to me like it's solving a problem no one has, but i'm probably missing something.]
+Its review calls this "a reproducibility mechanism the lingua franca should copy outright". That overstates it for our users. For an analysis that is a script in a repository, the commit (or better, a tag) already says what was run, and a reviewer rarely has to ask whether a change was structural. The hashes earn their place in the cases a commit does not distinguish, which are listed in the proposal.
 
 ## The proposal
 
-### Keep the machinery; change the interface
+### Keep the machinery
 
 ```python
 sim = ss.Sim(sir, rand_seed=1)
 ```
 
-Underneath, unchanged from Starsim: one RNG per distribution, seeded by hashing its name; per-agent CRN by hashing `(seed, draw_index, key)`.
-
-Changed: the key is declarable, following Vivarium.
-
-```python
-ss.Sim(sir, crn_key='slot')                     # default: Starsim's current behavior
-ss.Sim(sir, crn_key=['birth_date', 'sex'])      # Vivarium's: stable across population sizes
-ss.Sim(sir, crn_key=None)                       # off
-```
-
-`slot` stays the default because it is fast and it is right whenever the populations being compared are the same agents — which is the common case. The attribute-keyed form is what makes "compare a 10,000-agent run to a 100,000-agent run" meaningful. [CK: but ... how would that work? the other 90,000 agents have no parallel in the smaller sim so the runs are going to be totally different regardless...]
+Unchanged from Starsim: one RNG per distribution, seeded by hashing its name, and per-agent CRN by hashing `(seed, draw_index, slot)`. A newborn's slot is drawn from its parent's stream, so the same birth gets the same slot in both scenarios. `ss.options.crn = False` turns CRN off, as it does today.
 
 ### Check the contract
 
@@ -79,7 +66,7 @@ Because [transitions are declared](model-structure.md) and every draw goes throu
 
 ```text
 >>> sim.describe()
-common random numbers: on (key='slot')
+common random numbers: on
   ✓ infection, recovery, mortality — per-agent, CRN-safe
   ! network.rewire — samples without replacement; CRN does not hold across scenarios
     paired differencing will include Monte Carlo noise from this draw
@@ -87,31 +74,22 @@ common random numbers: on (key='slot')
 
 This is [camdl](../approaches/camdl.md)'s capability-check approach applied to CRN: name the limitation rather than leaving it in a comment. Draws made in custom `step()` code are reported the same way, from what the distributions saw during a run.
 
-### The array-draw rule
-
-[odin](../approaches/odin.md) specifies this carefully and it is worth copying verbatim into our spec:
-
-> `x[] <- Normal(0, 1)` gives every element its own draw, while `a <- Normal(0, 1); x[] <- a` gives every element the same draw.
-
-Its review: "That distinction is exactly the kind of thing that is ambiguous in most frameworks and silently wrong in some." [CK: huhhhh??? i am so confused by this example]
-
-Our version:
-
-```python
-dur = ss.lognorm_ex(mean=ss.days(10), std=3)     # in a transition: one draw per agent
-p   = ss.lognorm_ex(mean=0.1, std=0.02).rvs()    # one draw, shared
-```
-
-The rule: **a distribution in a per-agent slot draws per agent; a distribution evaluated to a scalar draws once.** Written down, not inferred. [CK: ...yes. i'm confused why this is a big deal. in the code example above, `dur` is a distribution and `p` is a scalar ...]
-
 ### Run identity
 
-```text
+```python
 >>> sim.hash()
-model=8f3a21  pars=c47e90  config=1b6d55  scenario=vaccine  seed=1
+objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='vaccine', seed=1)
 ```
 
-Four hashes and the seed, computed from the declared model, the resolved parameter values (including the provenance of any fetched data — see [parameters-and-distributions.md](parameters-and-distributions.md)), the execution configuration, and the scenario. Comparing two runs:
+Four hashes and the seed, computed from the declared model, the resolved parameter values (including the provenance of any fetched data; see [parameters-and-distributions.md](parameters-and-distributions.md)), the execution configuration, and the scenario. It is a plain `sc.objdict`, so `sim.hash().pars` is a string that can go in a file name or a column of a data frame.
+
+What this adds to a commit hash:
+
+- **Many runs come from one commit.** A sweep or a calibration produces hundreds of runs from the same code. The `pars` hash tells them apart, and a saved result carries the hash of what produced it.
+- **Not everything is committed.** Notebooks and exploratory scripts are run with uncommitted changes. The hashes are computed from the model that actually ran.
+- **Two models written differently can be the same model.** The `model` hash is computed from a normalized form, so it is the test for "did these two agents, given the same description, write the same model" ([principles.md](principles.md)).
+
+Comparing two runs:
 
 ```text
 >>> ss.diff(run_a, run_b)
@@ -121,9 +99,7 @@ config:   same
 scenario: baseline → vaccine
 ```
 
-That is the question every reviewer of a modeling analysis asks — *did the model change, or did the numbers?* — answered without diffing files. [CK: um, okay. `sim.hash()` should return a plain dict though! or an `sc.objdict()` :)]
-
-The hashes are always computed. Caching results by them is optional and off by default: a re-run runs again unless caching has been turned on. With caching on, a run whose hashes already exist is a cache hit (and says so), and writing a different result to an existing identity is an error rather than an overwrite. Fitting settings have their own hash ([calibration.md](calibration.md)), so changing the number of trials does not look like a change to the model.
+The hashes are always computed, because they cost almost nothing. Starsim already stores its version and git information with a saved sim, and that stays the main record of what code was used. Fitting settings have their own hash ([calibration.md](calibration.md)), so changing the number of trials does not look like a change to the model.
 
 ### Convergence is checked
 
@@ -134,35 +110,30 @@ The two that generalize cheaply:
 ```python
 sim.check_dt()      # halve dt, re-run, report the change. A discrete-time model that
                     # moves when dt halves has not converged.
-sim.check_reps()    # is n_reps enough for the quantity being compared?  (deferred from v1; see design/19)
+msim.check_runs()   # is n_runs enough for the quantity being compared?  (deferred from v1; see design/19)
 ```
 
-For a stochastic model, `check_reps()` is the more commonly needed one and nothing in the review offers it. With CRN on, the required replicate count for a paired comparison is often an order of magnitude lower, and saying so concretely is worth more than a warning in the documentation.
-
-### The seed is not the reproducibility story
-
-Worth stating explicitly in the documentation because it is widely misunderstood: a fixed seed makes a *run* reproducible; the four hashes make an *analysis* reproducible. A paper reporting `rand_seed=1` and nothing else has reported almost nothing. [CK: a paper reporting `rand_seed=1` is not a paper i want to read, or write ... what's wrong with the git hash (or better, tag)? i agree the hashes are relatively cheap so we 'might as well', but i'm still struggling to see the use case.]
-
-[SimInf](../approaches/siminf.md)'s `package_skeleton()` — a command that turns a model into a distributable, installable, citable R package — is the other end of this and its review is right that it is "trivial once the model is data". `ss.export(sim, 'my_analysis/')` producing a directory with the model, the resolved parameters, the data references, the environment, and a runnable script is the same idea and should exist (deferred from v1; `to_json()` and `ss.save` cover it meanwhile). [CK: this does sound cool, but .... isn't this just the model code? what do you gain from this?]
+For a stochastic model, `check_runs()` is the more commonly needed one and nothing in the review offers it. With CRN on, the required replicate count for a paired comparison is often an order of magnitude lower, and saying so concretely is worth more than a warning in the documentation.
 
 ## Trade-offs
 
 - **CRN constrains how sampling can be implemented.** Anything not expressible as a per-agent inverse CDF falls outside the guarantee. Accepted, now checked and reported rather than assumed.
-- **Attribute-keyed CRN is slower than slot-keyed** (a hash over several columns rather than one integer). Default to slot; offer the other. [CK: this seems reasonable, although i'm not sure i understand the advantage still.]
 - **Hashing the model requires a canonical form.** Two models written differently but meaning the same thing should hash the same, which needs a normalizer working on the [model spec](../design/14-model-spec.md). That normalizer is also what makes prose→model determinism testable ([principles.md](principles.md)), so it is not an extra cost.
-- **Content-addressed caching surprises people** when they expect a re-run to actually re-run. So it is off by default. When it is on, camdl's answer applies: the cache hit is reported, and there is a way to force a re-run.
 
 ## Rejected
 
 - **A single global RNG stream** (EpiModel). Adding a module changes everyone's draws.
-- **Reproducibility by seed alone.** Necessary, wildly insufficient.
+- **Reproducibility by seed alone.** A seed repeats a run; it does not say what was run. The version, the commit, and the hashes do.
+- **Common random numbers keyed on agent attributes** (Vivarium's `key_columns: ['entrance_time', 'age']`). The case made for it is comparing populations of different sizes, but a 10,000-agent run and a 100,000-agent run have 90,000 agents with no counterpart, so the runs differ whatever the key. Within one population size, Starsim's slot already identifies the same agent across scenarios, including agents born during the run, and is one integer to hash. If a case turns up where attribute keys do better, this can be revisited.
 - **CRN as an implementation detail.** It changes what a comparison means; it belongs in `describe()`.
-- **Caching on by default.** See the trade-off above.
+- **Content-addressed result caching in v1** (camdl). With the hashes in place it is easy to add: an identical re-run becomes a cache hit. It also surprises people who expect a re-run to run, and nobody has asked for it. Deferred.
+- **Exporting a run as a folder or a package** (an earlier draft's `ss.export`; SimInf's `package_skeleton()`). A model here is a Python script, which is already the thing to share.
+- **A rule for array draws** (odin distinguishes `x[] <- Normal(0, 1)`, one draw per element, from drawing once and assigning). In Python the difference is visible in the code: a distribution object in a parameter slot draws per agent, and a number is a number.
 - **Per-particle streams as the only mechanism** (dust). Right for particle filters, insufficient for paired scenarios.
 - **Making CRN mandatory.** Some analyses want independent replicates, and a user comparing structurally different models across which agent identity is meaningless should be able to turn it off.
 
 ## Open questions
 
-- **What is the CRN guarantee when the population differs between scenarios?** Vivarium's attribute keying answers part of this; births, deaths, and migration mean the agent sets diverge over time even from a common start. There is probably a statable guarantee ("agents alive at the divergence point retain their draws") that is worth writing down.
-- **What does CRN mean across run methods?** camdl pairs at the run level for compartmental models; Starsim pairs at the agent level. Comparing an ODE baseline with an agent-based intervention run is not a paired comparison in any useful sense, and `ss.diff` should probably say so.
+- **What is the CRN guarantee when the population differs between scenarios?** Births, deaths, and migration mean the agent sets diverge over time even from a common start. There is probably a statable guarantee ("agents alive at the divergence point retain their draws") that is worth writing down.
+- **What does CRN mean across solvers?** camdl pairs at the run level for compartmental models; Starsim pairs at the agent level. Comparing an ODE baseline with an agent-based intervention run is not a paired comparison in any useful sense, and `ss.diff` should probably say so.
 - **Deterministic flows inside a stochastic model** — camdl's `deterministic()` and `overdispersed()` annotations, and [Catalyst.jl](../approaches/notes.md#modelingtoolkitjl--catalystjl)'s per-reaction `PhysicalScale`. Per-transition methods are deferred beyond v1 ([paradigm-conversion.md](paradigm-conversion.md)), but the RNG implications (which streams exist, what CRN means) belong here when they arrive.

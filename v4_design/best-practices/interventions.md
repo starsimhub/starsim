@@ -120,20 +120,51 @@ There is nothing new to learn: the names are the attributes that already exist o
 **In a compartmental run** the same condition is evaluated on groups. It works if everything it uses is a stratification (age groups, sex, vaccination status), and stops with a clear message otherwise:
 
 ```text
-Cannot evaluate eligibility for 'bcg_campaign' with method='ode':
+Cannot evaluate eligibility for 'bcg_campaign' with solver='ode':
   ppl.clinic is a per-agent attribute and is not a stratification.
-  Fix: stratify by clinic, or run with method='abm'.
+  Fix: stratify by clinic, or run with solver='abm'.
 ```
 
-**When** is `start=`, `stop=`, `years=`/`dates=`, and `interval=`. Anything more complex is a function of the sim, with `min_duration=` so that a policy does not switch on and off every step:
+**When** is `start=`, `stop=`, `years=`/`dates=`, and `interval=`. For a condition that dates cannot express, `when=` takes a function of the sim. It is asked each step, and the change applies on exactly the steps where it returns `True`:
 
 ```python
-ss.modify(school.pars.n_contacts, multiply=0.2,
-          when=lambda sim: sim.results.sir.new_infections[-7:].sum() > 1000,
-          min_duration=ss.weeks(4))
+def many_cases(sim):
+    """ More than 1000 new infections over the last seven steps """
+    new = sim.results.sir.new_infections
+    return new[sim.ti-7:sim.ti].sum() > 1000
+
+ss.modify(school.pars.n_contacts, multiply=0.2, when=many_cases)
 ```
 
-This covers [EMOD](../approaches/emod.md)'s event broadcast/observe and [EpiHiper](../approaches/epihiper.md)'s triggers ("close schools when weekly cases exceed 1000"). There is no built-in vocabulary for calendar conditions such as weekdays. EpiHiper's "no school contacts on Fridays" (roughly 200 lines of JSON across variables, sets, triggers, and interventions) is a function:
+`when=` remembers nothing. In this example schools reopen on the first day the weekly count drops back under 1000 and close again the day it goes over, which is not how any real policy works. A policy with memory ("close when weekly cases pass 1000, and stay closed for at least four weeks") is not a keyword. It is an intervention, where the memory is a visible attribute and the rule is a few lines of `step()`:
+
+```python
+class SchoolClosure(ss.Intervention):
+    """ Close schools when weekly cases pass a threshold, for at least `hold` """
+    def __init__(self, threshold=1000, hold=ss.weeks(4)):
+        super().__init__()
+        self.define_pars(threshold=threshold, hold=hold)
+        self.reopen = None                                # the memory: when schools may reopen
+
+    def step(self):
+        sim = self.sim
+        new = sim.results.sir.new_infections
+        if new[sim.ti-7:sim.ti].sum() > self.pars.threshold:
+            self.reopen = sim.now + self.pars.hold        # each bad week restarts the clock
+
+    def closed(self, sim):
+        return self.reopen is not None and sim.now < self.reopen
+
+closure = SchoolClosure()
+sim = ss.Sim(sir, networks=[home, school, work], interventions=[
+    closure,
+    ss.modify(school.pars.n_contacts, multiply=0.2, when=closure.closed),
+])
+```
+
+The class decides; the modifier does the scaling, so the contact rate still returns to its base value by itself. A `min_duration=` keyword on `ss.modify` would be shorter. It would also hide state inside a one-line declaration, and leave the questions that matter (does a second bad week restart the clock? what if the condition is still true when the time is up?) to be answered by the library and not by the modeler.
+
+Together these cover [EMOD](../approaches/emod.md)'s event broadcast/observe and [EpiHiper](../approaches/epihiper.md)'s triggers ("close schools when weekly cases exceed 1000"). There is no built-in vocabulary for calendar conditions such as weekdays. EpiHiper's "no school contacts on Fridays" (roughly 200 lines of JSON across variables, sets, triggers, and interventions) is a function:
 
 ```python
 ss.modify(school.pars.n_contacts, multiply=lambda sim: 0.0 if sim.now.weekday() == 4 else 1.0)
@@ -146,7 +177,7 @@ Before adding an intervention class, check whether it is one of the two primitiv
 **Vaccination can be a transfer between strata** ([stratification.md](stratification.md)). [Epydemix](../approaches/epydemix.md) and [MEmilio](../approaches/memilio.md)'s `secirvvs` add vaccinated copies of the compartments by hand; here it is one line:
 
 ```python
-sir_vax = sir.stratify(vaccinated=[False, True], adjust={'infection': [1.0, 0.15]})   # 85% protection, declared once
+sir.stratify(vaccinated=[False, True], adjust={'infection': [1.0, 0.15]})   # 85% protection, declared once
 ss.transfer(vaccinated=True, rate=ss.peryear(0.3))
 ```
 
@@ -236,6 +267,8 @@ ss.screen(
 )
 ```
 
+A testing intervention reports what it did as results, like any module: tests done, and people diagnosed. When testing is modeled this way, the model's reported cases are those results added up (`cases = symptomatic_testing.diagnosed + screening.diagnosed`), and `ss.outcome` is not used for them. An outcome is the shortcut for when testing is not in the model at all ([results-and-observation.md](results-and-observation.md#outcome-intervention-or-state)).
+
 **Triggered by another module.** A delivery can happen when something happens elsewhere in the model, with `on=`:
 
 ```python
@@ -270,6 +303,7 @@ sims.plot()
 - **Conditions that evaluate later are an implementation cost, and a possible source of confusion.** The same expression builds a condition before the sim is initialized and returns an array after. The rule is simple to state, but error messages have to be good, and `describe()` should show each condition as written.
 - **A function cannot be saved or drawn.** Eligibility or delivery written as a function is printed by name in `describe()` and the model spec records that a function was used, not what it does. This is accepted: the function is the general form and must always work.
 - **A condition on a per-agent attribute has no compartmental meaning** unless the attribute is a stratification. `ppl.age > 65` works in both if the model is stratified by age with a boundary at 65; `ppl.clinic == 12` works only with agents. The run stops and names the attribute.
+- **`when=` is evaluated mid-run, on results so far.** The function reads a results array that is only filled up to the current step, so it has to index by `sim.ti` (a bare `[-7:]` would read the unfilled end of the array), and what it sees depends on where in the loop the modifier runs. It is kept because a stateless threshold is common and short; anything subtler belongs in a class.
 - **`deliver=fn` hides structure.** A delivery function can do anything, so two interventions using one cannot be compared keyword by keyword. Use the keywords when they fit.
 - **Products are a vocabulary that will grow.** Vaccines, tests, treatments, bednets, condoms, contact tracing. Most are an `ss.modify` on a named quantity with a coverage and an eligibility, and only the ones with distinct structure (a diagnostic returns a *result*) need a class.
 
@@ -281,6 +315,7 @@ sims.plot()
 - **Interventions as contact reductions only** (Epydemix, MEmilio). Covers COVID-era scenarios and little else.
 - **Interventions as extra compartments written by hand** (Epydemix's answer for vaccination, MEmilio's `secirvvs`). This is what `ss.transfer` between strata replaces, and it is why vaccination need not touch the disease model.
 - **`'no -> yes'` arrows for booleans.** `ss.transfer(vaccinated=True, ...)`.
+- **`min_duration=` on `ss.modify`,** and any other trigger keyword that needs memory. State that persists between steps belongs where it can be seen and tested: in a `step()` method or an intervention class.
 - **A separate rule language** (EpiHiper's variables/sets/triggers/operations). The semantics are the best in the review; the syntax is 200 lines of JSON for one Friday.
 - **Edge-level eligibility** (EpiHiper's edge predicates). Networks are enough: to change school contacts, modify the school network.
 - **Interventions that are inactive unless a scenario enables them** (camdl). Baselines usually contain real interventions; each scenario lists what it contains.
@@ -291,4 +326,5 @@ sims.plot()
 - **Who gets it when capacity runs out?** With 50,000 doses and 80,000 people eligible, the default is a random 50,000. Real programs prioritize (oldest first, highest risk first). Probably a `priority=` function or attribute; not settled.
 - **Stock that carries over.** `capacity=` per round or per unit time does not by itself express a stock that is delivered in batches and depleted over time. A time series covers the simple cases; a stock that depends on use may need `deliver=fn`.
 - **How far do conditions that evaluate later extend?** Comparisons and `&`, `|`, `~` on state arrays are clear. Arithmetic (`ppl.age - hiv.ti_infected`) and indexing are less so. The fallback is always the function form, so the short form can start small.
+- **Should `ss.modify` have triggers at all?** `when=` survives as a function of the sim with no memory. It is still the fragile part of a one-line modifier (see Trade-offs), and the alternative is that every trigger is an intervention class and `ss.modify` only knows dates. A view of a result "so far" (`result.so_far[-7:]`, say) would remove the indexing hazard and is a small thing worth having either way; it is not specified yet.
 - **Should `ss.transfer` accept the delivery keywords?** A vaccination campaign with coverage and years but no product could be written as a transfer or as `ss.vaccinate` with a minimal product. One of them should be the documented way.

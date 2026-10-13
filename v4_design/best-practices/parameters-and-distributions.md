@@ -107,10 +107,10 @@ and either way:
 
 ```text
 >>> sim.hash()
-model=8f3a21  pars=c47e90  config=1b6d55  scenario=baseline
+objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', seed=1)
 ```
 
-That is [camdl](../approaches/camdl.md)'s factored run identity. See [stochasticity-and-reproducibility.md](stochasticity-and-reproducibility.md).
+That is [camdl](../approaches/camdl.md)'s factored run identity: a change of values changes `pars` and nothing else. See [stochasticity-and-reproducibility.md](stochasticity-and-reproducibility.md).
 
 ### Every parameter slot accepts the whole ladder
 
@@ -136,7 +136,7 @@ The function is a normal option, not a last resort. It is called as `fn(sim)` (o
 
 A distribution in a parameter slot means one of two things, and the slot disambiguates:
 
-- **Variation between people**: `dur=ss.lognorm_ex(mean=10, std=3, unit='days')`. Each agent draws its own dwell time. In a compartmental run a dwell-time distribution becomes sub-stages ([model-structure.md](model-structure.md)).
+- **Variation between people**: `dur=ss.lognorm_ex(mean=10, std=3, unit='days')`. Each agent draws its own dwell time. A compartmental run has two ways to represent variation between people, and uses whichever applies: a dwell-time distribution becomes sub-stages ([model-structure.md](model-structure.md)), and a distribution on anything else (`beta`, `rel_sus`) is either binned into a dimension by the user (`sir.stratify(rel_sus=[...])`) or, under an explicit `solver='ode'`, replaced by its mean with a note. Under `solver='auto'` a model with per-person variation in `beta` or `rel_sus` runs as agents.
 - **Uncertainty**: `beta=ss.par(0.05, prior=ss.lognorm_ex(mean=0.05, std=0.02))`. A prior for calibration; camdl's `~ prior` syntax.
 
 Keeping them in separate slots (`dur=` versus `prior=`) is what stops the ambiguity that "a vector-valued parameter means a time series here and a sensitivity sweep there" produces in [EpiModel](../approaches/epimodel.md).
@@ -181,17 +181,17 @@ A module can say what data it needs, so that inputs can be checked before anythi
 ```python
 class MyNetwork(ss.Network):
     requires = [
-        ss.Needs('population', shape='patch', source='UN WPP 2024'),
-        ss.Needs('contact_matrix', shape='age x age', source='socialmixr:POLYMOD'),
+        ss.Requires('population', shape='patch', source='UN WPP 2024'),
+        ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
     ]
 ```
 
 ```python
-sim.needs()             # what this model requires, as a table
-sim.needs(to='form.csv')  # Atomica's databook: the data-entry contract, generated  (deferred from v1; see design/19)
+sim.requires()                # what this model requires, as a table
+sim.requires(to='form.csv')   # Atomica's databook: the data-entry contract, generated  (deferred from v1; see design/19)
 ```
 
-This is optional metadata. A module without `requires` works exactly as before, and a module with it is not restricted to what it listed: it can still read anything in the sim. The declaration exists to produce the table and the form, not to police access. (Which modules write to which quantities is found by observing a run, not by declaration; see [composition-and-effects.md](composition-and-effects.md).) [CK: let's just keep `requires()`, no need to have `requires` attribute, `ss.Needs` class, and `sim.needs()` method. we can do `requires` and `ss.Requires()` if necessary]
+One word, `requires`, for the list on the module, the entries in it, and the table. This is optional metadata. A module without `requires` works exactly as before, and a module with it is not restricted to what it listed: it can still read anything in the sim. The declaration exists to produce the table and the form, not to police access. (Which modules write to which quantities is found by observing a run, not by declaration; see [composition-and-effects.md](composition-and-effects.md).)
 
 ### Named data, not just values
 
@@ -207,18 +207,20 @@ Its review: "A lingua franca that can express a contact matrix but cannot say *w
 epymorph's ADRIOs are the pull-based version with caching and provenance; camdl has `read("data/lga_pop.tsv", column="patch")`; [LASER](../approaches/laser.md) ships a library of migration models. All four say the same thing: **a reference to data is part of the model.**
 
 ```python
-sim = ss.Sim(sir, people=ss.People('Kenya', year=2024), # [CK: capitalization should be consistent, i think ss.people() here?]
-                  networks=ss.contacts('Kenya', source='prem_2021'))
+sim = ss.Sim(sir, people=ss.people('Kenya', year=2024),
+                  networks=ss.contacts('Kenya', source='prem2021'))
 ```
 
-with the provenance carried into `sim.describe()` and the run hash, and the fetch cached.
+`ss.people` and `ss.contacts` are lowercase because they are loaders: each looks up named data and returns the ordinary object (an `ss.People`, a set of `ss.MixingPools`). The provenance is carried into `sim.describe()` and the run hash.
+
+The data itself comes from [`starsim_data`](https://github.com/starsimhub/starsim_data), which bundles what is small and common (UN population, birth, and death rates for every country; the Prem and Mistry contact matrices) and fetches the rest on demand, with a cache: annual resolution, life tables, other projection variants. Every data set has its source and license recorded (`ssd.provenance('prem2017')`).
 
 ## Trade-offs
 
 - **Declaration means adding a parameter to a custom module is two edits** (declare, use). Starsim already works this way and it is worth it. Most parameters live in their transition and are never named at all.
 - **A generated data form is only as good as the requirement declarations.** A module that reads something it did not list will be missing from the form. Enforcing the list (Vivarium's `PopulationView`, where a module sees only what it declared) would close that gap, but people forget declarations and they drift from the code, so it is left as optional metadata.
-- **A function in a parameter slot is only known to work in the run methods it has been tried in.** `sir.methods()` reports what happened; nothing is promised in advance.
-- **Bundled data goes stale and is large.** Prefer epymorph's pull-with-cache over Epydemix's bundle, and pin the source in the hash so a re-run with a changed upstream is detectable rather than silent. [CK: yes, but ... we can do a bit of both. see /home/cliffk/idm/starsim_data for current thinking on this; happy to revisit, but i think 'bundle small and common, pull everything else' is the right compromise.]
+- **A function in a parameter slot is only known to work under the solvers it has been tried with.** `sir.solvers()` reports what happened; nothing is promised in advance.
+- **Bundled data goes stale and is large; pulled data needs a network and can change underneath you.** So do some of each: bundle what is small and common, pull everything else with a cache (epymorph's approach), and version both. `starsim_data` keeps each UN revision as a separate store, so a new release adds data and does not change what an existing model loads, and the source goes into the hash so a changed upstream is detectable.
 - **Optional `source=` will mostly be empty.** True, and it costs nothing when unused, and the models that matter most are the ones where someone bothered.
 
 ## Rejected
@@ -227,11 +229,11 @@ with the provenance carried into `sim.describe()` and the run hash, and the fetc
 - **Mandatory value/model separation** (camdl). The capability is right; requiring two files for an SIR is not.
 - **String-concatenated parameter names** ([MetaCast](../approaches/metacast.md)'s `parameters['p' + subpop_suffix]`, `'beta_[high,vaccinated]'`). Its review: "the lesson is in the split, not the mechanism." Shapes do this job properly.
 - **`Use_Defaults: 1`** ([EMOD](../approaches/emod.md)), where "much of a model's behavior is not visible in its files". We guess defaults aggressively and *print every one*, which is the opposite policy despite sounding similar.
-- **New distribution names.** Starsim's names stay (`ss.lognorm_ex`, not a new `ss.lognorm`; `ss.nbinom`, not `ss.neg_binomial`), and there is no separate `ss.erlang`: use `ss.gamma` with an integer shape, or `stages=` on the transition. Starsim's review flags "~20 distributions" as part of the surface-area problem, so the documentation teaches the dozen listed above; the others, and any SciPy distribution via `ss.Dist`, remain available. [CK: i think we can revisit the list of starsim distributions, i'm not wedded to them necessarily.]
+- **New distribution names, for now.** Starsim's names are used (`ss.lognorm_ex`, not a new `ss.lognorm`; `ss.nbinom`, not `ss.neg_binomial`). There is no separate `ss.erlang`: an Erlang distribution is exactly a gamma distribution with an integer shape (`ss.gamma(a=3, scale=...)`), and its main use in this field, splitting a state into sub-stages, is `stages=3` on the transition. Starsim's review flags "~20 distributions" as part of the surface-area problem, so the documentation teaches the dozen listed above; the others, and any SciPy distribution via `ss.Dist`, remain available. The list itself is not fixed (see open questions).
 - **Enforced requirement views** (Vivarium). See the trade-off above.
 - **Repeating the unit on every distribution parameter.** Once is enough.
 
 ## Open questions
 
-- Should `bounds=` and `prior=` be the same field? camdl has one (`in [lo, hi] ~ prior`); they serve calibration and validation respectively, and collapsing them may be right. [CK: hm, this is a good question! i think pros and cons either way. i think keep both to start and then we can decide.]
-- What does a compartmental run do with a distribution that varies between people? A dwell-time distribution has a standard answer (sub-stages). A distribution on `beta` or `rel_sus` does not, short of adding a dimension or using the mean. Under `method='auto'` such a model runs as agents; what an explicit `method='ode'` should do is a question for [paradigm-conversion.md](paradigm-conversion.md). [CK: either stratify, or simplify .... right?]
+- Should `bounds=` and `prior=` be the same field? camdl has one (`in [lo, hi] ~ prior`). Bounds say what values are valid and where to search; a prior says what is believed. They overlap, and there are arguments both ways, so both are kept to start with and the question is revisited once calibration has been used in earnest.
+- **Which distributions, under which names?** Starsim's list and names are the starting point and can be revisited: `lognorm_ex` / `lognorm_im` in particular are precise and not what anyone would guess, and an `ss.erlang(mean=, k=)` would be a friendlier spelling than `ss.gamma(a=k, scale=mean/k)` if people turn out to write Erlang dwell times directly instead of using `stages=`.
