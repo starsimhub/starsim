@@ -4,9 +4,9 @@
 
 1. **Keep Starsim's per-distribution RNG streams.** Adding or reordering a module must not perturb another module's draws.
 2. **Keep common random numbers, and make the CRN contract explicit and checked** rather than documented in comments.
-3. **Key common random numbers on declared agent attributes, not only on a slot index** — Vivarium's formulation generalizes better.
+3. **Key common random numbers on declared agent attributes, not only on a slot index** — Vivarium's formulation generalizes better. [CK: really? i need convincing]
 4. **Adopt camdl's factored run identity**: model, parameters, config, scenario, and fit hashed separately.
-5. **Offer content-addressed result caching as an option, off by default.** With it on, an identical re-run is a cache hit and results cannot be silently overwritten.
+5. **Offer content-addressed result caching as an option, off by default.** With it on, an identical re-run is a cache hit and results cannot be silently overwritten. [CK: i guess? not sure i see the value in this yet]
 6. **State the RNG semantics of an array draw in the specification.** odin's rule is the kind of ambiguity that produces silently wrong models.
 7. **Convergence is a claim to be checked**, not an assumption.
 
@@ -33,7 +33,7 @@ randomness:
     key_columns: ['entrance_time', 'age']
 ```
 
-Vivarium's version is the more general formulation, and its review says why: "Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalizes better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly."
+Vivarium's version is the more general formulation, and its review says why: "Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalizes better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly." [CK: hm ... really? i haven't found this, but i could be convinced ... maybe the slot approach could be the default, but could be overridden by the user if desired. i'd need to see an example where vivarium's approach is easier or more robust than starsim's.]
 
 Meanwhile [EpiModel](../approaches/epimodel.md), [odin](../approaches/odin.md), [epipack](../approaches/epipack.md), and most others have no CRN at all, "so paired scenario comparison is unavailable and small intervention effects need many replicates."
 
@@ -51,7 +51,7 @@ The implication drawn there: "In a language with declared transitions, the condi
 
 > camdl enforces this through a factored run identity: model hash, params hash, config hash, scenario hash, fit hash. A reviewer asking "is this a structural change or a parameter sweep?" reads the level hashes rather than diffing files… Runs are content-addressed by their exact inputs, so an identical re-run is a cache hit rather than a recomputation, and results cannot be silently overwritten.
 
-Its review calls this "a reproducibility mechanism the lingua franca should copy outright", and the [approaches README](../approaches/README.md) agrees: it "solves a problem every framework in this review has and none of the others addresses".
+Its review calls this "a reproducibility mechanism the lingua franca should copy outright", and the [approaches README](../approaches/README.md) agrees: it "solves a problem every framework in this review has and none of the others addresses". [CK: ok, but how often is a reviewer confused about whether something is a structural change or a parameter sweep ...? feels to me like it's solving a problem no one has, but i'm probably missing something.]
 
 ## The proposal
 
@@ -71,7 +71,7 @@ ss.Sim(sir, crn_key=['birth_date', 'sex'])      # Vivarium's: stable across popu
 ss.Sim(sir, crn_key=None)                       # off
 ```
 
-`slot` stays the default because it is fast and it is right whenever the populations being compared are the same agents — which is the common case. The attribute-keyed form is what makes "compare a 10,000-agent run to a 100,000-agent run" meaningful.
+`slot` stays the default because it is fast and it is right whenever the populations being compared are the same agents — which is the common case. The attribute-keyed form is what makes "compare a 10,000-agent run to a 100,000-agent run" meaningful. [CK: but ... how would that work? the other 90,000 agents have no parallel in the smaller sim so the runs are going to be totally different regardless...]
 
 ### Check the contract
 
@@ -93,7 +93,7 @@ This is [camdl](../approaches/camdl.md)'s capability-check approach applied to C
 
 > `x[] <- Normal(0, 1)` gives every element its own draw, while `a <- Normal(0, 1); x[] <- a` gives every element the same draw.
 
-Its review: "That distinction is exactly the kind of thing that is ambiguous in most frameworks and silently wrong in some."
+Its review: "That distinction is exactly the kind of thing that is ambiguous in most frameworks and silently wrong in some." [CK: huhhhh??? i am so confused by this example]
 
 Our version:
 
@@ -102,7 +102,7 @@ dur = ss.lognorm_ex(mean=ss.days(10), std=3)     # in a transition: one draw per
 p   = ss.lognorm_ex(mean=0.1, std=0.02).rvs()    # one draw, shared
 ```
 
-The rule: **a distribution in a per-agent slot draws per agent; a distribution evaluated to a scalar draws once.** Written down, not inferred.
+The rule: **a distribution in a per-agent slot draws per agent; a distribution evaluated to a scalar draws once.** Written down, not inferred. [CK: ...yes. i'm confused why this is a big deal. in the code example above, `dur` is a distribution and `p` is a scalar ...]
 
 ### Run identity
 
@@ -121,7 +121,7 @@ config:   same
 scenario: baseline → vaccine
 ```
 
-That is the question every reviewer of a modeling analysis asks — *did the model change, or did the numbers?* — answered without diffing files.
+That is the question every reviewer of a modeling analysis asks — *did the model change, or did the numbers?* — answered without diffing files. [CK: um, okay. `sim.hash()` should return a plain dict though! or an `sc.objdict()` :)]
 
 The hashes are always computed. Caching results by them is optional and off by default: a re-run runs again unless caching has been turned on. With caching on, a run whose hashes already exist is a cache hit (and says so), and writing a different result to an existing identity is an error rather than an overwrite. Fitting settings have their own hash ([calibration.md](calibration.md)), so changing the number of trials does not look like a change to the model.
 
@@ -141,14 +141,14 @@ For a stochastic model, `check_reps()` is the more commonly needed one and nothi
 
 ### The seed is not the reproducibility story
 
-Worth stating explicitly in the documentation because it is widely misunderstood: a fixed seed makes a *run* reproducible; the four hashes make an *analysis* reproducible. A paper reporting `rand_seed=1` and nothing else has reported almost nothing.
+Worth stating explicitly in the documentation because it is widely misunderstood: a fixed seed makes a *run* reproducible; the four hashes make an *analysis* reproducible. A paper reporting `rand_seed=1` and nothing else has reported almost nothing. [CK: a paper reporting `rand_seed=1` is not a paper i want to read, or write ... what's wrong with the git hash (or better, tag)? i agree the hashes are relatively cheap so we 'might as well', but i'm still struggling to see the use case.]
 
-[SimInf](../approaches/siminf.md)'s `package_skeleton()` — a command that turns a model into a distributable, installable, citable R package — is the other end of this and its review is right that it is "trivial once the model is data". `ss.export(sim, 'my_analysis/')` producing a directory with the model, the resolved parameters, the data references, the environment, and a runnable script is the same idea and should exist (deferred from v1; `to_json()` and `ss.save` cover it meanwhile).
+[SimInf](../approaches/siminf.md)'s `package_skeleton()` — a command that turns a model into a distributable, installable, citable R package — is the other end of this and its review is right that it is "trivial once the model is data". `ss.export(sim, 'my_analysis/')` producing a directory with the model, the resolved parameters, the data references, the environment, and a runnable script is the same idea and should exist (deferred from v1; `to_json()` and `ss.save` cover it meanwhile). [CK: this does sound cool, but .... isn't this just the model code? what do you gain from this?]
 
 ## Trade-offs
 
 - **CRN constrains how sampling can be implemented.** Anything not expressible as a per-agent inverse CDF falls outside the guarantee. Accepted, now checked and reported rather than assumed.
-- **Attribute-keyed CRN is slower than slot-keyed** (a hash over several columns rather than one integer). Default to slot; offer the other.
+- **Attribute-keyed CRN is slower than slot-keyed** (a hash over several columns rather than one integer). Default to slot; offer the other. [CK: this seems reasonable, although i'm not sure i understand the advantage still.]
 - **Hashing the model requires a canonical form.** Two models written differently but meaning the same thing should hash the same, which needs a normalizer working on the [model spec](../design/14-model-spec.md). That normalizer is also what makes prose→model determinism testable ([principles.md](principles.md)), so it is not an extra cost.
 - **Content-addressed caching surprises people** when they expect a re-run to actually re-run. So it is off by default. When it is on, camdl's answer applies: the cache hit is reported, and there is a way to force a re-run.
 
