@@ -4,7 +4,7 @@
 
 1. **One concept covers age, space, risk, strain, and vaccination status.** They are all dimensions; the difference is which structure they carry, not what kind of thing they are.
 2. **Every dimension is an agent property; not every agent property is a dimension.** A property becomes a dimension when you stratify by it. Continuous properties (age, CD4 count) are binned for that purpose and stay continuous in an agent-based run.
-3. **Stratification is an operator applied to a finished model.** `sir.stratify(age=[0, 15, 65])` returns a new, stratified model and leaves the original untouched, so the two can be compared. `ss.stratify(sir, age=[0, 15, 65])` is the same thing.
+3. **Stratification is an operator applied to a finished model.** `sir.stratify(age=[0, 15, 65])` returns a new, stratified model and leaves the original untouched, so the two can be compared. `ss.stratify(sir, age=[0, 15, 65])` is the same thing. [CK: hm, i wonder if we need to support the case where not the full stratification matrix is needed. for example, stratify females by age but not males.]
 4. **The base model does not mention strata; the stratification supplies multiplicative adjustments.**
 5. **Some dimensions carry structure.** Age implies aging. Space may have movement between patches, or none. Strain changes who can infect whom.
 6. **Strain can be a dimension or a second disease.** Support both, and say when each fits.
@@ -176,7 +176,7 @@ sir_risk = sir.stratify(risk=['low', 'high'], adjust={'infection': [1.0, 3.0]})
 | Compartmental (`'ode'`, `'ctmc'`, ...) | Splits `S`, `I`, `R` into `S_low`, `S_high`, … and splits every transition, applying the adjustment |
 | Agent-based | Adds a per-agent `risk` property with the given split, and scales `rel_sus` by the adjustment |
 
-Nothing in the model text changes. This is why an EMOD Individual Property and a camdl stratum are the same declaration.
+Nothing in the model text changes. This is why an EMOD Individual Property and a camdl stratum are the same declaration. [CK: how is it kept manageable if there are a lot of strata? if i want to know the total number of infectious people, i don't want to manually have to sum over `res.I_0_female_low` through to `res.I_55_male_high`. if you can think of how it would work, great! but i'm struggling to think of how to sensibly collapse the potentially very many compartments into meaningful groupings, since the user indeed might want to know `res.I`, `res.I_female`, `res.I_high`, `res.I_female_high`, etc....]
 
 In an agent-based run a continuous property stays continuous. The bins are used only where something needs groups: a compartmental run, a per-group parameter, or a result selected by group.
 
@@ -188,7 +188,7 @@ hiv_cd4 = hiv.stratify(cd4=[0, 200, 350, 500])   # agents keep their exact CD4 c
 
 summer2 enforces: a mixing matrix requires a *complete* stratification; `AgeStratification` may be applied once; `StrainStratification` may be applied once; strains cannot carry a mixing matrix. Its review is right that "a mixing matrix requires a complete stratification is a correctness property, not an implementation limit".
 
-camdl's errors are the model for how to deliver these. E238 rejects a `count` on a bare stratified transfer "because it would multiply the intended total by the number of cells"; E239 rejects a bare endpoint inside an indexed family "because realized coverage would be `1 − (1 − f)^P` rather than `f`". From its review: "Each of these is a real modeling bug that other frameworks silently commit."
+camdl's errors are the model for how to deliver these. E238 rejects a `count` on a bare stratified transfer "because it would multiply the intended total by the number of cells"; E239 rejects a bare endpoint inside an indexed family "because realized coverage would be `1 − (1 − f)^P` rather than `f`". From its review: "Each of these is a real modeling bug that other frameworks silently commit." [CK: not sure i understand the example below ... why wouldn't all states be stratified by default?]
 
 ```text
 StratifyError: contact matrix by 'age' given, but 'age' does not cover every infectious state.
@@ -203,7 +203,7 @@ summer2 has `Multiply` and `Overwrite`. Its own implications section asks "consi
 ## Trade-offs
 
 - **Stratification is order-dependent even with multiplicative adjustments**, because the *set of transitions* being adjusted changes as strata are added. summer2 enforces ordering constraints "but they are not derivable from the model text — you have to know them". `describe()` prints the resolved stratified model, and combinations that are wrong are errors.
-- **Returning a new model means remembering to use it.** `sir.stratify(age=...)` on a line by itself does nothing to `sir`. This is how NumPy and pandas behave, and it is what makes side-by-side comparison possible.
+- **Returning a new model means remembering to use it.** `sir.stratify(age=...)` on a line by itself does nothing to `sir`. This is how NumPy and pandas behave, and it is what makes side-by-side comparison possible. [CK: hm. i think a la pandas we could have `inplace=True` by default, because i think this will be the standard case.]
 - **Two ways to do strains is one more decision for the user.** The rule of thumb above covers most cases; the two give the same answer where they overlap.
 - **The operator only supports what it implements.** odin's arrays are maximally general and maximally laborious. Anything it does not cover can be written as explicit per-group transitions; `describe()` shows a hand-written transition alongside the generated ones.
 - **Strata multiply.** Age (16) × risk (2) × strain (3) × patch (47) is 4,512 compartments, and someone will do it by accident. Print the compartment count at build time, and note that an agent-based run does not grow this way, which is a good reason to switch.
@@ -215,7 +215,7 @@ summer2 has `Multiply` and `Overwrite`. Its own implications section asks "consi
 - **`Overwrite` adjustments** (summer2), for the reason above.
 - **Stratification by writing out the compartments** ([epipack](../approaches/epipack.md), [Epydemix](../approaches/epydemix.md)). "Age structure means writing out `S_child`, `S_adult` and every process between them by hand."
 - **A separate metapopulation concept.** Space is a dimension, with or without movement, not a different kind of model. See [metapopulation.md](metapopulation.md).
-- **Stratifying in place.** A `stratify` that changed the model it was called on would lose the unstratified version.
+- **Stratifying in place.** A `stratify` that changed the model it was called on would lose the unstratified version. [CK: see above for `inplace` suggestion]
 - **Every agent property as a dimension.** Dimensions multiply compartments; properties do not have to.
 - **`'no -> yes'` arrows for boolean dimensions.** `vaccinated=True` says the same thing.
 - **Ontology-identified strata as a requirement** (MIRA's `context` keyed to ontologies). Optional.
