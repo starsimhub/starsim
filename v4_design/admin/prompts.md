@@ -1,6 +1,6 @@
 # Prompts
 
-This is a record of the prompts used to create the original contents of this repository, with a summary of what each one produced. All of the work was done with Claude Code on 25 August 2026, in three sessions. The prompts are reproduced exactly as typed, including typos. Times are UTC.
+This is a record of the prompts used to create and revise the contents of this repository, with a summary of what each one produced. All of the work was done with Claude Code: the original contents on 25 August 2026, in three sessions, and the revisions that followed human review from 12 October 2026. The prompts are reproduced exactly as typed, including typos. Times are UTC. Housekeeping prompts (asking where the review had got to, setting up this file and its skill) are not recorded.
 
 The root `README.md` was written by hand before the first session, so it has no prompt. The full session transcripts are archived in [`transcripts/`](transcripts/); the file for each session is named below.
 
@@ -14,6 +14,10 @@ The root `README.md` was written by hand before the first session, so it has no 
 | 4 | 15:47 | Apply feedback and finish the reviews | 22 framework reviews, `notes.md`, and an index (3,542 lines) | `5997bdb` |
 | 5 | 17:18 | Fill out `best-practices` | 16 documents plus an index (2,847 lines) | `c24ff3d` |
 | 6 | 19:40 | Build out `design` | 20 specification documents plus an index (3,658 lines) | `f6ff541` |
+| 7 | 12 Oct, 07:29 | Recapitulate the prompts and apply the first `CK:` comments | `best-practices/` and `design/` revised throughout; `questions-oct11.md` with 63 guesses to confirm | `e00c694`, `0b934ce`, `3bca852` |
+| 8 | 12 Oct, 16:16 | Review the work to date | A report on `best-practices`, six decisions to make, and five `design` files updated | `a4e06c5` |
+| 9 | 12 Oct, 18:51 | Apply the review | The listed fixes to `best-practices/` and the decisions carried into `design/` | `a4e06c5` |
+| 10 | 13 Oct, 03:19 | Address the remaining `CK:` comments and answers, then review `design` | 39 files revised: all of `best-practices/` and `design/` | not yet committed |
 
 ## Session 1: folder structure
 
@@ -163,3 +167,106 @@ Writing the specification forced several decisions that the best practices had l
 - Starsim's `per` type was renamed `rate`, flagged as the only rename.
 
 Two items were raised for attention. The largest unresolved question (B1 in `19-open-questions.md`) is that vector-borne transmission does not fit the force-of-infection form without a second host population. And `ss.Effect` carries a great deal of the design (interventions, connectors, waning, triggers, seasonality, and product efficacy all compile to it), which is an argument for refusing extensions to it.
+
+## Session 4: first revision after review
+
+Transcript: `0d67c1c6-dc58-4468-94d2-eceb363c910a.jsonl`
+
+By this point `agent-based.md`, `calibration.md`, `compartmental.md`, `composition-and-effects.md`, and `interventions.md` in `best-practices/` carried inline `[CK: ...]` review comments, and `ck-feedback1.md` held two general ones.
+
+### Prompt 7 (12 October 2026, 07:29)
+
+```text
+i was working with an earlier version of opus for this project. i'd like you to check the work and look for improvements. specifically:
+1. read README.md, prompts.md, notes.md, and all the other core files
+2. i'd like you to recapitulate the prompts, independently or semi-independently of the original agent who completed them, and come up with your own ideas
+3. based on what you learn, and also integrating my comments (marked with "CK:"), update the .md files in the subfolders
+4. you are on a new branch so go ahead and modify the files directly, but don't modify any files outside of the root folder.
+5. don't ask me any questions, make your best guess and keep going until you're done. you can collect questions into questions-oct11.md.
+6. you will likely run out of tokens partway through ... resume when your token quota refreshes.
+
+thanks!
+```
+
+**Response.** Revised `best-practices/` and `design/` throughout, applied the comments, and wrote `questions-oct11.md`: 63 questions it would have asked, each with the guess it went with and what to change if the guess was wrong. `approaches/` got an American-spelling pass, and `starsim.md` and `camdl.md` were fact-checked against the current source.
+
+The main changes from the first draft:
+
+- **One transition class.** `S >> I @ beta * I` is contact-mediated because the rate mentions a state, and `I >> R @ gamma` is spontaneous because it does not. `ss.transmission` and `ss.progression` remain as shorthand, and a bare number after `@` is a rate.
+- **`ss.modify` replaces `ss.Effect`**, with any named quantity as a target and plain `step()` code, presented as a normal way to work, for anything more complex.
+- **The approximation policy.** `method='auto'` never approximates; asking for a method the model does not fit uses the standard approximation and prints one line saying so.
+- **`ss.Compartments`** for vectors and environmental reservoirs, replacing `ss.Continuous`, which the first draft had left as its largest open problem.
+- **Starsim's loop stays.** Queued updates, named phases, and derived ordering are gone, as are required `writes`/`requires` declarations.
+- **Calibration without a likelihood**, by normalized RMSE, and `ss.compare_models`.
+- **A softer voice in `design/`.** "Guess and print" replaces most hard errors; the error catalog went from 87 codes to 48, and `14-ir.md` became `14-model-spec.md`.
+
+The vocabulary did not get smaller: 133 public names against the first draft's 134.
+
+## Session 5: review of the revision
+
+Transcript: `80513970-5406-458d-bed8-0e66586c8987.jsonl`
+
+### Prompt 8 (16:16)
+
+```text
+i'd like you to do a review of the work done on this project to date. specifically:
+1. read the readmes
+2. you can skim or skip ./approaches, but i want you to go into detail on best-practices
+3. after you're done with ./best-practices, you can update ./design
+4. watch your token usage! make sure you don't run out of tokens partway through with a lot of unwritten content
+```
+
+**Response.** Found the revision coherent and `design/` consistent with `questions-oct11.md`. The problems were three `[CK:]` notes in `model-structure.md` that had not been acted on, examples in `best-practices/` that predated the October decisions, and six decisions for a human:
+
+- how to avoid typing `S I R` twice in `ss.states('S I R')`;
+- the name `ss.Compartments`, and whether a per-module run method would remove the class;
+- the default time unit (days, or Starsim's years);
+- whether `method=` belongs on `ss.Sim` only or also on `sim.run()`;
+- `new_infections[-7:]` in triggers, which is wrong while results are preallocated;
+- candidates to trim from the vocabulary (`ss.Needs`, `ss.export`, `check_reps`, three mobility models).
+
+It listed fixes needed in eight `best-practices` files without applying them, because those files were mid-review, and updated five `design` files: forgiving arrow strings, `ss.State()` in a class body, the capitalization rule for products, `ss.Sim([...])`, and new entries in `19-open-questions.md`.
+
+### Prompt 9 (18:51)
+
+```text
+sounds good, pleaes apply these. for the decisions, all sound good. method= should not be sim only.
+```
+
+**Response.** Applied the listed fixes to `best-practices/` and carried the decisions into `design/`, with `method=` accepted by both `ss.Sim` and `sim.run()`. The vocabulary trim deferred `ss.Needs`, `ss.export`, `check_reps`, and the mobility models beyond `ss.gravity`.
+
+## Session 6: second revision after review
+
+Transcript: `7a6450dc-1675-40d1-8577-516da018b17d.jsonl`
+
+Before this session the remaining nine `best-practices` files had been reviewed, with `[CK: ...]` comments, and every question in `questions-oct11.md` had been answered inline.
+
+### Prompt 10 (13 October 2026, 03:19)
+
+```text
+address my comments ("CK:") in the remaining files in ./best-practices, and review my answers in questions-oct11.md. then, when you're done, review all of ./design against the documents in ./best-practices and update those files as needed.
+```
+
+**Response.** Addressed and removed every comment in the nine files, applied the answers, and wrote the result down as a list of 43 decisions. Five parallel agents then brought the other eight `best-practices` files and all of `design/` into line with that list, and the results were cross-checked. 39 files changed, including the status lines in the root `README.md`.
+
+Changes that came directly from the comments and answers:
+
+- **`solver=` and `sim.solvers()`** replace `method=` and `methods()`. The exact stochastic solver is `'gillespie'`, with `'ctmc'` as an alias, and the ODE library is chosen with `integrator=`.
+- **Time is in timesteps when nothing has a unit.** Otherwise the unit comes from `unit=`, `dt`, the dates, or the typed values, and is printed.
+- **`stratify` works in place by default**, with `inplace=False` for a copy.
+- **A sim is one trajectory.** Many runs are a MultiSim (`ss.parallel(sim, n_runs=100)`).
+- **`solver='auto'` may use Erlang stages** for a non-exponential dwell time, and says so; `approx=True` silences an approximation note.
+- **Smaller ones:** `S, I, R = ss.states(3)`, `ss.null` as the source and sink, `.select()` on results, `ss.data(..., aliases=)`, `requires`/`ss.Requires`, `ss.people('Kenya')`, an opt-in transmission log, and `track_writes` off by default.
+
+Decisions the response made and flagged, all then accepted:
+
+- **No `ss.Compartments`.** A reservoir or a vector population is ordinary states in the same disease, treated as a count because no transition connects it to the states people move through; `ss.State(people=False)` says so outright.
+- **`S >> I @ beta` is a constant hazard**, not transmission; the word `transmission` in the short form stands for `* I`.
+- **The default goodness of fit is the normalized absolute error**, as in Covasim, in place of normalized RMSE.
+- **`ss.outcome` takes a weighted sum of flows**, with `every=` for reporting periods and no `p=`. When testing is modeled, reported cases come from the interventions' own results.
+- **People properties are stratified on the sim** (`sim.stratify(age=...)`), and a disease's own dimensions on the disease.
+- **Reproducibility was cut back.** Common random numbers are keyed on Starsim's slots only, result caching is deferred, `ss.export` is dropped, and `sim.hash()` is described as a supplement to the git tag.
+- **Triggers.** `ss.modify(when=)` is a function with no memory, and `min_duration=` is gone.
+- **Gradients for fitting** come from automatic differentiation of ODE models through JAX; symbolic Jacobians stay out.
+
+`design/17-vocabulary.md` now counts 132 public names and `design/15-errors.md` 54 codes.
