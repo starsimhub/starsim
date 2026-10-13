@@ -33,7 +33,7 @@ ss.par(
 beta = ss.par(0.05, bounds=[0.001, 0.5], source='Ferguson et al. 2020, Table 2')
 dur  = ss.par(ss.days(10), bounds=[3, 30])
 
-S, I, R = ss.states('S I R')
+S, I, R = ss.states(3)
 sir = ss.Disease(
     infection = S >> I @ beta * I,
     recovery  = I >> R @ dur,
@@ -44,7 +44,7 @@ An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a n
 
 - **Names.** A named parameter is collected into the module's `pars`, Starsim's parameter container, under its name: `sir.pars.beta`. The name is the keyword if it was passed as one (`ss.Disease(beta=ss.par(0.05), ...)`), else the variable it is bound to, by the same lookup as for transitions ([01-objects.md](01-objects.md#names)). A plain Python number used in a rate is just a number; wrap it in `ss.par` to make it addressable by name.
 - **`bounds`** is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data ([13-inference.md](13-inference.md)). The scale used for the search (log for rates and durations, logit for probabilities) follows from the slot the parameter is used in. Bounds given as bare numbers are in the unit of the value. A value outside its bounds raises `E606 OutOfBounds`.
-- **`prior`** is needed only for posterior methods. Without one, a parameter with bounds is treated as uniform over them.
+- **`prior`** is needed only for posterior methods. Without one, a parameter with bounds is treated as uniform over them. `bounds` and `prior` are separate fields: bounds say which values are valid and where to search, a prior says what is believed. Whether they should be one field is an open question ([19-open-questions.md](19-open-questions.md)); both are kept.
 - **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()` and saved in the model spec.
 - **The type** of a parameter (rate, duration, probability) comes from the slot it is used in ([02-types.md](02-types.md)) or from its typed value. There is no `kind=` argument.
 - **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises `E604 UnvaluedParameter`.
@@ -73,11 +73,11 @@ beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03      # a fu
 ```
 
 - `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, or `'spline'`.
-- A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the run method provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
+- A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the solver provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
 - The forms combine: `ss.by(age=[...])` may hold time series, and a function may return any of the others' values.
 - Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a source.
 
-Every run method handles every form or says that it cannot. In particular a time-varying rate under an exact continuous-time method (`'ctmc'`) needs the time-inhomogeneous algorithm; a method MUST NOT freeze the rate at its starting value.
+Every solver handles every form or says that it cannot. In particular a time-varying rate under the exact continuous-time solver (`'gillespie'`) needs the time-inhomogeneous algorithm; a solver MUST NOT freeze the rate at its starting value.
 
 ### A distribution as a value, a distribution as a prior
 
@@ -88,7 +88,25 @@ ss.progression('I -> R', dur=ss.lognorm_ex(mean=10, std=3, unit='days'))    # va
 ss.par(0.05, prior=ss.lognorm_ex(mean=0.05, std=0.01))                      # uncertainty about one number
 ```
 
-The first gives each agent their own dwell time (and becomes stages in a compartmental run). The second is a prior over a single value and is used only by calibration.
+The first gives each agent their own dwell time. The second is a prior over a single value and is used only by calibration.
+
+A compartmental run has no individuals to draw for, so variation between people is represented in one of two ways, depending on the slot:
+
+| Where the distribution is | `solver='auto'` | An explicit compartmental solver (`solver='ode'`) |
+|---|---|---|
+| A dwell time (`dur=`) | Erlang stages matched to the distribution's mean and variance, with a note ([03-states-and-transitions.md](03-states-and-transitions.md)) | the same |
+| Anything else (`beta`, `rel_sus`, `rel_trans`) | the model runs as agents | the mean is used, with a note naming the parameter |
+
+To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `E804 CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
+
+The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. There is no `ss.erlang`: an Erlang distribution is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), and sub-stages are `stages=3` on the transition.
+
+The unit of a distribution is given once, either with `unit=` or on one of its parameters; the other parameters of the same dimension take it:
+
+```python
+ss.lognorm_ex(mean=10, std=3, unit='days')
+ss.lognorm_ex(mean=ss.days(10), std=3)        # the same
+```
 
 ## Shapes
 
@@ -120,52 +138,65 @@ sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
 
 `pars=` takes a dict or a file (CSV, TOML, or JSON) of values by name (`beta`, or `sir.beta` when there is more than one module). Names it does not recognize raise `E602 UnknownParameter`.
 
-Either way, `sim.hash()` reports the factored run identity ([11-random.md](11-random.md)):
+Either way, `sim.hash()` returns the parts of the run's identity as an `sc.objdict` ([11-random.md](11-random.md)):
 
 ```text
-model=8f3a21  pars=c47e90  config=1b6d55  scenario=baseline  fit=none  seed=1
+>>> sim.hash()
+objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', seed=1)
 ```
 
-so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file.
+A change of values changes `pars` and nothing else, so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file. The hash is a cheap by-product, useful for telling apart the many runs of a sweep or a calibration made from one commit; the git hash or tag of the code remains the main record of what was run.
 
 ## Requirements
 
-Deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)): the attribute and the class below had different names, and the feature serves one use case (Atomica's databook). It is kept here as the design for when a vignette needs it.
-
-A module MAY list the data it needs. This is optional metadata, used to tell the user what to supply and to generate a data-entry form. It is not enforced: a module can read anything, and a module that lists nothing works as before.
+A module MAY list the data it needs. One word, `requires`, names the list on the module, the entries in it, and the table. This is optional metadata, used to tell the user what to supply, to check inputs before anything runs, and to generate a data-entry form. It is not enforced: a module can read anything, and a module that lists nothing works as before.
 
 ```python
 class MyNetwork(ss.Network):
     requires = [
-        ss.Needs('population',     shape='patch',     source='UN WPP 2024'),
-        ss.Needs('contact_matrix', shape='age x age', source='socialmixr:POLYMOD'),
+        ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
+        ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
     ]
 ```
 
-`ss.Needs(name, shape=, source=, doc=, default=)` describes one item. For modules made only of states, transitions, and parameters, the list is generated from the parameters, so nothing has to be written.
+`ss.Requires(name, shape=, source=, doc=, default=)` describes one item. For modules made only of states, transitions, and parameters, the list is generated from the parameters, so nothing has to be written.
 
 ```python
-sim.needs()                 # the table of what this sim needs, and which items are still missing
-sim.needs(to='form.csv')    # a data-entry form with those fields, units, and labels
+sim.requires()                 # the table of what this sim requires, and which items are still missing
+sim.requires(to='form.csv')    # a data-entry form with those fields, units, and labels
 ```
 
-`needs(to=...)` is Atomica's databook, generated from the model. Because the list is optional, the form is as complete as the declarations are; items a module reads without listing do not appear in it.
+`requires(to=...)` is Atomica's databook, generated from the model. It serves one use case and is deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); the list and the table are not. Because the list is optional, the table and the form are as complete as the declarations are; items a module reads without listing do not appear in them.
 
 ## Named data
 
 A reference to data is part of the model: not just a contact matrix, but which one, from which source, for which place.
 
 ```python
-ss.People('Kenya', year=2024)                     # size, age structure, sex ratio
-ss.contacts('Kenya', source='prem_2021')          # an age contact matrix, as mixing pools
+ss.people('Kenya', year=2024)                     # size, age structure, sex ratio; returns an ss.People
+ss.contacts('Kenya', source='prem2021')           # an age contact matrix; returns a set of ss.MixingPools
 ss.geo('Kenya', level='county')                   # names, populations, centroids, adjacency
 ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to results by column name
 ```
 
-- Data is fetched on first use and cached locally; the cache key includes the source and its version.
-- The resolved source, version, and retrieval date are shown by `describe()` and contribute to the parameter hash, so a re-run against changed upstream data can be detected.
-- Providers are pluggable, so a group can add its own sources.
-- A place name that cannot be resolved raises `E605 UnknownLocation`, listing near matches and the providers searched.
+```python
+sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya', source='prem2021'))
+```
+
+`ss.people`, `ss.contacts`, and `ss.geo` are lowercase because they are loaders: each looks up named data and returns the ordinary object. `ss.People(n_agents=10_000)` remains the class.
+
+**Bundled and pulled.** The data comes from [`starsim_data`](https://github.com/starsimhub/starsim_data) (`import starsim_data as ssd`), which does some of each:
+
+- **Bundled**: what is small and common. UN World Population Prospects population, birth, death, and migration rates for every country, and the Prem (2017, 2021) and Mistry (2021) age contact matrices by setting (`all`, `home`, `work`, `school`, `community`). Reading it (`ssd.load('kenya', which='prem2017', kind='home')`) never touches the network, so it works offline and is reproducible from a pinned version.
+- **Pulled**: everything else, fetched on demand and cached locally (`ssd.fetch('kenya', which='deaths', years=(2000, 2025))`): annual resolution, life tables, other projection variants. The cache key includes the source and its version.
+- **Versioned**: each UN revision is kept as a separate store, so a new release adds data and does not change what an existing model loads; `revision=` pins one.
+- **Provenance**: every data set records its source and license (`ssd.provenance('prem2017')`).
+
+The library does not depend on other frameworks' packages (LASER's migration module, `epydemix-data`, `socialmixr`) for generators or data. A data set is adapted once, with its provenance recorded, and then it is ours to keep working.
+
+- The resolved source, version, and (for pulled data) retrieval date are shown by `describe()` and contribute to the `pars` part of `sim.hash()`, so a re-run against changed upstream data can be detected.
+- Providers are pluggable, so a group can add its own sources. Geographies in particular are not in `starsim_data` today (it is national-level) and come from a provider or from the user's own files ([06-routes.md](06-routes.md#geography)).
+- Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises `E605 UnknownLocation`, listing near matches and the providers searched.
 
 How data is matched to results is in [09-results.md](09-results.md).
 
@@ -176,3 +207,6 @@ How data is matched to results is in [09-results.md](09-results.md).
 - **String-built parameter names.** `ss.by` does this job.
 - **Required, enforced data declarations.** Requirements are metadata.
 - **A `use_defaults` switch** that hides a model's behavior. Defaults here are guessed and printed.
+- **New distribution names, including `ss.erlang`.** Starsim's names are used; an Erlang is `ss.gamma` with an integer shape, or `stages=` on the transition.
+- **Repeating the unit on every parameter of a distribution.** Once is enough.
+- **Depending on outside packages for data.** Bundle what is small and common, pull the rest with a cache, and own both.
