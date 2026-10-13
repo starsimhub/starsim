@@ -2,8 +2,8 @@
 Theoretical networks, useful for comparison against analytic results and for debugging.
 """
 import numpy as np
+import sciris as sc
 import starsim as ss
-ss_float_ = ss.dtypes.float
 
 class ErdosRenyiNet(ss.DynamicNetwork):
     """
@@ -35,15 +35,16 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         sim.run()
         ```
     """
-    def __init__(self, key_dict=None, pars=None, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         """ Initialize """
-        super().__init__(key_dict=key_dict)
+        super().__init__()
         self.define_pars(
             p = 0.1, # Probability of each edge
-            dur = ss.years(0), # Duration of zero ensures that new random edges are formed on each time step
+            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
         )
         self.update_pars(pars, **kwargs)
-        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
+        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years (the default isn't ss.years(0) so a Dist is allowed)
+        self.rng_ints = ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64) # Used to draw a random number for each agent as part of creating edges; must be uint64 for ss.utils.combine_rands()
         return
 
     def add_pairs(self):
@@ -52,20 +53,21 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         born_uids = (people.age > 0).uids
 
         # Sample integers
-        ints = self.randint.rvs(born_uids)
+        ints = self.rng_ints.rvs(born_uids)
 
         # All possible edges are upper triangle of complete matrix
         idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
 
-        # Use integers to create random numbers per edge
+        # Use integers to create random numbers per edge: combining one integer per agent is
+        # far cheaper than drawing a random number for each of the O(N^2) possible edges
         i1 = ints[idx1]
         i2 = ints[idx2]
-        r = ss.utils.combine_rands(i1, i2) # TODO: use ss.multi_rand()
+        r = ss.utils.combine_rands(i1, i2) # Uniform on [0, 1] # TODO: use ss.multi_rand()
         edge = r <= self.pars.p
 
-        p1 = idx1[edge]
-        p2 = idx2[edge]
-        beta = np.ones(len(p1), dtype=ss_float_)
+        p1 = born_uids[idx1[edge]]
+        p2 = born_uids[idx2[edge]]
+        beta = np.ones(len(p1), dtype=ss.dtypes.float)
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)

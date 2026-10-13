@@ -45,65 +45,6 @@ def test_microsim(do_plot=False):
 
 
 @sc.timer()
-def test_results():
-    sc.heading('Testing results export and plotting')
-
-    # Make a sim with 2 SIS models with varying units and dt
-    d1 = ss.SIS(dt=ss.years(1/12), name='sis1')
-    d2 = ss.SIS(dt=ss.years(0.5), name='sis2')
-    sim = ss.Sim(n_agents=medium, diseases=[d1, d2], networks='random')
-
-    # Run sim and pull out disease results
-    sim.run()
-    rs1 = sim.results.sis1
-    rs2 = sim.results.sis2
-
-    # Export a single result to a series or dataframe
-    res = rs1.new_infections
-    res_df = res.to_df()
-    res_series = res.to_series()
-    assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
-
-    # Test resampling (always returns a Result)
-    resampled = rs1.new_infections.resample(new_unit='year')
-    assert isinstance(resampled, ss.Result)
-    assert len(resampled.values) < len(rs1.new_infections.values)
-
-    # Test that resample and annualize produce the same values
-    annualized = rs1.new_infections.annualize()
-    assert np.allclose(resampled.values, annualized.values, rtol=1e-10)
-
-    # Test Results.annualize() (annualizes all results in the group)
-    rs1_annual = rs1.annualize()
-    assert isinstance(rs1_annual, ss.Results)
-    assert len(rs1_annual.new_infections.values) == len(annualized.values)
-    assert np.allclose(rs1_annual.new_infections.values, annualized.values, rtol=1e-10)
-
-    # Export results of a whole module to a dataframe
-    dfs = rs1.to_df()
-    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections
-
-    # Export resampled summary of results to dataframe
-    dfy1 = rs1.to_df(resample='year')
-    dfy2 = rs2.to_df(resample='5YE')
-    assert dfs.new_infections.iloc[:12].sum() == dfy1.new_infections.iloc[0]
-    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible.iloc[0]  # Entries 0 and 1 represent 2000
-    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible.iloc[1]  # Entries 2-12 correspond to 2001-2005
-
-    # Export whole sim to unified annualized dataframe
-    sim_df = sim.to_df(resample='year', use_years=True)
-    assert sim_df.sis1_n_infected.values[0] == rs1.n_infected[:12].mean()
-    assert sim_df.sis2_n_infected.values[0] == rs2.n_infected[:2].mean()
-
-    # Plot
-    res.plot()
-    sim.results.sis1.plot()
-    sim.results.sis2.plot()
-
-    return sim
-
-
-@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=ss.RandomNet()), n_agents=small)
@@ -173,7 +114,6 @@ if __name__ == '__main__':
 
     # Run tests
     sim1  = test_microsim(do_plot)
-    sim2  = test_results()
     sims1 = test_deepcopy()
     sims2 = test_deepcopy_until()
     mods  = test_custom_imports()

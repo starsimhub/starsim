@@ -1,21 +1,21 @@
 """
 Test simulation performance -- Numba version
 
-Uses a single njit-compiled function with a for loop to avoid
+Uses a single jit-compiled function with a for loop to avoid
 per-step dispatch overhead. All state is carried as NumPy arrays (mutable).
 """
 import numpy as np
-from numba import njit
+from numba import jit
 import sciris as sc
 
 
 #%% Numba-compiled simulation loop
 
-@njit
+@jit
 def numba_run(seed, infected, susceptible, ti_recovered, immunity, rel_sus,
               res_sus, res_inf, res_rel_sus,
               n_agents, n_edges, dur, source, edge_beta, disease_beta, dur_inf, waning, imm_boost):
-    """ Run the full SIS simulation inside a single njit-compiled loop """
+    """ Run the full SIS simulation inside a single jit-compiled loop """
     np.random.seed(seed)
 
     # Pre-compute lognormal parameters (std=1)

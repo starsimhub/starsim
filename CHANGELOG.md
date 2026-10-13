@@ -2,6 +2,101 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.7.2 (2026-10-06)
+- `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.
+- *GitHub info*: PR [1435](https://github.com/starsimhub/starsim/pull/1435)
+
+
+## Version 3.7.1 (2026-10-03)
+
+### New features
+- `sim.add_module()` adds a module (e.g. an intervention) to a sim that has already been initialized or partly run.
+- `ss.RandomNet(uniform_targets=True)` (and `ss.HybridNet(uniform_targets=True)`) chooses the target of each edge uniformly from the eligible agents, as in Covasim v3, rather than in proportion to their number of contacts. This gives less variable numbers of contacts (e.g. a variance of 15 rather than 30 with `n_contacts=ss.poisson(20)`).
+- `sim.people.dead` now covers every agent ever created (indexed by UID), so `people.dead.sum()` is the number of deaths and `people.dead.uids` are the agents who died. Dead agents are still removed from all other arrays. Previously, it was always `False` after each timestep. (Note: `ti_dead` is unchanged, since this is used to schedule deaths.)
+
+### Performance
+- Network transmission, `ss.find_contacts()`, and removing dead agents from networks now use Numba for speed (up to 3x faster for some sims). Random numbers for transmission are now only drawn for edges that can transmit. `Network.find_contacts()` is a further 1.3–4x faster, since it no longer creates a set; `ss.find_contacts()` has a new `as_array` argument to do the same.
+
+### Changes that may affect results
+- *Regression*: with `ss.options.crn = False`, transmission results differ stochastically, since fewer random numbers are drawn. Results with CRN (the default) are unchanged.
+- *Regression*: `ss.RandomSafeNet` now avoids ties by using `float64`, fixing a bug which gave agent 0 too many contacts.
+
+### Changes that may require migration
+- *Migration*: sim and module parameters are now locked when the sim is initialized, so setting a parameter that doesn't exist (e.g. a typo such as `sim.pars['rand_sed'] = 2`) raises an error instead of silently doing nothing. To add a new parameter after initialization, use `pars.update(my_par=..., create=True)`.
+
+### Bugfixes
+- `dist.shrink()` now removes the SciPy distribution and the random number generator, so modules with many distributions no longer fail the size check in `sim.shrink()`.
+- `ss.Results()` can be created without a module, so results can be merged like dicts, e.g. `sc.mergedicts(sim.results, other)`.
+- `network.validate()` no longer fails for a network with no edges, and `sim.current_scale` no longer fails if called during initialization with `rescale=True`.
+- *GitHub info*: PR [1433](https://github.com/starsimhub/starsim/pull/1433)
+
+
+## Version 3.7.0 (2026-10-02)
+This release adds features needed to port Covasim to Starsim (Covasim v4), and which are also useful for other disease models: 2D results and agent arrays (e.g. by variant), CRN-safe choice of exactly *N* agents, dynamic rescaling, Covasim's "hybrid" network (household, school, workplace, and community networks), and more MultiSim methods.
+
+### New features
+- 2D results: `res = ss.Result(..., columns=['wild', 'alpha'])` has shape `(npts, ncols)`. `res.alpha` (or `res.col('alpha')`) returns a 1D result for that column; scaling, `to_df()`, `sim.summarize()`, `resample()`/`annualize()`, `MultiSim.reduce()` and plotting all handle one column/line per result column.
+- 2D agent arrays: `ss.FloatArr('sus_imm', columns=n_variants)` (and the same for `BoolArr`/`IntArr`) grow with the population like other states. Columns can be named, e.g. `columns=['wildtype', 'mutant']` allows `arr.mutant` (or `arr['mutant']` or `arr.col('mutant')`, and e.g. `arr.mutant += 0.1` updates the column), and more dimensions are supported via e.g. `columns=(2,3)`.
+- `ss.choose_n(n, weights=None)` chooses exactly `n` agents without replacement, and is CRN-safe: if the candidates change slightly, most of the same agents are chosen. It can be used for exact-count seeding, e.g. `ss.SIR(init_prev=ss.choose_n(20))`, or anywhere else an `ss.bernoulli()` can be used.
+- Distributions accept a `round` option at creation, e.g. `ss.lognorm_ex(ss.days(5), ss.days(2), round='nearest')`; `round=True` (or `'stochastic'`) rounds stochastically as before, and `round='nearest'` rounds deterministically (also accepted by `dist.rvs()`).
+- Dynamic rescaling, as in Covasim: with `ss.Sim(rescale=True)`, the population scale factor starts at 1 and increases to `pop_scale` as agents stop being naive, making some of them naive again via the new `disease.make_naive()`; the per-timestep scale is in `sim.results.pop_scale`, and `sim.current_scale` gives the current value. Controlled by the new sim parameters `rescale`, `rescale_threshold` and `rescale_factor`. See the new [Population rescaling](https://docs.starsim.org/user_guide/advanced_rescaling.html) user guide page.
+- `ss.Infection.infect()` is split into `infect_route()`, which computes transmission along one network, and `finalize_infections()`, which removes duplicate infections, so multi-strain diseases can call `infect_route()` once per strain.
+- New networks: `ss.ClusterNet` (fully connected clusters, e.g. households) and `ss.HybridNet` (Covasim's household, school, work and community networks, which become four networks `h`, `s`, `w` and `c` when added to a sim). `ss.RandomNet` and `ss.RandomExactNet` have new `dynamic` (set `False` for a static network) and `age_range` parameters.
+- New network methods: `net.remove_edges()` (indices or a boolean mask), `net['p1']` to get an edge column, and `net.eligible()`; `net.from_df()` also accepts a dict of arrays, and returns the network.
+- New MultiSim methods: `combine()` (merge the sims into one larger sim), `ss.MultiSim.merge()` and `split()`, and `compare()`/`plot_compare()`.
+- The infection log (`ss.infection_log`) now records the network of each infection, and extra data per infection (e.g. `log.add_entries(uids, sources, t, variant=variants)`); it stores entries as arrays, so it is much faster.
+- The docs now publish a machine-readable index of the whole API, including default module parameters, for LLMs and other tools: <https://docs.starsim.org/llms.txt> (also `llms-full.txt`, with examples, and `api.json`). This replaces the root `llms.txt`, which was a copy of `CLAUDE.md`.
+
+### Changes that may affect results
+- *Regression*: stochastic rounding (`dist.rvs(round=True)`) is now CRN-safe, so results that use it (e.g. `ss.NCD`) will differ.
+- *Regression*: results inside nested `ss.Results` are now scaled by `pop_scale` (previously only top-level results were).
+- *Regression*: cumulative infections are now summed after scaling, which may give differences at the level of floating-point precision.
+
+### Changes that may require migration
+- *Migration*: comparing `sim.t` (an `ss.Timeline`) to a number, or using it as an index, now raises an error; use `sim.ti` instead (e.g. `if sim.ti == 10`). Setting `self.t` on a module also gives a clearer error.
+- *Migration*: module names must be unique across all module types. Two modules with the same default name (e.g. two `ss.RandomNet()`s) are now renamed with a warning (`randomnet`, `randomnet_1`) rather than raising an error; explicitly set names that clash still raise an error.
+- *Migration*: `ss.InfectionLog` is no longer a NetworkX graph; use `log.to_df()`, or `log.to_graph()` for a graph.
+- *Migration*: `init_prev` values greater than 1 now raise an error (previously they infected everyone); use `ss.choose_n(n)` to seed a fixed number of infections.
+- *GitHub info*: PR [1431](https://github.com/starsimhub/starsim/pull/1431)
+
+
+## Version 3.6.2 (2026-09-30)
+This release contains many LLM-assisted bugfixes. Most changes should have relatively little impact on users, although results may differ slightly for some results in some projects.
+
+### Changes that may affect results
+- *Regression*: `ss.Deaths` treated death rates given per month/week/day as per year.
+- *Regression*: `ss.SIR` recovery/death and `ss.Pregnancy` losses were mistimed when the module had its own `dt`; CBR, CMR, and burn-in fetus ages also used the sim's `dt` instead of the module's.
+- *Regression*: `ss.Pregnancy` burn-in started one step late and its events were counted at `ti=0`; fetal deaths caused by maternal death are now classified by gestational age; fertility data are now looked up at the mean pregnancy duration rather than the shortest.
+- *Regression*: `ss.NCD` agents with a zero-length prognosis never died.
+- *Regression*: `ss.randint` UID draws now use 64-bit uniforms (previously correlated for wide ranges, e.g. `ssl.ErdosRenyiNet`) and floor correctly for negative `low`; CRN uniforms are never exactly 0; zero-scale distributions (e.g. `ss.normal(std=0)`) return the constant instead of NaN; `ss.years(ss.poisson(x))` now scales with `dt`.
+- *Regression*: rate/probability conversions now use `np.expm1()`/`np.log1p()` instead of `1 - np.exp()`/`np.log(1 - x)`, which is more accurate for small probabilities and fixes results differing between x86 and ARM machines (issue [1426](https://github.com/starsimhub/starsim/issues/1426)).
+- *Regression*: `ss.prob.to_prob()` with no argument now uses the module's `dt`, and adding/subtracting rates with different units now gives the right value.
+- *Regression*: modules given time arguments via `super().__init__(**kwargs)` now inherit the sim's `dt`.
+- *Regression*: `ss.PostnatalNet` edges ended one step early; `ss.MSMNet` redrew participation every step, paired deterministically, and had unitless `duration`/`acts`.
+- *Regression*: `ssl.ErdosRenyiNet` and `ssl.DiskNet` could connect dead agents; `ssl.DiskNet` agents could leave the unit square; `ssl.HouseholdNet` re-aged unborn agents.
+- *Regression*: `ss.routine_triage`/`ss.campaign_triage` never delivered; `ss.treat_num` queued duplicate and ineligible agents; screening outcomes persisted between rounds.
+- *Regression*: `ssl.Cholera` environmental transmission was effectively off, and agents could be infected twice; `ssl.Ebola` bodies stopped transmitting after one timestep, rather than at burial (deaths are now recorded at burial).
+- *Regression*: fixed `ssl.mnch` `fetal_infection` never applying damage during pregnancy, `NeonatalSepsis` killing non-neonates, and `treat_pregnant` not cancelling deaths or applying `tx_growth_reversal` as a fraction.
+- *Regression*: `sim.summarize()` now uses the final value for `cumulative` results (e.g. `births_cumulative`).
+- *Regression*: date-based sims with sub-daily timesteps (e.g. `dt=ss.days(0.25)`) now step exactly; previously steps were slightly too long in leap years (0.2507 days).
+- *Regression*: `ss.options.set('defaults')` no longer switches to 64-bit precision, and `STARSIM_PRECISION` is now respected.
+- *Regression*: `ss.Normal` calibration likelihoods computed the default variance incorrectly and misapplied per-timepoint `sigma2`; `step_containing()` picked the next step rather than the containing one.
+- *Regression*: `MultiSim(debug=True)` now runs all `n_runs`; functions added via `sim.loop.insert()` now run on the right sim after the sim is copied.
+
+### Other bugfixes
+- Campaign years outside the sim now raise an error, rather than running at the first/last timestep; `DateArray.to_date(inplace=True)` on a float array now raises an error rather than doing nothing; the unused `interpolate` argument of `ss.CampaignDelivery` and `col_names` argument of `Result.resample()` have been removed.
+- Fixed crashes: comparing an `Arr` with a NumPy array; `Arr.astype()`; `ss.Births` with `crn=False` and dataframe rates; short sims with `ss.Pregnancy` burn-in; `ss.BreastfeedingNet` with deliveries during burn-in; saving an uninitialized sim; `demographics=True` with `birth_rate`/`death_rate`; `ss.RandomSafeNet(dur=<number>)`; `ss.rand_raw` under CRN; multi-disease `ss.Dx`/`ss.Tx` dataframes; `ss.RoutineDelivery` with date-based sims or non-annual `years`; `ssl.HIV` with a custom name; nested `ss.options.context()`; `Module.create()`; `Results.annualize()`/`append()`; several calibration paths (`die=False`, float-year `combine_reps`, `Binomial` `p` column, interrupted calibrations).
+- Fixed plotting: `MultiSim.plot()` deleting `auto_plot=False` results and ignoring `fig`/`alpha`; `sim.plot('new_deaths')` with several matching keys; `People.plot_ages()` percentages and `bins`; `Result.plot(fig=...)`; `Loop.plot()`/`plot_cpu()`; date-axis ticks with Sciris 3.4.
+- `ss.MFNet(rel_part_rates=...)` now scales participation (previously it had no effect).
+- `ss.Pregnancy(dur_pregnancy=...)` now accepts a number, duration, or any distribution, not only an `ss.choice`.
+- Added `DateArray.days_since()`, which gives the exact number of days since a date; `ss.DateArray()` now reads strings as dates (previously as years).
+- `for p in sim.people` now iterates over active agents only; `timeline.relvec` is now numeric; `ss.StaticNet` passes extra arguments to networkx generators; `Network.plot()` passes kwargs to `nx.draw_networkx()`; `ss.SIR(name=...)` sets the label; `ss.Samples` no longer adds an `Unnamed: 0` column.
+- Fixed diagnostics (`sim.set_diagnostics()`) never recording random variates; `sim.init_dists()` no longer changes dist seeds when called again; and other small fixes to time, distribution, and debugging utilities.
+- Fixed several docstring examples.
+- *Migration*: `ss.Network` now takes `pars` as its first argument, like other modules, plus an optional `edges` dict or dataframe; standard module arguments (`name`, `label`, `dt`, etc.) are passed to `update_pars()` and other keyword arguments are still treated as edges. `ss.Network('name')` no longer works; use `ss.Network(name='name')`.
+- *GitHub info*: PR [1427](https://github.com/starsimhub/starsim/pull/1427)
+
+
 ## Version 3.6.1 (2026-08-29)
 This release contains two performance improvements:
 - `nb_indexer()` (used for `ss.Arr` UID indexing) is now written as an explicit loop rather than `arr[inds]`, due to a regression in Numba 0.66.
@@ -343,11 +438,13 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 
 ## Version 3.0.6 (2026-01-28)
 - Fixed bug in `sim.loop.plot_cpu()` when using pandas v3
+- *GitHub info*: PR [1118](https://github.com/starsimhub/starsim/pull/1118)
 
 
 ## Version 3.0.5 (2025-10-22).
 - Fixed bugs with products being added/stepped multiple times.
 - Fixed bug that prevented `Result.resample(output_form='series')` from being used.
+- *GitHub info*: PR [1095](https://github.com/starsimhub/starsim/pull/1095)
 
 
 ## Version 3.0.4 (2025-10-22)
@@ -358,6 +455,7 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 
 ## Version 3.0.3 (2025-10-07)
 - Swapped order of `age` and `female` states in People to allow `female` dist to use `age` state during population initialization.
+- *GitHub info*: PR [1051](https://github.com/starsimhub/starsim/pull/1051)
 
 
 ## Version 3.0.2 (2025-08-25)

@@ -23,6 +23,11 @@ outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agen
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
 mnch_pars     = dict(start=2000, dur=ss.years(5), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
+# DiskNet and ErdosRenyiNet compare every pair of agents on every timestep, so their cost grows
+# as the square of the population; cap the agents and shorten the run to keep the test fast
+net_agents = min(n_agents, 500)
+network_pars  = dict(start=2000, dur=ss.days(90), dt=ss.days(1), n_agents=net_agents, rand_seed=1, verbose=0)
+
 
 @sc.timer()
 def test_exports():
@@ -160,8 +165,9 @@ def test_networks():
     sc.heading('Testing library networks...')
 
     sims = sc.objdict()
-    for name, net in dict(disk=ssl.DiskNet(r=0.05), er=ssl.ErdosRenyiNet(p=0.01)).items():
-        sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=net, **outbreak_pars)
+    nets = dict(disk=ssl.DiskNet(r=0.1), er=ssl.ErdosRenyiNet(p=0.01)) # DiskNet radius is scaled up to keep the contact density similar with fewer agents
+    for name, net in nets.items():
+        sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=net, **network_pars)
         sim.run()
         n_edges = len(sim.networks[0])
         print(f'  {name}: {n_edges:n} edges, {sim.results.sis.cum_infections[-1]:n} cumulative infections')
@@ -170,10 +176,10 @@ def test_networks():
         sims[name] = sim
 
     # NullNet has one zero-weight self-edge per agent, so nothing should transmit
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.NullNet(), **outbreak_pars)
+    sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.NullNet(), **network_pars)
     sim.run()
     net = sim.networks.nullnet
-    assert len(net) == n_agents, 'Expected one self-edge per agent in NullNet'
+    assert len(net) == net_agents, 'Expected one self-edge per agent in NullNet'
     assert np.all(net.edges.beta == 0), 'Expected zero transmission weight in NullNet'
     assert (net.edges.p1 == net.edges.p2).all(), 'Expected only self-edges in NullNet'
     sims.null = sim

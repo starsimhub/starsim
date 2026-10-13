@@ -14,7 +14,10 @@ def test_infection_log(do_plot=False):
     sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
     sim.run()
     log = sim.analyzers[0]
-    assert len(log.logs[0]) > 900, 'Expect almost everyone to be infected'
+    df = log.to_df()
+    assert len(df) > 900, 'Expect almost everyone to be infected'
+    assert set(df.network.dropna()) == {'randomnet'} # Network recorded for each transmission
+    assert df.network.isna().sum() == df.source.lt(0).sum() # Seed infections have no network
     if do_plot:
         log.plot()
         log.animate()

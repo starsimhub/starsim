@@ -124,6 +124,33 @@ sim.diseases.sir.plot()
 
 (Note: `ss.infection_log()` also has an `.animate()` method, which we will leave for you to try out!)
 
+The log for each disease is an `ss.InfectionLog`, stored in `infection_log.logs` (or `infection_log.log` if there is only one disease). It stores entries as arrays, and `to_df()` converts them to a line list, with one row per infection: the time (`t`), the infecting agent (`source`, which is `-1` for seed infections), the infected agent (`target`), and the name of the network the infection occurred on:
+
+```{python}
+log = infection_log.log
+print(log)
+df = log.to_df()
+df.tail()
+```
+
+If you want a NetworkX graph instead (e.g. to analyze transmission chains), use `log.to_graph()`, which returns a `MultiDiGraph` with agents as nodes and infections as edges.
+
+Modules can also record extra data for each infection. A disease that records its own infections (e.g. one with multiple variants) can pass extra data when creating entries, e.g. `log.add_entries(uids, sources, time, variant=variants)`, while `log.add_data(uids, ...)` adds data to each agent's most recent infection, which is useful for recording outcomes that happen later (e.g. diagnosis or death). For example, to record the age of each agent when they were infected:
+
+```{python}
+class AgeSIR(ss.SIR):
+    def set_prognoses(self, uids, sources=None):
+        super().set_prognoses(uids, sources)
+        if self.infection_log: # The log only exists if the infection_log analyzer is used
+            self.infection_log.add_data(uids, age=self.sim.people.age[uids])
+        return
+
+sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases=AgeSIR(), networks='random', analyzers='infection_log', verbose=0)
+sim.run()
+df = sim.analyzers.infection_log.to_df()
+df.tail()
+```
+
 ### Dynamics by age
 
 This analyzer illustrates how you could track infections by age. Since it illustrates some additional key principles of building analyzers, here it is in full:

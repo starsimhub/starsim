@@ -93,7 +93,7 @@ class HIV(ss.Infection):
 
         self.rel_trans[people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
-        can_die = people.hiv.infected.uids
+        can_die = self.infected.uids
         hiv_deaths = self.pars.death_dist.filter(can_die)
 
         people.request_death(hiv_deaths)

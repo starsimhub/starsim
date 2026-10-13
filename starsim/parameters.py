@@ -34,6 +34,34 @@ class Pars(sc.objdict):
         super().__init__(**kwargs)
         return
 
+    _locked = False # Whether new keys can be added; set by lock()
+
+    def lock(self, locked=True):
+        """
+        Lock the parameters, so that setting a key that doesn't exist raises an error
+
+        Parameters are locked when the sim is initialized, so that e.g. a typo in
+        `sim.pars['rand_sed'] = 2` raises an error rather than silently doing nothing.
+        Use `pars.lock(False)` to unlock, or `pars.update(create=True)` to add a new key.
+        """
+        object.__setattr__(self, '_locked', locked) # Set as an attribute, not a key
+        return self
+
+    def __setitem__(self, key, value):
+        if self._locked and key not in self:
+            errormsg = f'Key "{key}" not found; available keys are {list(self.keys())}. To add a new parameter, use pars.update({key}=..., create=True).'
+            raise sc.KeyNotFoundError(errormsg)
+        return super().__setitem__(key, value)
+
+    def __deepcopy__(self, memo):
+        """ Copy the keys directly, since by default a copy sets the attributes first, so locked parameters couldn't be copied """
+        new = self.__class__.__new__(self.__class__)
+        memo[id(self)] = new
+        for key,value in self.items():
+            dict.__setitem__(new, key, sc.dcp(value, memo))
+        new.__dict__.update(sc.dcp(self.__dict__, memo))
+        return new
+
     def update(self, pars=None, create=False, **kwargs):
         """
         Update internal dict with new pars.
@@ -54,7 +82,7 @@ class Pars(sc.objdict):
         # Perform the update
         for key,new in pars.items():
             if key not in self.keys(): # It's a new parameter and create=True: update directly
-                self[key] = new
+                super().__setitem__(key, new) # Skip the check for locked parameters
             else:
                 old = self[key] # Get the existing object we're about to update
                 if isinstance(old, atomic_classes): # It's a number, string, etc: update directly
@@ -65,7 +93,7 @@ class Pars(sc.objdict):
                 elif isinstance(old, ss.ndict): # Update module containers -- main use case
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module): # Update modules -- rare
-                    self._update_module(key, old, new)
+                    self._update_module(old, new)
                 elif isinstance(old, ss.TimePar):
                     self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
@@ -95,10 +123,10 @@ class Pars(sc.objdict):
                 raise TypeError(errormsg)
         return
 
-    def _update_module(self, key, old, new):
+    def _update_module(self, old, new):
         """ Update a Module object in the parameters, e.g. sim.pars.diseases.sir """
         if isinstance(new, dict):
-            old[key].pars.update(new) # e.g. pars = {'dur_inf': 6}
+            old.pars.update(new) # e.g. pars = {'dur_inf': 6}
         else:
             errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
             raise TypeError(errormsg)
@@ -142,8 +170,8 @@ class Pars(sc.objdict):
 
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist):
-            if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
-                errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
+            if isinstance(old, ss.bernoulli) and not isinstance(new, (ss.bernoulli, ss.choose_n)): # Both have filter()
+                errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {type(new)} is invalid"
                 raise TypeError(errormsg)
             else:
                 self[key] = new
@@ -162,8 +190,8 @@ class Pars(sc.objdict):
             if newtype is None: # Same type of dist, set parameters
                 old.set(**new)
             else: # We need to create a new distribution
-                if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
-                    errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
+                if isinstance(old, ss.bernoulli) and newtype not in ['bernoulli', 'choose_n']:
+                    errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {newtype} is invalid"
                     raise TypeError(errormsg)
                 else:
                     dist = ss.make_dist(new)
@@ -212,6 +240,9 @@ class SimPars(Pars):
         n_agents (int/float): The number of agents to run (default 10,000)
         total_pop (int/float): If provided, scale the agents to this effective population size
         pop_scale (float): If provided, use this agent-to-population scale factor (total_pop = n_agents*pop_scale)
+        rescale (bool): If True, start with a scale factor of 1 and increase it to pop_scale as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False)
+        rescale_threshold (float): If rescaling, the fraction of agents who are not naive that triggers rescaling (default 0.05)
+        rescale_factor (float): If rescaling, the minimum factor by which to increase the scale each time (default 1.2)
         unit (str): The time unit for the simulation (default 'year'; other choices are 'day', 'week', 'month')
         start (float/str/date): The starting date for the simulation (default 2000); can be a year or date
         stop (float/str/date): If provided, the ending date for the simulation (if not provided, calculate from "dur")
@@ -241,6 +272,9 @@ class SimPars(Pars):
         self.n_agents  = 10e3 # Number of agents
         self.total_pop = None # If defined, used for calculating the scale factor
         self.pop_scale = None # How much to scale the population
+        self.rescale   = False # Whether to rescale the population dynamically (see docstring)
+        self.rescale_threshold = 0.05 # Fraction of non-naive agents that triggers rescaling
+        self.rescale_factor    = 1.2 # Minimum factor to rescale by each time
         self.people_results = True # Whether to collect automatic People-level results every timestep (see docstring)
 
         # Simulation parameters
@@ -351,35 +385,75 @@ class SimPars(Pars):
 
         # Convert any modules that are not already Module objects
         modules = self.convert_modules()
+        modules = self.expand_modules(modules)
         self._reset_modules()
+        products = []
+        names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
         for source, mod in modules:
             if source == 'modules':
                 # Modules from 'modules=' get sorted by type
                 for modkey, modclass in modmap.items():
                     if isinstance(mod, modclass):
-                        self[modkey].append(mod)
                         break
                 else:
-                    self['custom'].append(mod)
+                    modkey = 'custom'
             else:
                 # Modules from specific containers stay where the user put them
-                self[source].append(mod)
+                modkey = source
+            self.validate_name(mod, modkey, names)
+            if getattr(mod, 'has_product', False) and not any(mod.product is p for p in products): # Products share the same namespaces; the same product can be used by more than one intervention
+                self.validate_name(mod.product, 'products', names)
+                products.append(mod.product)
+            self[modkey].append(mod)
 
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
+        return
+
+    @staticmethod
+    def expand_modules(modules):
+        """
+        Replace any module that defines an `expand()` method with the modules it returns, e.g. `ss.HybridNet()` → four networks
+
+        Args:
+            modules (list): (source, module) tuples, as returned by `convert_modules()`
+        """
+        out = []
+        for source, mod in modules:
+            if hasattr(mod, 'expand'):
+                out += [(source, m) for m in mod.expand()]
+            else:
+                out.append((source, mod))
+        return out
+
+    @staticmethod
+    def validate_name(mod, modkey, names):
+        """
+        Ensure the module name is unique, renaming it if it is the default name (e.g. "sir" → "sir_1")
+
+        Args:
+            mod (`ss.Module`): the module to validate
+            modkey (str): the type of module, e.g. "diseases"
+            names (dict): the names used so far, mapped to their module type; updated in place
+        """
+        name = mod.name
+        if name in names:
+            if mod._default_name:
+                mod.name = sc.uniquename(name, list(names), style='_%d')
+                ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
+            else:
+                errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
+                raise ValueError(errormsg)
+        names[mod.name] = modkey
         return
 
     def validate_demographics(self):
         """ Validate demographics-related input parameters"""
         # Allow shortcut for default demographics
         demog = self.demographics
+        use_default = demog in [True, 1] # ...turn it on with True or 1
         if demog in [True, False, 1, 0]: # Allow turning it on or off
-            self.demographics = sc.autolist()
-            if demog: # ...turn it on with True or 1
-                if self.birth_rate is None:
-                    self.demographics += ss.Births()
-                if self.death_rate is None:
-                    self.demographics += ss.Deaths()
+            self.demographics = ss.ndict()
 
         # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         valid = isinstance(self.demographics, ss.ndict) and not len(self.demographics)
@@ -389,12 +463,16 @@ class SimPars(Pars):
                 raise ValueError(errormsg)
             births = ss.Births(birth_rate=self.birth_rate)
             self.demographics += births
+        elif use_default:
+            self.demographics += ss.Births()
         if self.death_rate is not None:
             if not valid:
                 errormsg = 'You can only specify death_rate together with (optionally) birth_rate, not other demographics modules; add ss.Deaths() manually'
                 raise ValueError(errormsg)
             background_deaths = ss.Deaths(death_rate=self.death_rate)
             self.demographics += background_deaths
+        elif use_default:
+            self.demographics += ss.Deaths()
 
         # Decide whether to use aging based on if demographics modules are present
         if self.use_aging is None:

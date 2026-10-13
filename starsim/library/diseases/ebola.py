@@ -18,7 +18,8 @@ class Ebola(ss.SEIR):
     die; everyone else recovers. Severe agents are more infectious
     (`sev_factor`), and dead agents remain infectious until buried
     (`unburied_factor`), with safe burials happening immediately and unsafe
-    burials after a delay.
+    burials after a delay. Bodies are only removed from the population (i.e.
+    counted as deaths by the sim) once they are buried.
 
     Args:
         init_prev (Dist):           initial prevalence
@@ -91,20 +92,29 @@ class Ebola(ss.SEIR):
 
     def step_state(self):
         """ Progress exposed -> infectious -> severe -> recovered/dead -> buried """
-        super().step_state()
         p = self.pars
         ti = self.ti
+
+        # Progress exposed -> infectious (as in ss.SEIR; super() isn't called since it would remove bodies before burial)
+        infectious = (self.exposed & (self.ti_infectious <= ti)).uids
+        self.exposed[infectious] = False
+        self.infectious[infectious] = True
 
         # Progress infectious -> severe
         severe = (self.infectious & (self.ti_severe <= ti)).uids
         self.severe[severe] = True
 
-        # Progress severe -> recovered
-        self.severe[self.recovered] = False
+        # Progress infectious/severe -> recovered
+        recovered = (self.infectious & (self.ti_recovered <= ti)).uids
+        self.clear_infection(recovered)
+        self.recovered[recovered] = True
+        self.severe[recovered] = False
 
-        # Progress dead -> buried
+        # Progress dead -> buried: unburied bodies stay in the population (and infectious) until burial, when they are removed
+        self.severe[self.ti_dead <= ti] = False
         buried = (self.ti_buried <= ti).uids
         self.buried[buried] = True
+        self.sim.people.request_death(buried)
 
         # Update transmissibility: severe agents and unburied bodies are more infectious
         self.rel_trans[:] = 1.0

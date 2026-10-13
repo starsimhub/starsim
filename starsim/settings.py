@@ -45,13 +45,12 @@ class Options(sc.objdict):
     """
     Set options for Starsim.
 
-    Use `ss.options.set('defaults')` to reset all values to default, or `ss.options.set(dpi='default')`
+    Use `ss.options.set('defaults')` to reset all values to default, or `ss.options.set(verbose='default')`
     to reset one parameter to default. See `ss.options.help(detailed=True)` for
     more information.
 
-    Options can also be saved and loaded using `ss.options.save()` and `ss.options.load()`.
-    See `ss.options.context()` and `ss.options.with_style()` to set options
-    temporarily.
+    See `ss.options.context()` to set options temporarily, and `ss.style()` to
+    set the plotting style temporarily.
 
     Common options are (see also `ss.options.help(detailed=True)`):
 
@@ -71,6 +70,7 @@ class Options(sc.objdict):
         self.update(options)  # Update this object with them
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
+        self.setattribute('on_entry', [])  # Stack of settings to restore, to allow nested context() blocks
         self.setattribute('_locked', True)
         return
 
@@ -125,7 +125,7 @@ class Options(sc.objdict):
         options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
 
         optdesc.precision = 'Set arithmetic precision'
-        options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
+        options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
 
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
@@ -136,7 +136,7 @@ class Options(sc.objdict):
         return optdesc, options
 
     def __call__(self, *args, **kwargs):
-        """Allow `ss.options(dpi=150)` instead of `ss.options.set(dpi=150)` """
+        """Allow `ss.options(verbose=0)` instead of `ss.options.set(verbose=0)` """
         return self.set(*args, **kwargs)
 
     def __setitem__(self, key, value):
@@ -176,12 +176,11 @@ class Options(sc.objdict):
         """ Allow to be used in a with block """
         try:
             reset = {}
-            for k, v in self.on_entry.items():
+            for k, v in self.on_entry.pop().items():
                 if self[k] != v:  # Only reset settings that have changed
                     reset[k] = v
             self.set(**reset)
-            self.delattribute('on_entry')
-        except AttributeError as E:
+        except IndexError as E:
             errormsg = 'Please use ss.options.context() if using a with block'
             raise AttributeError(errormsg) from E
         return
@@ -273,7 +272,7 @@ class Options(sc.objdict):
 
         Examples:
             ```python
-            ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)
+            ss.options.set(verbose=0) # Equivalent to ss.options(verbose=0)
             ```
         """
 
@@ -323,15 +322,15 @@ class Options(sc.objdict):
             with ss.options.context(warnings='error'):
                 ss.Sim(location='not a location').init()
 
-            # Use with_style(), not context(), for plotting options
-            with ss.options.with_style(dpi=50):
+            # Use ss.style(), not context(), for plotting options
+            with ss.style(dpi=50):
                 ss.Sim().run().plot()
             ```
         """
 
         # Store current settings
         on_entry = {k: self[k] for k in kwargs.keys()}
-        self.setattribute('on_entry', on_entry)
+        self.on_entry.append(on_entry)
 
         # Make changes
         self.set(**kwargs)
@@ -358,7 +357,7 @@ class Options(sc.objdict):
         sc.options(jupyter=self.is_jupyter)
         return
 
-    def set_precision(self):
+    def set_precision(self, refresh=True):
         """ Change the arithmetic precision used by Starsim/NumPy """
         if self.precision == 32:
             dtypes.update(dict(
@@ -379,7 +378,8 @@ class Options(sc.objdict):
         else:
             errormsg = f'Precision {self.precision} not recognized; must be 32 or 64'
             raise ValueError(errormsg)
-        self.refresh_references()
+        if refresh:
+            self.refresh_references()
         return
 
     def refresh_references(self):
@@ -440,6 +440,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
 
 # Create the options on module load
 options = Options()
+options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
 
 # Load the fonts
 if options.install_fonts:

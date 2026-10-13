@@ -3,7 +3,6 @@ Spatial networks, in which contacts are determined by agents' positions.
 """
 import numpy as np
 import starsim as ss
-ss_float_ = ss.dtypes.float
 
 class DiskNet(ss.Network):
     """
@@ -34,9 +33,9 @@ class DiskNet(ss.Network):
         sim.run()
         ```
     """
-    def __init__(self, key_dict=None, pars=None, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         """ Initialize """
-        super().__init__(key_dict=key_dict)
+        super().__init__()
         self.define_pars(
             r = 0.1, # Radius
             v = ss.freq(0.05, unit=ss.day), # Velocity
@@ -52,42 +51,31 @@ class DiskNet(ss.Network):
     def step(self):
         # Motion step
         vdt = self.pars.v * self.t.dt
-        self.x[:] = self.x + vdt * np.cos(self.theta)
-        self.y[:] = self.y + vdt * np.sin(self.theta)
+        x = (self.x + vdt * np.cos(self.theta)) % 2
+        y = (self.y + vdt * np.sin(self.theta)) % 2
 
-        # Wall bounce
-
-        ## Right edge
-        inds = (self.x > 1).uids
-        self.x[inds] = 2 - self.x[inds]
-        self.theta[inds] = np.pi - self.theta[inds]
-
-        ## Left edge
-        inds = (self.x < 0).uids
-        self.x[inds] =  -self.x[inds]
-        self.theta[inds] = np.pi - self.theta[inds]
-
-        ## Top edge
-        inds = (self.y > 1).uids
-        self.y[inds] = 2 - self.y[inds]
-        self.theta[inds] = - self.theta[inds]
-
-        ## Bottom edge
-        inds = (self.y < 0).uids
-        self.y[inds] = -self.y[inds]
-        self.theta[inds] = - self.theta[inds]
+        # Wall bounce: after the modulo, positions in (1, 2) have bounced an odd number of times, so reflect them and their heading
+        bx = x > 1
+        by = y > 1
+        self.x[:] = np.where(bx, 2 - x, x)
+        self.y[:] = np.where(by, 2 - y, y)
+        self.theta[:] = np.where(bx, np.pi - self.theta, self.theta)
+        self.theta[:] = np.where(by, -self.theta, self.theta)
 
         self.add_pairs()
         return
 
     def add_pairs(self):
         """ Generate contacts """
-        p1, p2 = np.triu_indices(n=len(self.x), k=1)
-        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
+        uids = self.sim.people.auids
+        x = self.x.values
+        y = self.y.values
+        p1, p2 = np.triu_indices(n=len(uids), k=1)
+        d12_sq = (x[p2]-x[p1])**2 + (y[p2]-y[p1])**2
         edge = d12_sq < self.pars.r**2
 
-        self.edges['p1'] = ss.uids(p1[edge])
-        self.edges['p2'] = ss.uids(p2[edge])
-        self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
+        self.edges['p1'] = uids[p1[edge]]
+        self.edges['p2'] = uids[p2[edge]]
+        self.edges['beta'] = np.ones(len(self.p1), dtype=ss.dtypes.float)
 
         return

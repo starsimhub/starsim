@@ -355,7 +355,7 @@ def run_sim(seed, **kwargs):
     summary = {}
     summary['seed'] = sim.pars.rand_seed
     summary['p_death']= sir.pars.p_death.pars.p
-    summary['initial']= sir.pars.init_prev.pars.p
+    summary['initial']= sir.pars.init_prev.pars.n
     summary['cum_infections'] = sum(sim.results.sir.new_infections)
     summary['cum_deaths'] = sum(sim.results.new_deaths)
     
@@ -376,7 +376,7 @@ n = 5
 seeds = np.arange(n)
 for init_prev in initials:
     for p_death in p_deaths:
-        outputs = [run_sim(seed, init_prev=init_prev, p_death=p_death) for seed in seeds]
+        outputs = [run_sim(seed, init_prev=ss.choose_n(init_prev), p_death=p_death) for seed in seeds]
         ss.Samples.new(outputs, identifiers=["p_death", "initial"], folder=resultsdir)
 ```
 

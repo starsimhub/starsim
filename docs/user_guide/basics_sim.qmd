@@ -153,3 +153,25 @@ msim = ss.parallel(sims)
 msim.plot()
 ```
 
+Modules are usually supplied when the sim is created, but you can also add one to a partially run sim with `sim.add_module()`. For example, to add a different vaccination intervention to each scenario:
+
+```{python}
+import starsim as ss
+
+base_sim = ss.Sim(diseases='sis', networks='random', start=2000, stop=2100, verbose=False)
+base_sim.run(until=2030)
+
+sims = []
+probs = [0.0, 0.2, 0.5]
+for prob in probs:
+    sim = base_sim.copy()
+    sim.add_module(ss.routine_vx(product=ss.simple_vx(disease='sis'), prob=prob))
+    sim.label = f'prob={prob}'
+    sims.append(sim)
+
+msim = ss.parallel(sims)
+msim.plot()
+```
+
+The sim must be initialized before calling `sim.add_module()`. The new module's results cover the whole sim, but are only filled in from the timestep it was added.
+

@@ -12,4 +12,9 @@ objects.inv
 !/api/index.qmd
 /.quarto/
 
+# Ignore the auto-generated API index (see make_api.py)
+/api.json
+/llms.txt
+/llms-full.txt
+
 **/*.quarto_ipynb

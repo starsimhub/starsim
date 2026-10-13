@@ -1,8 +1,8 @@
-cpu_performance: 1.0177655856784376
+cpu_performance: 0.9809147276845727
 times:
-  bare_init: 0.0176
-  bare_run: 0.2333
-  bare_run_no_people: 0.1439
-  births_run: 0.043
-  crn_false_run: 0.0921
+  bare_init: 0.017
+  bare_run: 0.2466
+  bare_run_no_people: 0.1524
+  births_run: 0.0433
+  crn_false_run: 0.0926
   het_init: 0.0555

@@ -659,7 +659,7 @@ def step_containing(expected, actual):
         actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
     """
     t = expected.index
-    inds = np.searchsorted(actual.index, t, side='left')
+    inds = np.maximum(np.searchsorted(actual.index, t, side='right') - 1, 0) # Last step at or before t (or the first step, if t is before it)
     conformed = pd.DataFrame(index=expected.index)
     for k in actual:
         conformed[k] = actual[k].values[inds] # .values because indices differ
@@ -778,7 +778,7 @@ class CalibComponent(sc.prettyobj):
         if self.combine_reps is None:
             nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
         else:
-            timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
+            timecols = list(expected.index.names) # e.g. ['t'] or ['t', 't1']
             actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
             actual_combined['rand_seed'] = 0 # Fake the seed
             actual_combined = actual_combined.reset_index().set_index('rand_seed') # Make it look like self.actual
@@ -950,7 +950,7 @@ class Binomial(CalibComponent):
     @staticmethod
     def get_p(df, x_col='x', n_col='n'):
         if 'p' in df:
-            p = df['p'].values
+            p = df['p']
         else:
             p = df[x_col] / df[n_col] # Switched to MLE x/n from previous "Bayesian" (Laplace +1, Jeffreys) before: (df[x_col]+1) / (df[n_col]+2)
         return p
@@ -1231,9 +1231,12 @@ class Normal(CalibComponent):
 
         logLs = []
         sigma2 = self.sigma2
-        compute_var = sigma2 is None
 
         combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        if sigma2 is None: # Use the maximum-likelihood variance of all the residuals
+            a_x = combined['x_a'] / combined['n'] if 'n' in combined else combined['x_a']
+            sigma2 = max(self.compute_var(combined['x_e'], a_x), np.finfo(float).eps) # Avoid zero variance (and hence a NaN likelihood) for a perfect fit
+
         for idx, rep in combined.iterrows():
             e_x = rep['x_e']
             a_x = rep['x_a']
@@ -1242,10 +1245,11 @@ class Normal(CalibComponent):
             if 'n' in rep:
                 a_x = rep['x_a'] / rep['n']
 
-            if compute_var:
-                sigma2 = self.compute_var(expected['x'], a_x)
+            this_sigma2 = sigma2
+            if isinstance(sigma2, (list, np.ndarray)): # User provided a vector of variances, one per timepoint
+                this_sigma2 = sigma2[expected.index.get_loc(rep['t'])]
 
-            logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=np.sqrt(sigma2))
+            logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=np.sqrt(this_sigma2))
             logLs.append(logL)
 
         nlls = -np.array(logLs)

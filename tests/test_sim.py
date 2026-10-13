@@ -2,6 +2,7 @@
 Test Sim API
 """
 
+import numpy as np
 import starsim as ss
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -303,6 +304,43 @@ def test_creation_syntax():
 
 
 @sc.timer()
+def test_add_module():
+    """ Test adding a module to a sim that has been partly run """
+    sc.heading('Testing sim.add_module()...')
+    kw = dict(n_agents=n_agents, diseases='sis', networks='random')
+    base = ss.Sim(**kw).run()
+    sim = ss.Sim(**kw)
+    sim.run(until='2010-01-01')
+    ti = sim.ti
+    vx = sim.add_module(ss.routine_vx(product=ss.simple_vx(disease='sis'), prob=0.5))
+    sim.run()
+
+    inf = sim.results.sis.n_infected
+    base_inf = base.results.sis.n_infected
+    assert sim.interventions.routine_vx is vx and vx.ti == sim.ti # It was added, and kept in step with the sim
+    assert np.array_equal(inf[:ti], base_inf[:ti]) # No change before the module was added...
+    assert inf[-1] < base_inf[-1] # ...but fewer infections after
+    with pytest.raises(ss.AlreadyRunError):
+        sim.add_module(ss.Intervention()) # Can't add a module to a completed sim
+    return sim
+
+
+@sc.timer()
+def test_locked_pars():
+    """ Test that parameters that don't exist can't be set after initialization """
+    sc.heading('Testing locked parameters...')
+    sim = ss.Sim(n_agents=n_agents, diseases='sis', networks='random').init()
+    with pytest.raises(sc.KeyNotFoundError):
+        sim.pars['rand_sed'] = 2 # Typo in a sim parameter
+    with pytest.raises(sc.KeyNotFoundError):
+        sim.diseases.sis.pars.bta = 0.1 # Typo in a module parameter
+    sim.pars.rand_seed = 2 # Existing parameters can be set
+    sim.pars.update(my_par=3, create=True) # New parameters can be added explicitly
+    assert sim.copy().pars.my_par == 3 # Locked parameters can be copied
+    return sim
+
+
+@sc.timer()
 def test_save():
     """ Test save and export """
     sc.heading('Testing save and export...')
@@ -324,6 +362,10 @@ def test_save():
     assert sim.summary == s2.summary, 'Sims do not match'
     assert sim.pars.n_agents == json2['pars']['n_agents'], 'Parameters do not match'
     assert json == json2, 'Outputs do not match'
+
+    # Shrinking removes large objects from the distributions
+    sim.shrink()
+    assert isinstance(sim.diseases.sis.pars.dur_inf.dist, ss.utils.Shrunk)
 
     # Delete files
     sc.rmpath(f.values())
@@ -352,6 +394,28 @@ def test_save_mixed_dt():
     return sim
 
 
+@sc.timer()
+def test_rescale():
+    """ Test dynamic rescaling, and that duplicate modules get unique names """
+    sc.heading('Testing dynamic rescaling')
+    def make_sim(init_inf, **kwargs):
+        sir = ss.SIR(beta=ss.perday(0.025), dur_inf=ss.days(10), init_prev=ss.choose_n(init_inf), p_death=0)
+        return ss.Sim(n_agents=5e3, pop_scale=10, diseases=sir, networks=ss.RandomNet(n_contacts=10), dt=ss.days(1), dur=ss.days(150), verbose=0, **kwargs)
+    fixed = make_sim(init_inf=2).run()
+    rescaled = make_sim(init_inf=20, rescale=True).run()
+    scale = rescaled.results.pop_scale
+    assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
+    assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized
+    cum_fixed = fixed.results.sir.cum_infections[-1]
+    cum_rescaled = rescaled.results.sir.cum_infections[-1]
+    assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
+
+    with pytest.warns(RuntimeWarning, match='renaming'):
+        sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
+    assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique
+    return rescaled
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -368,6 +432,9 @@ if __name__ == '__main__':
     sim8 = test_creation_syntax()
     sim9 = test_save()
     sim10 = test_save_mixed_dt()
+    sim11 = test_rescale()
+    sim12 = test_add_module()
+    sim13 = test_locked_pars()
 
     T.toc()
 

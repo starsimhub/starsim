@@ -261,7 +261,7 @@ def test_ncd():
     sim.run()
     log = sim.analyzers[0].logs[0]
 
-    assert len(log.out_edges) == log.number_of_edges()
+    assert len(log) == log.to_graph().number_of_edges()
     df = log.to_df()  # Check generation of line-list
     assert df.source.isna().all()
 

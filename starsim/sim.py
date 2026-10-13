@@ -174,6 +174,7 @@ class Sim(ss.Base):
 
         # Validation and initialization -- this is "pre"
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
@@ -181,12 +182,15 @@ class Sim(ss.Base):
         self.init_modules_pre()
 
         # Final initializations -- this is "post"
+        if self.pars.rescale:
+            self.init_rescale()
         self.init_dists() # Initialize distributions
         self.init_people_vals() # Initialize the values in all the states and networks
         self.init_modules_post() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
+        self.lock_pars() # Don't allow new parameters to be added by mistake
 
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
 
@@ -197,6 +201,68 @@ class Sim(ss.Base):
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
             self.diagnostics.store_states(key='init')
         return self
+
+    def add_module(self, module, key=None):
+        """
+        Add a module to a sim that has already been initialized, and possibly run part-way
+
+        Usually modules are supplied when the sim is created; use this method to add
+        one later, e.g. an intervention after running the sim to a certain date. It
+        should be called between timesteps (not from within a module's `step()`). The
+        module's results cover the whole sim, but are only filled in from the current
+        timestep onwards.
+
+        Args:
+            module (`ss.Module`): the module to add
+            key (str): the type of module, e.g. "interventions" (if None, determine from the module's class)
+
+        Examples:
+            ```python
+            sim = ss.Sim(diseases='sis', networks='random')
+            sim.run(until='2010-01-01')
+            sim.add_module(ss.routine_vx(product=ss.simple_vx(disease='sis'), prob=0.5))
+            sim.run()
+            ```
+        """
+        if not self.initialized:
+            errormsg = 'The sim must be initialized before calling sim.add_module(); to add a module before initialization, include it when creating the sim'
+            raise RuntimeError(errormsg)
+        if self.complete:
+            errormsg = f'Cannot add module "{module.name}" to a sim that has finished running'
+            raise AlreadyRunError(errormsg)
+
+        # Figure out the type of module, and make sure the name is unique
+        if key is None:
+            key = 'custom'
+            for modkey, modclass in ss.module_map().items():
+                if isinstance(module, modclass):
+                    key = modkey
+                    break
+        names = {mod.name:None for mod in self.modules}
+        ss.SimPars.validate_name(module, key, names)
+        modules = [module]
+        if getattr(module, 'has_product', False) and not any(module.product is p for p in self.products()):
+            ss.SimPars.validate_name(module.product, 'products', names)
+            modules.append(module.product)
+        getattr(self, key).append(module) # Not self[key], since subclasses may override __getitem__
+        self.pars[key][module.name] = module.pars
+
+        # Initialize the module(s), as in sim.init()
+        for mod in modules:
+            mod.init_pre(self)
+        self.dists.init(obj=self) # Only initializes the new distributions
+        for mod in modules:
+            self.dists.copy_to_module(mod)
+            mod.init_post()
+            mod.t.ti = np.searchsorted(mod.t.yearvec, self.t.now('year')) # Start the module at the current time
+
+        # Add the module to the loop, and resume from the same place
+        loop = self.loop
+        current = loop.plan[loop.index]
+        loop.init()
+        loop.index = sc.findfirst([(entry.func == current.func and entry.ti == current.ti) for entry in loop.plan])
+        self.lock_pars()
+        return module
 
     def get_module(self, query, die=True, match_case=False):
         """
@@ -356,6 +422,13 @@ class Sim(ss.Base):
 
         return
 
+    def lock_pars(self, locked=True):
+        """ Lock the sim and module parameters, so setting a parameter that doesn't exist raises an error """
+        self.pars.lock(locked)
+        for mod in self.modules:
+            mod.pars.lock(locked)
+        return
+
     def init_modules_pre(self):
         """ Initialize all the modules with the sim """
         for mod in self.modules:
@@ -397,6 +470,71 @@ class Sim(ss.Base):
         """
         # Let People handle its own result initialization
         self.people.init_results()
+
+        # With dynamic rescaling, store the scale factor for each timestep
+        if self.pars.rescale:
+            self.results += ss.Result('pop_scale', label='Population scale factor', scale=False, auto_plot=False, timevec=self.timevec, values=np.ones(self.t.npts))
+        return
+
+    @property
+    def current_scale(self):
+        """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
+        if not self.pars.rescale:
+            return self.pars.pop_scale
+        elif 'pop_scale' not in self.results: # The results aren't initialized yet, e.g. during a module's init_post()
+            return 1.0 # With rescaling, the scale starts at 1
+        return self.results.pop_scale[self.ti]
+
+    def result_scale(self, module=None):
+        """
+        The factor to scale results by: a number, or an array with one value per timestep if `pars.rescale=True`
+
+        Args:
+            module (`ss.Module`): if provided, map the scale onto the module's timevec (if different from the sim's)
+        """
+        if not self.pars.rescale:
+            return self.pars.pop_scale
+        scale = self.results.pop_scale.values
+        if module is not None and not np.array_equal(module.t.yearvec, self.t.yearvec):
+            inds = np.searchsorted(self.t.yearvec, module.t.yearvec + 1e-9, side='right') - 1 # Use the most recent sim timestep, since the scale only changes on sim timesteps; 1e-9 avoids floating-point error
+            scale = scale[np.maximum(inds, 0)]
+        return scale
+
+    def init_rescale(self):
+        """ Check that the diseases support dynamic rescaling, and create the distribution for it """
+        for disease in self.diseases():
+            if not hasattr(disease, 'ti_infected'):
+                errormsg = f'Dynamic rescaling (rescale=True) requires each disease to have a ti_infected state, but "{disease.name}" does not'
+                raise ValueError(errormsg)
+        self.rng_rescale = ss.choose_n(name='rng_rescale') # Choose who to make naive when rescaling
+        return
+
+    def rescale(self):
+        """
+        Dynamically rescale the population; only used if `pars.rescale=True`
+
+        The scale factor starts at 1. Once the fraction of agents who are not naive (i.e. have
+        ever been infected with any disease) exceeds `pars.rescale_threshold`, the scale factor
+        is increased by at least `pars.rescale_factor` (up to `pars.pop_scale`), and the same
+        fraction of non-naive agents are made naive again (via `disease.make_naive()`), so that
+        each agent now represents more people. Based on Covasim's dynamic rescaling.
+        """
+        pars = self.pars
+        ti = self.ti
+        self.rng_rescale.jump_dt(ti=ti+1) # Like other distributions, advance the random numbers for this timestep
+        scale = self.results.pop_scale
+        if scale[ti] < pars.pop_scale: # We have room to rescale
+            not_naive = ss.uids.concatenate([disease.ti_infected.notnan.uids for disease in self.diseases()]).unique()
+            ratio = len(not_naive)/len(self.people) # Current proportion not naive
+            if ratio > pars.rescale_threshold: # Check if we've reached the point to rescale
+                max_ratio = pars.pop_scale/scale[ti] # Don't exceed the total population size
+                scaling_ratio = min(max(ratio/pars.rescale_threshold, pars.rescale_factor), max_ratio)
+                scale[ti:] *= scaling_ratio # Update the scale factor from here on
+                n = int(round(len(not_naive)*(1.0 - 1.0/scaling_ratio))) # For example, rescaling by 2 makes half of the non-naive agents naive
+                self.rng_rescale.set(n=n)
+                new_naive = self.rng_rescale.filter(not_naive)
+                for disease in self.diseases():
+                    disease.make_naive(new_naive)
         return
 
     def init_data(self, data=None):
@@ -453,7 +591,7 @@ class Sim(ss.Base):
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
-            errormsg = 'Simulation already complete (call sim.init() to re-run)'
+            errormsg = 'Simulation already complete'
             raise AlreadyRunError(errormsg)
 
         # Print out progress if needed
@@ -510,7 +648,7 @@ class Sim(ss.Base):
 
         # Check for AlreadyRun errors
         if self.complete:
-            errormsg = 'Simulation is already complete (call sim.init() to re-run)'
+            errormsg = 'Simulation is already complete'
             raise AlreadyRunError(errormsg)
 
         try:
@@ -562,12 +700,15 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
+        scale = self.result_scale()
         for reskey, res in self.results.items():
-            if isinstance(res, ss.Result): # Note: since Result is a NumPy array, "res" and self.results[key] are not the same object
+            if isinstance(res, ss.Result):
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
-                    self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+                    res.apply_scale(scale)
                 if np.all(res == res[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
+        if self.pars.rescale and self.pars.people_results: # With a scale that varies over time, cumulative results must be summed after scaling
+            self.results.cum_deaths[:] = np.cumsum(self.results.new_deaths)
         self.results_ready = True # Results are ready to use
         return
 
@@ -604,12 +745,12 @@ class Sim(ss.Base):
 
         # Convert "how" from a string to a dict
         if how == 'default':
-            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', 'timevec':'last', '':'mean'}
+            how = {'cumulative':'last', 'n_':'mean', 'new_':'mean', 'cum_':'last', 'timevec':'last', '':'mean'}
         elif isinstance(how, str):
             how = {'':how} # Match everything
 
         summary = sc.objdict()
-        flat = sc.flattendict(self.results, sep='_')
+        flat = self.results.flatten(sep='_', only_results=False, keep_case=True, columns=True) # Summarize each column of 2D results separately
         for key, res in flat.items():
             if 'timevec' not in key: # Skip module-specific time vectors
                 try:
@@ -729,7 +870,7 @@ class Sim(ss.Base):
         missing = []
         if check:
             if verbose:
-                sc.pp(self._call_required)
+                sc.pp({mod.name:mod._call_required for mod in self.modules})
 
             for mod in self.modules:
                 modmissing = mod.check_method_calls()
@@ -1003,8 +1144,13 @@ class Sim(ss.Base):
                     if found:
                         ax.scatter(df.index.values, df[dfkey].values, **kw.data)
 
-                # Plot results
-                ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
+                # Plot results, with one line per column for 2D results
+                if res.columns is None:
+                    ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
+                else:
+                    labels = [f'{col} ({self.label})' if self.label else col for col in res.columns]
+                    ax.plot(res.timevec, res.values, **kw.plot, label=labels)
+                    ax.legend()
                 ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         if show_label in ['title', 'suptitle'] and self.label:
@@ -1052,10 +1198,10 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         if summary:
             sc.heading('Results:')
             print(sim.summary)
-            if plot:
-                sim.plot()
-                if show:
-                    plt.show()
+        if plot:
+            sim.plot()
+            if show:
+                plt.show()
     return sim
 
 
@@ -1153,14 +1299,14 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 small_change = 1.96 # 95% CI, roughly speaking
 
             numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
-            if numeric and old > 0:
+            if numeric:
                 this_diff = new - old
-                this_ratio = new / old
+                this_ratio = new / old if old else np.nan
                 if multi:
                     abs_ratio = abs(this_diff)/sem
                     this_zscore = abs_ratio
                 else:
-                    abs_ratio = max(this_ratio, 1.0/this_ratio)
+                    abs_ratio = max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
                     this_zscore = np.nan
 
                 # Set the character to use
@@ -1230,9 +1376,9 @@ def check_sims_match(*args, full=False):
 
     Examples:
         ```python
-        s1 = ss.Sim(diseases='sir', networks='random')
-        s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
-        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
+        s1 = ss.Sim(diseases='sir', networks='random').run()
+        s2 = ss.Sim(pars=dict(diseases='sir', networks='random')).run()
+        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()).run()
         assert ss.check_sims_match(s1, s2, s3)
         ```
     """

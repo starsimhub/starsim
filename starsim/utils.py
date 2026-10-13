@@ -1,8 +1,10 @@
 """
 Numerical utilities and other helper functions
 """
+import re
 import warnings
 import numpy as np
+import numba as nb
 import pandas as pd
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -232,22 +234,45 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-def find_contacts(p1, p2, inds):  # pragma: no cover
-    """
-    Variation on Network.find_contacts() that avoids sorting.
-
-    A set is returned here rather than a sorted array so that custom tracing interventions can efficiently
-    add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be
-    an int64 array since this is what's returned by true() etc. functions by default.
-    """
-    pairing_partners = set()
-    inds = set(inds)
+@nb.jit(cache=True)
+def _mark_partners(p1, p2, is_ind, is_partner):
+    """ Mark the partners of the agents flagged in is_ind, in both directions of each edge; used by find_contacts() """
     for i in range(len(p1)):
-        if p1[i] in inds:
-            pairing_partners.add(p2[i])
-        if p2[i] in inds:
-            pairing_partners.add(p1[i])
-    return pairing_partners
+        if is_ind[p1[i]]:
+            is_partner[p2[i]] = True
+        if is_ind[p2[i]]:
+            is_partner[p1[i]] = True
+    return
+
+
+def find_contacts(p1, p2, inds, as_array=False):
+    """
+    Find the partners of the specified agents in an edge list; see also `Network.find_contacts()`.
+
+    By default, a set is returned so that custom tracing interventions can efficiently add extra
+    people; with `as_array=True`, a sorted array of unique UIDs is returned instead, which is faster.
+
+    Args:
+        p1 (array): the first agent of each edge
+        p2 (array): the second agent of each edge
+        inds (array): the agents whose partners to find
+        as_array (bool): if True, return a sorted array rather than a set
+    """
+    p1 = np.asarray(p1)
+    p2 = np.asarray(p2)
+    inds = np.asarray(inds, dtype=np.int64)
+
+    # Make lookup tables of which people are in inds, and which are their partners (much faster than np.isin() or a set)
+    n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(inds, initial=-1)) + 1
+    is_ind = np.zeros(n, dtype=bool)
+    is_ind[inds] = True
+    is_partner = np.zeros(n, dtype=bool)
+    _mark_partners(p1, p2, is_ind, is_partner)
+
+    partners = np.flatnonzero(is_partner).astype(ss.dtypes.int, copy=False)
+    if not as_array:
+        partners = set(partners.tolist())
+    return partners
 
 
 # %% Data cleaning and processing
@@ -372,8 +397,15 @@ def apply_age_range(age_string, arr):
 
 
 def standardize_netkey(key):
-    """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
-    return key.lower().removesuffix('net')
+    """ 
+    Standardize network key names
+    
+    Networks can be upper or lowercase, have a suffix 'net' or not, and may include
+    a number added to make the name unique; this function standardizes them. For
+    example, 'RandomNet', 'randomnet', and 'randomnet_1' would all be standardized
+    to 'random'.
+    """
+    return re.sub(r'net(_\d+)?$', r'\1', key.lower())
 
 
 # Alternative column names accepted for standard data columns, used only if the configured
@@ -554,13 +586,22 @@ def combine_rands(a, b):
 
     See ss.multi_random() for the user-facing version.
 
+    Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
+    [0, 1], so they raise an error rather than being cast, since casting would silently copy
+    the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
+
     Args:
-        a (array): array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
         b (array): ditto, same size as a
 
     Returns:
-        A new array of random numbers the same size as a and b
+        A new array of uniformly distributed random numbers in [0, 1], the same size as a and b
     """
+    a_dtype = getattr(a, 'dtype', type(a).__name__)
+    b_dtype = getattr(b, 'dtype', type(b).__name__)
+    if a_dtype != np.uint64 or b_dtype != np.uint64:
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
@@ -672,7 +713,7 @@ def shrink(obj=None, attrs=None, verbose=False):
                 setattr(obj, attr, shrunk)
             elif verbose:
                 ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
-    return shrunk
+        return obj
 
 
 #%% Plotting helper functions
@@ -777,7 +818,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         flat = results[key].flatten() # e.g. sim.results['sis']
         key = None # We've already used the key, so reset it
     else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = results if flattened else results.flatten()
+        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
 
     # Configuration
     flat_orig = flat # Copy reference before we modify in place
@@ -789,7 +830,10 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
 
     if key is not None:
         if isinstance(key, str):
-            flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
+                flat = {normkey(key):flat[normkey(key)]}
+            else:
+                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
             if len(flat) != 1:
                 errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
                 raise sc.KeyNotFoundError(errormsg)

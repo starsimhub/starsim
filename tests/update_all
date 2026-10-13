@@ -1,0 +1,11 @@
+#!/bin/bash
+# Update the baseline and the benchmarks (e.g. before a release).
+# Can be run from any folder, e.g. ./tests/update_all
+
+cd "$(dirname "$0")"
+
+echo 'Updating benchmarks...'
+./update_benchmarks.py
+
+echo 'Updating baseline...'
+python -c 'import test_baselines; test_baselines.save_baseline()'

@@ -1,12 +1,12 @@
 """
 Networks that connect people within a population
 """
+import inspect
 import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
-import networkx as nx # Also used by InfectionLog, so we can't lazily import it, and only 100 ms
 
 # This has a significant impact on runtime, surprisingly
 ss_float = ss.dtypes.float
@@ -14,7 +14,7 @@ ss_int = ss.dtypes.int
 _ = None
 
 
-@nb.njit(cache=True)
+@nb.jit(cache=True)
 def fisher_yates_shuffle(arr, randvals):
     """ In-place Fisher-Yates shuffle using precomputed uniform random values.
 
@@ -61,13 +61,14 @@ class Network(Route):
     the connection.
 
     Args:
+        pars (dict): parameters, for subclasses that define them
+        edges (dict/dataframe): the edges of the network, as an alternative to passing them as keyword arguments
         p1 (array): an array of length N, the number of connections in the network, with the indices of people on one side of the connection.
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
         beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
-        label (str): the name of the network (optional)
-        kwargs (dict): other keys copied directly into the network
+        kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as edges
 
-    Note that all arguments (except for label) must be arrays of the same length,
+    Note that all edge arguments must be arrays of the same length,
     although not all have to be supplied at the time of creation (they must all
     be the same at the time of initialization, though, or else validation will fail).
 
@@ -81,17 +82,17 @@ class Network(Route):
         p2 = np.random.randint(n_people, size=n)
         beta = np.ones(n)
         network = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
-        network = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
+        network = ss.Network(edges=dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
 
         # Convert one network to another with extra columns
         index = np.arange(n)
         self_conn = p1 == p2
-        network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
+        network2 = ss.Network(edges=network.edges, index=index, self_conn=self_conn, label=network.label)
         ```
     """
-    def __init__(self, name=None, label=None, **kwargs):
+    def __init__(self, pars=None, edges=None, **kwargs):
         # Initialize as a module
-        super().__init__(name=name, label=label)
+        super().__init__()
 
         # Each relationship is characterized by these default set of keys
         self.meta = sc.objdict(
@@ -104,9 +105,13 @@ class Network(Route):
         self.edges = sc.objdict()
         self.participant = ss.BoolArr('participant')
 
-        # Set data, if provided
-        for key, value in kwargs.items():
+        # Standard module arguments are parameters; the rest are edges
+        standard_args = ss.modules.module_args + ss.Timeline.time_args
+        edges = dict(edges) if edges is not None else {} # dict() also handles dataframes
+        edges.update({k:kwargs.pop(k) for k in list(kwargs) if k not in standard_args})
+        for key, value in edges.items():
             self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
+        self.update_pars(pars, **kwargs)
         return
 
     @property
@@ -169,6 +174,12 @@ class Network(Route):
         out += '\n' + self.to_df().__repr__()
         return out
 
+    def __getitem__(self, key):
+        """ Allow edge columns to be accessed like a dict, e.g. `network['p1']`, as for Covasim v3 layers """
+        if isinstance(key, str) and key in self.edges:
+            return self.edges[key]
+        return super().__getitem__(key)
+
     def __contains__(self, item):
         """
         Check if a person is present in a network
@@ -215,6 +226,8 @@ class Network(Route):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
+        if not len(self.edges): # No edges have been added yet
+            return
         n = len(self.edges.p1)
         for key, dtype in self.meta.items():
             if dtype:
@@ -228,6 +241,19 @@ class Network(Route):
                 raise TypeError(errormsg)
         self.validate_uids()
         return
+
+    def eligible(self, age_range=None):
+        """
+        Return the agents who can form edges: alive, born, and (optionally) within an age range
+
+        Args:
+            age_range (list): if supplied, only include agents with `age_range[0] <= age < age_range[1]`
+        """
+        people = self.sim.people
+        eligible = people.alive & (people.age > 0)
+        if age_range is not None:
+            eligible = eligible & (people.age >= age_range[0]) & (people.age < age_range[1])
+        return eligible
 
     def get_inds(self, inds, remove=False):
         """
@@ -255,6 +281,34 @@ class Network(Route):
         """
         popped_inds = self.get_inds(inds, remove=True)
         return popped_inds
+
+    def remove_edges(self, inds):
+        """
+        Remove the specified edges from the network
+
+        Args:
+            inds (array): the indices of the edges to remove, or a boolean mask the same length as the network
+
+        Example:
+            ```python
+            net = sim.networks.randomnet
+            net.remove_edges(net.edges.p1 == 0) # Remove all edges with agent 0 as p1
+            ```
+        """
+        inds = np.asarray(inds)
+        if not inds.size: # Nothing to remove
+            return
+        if inds.dtype == bool:
+            if len(inds) != len(self):
+                errormsg = f'Boolean mask has length {len(inds)}, but the network has {len(self)} edges'
+                raise ValueError(errormsg)
+            keep = ~inds
+        else:
+            keep = np.ones(len(self), dtype=bool)
+            keep[inds] = False
+        for k in self.meta_keys():
+            self.edges[k] = self.edges[k][keep]
+        return
 
     def append(self, edges=None, **kwargs):
         """
@@ -297,6 +351,7 @@ class Network(Route):
             nx.draw(G)
             ```
         """
+        import networkx as nx # Lazy import since slow
         keys = [('p1', int), ('p2', int), ('beta', float)]
         data = [np.array(self.edges[k], dtype=dtype) for k,dtype in keys]
         if max_edges:
@@ -326,11 +381,30 @@ class Network(Route):
         return df
 
     def from_df(self, df, keys=None):
-        """ Convert from a dataframe """
+        """
+        Set the edges from a dataframe or a dict of arrays
+
+        Replaces the existing edges, and returns the network, so it can also be used to
+        create a new network. If `beta` is not supplied, it defaults to 1.
+
+        Args:
+            df (dataframe/dict): the edges, with columns `p1`, `p2`, and (optionally) `beta`
+            keys (list): the columns to use (default: the network's meta keys)
+
+        Examples:
+            ```python
+            net = ss.Network(name='mynet').from_df(dict(p1=[0,1,2], p2=[1,2,3])) # Create a new network
+            net.from_df(df) # Replace the edges of an existing network
+            ```
+        """
         if keys is None:
             keys = self.meta_keys()
         for key in keys:
-            self.edges[key] = df[key].to_numpy()
+            if key == 'beta' and key not in df:
+                self.edges[key] = np.ones(len(df['p1']), dtype=ss_float)
+            else:
+                self.edges[key] = np.array(df[key], dtype=self.meta.get(key))
+        self.validate_uids()
         return self
 
     def shrink(self):
@@ -349,9 +423,11 @@ class Network(Route):
             max_edges (int): the maximum number of edges to show
             random (bool): if true, select edges randomly; otherwise, show the first N
             alpha (float): the alpha value of the edges
-            kwargs (dict): passed to nx.draw_networkx()
+            kwargs (dict): figure and style arguments (e.g. `figsize`, `font`) are passed to `ss.plot_args()`, the rest to `nx.draw_networkx()`
         """
-        kw = ss.plot_args(kwargs)
+        import networkx as nx # Lazy import since slow
+        figkeys = ss.utils.plotting_kw.fig + ss.utils.plotting_kw.style
+        kw = ss.plot_args({k:kwargs.pop(k) for k in list(kwargs) if k in figkeys})
         with ss.style(**kw.style):
             fig,ax = plt.subplots(**kw.fig)
             G = self.to_graph(max_edges=max_edges, random=random)
@@ -371,38 +447,25 @@ class Network(Route):
 
         For some purposes (e.g. contact tracing) it's necessary to find all the edges
         associated with a subset of the people in this network. Since edges are bidirectional
-        it's necessary to check both p1 and p2 for the target indices. The return type is a Set
-        so that there is no duplication of indices (otherwise if the Network has explicit
-        symmetric interactions, they could appear multiple times). This is also for performance so
-        that the calling code doesn't need to perform its own unique() operation. Note that
-        this cannot be used for cases where multiple connections count differently than a single
-        infection, e.g. exposure risk.
+        it's necessary to check both p1 and p2 for the target indices. Each contact is only
+        returned once (otherwise if the Network has explicit symmetric interactions, they could
+        appear multiple times), so the calling code doesn't need to perform its own unique()
+        operation. Note that this cannot be used for cases where multiple connections count
+        differently than a single infection, e.g. exposure risk.
 
         Args:
             inds (array): indices of people whose edges to return
             as_array (bool): if true, return as sorted array (otherwise, return as unsorted set)
 
         Returns:
-            contact_inds (array): a set of indices for pairing partners
+            contact_inds (array/set): the indices of the pairing partners
 
         Example: If there were a network with
         - p1 = [1,2,3,4]
         - p2 = [2,3,1,4]
         Then find_edges([1,3]) would return {1,2,3}
         """
-
-        # Check types
-        if not isinstance(inds, np.ndarray):
-            inds = sc.promotetoarray(inds)
-        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from utils.true(), which returns int64
-            inds = np.array(inds, dtype=np.int64)
-
-        # Find the edges
-        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, inds)
-        if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss_int)
-            contact_inds.sort()
-
+        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
         return contact_inds
 
     def add_pairs(self):
@@ -415,10 +478,17 @@ class Network(Route):
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
         """
-        keep = ~(np.isin(self.edges.p1, uids) | np.isin(self.edges.p2, uids))
-        for k in self.meta_keys():
-            self.edges[k] = self.edges[k][keep]
+        p1 = self.edges.p1
+        p2 = self.edges.p2
 
+        # Make a lookup table of the UIDs to remove (much faster than np.isin() for many edges)
+        n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(uids, initial=-1)) + 1
+        is_removed = np.zeros(n, dtype=bool)
+        is_removed[uids] = True
+
+        # Remove edges where either partner is being removed
+        remove = is_removed[p1] | is_removed[p2]
+        self.remove_edges(remove)
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
@@ -429,8 +499,8 @@ class Network(Route):
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, pars=None, edges=None, **kwargs):
+        super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.dur = ss_float # Add duration to the meta keys for dynamic networks
         return
 
@@ -454,8 +524,8 @@ class DynamicNetwork(Network):
 
 class SexualNetwork(DynamicNetwork):
     """ Base class for all sexual networks """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, pars=None, edges=None, **kwargs):
+        super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.acts = ss_int # Add acts to the meta keys for sexual networks
         self.debut = ss.FloatArr('debut', default=0)
         return
@@ -513,6 +583,7 @@ class StaticNet(Network):
         super().__init__()
         self.graph = graph
         self.define_pars(seed=True, p=None, n_contacts=10)
+        self.graph_kwargs = {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
@@ -521,6 +592,7 @@ class StaticNet(Network):
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
         if self.graph is None:
+            import networkx as nx # Lazy import since slow
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
         n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
         if self.pars.p is None: # Convert from n_contacts to probability
@@ -532,8 +604,10 @@ class StaticNet(Network):
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
+            args = inspect.signature(self.graph).parameters
+            kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
             try:
-                self.graph = self.graph(n=self.n_agents, **self.pars)
+                self.graph = self.graph(n=self.n_agents, **kw, **self.graph_kwargs)
             except TypeError as e:
                 ss.warn(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.StaticNet() instead.")
                 raise e
@@ -575,19 +649,30 @@ class RandomExactNet(DynamicNetwork):
         n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
+        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
+            (so agents who join later, e.g. newborns, are not added)
 
     Note: n_contacts = 10 will create *5* edges per agent. Since disease transmission
     usually occurs bidirectionally, this means that the effective number of contacts
     per agent is actually 10. Consider 3 agents with 3 edges between them (a triangle):
     each agent is connected to 2 other agents.
+
+    Example:
+        ```python
+        # Static network with Poisson-distributed contacts among adults, as in Covasim v3
+        net = ss.RandomNet(n_contacts=ss.poisson(20), age_range=[18, 65], dynamic=False)
+        ```
     """
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, **kwargs):
         """ Initialize """
         super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
+            age_range = None,
+            dynamic = True,
         )
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG; name kept as 'RandomNet' (not the class name) so results stay reproducible across the rename, and shared with the RandomNet subclass
@@ -621,12 +706,17 @@ class RandomExactNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
 
+    def step(self):
+        """ If dynamic, replace expired edges; otherwise, do nothing """
+        if self.pars.dynamic:
+            super().step()
+        return
+
     def add_pairs(self):
         """ Generate edges """
         p = self.pars
         people = self.sim.people
-        born = people.alive & (people.age > 0)
-        uids = born.uids
+        uids = self.eligible(p.age_range).uids
         if isinstance(p.n_contacts, ss.Dist):
             n_conn = p.n_contacts.rvs(uids)
         else:
@@ -685,14 +775,45 @@ class RandomNet(RandomExactNet):
     correctly forms most of its edges with itself); drawing targets uniformly over
     agents instead would destroy that clustering and bias the realized degrees.
 
+    Alternatively, with `uniform_targets=True`, each target is chosen uniformly from all
+    eligible agents, regardless of their own `n_contacts`, as in Covasim v3's random networks.
+    This gives less variable numbers of contacts (e.g. with `n_contacts=ss.poisson(20)`, a
+    variance of about 15, rather than 30 for the default or 20 for `ss.RandomExactNet`), but
+    loses the mixing structure described above.
+
     Note: like `ss.RandomExactNet`, this is not random-number safe; see `ss.RandomSafeNet`
     for the CRN-safe (but slower) version.
+
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
+        uniform_targets (bool): if True, choose the target of each edge uniformly from the eligible agents, rather than in proportion to their number of contacts
+
+    Example:
+        ```python
+        # Static network with Poisson-distributed contacts, as in Covasim v3
+        net = ss.RandomNet(n_contacts=ss.poisson(20), dynamic=False, uniform_targets=True)
+        ```
     """
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, uniform_targets=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            uniform_targets = False,
+        )
+        self.update_pars(pars, **kwargs)
+        return
+
     def get_edges(self, inds, n_contacts):
         """ Find edges by sampling the source stubs with replacement (see `ss.RandomExactNet.get_edges`) """
         source = np.repeat(inds, n_contacts)
         n = len(source)
-        if n:
+        if n and self.pars.uniform_targets:
+            idx = self.dist.rng.integers(0, len(inds), n) # A random target agent for each source stub
+            target = np.take(np.asarray(inds), idx).view(ss.uids)
+        elif n:
             idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
             nc = np.asarray(n_contacts)
             nc0 = int(nc.flat[0])
@@ -738,7 +859,9 @@ class RandomSafeNet(DynamicNetwork):
             beta = 1.0,
         )
         self.update_pars(pars, **kwargs)
+        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years, as for ss.RandomExactNet (the default isn't ss.years(0) so a Dist is allowed)
         self.dist = ss.random(name='RandomSafeNet')
+        self.dist.hash_dtype = np.float64 # Since float32 only gives 2^24 distinct values, which would mean many ties (e.g. 25% of edges with a million agents)
         return
 
     def rep_rand(self, uids, sort=True):
@@ -768,18 +891,13 @@ class RandomSafeNet(DynamicNetwork):
         center = v[1:-1]
         p1_dist = abs(center - v[:-2])
         p2_dist = abs(center - v[2:])
-        use_p1 = sc.findinds(p1_dist < p2_dist)
-        use_p2 = sc.findinds(p1_dist > p2_dist) # Can refactor
+        use_p1 = p1_dist <= p2_dist # Ties (which are common with many agents, since the random numbers are float32) go to the lower neighbor
         source = agent[1:-1]
-        target = np.zeros(len(source), dtype=agent.dtype).view(ss.uids)
-        target[use_p1] = agent[:-2][use_p1]
-        target[use_p2] = agent[2:][use_p2]
+        target = np.where(use_p1, agent[:-2], agent[2:]).view(ss.uids)
 
         # Store additional information for debugging
         if debug:
-            dist = np.zeros(len(source))
-            dist[use_p1] = p1_dist[use_p1]
-            dist[use_p2] = p2_dist[use_p2]
+            dist = np.where(use_p1, p1_dist, p2_dist)
             out = sc.objdict()
             out.pairs = sorted(list(zip(source, target)))
             out.src = source
@@ -823,6 +941,164 @@ class RandomSafeNet(DynamicNetwork):
         return ss.return_fig(fig)
 
 
+class ClusterNet(Network):
+    """
+    Fully connected clusters of agents, e.g. households, schools, or workplaces
+
+    Each agent (optionally, only those within an age range) is assigned to one
+    cluster, with cluster sizes drawn from `cluster_size`, and every pair of agents
+    within a cluster is connected. Agents are assigned to clusters in a random order
+    (from a CRN-safe random number per agent), so clusters are not correlated with
+    other networks. Based on `make_microstructured_contacts()` from Covasim v3: as
+    there, clusters of size 0 are skipped, and the last cluster is truncated to fit.
+
+    Args:
+        cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution
+        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        beta (float): the beta value for each edge
+        dynamic (bool): if True, the clusters are recreated on each timestep; if False (default), they are created once and never change
+
+    Example:
+        ```python
+        households = ss.ClusterNet(name='households', cluster_size=ss.poisson(3))
+        sim = ss.Sim(diseases='sis', networks=households)
+        sim.run()
+        ```
+    """
+    def __init__(self, pars=None, cluster_size=_, age_range=_, beta=_, dynamic=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            cluster_size = ss.poisson(lam=4),
+            age_range = None,
+            beta = 1.0,
+            dynamic = False,
+        )
+        self.update_pars(pars, **kwargs)
+        self.define_states(
+            ss.FloatArr('cluster', label='Cluster ID'),
+        )
+        self.rng_order = ss.random() # Order in which agents are assigned to clusters
+        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ss.RandomSafeNet
+        self.n_clusters = 0
+        return
+
+    def step(self):
+        """ If dynamic, recreate the clusters; otherwise, do nothing """
+        if self.pars.dynamic:
+            self.remove_edges(np.ones(len(self), dtype=bool))
+            self.cluster.set_nan(self.cluster.auids)
+            self.n_clusters = 0
+            self.add_pairs()
+        return
+
+    def add_pairs(self):
+        """ Assign agents to clusters, and connect every pair of agents within each cluster """
+        uids = self.eligible(self.pars.age_range).uids
+        uids = uids[np.argsort(self.rng_order.rvs(uids), kind='stable')] # Shuffle; use a stable sort since the default order of ties depends on the CPU
+        n = len(uids)
+        if not n:
+            return
+
+        # Draw cluster sizes until there are enough to cover everyone
+        sizes = np.empty(0, dtype=ss_int)
+        while sizes.sum() < n:
+            new = np.round(self.pars.cluster_size.rvs(n)).astype(ss_int) # n clusters is enough unless some have size 0
+            if not np.any(new > 0): # Avoid an infinite loop
+                errormsg = f'The cluster size distribution for {self.name} did not produce any clusters of size 1 or more: {self.pars.cluster_size}'
+                raise ValueError(errormsg)
+            sizes = np.concatenate([sizes, new[new > 0]])
+        n_clusters = np.searchsorted(np.cumsum(sizes), n) + 1
+        sizes = sizes[:n_clusters]
+        sizes[-1] -= sizes.sum() - n # Truncate the last cluster
+        self.cluster[uids] = self.n_clusters + np.repeat(np.arange(n_clusters), sizes)
+        self.n_clusters += n_clusters
+
+        # Connect every pair (i<j) within each cluster, looping over cluster sizes rather than clusters
+        starts = np.cumsum(sizes) - sizes
+        p1 = [np.empty(0, dtype=ss_int)]
+        p2 = [np.empty(0, dtype=ss_int)]
+        for size in np.unique(sizes[sizes > 1]):
+            these = starts[sizes == size][:, None]
+            i, j = np.triu_indices(size, k=1)
+            p1.append((these + i).ravel())
+            p2.append((these + j).ravel())
+        p1 = uids[np.concatenate(p1)]
+        p2 = uids[np.concatenate(p2)]
+        beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
+        self.append(p1=p1, p2=p2, beta=beta)
+        return
+
+
+class HybridNet(Network):
+    """
+    Covasim v3's "hybrid" population: households, schools, workplaces, and community
+
+    When added to a sim, this expands into four separate networks: households (`h`,
+    an `ss.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each
+    an `ss.RandomNet` with Poisson-distributed contacts. As in Covasim v3, the networks
+    are static, and schools and workplaces are random networks restricted by age.
+    Each network can then be modified separately, e.g. `sim.networks.s`.
+
+    The default `beta` values are Covasim v3's per-layer relative transmissibility,
+    and are applied to the edges of each network; for per-network transmissibility
+    on the disease instead, set them to 1 and use e.g. `ss.SIS(beta=dict(h=0.3, s=0.06, w=0.06, c=0.03))`.
+
+    Args:
+        household_size (int/`ss.Dist`): the size of each household; a number is the mean of a Poisson distribution
+        contacts (dict): the mean number of contacts per agent in schools, workplaces, and community (numbers or `ss.Dist`s)
+        beta (dict): the beta value for each edge in each network
+        school_ages (list): the age range of agents in schools
+        work_ages (list): the age range of agents in workplaces
+        dynamic (bool): whether the networks are recreated on each timestep
+        uniform_targets (bool): whether to choose the targets of edges in schools, workplaces, and community uniformly, as in Covasim v3 (see `ss.RandomNet`)
+
+    Examples:
+        ```python
+        sim = ss.Sim(diseases='sis', networks=ss.HybridNet())
+        sim.run()
+        print(sim.networks.keys()) # ['h', 's', 'w', 'c']
+
+        # Larger households and smaller schools; contacts and beta can be partial
+        hybrid = ss.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))
+        ```
+    """
+    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, uniform_targets=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            household_size = ss.poisson(lam=2.0), # Covasim v3 default (contacts['h'])
+            contacts = dict(s=20, w=16, c=20),
+            beta = dict(h=3.0, s=0.6, w=0.6, c=0.3),
+            school_ages = [6, 22],
+            work_ages = [22, 65],
+            dynamic = False,
+            uniform_targets = False,
+        )
+        defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
+        self.update_pars(pars, **kwargs)
+        for key,default in defaults.items(): # Allow partial dicts, e.g. contacts=dict(s=10)
+            self.pars[key] = sc.mergedicts(default, self.pars[key])
+        return
+
+    def expand(self):
+        """ Create the four networks; called automatically when added to a sim """
+        p = self.pars
+        n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
+        kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
+        rkw = dict(uniform_targets=p.uniform_targets, **kw)
+        networks = [
+            ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
+            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **rkw),
+            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **rkw),
+            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **rkw),
+        ]
+        return networks
+
+    def step(self):
+        """ Not used, since the networks returned by expand() are used instead """
+        errormsg = 'ss.HybridNet() should be added to a sim, which replaces it with the networks from expand()'
+        raise RuntimeError(errormsg)
+
+
 class MFNet(SexualNetwork):
     """
     This network is built by **randomly pairing** males and female with variable
@@ -833,7 +1109,7 @@ class MFNet(SexualNetwork):
         debut (`ss.Dist`): Age of debut can vary by using callable parameter values
         acts (`ss.Dist`): Number of acts per year
         participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-        rel_part_rates (float): Relative participation in the network
+        rel_part_rates (float): Relative participation in the network, i.e. a multiplier (from 0 to 1) on the probability of participating
     """
     def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, **kwargs):
         super().__init__()
@@ -848,6 +1124,7 @@ class MFNet(SexualNetwork):
 
         # Finish initialization
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
+        self.rel_part = ss.bernoulli(p=1.0) # Set p later, in case rel_part_rates is modified
         return
 
     def init_post(self):
@@ -866,7 +1143,11 @@ class MFNet(SexualNetwork):
         people = self.sim.people
         if upper_age is None: uids = people.auids
         else: uids = (people.age < upper_age).uids
-        self.participant[uids] = self.pars.participation.rvs(uids)
+        participant = self.pars.participation.rvs(uids)
+        if self.pars.rel_part_rates != 1: # Scale the probability of participating
+            self.rel_part.set(p=self.pars.rel_part_rates)
+            participant &= self.rel_part.rvs(uids)
+        self.participant[uids] = participant
         return
 
     def set_debut(self, upper_age=None):
@@ -935,12 +1216,14 @@ class MSMNet(SexualNetwork):
     def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, **kwargs):
         super().__init__()
         self.define_pars(
-            duration = ss.lognorm_ex(mean=2, std=1),
+            duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)),
             debut = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_ex(mean=80, std=20),
+            acts = ss.lognorm_ex(mean=ss.freqperyear(80), std=ss.freqperyear(20)),
             participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
+        self.dist = ss.random(name='MSMNet') # For shuffling available males before pairing
+        self.dist.hash_dtype = np.float64 # Avoid ties, as for ss.RandomSafeNet
         return
 
     def init_post(self):
@@ -965,6 +1248,7 @@ class MSMNet(SexualNetwork):
     def add_pairs(self):
         """ Pair all unpartnered MSM """
         available_m = self.available(self.sim.people, 'male')
+        available_m = available_m[np.argsort(self.dist.rvs(available_m), kind='stable')] # Shuffle so pairing is random; use a stable sort since the default order of ties depends on the CPU
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -984,7 +1268,7 @@ class MSMNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states()
+        self.set_network_states(upper_age=self.t.dt.years)
         self.add_pairs()
         return
 
@@ -1035,10 +1319,7 @@ class PostnatalNet(DynamicNetwork):
     """
 
     def __init__(self, pars=None, dur=None, **kwargs):
-        """
-
-        """
-        super().__init__(**kwargs)
+        super().__init__()
         self.define_pars(dur=dur)
         self.update_pars(pars, **kwargs)
         return
@@ -1050,11 +1331,11 @@ class PostnatalNet(DynamicNetwork):
 
         if n:
             if isinstance(p.dur, ss.Dist):
-                dur = p.dur.rvs(mother_uids)
+                dur = p.dur.rvs(mother_uids) + 1 # +1 since edges are added by Pregnancy before end_pairs() decrements them in the same step
             elif p.dur is None:
                 dur = np.full(n,fill_value=np.inf)
             else:
-                dur = np.full(n, p.dur/self.t.dt)
+                dur = np.full(n, p.dur/self.t.dt + 1)
             self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
         return n
 
@@ -1073,15 +1354,16 @@ class BreastfeedingNet(PostnatalNet):
         assert self.pars.dur is None, 'BreastfeedingNet does not accept a `dur` parameter as breastfeeding duration is determined by the Pregnancy module'
         return
 
-    def init_post(self, *args, **kwargs):
-        # Connect the pregnancy module to this network
+    def init_pre(self, sim):
+        # Connect the pregnancy module to this network; do this here rather than in init_post() since deliveries during the pregnancy burn-in call add_pairs()
+        super().init_pre(sim)
         for mod in self.sim.modules:
             if isinstance(mod, ss.Pregnancy):
                 self.pregnancy = mod
                 break
         else:
             raise RuntimeError('BreastfeedingNet requires a Pregnancy module in the simulation to track breastfeeding status')
-        super().init_post(*args, **kwargs)
+        return
 
     def add_pairs(self, mother_uids=None, newborn_uids=None):
         """
@@ -1269,7 +1551,7 @@ class MixingPool(Route):
         mp_pars = dict(
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
-            beta = ss.Rate(0.2),
+            beta = 0.2,
             n_contacts = ss.poisson(lam=4),
         )
 

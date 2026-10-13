@@ -60,5 +60,6 @@ To run these user guides locally:
 - [Indexing and arrays](user_guide/advanced_indexing.qmd)
 - [Probability distributions](user_guide/advanced_distributions.qmd)
 - [Random number generation](user_guide/advanced_random.qmd)
+- [Population rescaling](user_guide/advanced_rescaling.qmd)
 - [Profiling and optimization](user_guide/advanced_profiling.qmd)
 - [Nonstandard usage](user_guide/advanced_nonstandard.qmd)

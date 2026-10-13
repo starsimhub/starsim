@@ -1,0 +1,131 @@
+---
+title: Population rescaling
+jupyter: python3
+---
+
+Simulating every person in a large population is often unnecessary, so Starsim lets each agent represent more than one person. This page covers static scaling, where each agent represents a fixed number of people, and dynamic rescaling, where that number increases as the epidemic grows.
+
+## Static scaling
+
+The `pop_scale` parameter sets how many people each agent represents. You can set it directly, or set `total_pop` and let Starsim calculate `pop_scale = total_pop/n_agents`:
+
+```{python}
+import numpy as np
+import sciris as sc
+import matplotlib.pyplot as plt
+import starsim as ss
+ss.options(jupyter=True)
+
+pars = dict(
+    n_agents = 5000,
+    total_pop = 1e6,
+    start = '2020-01-01',
+    dur = ss.days(150),
+    dt = ss.days(1),
+    networks = ss.RandomNet(n_contacts=10),
+    verbose = 0,
+)
+sir = ss.SIR(beta=ss.perday(0.03), init_prev=ss.choose_n(10), dur_inf=ss.days(10), p_death=0)
+
+static = ss.Sim(pars, diseases=sir, label='Static')
+static.run()
+print(f'Each agent represents {static.pars.pop_scale:n} people')
+```
+
+Results defined with `scale=True` (the default, used for counts such as `n_infected`) are multiplied by the scale factor when the sim finishes. Results with `scale=False` (e.g. `prevalence`) are left unchanged.
+
+The drawback is resolution. Here, the 10 initial infections represent 2,000 infected people, and an outbreak can never start from fewer than 200 people. Rare events, such as the first few cases of an epidemic, can't be represented accurately.
+
+## Dynamic rescaling
+
+With `rescale=True`, the scale factor starts at 1, so the first agents represent single people. As the epidemic spreads, the scale factor increases up to `pop_scale`. This approach is based on Covasim. Each timestep, the sim:
+
+1. Checks the fraction of agents who are not naive, meaning they have ever been infected with any disease.
+2. If that fraction exceeds `rescale_threshold` (default 0.05), increases the scale factor by at least `rescale_factor` (default 1.2), without exceeding `pop_scale`.
+3. Chooses enough non-naive agents to make the same fraction naive again (e.g. half of them, if the scale doubles), and resets them by calling `disease.make_naive()` for each disease.
+
+As a result, every agent always represents the same number of people. Some of those people may be naive while others may be infected. When the scale factor increases, the infected people are "spread" across fewer agents, which frees up agents to represent the population that has not been infected yet.
+
+```{python}
+dynamic = ss.Sim(pars, diseases=sir, rescale=True, label='Dynamic')
+dynamic.run()
+
+res = dynamic.results
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+axs[0].plot(res.timevec, res.pop_scale)
+axs[0].set_title('Population scale factor')
+for sim in [static, dynamic]:
+    axs[1].plot(sim.timevec, sim.results.sir.n_infected, label=sim.label)
+axs[1].set_title('Number infected')
+axs[1].legend()
+plt.show()
+```
+
+The static sim starts with 2,000 infected people (10 agents, each representing 200 people), so its epidemic peaks earlier, while the dynamic sim starts with just 10. The scale factor for each timestep is stored in `sim.results.pop_scale`. During a run, `sim.current_scale` gives the current scale factor.
+
+When a module has a different timestep than the sim, its results use the scale factor from the most recent sim timestep, since the scale only changes on sim timesteps.
+
+### Requirements for diseases
+
+Dynamic rescaling needs to know which agents are naive, so each disease must have a `ti_infected` state, which all `ss.Infection` subclasses have. It also needs to reset agents, which is done by `disease.make_naive(uids)`. By default, this resets every state of the disease to its default value, except `rel_sus` and `rel_trans`, since these are often modified by other modules (e.g. vaccines). You can change which states are kept via `skip_states`, or override the method if your disease needs something different. For example, `ss.SIS` also resets `rel_sus`, since it calculates `rel_sus` from its own immunity:
+
+```python
+class MyDisease(ss.SIS):
+    def make_naive(self, uids, skip_states=None):
+        super().make_naive(uids, skip_states=['rel_trans']) # Reset rel_sus too
+        self.my_custom_state[uids] = 0 # And reset anything not stored as a state
+        return
+```
+
+### Custom results
+
+Results with `scale=True` are scaled automatically, using the scale factor for each timestep. However, a cumulative result calculated during the run would mix different scale factors. Instead, calculate it in `finalize_results()`, after the results have been scaled, as `ss.Infection` does for `cum_infections`:
+
+```python
+def finalize_results(self):
+    super().finalize_results() # Scale the results first
+    self.results.cum_infections[:] = np.cumsum(self.results.new_infections)
+    return
+```
+
+## Results only count the people that agents represent
+
+While the scale factor is less than `pop_scale`, part of the population is not represented by any agent. These people are all naive, but they don't appear in the results. Above, the dynamically rescaled sim starts with 5,000 people alive rather than 1 million, so its prevalence is 200 times too high:
+
+```{python}
+res = dynamic.results
+print(f'n_alive = {res.n_alive[0]:n}, n_susceptible = {res.sir.n_susceptible[0]:n}, n_infected = {res.sir.n_infected[0]:n}, prevalence = {res.sir.prevalence[0]}')
+```
+
+Starsim does not correct for this automatically, since the right correction depends on the disease and on what each result means. For a disease where the unrepresented people are simply susceptible, you can add them back in `finalize_results()`. At each timestep, the scaled agents represent `n_agents` people, and `n_agents*(pop_scale/scale - 1)` more people are not represented:
+
+```{python}
+class FullPopSIR(ss.SIR):
+    """ SIR whose results include the people not represented by agents during dynamic rescaling """
+    def finalize_results(self):
+        super().finalize_results() # Scale the results
+        sim = self.sim
+        if sim.pars.rescale:
+            res = self.results
+            n_agents = res.n_susceptible + res.n_infected + res.n_recovered # People represented by agents (already scaled)
+            ratio = sim.pars.pop_scale/sim.result_scale(self) # Final scale factor relative to the current one
+            n_implicit = n_agents*(ratio - 1) # People not represented by agents, who are all naive
+            res.n_susceptible[:] += n_implicit
+            res.prevalence[:] = res.n_infected/(n_agents + n_implicit)
+        return
+
+fullpop_sir = FullPopSIR(name='sir', beta=ss.perday(0.03), init_prev=ss.choose_n(10), dur_inf=ss.days(10), p_death=0)
+fullpop = ss.Sim(pars, diseases=fullpop_sir, rescale=True, label='Full population')
+fullpop.run()
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+for sim in [dynamic, fullpop]:
+    axs[0].plot(sim.timevec, sim.results.sir.n_susceptible, label=sim.label)
+    axs[1].plot(sim.timevec, sim.results.sir.prevalence, label=sim.label)
+axs[0].set_title('Number susceptible')
+axs[1].set_title('Prevalence')
+axs[1].legend()
+plt.show()
+```
+
+Since the disease has the same name (`sir`) as before, it uses the same random numbers, so the epidemic itself is identical. Only the reported results differ. The same approach applies to the sim's own results (e.g. `n_alive`), which you could adjust in an analyzer's `finalize_results()`.

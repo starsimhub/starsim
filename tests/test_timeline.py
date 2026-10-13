@@ -2,6 +2,7 @@
 Test the Timeline object
 """
 import numpy as np
+import pytest
 import sciris as sc
 import starsim as ss
 
@@ -25,6 +26,11 @@ def test_timeline_lengths():
     assert len(ss.Timeline(start=ss.years(0), stop=ss.years(1), dt=ss.years(1/12))) == 13
     assert len(ss.Timeline(ss.date('2020-01-01'), ss.date('2030-06-01'), ss.days(1))) == 3805
     assert len(ss.Timeline(ss.date(2020), ss.date(2030.5), ss.years(0.1))) == 106
+
+    # Sub-daily steps are exact, even in a leap year
+    t2 = ss.Timeline(ss.date('2000-01-01'), ss.date('2000-01-10'), ss.days(0.25)).init()
+    assert len(t2) == 37
+    assert np.allclose(t2.tvec.days_since('2000-01-01'), np.arange(37)*0.25)
 
     return t
 
@@ -79,6 +85,7 @@ def test_timeline():
     assert isinstance(s1.t.start, ss.years)
     assert isinstance(t1.start, ss.date)
     assert s1.t.tvec[-1] == ss.years(2002)
+    assert np.array_equal(s1.t.relvec[:3], [0, 0.1, 0.2]) # Numbers in the sim's units, not ss.datedur objects
     assert t1.tvec[-1] == ss.date('2001-06-30')
 
     print('Testing weeks vs. days')
@@ -120,6 +127,11 @@ def test_timeline():
     assert s6.t.tvec[0] == ss.years(2)
     assert s6.t.tvec[-1] == ss.datedur(years=52).years
     assert len(s6.t) == 51
+
+    print('Testing that a timeline is not a timestep index')
+    with pytest.raises(TypeError):
+        s1.t == 10 # Should be s1.ti == 10
+    assert s1.t == s1.t and s1.t != t1 # Comparing timelines still uses identity
 
     return [s1, t1, s2, t2]
 

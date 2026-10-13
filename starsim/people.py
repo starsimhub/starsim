@@ -108,7 +108,7 @@ class People:
         Allow people['attr'] instead of getattr(people, 'attr')
         If the key is an integer, alias `people.person()` to return a `Person` instance
         """
-        if isinstance(key, int):
+        if isinstance(key, (int, np.integer)):
             return self.person(key)
         elif isinstance(key, str):
             return getattr(self, key)
@@ -121,9 +121,9 @@ class People:
         return setattr(self, key, value)
 
     def __iter__(self):
-        """ Iterate over people """
-        for i in range(len(self)):
-            yield self[i]
+        """ Iterate over (alive) people """
+        for uid in self.auids:
+            yield self.person(uid)
 
     def __setstate__(self, state):
         """
@@ -354,8 +354,26 @@ class People:
     
     @property
     def dead(self):
-        """ Dead boolean. Also includes removed agents """
-        return ~self.alive
+        """
+        Whether each agent has died
+
+        Unlike other arrays, this covers every agent ever created (indexed by UID),
+        since dead agents are removed from the active agents. Agents who were removed
+        for other reasons (e.g. emigration) are not counted as dead.
+
+        Examples:
+            ```python
+            sim = ss.Sim(diseases=dict(type='sir', p_death=0.5), networks='random').run()
+            n_deaths = sim.people.dead.sum()
+            dead_uids = sim.people.dead.uids
+            ```
+        """
+        n = self.n_uids
+        raw = np.zeros(self.uid.len_tot, dtype=bool)
+        raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
+        dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
+        dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
+        return dead
 
     @property
     def born(self):
@@ -498,7 +516,7 @@ class People:
         """
         Remove agents who are exiting the population (death, migration, etc)
         """
-        uids = self.dead.uids
+        uids = self.alive.false() # Agents who are still active but no longer alive
         if len(uids):
 
             # Remove the UIDs from the networks too
@@ -528,8 +546,16 @@ class People:
         return
 
     def to_df(self):
-        """ Export to dataframe """
-        df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
+        """ Export to dataframe; 2D states have one column per value, e.g. `sus_imm_0` (or `sus_imm_wild` if the columns are named) """
+        cols = dict(uid=self.uid, slot=self.slot)
+        for key,state in self.states.items():
+            if state.ndim > 1:
+                vals = state.values.reshape(len(state), int(np.prod(state.item_shape))).T
+                names = state.columns if state.columns is not None else range(len(vals))
+                cols.update({f'{key}_{name}':col for name,col in zip(names, vals)})
+            else:
+                cols[key] = state
+        df = sc.dataframe(**cols)
         return df
 
     def plot(self, key=None, alive=True, bins=50, hist_kw=None, max_plots=20, figsize=(16,12), **kwargs):
@@ -619,8 +645,7 @@ class People:
         # Define age bins
         if np.iterable(bins):
             width = None # Already defined, don't need
-
-        if np.isscalar(bins):
+        elif np.isscalar(bins):
             width = bins
         else:
             width = 5
@@ -637,7 +662,7 @@ class People:
         if absolute:
             xlabel = 'Number of people'
         else:
-            total = f_vals.sum() + f_vals.sum()
+            total = f_vals.sum() + m_vals.sum()
             f_vals = f_vals / total * 100
             m_vals = m_vals / total * 100
             xlabel = 'Percentage of population'
