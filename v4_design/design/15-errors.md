@@ -6,7 +6,7 @@ Justified by [best-practices/principles.md](../best-practices/principles.md).
 
 ## The policy
 
-**Prefer guessing a default and printing it to raising an error.** Most things a user leaves out have a sensible default, and stopping the run to ask for it helps nobody. An error is for the cases where there is no sensible guess: a name that does not exist, lengths that do not match, a request the run method cannot meet.
+**Prefer guessing a default and printing it to raising an error.** Most things a user leaves out have a sensible default, and stopping the run to ask for it helps nobody. An error is for the cases where there is no sensible guess: a name that does not exist, lengths that do not match, a request the solver cannot meet.
 
 A message is read once, by an epidemiologist or by an AI writing a model for one. Either way it should say what is wrong in the user's own terms, show the line, and say what to do.
 
@@ -36,13 +36,13 @@ Avoid `ValueError: shape mismatch`, `KeyError: 'beta'`, and a traceback through 
 | **Warning** (`W`) | The run can proceed, but something probably needs attention | Printed through Starsim's `ss.warn`; the run continues |
 | **Note** (`W`, marked "note" below) | Something was assumed, approximated, or is worth knowing | One printed line; `verbose=0` hides it |
 
-Guessed defaults are not coded at all: `describe()` marks them `[guessed]` ([01-objects.md](01-objects.md#describe)). Approximations made when a method is requested explicitly are uncoded one-line notes as well ([12-backends.md](12-backends.md#approximations)); they turn into `E804` only under `approx=False`.
+Most guessed defaults are not coded at all: `describe()` marks them `[guessed]` ([01-objects.md](01-objects.md#describe)). The few that also print a line when the sim is built (the unit, a state treated as a count) have a note code so the line can be looked up. Approximations made when a solver is requested explicitly are uncoded one-line notes ([12-backends.md](12-backends.md#approximations)); `approx=True` silences them, and they turn into `E804` only under `approx=False`. The one approximation `solver='auto'` makes without being asked, Erlang stages for a dwell time, has a code (`W1205`).
 
 Warnings and notes use Python's `warnings` machinery, as Starsim does today, so they can be filtered or turned into errors in the usual way. Notes keep a `W` code so that they can be looked up.
 
 ## The catalog
 
-Every code cited anywhere in this folder is listed here.
+Every code cited anywhere in this folder is listed here: 54 codes, of which 34 are errors, 7 warnings, and 13 notes.
 
 ### 1xx: types and units
 
@@ -50,8 +50,9 @@ Every code cited anywhere in this folder is listed here.
 |---|---|---|---|
 | `E101` | `IncompatibleTypes` | error | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq` ([02](02-types.md#arithmetic)) |
 | `E102` | `WrongDimension` | error | A fully typed expression has the wrong dimension for its slot (a rate times a duration in `rate=`), or both `beta` and `n_contacts` carry a time unit ([06](06-routes.md#units)) |
-| `W101` | `UnitAssumed` | note | No unit was given anywhere; days were assumed |
+| `W101` | `UnitInferred` | note | The sim's unit was not given with `unit=` and was taken from `dt`, from `start` and `stop`, or from the typed values. Says which unit and where it came from (`unit='day', dt=1 day (from start and stop dates)`). Not printed when nothing has a unit: time is then in timesteps and nothing was inferred |
 | `W102` | `LargeStep` | note | `rate × dt > 0.1` for a converted rate; says how far `rate × dt` is from `1 − exp(−rate × dt)` and points to `sim.check_dt()` |
+| `W103` | `UnitsDisagree` | note | The only source of a unit is the typed values, they have different units (`ss.days(10)` and `ss.peryear(0.02)`), and there are bare numbers that need one. The smallest unit is used. Names the bare numbers it was applied to and suggests `unit=` |
 
 ### 2xx: states and transitions
 
@@ -63,7 +64,10 @@ Every code cited anywhere in this folder is listed here.
 | `E206` | `DuplicateDeclaration` | error | Two members of a module are given the same explicit name, or a state is an endpoint of transitions in two modules |
 | `E208` | `NonlinearExposure` | error | A rate is not linear in its bare states (`I ** 2`, `I / (I + K)`, or a term containing two bare states). Says to use `I.n` if a literal count was meant |
 | `E209` | `UndrivenTransition` | error | A transition reaches build time with no rate, no duration, and no `p=` |
-| `W207` | `UnreachableState` | note | A state has no transition into it and starts empty, which is usually a typo |
+| `E210` | `UnnamedState` | error | A state made by `ss.states(3)` or `ss.State()` cannot be matched to a variable name when the module is built (two names for one object, a state built inline). Suggests `ss.states('S I R')` or `ss.State('S')` |
+| `E211` | `ExposureToCount` | error | A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` |
+| `W207` | `UnreachableState` | note | A state has no transition into it, from another state or from `ss.null`, and starts empty, which is usually a typo |
+| `W212` | `StateNotPeople` | note | A state was inferred to hold a count and not people, because no transition connects it to the module's first state (`state 'W' treated as a count, not people (no transition connects it to 'S')`). `ss.State(people=False)` confirms it and `ss.State(people=True)` overrides it; either silences the note |
 
 ### 3xx: stratification
 
@@ -71,9 +75,10 @@ Every code cited anywhere in this folder is listed here.
 |---|---|---|---|
 | `E301` | `UnknownTransition` | error | `adjust=` names a transition that does not exist. Lists the ones that do |
 | `E302` | `BadSplit` | error | `split=` has the wrong number of entries. (A split that does not sum to 1 is normalized, and `describe()` says so) |
-| `E305` | `DuplicateStructuralDimension` | error | The model is stratified by age twice, or by any dimension it already has |
+| `E305` | `DuplicateStructuralDimension` | error | A model or sim is stratified by a dimension it already has. `stratify` works in place, so this is what a notebook cell that is run twice will hit, and the message says so. (Stratifying a disease by a people property the sim already has, with the same levels, only adds the adjustments and is not an error) |
 | `E306` | `InvalidAdjustment` | error | A negative multiplier in `adjust=`. (A multiplier that pushes a probability above 1 is clipped, with a note) |
 | `E307` | `PartialStratificationMixing` | error | A state that a dimension does not apply to is the origin or the source of a transmission, so there is no coordinate for those people to mix as |
+| `E308` | `InconsistentDimension` | error | Two modules in one sim are stratified by the same people property (age, sex, place) with different groups. Names both modules and their groups, and suggests stratifying the sim: `sim.stratify(age=[...])` |
 | `W309` | `LargeStateSpace` | warning | The stratified model has more than about 10,000 compartments. Names the dimensions and sizes and notes that an agent-based run does not grow this way |
 
 ### 4xx: mixing and geography
@@ -83,6 +88,7 @@ Every code cited anywhere in this folder is listed here.
 | `E402` | `NoGeography` | error | A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances |
 | `E403` | `RouteMismatch` | error | A key of a per-layer `beta` dict matches no network or layer |
 | `W402` | `TargetStatsNotRecovered` | warning | `net.check()` finds that a network does not reproduce a target statistic it was given |
+| `W404` | `MatrixAggregated` | note | In a compartmental run, a contact matrix whose age groups are not the model's was aggregated to the model's groups, weighted by population. Names the matrix and both sets of groups, and says where a model group cuts through a matrix band and the band was split. Agents use the matrix's own groups and get no note |
 
 ### 5xx: modifiers
 
@@ -108,25 +114,20 @@ Every code cited anywhere in this folder is listed here.
 | `E702` | `UnknownOutcomeSource` | error | The source of an `ss.outcome` names nothing in the model |
 | `E703` | `OutcomeCycle` | error | Outcomes chain back to themselves |
 | `E704` | `DataMisaligned` | error | The data lies entirely outside the simulated period. (Data partly outside is used where it overlaps, with a note) |
-| `W705` | `UnknownDataColumn` | warning | A data column matches no result. It is reported once, with the closest result names, and ignored |
+| `E705` | `UnknownDataColumn` | error | A data column matches no result. Lists the closest result names and suggests `ss.data(..., aliases=dict(result='Column'))` to rename it or `ignore_extra=True` to drop it |
 
-### 8xx and 12xx: run methods
+### 8xx and 12xx: solvers
 
 | Code | Name | Level | When |
 |---|---|---|---|
-| `E804` | `CapabilityError` | error | The requested run method cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
+| `E804` | `CapabilityError` | error | The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
 | `W1201` | `SmallCounts` | note | `ode` or `sde` with a compartment holding only a few people |
 | `W1202` | `ExtinctionPossible` | note | `ode` on a model where the epidemic could plausibly die out by chance |
 | `W1203` | `LeapConditionMarginal` | note | `tau` with rates changing quickly within a leap |
 | `W1204` | `DiscretizationCoarse` | note | `binomial` or `abm` with `rate × dt` large |
+| `W1205` | `StagesUnderAuto` | note | `solver='auto'` represented a dwell time that is not exponential or Erlang by fitted Erlang stages, so that the model could stay an ODE. Names the transition, the number of stages, and the mean and standard deviation kept. `stages=` on the transition or `approx=True` silences it; with `approx=False` the model runs as agents instead |
 
-Each of the four notes names the quantity involved and a method that would not have the problem ([12-backends.md](12-backends.md#the-methods)).
-
-### 9xx: reproducibility
-
-| Code | Name | Level | When |
-|---|---|---|---|
-| `E901` | `ResultExists` | error | Only when result caching is on: a different result would overwrite a stored one with the same run hash |
+Each of the first four notes names the quantity involved and a solver that would not have the problem ([12-backends.md](12-backends.md#the-solvers)).
 
 ### 10xx: execution
 
@@ -171,7 +172,9 @@ Some mistakes are ordinary Python usage errors and raise a plain `TypeError` or 
 
 ## Removed since the first draft
 
-The first draft had about 75 codes. Most of the ones that went were errors for mechanisms that no longer exist (queued updates, the closure ladder, declared reads and writes, the dict shorthand, predicate rank) or refusals that are now a guessed default or a printed approximation. In particular: a missing `n_agents` is guessed; a spatial dimension without mobility is an ordinary model; coverage and capacity on a stratified model are behaviors the library is required to get right ([05](05-dimensions.md#coverage-and-counts-on-a-stratified-model)), not errors; and running a network model as an ODE prints a note.
+The first draft had about 75 codes and this one has 54. Most of the ones that went were errors for mechanisms that no longer exist (queued updates, the closure ladder, declared reads and writes, the dict shorthand, predicate rank) or refusals that are now a guessed default or a printed approximation. In particular: a missing `n_agents` is guessed; a spatial dimension without mobility is an ordinary model; coverage and capacity on a stratified model are behaviors the library is required to get right ([05](05-dimensions.md#coverage-and-counts-on-a-stratified-model)), not errors; and running a network model as an ODE prints a note.
+
+Since the second draft: `E901 ResultExists` went with result caching, which is deferred. `W101` was `UnitAssumed` ("no unit given, assuming days"); a model with no unit now runs in timesteps and the code reports an inferred unit instead. An unmatched data column was a warning (`W705`) and is an error (`E705`), now that `ss.data(aliases=, ignore_extra=)` gives a way to deal with it. Seven codes were added, for states that are not people, sim-level stratification, units, and `solver='auto'`: `W103`, `E210`, `E211`, `W212`, `E308`, `W404`, and `W1205`.
 
 ## Documentation
 

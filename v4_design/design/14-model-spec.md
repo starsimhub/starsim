@@ -161,7 +161,7 @@ Each module carries `guessed`: the paths of its fields whose values were guessed
 
 ## Rate expressions
 
-Rates, branch probabilities, result ratios, and conditions are written as nested lists: an operator or a kind, followed by its arguments. A number, a quantity, or a name can stand anywhere an argument can. Nothing in the spec is a string of code to be parsed.
+Rates, branch probabilities, result ratios, and conditions are written as nested lists: an operator or a kind, followed by its arguments. A number, a quantity, or a name can stand anywhere an argument can. Nothing in the spec is a string of code to be parsed. [CK: don't particularly like this, it's extremely hard to read]
 
 ```json
 ["*", ["par", "beta"], ["state", "I"]]
