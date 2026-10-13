@@ -74,7 +74,7 @@ If nothing specifies a unit (no `unit=`, no `dt=` with a unit, no dates, no type
 note: no time unit given; assuming unit='day', dt=1 day
 ```
 
-Starsim's own default unit is the year, so this is a change from Starsim and is listed under open questions. Examples in this folder do not rely on the default: they give `unit=`, `dt=`, or typed values.
+Starsim's own default unit is the year, so this is a change from Starsim and is listed under open questions. Examples in this folder do not rely on the default: they give `unit=`, `dt=`, or typed values. [CK: if nothing has any units, then i think the unit should be in timesteps, not 'days'. as soon as anything has any units, we can use those, and print where we got them from.]
 
 ### Print the conversion, do not make people write it
 
@@ -113,7 +113,7 @@ ss.Sim(sir, start=2020, stop=2030, dt=ss.months(1))          # float years
 ss.Sim(sir, start='2020-03-15', stop='2020-06-01')           # dates
 ```
 
-Relative time (`start=0, stop=100`) stays available for textbook models. Starsim's `Timeline` already exposes `tvec` / `tivec` / `timevec` / `yearvec` / `datevec` / `relvec`, which is a lot of parallel representations, and does mean output can be requested in whatever frame the data are in. Keep it; do not add to it.
+Relative time (`start=0, stop=100`) stays available for textbook models. Starsim's `Timeline` already exposes `tvec` / `tivec` / `timevec` / `yearvec` / `datevec` / `relvec`, which is a lot of parallel representations, and does mean output can be requested in whatever frame the data are in. Keep it; do not add to it. [CK: if we can simplify the Timeline, i'd appreciate it! but i'm not sure we can, since dates/times are messy.]
 
 ### Per-module timesteps
 
@@ -149,13 +149,13 @@ The last line of the message suggests the fix. [Error messages are part of the l
 
 - **`ss.perday(0.05)` is more to type than `0.05`.** Which is why bare numbers work; the typed form is for when the model spans timescales or the units are not obvious.
 - **Rate-to-probability conversion has corners at large `dt`.** Starsim's review flags this, particularly around calendar durations and `datedur` versus float-year arithmetic. The mitigation is a warning when `rate × dt > ~0.1`, where the exponential conversion starts to matter and people's intuitions stop being reliable.
-- **Per-module timesteps make the execution order harder to reason about.** Starsim's loop being an object that can be printed and plotted (`sim.loop`) is what makes this manageable; keep that.
+- **Per-module timesteps make the execution order harder to reason about.** Starsim's loop being an object that can be printed and plotted (`sim.loop`) is what makes this manageable; keep that. [CK: yes, but it's hard to interpret in practice ... we should think about how to make it as clear as possible.]
 - **Bare numbers skip the dimension check**, and a default unit can be the wrong one. Both are handled by printing: `describe()` shows every resolved value with its unit, and an assumed unit is announced at run time.
 - **Fifteen time classes is a lot** (Starsim's own review says so). Resist adding more. If a new one seems necessary, check whether it is a `datedur` in disguise.
 
 ## Rejected
 
-- **Unitless integer steps** (EpiModel, `individual`, LASER, epiworld, SimInf). The cost is documented across five reviews.
+- **Unitless integer steps** (EpiModel, `individual`, LASER, epiworld, SimInf). The cost is documented across five reviews. [CK: actually, i think this would be nice. for theoretical models, forcing it into dates or years feels awkward at best.]
 - **Making the user write `1 - exp(-r*dt)`** (odin, `individual`). Transparent and unsafe; we get the transparency from the printout.
 - **Units as an optional annotation** ([SBML](../approaches/notes.md#sbml-systems-biology-markup-language)'s `unitDefinition`, which is in the standard and "widely ignored in practice"). Here the kind of quantity comes from the argument slot and the unit from the sim, so every value ends up with both whether or not the user typed them.
 - **Renaming Starsim's types** (`ss.per` to `ss.rate`, for example). The current names work and existing code uses them.
@@ -165,6 +165,6 @@ The last line of the message suggests the fix. [Error messages are part of the l
 
 ## Open questions
 
-- What happens when a `ss.freq` and a `ss.per` are added? Probably an error, but the rules for the full type lattice need writing down once rather than discovering per operator.
-- **The default unit.** This document assumes days when nothing specifies a unit, because most textbook models and most outbreak models are written in days. Starsim's own default is the year. One of the two has to give, or the default has to depend on something stated (for example, years when `start=2020` and days when `start='2020-01-01'`).
+- What happens when a `ss.freq` and a `ss.per` are added? Probably an error, but the rules for the full type lattice need writing down once rather than discovering per operator. [CK: agree]
+- **The default unit.** This document assumes days when nothing specifies a unit, because most textbook models and most outbreak models are written in days. Starsim's own default is the year. One of the two has to give, or the default has to depend on something stated (for example, years when `start=2020` and days when `start='2020-01-01'`). [CK: i think we should use integer timesteps ... what's the most common answer among the models surveyed?]
 - Continuous-time methods ([SimInf](../approaches/siminf.md)'s, [EoN](../approaches/eon.md)'s; here `method='ctmc'` and `'ode'`) have no rate-to-probability conversion at all, which is a real correctness advantage. Does the *model* need to know? Probably not: see [paradigm-conversion.md](paradigm-conversion.md).
