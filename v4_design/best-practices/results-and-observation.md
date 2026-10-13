@@ -9,7 +9,7 @@
 5. **Data attaches to results by name.** `ss.Sim(sir, data='cases.csv')`, with columns named like results, as in Covasim. Results that have data are plotted against it.
 6. **Incidence is a result, not something derived by post-processing.** odin's `zero_every` accumulator plus camdl's `incidence(transition)` is a complete answer.
 7. **For any stochastic run, the default result is a distribution over trajectories, not a trajectory.**
-8. **Record transmission events.** Cheap, generally useful, and it enables phylodynamic comparison.
+8. **Record transmission events.** Cheap, generally useful, and it enables phylodynamic comparison. [CK: yes, but not by default, too much data!]
 
 ## Why
 
@@ -118,13 +118,13 @@ sir = ss.Disease(
 )
 ```
 
-This is Atomica's Components-and-Denominator in Python. A sum of states is a named combination; a ratio of two is a characteristic. In a result, a state stands for the number of people in it, so `I / N` is a time series of prevalence. (`I.prev`, the fraction of the whole population in `I`, exists for the most common case.)
+This is Atomica's Components-and-Denominator in Python. A sum of states is a named combination; a ratio of two is a characteristic. In a result, a state stands for the number of people in it, so `I / N` is a time series of prevalence. (`I.prev`, the fraction of the whole population in `I`, exists for the most common case.) [CK: hmm ... i'm not sure about this. it's confusing that N = S+I+R is a new state, but E = I+R is a result. i think we might need to rethink this a bit, or maybe you could clarify how it would work in practice with more complex edge cases.]
 
 After [stratifying](stratification.md), any result can be selected by stratum, which is summer2's `source_strata` filter:
 
 ```python
 sim.results.sir.infection.sel(age=0)      # incidence in the youngest age group
-sim.results.sir.prevalence.sel(risk='high')
+sim.results.sir.prevalence.sel(risk='high') # [CK: i like short names, but 'select' is fine here]
 ```
 
 ### Outcomes: the reporting cascade
@@ -138,10 +138,10 @@ sir = ss.Disease(
     cases  = ss.outcome(infection, p=0.5,  delay=ss.days(5)),
     hosp   = ss.outcome(infection, p=0.05, delay=ss.days(7), duration=ss.days(10)),
     deaths = ss.outcome('hosp',    p=0.2,  delay=ss.days(14)),
-)
+) # [CK: this is just a toy example and already it's getting pretty complicated with transitions, results, and outcomes all mushed together ... potentially we do want to support this, but i think most users will use a more explicit form, e.g. outcomes=[...]]
 ```
 
-An outcome is a flow that has been thinned (`p=`) and delayed (`delay=`). Its source is a transition or another outcome, given as the object or by name, so outcomes chain. `duration=` produces both `hosp` (admissions) and `n_hosp` (people currently in hospital), which is flepiMoP's automatic `currHosp` and is the incidence/prevalence pair that gets hand-rolled everywhere else. `p=` and `delay=` accept distributions, because ascertainment varies and reporting delays are not point masses.
+An outcome is a flow that has been thinned (`p=`) and delayed (`delay=`). Its source is a transition or another outcome, given as the object or by name, so outcomes chain. `duration=` produces both `hosp` (admissions) and `n_hosp` (people currently in hospital), which is flepiMoP's automatic `currHosp` and is the incidence/prevalence pair that gets hand-rolled everywhere else. `p=` and `delay=` accept distributions, because ascertainment varies and reporting delays are not point masses. [CK: i don't love this. seems both complex and not flexible enough. there are other transformations that happen, like binning. and the delays might be a complex function (eg, no cases reported over the weekend), but i guess that can be handled here. will also be important to handle combinations, e.g. cases ~ (asymptomatic_infection * 0.01 + symptomatic_infection * 0.3 + severe_infection * 0.8). also need to think about how 'outcomes' relate to interventions -- does the disease handle cases, or do the testing interventions? how do you get 'cases' if you have several different testing interventions?] 
 
 This replaces adding hospitalization and death compartments to the disease model when they are not part of transmission. The same disease model then serves a hospital-burden question and a transmission question. Outcomes are results like any other: `sim.results.sir.cases`, `sim.results.sir.n_hosp`.
 
@@ -156,7 +156,7 @@ sim.plot()
 
 The data does not need to be on the model's timestep. Weekly case counts are compared with the model's cases summed over each week, because `cases` is a flow; a prevalence survey is compared with the model's value on the survey date, because `prevalence` is a stock. The result already knows which it is. (Starsim's calibration components ask the user for this as `conform='incident'` or `'prevalent'`.)
 
-That is all [calibration](calibration.md) needs: `sim.calibrate()` fits to every result that has data, using a normalized root-mean-square error per series. Nobody has to write a likelihood. When one is wanted, it goes on the result:
+That is all [calibration](calibration.md) needs: `sim.calibrate()` fits to every result that has data, using a normalized root-mean-square error per series. Nobody has to write a likelihood. [CK: not sure i love RMSE as the default ... i think a nonparametric default would be better, RMSE is common but fragile.] When one is wanted, it goes on the result:
 
 ```python
 cases = ss.outcome(infection, p=0.5, delay=ss.days(5),
@@ -173,14 +173,14 @@ which is camdl's `weekly_cases ~ neg_binomial(...)` and odin's `cases ~ Poisson(
 sim = ss.Sim(sir, method='stochastic', n_reps=100).run()
 sim.plot()                        # median and interval, not 100 spaghetti lines
 sim.results.sir.n_I.quantiles([0.025, 0.5, 0.975])
-sim.results.sir.n_I.trajectories  # still there when you want it
+sim.results.sir.n_I.trajectories  # still there when you want it # [CK: don't love the name 'trajectories', maybe 'raw' or 'full' or something? open to suggestions ...]
 ```
 
-And [`epidemics`](../approaches/epidemics.md)'s scenario grid is the same idea one level up: passing lists of elements returns one tidy frame with scenario identifiers. `ss.parallel(baseline=..., vaccine=...)` should return a result object indexed by scenario, replicate, and time — the [default unit of a run is a set of scenarios](interventions.md#scenarios-in-the-file), not a trajectory.
+And [`epidemics`](../approaches/epidemics.md)'s scenario grid is the same idea one level up: passing lists of elements returns one tidy frame with scenario identifiers. `ss.parallel(baseline=..., vaccine=...)` should return a result object indexed by scenario, replicate, and time — the [default unit of a run is a set of scenarios](interventions.md#scenarios-in-the-file), not a trajectory. [CK: um ... i don't agree with that for `sim.run()`, but i do agree that it should be utterly seamless to switch from a single run to multiple runs, and i agree that `ss.parallel()` returning a single object containing indexed scenarios is nice.]
 
 ### Transmission provenance
 
-[EpiModel](../approaches/epimodel.md)'s `get_transmat()` records every infection event with infector, infectee, time, and probability, and converts to a phylogeny via `as.phylo.transmat()`. Its review: "cheap, generally useful, and enables phylodynamic comparison. It should be part of the standard result set rather than an opt-in."
+[EpiModel](../approaches/epimodel.md)'s `get_transmat()` records every infection event with infector, infectee, time, and probability, and converts to a phylogeny via `as.phylo.transmat()`. Its review: "cheap, generally useful, and enables phylodynamic comparison. It should be part of the standard result set rather than an opt-in." [CK: hm ... you make a strong case, but i've found the transmission tree is usually huuuge and can also be slow. it tends to be much bigger than all the other results combined. so i would still have it be opt-in since most models aren't going to be doing phylodynamic comparisons. i think `sim.run(trans_tree=True)` or similar is easy enough. but also it gets complicated in eg malaria, or cholera, or whatnot ...]
 
 ```python
 sim.transmissions   # infector, infectee, time, route, and the layer it happened on
@@ -203,8 +203,8 @@ The results are already declared, so the library knows what each one depends on.
 - **Auto-generating a result per state and per transition is memory the user did not ask for.** Bounded by `n_states + n_transitions` per timestep, which is small until stratification multiplies it. The pruning above is the answer, and the default should stay generous.
 - **The outcome cascade duplicates what compartments can express.** A hospitalization can be a state (if hospitalized people transmit differently) or an outcome (if they do not). Both are legitimate and the choice is a modeling decision. Say so in the documentation rather than picking one.
 - **Delays in an ODE run need convolution or extra state.** flepiMoP's delayframe method is discrete-time convolution. In an ODE run a delay distribution becomes Erlang stages, the same expansion as [dwell times](model-structure.md).
-- **Matching data by column name depends on the names matching.** A typo in a column header is caught (unknown columns are errors), but the user does have to rename `Reported Cases (weekly)` to `cases`.
-- **Quantiles-by-default hides individual trajectories**, and sometimes the spaghetti is the point (extinction, bimodality). `sim.plot(style='trajectories')` must be one word away.
+- **Matching data by column name depends on the names matching.** A typo in a column header is caught (unknown columns are errors), but the user does have to rename `Reported Cases (weekly)` to `cases`. [CK: they should be able to declare aliases. how about something like: `ss.data(df, aliases=dict(cases='Reported Cases', year='Years'), ignore_extra=True`]
+- **Quantiles-by-default hides individual trajectories**, and sometimes the spaghetti is the point (extinction, bimodality). `sim.plot(style='trajectories')` must be one word away. [CK: hm. i think it's a really important question whether a sim is just one trajectory, or many. i'm inclined towards one. but then it would just be a multisim, so `msim.plot()` vs `msim.plot_lines()`? idk, would need to think about the names]
 
 ## Rejected
 
@@ -218,7 +218,7 @@ The results are already declared, so the library knows what each one depends on.
 
 ## Open questions
 
-- **Should an outcome be able to feed back into the model?** "Hospitalized people are isolated and stop transmitting" makes the outcome causal, at which point it should have been a state. A clean rule is needed, and "outcomes are observational only" is probably it.
-- **Where do agent-level outputs go?** A line list, an age-at-infection distribution, and a partnership history are not time series. Starsim's `ss.Analyzer` handles this and stays imperative; that may be correct.
-- **Under-reporting, reporting delay, and reporting schedule** are three different things. flepiMoP handles the first two with `probability` and `delay`; camdl handles the third with `emit_schedule`. Here `p=` and `delay=` are on the outcome and the schedule comes from the dates in the data. Whether a schedule is ever needed without data (for example, to output weekly totals) is not settled.
-- **The denominator.** `N = S + I + R` is explicit and needs no new name; a built-in total population would save a line and would also count people outside the disease's states. Which is the better default is open.
+- **Should an outcome be able to feed back into the model?** "Hospitalized people are isolated and stop transmitting" makes the outcome causal, at which point it should have been a state. A clean rule is needed, and "outcomes are observational only" is probably it. [CK: if there's a functional difference between an outcome and a state, then it should be able to feed back in -- eg a `delay` arg. if there's no functional difference, then ... do we really need `ss.outcome`? i do like the distinction between modeled states and observed states, but i can imagine that line getting really blurry really fast.]
+- **Where do agent-level outputs go?** A line list, an age-at-infection distribution, and a partnership history are not time series. Starsim's `ss.Analyzer` handles this and stays imperative; that may be correct. [CK: yes ... here we probably just let the user do their thing.]
+- **Under-reporting, reporting delay, and reporting schedule** are three different things. flepiMoP handles the first two with `probability` and `delay`; camdl handles the third with `emit_schedule`. Here `p=` and `delay=` are on the outcome and the schedule comes from the dates in the data. Whether a schedule is ever needed without data (for example, to output weekly totals) is not settled. [CK: i think it is, yes.]
+- **The denominator.** `N = S + I + R` is explicit and needs no new name; a built-in total population would save a line and would also count people outside the disease's states. Which is the better default is open. [CK: as in, whether to have every sim declare an N state? i think i prefer being explicit]
