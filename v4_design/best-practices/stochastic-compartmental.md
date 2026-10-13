@@ -7,7 +7,7 @@ Gillespie/CTMC, tau-leaping, chain-binomial, and diffusion (SDE). One model, fou
 1. **Stochasticity is a run-time choice with several named methods**, not a property of the model.
 2. **Prefer continuous time where the model allows it**, because it eliminates rate-to-probability conversion entirely.
 3. **Name the approximation.** Gillespie, tau-leaping, chain-binomial, and diffusion are different models with different validity conditions, and the result should say which one produced it.
-4. **Default to a distribution over trajectories**, not a trajectory.
+4. **Default to a distribution over trajectories**, not a trajectory. [CK: not sure i agree with this]
 5. **Quantities that are not people are compartments too.** An environmental reservoir or a vector population is a count with its own transitions, and disease rates may use that count directly.
 6. **Extinction is the reason this paradigm exists**; make it visible.
 
@@ -40,8 +40,8 @@ sir = ss.Disease(
 )
 kw = dict(total_pop=1000, unit='day')
 
-ss.Sim(sir, **kw).run()                   # auto: deterministic ODE for this model
-ss.Sim(sir, **kw).run(method='ctmc')      # exact continuous-time (Gillespie)
+ss.Sim(sir, **kw).run()                   # auto: deterministic ODE for this model [CK: same as method='ode'?]
+ss.Sim(sir, **kw).run(method='ctmc')      # exact continuous-time (Gillespie) [CK: maybe 'gillespie' could be an alias for it, or just the name ... whichever is more common]
 ss.Sim(sir, **kw).run(method='tau')       # tau-leaping
 ss.Sim(sir, **kw).run(method='binomial')  # chain-binomial, discrete time
 ss.Sim(sir, **kw).run(method='sde')       # diffusion approximation
@@ -111,7 +111,7 @@ cholera = ss.Disease(infection, recovery)
 water   = ss.Compartments(shedding, decay)
 
 sim = ss.Sim([cholera, water], total_pop=10_000, unit='day')
-sim.run(method='stochastic')
+sim.run(method='stochastic') # [CK: see my earlier comments about this example]
 ```
 
 `W.n` is the plain count in `W`, and a rate may be any expression of counts and parameters, used as written. Nothing here is a special kind of transmission: infection depends on the amount in the water, and the water is filled by the infectious and decays. The same four lines of transitions describe a vector-borne disease with mosquito states in place of `W`. `ss.Compartments` also works inside an agent-based sim ([agent-based.md](agent-based.md)), where people are agents and the reservoir stays a count.
