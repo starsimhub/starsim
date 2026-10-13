@@ -28,21 +28,21 @@ Each document starts with a pointer to the `best-practices` document that justif
 
 ### The language
 
-- [01-objects.md](01-objects.md): the class hierarchy, capitalization, constructing a model, how things get their names, `ss.Sim`, and `describe()`.
-- [02-types.md](02-types.md): Starsim's durations, rates, probabilities, and frequencies; how bare numbers get their units; time in a sim; distributions.
-- [03-states-and-transitions.md](03-states-and-transitions.md): the core. States, the one transition class and its three spellings, rates that mention states, dwell times, branching, functions in any slot, and `ss.Compartments`.
+- [01-objects.md](01-objects.md): the class hierarchy, capitalization, constructing a model, how things get their names, `ss.Sim` (one sim is one run; many runs are an `ss.MultiSim`), and `describe()`.
+- [02-types.md](02-types.md): Starsim's durations, rates, probabilities, and frequencies; how bare numbers get their units, and time in timesteps when nothing has a unit; time in a sim; distributions.
+- [03-states-and-transitions.md](03-states-and-transitions.md): the core. States, the one transition class and its three spellings, rates that mention states, dwell times, branching, functions in any slot, `ss.null`, and states that are not people (reservoirs and vector populations).
 - [04-parameters.md](04-parameters.md): `ss.par`, the forms a value can take, values by stratum, values kept outside the model, and named data.
-- [05-dimensions.md](05-dimensions.md): stratification by age, space, risk, or strain; `stratify` returns a new model; `ss.transfer`.
+- [05-dimensions.md](05-dimensions.md): stratification by age, space, risk, or strain; `stratify` on a model or on the whole sim, in place by default; `ss.transfer`.
 - [06-routes.md](06-routes.md): who meets whom. The force of infection, networks and mixing pools, counts used literally, layers, mobility, and geography.
 - [07-effects.md](07-effects.md): interactions between modules. `ss.modify`, conditions, and plain code in `step()`.
 - [08-interventions.md](08-interventions.md): products, delivery, follow-ups, `ss.change`, triggers, and scenarios.
-- [09-results.md](09-results.md): automatic results, declared results and `ss.outcome`, data attached by name, and the transmission log.
+- [09-results.md](09-results.md): automatic results, stratified results as one result with dimensions, declared results and `ss.outcome`, data attached by name, results of many runs, and the transmission log.
 
 ### Running and fitting
 
 - [10-execution.md](10-execution.md): the ordered loop, what runs when, competing hazards, per-module timesteps, and building the sim.
 - [11-random.md](11-random.md): random number streams, common random numbers, the run hash, and convergence checks.
-- [12-backends.md](12-backends.md): run methods. `method='auto'`, the methods, the standard approximations and how they are reported, `methods()`, and the try-it rule for functions.
+- [12-backends.md](12-backends.md): solvers. `solver='auto'`, the solvers, the standard approximations and how they are reported, `solvers()`, and the try-it rule for functions.
 - [13-inference.md](13-inference.md): `sim.calibrate()`, goodness of fit, how the fitting method is chosen, sensitivity, and model comparison.
 
 ### Machinery
@@ -60,8 +60,8 @@ Each document starts with a pointer to the `best-practices` document that justif
 ## What the specification claims
 
 1. **The model is data.** States, transitions, and parameters are objects, so the diagram, the equations, the stratified model, the hash, and the saved file all come from the same thing. [14-model-spec.md](14-model-spec.md)
-2. **The run method is chosen for you and can be changed.** `method='auto'` picks the simplest representation that runs the model exactly, and says which; `method=` asks for another. [12-backends.md](12-backends.md)
-3. **Approximations are named when they happen.** Asking for a method the model does not natively fit uses the standard approximation and prints one line saying so; `approx=False` makes it an error instead. [12-backends.md](12-backends.md#approximations)
+2. **The solver is chosen for you and can be changed.** `solver='auto'` picks the simplest solver that represents the model faithfully, an ODE if it can be one and agents otherwise, and says which. It never approximates the mixing; the one thing it does unasked is represent a non-exponential dwell time by Erlang stages, and it says so. `solver=` asks for another. [12-backends.md](12-backends.md)
+3. **Approximations are named when they happen.** Asking for a solver the model does not natively fit uses the standard approximation and prints one line saying so; `approx=True` silences the line, and `approx=False` makes the approximation an error instead. [12-backends.md](12-backends.md#approximations)
 4. **Defaults are guessed and printed.** `describe()` shows every guess, marked as one. [01-objects.md](01-objects.md#describe)
 5. **The vocabulary is small and counted.** [17-vocabulary.md](17-vocabulary.md)
 6. **A model is never easier to write without the lingua franca than with it.** For each vignette, the lingua franca version takes no more lines of model code and no more run time than the original framework's. [18-conformance.md](18-conformance.md#13-north-star)
