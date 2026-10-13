@@ -31,14 +31,13 @@ def _init_sim_pool(sim, build_fn, build_kw, eval_fn, eval_kw, die):
 def _run_sim(calib_pars, seed=None):
     d = _sim_pool_data
     sim = sc.dcp(d['sim'])
-    sim = d['build_fn'](sim, calib_pars, **d['build_kw'])
-    if seed is not None:
-        if sim.initialized:
-            raise Exception('The build_fn initialized the Sim, but reseeding requires that the sim not yet be initialized')
-        sim.pars.rand_seed = seed
     try:
+        sim = d['build_fn'](sim, calib_pars, **d['build_kw'])
+        if seed is not None:
+            if sim.initialized:
+                raise Exception('The build_fn initialized the Sim, but reseeding requires that the sim not yet be initialized')
+            sim.pars.rand_seed = seed
         sim.run()
-        print(calib_pars, sim.pars.rand_seed)
         return d['eval_fn'](sim, **d['eval_kw'])
     except Exception as E:
         if d['die']:
@@ -506,7 +505,7 @@ class Calibration(sc.prettyobj):
                 study = self.load_study()
                 self.best_pars, self.initial_pars = self._get_calibrated_pars(study)
             except:
-                raise ValueError('Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
+                raise ValueError(f'Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
 
         best_pars = self.best_pars.copy()
         best_seeds = best_pars.pop('seeds')
