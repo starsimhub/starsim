@@ -9,7 +9,7 @@ Justified by [best-practices/calibration.md](../best-practices/calibration.md).
 ```python
 import starsim as ss
 
-S, I, R = ss.states('S I R')
+S, I, R = ss.states(3)
 beta = ss.par(0.075, bounds=[0.01, 0.30])            # has bounds, so it is fitted
 
 sir = ss.Disease(
@@ -85,12 +85,15 @@ fit = sim.calibrate(
     data       = None,   # data to fit to; default: the sim's data
     weights    = None,   # relative weight of each data series; default: equal
     likelihood = None,   # dict of result name -> distribution, if not given on the result
-    method     = None,   # override the automatic choice; a list runs several in sequence
-    n_reps     = None,   # replicates per evaluation, for stochastic runs
+    gof        = None,   # the goodness of fit: a name ('rmse') or a function; default: normalized absolute error
+    method     = None,   # the fitting method; overrides the automatic choice; a list runs several in sequence
+    n_runs     = None,   # runs per evaluation, for stochastic sims
     rand_seed  = None,
-    **kwargs,            # passed to the method (e.g. trials=500, draws=2000)
+    **kwargs,            # passed to the fitting method (e.g. trials=500, draws=2000)
 )
 ```
+
+`method=` here is the fitting method. How the sim itself is run is its `solver=` ([12-backends.md](12-backends.md)), which calibration does not change.
 
 A parameter's `prior=`, if it has one, is used by methods that take priors; otherwise the prior is uniform over the bounds. A parameter whose bounds are positive and span a factor of ten or more is searched on a log scale, and this is printed.
 
@@ -99,10 +102,11 @@ A parameter's `prior=`, if it has one, is used by methods that take priors; othe
 Data is attached to the sim and matched to results by name, as in Covasim:
 
 ```python
-sim = ss.Sim(sir, data='cases.csv')       # a path or a dataframe
+sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.data(...)
 ```
 
-- The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous). A column that matches nothing is reported once and ignored.
+- The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous). A column that matches nothing is an error that lists the closest result names (`E705 UnknownDataColumn`).
+- Headers that do not match are renamed on the way in, and columns that are not wanted are dropped: `data=ss.data(df, aliases=dict(cases='Reported Cases', year='Years'), ignore_extra=True)` ([09-results.md](09-results.md#data)).
 - Results that have data are plotted against it by `sim.plot()` without being asked.
 - **Alignment is automatic.** A result that is a state of the system at a point in time (a count, a prevalence) is compared at the data's dates, interpolating if needed. A result that is a flow (new infections, reported cases, deaths) is summed over the interval ending at each data date. The library knows which is which because results are declared ([09-results.md](09-results.md)).
 - Stratified data uses extra columns named after the stratification (`age`, `sex`), matched to the result's coordinates.
@@ -112,22 +116,29 @@ sim = ss.Sim(sir, data='cases.csv')       # a path or a dataframe
 
 The default is deliberately simple:
 
-> **For each data series, the root-mean-square error between model and data, divided by the mean of the data. The series are combined as a weighted average, with equal weights unless `weights=` says otherwise.**
+> **For each data series, the normalized absolute error: the mean of |model − data|, divided by the mean of the data. The series are combined as a weighted average, with equal weights unless `weights=` says otherwise.**
 
 ```python
 fit = sim.calibrate(weights=dict(cases=1, deaths=2, seroprevalence=1))
 ```
 
-Dividing by the mean puts series with different units and sizes (thousands of cases, a prevalence of a few percent) on the same scale, so that equal weights are a reasonable starting point. A series whose mean is zero is divided by its range instead. For a stochastic run the model value is the mean over `n_reps` replicates. The measure, the weights, and each series' contribution are printed by `fit.summary()`.
+This is the measure Covasim uses. It assumes no noise model, so there is nothing to choose before fitting, and because the differences are not squared, one bad reporting week does not dominate the fit. Dividing by the mean puts series with different units and sizes (thousands of cases, a prevalence of a few percent) on the same scale, so that equal weights are a reasonable starting point. A series whose mean is zero is divided by its range instead. For a stochastic sim the model value is the mean over `n_runs` runs. The measure, the weights, and each series' contribution are printed by `fit.summarize()`.
 
-This is not a likelihood, and it does not need to be: it is enough to find parameters that make the model go through the data, which is what most calibration is for. A custom measure is a function: `sim.calibrate(gof=fn)`, where `fn(sim)` returns a number to minimize.
+Other measures are chosen by name or given as a function:
+
+```python
+fit = sim.calibrate(gof='rmse')    # root-mean-square error, normalized by the mean of the data
+fit = sim.calibrate(gof=fn)        # fn(sim) returns a number to minimize
+```
+
+The default measure is not a likelihood, and it does not need to be: it is enough to find parameters that make the model go through the data, which is what most calibration is for. Which measure should be the default, and which others get names, is open ([19-open-questions.md](19-open-questions.md)): the requirement is a sensible default that needs no noise model, and count data with many zeros may want a different one.
 
 ### Likelihoods, when wanted
 
 A likelihood can be attached to a result. It says how the observed number is distributed around the model's value, and it enables methods that give a posterior:
 
 ```python
-cases = ss.outcome(infection, p=0.5, delay=ss.days(5), likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))
+cases = ss.outcome(0.5 * infection, delay=ss.days(5), likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))
 ```
 
 or, for any result, at calibration time: `sim.calibrate(likelihood=dict(prevalence=ss.normal(scale=0.02)))`.
@@ -139,11 +150,11 @@ or, for any result, at calibration time: `sim.calibrate(likelihood=dict(prevalen
 
 ## Choosing the method
 
-The right method follows from the model, so the library picks it and prints the choice with the reason. `method=` overrides it.
+The right fitting method follows from the model, so the library picks it and prints the choice with the reason. `method=` overrides it.
 
 | The model is | No likelihood (default) | With a likelihood |
 |---|---|---|
-| Deterministic (`'ode'`) | least squares: gradient-based (L-BFGS-B) when gradients are available, simplex (Nelder-Mead) otherwise | NUTS, started from the least-squares optimum |
+| Deterministic (`solver='ode'`) | minimize the goodness of fit: gradient-based (L-BFGS-B) with exact gradients, simplex (Nelder-Mead) when a gradient is not available | NUTS, started from the optimum |
 | Stochastic compartmental | ABC-SMC, using the goodness of fit as the distance; gives uncertainty without a likelihood | particle MCMC |
 | Agent-based, cheap enough to run thousands of times | ABC-SMC | ABC-SMC (the likelihood is used as the distance) |
 | Agent-based, expensive | Optuna; a point estimate | Optuna; a point estimate |
@@ -151,10 +162,10 @@ The right method follows from the model, so the library picks it and prints the 
 "Cheap enough" is decided by timing one run against the default budget of evaluations, and the decision is printed.
 
 ```text
->>> fit = sim.calibrate()          # the SIR above with method='ode'
+>>> fit = sim.calibrate()          # the SIR above with solver='ode'
 model: deterministic ODE, 3 parameters to fit, 1 data series (prevalence, 3 points)
-method: least squares, L-BFGS-B with gradients from JAX  (override with method=)
-goodness of fit: normalized RMSE, equal weights
+method: L-BFGS-B with gradients by automatic differentiation  (override with method=)
+goodness of fit: normalized absolute error, equal weights
 converged: yes (41 evaluations)
 beta        0.071
 init_prev   0.023
@@ -165,32 +176,73 @@ note: beta and n_contacts enter the model only as a product; their product (0.33
 ```text
 >>> fit = sim.calibrate()          # the same model with a network, run as agents
 model: agent-based (2,000 agents, 0.02 s per run), 3 parameters to fit
-method: ABC-SMC, 5 generations of 200 particles, 4 replicates each  (override with method=)
-goodness of fit: normalized RMSE, equal weights
-note: common random numbers on, so replicates are paired across parameter sets
+method: ABC-SMC, 5 generations of 200 particles, 4 runs each  (override with method=)
+goodness of fit: normalized absolute error, equal weights
+note: common random numbers on, so runs are paired across parameter sets
 beta        0.071  [0.052, 0.094]
 init_prev   0.023  [0.012, 0.041]
 n_contacts  4.6    [2.9, 7.8]
 ```
 
-**Optuna gives a point estimate, not a posterior.** It is the right tool when each run is expensive and nothing else is affordable, and the output says what it is: `interval: not available (method='optuna' gives a point estimate)`. The spread of trial values MUST NOT be presented as an interval.
+**Optuna gives a point estimate, not a posterior.** It is the right tool when each run is expensive and nothing else is affordable, and the output says what it is: `interval: not available (method='optuna' gives a point estimate)`. The spread of trial values MUST NOT be presented as an interval. [CK: true, but can also sample the best N trials, or do a weighed sample by GOF, or do other workarounds that give at least some indication of uncertainty.]
 
-Gradients come from the JAX build of the ODE ([12-backends.md](12-backends.md) §How a model is built). Without JAX, small models are fitted with SciPy using finite differences or the simplex method.
+### Gradients
+
+For a model run with `solver='ode'`, the fit has exact gradients. The ODE solver runs through JAX ([12-backends.md](12-backends.md#how-a-model-is-built)), so `sim.calibrate()` gets the derivative of the goodness of fit (or of the log-likelihood) with respect to every fitted parameter by automatic differentiation, in the same pass that runs the model. This is what camdl gets by symbolic differentiation, without anything symbolic. Two things follow:
+
+- **Gradient-based optimizers** (L-BFGS-B) are the default for ODE models, and converge in far fewer runs than a simplex or a trial-based search when there are more than a few parameters.
+- **HMC/NUTS** is available for ODE models that have a likelihood, which gives a posterior at a cost that does not grow badly with the number of parameters.
+
+Conditions and limits:
+
+- A function in a rate is differentiable if it is written with array operations that JAX can trace. One that is not is reported in one line, and the fit uses finite differences or the simplex method instead.
+- Without JAX installed, small models are fitted with SciPy using finite differences or the simplex method, and NUTS is not offered.
+- Gradients exist for `solver='ode'` only. Stochastic compartmental and agent-based sims are fitted by the methods in the table that need none.
+- `sim.sensitivity()` can use the same gradients for local sensitivities.
+- Symbolic Jacobians, fixed points, and eigenvalues are not part of this and stay out of v1.
 
 ## Staged fitting
 
-Finding a good region cheaply and then characterizing uncertainty around it is a common workflow. A list of methods runs them in sequence, each starting from the previous result:
+Sometimes one fitting method is not enough. A cheap, robust search is good at finding roughly where the best fit is and bad at saying how uncertain it is; a sampler is good at describing the uncertainty and slow, or lost, if started far from the best fit. Staged fitting runs the first and then the second.
+
+`method=` takes a list. **Each entry is a fitting method. They are run in the order given, and each one starts from the best fit the previous one found.**
 
 ```python
-fit = sim.calibrate(method=['optuna', 'abc'])
+fit = sim.calibrate(method=['optuna', 'nuts'])
+```
 
+Read aloud: "search with Optuna; then, starting from the best parameters Optuna found, sample with NUTS". The returned `fit` is the result of the last stage that ran.
+
+An entry is either a method's name, which uses that method's default settings, or a dict that also gives its settings:
+
+```python
 fit = sim.calibrate(method=[
-    dict(method='optuna', trials=500),
-    dict(method='nuts', draws=2000),
+    dict(method='optuna', trials=500),    # stage 1: 500 trials to find a good region
+    dict(method='nuts', draws=2000),      # stage 2: 2,000 posterior draws, started from stage 1's best fit
 ])
 ```
 
-If a stage does not converge, the sequence stops there, says why, and returns the fit from the last stage that completed (`W1303 StageStopped`), so that a poor starting point is not fed into an expensive sampler.
+```text
+stage 1 of 2: Optuna TPE, 500 trials
+  best fit 0.094 (normalized absolute error); improvement over the last quarter of trials 0.2%: converged
+stage 2 of 2: NUTS, 2000 draws, started from stage 1
+  R-hat 1.00, effective sample size 1,640: converged
+beta        0.071  [0.058, 0.086]
+init_prev   0.023  [0.014, 0.036]
+```
+
+What "starts from the previous best fit" means depends on the stage that follows: an optimizer takes it as its initial guess, and a sampler (NUTS, particle MCMC, ABC-SMC) starts its chains or its first generation around it.
+
+**A stage that fails to converge stops the sequence.** Each method has its own convergence check ([Convergence reporting](#convergence-reporting)). If a stage does not pass it, the stages after it are not run, the output says which stage stopped and why, and the fit returned is the last good one: the result of the last stage that did converge (`W1303 StageStopped`). So a poor starting point is never fed into an expensive sampler. If the first stage is the one that fails, its best attempt is returned, labeled as not converged.
+
+```text
+stage 1 of 2: Optuna TPE, 500 trials
+  still improving after 500 trials (4.1% over the last quarter): not converged
+W1303 StageStopped: stage 1 (optuna) did not converge, so stage 2 (nuts) was not run.
+  Returning stage 1's best attempt. Try more trials, or tighter bounds.
+```
+
+A single method is the one-stage case: `method='optuna'` and `method=['optuna']` are the same.
 
 ## The result
 
@@ -198,7 +250,7 @@ If a stage does not converge, the sequence stops there, says why, and returns th
 fit.sim          # the calibrated sim: a copy of the original with the best-fit values, already run
 fit.pars         # a table: parameter, initial value, best fit, interval if the method gives one, bounds
 fit.plot()       # results against data, before and after, per data series
-fit.summary()    # estimates, goodness of fit per series, convergence diagnostics
+fit.summarize()    # estimates, goodness of fit per series, convergence diagnostics
 fit.to_df()      # every evaluation or sample
 ```
 
@@ -206,7 +258,7 @@ The original `sim` is not changed. `fit.sim` is an ordinary sim: plot it, add in
 
 ### Convergence reporting
 
-`fit.summary()` reports whether the fit can be trusted, by method:
+`fit.summarize()` reports whether the fit can be trusted, by method:
 
 | Method family | Reported |
 |---|---|
@@ -221,7 +273,7 @@ A best-fit value at or near a bound is flagged (`W1301 AtBound`), because that u
 ## What is model and what is fitting
 
 - A likelihood declared on a result is part of the model: it says how observations relate to the process.
-- Everything else here is a fitting setting: the data, weights, method, number of trials, and seeds. Changing them does not change the model, and the run hash keeps them in a separate part ([11-random.md](11-random.md)).
+- Everything else here is a fitting setting: the data, weights, goodness of fit, fitting method, number of trials, and seeds. Changing them does not change the model, so they are not part of `sim.hash()`; the fit records its own hash of them ([11-random.md](11-random.md#run-identity)).
 
 In practice both live in the same script, which is fine and avoids the two drifting apart.
 
@@ -272,21 +324,22 @@ held out: the last 25% of each series (cases: 2020-10-01 to 2020-12-31)
             fitted pars   fit error   prediction error   rank
 sim_seir    3             0.08        0.12               1
 sim_sir     2             0.15        0.31               2
-prediction error is normalized RMSE on held-out data (lower is better)
+prediction error is the normalized absolute error on held-out data (lower is better)
 ```
 
 - "Fit error" is the error on the data used for fitting, shown for reference. A model with more parameters will usually fit better; "prediction error" is the column that matters, and no separate penalty for the number of parameters is needed.
 - `data=` is attached to every sim, so each model must have results named like its columns. Without `data=`, each sim's own data is used, and it must be the same for all of them.
 - Models are labeled by the sims' `label`, else by position.
-- `folds=k` repeats the comparison with `k` different cut points (fit to the first part, predict the next) and reports the mean and spread of the prediction error. With stochastic models the spread across replicates is included. When the spread is larger than the difference between models, the table says there is no clear difference rather than ranking them.
-- `comp.fits` holds each model's `fit`; `comp.summary()` and `comp.to_df()` give the table.
+- `folds=k` repeats the comparison with `k` different cut points (fit to the first part, predict the next) and reports the mean and spread of the prediction error. With stochastic models the spread across runs is included. When the spread is larger than the difference between models, the table says there is no clear difference rather than ranking them.
+- `comp.fits` holds each model's `fit`; `comp.summarize()` and `comp.to_df()` give the table.
 
-The models can differ in any way (structure, stratification, run method), since each is just a sim.
+The models can differ in any way (structure, stratification, solver), since each is just a sim.
 
 ## Rejected
 
 - **A separate calibration vocabulary** (Starsim's `calib_pars`, `build_fn`, `CalibComponent`). Bounds belong on parameters and data belongs with results; restating them elsewhere is verbose and drifts.
 - **Requiring a likelihood.** Most users want the model to go through the data. A likelihood is available when the question needs one.
+- **A squared error as the default goodness of fit.** One bad reporting week dominates it. It is available as `gof='rmse'`.
 - **One method for every model.** Optuna on a three-equation ODE is slow and gives no uncertainty; NUTS on an agent-based model is not possible. The model determines the method.
 - **Presenting the spread of optimizer trials as an interval.**
 - **`fit.apply(sim)`.** The calibrated sim is `fit.sim`.
