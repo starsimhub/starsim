@@ -13,7 +13,7 @@ There are two ways to write an interaction, and both are first-class:
 
 ```python
 ss.modify(target, multiply=None, add=None, set=None,     # exactly one of these three
-          where=None, start=None, stop=None, when=None, min_duration=None, name=None)
+          where=None, start=None, stop=None, when=None, name=None)
 ```
 
 ```python
@@ -28,7 +28,7 @@ Read as: *for people with active syphilis, multiply HIV transmissibility by 2.*
 | `multiply=`, `add=`, `set=` | what to do to it; exactly one |
 | `where=` | who it applies to: a [condition](#conditions). Omitted means everyone |
 | `start=`, `stop=` | the period it applies in (dates, years, or durations since the start of the sim). Omitted means always |
-| `when=` | a function of the sim returning `True` or `False`, for anything `start`/`stop` cannot say; `min_duration=` keeps it on for at least that long once triggered ([08-interventions.md](08-interventions.md#triggers)) |
+| `when=` | a function of the sim returning `True` or `False`, for anything `start`/`stop` cannot say. The modifier applies on exactly the steps where it returns `True`; it has no memory. A rule with memory (stay on for four weeks once triggered) is `step()` code ([08-interventions.md](08-interventions.md#triggers)) |
 | `name=` | used in `describe()` and `what_modifies()`; defaults to the variable or keyword name |
 
 A modifier is passed to the sim like any other module, in `connectors=` (interactions that are part of the biology) or `interventions=` (policy). The two lists differ only in where the condition is evaluated in the loop ([below](#execution-order)).
@@ -68,27 +68,44 @@ that is, **set, then multiply, then add**. The rule does not depend on the order
 
 - `multiply=` is the usual choice. Multipliers commute, and two 40% reductions giving a 64% reduction is the standard assumption.
 - `add=` exists because additive combination is a legitimate modeling choice (`epidemics` uses it deliberately). Mixing `multiply=` and `add=` on one target is allowed; the formula above says what happens.
-- `set=` replaces the base. If two `set=` modifiers are active for the same people at once, the one later in the loop order is used and `W502 OverlappingSet` names both; use `multiply=` or make one conditional on the other to avoid it.
+- `set=` replaces the base. If two `set=` modifiers are active for the same people at once, the one later in the loop order wins (connectors before interventions, and within a list the order given) and the warning `W502 OverlappingSet` names both. It is a warning and not an error; use `multiply=`, or make one conditional on the other, to avoid it.
 - A result outside the quantity's natural range (a probability above 1, a negative rate) is clipped to the range, and `what_modifies()` reports that it happened.
 
 Stratification adjustments ([05-dimensions.md](05-dimensions.md)) and product efficacies ([08-interventions.md](08-interventions.md)) are multipliers of this kind and combine with `ss.modify` by the same rule.
 
 ### Base and effective values
 
-Every modifiable quantity has a **base** value and an **effective** value.
+A quantity that can be modified keeps two numbers for each person (or each group, in a compartmental run):
 
-- The base is what the owning module declared or last assigned. **A modifier never overwrites it.**
-- The effective value is the base with all currently active modifiers applied. It is what the library uses, and what any module gets when it reads the quantity.
-- When a modifier stops applying (the condition becomes false, `stop=` passes), the effective value returns to the base. Nothing has to be saved and restored; the `orig_rel_sus` copies seen in Starsim interventions are not needed.
+- the **base** value: the quantity's own value, as the module that owns it declared it or last assigned it;
+- the **effective** value: the base with every modifier that is active right now applied on top. This is the number the model uses.
 
-For code that touches a modifiable array directly:
+A quantity with no active modifier has the same base and effective value. Three rules cover everything code can do with one:
+
+1. **Reading gives the effective value.** `sir.rel_sus[uids]` returns what the transmission step will use.
+2. **Assigning sets the base.** `sir.rel_sus[uids] = 0.8` changes the quantity's own value. Any active modifiers still apply on top of the new base.
+3. **`.base` reads the base.** `sir.rel_sus.base[uids]` returns the value with no modifiers applied.
+
+A modifier never changes the base, which is why nothing has to be restored when it ends. One person, followed through a campaign that halves susceptibility (`ss.modify(sir.rel_sus, multiply=0.5, where=campaign.protected)`):
 
 ```python
-hiv.rel_trans[uids]            # reads the effective values
-hiv.rel_trans.base[uids]       # reads the base values
-hiv.rel_trans[uids] = 0.5      # assigns the base
-hiv.rel_trans[uids] *= 0.5     # scales the base; active modifiers are not folded in
+sir.rel_sus[uid] = 0.8        # assign: the base is 0.8
+sir.rel_sus[uid]              # 0.8   nothing modifies it yet
+
+# ... the person becomes protected, so the modifier is active for them
+sir.rel_sus[uid]              # 0.4   effective = base 0.8 × 0.5
+sir.rel_sus.base[uid]         # 0.8   the base is untouched
+
+sir.rel_sus[uid] = 1.0        # assign: the base is now 1.0
+sir.rel_sus[uid]              # 0.5   the modifier still applies
+
+# ... protection ends
+sir.rel_sus[uid]              # 1.0   back to the base, with nothing saved or restored
 ```
+
+The `orig_rel_sus` copies seen in Starsim interventions, which remember a value in order to put it back later, are not needed.
+
+An in-place operation acts on the base, like an assignment: `sir.rel_sus[uids] *= 0.5` halves the base values. It does not read the effective value and write that back, which would fold the active modifiers into the base permanently.
 
 **Implementation.** The effective array is cached. It MUST be recomputed only when something that feeds it changes: a base value is assigned, a modifier's active set (the people or groups its condition selects) changes, or a time-varying multiplier takes a new value. A modifier outside its `start`/`stop` period is not evaluated at all, and a modifier with a constant multiplier and an unchanged active set costs one comparison per step. A quantity with no modifiers has no cache and behaves exactly as in Starsim.
 
@@ -117,11 +134,14 @@ hiv.rel_trans   base: 1.0 per agent
   modifiers
     syph_trans   multiply=2.0   where=syphilis.active     active for 1,204 agents   [stisim.py:14]
     art          multiply=0.04  where=hiv.on_art          active for 8,811 agents   [stisim.py:31]
-  direct writes observed
+  direct writes observed                                                            (track_writes=True)
     AcuteHIV.step()    assigned base for 310 agents (last at 2024-06-01)            [hiv.py:212]
 ```
 
-It MUST list every modifier on the target, with its operation, condition, period, and where it was declared, and every module that was observed assigning the base value during the run. Writes are observed, not declared: the arrays record which module assigned them. This costs little and is on by default; `ss.Sim(..., track_writes=False)` turns it off. Before the sim has run, the second section is empty.
+It has two sections, and they come from different places:
+
+- **Modifiers** are declared, so they are always listed: every `ss.modify` (and `ss.change`, product, and stratification adjustment) on the target, with its operation, condition, period, and where it was declared. This section MUST be complete, and it is available before the sim has run.
+- **Direct writes** are observed, not declared: with `ss.Sim(..., track_writes=True)` the arrays record which module assigned them during the run, and the second section lists every module seen assigning the base value. **Tracking is off by default**, because recording the writer on every assignment is cheap but not free; with it off, the second section says `not tracked (run with track_writes=True)`. Observed writes are known only after a run, and only for code paths that ran.
 
 Scaling a shared quantity through `ss.modify` (or `*=`) is preferred to overwriting it, so that two modules do not clobber each other. This is guidance, and `what_modifies()` is how to check; nothing is enforced.
 
@@ -163,7 +183,7 @@ No new vocabulary is involved: the objects and attribute names are the ones the 
 
 ### On agents and on groups
 
-A condition is evaluated on whatever the run method provides.
+A condition is evaluated on whatever the solver provides.
 
 - **Agent-based run.** Each array is one value per agent, and the condition is a boolean per agent.
 - **Compartmental run.** Each array is one value per group (one row per stratum), and the condition is a boolean per group. This works when everything the condition uses is something the model is stratified by, or a state: `ppl.age > 65` works when age is a dimension with a bin edge at 65, and `sir.vaccinated` works when `vaccinated` is a state or a dimension.
@@ -173,7 +193,7 @@ The rule is **try it and report**. Nothing is analyzed in advance. If a conditio
 ```text
 E804 CapabilityError: condition 'eligible' uses people.age > 70, but the model's age
      bins are [0, 15, 65] and 70 falls inside the 65+ bin.
-     Fix: add 70 as a bin edge, sir.stratify(age=[0, 15, 65, 70]), or run with method='abm'.
+     Fix: add 70 as a bin edge, sir.stratify(age=[0, 15, 65, 70]), or run with solver='abm'.
 ```
 
 A condition on another module's state (`where=syphilis.active` on an HIV quantity) needs the two modules' states tracked jointly. In an agent-based run that is free. In a compartmental run the library crosses the two modules' states, the model grows to the product, and `describe()` shows the new size.
@@ -228,15 +248,22 @@ class ANCTesting(ss.Intervention):
         diagnose(self.sim, positive)
 ```
 
-The two are the same model. The first is shorter and also runs in a compartmental method if age, sex, ANC attendance, and diagnosis are all stratifications or states. The second can do anything: decide who is referred at the moment of infection and test them at their next visit (add a `referred` boolean state, set it in one line, test `self.referred & anc.visit`), prioritize by clinic, draw down a stock. Code like this is agent-based unless it happens to work on groups, by the same try-it rule as conditions.
+The two are the same model. The first is shorter and also runs under a compartmental solver if age, sex, ANC attendance, and diagnosis are all stratifications or states. The second can do anything: decide who is referred at the moment of infection and test them at their next visit (add a `referred` boolean state, set it in one line, test `self.referred & anc.visit`), prioritize by clinic, draw down a stock. Code like this is agent-based unless it happens to work on groups, by the same try-it rule as conditions.
+
+Two pieces of guidance for custom code, neither of them enforced:
+
+- **For booleans and events, write directly.** `hiv.diagnosed[positive] = True` has no combination problem.
+- **For scaling a number another module owns, use a modifier and flip a flag.** Declare `ss.modify(hiv.rel_trans, multiply=0.04, where=self.suppressed)` once, and have `step()` set and clear `self.suppressed`. The base stays intact, other modules' modifiers still apply, and there is nothing to restore. Writing `hiv.rel_trans[uids] = 0.04` directly is allowed, and sets the base.
+
+The same pattern is how a rule with memory is written: `step()` keeps whatever it needs to remember and sets a flag, and a modifier reads the flag ([08-interventions.md](08-interventions.md#triggers)).
 
 A function can be used in place of a class when no state is needed: a plain function passed as a keyword to a module is called every step ([03-states-and-transitions.md](03-states-and-transitions.md)).
 
 ### No required declarations
 
-A module does not declare what it reads or writes. Declarations of that kind get forgotten and drift away from the code, and an out-of-date declaration is worse than none. What a module actually wrote is recorded and shown by `what_modifies()`.
+A module does not declare what it reads or writes. Declarations of that kind get forgotten and drift away from the code, and an out-of-date declaration is worse than none. What a module actually wrote can be recorded as it happens (`track_writes=True`) and is then shown by `what_modifies()`.
 
-`ss.Needs` and `requires=` (deferred from v1) are optional metadata that says what input data a module expects, for generating data-entry forms ([04-parameters.md](04-parameters.md)). They are never enforced as access control: a module can read anything in the sim.
+`requires = [ss.Requires(...)]` is optional metadata that says what input data a module expects, for `sim.requires()` and for generating data-entry forms ([04-parameters.md](04-parameters.md#requirements)). It is never enforced as access control: a module can read anything in the sim.
 
 ## Execution order
 
@@ -245,17 +272,19 @@ Order is Starsim's ordered loop ([10-execution.md](10-execution.md)). Each step,
 What this means for interactions:
 
 - **Each module sees the current values when it runs.** A chain can therefore complete within one step: infection, testing, and treatment all happen in the same step if the modules are ordered that way.
-- **A modifier follows the state it depends on.** A `where=` condition on a state array is kept current: when the state changes, the effective value is recomputed at the next read ([10-execution.md](10-execution.md#where-ssmodify-is-evaluated)). A `when=` or `where=` given as a function is called once per step, at the modifier's place in the loop: among the connectors if it was passed in `connectors=`, among the interventions if in `interventions=`.
+- **A modifier follows the state it depends on.** A `where=` condition on a state array is kept current: when the state changes, the effective value is recomputed at the next read ([10-execution.md](10-execution.md#where-ssmodify-is-evaluated)). A `when=` or `where=` given as a function is called once per step, at the modifier's place in the loop: among the connectors if it was passed in `connectors=`, among the interventions if in `interventions=`. It is a function of the sim as it is at that moment and nothing else; the modifier keeps no record of what it returned on earlier steps.
 - **Mutual dependence is fine.** HIV raises syphilis susceptibility while syphilis raises HIV transmissibility; each reads the other's current value, and the order decides which goes first. There are no cycle errors. Where the order matters, the convention is to run last the module whose accuracy matters most.
 - **Any effect of ordering is of order `dt`.** `sim.check_dt()` reruns with a smaller step and shows how much the results change.
 
 ## Rejected
 
 - **A closed list of modifiable quantities.** Too restrictive for real models; any named numeric quantity can be a target.
-- **Required `writes`/`requires` declarations with enforced read-only views.** They depend on people remembering to keep them current. Observed writes give the same information without that.
+- **Required `reads`/`writes` declarations with enforced read-only views.** They depend on people remembering to keep them current. Observed writes give the same information without that.
 - **Global condition names and an expression type the user has to learn.** Conditions use the sim's own attributes, lazily when written before the sim exists.
-- **Analyzing conditions in advance to decide what can run where.** Try the condition on what the method provides and report what it asked for.
+- **Analyzing conditions in advance to decide what can run where.** Try the condition on what the solver provides and report what it asked for.
 - **Queued updates, named phases, and ordering derived from declarations.** The ordered loop is simpler, allows within-step chains, and handles mutual dependence.
-- **Last-write-wins as the only way to share a quantity.** `ss.modify` keeps the base and combines by a stated rule; direct writes are still allowed and are visible.
+- **Last-write-wins as the only way to share a quantity.** `ss.modify` keeps the base and combines by a stated rule; direct writes are still allowed, and are visible when tracking is on.
 - **Additive combination as the default.** Available as `add=`.
+- **`min_duration=` on `ss.modify`, or any other memory inside a modifier.** A modifier is a function of the current state of the sim. A rule that remembers (hold for two weeks once triggered) is a few lines of `step()`, where the memory is visible.
+- **Write tracking on by default.** It has a cost on every assignment, and most runs never ask the question.
 - **A separate object for protective measures** (a "tool" carrying fixed multipliers). A product's efficacy is a modifier on the people who hold it.
