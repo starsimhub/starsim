@@ -132,7 +132,7 @@ t('transitions')
 from .transitions import (
     CodedError, error, note, Expr, par, State, states, null,
     Transition, transmission, progression, birth, death, outcome, Graph,
-    by, Strat, Transfer, transfer, stratify,
+    by, timeseries, seasonal, geo, gravity, Mobility, Strat, Transfer, transfer, stratify,
 )
 
 t('solvers')

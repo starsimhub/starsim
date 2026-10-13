@@ -21,7 +21,7 @@ import starsim as ss
 
 __all__ = ['CodedError', 'error', 'note', 'Expr', 'par', 'State', 'states', 'null',
            'Transition', 'transmission', 'progression', 'birth', 'death', 'outcome', 'Graph',
-           'by', 'Strat', 'Transfer', 'transfer', 'stratify']
+           'by', 'timeseries', 'seasonal', 'geo', 'gravity', 'Mobility', 'Strat', 'Transfer', 'transfer', 'stratify']
 
 
 #%% Errors and notes
@@ -30,7 +30,7 @@ codes = dict(
     E101='IncompatibleTypes', E102='WrongDimension', E201='ReservedName', E204='UnknownState', E205='BadBranchSplit',
     E206='DuplicateDeclaration', E208='NonlinearExposure', E209='UndrivenTransition', E210='UnnamedState',
     E211='ExposureToCount', E301='UnknownTransition', E302='BadSplit', E305='DuplicateStructuralDimension',
-    E306='InvalidAdjustment', E308='InconsistentDimension', E403='RouteMismatch', E504='UnmodifiableTarget', E505='UnknownEffect', E506='UnknownDisease',
+    E306='InvalidAdjustment', E308='InconsistentDimension', E402='NoGeography', E403='RouteMismatch', E504='UnmodifiableTarget', E505='UnknownEffect', E506='UnknownDisease',
     E602='UnknownParameter', E603='ShapeError', E604='UnvaluedParameter', E606='OutOfBounds', E702='UnknownOutcomeSource',
     E703='OutcomeCycle', E704='DataMisaligned', E705='UnknownDataColumn', E804='CapabilityError', E1003='RunAfterFinish',
     E1102='MissingDimension', E1301='NothingToFit', E1302='NoData',
@@ -101,7 +101,7 @@ class Expr:
     def __radd__(self, other):     return BinOp('+', other, self)
     def __sub__(self, other):      return BinOp('-', self, other)
     def __rsub__(self, other):     return BinOp('-', other, self)
-    def __mul__(self, other):      return BinOp('*', self, other)
+    def __mul__(self, other):      return NotImplemented if isinstance(other, (Transition, outcome, FlowSum)) else BinOp('*', self, other) # A parameter times a flow is a share of the flow, e.g. rho * infection
     def __rmul__(self, other):     return BinOp('*', other, self)
     def __truediv__(self, other):  return BinOp('/', self, other)
     def __rtruediv__(self, other): return BinOp('/', other, self)
@@ -216,6 +216,7 @@ class par(Expr):
 def value_str(val):
     """ String representation of a parameter value """
     if isinstance(val, float): return f'{val:n}'
+    elif isinstance(val, TimeValue): return repr(val)
     elif callable(val) and not isinstance(val, ss.Dist): return getattr(val, '__name__', 'function')
     elif isinstance(val, ss.TimePar): return repr(val)
     return str(val)
@@ -308,8 +309,9 @@ def evaluate(expr, ctx):
     """
     Evaluate an expression
 
-    The context `ctx` supplies the numbers: `ctx.value(par)`, `ctx.count(states)`,
-    `ctx.frac(states)`, and `ctx.exposure(state)`.
+    The context `ctx` supplies the numbers: `ctx.value(par)`, `ctx.local_count(states)`
+    and `ctx.local_frac(states)` (the number in some states, and that as a fraction of the
+    people, in the same place as whoever the expression is evaluated for), and `ctx.exposure(state)`.
     """
     if isinstance(expr, BinOp):
         a = evaluate(expr.a, ctx)
@@ -323,7 +325,7 @@ def evaluate(expr, ctx):
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
-        return ctx.count(expr.states) if expr.kind == 'n' else ctx.frac(expr.states)
+        return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.local_frac(expr.states)
     elif isinstance(expr, State):
         return ctx.exposure(expr)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
@@ -577,7 +579,7 @@ class Transition:
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, anything else is a rate """
         value = driver.value if isinstance(driver, par) else driver
-        if isinstance(value, (ss.dur, ss.Dist)):
+        if isinstance(value, (ss.dur, ss.Dist)) or (isinstance(value, TimeValue) and any(isinstance(v, ss.dur) for v in value.typed)):
             self.dur = as_expr(driver)
         else:
             self.rate = as_expr(driver)
@@ -1472,16 +1474,20 @@ class Graph:
         out.guessed = sorted(guessed)
         return out
 
-    def stratify(self, split=None, adjust=None, states=None, where=None, kind=None, **kwargs):
+    def stratify(self, split=None, adjust=None, states=None, where=None, kind=None, mobility=None, **kwargs):
         """ Stratify the graph by one or more dimensions; see `ss.Disease.stratify()` """
-        for unsupported,val in dict(states=states, where=where).items():
-            if val is not None:
-                errormsg = f'stratify({unsupported}=...) is not implemented yet: every state that is people is stratified'
-                raise NotImplementedError(errormsg)
+        if where is not None:
+            errormsg = 'stratify(where=...) is not implemented yet: a dimension applies to every group'
+            raise NotImplementedError(errormsg)
+        if states is not None:
+            states = [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
+            for name in states:
+                if name not in self.states:
+                    error('E204', f'states= names a state "{name}" that "{self.module.name}" does not have. Its states are {sc.strjoin(self.states.keys())}; did you mean {closest(name, self.states.keys())}?')
         dims = {k:v for k,v in kwargs.items() if not isinstance(v, Transfer)}
         transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
-        if len(dims) > 1 and (split is not None or adjust is not None):
-            errormsg = 'When using split= or adjust=, give one dimension per call to stratify(), so it is clear which one they belong to'
+        if len(dims) > 1 and (split is not None or adjust is not None or states is not None or mobility is not None):
+            errormsg = 'When using split=, adjust=, states=, or mobility=, give one dimension per call to stratify(), so it is clear which one they belong to'
             raise ValueError(errormsg)
         for key in (adjust or {}):
             if key not in self.transitions:
@@ -1489,7 +1495,11 @@ class Graph:
         for name,levels in dims.items():
             if any(s.name == name for s in self.strats):
                 error('E305', f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
-            self.strats.append(Strat(name, levels, split=split, adjust=adjust, kind=kind))
+            strat = Strat(name, levels, split=split, adjust=adjust, kind=kind, states=states, mobility=mobility)
+            if strat.kind == 'strain' and states is None: # A strain belongs to an infection, so the states people can be in without ever being infected have none
+                strat.states = [s.name for s in self.people_states if s.name not in self.uninfected]
+                strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(self.uninfected)})'
+            self.strats.append(strat)
         for name,tf in transfers.items():
             tf.name = name
             self.add(self.transfers, name, tf)
@@ -1503,6 +1513,18 @@ class Graph:
     @property
     def transmissions(self):
         return [tr for tr in self.transitions.values() if tr.contact]
+
+    @property
+    def uninfected(self):
+        """ The names of the states people can be in without ever having been infected: those reached from the first state by transitions that are not contact-mediated """
+        seen = []
+        todo = [self.first]
+        while todo:
+            state = todo.pop()
+            if state.name not in seen and state.people:
+                seen.append(state.name)
+                todo += [dst for tr in self.transitions.values() if not tr.contact and state in tr.src for dst in tr.dst]
+        return seen
 
     @property
     def infected(self):
@@ -1523,6 +1545,9 @@ class Graph:
                 if val.unit is not None:
                     out.append(val.unit.base)
                 for v in val.pars.values():
+                    check(v)
+            elif isinstance(val, TimeValue):
+                for v in val.typed:
                     check(v)
         for p in self.all_pars():
             check(p.raw)
@@ -1604,6 +1629,8 @@ def quantity_json(raw, kind, unit):
         if kind in ['rate', 'dur']:
             return dict(type='per' if kind == 'rate' else 'dur', value=float(raw), unit=unit)
         return float(raw)
+    elif isinstance(raw, TimeValue):
+        return raw.to_json()
     elif callable(raw):
         return dict(fn=getattr(raw, '__name__', 'function'))
     elif isinstance(raw, dict):
@@ -1673,8 +1700,308 @@ class by:
         return f'by({self.dim}={self.values})'
 
 
+class TimeValue:
+    """ Base class for values that vary in time: called with the sim, they return the value at the current time """
+    def __call__(self, sim):
+        return self.at(sim.t.now('year'), sim)
+
+    @property
+    def __name__(self): # So it can be named in messages like any other function of the sim
+        return type(self).__name__
+
+    @property
+    def typed(self):
+        """ The typed quantities it holds, used to infer the sim's unit """
+        return []
+
+
+class timeseries(TimeValue):
+    """
+    A value that varies in time, given at some times and interpolated between them
+
+    It can be used wherever a value or a function of the sim can: as a rate or a
+    duration, as the amount of `ss.modify()`, or as the coverage or capacity of a delivery.
+    Before the first time the first value is used, and after the last time the last.
+
+    Args:
+        data (dict/str/dataframe): the value at each time, as a dict, a dataframe (the first column is
+            the time, the second the value), or the name of a file holding one. A time is a date, or a
+            number: a year if the sim has dates, and otherwise a time in the sim's unit
+        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', or 'spline'
+
+    Examples:
+        ```python
+        beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
+        ```
+    """
+    def __init__(self, data, mode='constant'):
+        if isinstance(data, str):
+            data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
+        if not isinstance(data, dict):
+            data = dict(zip(data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()))
+        if mode not in ['constant', 'linear', 'spline']:
+            errormsg = f'The mode of ss.timeseries() is "constant", "linear", or "spline", not "{mode}"'
+            raise ValueError(errormsg)
+        self.times = list(data.keys())
+        self.values = list(data.values())
+        self.mode = mode
+        self._years = None # The times as years, worked out for the sim it is used in
+        return
+
+    def __repr__(self):
+        return f'timeseries({dict(zip(self.times, self.values))}, mode={self.mode!r})'
+
+    @property
+    def typed(self):
+        return self.values
+
+    def years(self, sim):
+        """ The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years) """
+        if self._years is None or self._years[0] is not sim:
+            out = []
+            for time in self.times:
+                time = ss.connectors.to_time(sim, time)
+                out.append(time.years if isinstance(time, ss.date) else time.to('year').value)
+            if np.any(np.diff(out) <= 0):
+                errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
+                raise ValueError(errormsg)
+            self._years = (sim, np.array(out, dtype=float))
+        return self._years[1]
+
+    def at(self, year, sim):
+        years = self.years(sim)
+        vals = self.values
+        i = int(np.clip(np.searchsorted(years, year + 1e-9, side='right') - 1, 0, len(vals) - 1))
+        if self.mode == 'constant' or year <= years[0] or i == len(vals) - 1:
+            return vals[i]
+        elif self.mode == 'linear':
+            w = (year - years[i])/(years[i+1] - years[i])
+            return vals[i]*(1 - w) + vals[i+1]*w
+        import scipy.interpolate as spi
+        return float(spi.CubicSpline(years, np.array(vals, dtype=float))(year))
+
+    def __deepcopy__(self, memo): # The cached times belong to one sim
+        new = object.__new__(type(self))
+        new.__dict__.update(times=list(self.times), values=sc.dcp(self.values, memo=memo), mode=self.mode, _years=None)
+        return new
+
+    def to_json(self):
+        return dict(timeseries={str(time):quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
+
+
+class seasonal(TimeValue):
+    """
+    A value with a yearly cycle: `mean × (1 + amplitude × cos(2π(t − peak)))`, with `t` in years
+
+    It can be used wherever a value or a function of the sim can. In a sim with no
+    dates, time starts at the beginning of a year.
+
+    Args:
+        mean (any): the mean over the year: a number or a typed quantity
+        amplitude (float): the size of the cycle relative to the mean (0.3 means from 70% to 130% of it)
+        peak (str/float): when the value is highest: a month (its middle is used), or a fraction of the year
+
+    Examples:
+        ```python
+        beta = ss.seasonal(mean=0.3, amplitude=0.4, peak='January')
+        sis = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=10), init_prev=0.01)
+        sim = ss.Sim(sis, start='2020-01-01', stop='2023-01-01').run()
+        ```
+    """
+    months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+
+    def __init__(self, mean=1.0, amplitude=0.0, peak=0.0):
+        self.mean = mean
+        self.amplitude = amplitude
+        self.peak = peak
+        if isinstance(peak, str):
+            matches = [i for i,month in enumerate(self.months) if month.startswith(peak.lower())]
+            if len(matches) != 1 or len(peak) < 3:
+                errormsg = f'The peak of ss.seasonal() is a month (e.g. "January") or a fraction of the year, not "{peak}"'
+                raise ValueError(errormsg)
+            self.peak_frac = (matches[0] + 0.5)/12
+        else:
+            self.peak_frac = float(peak)
+        return
+
+    def __repr__(self):
+        return f'seasonal(mean={self.mean}, amplitude={self.amplitude}, peak={self.peak!r})'
+
+    @property
+    def typed(self):
+        return [self.mean]
+
+    def at(self, year, sim=None):
+        return self.mean*max(0.0, 1 + self.amplitude*np.cos(2*np.pi*(year - self.peak_frac)))
+
+    def to_json(self):
+        return dict(seasonal=dict(mean=quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak))
+
+
 kinds = dict(age='age', patch='space', node='space', region='space', district='space', county='space',
              strain='strain', variant='strain', genotype='strain', serotype='strain', resistance='strain')
+
+
+class geo:
+    """
+    A geography: named places with populations and positions, used as the levels of a spatial stratification
+
+    Args:
+        data (dataframe/str): a table (or the name of a file holding one) with a column `name`, and optionally `pop`, and `x` and `y` or `lat` and `lon`
+        names (list): the name of each place (instead of `data`)
+        pop (list): the population of each place; sets the share of people who start in each
+        x (list): a position for each place, in any unit of distance
+        y (list): the other coordinate
+        lat (list): latitudes in degrees (instead of `x` and `y`); distances are then great-circle distances in km
+        lon (list): longitudes in degrees
+        distances (array): the distance between each pair of places (instead of positions)
+
+    Examples:
+        ```python
+        towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        sir.stratify(patch=towns, mobility=ss.gravity(k=0.01))
+        ```
+    """
+    def __init__(self, data=None, names=None, pop=None, x=None, y=None, lat=None, lon=None, distances=None):
+        if isinstance(data, str):
+            if not data.endswith(('.csv', '.xlsx')):
+                errormsg = f'ss.geo("{data}") looks like the name of a place; named geographies are not available yet, so give a table of places (a dataframe or a file) or names= with their populations and positions'
+                raise NotImplementedError(errormsg)
+            data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
+        if data is not None:
+            cols = {key:data[key].tolist() for key in ['name', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
+            names, pop, x, y, lat, lon = [cols.get(key) for key in ['name', 'pop', 'x', 'y', 'lat', 'lon']]
+        if names is None:
+            errormsg = 'ss.geo() needs the names of the places: names=[...], or a table with a column called "name"'
+            raise ValueError(errormsg)
+        self.names = list(names)
+        self.pop = None if pop is None else np.array(pop, dtype=float)
+        self.distances = None
+        if distances is not None:
+            self.distances = np.array(distances, dtype=float)
+        elif x is not None and y is not None:
+            x, y = np.array(x, dtype=float), np.array(y, dtype=float)
+            self.distances = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :])
+        elif lat is not None and lon is not None: # Great-circle distances, in km
+            lat, lon = np.radians(np.array(lat, dtype=float)), np.radians(np.array(lon, dtype=float))
+            a = np.sin((lat[:, None] - lat[None, :])/2)**2 + np.cos(lat[:, None])*np.cos(lat[None, :])*np.sin((lon[:, None] - lon[None, :])/2)**2
+            self.distances = 2*6371*np.arcsin(np.sqrt(a))
+        for key,val in dict(pop=self.pop, distances=self.distances).items():
+            if val is not None and len(val) != len(self.names):
+                errormsg = f'ss.geo() has {len(self.names)} places but {len(val)} entries in {key}'
+                raise ValueError(errormsg)
+        return
+
+    def __repr__(self):
+        return f'geo({sc.strjoin(self.names)})'
+
+    def __len__(self):
+        return len(self.names)
+
+
+class gravity:
+    """
+    The gravity model of movement: the share of their time that a person from place `i` spends in place `j` (or, for migration,
+    the rate at which they move there) is `k × pop[i]^(a−1) × pop[j]^b / distance[i,j]^c`
+
+    Populations and distances come from the geography of the dimension it is used on (`ss.geo`).
+
+    Args:
+        k (float): the overall amount of movement
+        a (float): the exponent of the population of the place people come from
+        b (float): the exponent of the population of the place they go to
+        c (float): the exponent of the distance between the two
+
+    Examples:
+        ```python
+        sir.stratify(patch=towns, mobility=ss.gravity(k=0.01, a=1.0, b=1.0, c=2.0))
+        ```
+    """
+    def __init__(self, k=1.0, a=1.0, b=1.0, c=2.0):
+        self.k = k
+        self.a = a
+        self.b = b
+        self.c = c
+        return
+
+    def __repr__(self):
+        return f'gravity(k={self.k}, a={self.a}, b={self.b}, c={self.c})'
+
+    def matrix(self, strat):
+        """ The movement between each pair of levels of a stratification, from its geography """
+        place = strat.geo
+        if place is None or place.distances is None or place.pop is None:
+            error('E402', f'ss.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+                          f'     Give the places with ss.geo(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.Mobility(matrix=...).')
+        pop, dist = place.pop, place.distances
+        with np.errstate(divide='ignore'):
+            out = self.k*pop[:, None]**(self.a - 1)*pop[None, :]**self.b/dist**self.c
+        np.fill_diagonal(out, 0)
+        return out
+
+
+class Mobility:
+    """
+    Movement between the levels of a spatial stratification
+
+    People either commute (they keep their home, and spend a share of their time in
+    other places, where they are exposed and expose others) or migrate (they relocate).
+
+    Args:
+        model (gravity): a movement model (instead of `matrix`)
+        matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there
+        kind (str): 'commute' (the default) or 'migrate'
+        away (float): for commuting, the share of their time people spend away from home; the movement is rescaled to give it
+
+    Examples:
+        ```python
+        sir.stratify(patch=towns, mobility=ss.Mobility(ss.gravity(), kind='commute', away=0.4))
+        sir.stratify(patch=['a', 'b'], mobility=ss.Mobility(matrix=[[0, 0.1], [0.2, 0]]))
+        ```
+    """
+    def __init__(self, model=None, matrix=None, kind='commute', away=None, data=None):
+        if data is not None:
+            errormsg = 'ss.Mobility(data=...) (a movement register) is not implemented yet; give a matrix or a movement model'
+            raise NotImplementedError(errormsg)
+        if (model is None) == (matrix is None):
+            errormsg = 'ss.Mobility() takes a movement model (e.g. ss.gravity()) or matrix=, and not both'
+            raise ValueError(errormsg)
+        if kind not in ['commute', 'migrate']:
+            errormsg = f'The kind of ss.Mobility() is "commute" or "migrate", not "{kind}"'
+            raise ValueError(errormsg)
+        self.model = model
+        self.given = None if matrix is None else np.array(matrix, dtype=float)
+        self.kind = kind
+        self.away = away
+        return
+
+    def __repr__(self):
+        what = self.model if self.model is not None else 'matrix'
+        away = f', away={self.away}' if self.away is not None else ''
+        return f'Mobility({what}, kind={self.kind!r}{away})'
+
+    def matrix(self, strat):
+        """ The movement between each pair of levels, with nothing on the diagonal """
+        out = self.model.matrix(strat) if self.model is not None else self.given.copy()
+        if out.shape != (strat.n, strat.n):
+            error('E603', f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
+        np.fill_diagonal(out, 0)
+        return out
+
+    def time_share(self, strat):
+        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1 """
+        out = self.matrix(strat)
+        total = out.sum(axis=1)
+        if self.away is not None:
+            scale = np.divide(self.away, total, out=np.zeros(strat.n), where=total>0)
+        else: # Nobody can spend more than all their time away
+            scale = 1/np.maximum(total, 1)
+        out = out*scale[:, None]
+        np.fill_diagonal(out, 1 - out.sum(axis=1))
+        return out
 
 
 class Strat:
@@ -1687,11 +2014,26 @@ class Strat:
         split (list): the share of the population in each level
         adjust (dict): multipliers on named transitions, one per level
         kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
+        states (list): the names of the states it applies to (default: every state that is people)
+        mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
     """
-    def __init__(self, name, levels, split=None, adjust=None, kind=None):
+    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, mobility=None):
         self.name = name
-        self.kind = kind or kinds.get(name, 'plain')
+        self.geo = levels if isinstance(levels, geo) else None
+        self.kind = kind or ('space' if self.geo is not None else kinds.get(name, 'plain'))
+        self.states = states
         self.guessed = sc.objdict()
+        if self.geo is not None:
+            levels = self.geo.names
+            if split is None and self.geo.pop is not None:
+                split = self.geo.pop/self.geo.pop.sum()
+        if mobility is not None and not isinstance(mobility, Mobility): # A movement model or a matrix on its own is commuting
+            mobility = Mobility(mobility) if isinstance(mobility, gravity) else Mobility(matrix=mobility)
+            self.guessed['mobility'] = 'commuting, since kind= was not given'
+        if mobility is not None and self.kind != 'space':
+            errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
+            raise ValueError(errormsg)
+        self.mobility = mobility
         levels = list(levels)
         numeric = all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
         self.edges = None
@@ -1734,7 +2076,8 @@ class Strat:
     def spec(self):
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist(), adjust={k:v.tolist() for k,v in self.adjust.items()})
+        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist(), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states,
+                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, matrix=self.mobility.matrix(self).tolist(), away=self.mobility.away))
 
     @property
     def mids(self):

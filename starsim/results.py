@@ -160,9 +160,7 @@ class Result(ss.BaseArr):
         keep = np.ones(self.strata.shape[1], dtype=bool)
         for dim,levels in dims.items():
             names = [strat.name for strat in strats]
-            if dim not in names:
-                errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
-                raise KeyError(errormsg)
+            self._check_dim(dim)
             d = names.index(dim)
             inds = [strats[d].index(level) for level in sc.tolist(levels)]
             keep &= np.isin(coords[:, d], inds)
@@ -179,15 +177,16 @@ class Result(ss.BaseArr):
         """
         strats = self._check_strata()
         names = [strat.name for strat in strats]
-        if dim not in names:
-            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
-            raise KeyError(errormsg)
+        self._check_dim(dim)
         d = names.index(dim)
         strat = strats[d]
         coords = strat.sim_coords
         values = np.column_stack([self.strata[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+        columns = [str(label) for label in strat.labels]
+        if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
+            columns = [f'{dim}_{col}' for col in columns]
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
-                     values=values, shape=values.shape[0], columns=[str(label) for label in strat.labels], summarize_by=self.summarize_by)
+                     values=values, shape=values.shape[0], columns=columns, summarize_by=self.summarize_by)
         return out
 
     def _check_strata(self):
@@ -195,6 +194,14 @@ class Result(ss.BaseArr):
             errormsg = f'The result "{self.name}" is not stratified, so there is nothing to select'
             raise ValueError(errormsg)
         return self.strats
+
+    def _check_dim(self, dim):
+        """ Check that the result has a dimension; a state has only the dimensions it was stratified by """
+        names = getattr(self, 'dims', None) or [strat.name for strat in self.strats]
+        if dim not in names:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
+            raise KeyError(errormsg)
+        return
 
     def _substrata(self, keep):
         """ A result made of some of the groups of this one """

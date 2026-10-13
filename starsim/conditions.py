@@ -53,7 +53,7 @@ class Cond:
     def __repr__(self):
         op, args = self.op, self.args
         if op == 'people': return f'people.{args[0]}'
-        elif op in ['state', 'array']: return f'{args[0]}.{args[1]}' if args[0] else f'{args[1]}'
+        elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
         elif op == '~':    return f'~{args[0]!r}'
         elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
@@ -84,6 +84,12 @@ class Cond:
     def __rtruediv__(self, other): return Cond('/', other, self)
     __hash__ = object.__hash__
 
+    def __copy__(self): # A condition is never changed once made, and refers to modules by name, so is shared between copies of a sim
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
     def isin(self, values):
         return Cond('isin', self, tuple(values))
 
@@ -109,6 +115,11 @@ class Cond:
         return ops[op](a, b)
 
 
+def modname(mod):
+    """ The name of a module that a condition refers to: kept as the module until it is needed, since a module can be named after the condition is written """
+    return mod if (mod is None or isinstance(mod, str)) else mod.name
+
+
 def evaluate(obj, ctx):
     return obj.eval(ctx) if isinstance(obj, Cond) else obj
 
@@ -124,7 +135,7 @@ def as_cond(obj):
     if isinstance(obj, Cond):
         return obj
     elif isinstance(obj, (ss.State, ss.Transition)): # Looked up by name when the sim runs, since the sim works on copies
-        return Cond('state', None, obj.name)
+        return Cond('state', getattr(obj, 'module', None), obj.name)
     elif isinstance(obj, ss.transitions.StateSet):
         out = as_cond(obj.states[0])
         for state in obj.states[1:]:
@@ -141,7 +152,7 @@ def from_arr(arr):
     if people is not None and people.states.get(arr.name) is arr:
         return Cond('people', arr.name)
     mod = getattr(arr, 'mod', None)
-    return Cond('array', getattr(mod, 'name', None), arr.name)
+    return Cond('array', mod, arr.name)
 
 
 def lazy(op, arr, other=None):
@@ -225,9 +236,9 @@ class Selector:
                 return self.dim(name)
             arr = sim.people[name] # In a compartmental run this is one value per group, and stops with a message if people are not stratified by it
             return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.n_groups]
-        modname, name = args
-        mod = self.module(modname)
-        if modname is None: # A state or transition given without its module: look in this module first, then the others
+        name = args[1]
+        mod = self.module(modname(args[0]))
+        if args[0] is None: # A state or transition given without its module: look in this module first, then the others
             for other in [self.mod] + [m for m in sim.declared if m is not self.mod]:
                 if other is not None and (name in other.graph.states or name in other.graph.transitions):
                     mod = other

@@ -398,6 +398,53 @@ class Sim(ss.Base):
         """
         return ss.fit(self, **kwargs)
 
+    def check_dt(self, factor=2, output=False):
+        """
+        Rerun the sim with a smaller timestep, and report how much each result changes
+
+        In a run that takes whole steps this covers everything that depends on the size
+        of the step: turning rates into probabilities, the delay of a step between modules,
+        and the order of the modules. In a stochastic run the change also includes the
+        difference between two runs.
+
+        Args:
+            factor (int): how many times smaller to make the timestep
+            output (bool): return the table (as a dataframe) instead of printing it
+
+        Examples:
+            ```python
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4), init_prev=0.01)
+            ss.Sim(sir, solver='binomial', unit='day', stop=100).check_dt()
+            ```
+        """
+        if not hasattr(self, 'inputs'):
+            errormsg = 'sim.check_dt() is only available for sims with declared states and transitions'
+            raise ValueError(errormsg)
+        coarse = self if self.results_ready else self.new(verbose=0).run()
+        fine = self.new(dt=coarse.t.dt/factor, verbose=0).run()
+        n = coarse.t.npts - 1
+        rows = []
+        for mod in coarse.declared:
+            for key,res in mod.results.items():
+                if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
+                    continue
+                other = fine.results[mod.name][key].values
+                if (res.summarize_by or res.summary_method()) == 'sum': # A flow: total it over each of the larger steps
+                    a, b = res.values[:n], other[:n*factor].reshape(n, factor).sum(axis=1)
+                else:
+                    a, b = res.values, other[::factor]
+                scale = np.abs(a).max()
+                change = np.abs(b - a).max()/scale if scale else 0.0
+                rows.append(dict(module=mod.name, result=key, peak=a.max(), peak_fine=b.max(), change=change))
+        df = sc.dataframe(rows).sort_values('change', ascending=False).reset_index(drop=True)
+        if output:
+            return df
+        dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse.unit or 'step'
+        print(f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):')
+        for row in df.itertuples():
+            print(f'  {row.module}.{row.result:<20s} {row.change:6.1%}   (peak {row.peak:n} → {row.peak_fine:n})')
+        return
+
     def what_modifies(self, target, output=False):
         """
         Print everything that modifies a quantity: each `ss.modify()` and `ss.change()`, and the efficacy of each product
@@ -442,7 +489,7 @@ class Sim(ss.Base):
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         for call in sc.tolist(self.pars.stratify):
             call = dict(call)
-            opts = {key:call.pop(key, None) for key in ['split', 'adjust', 'kind']}
+            opts = {key:call.pop(key, None) for key in ['split', 'adjust', 'kind', 'mobility']}
             for name,levels in call.items():
                 strat = trans.Strat(name, levels, **opts)
                 if name in strats:
@@ -681,11 +728,18 @@ class Sim(ss.Base):
                 add('unit', 'none: time is in timesteps', 'nothing in the model has a unit')
             else:
                 add('unit', self.unit, f'from {self.unit_source}' if self.unit_source else None)
+            for strat in self.strats: # Each dimension: its levels, the states it applies to, and what it generates
+                text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
+                text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else ''
+                if strat.kind == 'space':
+                    text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                add('dimension', text, f'guessed: {"; ".join(strat.guessed.values())}' if strat.guessed else None)
         for mod in mods:
             if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
                 lines += ['', mod.describe(output=True)]
         if self.declared:
             lines.append('')
+            place = f' within each {self.strats[self.mixing.space].name}' if self.mixing.space is not None else ''
             nets = list(self.networks.values()) + getattr(self, 'mixed', [])
             if nets:
                 for net in nets:
@@ -693,7 +747,7 @@ class Sim(ss.Base):
                     how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': contact matrix by {self.strats[term[0].dim].name}'
                     add('mixing', f'{net.name} ({type(net).__name__}){how}')
             else:
-                add('mixing', f'homogeneous, 1 contact per {unit}, frequency-dependent', 'guessed: no network given')
+                add('mixing', f'homogeneous{place}, 1 contact per {unit}, frequency-dependent', 'guessed: no network given')
             for mod in list(self.connectors()) + list(self.interventions()):
                 if isinstance(mod, ss.modify):
                     add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')

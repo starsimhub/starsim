@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status of the Starsim v4 implementation of the design spec. The code is in `/home/cliffk/idm/starsim` on the `v4` branch; section numbers refer to the files in `design/`. Checked items run and have a test in `tests/test_transitions.py` or `tests/test_deliveries.py`.
+Status of the Starsim v4 implementation of the design spec. The code is in `starsim/` in this repository, on the `v4` branch; section numbers refer to the files in `design/`. Checked items run and have a test in `tests/test_transitions.py`, `tests/test_deliveries.py`, or `tests/test_dimensions.py`.
 
 ## Build set
 
@@ -18,8 +18,16 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 ## Held-out set
 
-- [ ] Wave 1: one simple example from each framework (MEmilio, EpiModel, epydemix, summer2, SimInf, odin, EMULSION, flepiMoP, Atomica, LASER, camdl)
-- [ ] Wave 2: the other eight conformance corpus models (4, 7, 9, 12, 13, 16, 17, 18)
+- [ ] Wave 1: one simple example from each framework (MEmilio, EpiModel, epydemix, summer2, SimInf, odin, EMULSION, flepiMoP, Atomica, LASER, camdl). The originals have not been collected in `examples/` yet.
+- [x] Wave 2: the other eight conformance corpus models
+    - [x] 4. SIR with a lognormal dwell time
+    - [x] 7. Patches with gravity mobility, and with none
+    - [x] 9. Two diseases that modify each other (as agents; a compartmental run is listed under 06)
+    - [x] 12. Ross-Macdonald malaria, with a seasonal inflow and mosquito species
+    - [x] 13. Screening with follow-up treatment, moved in the loop
+    - [x] 16. A threshold-triggered intervention, with and without memory
+    - [x] 17. TB with resistance as a strain
+    - [x] 18. Two diseases with age stratified on the sim
 - [ ] Wave 3: one complex example from each framework, Ghana measles, and TB
 
 ## By section of the spec
@@ -36,7 +44,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - [x] The unit rules for declared sims (`unit=`, typed `dt`, dates, typed values, timesteps)
 - [x] Typed durations and rates in expressions
-- [ ] The unit notes `W102` and friends
+- [x] `W102 LargeStep`, for the solvers that take whole steps
+- [ ] The other unit notes
 
 ### 03 States and transitions
 
@@ -51,7 +60,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - [x] `ss.par` with bounds, priors, and docs; parameters named from their slots
 - [x] `pars=` by name on the sim
-- [ ] `ss.timeseries`, `ss.seasonal`
+- [x] `ss.timeseries` (constant, linear, spline) and `ss.seasonal`, in rates, durations, modifier amounts, coverage, and capacity
+- [ ] A time series inside `ss.by`
 - [ ] `requires=` and `sim.requires()`
 
 ### 05 Dimensions
@@ -59,7 +69,14 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `stratify()` on a disease and on the sim, `split=`, `adjust=`
 - [x] `ss.transfer` as a rate, `ss.by`
 - [x] Aging between age groups
-- [ ] Strain, space, and mobility dimensions
+- [x] `states=` on `stratify()`: dimensions of some states only, including states that are not people
+- [x] Strain dimensions: a force of infection for each strain, the infector's strain passed on, `adjust` by strain
+- [x] Space: mixing within each place, counts per place, `ss.geo`, `ss.gravity`, and `ss.Mobility` (commuting and migration)
+- [x] Dimensions listed by `describe()`, with the states each applies to and the mobility
+- [ ] `immunity=` between strains
+- [ ] `where=` on `stratify()`
+- [ ] Named geographies (`ss.geo('Kenya')`) and movement registers (`ss.Mobility(data=)`)
+- [ ] A contact matrix by age within each place, in a compartmental run; networks that know about places, as agents
 
 ### 06 Routes
 
@@ -74,6 +91,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Targets other than parameters: `rel_sus`, `rel_trans`, a transition
 - [x] Time-varying amounts (a function of the sim, `ss.by`)
 - [x] Lazy conditions (`ppl.age > 65`, `sir.I & ~sir.vaccinated`), on agents and on groups
+- [x] Conditions on another disease's state, when both have a state of the same name (agents only)
 - [x] `sim.what_modifies()`, for declared modifiers
 - [x] `W502 OverlappingSet`
 - [ ] Network parameters as targets (`school.pars.n_contacts`)
@@ -98,7 +116,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] Delivery results by stratum
 - [ ] Waning by a function of time in a compartmental run (stages)
 - [ ] A test delay in a compartmental run
-- [ ] Time series for `coverage=` and `capacity=` (`ss.timeseries`)
+- [x] Time series for `coverage=` and `capacity=` (`ss.timeseries`)
 - [ ] `ss.Vx`, `ss.Dx`, `ss.Tx` as aliases of the new products
 - [ ] Contact tracing and partner notification
 
@@ -107,7 +125,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] A count per state and a flow per transition, with the timing convention
 - [x] Result expressions (sums and ratios of states)
 - [x] `ss.outcome`, with delays, durations, and reporting periods
-- [x] `res.select()` and `res.by()` on stratified results
+- [x] `res.select()` and `res.by()` on stratified results, including cumulative ones; a state has only the dimensions it was stratified by
 - [ ] Flows in ratio results
 - [ ] Extinction reporting
 
@@ -116,8 +134,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `ode` (RK4, or any `scipy` integrator), `binomial`, `tau`, `gillespie`, `sde`, `abm`
 - [x] `auto` and `stochastic` solver choice, with the reason printed
 - [x] Approximations noted, and refused with `approx=False`
-- [ ] Gillespie thinning for time-varying rates
-- [ ] `sim.check_dt()`
+- [x] `sim.loop.insert()` of a module, which moves its `step()`
+- [x] `sim.check_dt()`
+- [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
 - [ ] JAX and gradients
 
 ### 13 Inference
@@ -146,10 +165,18 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A delivery never gives a product to someone who already holds it.
 - A bare number in `ss.change(at=...)` or `start=` is a year only if the sim has dates; otherwise it is a time in the sim's unit.
 - A modifier acts where the engine uses the quantity; reading `sir.rel_sus` from custom code gives the base value.
+- A module written as code that works on groups as well as on agents says so with the class attribute `compartmental = True`; otherwise it makes the model agent-based.
+- The peak of `ss.seasonal` given as a month is the middle of that month. In a sim with no dates, time starts at the beginning of a year.
+- `ss.geo` takes the places directly (names, populations, and positions or distances); there are no named geographies.
+- `ss.gravity` gives `k × pop[i]^(a−1) × pop[j]^b / distance^c`: for commuting, the share of time a person from `i` spends in `j` (capped so that it sums to at most 1, or rescaled to `away=`), and for migration the rate of moving.
+- An inflow whose rate uses a count (`xi * I.n`, or `ss.birth`) arrives in each place according to the count there; an inflow at a fixed rate is shared between places by their split.
+- A new infection is recorded under the strain acquired, and a state that a dimension does not apply to is counted at that dimension's first level.
+- A level of a stratification named like an attribute of a result (`low`, `high`) is a column called `<dimension>_<level>` in `result.by()`.
 
 ## Known issues
 
-- `result.by()` fails for a stratification with a level called `low` or `high`, since those are attributes of a result.
+- As agents, a dwell time is sampled when someone enters a state, so an `adjust` on a duration does not follow a person who later moves to another level (through an `ss.transfer`, or by aging). A rate does.
+- A strain's initial share is the split of the dimension (equal by default), which applies to everyone who starts in an infected state.
 - A function of the sim that compares ages with a number that is not a bin edge runs in a compartmental model without complaint (each group has the age of its midpoint); the lazy form (`ppl.age > 70`) is checked.
 - As agents, someone tested on the step they were infected may already have recovered (about `dt/2` of a dwell time), so event-triggered tests find slightly fewer cases than in a compartmental run.
 - An ODE and an agent-based run of the same model differ by an amount of order `dt` (about 6% in the prevalence of an SIS model with a daily step).

@@ -432,6 +432,29 @@ class Loop:
         if matches.dtype == bool:
             matches = sc.findinds(matches)
 
+        # A module is moved: its step() runs at the matching place, on each timestep where there is one
+        if isinstance(func, ss.Module):
+            step_label = f'{func.name}.step'
+            own = {repr(entry.time):entry for entry in self.plan if entry.label == step_label}
+            if not own:
+                errormsg = f'Cannot move "{func.name}" in the loop, since its step() is not in the plan; the labels are {sc.strjoin(metadata.label.unique())}'
+                raise ValueError(errormsg)
+            moved = {repr(self.plan[m].time) for m in matches} & set(own.keys())
+            matches = set(matches.tolist())
+            plan = []
+            for i,entry in enumerate(self.plan):
+                key = repr(entry.time)
+                if entry.label == step_label and key in moved:
+                    continue
+                elif i in matches and key in moved:
+                    plan += [own[key], entry] if before else [entry, own[key]]
+                else:
+                    plan.append(entry)
+            self.plan = plan
+            self.df = None
+            self.cpu_df = None
+            return
+
         # Perform the insertion in reverse order
         name = func.__name__
         sim_func = ft.partial(func, self.sim) # Construct a partial function (not a lambda, so the sim is updated when deepcopied)
@@ -468,7 +491,7 @@ class Loop:
         Note: the loop must be initialized (`sim.init()`) before you can call this.
 
         Args:
-            func (func): the function to insert; must take a single argument, `sim`
+            func (func/Module): the function to insert, which must take a single argument, `sim`; or a module of the sim, whose `step()` is moved there
             label (str): the label (module.name) of the function to match; see `sim.loop.to_df().label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match

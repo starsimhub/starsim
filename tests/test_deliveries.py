@@ -110,7 +110,7 @@ def test_conditions():
     sir = make_sir().stratify(age=[0, 15, 65])
     cond = (ppl.age < 15) & sir.S
     assert isinstance(cond, ss.Cond)
-    assert str(cond) == '((people.age < 15) & S)'
+    assert str(cond) == '((people.age < 15) & sir.S)'
     with pytest.raises(TypeError):
         bool(cond)
 
@@ -198,6 +198,16 @@ def test_vaccinate():
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
     with pytest.raises(TypeError):
         ss.vaccinate(ss.Test())
+    # Coverage and capacity that vary in time
+    def varying(**kwargs):
+        vaccine = ss.Vaccine(efficacy=0.9)
+        supply = ss.vaccinate(vaccine, coverage=ss.timeseries({0: 0.0, 10: 0.05, 20: 0.0}), interval=1, capacity=ss.timeseries({0: 1e9, 15: 100}))
+        return ss.Sim(make_sir(), interventions=supply, **kwargs)
+    sims = run_each(varying, stop=30)
+    for sim in sims.values():
+        delivered = sim.results.supply.delivered
+        assert delivered[:10].sum() == 0 and delivered[20:].sum() == 0 # Nobody is reached outside the ten days
+        assert delivered[12] > 1500 and delivered[17] == 100 # About 5% of those left each day, until supplies are limited
     return sims
 
 
@@ -354,6 +364,100 @@ def test_deliver():
     return msim
 
 
+def test_coinfection():
+    sc.heading('Testing two diseases that modify each other')
+    def make(coinfect=True):
+        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.002, 0.001])), init_prev=0.05)
+        syph = ss.Disease(infection=ss.transmission('S -> I', beta=0.01), cure=ss.progression('I -> S', dur=ss.years(3)), init_prev=0.05)
+        coinfection = [
+            ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'), # Both diseases have a state called I, so each condition remembers its own
+            ss.modify(syph.rel_sus, multiply=5.0, where=hiv.I, name='syph_sus'),
+        ]
+        return ss.Sim(diseases=[hiv, syph], networks=ss.MFNet(), connectors=coinfection if coinfect else None, start=2000, stop=2020, verbose=0)
+    sim = make().run()
+    base = make(coinfect=False).run()
+    assert list(sim.diseases.keys()) == ['hiv', 'syph'] # Named from their variables
+    assert sim.results.hiv.n_I[-1] > base.results.hiv.n_I[-1]
+    assert sim.results.syph.cum_infection[-1] > 1.1*base.results.syph.cum_infection[-1]
+    assert 'where=syph.I' in sim.what_modifies('hiv.rel_trans', output=True)
+    assert 'where=hiv.I' in sim.what_modifies('syph.rel_sus', output=True)
+    return sim
+
+
+def test_loop_order():
+    sc.heading('Testing moving a module in the loop')
+    def make():
+        test = ss.Test(sensitivity=0.9, specificity=0.98)
+        drug = ss.Treatment(efficacy=0.95)
+        screen = ss.screen(test, coverage=0.2, interval=1, on_positive=ss.treat(drug))
+        sim = ss.Sim(make_sir(), interventions=screen, n_agents=5000, stop=60, verbose=0, unit='day')
+        return sim, screen
+    sim, screen = make()
+    sim.run()
+    labels = sim.loop.to_df().label.tolist()
+    assert labels.index('screen.step') < labels.index('sir.step') # By default, interventions come before transmission
+
+    moved, screen = make()
+    moved.init()
+    moved.loop.insert(screen, label='sir.step') # So someone can be infected, tested, and treated in one step
+    moved.run()
+    df = moved.loop.to_df()
+    labels = df.label.tolist()
+    assert labels.index('screen.step') == labels.index('sir.step') + 1
+    assert (df.label == 'screen.step').sum() == (df.label == 'sir.step').sum() # Moved, not added
+    assert moved.results.screen.diagnosed.sum() > 0
+    assert not np.array_equal(moved.results.sir.n_I, sim.results.sir.n_I)
+    return moved
+
+
+def test_triggers():
+    sc.heading('Testing interventions triggered by the state of the sim')
+    pars = dict(stop=200, **kw)
+    def make():
+        return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.001, name='sir')
+
+    # A function of the sim has no memory, so it switches on and off as the number infected crosses the threshold
+    sir = make()
+    distancing = ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.results.sir.n_I[sim.ti - 1] > 1000)
+    bare = ss.Sim(sir, interventions=distancing, **pars).run()
+    base = ss.Sim(make(), **pars).run()
+    assert bare.solver == 'ode'
+    assert bare.results.sir.n_I.max() < 0.2*base.results.sir.n_I.max()
+
+    # A policy with memory is a module that decides, and a modifier that applies the effect
+    class Closure(ss.Intervention):
+        """ Close for four weeks once the number infected passes a threshold """
+        compartmental = True # It reads results and sets a flag, so it runs under any solver
+
+        def __init__(self, threshold=1000, weeks=4, **kwargs):
+            super().__init__(**kwargs)
+            self.threshold = threshold
+            self.weeks = weeks
+            self.closed = False
+            self.reopen = None
+            self.days_closed = 0
+            return
+
+        def step(self):
+            sim = self.sim
+            if self.closed and sim.ti >= self.reopen:
+                self.closed = False
+            if not self.closed and sim.results.sir.n_I[sim.ti - 1] > self.threshold:
+                self.closed = True
+                self.reopen = sim.ti + 7*self.weeks
+            self.days_closed += self.closed
+            return
+
+    sir = make()
+    effect = ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.interventions.closure.closed)
+    held = ss.Sim(sir, interventions=[Closure(name='closure'), effect], **pars).run()
+    assert held.solver == 'ode'
+    assert held.interventions.closure.days_closed % 28 == 0 or held.interventions.closure.closed # Closed for four weeks at a time
+    assert held.results.sir.n_I.max() < base.results.sir.n_I.max()
+    assert np.isclose(sir.pars.beta.value, 0.3) # The base value is never overwritten
+    return held
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -364,3 +468,6 @@ if __name__ == '__main__':
     treat  = test_treat()
     screen = test_screen()
     msim   = test_deliver()
+    coinf  = test_coinfection()
+    loop   = test_loop_order()
+    held   = test_triggers()

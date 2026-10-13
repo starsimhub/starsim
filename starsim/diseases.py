@@ -121,6 +121,8 @@ class Disease(ss.Module):
             split (list): the share of the population in each level
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`
             kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
+            states (list): the states the dimension applies to (default: every state that is people; for a strain, every state reached only through infection)
+            mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.gravity()`, `ss.Mobility()`, or a matrix
             inplace (bool): if False, return a stratified copy and leave this disease unchanged
             kwargs (dict): the dimension and its levels (bin edges or labels), e.g. `age=[0, 15, 65]`;
                 an `ss.transfer` passed as a keyword is added under that name

@@ -324,6 +324,16 @@ def test_stratify():
             assert any('approximated' in note for note in sim.notes) # Asking for an ODE of a network model gives the standard approximation, and says so
     assert np.allclose(finals[:], finals[0], rtol=0.03), f'Expected the same attack rate from each, not {finals}'
 
+    # Stratifying the sim gives every disease the same groups
+    def make(name, beta, dur):
+        return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=dur), init_prev=0.01, name=name)
+    pars = dict(unit='day', stop=100, **kw)
+    both = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], **pars).stratify(age=[0, 5, 18, 65]).run()
+    same = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], stratify=dict(age=[0, 5, 18, 65]), **pars).init()
+    assert both.hash().model == same.hash().model
+    for key in ['flu', 'rsv']:
+        assert both.results[key].n_I.by('age').values.shape == (101, 4)
+
     # Errors
     with pytest.raises(ss.CodedError, match='E305'):
         make_sir().stratify(age=[0, 15]).stratify(age=[0, 15])
@@ -520,6 +530,51 @@ def test_functions():
     return sim
 
 
+@sc.timer()
+def test_time_values():
+    sc.heading('Testing values that vary in time')
+    def make(beta):
+        return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=10), init_prev=0.01, name='sis')
+    dates = dict(start='2020-01-01', stop='2020-06-01', **kw)
+
+    # A time series is a step function by default, so matches the same changes made with ss.change()
+    series = ss.Sim(make(ss.timeseries({'2020-01-01': 0.3, '2020-02-01': 0.1, '2020-04-01': 0.3})), **dates).run()
+    sis = make(0.3)
+    changed = ss.Sim(sis, interventions=ss.change(sis.pars.beta, at=['2020-02-01', '2020-04-01'], to=[0.1, 0.3]), **dates).run()
+    assert series.solver == 'ode' # A value that varies in time does not make a model agent-based
+    assert np.allclose(series.results.sis.n_I, changed.results.sis.n_I)
+    assert series.to_spec()['modules'][0]['pars'][0]['value']['mode'] == 'constant'
+
+    # With no dates, the times are in the sim's unit; and it can be the amount of a modifier
+    sis = make(0.3)
+    ramp = ss.modify(sis.pars.beta, multiply=ss.timeseries({0: 1.0, 50: 0.2}, mode='linear'))
+    res = ss.Sim(sis, interventions=ramp, stop=100, **kw).run().results.sis
+    assert res.n_I[:40].max() > 2*res.n_I[-1] # Transmission falls below what is needed to sustain it
+    with pytest.raises(ValueError):
+        ss.Sim(make(ss.timeseries({50: 1.0, 0: 0.2})), stop=10, **kw).run()
+
+    # A seasonal value peaks once a year, under every solver
+    for solver in ['ode', 'binomial', 'tau', 'abm']:
+        beta = ss.seasonal(mean=ss.perday(0.3), amplitude=0.5, peak='January')
+        sim = ss.Sim(make(beta), start=2020, stop=2023, dt=ss.days(1), solver=solver, total_pop=20_000, **kw).run()
+        n_I = sim.results.sis.n_I[366:731] # The second year
+        assert np.argmax(n_I) < 45 or np.argmax(n_I) > 320, f'Expected infections to peak in the winter with {solver}'
+        assert n_I.max() > 1.5*n_I.min()
+    assert sim.unit == 'day'
+    assert 'seasonal(mean=' in sim.describe(output=True)
+
+    # A fast transition is noted when the solver takes whole steps, and check_dt() says how much the step matters
+    fast = ss.Disease(infection=ss.transmission('S -> I', beta=0.6), recovery=ss.progression('I -> R', dur=4), init_prev=0.01, name='fast')
+    stepped = ss.Sim(fast, solver='binomial', unit='day', stop=60, total_pop=1e6, **kw)
+    df = stepped.check_dt(output=True)
+    assert any('rate × dt = 0.25' in note for note in stepped.new().init().notes)
+    assert 0.05 < df.change[df.result == 'n_I'].iloc[0] < 0.2
+    smooth = ss.Sim(fast, solver='ode', unit='day', stop=60, total_pop=1e6, **kw)
+    assert smooth.check_dt(output=True).change.max() < 1e-3 # An ODE does not depend on the timestep
+    assert not smooth.new().init().notes
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -535,3 +590,4 @@ if __name__ == '__main__':
     fit   = test_outcomes()
     msim  = test_modify()
     funcs = test_functions()
+    times = test_time_values()
