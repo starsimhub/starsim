@@ -4,9 +4,9 @@ Finding 4 of the [landscape review](../approaches/README.md#cross-cutting-findin
 
 ## Recommendation
 
-1. **Factor transmission into two facts: how infectious the pathogen is, and how contact happens.** The disease states the first; the networks state the second.
+1. **Factor transmission into two facts: how infectious the pathogen is, and how contact happens.** The disease states the first; the networks state the second. [CK: this won't always work, e.g. HIV has different transmissibility via needle sharing, M-F transmission, and F-M transmission]
 2. **Keep Starsim's route abstraction and its keyword.** `networks=` accepts individual-level networks and mixing pools alike.
-3. **Homogeneous mixing is the default.** With no network given, `S >> I @ beta * I` is the textbook `beta * S * I / N`, and `beta` is the classical transmission rate. The user does not write `/N`.
+3. **Homogeneous mixing is the default.** With no network given, `S >> I @ beta * I` is the textbook `beta * S * I / N`, and `beta` is the classical transmission rate. The user does not write `/N`. [CK: will `S >> I @ beta` work? what about e.g. `S >> I @ (beta*I + beta_vax*I_vax)`?]
 4. **A bare state in a rate means exposure to that state through the model's networks.** `I.n` means the plain count. The first covers person-to-person transmission; the second covers everything else.
 5. **Name the denominator convention**, because frequency- and density-dependent transmission are different models and the difference is invisible in most frameworks.
 6. **Let structure be specified by its generating model, not only its realization.** "Mean degree 0.7, partnerships lasting 50 days" is what modelers have; an edge list is not.
@@ -36,7 +36,7 @@ recovery  = I >> R @ ss.days(10)
 sir = ss.Disease(infection, recovery)
 ```
 
-or, in the short form, `ss.transmission('S -> I', beta=0.3)`. Either way the model reads like the equation, and there is no `/N`.
+or, in the short form, `ss.transmission('S -> I', beta=0.3)`. Either way the model reads like the equation, and there is no `/N`. [CK: related to my above comment, i feel that if it's going to be `ss.transmission('S -> I', beta=0.3)`, for parallel it should be `transmission = S >> I @ beta`. but maybe it should be `ss.infection('S -> I', beta=0.3)`? or maybe both names is fine. but i do feel that if `ss.transmission` can just use S->I with a bare beta, so should the short form]
 
 **A bare state inside a rate means "exposure to that state through the model's networks".** The library works out what that exposure is from how the population mixes:
 
@@ -109,8 +109,22 @@ cholera = ss.Disease(
 water = ss.Compartments(              # a count, not people
     shedding = None >> W @ xi * I.n,
     decay    = W >> None @ ss.days(30),
-)
+) # [CK: thinking about how I feel about None like this ... i guess it's ok?]
 sim = ss.Sim([cholera, water], total_pop=100_000, unit='day')
+
+# [CK: i think if None appears then it can be inferred that it's a 'compartment' (though i still hate that name since S and I are also compartments), e.g. i'd prefer this:
+
+beta, K, xi = 0.5, 1e5, 10
+S, I, R, W = ss.states()
+cholera = ss.Disease(
+    infection = S >> I @ beta * W.n / (W.n + K),
+    recovery  = I >> R @ ss.days(5),
+    shedding = ss.null >> W @ xi * I.n, # [CK: open to names other than 'null', but i think this is the right idea]
+    decay    = W >> ss.null @ ss.days(30),
+)
+sim = ss.Sim(cholera, water, total_pop=100_000, unit='day')
+
+# ]
 ```
 
 Vector-borne transmission (Ross-Macdonald), with `a` the biting rate and `b`, `c` the two transmission probabilities:
@@ -135,9 +149,9 @@ mosquitoes = ss.Compartments(
 sim = ss.Sim([malaria, mosquitoes], n_agents=5_000, unit='day')
 ```
 
-`ss.Compartments` is a module whose states are counts: a water reservoir, a mosquito population, a wastewater signal. It uses the same transition syntax as a disease and sits in the same sim. In the malaria example `n_agents=` makes the humans agents while the mosquitoes stay three numbers. See [model-structure.md](model-structure.md) and [agent-based.md](agent-based.md).
+`ss.Compartments` is a module whose states are counts: a water reservoir, a mosquito population, a wastewater signal. It uses the same transition syntax as a disease and sits in the same sim. In the malaria example `n_agents=` makes the humans agents while the mosquitoes stay three numbers. See [model-structure.md](model-structure.md) and [agent-based.md](agent-based.md). [CK: i still don't really understand this distinction. the states Sh, Eh etc are counts too.]
 
-The difference between `I` and `I.n` is the whole rule. `beta * I` asks the library to work out exposure from the mixing, with the right denominator. `beta * I.n` is a number times a count, and the user is responsible for what it means.
+The difference between `I` and `I.n` is the whole rule. `beta * I` asks the library to work out exposure from the mixing, with the right denominator. `beta * I.n` is a number times a count, and the user is responsible for what it means. [CK: this sounds confusing to me]
 
 ### Infectious sources come from the states
 
@@ -179,7 +193,7 @@ ss.contacts('Kenya', source='prem_2021')
 ss.StaticNet(edges=my_edgelist)        # still allowed: the realization, not the description
 ```
 
-(`mean_degree` and `concurrency` are proposed additions to Starsim's `ss.MFNet`, which today takes `duration`, `acts`, `participation`, and `debut`.) The diagnostic step EpiModel treats as mandatory becomes one call:
+(`mean_degree` and `concurrency` are proposed additions to Starsim's `ss.MFNet`, which today takes `duration`, `acts`, `participation`, and `debut`.)  [CK: ok ... not sure how mean_degree is better than n_contacts, but concurrency seems like a useful parameter.] The diagnostic step EpiModel treats as mandatory becomes one call:
 
 ```python
 net.check()   # simulate the network alone; do the target statistics recover?
@@ -195,7 +209,7 @@ ss.MFNet(
 )
 ```
 
-Three numbers with three different data sources. Collapsing them into "contact rate" is lossy for anything sexually transmitted. Starsim's sexual networks already carry `duration` and `acts` separately.
+Three numbers with three different data sources. Collapsing them into "contact rate" is lossy for anything sexually transmitted. Starsim's sexual networks already carry `duration` and `acts` separately. [CK: i like it, but ... what does 0.7 mean? it could mean 1 70% of the time and 0 30% of the time, or it could be a poisson distribution with lambda=0.7 ... ]
 
 ### Sexual networks in a compartmental run
 
@@ -212,7 +226,7 @@ The same applies to `ss.RandomNet(n_contacts=10)`: asked for as an ODE, it is ap
 
 ### Layers
 
-Household, school, work, community: [Epydemix](../approaches/epydemix.md) has them, Covasim had them, [MEmilio](../approaches/memilio.md) has them via contact-matrix dampings, and they are what school-closure interventions act on. A list of networks is a layered population, and each layer can be changed separately:
+Household, school, work, community: [Epydemix](../approaches/epydemix.md) has them, Covasim had them, [MEmilio](../approaches/memilio.md) has them via contact-matrix dampings, and they are what school-closure interventions act on. A list of networks is a layered population, and each layer can be changed separately: [CK: these are in Starsim as of v3.7.2]
 
 ```python
 home   = ss.contacts('Kenya', layer='home')
@@ -224,14 +238,14 @@ sim = ss.Sim(sir.stratify(age=[0, 5, 18, 65]), networks=[home, school, work], un
 )
 ```
 
-The `ss.modify` line is a school closure: school contacts are multiplied by 0.2 between the two dates and return to their original value afterwards ([interventions.md](interventions.md), [composition-and-effects.md](composition-and-effects.md)).
+The `ss.modify` line is a school closure: school contacts are multiplied by 0.2 between the two dates and return to their original value afterwards ([interventions.md](interventions.md), [composition-and-effects.md](composition-and-effects.md)). [CK: how does it work if the contact layer ages don't line up with the disease stratifications? shouldn't the sim be stratified, rather than the disease?]
 
 ## Trade-offs
 
 - **`beta` means "per contact" once a network is given, and the contact rate is then a second number.** Incidence data identifies only their product. This is not a new problem; it is the existing one made visible, and [calibration.md](calibration.md) covers fitting it.
-- **`I` and `I.n` look similar and mean different things.** `describe()` prints the resolved rate for every transition, including the denominator, so the difference is visible.
+- **`I` and `I.n` look similar and mean different things.** `describe()` prints the resolved rate for every transition, including the denominator, so the difference is visible. [CK: yeah .... i don't love this, but i don't quite understand it either so maybe you just need to explain it better.]
 - **An approximated network model is a different model.** The one-line note says what was done; it does not say how much the answer changed. Running both and comparing is the only way to know.
-- **A network library is a maintenance surface.** Every named generator (gravity, radiation, ERGM-fitted, contact matrices for 400 locations) is code and data we own. Prefer wrapping the existing implementations (LASER's migration module, `socialmixr`/`epydemix-data` contact matrices, `ergm` for fitted networks) over reimplementing them.
+- **A network library is a maintenance surface.** Every named generator (gravity, radiation, ERGM-fitted, contact matrices for 400 locations) is code and data we own. Prefer wrapping the existing implementations (LASER's migration module, `socialmixr`/`epydemix-data` contact matrices, `ergm` for fitted networks) over reimplementing them. [CK: see /home/cliffk/idm/starsim_data for our current solution to that; happy to update, but in general we do NOT want dependence on LASER, epydemix-data, etc -- AI makes maintaining stuff we control easier, and these outside dependencies are problematic.]
 - **A contact matrix and a network are not interchangeable even when both are available.** The matrix is the mean of a distribution whose variance matters for threshold behavior.
 
 ## Rejected
@@ -249,5 +263,5 @@ The `ss.modify` line is a school closure: school contacts are multiplied by 0.2 
 ## Open questions
 
 - **How are partner-change rates derived from a network's parameters?** For a simple network (mean degree, duration) there is a standard formula. For a network with age mixing, concurrency, and several partnership types, the grouping and the rates need choosing, and the choice should be printed.
-- **Static networks with strong degree heterogeneity.** Homogeneous mixing with the same mean is a poor approximation for these. A degree-grouped approximation is the standard improvement; whether to build it is open. An agent-based run is always available.
+- **Static networks with strong degree heterogeneity.** Homogeneous mixing with the same mean is a poor approximation for these. A degree-grouped approximation is the standard improvement; whether to build it is open. An agent-based run is always available. [CK: agree, think here we can just move to the ABM]
 - **Dose response.** [EpiHiper](../approaches/epihiper.md)'s review notes its transmission form is fixed and "anything else — dose response, within-host viral load, density dependence — is not expressible". Here a rate can be a function ([parameters-and-distributions.md](parameters-and-distributions.md)), which covers it in principle; a worked example with viral load is needed to confirm.
