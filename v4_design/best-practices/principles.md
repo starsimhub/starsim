@@ -9,7 +9,7 @@ Two statements define success, and every recommendation in this folder should be
 1. **A model should never be easier to write without the lingua franca than with it.**
 2. **For each of the main frameworks (MEmilio, EpiModel, Epydemix, and the rest), its own examples can be written in the lingua franca in no more lines of code, and run in no more time, than the original.**
 
-The second is measurable, and [vignettes](../vignettes) is where it gets measured: lines of model code and wall-clock time, original against translation.
+The second is measurable, and [vignettes](../vignettes) is where it gets measured: lines of model code and wall-clock time, original against translation. [CK: a partial exception is that some frameworks have very specific built-ins, e.g. `interventions=close_schools_uk()`; this doesn't count, or rather, we are allowed to count the lines of code in `close_schools_uk()` as part of our total.]
 
 ## Recommendation
 
@@ -19,9 +19,9 @@ The second is measurable, and [vignettes](../vignettes) is where it gets measure
 4. **One vocabulary, several lengths.** The two-line form, the operator form, and the class form are the same words written at different lengths. Never delete the short form to enable a feature that only the long form needs; support both.
 5. **Complexity belongs in the library.** What the user writes may be tiny and what the library does with it may be large.
 6. **Plain Python is always available, and it is not second class.** Real models have parts that are easiest to say as a function or a `step()` method. Those parts work everywhere they can, and the library says where they cannot.
-7. **Expressions are Python, never strings.** A string may name a state or draw an arrow (`'S -> I'`); it never carries a formula.
+7. **Expressions are Python, never strings.** A string may name a state or draw an arrow (`'S -> I'`); it never carries a formula. [CK: I think so, but see Polars expressions, and Atomica strings. i'm not convinced that we should NEVER allow string expressions, but agree we would need strong reason to allow them.]
 8. **Approximate rather than refuse, and say what was approximated.** A coarser model that runs is more useful than a refusal, as long as the user is told.
-9. **A feature that only pays off in one framework's use case does not go in.** A vocabulary nobody can hold is a vocabulary nobody uses correctly.
+9. **A feature that only pays off in one framework's use case does not go in.** A vocabulary nobody can hold is a vocabulary nobody uses correctly. [CK: true, but the user is realistically going to be an AI most of the time.]
 
 ## Why: the audience is the binding constraint
 
