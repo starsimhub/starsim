@@ -92,7 +92,7 @@ sim = ss.Sim(hiv, networks=[ss.MFNet(), needles])
 
 ## Counts used literally
 
-`I.n` is the plain number in a state (the same number as the result `n_I`), and `I.prev` is its fraction of the population. A rate may be any arithmetic expression of counts and parameters, and it is then used exactly as written, without going through the routes:
+`I.n` is the plain number in a state (the same number as the result `n_I`), and `I.frac` is its fraction of the population. A rate may be any arithmetic expression of counts and parameters, and it is then used exactly as written, without going through the routes:
 
 ```python
 S >> I @ beta * I                      # exposure to I through the routes (the usual case)

@@ -228,7 +228,7 @@ A sim is one trajectory, whatever the solver. Several runs are a MultiSim, as in
 
 ```python
 sim  = ss.Sim(sir, solver='gillespie', total_pop=1000)
-msim = ss.parallel(sim, n_runs=100)            # or ss.MultiSim(sim, n_runs=100).run()
+msim = ss.parallel(sim, n_runs=100)            # or sim.run(n_runs=100), or ss.MultiSim(sim, n_runs=100).run()
 
 msim.plot()                                    # the median and an interval
 msim.plot(lines=True)                          # every run

@@ -216,7 +216,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.Par`, `ss.Outcome` | Capitalization rule | `ss.par`, `ss.outcome` |
 | `ss.cascade`, `observe()`, `Model.results()` | A separate observation step | Results declared as keywords with the model |
 | `ss.N`, `ss.count` | Extra names for a sum and a keyword | `N = S + I + R`; `capacity=` |
-| `ss.erlang`, `ss.dist(...)` | Duplicates | `ss.gamma` with an integer shape or `stages=`; `ss.Dist(dist=...)` |
+| `ss.dist(...)` | Duplicate | `ss.Dist(dist=...)` |
 | `ss.lognorm`, `ss.binomial`, `ss.neg_binomial`, `ss.rate` | Not Starsim's names | `ss.lognorm_ex` / `ss.lognorm_im`, Starsim's set, `ss.nbinom`, `ss.per` |
 | `ss.exp_decay`, `ss.linear_decay` | Covered by existing forms | `waning=` as a duration, a function, or `ss.timeseries` |
 | `ss.act`, `queue()`, `phase=`, `sim.substep()` | Queued updates and named phases are gone | Starsim's ordered loop, `sim.loop.insert()` |

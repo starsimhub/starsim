@@ -19,7 +19,7 @@ Justified by [best-practices/time-and-units.md](../best-practices/time-and-units
 
 `ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days.
 
-Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.prev` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)).
+Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)).
 
 ## Conversion
 
@@ -167,7 +167,7 @@ There are no sub-step offsets. Commuting, which the first draft handled with dep
 
 ## Distributions
 
-Distributions use Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the lognormal itself), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, `ss.choice`, and the rest of Starsim's set. Any SciPy distribution can be wrapped with `ss.Dist(dist=...)`. `ss.erlang` is not in the vocabulary; use `ss.gamma` with an integer shape, or `stages=` on the transition.
+Distributions use Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the lognormal itself), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, `ss.choice`, and the rest of Starsim's set. Any SciPy distribution can be wrapped with `ss.Dist(dist=...)`. `ss.erlang(k=, mean=)` is the one addition: an Erlang distribution given by its number of stages and its mean, which is `ss.gamma` with an integer shape; `stages=` on the transition says the same thing.
 
 A distribution is accepted wherever a quantity of the same type is. **Units are given once per distribution**:
 

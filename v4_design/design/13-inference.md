@@ -15,7 +15,7 @@ beta = ss.par(0.075, bounds=[0.01, 0.30])            # has bounds, so it is fitt
 sir = ss.Disease(
     infection  = S >> I @ beta * I,
     recovery   = I >> R @ ss.days(10),
-    prevalence = I.prev,                             # a result; the data has a column with this name
+    prevalence = I.frac,                             # a result; the data has a column with this name
     init_prev  = ss.par(0.02, bounds=[0.01, 0.05]),
     name       = 'sir',
 )

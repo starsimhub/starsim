@@ -172,7 +172,7 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 - **`ss.null`.** It is a source for births and a sink for deaths, so neither `ss.source` nor `ss.sink` fits both. `ss.null` is short and reads acceptably in both positions; a better word would be welcome.
 - **How robust is picking up names from variables?** `S, I, R = ss.states(3)` and `ss.Disease(infection, recovery)` find names by looking at the caller's variables when the module is built. That is convenient and slightly magical. A transition has a fallback (`S_to_I`); a state does not, and raises `E210`. How often that happens in a REPL, under `exec`, or with two names for one object is to be found out.
 - **The many-run views.** `msim.plot(lines=True)` and `.values` are placeholders for "every run" and "the full array".
-- **Which distributions, under which names?** Starsim's list and names are the starting point and can be revisited. `ss.lognorm_ex` and `ss.lognorm_im` are precise and not what anyone would guess. There is no `ss.erlang`, because it is `ss.gamma` with an integer shape and its common use is `stages=`; an `ss.erlang(mean=, k=)` would be a friendlier spelling if people turn out to write Erlang dwell times directly.
+- **Which distributions, under which names?** Starsim's list and names are the starting point and can be revisited. `ss.lognorm_ex` and `ss.lognorm_im` are precise and not what anyone would guess. `ss.erlang(k=, mean=)` has been added as a friendlier spelling of `ss.gamma` with an integer shape.
 - **`I` and `I.n`.** A longer spelling for the bare state (`I.contact`, say) would be clearer, and would stop `S >> I @ beta * I` reading like the textbook equation.
 
 ### B13. Time

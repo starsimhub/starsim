@@ -99,7 +99,7 @@ A compartmental run has no individuals to draw for, so variation between people 
 
 To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `E804 CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
 
-The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. There is no `ss.erlang`: an Erlang distribution is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), and sub-stages are `stages=3` on the transition.
+The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. An Erlang distribution is `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`); sub-stages are also `stages=3` on the transition.
 
 The unit of a distribution is given once, either with `unit=` or on one of its parameters; the other parameters of the same dimension take it:
 
@@ -207,6 +207,6 @@ How data is matched to results is in [09-results.md](09-results.md).
 - **String-built parameter names.** `ss.by` does this job.
 - **Required, enforced data declarations.** Requirements are metadata.
 - **A `use_defaults` switch** that hides a model's behavior. Defaults here are guessed and printed.
-- **New distribution names, including `ss.erlang`.** Starsim's names are used; an Erlang is `ss.gamma` with an integer shape, or `stages=` on the transition.
+- **New distribution names, other than `ss.erlang`.** Starsim's names are used. `ss.erlang(k=, mean=)` is the one addition: it is `ss.gamma` with an integer shape, given by its number of stages and its mean.
 - **Repeating the unit on every parameter of a distribution.** Once is enough.
 - **Depending on outside packages for data.** Bundle what is small and common, pull the rest with a cache, and own both.

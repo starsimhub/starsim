@@ -26,7 +26,7 @@ Why do we need a lingua franca? Why can't LLMs just write disease models directl
 
 - `approaches` contains a review of the current approaches used in the epi modeling landscape, based on https://starsim.org/disease_modeling_landscape. *[first pass done and reviewed by humans]*
 - `best-practices` distills the modeling landscape into best practices for each type of modeling. *[second pass done after human review]*
-- `design` contains design specifications for the language, based on the best practices described. *[second pass done, following the reviewed best practices; NOT yet reviewed by humans]*
+- `design` contains design specifications for the language, based on the best practices described. *[second pass done after human review]*
 - `examples` contains examples of models written in other frameworks to be expressed by the lingua franca. *[not done]*
 - `vignettes` contains translations of the model examples into the lingua franca. *[not done]*
 - `webapp` is a tool for viewing `examples` models side by side with their `vignettes` translations, with diff-style markup. *[not done]*

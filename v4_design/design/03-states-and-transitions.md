@@ -174,7 +174,7 @@ The keys are network names. A pair is the two directions of a directed network (
 | `S \| I \| R` | a set of states | "any of S, I, R" (several sources) |
 | `p * A + (1 - p) * B` | a weighted sum of states | a split between destinations, or a weighted source of infection |
 | `I.n` | a count | the number of people in `I`; the same number as the result `n_I` |
-| `I.prev` | a fraction | `I.n` divided by the number of people in `I`'s module |
+| `I.frac` | a fraction | `I.n` divided by the number of people in `I`'s module |
 | `S + I + R` | a sum of states | a source of infection or a denominator in a rate; a result when given to the module by name. Never a new state |
 | `ss.null >> S`, `I >> ss.null` | an inflow, an outflow | "from outside", "to outside" |
 
@@ -225,7 +225,7 @@ The model text is the same in both cases. Whether mixing is frequency- or densit
 infection    S -> I   rate = 0.3 × I.n / N        [homogeneous mixing]
 ```
 
-Several sources are a sum of exposures: `S >> E @ beta * (I + 0.5 * A)` says asymptomatic people are half as infectious, and `S >> I @ beta * I + beta_vax * I_vax` gives each source its own coefficient. A rate may multiply the exposure by anything that contains no bare state, such as a parameter, a seasonal curve, or a count (`beta * I * (1 - 0.3 * H.prev)`). The rate MUST be linear in the bare states, because exposure through a network is a sum over contacts; `I ** 2` or `I / (I + K)` raises `E208 NonlinearExposure`, which says to use `I.n` if a literal count was meant.
+Several sources are a sum of exposures: `S >> E @ beta * (I + 0.5 * A)` says asymptomatic people are half as infectious, and `S >> I @ beta * I + beta_vax * I_vax` gives each source its own coefficient. A rate may multiply the exposure by anything that contains no bare state, such as a parameter, a seasonal curve, or a count (`beta * I * (1 - 0.3 * H.frac)`). The rate MUST be linear in the bare states, because exposure through a network is a sum over contacts; `I ** 2` or `I / (I + K)` raises `E208 NonlinearExposure`, which says to use `I.n` if a literal count was meant.
 
 Three things follow from the rule and are worth stating:
 
@@ -235,9 +235,9 @@ Three things follow from the rule and are worth stating:
 
 States that are a source of any contact-mediated transition are marked infectious.
 
-### `I.n` is a count, `I.prev` a fraction
+### `I.n` is a count, `I.frac` a fraction
 
-`I.n` is the plain number of people in a state (the number represented, after any scaling from `n_agents` to `total_pop`), and `I.prev` is that number as a fraction of the module's people. For a state that is not people, `W.n` is simply its value. A sum of states has them too: `N = S + I + R` then `N.n`. Rates may be arbitrary expressions of counts and parameters, and they are used literally, with no routes involved:
+`I.n` is the plain number of people in a state (the number represented, after any scaling from `n_agents` to `total_pop`), and `I.frac` is that number as a fraction of the module's people. For a state that is not people, `W.n` is simply its value. A sum of states has them too: `N = S + I + R` then `N.n`. Rates may be arbitrary expressions of counts and parameters, and they are used literally, with no routes involved:
 
 ```python
 S >> I  @ beta * W.n / (W.n + K)      # environmental: saturating dose-response to a reservoir W
@@ -268,7 +268,7 @@ Any `ss.Dist` of durations is accepted:
 
 ```python
 I >> R @ ss.days(10)                                   # exponential
-I >> R @ ss.gamma(a=3, scale=ss.days(10 / 3))          # Erlang with 3 stages, mean 10 days
+I >> R @ ss.erlang(k=3, mean=ss.days(10))              # Erlang with 3 stages, mean 10 days; the same as ss.gamma(a=3, scale=ss.days(10 / 3))
 I >> R @ ss.lognorm_ex(mean=10, std=3, unit='days')    # lognormal
 I >> R @ ss.weibull(c=2, scale=ss.days(11))
 ```
@@ -290,7 +290,7 @@ ss.progression('I -> R', dur=ss.days(10), stages=3)
 ss.Transition(I, R, dur=ss.days(10), stages=3)
 ```
 
-Generated sub-stages appear in `describe()` and are summed in results, so `n_I` means what the user meant. `ss.erlang` is not in the vocabulary; `ss.gamma` with an integer shape, or `stages=`, says the same thing.
+Generated sub-stages appear in `describe()` and are summed in results, so `n_I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` all say the same thing.
 
 ## Branching
 
@@ -435,7 +435,7 @@ states       S, I, R                    people
 **What follows.** A state that is not people:
 
 - holds a plain count, a number, whatever the solver. It is never represented as agents;
-- is not part of `total_pop`, of `N`, or of `I.prev`'s denominator, and `n_agents` and the scale factor between agents and people do not apply to it;
+- is not part of `total_pop`, of `N`, or of `I.frac`'s denominator, and `n_agents` and the scale factor between agents and people do not apply to it;
 - starts at zero unless given an `init`, which is a count;
 - has no age, sex, or risk group and does not sit on networks. Stratifying by a property of people leaves it unsplit; it is split by `patch`, or by dimensions of its own given with `states=` (`malaria.stratify(species=['gambiae', 'funestus'], states=[Sv, Ev, Iv])`). See [05-dimensions.md](05-dimensions.md#states-that-are-not-people);
 - is used in a rate as a count, `W.n`. Used bare it raises `E211 ExposureToCount` (below);

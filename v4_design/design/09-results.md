@@ -98,7 +98,7 @@ Either way they end up in the same place: `sim.results.sir.prevalence`, `sim.res
 
 ### Ratios and combinations
 
-Arithmetic on states never makes a new state: nobody is "in" `N`. `S + I + R` is a sum of states, and what a sum does depends on where it is put. In a rate it is a source of infection or a denominator ([03-states-and-transitions.md](03-states-and-transitions.md)). Given to the disease as a result, it is a result, in which a state stands for the number of people in it. So a sum of states is a combined count and a ratio of two is a proportion: `I / N` is a time series of prevalence. Flows can be used the same way (`infection / S` is the per-capita incidence). `N` itself is not a result of the model above, because it was not given to the disease. `I.prev`, the fraction of the whole population in `I`, exists for the most common case.
+Arithmetic on states never makes a new state: nobody is "in" `N`. `S + I + R` is a sum of states, and what a sum does depends on where it is put. In a rate it is a source of infection or a denominator ([03-states-and-transitions.md](03-states-and-transitions.md)). Given to the disease as a result, it is a result, in which a state stands for the number of people in it. So a sum of states is a combined count and a ratio of two is a proportion: `I / N` is a time series of prevalence. Flows can be used the same way (`infection / S` is the per-capita incidence). `N` itself is not a result of the model above, because it was not given to the disease. `I.frac`, the fraction of the whole population in `I`, exists for the most common case.
 
 The rules:
 
@@ -200,7 +200,7 @@ A sim is one trajectory, whatever the solver. Many runs are a MultiSim, as in St
 
 ```python
 sim  = ss.Sim(sir, solver='gillespie', total_pop=1000, unit='day')
-msim = ss.parallel(sim, n_runs=100)          # or ss.MultiSim(sim, n_runs=100).run()
+msim = ss.parallel(sim, n_runs=100)          # or sim.run(n_runs=100), or ss.MultiSim(sim, n_runs=100).run()
 
 msim.plot()                                  # median and interval
 msim.plot(lines=True)                        # every run
