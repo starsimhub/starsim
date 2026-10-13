@@ -1,0 +1,366 @@
+"""
+Test interventions on declared models: modifiers, conditions, products, and their delivery
+"""
+
+# %% Imports and settings
+import pytest
+import numpy as np
+import sciris as sc
+import starsim as ss
+
+kw = dict(verbose=0, unit='day', total_pop=50_000)
+solvers = ['ode', 'binomial', 'abm']
+
+
+def make_sir(**kwargs):
+    sir = ss.Disease(
+        infection = ss.transmission('S -> I', beta=0.3),
+        recovery  = ss.progression('I -> R', dur=10),
+        init_prev = 0.01,
+        name = 'sir',
+        **kwargs,
+    )
+    return sir
+
+
+def make_sis():
+    sis = ss.Disease(
+        infection = ss.transmission('S -> I', beta=0.3),
+        recovery  = ss.progression('I -> S', dur=10),
+        init_prev = 0.01,
+        name = 'sis',
+    )
+    return sis
+
+
+def run_each(make, stop=150, **kwargs):
+    """ Run the sim that `make` returns with each solver """
+    return sc.objdict({solver:make(solver=solver, stop=stop, **kw, **kwargs).run() for solver in solvers})
+
+
+def check_close(sims, func, rtol=0.1):
+    """ Check that a number from each sim matches the ODE's """
+    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
+    return vals
+
+
+# %% Define the tests
+
+def test_change():
+    sc.heading('Testing ss.change()')
+    def make(**kwargs):
+        sir = make_sir()
+        lockdown = ss.change(sir.pars.beta, at=[20, 60], by=[0.3, 1.0])
+        return ss.Sim(sir, interventions=lockdown, **kwargs)
+    sims = run_each(make, stop=120)
+    base = ss.Sim(make_sir(), solver='ode', stop=120, **kw).run()
+    res, res0 = sims.ode.results.sir, base.results.sir
+    assert np.allclose(res.n_S[:21], res0.n_S[:21]) # The same until it starts
+    assert res.infection[20:60].sum() < 0.5*res0.infection[20:60].sum()
+    assert res.infection[60:].sum() > res0.infection[60:].sum() # The epidemic resumes when the multiplier goes back to 1
+    check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
+
+    # Values instead of multipliers, and dates
+    sir = make_sir()
+    to = ss.change(sir.pars.beta, at=['2020-01-21', '2020-03-01'], to=[0.09, 0.3])
+    dated = ss.Sim(sir, interventions=to, start='2020-01-01', stop='2020-04-30', total_pop=50_000, verbose=0).run()
+    assert np.allclose(dated.results.sir.n_S, res.n_S)
+    with pytest.raises(ValueError):
+        ss.change(sir.pars.beta, at=[20, 60], by=[0.3])
+    return sims
+
+
+def test_modify_where():
+    sc.heading('Testing modifiers with conditions, and targets other than parameters')
+    def make(**kwargs):
+        sir = make_sir().stratify(risk=['lower', 'higher'], split=[0.8, 0.2])
+        risky = ss.modify(sir.rel_sus, multiply=3.0, where=sir.risk == 'higher')
+        faster = ss.modify(sir.recovery, multiply=2.0, start=20)
+        quieter = ss.modify(sir.rel_trans, multiply=lambda sim: 0.5 if sim.ti > 40 else 1.0)
+        return ss.Sim(sir, connectors=risky, interventions=[faster, quieter], **kwargs)
+    sims = run_each(make)
+    for sim in sims.values():
+        by_risk = sim.results.sir.infection.by('risk').values.sum(axis=0)
+        assert by_risk[1]/0.2 > 1.1*by_risk[0]/0.8, 'Expected a higher attack rate in the higher-risk group'
+    check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
+    text = sims.ode.what_modifies('sir.rel_sus', output=True)
+    assert 'risky' in text and 'multiply=3.0' in text and 'higher' in text
+    assert 'faster' in sims.abm.what_modifies(sims.abm.diseases.sir.recovery, output=True)
+    assert 'none' in sims.ode.what_modifies('sir.pars.beta', output=True)
+
+    # A modifier of a parameter can depend on the group, but in a compartmental run not on the state
+    sir = make_sir().stratify(risk=['lower', 'higher'])
+    group = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.0, where=sir.risk == 'lower'), solver='ode', stop=50, **kw).run()
+    assert np.isclose(group.results.sir.infection.by('risk').values[:, 0].sum(), 0)
+    with pytest.raises(ss.CodedError, match='E804'):
+        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.5, where=sir.I), solver='ode', stop=50, **kw).run()
+
+    # Two modifiers that set the same thing are noted
+    sir = make_sir()
+    sets = [ss.modify(sir.pars.beta, set=0.2, name='a'), ss.modify(sir.pars.beta, set=0.1, name='b')]
+    both = ss.Sim(sir, interventions=sets, stop=20, **kw).run()
+    assert any('both set' in note for note in both.notes)
+    return sims
+
+
+def test_conditions():
+    sc.heading('Testing conditions')
+    ppl = ss.People(100)
+    sir = make_sir().stratify(age=[0, 15, 65])
+    cond = (ppl.age < 15) & sir.S
+    assert isinstance(cond, ss.Cond)
+    assert str(cond) == '((people.age < 15) & S)'
+    with pytest.raises(TypeError):
+        bool(cond)
+
+    # The same condition selects agents or groups
+    def make(eligible=cond, **kwargs):
+        vaccine = ss.Vaccine(efficacy=0.9)
+        kids = ss.vaccinate(vaccine, eligible=eligible, years=[5])
+        return ss.Sim(sir, interventions=kids, **kwargs)
+    sims = run_each(make, stop=20)
+    for sim in sims.values():
+        n_S = sim.results.sir.n_S.by('age').values[5, 0]
+        assert np.isclose(sim.results.kids.delivered[5], n_S, rtol=0.02) # Every susceptible child, and nobody else
+    check_close(sims, lambda sim: sim.results.kids.delivered.sum(), rtol=0.05)
+
+    # A function of the sim does the same
+    func = make(eligible=lambda sim: sim.people.age < 15, solver='ode', stop=20, **kw).run()
+    assert func.results.kids.delivered[5] > sims.ode.results.kids.delivered[5] # Including the children who are not susceptible
+
+    # An age that is not the edge of a group cannot be used on groups, so the model runs as agents unless told otherwise
+    auto = make(eligible=ppl.age < 10, stop=20, **kw).init()
+    assert auto.solver == 'abm' and 'falls inside a bin' in auto.solver_reason
+    with pytest.raises(ss.CodedError, match='E804'):
+        make(eligible=ppl.age < 10, solver='ode', stop=20, **kw).run()
+    return sims
+
+
+def test_vaccinate():
+    sc.heading('Testing vaccination: campaigns, routine delivery, waning, and capacity')
+    base = ss.Sim(make_sir(), solver='ode', stop=150, **kw).run()
+
+    # A campaign
+    def campaign(**kwargs):
+        sir = make_sir()
+        vaccine = ss.Vaccine(efficacy=0.9, cost=2.0)
+        rounds = ss.vaccinate(vaccine, coverage=0.6, years=[5])
+        return ss.Sim(sir, interventions=rounds, **kwargs)
+    sims = run_each(campaign)
+    for sim in sims.values():
+        res = sim.results.rounds
+        assert np.isclose(res.delivered.sum(), 30_000, rtol=0.02) and np.isclose(res.coverage[5], 0.6, atol=0.02)
+        assert np.isclose(res.cost.sum(), 2*res.delivered.sum())
+        assert sim.results.sir.cum_infection[-1] < 0.5*base.results.sir.cum_infection[-1]
+        assert [strat.name for strat in sim.strats] == ['has_vaccine'] # Holding the vaccine is a property of people
+    assert sims.ode.hash().model == base.hash().model # The scenario is not part of the model
+    assert 'has_vaccine' in sims.ode.describe(output=True)
+
+    # Routine delivery: each person is offered it once, and half accept
+    def routine(**kwargs):
+        sir = make_sir()
+        vaccine = ss.Vaccine(efficacy=0.9)
+        offer = ss.vaccinate(vaccine, coverage=0.5, start=10)
+        return ss.Sim(sir, interventions=offer, **kwargs)
+    sims = run_each(routine)
+    for sim in sims.values():
+        res = sim.results.offer
+        assert np.isclose(res.delivered[10], 25_000, rtol=0.03) and res.delivered[:10].sum() == 0 and res.delivered[11:].sum() == 0
+
+    # Protection that is lost, and given again in the next round; with efficacy against two things
+    def waning(**kwargs):
+        sis = make_sis()
+        vaccine = ss.Vaccine(efficacy=dict(acquisition=0.8, transmission=0.5), waning=ss.days(30))
+        rounds = ss.vaccinate(vaccine, coverage=0.8, interval=ss.days(50), start=20)
+        return ss.Sim(sis, interventions=rounds, **kwargs)
+    sims = run_each(waning, stop=200)
+    for sim in sims.values():
+        delivered = sim.results.rounds.delivered
+        assert list(np.flatnonzero(delivered)) == [20, 70, 120, 170]
+        expected = 0.8*(10_000 + 40_000*(1 - np.exp(-50/30))) # Those missed in the last round, and those who have lost their protection since
+        assert np.isclose(delivered[70], expected, rtol=0.05)
+    check_close(sims, lambda sim: sim.results.sis.n_I[100])
+
+    # A number available per day, while stocks last; and coverage by age
+    def capacity(**kwargs):
+        sir = make_sir().stratify(age=[0, 15, 65])
+        vaccine = ss.Vaccine(efficacy=0.9)
+        stock = ss.vaccinate(vaccine, capacity=ss.perday(500), coverage=ss.by(age=[1.0, 1.0, 0.0]), start=10, stop=40)
+        return ss.Sim(sir, interventions=stock, **kwargs)
+    sims = run_each(capacity, stop=60)
+    for sim in sims.values():
+        delivered = sim.results.stock.delivered
+        assert np.allclose(delivered[10:40], 500, rtol=0.1) and delivered[:10].sum() == 0 and delivered[40:].sum() == 0
+
+    # Errors
+    with pytest.raises(ss.CodedError, match='E505'):
+        ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
+    with pytest.raises(TypeError):
+        ss.vaccinate(ss.Test())
+    return sims
+
+
+def test_transfer():
+    sc.heading('Testing vaccination as a transfer along a stratification')
+    def make(**kwargs):
+        sir = make_sir().stratify(vaccinated=[False, True], split=[1, 0], adjust={'infection': [1.0, 0.15]})
+        rollout = ss.transfer(vaccinated=True, coverage=0.7, years=[5, 30], eligible=~sir.vaccinated)
+        return ss.Sim(sir, interventions=rollout, **kwargs)
+    sims = run_each(make)
+    for sim in sims.values():
+        delivered = sim.results.rollout.delivered
+        assert np.allclose(delivered[[5, 30]], [35_000, 10_500], rtol=0.05) # 70% of everyone, then 70% of those left
+    check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
+    return sims
+
+
+def test_treat():
+    sc.heading('Testing treatment: curing, and changing rates')
+    base = ss.Sim(make_sis(), solver='ode', stop=150, **kw).run()
+
+    # A treatment that cures
+    def cure(**kwargs):
+        sis = make_sis()
+        drug = ss.Treatment(efficacy=0.9)
+        rounds = ss.treat(drug, coverage=0.3, interval=5, start=30)
+        return ss.Sim(sis, interventions=rounds, **kwargs)
+    sims = run_each(cure)
+    for solver,sim in sims.items():
+        res = sim.results
+        assert res.sis.n_I[-1] < 0.9*base.results.sis.n_I[-1]
+        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.05) # By default, the people who are infected
+    check_close(sims, lambda sim: sim.results.rounds.delivered.sum())
+
+    # A treatment that changes rates, with protection that fades by a function of time (which needs agents)
+    def make_sird():
+        return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), death=ss.death('I ->', rate=0.02), init_prev=0.01, name='sird')
+    def rates(waning=None, **kwargs):
+        sird = make_sird()
+        art = ss.Treatment(efficacy=dict(transmission=0.5, mortality=0.9), waning=waning)
+        program = ss.treat(art, eligible=sird.I, coverage=0.8)
+        return ss.Sim(sird, interventions=program, **kwargs)
+    untreated = ss.Sim(make_sird(), solver='ode', stop=150, **kw).run()
+    sims = run_each(rates)
+    for sim in sims.values():
+        assert sim.results.sird.death.sum() < 0.6*untreated.results.sird.death.sum()
+    check_close(sims, lambda sim: sim.results.program.delivered.sum()/sim.results.sird.cum_infection[-1]) # Most of the people infected, whenever that was
+    fades = rates(waning=lambda t: np.exp(-t/5), stop=150, **kw).run()
+    assert fades.solver == 'abm'
+    assert fades.results.sird.death.sum() > 1.2*sims.abm.results.sird.death.sum()
+
+    with pytest.raises(ss.CodedError, match='E505'):
+        ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(efficacy=0.5, transition='cure')), **kw).init()
+    return sims
+
+
+def test_screen():
+    sc.heading('Testing screening, follow-ups, and event-triggered delivery')
+
+    # Screen in rounds, and treat most of those who test positive
+    def rounds(**kwargs):
+        sis = make_sis()
+        test = ss.Test(sensitivity=0.9, specificity=0.95)
+        drug = ss.Treatment(efficacy=0.95)
+        screening = ss.screen(test, coverage=0.4, interval=7, start=30, on_positive=ss.treat(drug, coverage=0.8))
+        return ss.Sim(sis, interventions=screening, **kwargs)
+    sims = run_each(rounds)
+    for sim in sims.values():
+        res = sim.results
+        ti = 37
+        n_I = res.sis.n_I[ti]
+        expected = 0.4*(0.9*n_I + 0.05*(50_000 - n_I)) # True positives and false positives
+        assert np.isclose(res.screening.delivered[ti], 20_000, rtol=0.03)
+        assert np.isclose(res.screening.diagnosed[ti], expected, rtol=0.05)
+        assert np.isclose(res.screening_positive.delivered[ti], 0.8*res.screening.diagnosed[ti], rtol=0.05) # The follow-up is a module of its own
+    check_close(sims, lambda sim: sim.results.screening.diagnosed.sum())
+
+    # Test half of new infections, and cure those found
+    def events(**kwargs):
+        sir = make_sir()
+        test = ss.Test(sensitivity=0.8)
+        drug = ss.Treatment(efficacy=1.0)
+        symptomatic = ss.screen(test, on=sir.infection, coverage=0.5, on_positive=ss.treat(drug))
+        return ss.Sim(sir, interventions=symptomatic, **kwargs)
+    sims = run_each(events)
+    for sim in sims.values():
+        res = sim.results
+        assert np.isclose(res.symptomatic.delivered.sum(), 0.5*res.sir.infection[:-1].sum(), rtol=0.05)
+        assert np.isclose(res.symptomatic.diagnosed.sum(), 0.8*res.symptomatic.delivered.sum(), rtol=0.08) # As agents, a few have already recovered by the time they are tested
+    check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
+
+    # A test with a delay needs agents; the follow-ups happen when the result arrives, and can be functions
+    negatives = []
+    def delay(**kwargs):
+        sis = make_sis()
+        test = ss.Test(sensitivity=0.9, delay=ss.days(3))
+        drug = ss.Treatment(efficacy=1.0)
+        slow = ss.screen(test, coverage=0.5, years=[40], on_positive=ss.treat(drug), on_negative=lambda sim, uids: negatives.append(len(uids)))
+        return ss.Sim(sis, interventions=slow, **kwargs)
+    sim = delay(stop=60, **kw).run()
+    res = sim.results
+    assert sim.solver == 'abm'
+    assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.diagnosed)) == [43]
+    assert np.isclose(res.slow_positive.delivered[43], res.slow.diagnosed[43])
+    assert negatives[0] > 0
+    with pytest.raises(ss.CodedError, match='E804'):
+        delay(solver='ode', stop=60, **kw).run()
+    return sims
+
+
+def test_deliver():
+    sc.heading('Testing delivery by a function, triggers, and scenarios')
+
+    # A function that says who gets it: UIDs for agents, a number per group otherwise
+    def give(sim):
+        if sim.ti != 5:
+            return ss.uids() if sim.solver == 'abm' else np.zeros(sim.n_groups)
+        elif sim.solver == 'abm':
+            return sim.people.auids[:10_000]
+        return sim.diseases.sir.S.values*0.5
+    def by_function(**kwargs):
+        sir = make_sir()
+        vaccine = ss.Vaccine(efficacy=0.9)
+        chosen = ss.vaccinate(vaccine, deliver=give, capacity=8000)
+        return ss.Sim(sir, interventions=chosen, **kwargs)
+    for solver in ['ode', 'abm']:
+        sim = by_function(solver=solver, stop=20, **kw).run()
+        assert np.isclose(sim.results.chosen.delivered.sum(), 8000) # Capped by the capacity
+    with pytest.raises(ValueError):
+        ss.vaccinate(ss.Vaccine(efficacy=0.9), deliver=give, coverage=0.5)
+
+    # A trigger: vaccinate while there are many infections
+    def triggered(**kwargs):
+        sir = make_sir()
+        vaccine = ss.Vaccine(efficacy=0.9)
+        many = lambda sim: sim.results.sir.n_I[sim.ti - 1] > 2000
+        response = ss.vaccinate(vaccine, coverage=0.2, interval=1, when=many)
+        return ss.Sim(sir, interventions=response, **kwargs)
+    sims = run_each(triggered)
+    for sim in sims.values():
+        res = sim.results
+        given = np.flatnonzero(res.response.delivered)
+        assert len(given) and np.all(res.sir.n_I[given - 1] > 2000)
+
+    # Scenarios are sims, and can be compared run by run
+    def scenario(vaccinate=True, **kwargs):
+        sir = make_sir()
+        campaign = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.6, years=[5])
+        return ss.Sim(sir, interventions=campaign if vaccinate else None, solver='binomial', stop=100, **kw)
+    msim = ss.parallel(baseline=scenario(False), vaccine=scenario(True), n_runs=3)
+    diff = msim.diff('baseline').vaccine.sir.cum_infection
+    assert diff.values.shape == (3, 101)
+    assert np.all(diff.values[:, -1] < 0) # Fewer infections in every run
+    return msim
+
+
+if __name__ == '__main__':
+    sc.options(interactive=False)
+    change = test_change()
+    where  = test_modify_where()
+    conds  = test_conditions()
+    vx     = test_vaccinate()
+    trans  = test_transfer()
+    treat  = test_treat()
+    screen = test_screen()
+    msim   = test_deliver()

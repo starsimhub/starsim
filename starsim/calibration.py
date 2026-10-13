@@ -1165,3 +1165,302 @@ class Normal(CalibComponent):
         sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
         return
+
+
+#%% Data and fitting for models with declared parameters
+
+class data:
+    """
+    Data to compare with a sim's results, matched by name: each column is named like the result it corresponds to
+
+    Args:
+        source (str/df): a file name or a dataframe, with a time column (`date`, `year`, `t`, or `time`) and one column per data series
+        aliases (dict): for headers that do not match: the result (or time-column) name, and the column that holds it
+        ignore_extra (bool): if True, drop columns that match no result instead of raising an error
+
+    Examples:
+        ```python
+        data = ss.data('kenya_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
+        sim = ss.Sim(sir, data=data, start='2020-01-01', stop='2020-12-31')
+        ```
+    """
+    def __init__(self, source, aliases=None, ignore_extra=False):
+        self.source = source
+        self.aliases = aliases or {}
+        self.ignore_extra = ignore_extra
+        return
+
+    def load(self, sim=None):
+        """ Load the data and rename the columns """
+        df = sc.dataframe(pd.read_csv(self.source) if isinstance(self.source, str) else self.source)
+        for name,col in self.aliases.items():
+            if col not in df.columns:
+                errormsg = f'The alias {name}="{col}" names a column the data does not have; its columns are {list(df.columns)}'
+                raise KeyError(errormsg)
+            df = df.rename(columns={col:name})
+        if sim is not None and self.ignore_extra:
+            keep = [col for col in df.columns if col in self.time_cols or self.match(sim, col) is not None]
+            df = df[keep]
+        return df
+
+    time_cols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year']
+
+    @staticmethod
+    def match(sim, col):
+        """ Find the result that a data column corresponds to: "cases", or "sir.cases" if the name is used by more than one module """
+        modname, _, name = col.replace('_', '.', 1).rpartition('.') if '.' not in col and col.split('_')[0] in sim.results else col.rpartition('.')
+        matches = []
+        for mod in sim.modules:
+            if modname in ['', mod.name] and name in mod.results and isinstance(mod.results[name], ss.Result):
+                matches.append(mod.results[name])
+        if not matches and col in sim.results and isinstance(sim.results[col], ss.Result):
+            matches.append(sim.results[col])
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
+    def check(sim, df):
+        """ Check that every data column matches a result, and that the data overlaps the simulated period """
+        options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
+        for col in df.columns:
+            if data.match(sim, col) is None:
+                ss.error('E705', f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
+                                 f"     Rename it with ss.data(..., aliases=dict(result='{col}')), or drop it with ss.data(..., ignore_extra=True).")
+        return
+
+
+def data_times(sim, df):
+    """ The times of the data, on the sim's own time axis (the result timevec as numbers) """
+    timevec = sim.t.timevec
+    index = df.index
+    if sim.t.is_absolute:
+        sim_t = np.array([ss.date(t).years for t in timevec])
+        data_t = np.array([ss.date(t).years for t in index])
+    else:
+        sim_t = np.asarray(timevec, dtype=float)
+        data_t = np.asarray(index, dtype=float)
+    return sim_t, data_t
+
+
+def compare(sim, df=None):
+    """
+    Line up a sim's results with its data
+
+    A flow (new infections, reported cases) is summed over the interval ending at
+    each data time; a stock or ratio (a count, a prevalence) is read at the data's time.
+
+    Returns a dict of `{column: (data values, model values)}`.
+    """
+    df = sim.data if df is None else df
+    sim_t, data_t = data_times(sim, df)
+    if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
+        ss.error('E704', f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+    out = sc.objdict()
+    inside = (data_t >= sim_t.min()) & (data_t <= sim_t.max())
+    for col in df.columns:
+        res = data.match(sim, col)
+        values = np.asarray(res.values, dtype=float)
+        expected = np.asarray(df[col], dtype=float)
+        if res.summarize_by == 'sum': # A flow: sum over the interval ending at each data time
+            spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
+            starts = np.append(data_t[0] - spacing, data_t[:-1])
+            model = np.array([values[(sim_t > lo + 1e-9) & (sim_t <= hi + 1e-9)].sum() for lo,hi in zip(starts, data_t)])
+        else:
+            model = np.interp(data_t, sim_t, values)
+        ok = inside & np.isfinite(expected)
+        out[col] = (expected[ok], model[ok])
+    return out
+
+
+def mismatch(sim, df=None, weights=None, gof=None):
+    """
+    The goodness of fit between a sim and its data (smaller is better)
+
+    By default, for each data series, the normalized absolute error: the mean of
+    |model − data| divided by the mean of the data; the series are then averaged.
+
+    Args:
+        sim (`ss.Sim`): a sim that has been run
+        df (df): the data, if not the sim's
+        weights (dict): the relative weight of each data series (default: equal)
+        gof (str/func): 'nae' (default), 'rmse', or a function of the sim returning a number
+    """
+    if callable(gof):
+        return gof(sim)
+    total = 0.0
+    wsum = 0.0
+    for col,(expected,model) in compare(sim, df).items():
+        scale = np.abs(expected).mean() or np.ptp(expected) or 1.0
+        diff = model - expected
+        value = np.sqrt(np.mean(diff**2))/scale if gof == 'rmse' else np.mean(np.abs(diff))/scale
+        weight = (weights or {}).get(col, 1.0)
+        total += weight*value
+        wsum += weight
+    return total/wsum if wsum else np.nan
+
+
+class Fit(sc.prettyobj):
+    """
+    The result of fitting a sim to its data; see `ss.fit()`
+
+    Attributes:
+        sim (`ss.Sim`): the calibrated sim: a copy of the original with the best-fit values, already run
+        pars (dict): the best-fit value of each fitted parameter; can be passed to `ss.Sim(pars=...)`
+        table (df): parameter, initial value, best fit, and bounds
+        before (`ss.Sim`): the sim with the initial values, already run
+        mismatch (float): the goodness of fit of the calibrated sim
+        trials (df): every evaluation
+    """
+    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before):
+        self.sim = sim
+        self.before = before
+        self.pars = pars
+        self.table = table
+        self.trials = trials
+        self.method = method
+        self.mismatch = mismatch
+        self.mismatch_before = mismatch_before
+        return
+
+    def summarize(self):
+        """ Print the estimates and the goodness of fit before and after """
+        print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
+        print(self.table.to_string(index=False))
+        print(f'Goodness of fit: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after')
+        for par in self.table.itertuples():
+            span = par.high - par.low
+            if min(par.best - par.low, par.high - par.best) < 0.01*span:
+                ss.warn(f'W1301 AtBound: the best-fit value of "{par.par}" ({par.best:n}) is at one of its bounds [{par.low:n}, {par.high:n}]')
+        return self.table
+
+    def to_df(self):
+        """ Every evaluation: the parameter values tried, and the goodness of fit of each """
+        return self.trials
+
+    def plot(self, **kwargs):
+        """ Plot the results that have data against it, before and after fitting """
+        import matplotlib.pyplot as plt
+        cols = list(self.sim.data.columns)
+        fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kwargs)
+        for ax,col in zip(axs.flatten(), cols):
+            for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
+                res = data.match(sim, col)
+                ax.plot(res.timevec, res.values, label=label, alpha=0.8)
+            ax.scatter(self.sim.data.index, self.sim.data[col], c='k', s=15, label='Data', zorder=10)
+            ax.set_title(col)
+            ax.legend(frameon=False)
+        sc.figlayout(fig=fig)
+        return ss.return_fig(fig)
+
+
+def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
+    """
+    Fit a sim's parameters to its data; usually called as `sim.calibrate()`
+
+    Fits every parameter that has `bounds` (see `ss.par`) to every result that has
+    data (see `ss.Sim(data=...)`). The original sim is not changed.
+
+    Args:
+        sim (`ss.Sim`): the sim to fit, with data
+        pars (list): the names of the parameters to fit (default: all that have bounds)
+        data (df): the data to fit to (default: the sim's data)
+        weights (dict): the relative weight of each data series (default: equal)
+        gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim
+        method (str): 'nelder-mead' (the default for a deterministic sim), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
+        scan (int): for the SciPy methods, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from the best of them
+        n_runs (int): runs per evaluation, for a stochastic sim (default 1)
+        rand_seed (int): the random seed for the fitting method
+        verbose (bool): whether to print progress
+        kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna or `maxiter=500` for SciPy
+
+    Returns:
+        An `ss.Fit` object
+
+    Examples:
+        ```python
+        beta = ss.par(0.1, bounds=[0.01, 0.5])
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ beta * I, I >> R @ ss.days(10), init_prev=0.01)
+        sim = ss.Sim(sir, data='cases.csv', start='2020-01-01', stop='2020-06-01')
+        fit = sim.calibrate()
+        fit.sim.plot()
+        ```
+    """
+    import scipy.optimize as spo
+    base = sim.new(verbose=0)
+    if data is not None:
+        base.data = data
+    probe = sim.new(verbose=0).init() # To find the parameters and check the data
+    if probe.data is None:
+        ss.error('E1302', 'calibrate() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit.')
+    fitted = sc.objdict()
+    for mod in probe.declared:
+        for name,p in mod.graph.pars.items():
+            if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
+                key = name if sum(name in m.graph.pars for m in probe.declared) == 1 else f'{mod.name}.{name}'
+                fitted[key] = p
+    if not fitted:
+        ss.error('E1301', 'calibrate() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
+    names = list(fitted.keys())
+    lows = np.array([p.bounds[0] for p in fitted.values()], dtype=float)
+    highs = np.array([p.bounds[1] for p in fitted.values()], dtype=float)
+    x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)
+    types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in fitted.values()] # Keep the unit of typed values
+    logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are searched on a log scale
+    verbose = sc.ifelse(verbose, ss.options.verbose)
+    if verbose and logs.any():
+        print(f'Searching on a log scale: {sc.strjoin(np.array(names)[logs])}')
+    stochastic = probe.solver not in ['ode']
+    method = sc.ifelse(method, 'optuna' if stochastic else 'nelder-mead')
+    n_runs = sc.ifelse(n_runs, 1)
+
+    def to_pars(x):
+        return {name:(cls(val) if cls is not None else float(val)) for name,val,cls in zip(names, x, types)}
+
+    def run(x, seed=None):
+        kw = {} if seed is None else dict(rand_seed=seed)
+        new = base.new(pars=to_pars(x), **kw)
+        new.data = base.data
+        return new.run()
+
+    trials = []
+    def objective(x):
+        values = [mismatch(run(x, seed=None if n_runs == 1 else i + 1), weights=weights, gof=gof) for i in range(n_runs)]
+        value = float(np.mean(values))
+        trials.append(dict(zip(names, x), mismatch=value))
+        return value
+
+    def encode(x): return np.where(logs, np.log(np.maximum(x, 1e-300)), x)
+    def decode(z): return np.clip(np.where(logs, np.exp(np.minimum(z, 700)), z), lows, highs)
+
+    mismatch_before = objective(x0)
+    start = x0
+    scan = kwargs.pop('scan', None if method == 'optuna' else 10*len(names))
+    if scan: # The fit can have several local optima, so start from the best of a spread of points
+        sampler = sps.qmc.LatinHypercube(d=len(names), seed=rand_seed if rand_seed is not None else 1)
+        points = decode(encode(lows) + sampler.random(scan)*(encode(highs) - encode(lows)))
+        values = [objective(x) for x in points]
+        if min(values) < mismatch_before:
+            start = points[int(np.argmin(values))]
+    if method == 'optuna':
+        import optuna
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        study = optuna.create_study(sampler=optuna.samplers.TPESampler(seed=rand_seed))
+        study.enqueue_trial(dict(zip(names, x0)))
+        def trial_objective(trial):
+            x = [trial.suggest_float(name, lo, hi, log=bool(log)) for name,lo,hi,log in zip(names, lows, highs, logs)]
+            return objective(np.array(x))
+        study.optimize(trial_objective, n_trials=kwargs.pop('trials', 100), **kwargs)
+        best = np.array([study.best_params[name] for name in names])
+    else:
+        bounds = list(zip(encode(lows), encode(highs)))
+        options = sc.mergedicts(dict(xatol=1e-4, fatol=1e-6) if method == 'nelder-mead' else None, kwargs)
+        result = spo.minimize(lambda z: objective(decode(z)), encode(start), method=method, bounds=bounds, options=options)
+        best = decode(result.x)
+
+    best_pars = sc.objdict(to_pars(best))
+    after = run(best)
+    before = run(x0)
+    table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
+    out = Fit(sim=after, before=before, pars=best_pars, table=table, trials=pd.DataFrame(trials), method=method,
+              mismatch=mismatch(after, weights=weights, gof=gof), mismatch_before=mismatch_before)
+    return out

@@ -1,6 +1,8 @@
 """
 Define core Sim classes
 """
+import sys
+import inspect
 import itertools
 import numpy as np
 import sciris as sc
@@ -19,7 +21,10 @@ class Sim(ss.Base):
     modules via the `ss.Loop` integration loop.
 
     Args:
-        pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
+        model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`.
+            Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
+        pars (dict): either the sim parameters (as for the first argument), or the values of model parameters by name,
+            e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; these apply to modules with declared parameters (see `ss.par`)
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
         demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
@@ -30,6 +35,12 @@ class Sim(ss.Base):
         analyzers (str/Analyzer/list): as above, for analyzers
         custom (Module/list): as above, for any custom user-created modules not matching one of the above types
         modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
+        solver (str): how to run modules with declared states and transitions (see `ss.Disease`): 'auto' (the default: an ODE if
+            every part of the model has a compartmental form, otherwise agents), 'ode', 'gillespie', 'tau', 'binomial', 'sde', 'abm', or
+            'stochastic' (a stochastic compartmental solver chosen for the population size)
+        unit (str): the unit of bare numbers in declared transitions, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
+        approx (bool): by default, each approximation a solver makes is noted in one line; True hides the notes, False makes them errors
+        stratify (dict): stratify every module by a property of people, e.g. `dict(age=[0, 15, 65])`
         copy_inputs (bool): if True (default), copy modules as they're inserted into the sim, allowing
             the same module objects to be reused across multiple sims. Set to False if you want external
             references to the module objects to reflect state changes after sim.run().
@@ -49,16 +60,30 @@ class Sim(ss.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
-    def __init__(self, pars=None, label=None, people=None, demographics=None, connectors=None, 
-                 networks=None, diseases=None, interventions=None, analyzers=None, custom=None, 
-                 modules=None, copy_inputs=True, data=None, **kwargs):
+    def __init__(self, model=None, label=None, people=None, demographics=None, connectors=None,
+                 networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
+                 modules=None, copy_inputs=True, data=None, pars=None, **kwargs):
         self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
+        if isinstance(model, ss.Module) or (isinstance(model, (list, tuple)) and len(model)): # The first argument can be the model: a module or a list of modules
+            modules = sc.mergelists(model, modules)
+        elif model is not None: # Or the sim parameters, as a dict
+            kwargs = sc.mergedicts(model, kwargs)
+        self._name_modules(sys._getframe(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
+        interventions = self._add_followups(interventions)
+        self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
+        if isinstance(pars, dict) and len(pars) and not any(key in self.pars for key in pars):
+            self.par_values, pars = dict(pars), None
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
         self.pars.update(input_pars)  # Update the parameters
+        if any(getattr(mod, 'graph', None) is not None for val in input_pars.values() for mod in sc.tolist(val)):
+            self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt, e.g. with other parameter values for calibration
+        self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
+        self.notes = [] # Notes on what was assumed or approximated when the sim was built
+        self.solver = None # Set in init()
 
         # Set attributes; see also sim.init() for more
         self.created = sc.now()  # The datetime the sim was created
@@ -76,6 +101,46 @@ class Sim(ss.Base):
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
         return
+
+    @staticmethod
+    def _name_modules(frame, *args):
+        """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
+        for arg in args:
+            for mod in sc.tolist(arg):
+                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery)) else []
+                named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
+                for obj in named:
+                    if obj is not None and obj._default_name:
+                        name = ss.transitions.find_name(obj, frame)
+                        if name is not None:
+                            obj.name = obj.label = name
+                            obj._default_name = False
+        return
+
+    @staticmethod
+    def _add_followups(interventions):
+        """ A delivery that is the follow-up of another (on_positive=, on_negative=) is a module of its own, so is added to the list """
+        if not any(isinstance(mod, ss.Delivery) for mod in sc.tolist(interventions)):
+            return interventions
+        out = []
+        def add(mod, parent=None, suffix=None):
+            if any(mod is other for other in out):
+                return
+            if parent is not None:
+                mod.triggered = True
+                if mod._default_name:
+                    mod.name = mod.label = f'{parent.name}_{suffix}'
+                    mod._default_name = False
+            out.append(mod)
+            if isinstance(mod, ss.Delivery):
+                for key in ['positive', 'negative']:
+                    child = getattr(mod, f'on_{key}')
+                    if isinstance(child, ss.Delivery):
+                        add(child, mod, key)
+            return
+        for mod in sc.tolist(interventions):
+            add(mod)
+        return out
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -176,6 +241,7 @@ class Sim(ss.Base):
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
+        self.init_solver() # Choose the unit and the solver
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
@@ -186,6 +252,12 @@ class Sim(ss.Base):
             self.init_rescale()
         self.init_dists() # Initialize distributions
         self.init_people_vals() # Initialize the values in all the states and networks
+        if self.solver == 'abm' and self.strats:
+            self.init_strat_vals()
+        elif self.solver != 'abm' and self.strats: # One row per group: age is the middle of the group
+            for d,strat in enumerate(self.strats):
+                if strat.kind == 'age':
+                    self.people.age[self.people.auids] = strat.mids[self.group_coords[:, d]]
         self.init_modules_post() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
@@ -193,6 +265,12 @@ class Sim(ss.Base):
         self.lock_pars() # Don't allow new parameters to be added by mistake
 
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
+        if self.solver != 'abm': # One row per group, so properties that are not stratifications have no values to give
+            dims = [strat.name for strat in self.strats]
+            missing = [key for key in ['age', 'female'] if key not in dims and not (key == 'female' and 'sex' in dims)]
+            for key in missing:
+                self.people.__dict__.pop(key, None)
+            self.people._no_groups = missing
 
         # It's initialized
         self.initialized = True
@@ -201,6 +279,537 @@ class Sim(ss.Base):
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
             self.diagnostics.store_states(key='init')
         return self
+
+    def init_solver(self):
+        """
+        Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
+
+        A sim with no declared states and transitions is run as agents, as in earlier
+        versions of Starsim, and none of this applies to it.
+        """
+        pars = self.pars
+        solvers = ss.solvers
+        modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
+        self.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
+        solver = solvers.aliases.get(pars.solver, pars.solver)
+        if solver not in ss.solver_names:
+            errormsg = f'Unknown solver "{pars.solver}"; the choices are {sc.strjoin(ss.solver_names)}'
+            raise ValueError(errormsg)
+        self.unit = None # e.g. 'day'; None means time is counted in timesteps
+        self.unit_base = 'year' # The unit that bare numbers are in; with no unit, this is whatever the timestep is
+        self.unit_source = None
+        self.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), ss.change(), and the efficacy of products
+        self.overlaps = [] # Pairs of modifiers that set the same quantity at once, which is noted
+        self.set_par_values()
+        self.init_strats()
+        self.mixing = solvers.Mixing(self)
+        if not self.declared:
+            self.solver = 'abm'
+            self.solver_reason = None
+            return
+
+        # The unit
+        self.init_unit()
+
+        # The solver
+        agent_reasons = self.agent_reasons(modules)
+        if solver == 'auto' and not agent_reasons:
+            agent_reasons = self.try_functions()
+        if solver == 'auto':
+            if agent_reasons:
+                solver, reason = 'abm', agent_reasons[0]
+            else:
+                solver, reason = 'ode', 'every part of the model has a compartmental form'
+        elif solver == 'stochastic':
+            total_pop = sc.ifelse(pars.total_pop, pars.n_agents)
+            n_events = total_pop*sum(len(mod.graph.transitions) for mod in self.declared)
+            if n_events <= 1e6:
+                solver, reason = 'gillespie', f'exact; about {sc.sigfig(n_events, 1, sep=",")} events at this population size'
+            else:
+                solver, reason = 'tau', f'exact Gillespie would need about {n_events:.0e} events'
+        else:
+            reason = 'requested'
+        self.solver = solver
+        self.solver_reason = reason
+
+        # The population
+        if solver == 'abm':
+            if 'n_agents' not in self.given and 'people' not in self.given and 'total_pop' in self.given:
+                pars.n_agents = int(min(pars.total_pop, pars.n_agents))
+                pars.pop_scale = pars.total_pop/pars.n_agents
+        else:
+            for mod in modules:
+                if getattr(mod, 'graph', None) is None and not isinstance(mod, ss.Route) and not getattr(mod, 'compartmental', False):
+                    ss.error('E804', f'cannot run with solver="{solver}": the module "{mod.name}" ({type(mod).__name__}) only works on agents.\n'
+                                     f'     Run with solver="abm", or leave the solver as "auto".')
+            self.integrator = sc.ifelse(pars.integrator, 'rk4')
+            pars.pop_scale = 1.0
+            pars.people_results = False
+
+            self.mixing.init(approx=pars.approx)
+            self.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
+            pars.networks = ss.ndict()
+            pars.n_agents = self.n_groups
+
+        # Say what was chosen
+        if pars.verbose:
+            print(f'solver: {solver} ({reason})')
+            if self.unit_source:
+                ss.note(f"unit='{self.unit}' (from {self.unit_source})", code='W101', sim=self)
+            for mod in self.declared:
+                for key,why in mod.graph.guessed.items():
+                    if key.endswith('.people'):
+                        ss.note(f"state '{key.split('.')[1]}' treated as a count, not people ({why})", code='W212', sim=self)
+        return
+
+    def set_par_values(self):
+        """ Apply parameter values given by name (pars=dict(beta=0.1), or 'sir.beta' if the name is used by more than one module) """
+        for key,val in (self.par_values or {}).items():
+            modname, _, name = key.rpartition('.')
+            mods = [mod for mod in self.declared if name in mod.pars and modname in ['', mod.name]]
+            if len(mods) != 1:
+                options = [f'{mod.name}.{k}' for mod in self.declared for k in mod.graph.pars]
+                ss.error('E602', f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
+                                 f'Parameters are {sc.strjoin(options)}; did you mean {ss.transitions.closest(key, options)}?')
+            mods[0].set_pars({name:val})
+        return
+
+    def new(self, pars=None, **kwargs):
+        """
+        A new, uninitialized sim built from the same inputs as this one, optionally with other values
+
+        Args:
+            pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
+            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`
+        """
+        if not hasattr(self, 'inputs'):
+            errormsg = 'sim.new() is only available for sims with declared states and transitions'
+            raise ValueError(errormsg)
+        inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
+        sim = Sim(inputs, data=sc.dcp(self.data))
+        sim.par_values = sc.mergedicts(self.par_values, pars)
+        return sim
+
+    def calibrate(self, **kwargs):
+        """
+        Fit every parameter that has bounds to every result that has data; see `ss.fit()` for the arguments
+
+        Returns an `ss.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`.
+        """
+        return ss.fit(self, **kwargs)
+
+    def what_modifies(self, target, output=False):
+        """
+        Print everything that modifies a quantity: each `ss.modify()` and `ss.change()`, and the efficacy of each product
+
+        Args:
+            target (par/str): the quantity, as for `ss.modify()`: e.g. `sir.pars.beta`, `sir.rel_sus`, or `'sir.pars.beta'`
+            output (bool): return the text instead of printing it
+        """
+        if not self.initialized:
+            self.init()
+        mod, kind, name = ss.connectors.parse_target(target)
+        modname = mod if isinstance(mod, str) else mod.name
+        graph = self.get_declared(modname).graph
+        if kind is None:
+            kind = 'transition' if name in graph.transitions else 'par'
+        path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'
+        mods = self.modifiers.get((modname, kind, name), [])
+        lines = [path, '  modifiers' if mods else '  modifiers: none']
+        lines += [f'    {mod.describe()}' for mod in mods]
+        text = '\n'.join(lines)
+        if output:
+            return text
+        print(text)
+        return
+
+    def stratify(self, **kwargs):
+        """
+        Stratify every module in the sim by a property of people, e.g. `sim.stratify(age=[0, 15, 65])`
+
+        Takes the same arguments as `ss.Disease.stratify()`, and returns the sim.
+        """
+        if self.initialized:
+            errormsg = 'Cannot stratify a sim that has already been initialized; stratify it first'
+            raise RuntimeError(errormsg)
+        self.pars.stratify = sc.mergelists(self.pars.stratify, kwargs)
+        return self
+
+    def init_strats(self):
+        """ Collect the stratifications of the sim and its modules, and work out the groups they give """
+        trans = ss.transitions
+        strats = sc.objdict()
+        self.sim_strats = [] # The ones given to the sim, which apply to every module
+        for call in sc.tolist(self.pars.stratify):
+            call = dict(call)
+            opts = {key:call.pop(key, None) for key in ['split', 'adjust', 'kind']}
+            for name,levels in call.items():
+                strat = trans.Strat(name, levels, **opts)
+                if name in strats:
+                    ss.error('E305', f'the sim is already stratified by "{name}".')
+                strats[name] = strat
+                self.sim_strats.append(strat)
+        for mod in self.declared:
+            for strat in mod.graph.strats:
+                if strat.name in strats:
+                    other = strats[strat.name]
+                    if not strat.same_levels(other):
+                        ss.error('E308', f'"{mod.name}" is stratified by "{strat.name}" with levels {strat.labels}, but another module or the sim uses {other.labels}.\n'
+                                         f'     A property of people has the same groups for every module; stratify the sim instead: sim.stratify({strat.name}=[...]).')
+                else:
+                    strats[strat.name] = strat
+            for tf in mod.graph.transfers.values(): # A boolean coordinate that does not exist yet is created, with everyone starting False
+                if tf.dim not in strats:
+                    if isinstance(tf.dst, bool):
+                        strats[tf.dim] = trans.Strat(tf.dim, [False, True], split=[1.0, 0.0])
+                        mod.graph.strats.append(strats[tf.dim])
+                    else:
+                        ss.error('E1102', f'the transfer "{tf.name}" moves people along "{tf.dim}", but the model is not stratified by it. Add e.g. {mod.name}.stratify({tf.dim}=[...]).')
+        self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
+        for mod in self.pars.interventions.values(): # Properties of people that the interventions need, e.g. holding a product
+            if hasattr(mod, 'dims'):
+                for strat in mod.dims():
+                    strat.owner = mod.name # Part of the scenario, not of the model
+                    strats.setdefault(strat.name, strat)
+                self.dim_moves += [move for move in mod.dim_moves() if move.dim not in [m.dim for m in self.dim_moves]]
+                for dim in (mod.move or {}):
+                    if dim not in strats:
+                        ss.error('E1102', f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+        self.strats = list(strats.values())
+        self.group_shape = tuple(strat.n for strat in self.strats)
+        self.group_mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:] # How far apart adjacent levels of each dimension are, in groups
+        self.n_groups = int(np.prod(self.group_shape)) if self.strats else 1
+        self.group_coords = np.indices(self.group_shape).reshape(len(self.strats), -1).T if self.strats else np.zeros((1, 0), dtype=int) # The level of each group in each dimension
+        split = np.ones(self.n_groups)
+        births = np.ones(self.n_groups)
+        for d,strat in enumerate(self.strats):
+            split *= strat.split[self.group_coords[:, d]]
+            first = np.zeros(strat.n)
+            first[0] = 1
+            births *= (first if strat.kind == 'age' else strat.split)[self.group_coords[:, d]] # People are born into the youngest group
+        self.group_split = split
+        self.birth_split = births
+        for strat in self.strats:
+            strat.sim_coords = self.group_coords # So a result can look up which group is which
+        for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
+            if strat.kind != 'age':
+                setattr(self, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
+        if self.strats and self.pars.use_aging is None and any(strat.kind == 'age' for strat in self.strats):
+            self.pars.use_aging = True
+        return
+
+    def get_declared(self, name):
+        """ A module with declared states and transitions, by name """
+        mods = {mod.name:mod for mod in self.declared}
+        if name not in mods:
+            errormsg = f'No module named "{name}" with declared transitions was found; these are {sc.strjoin(mods.keys())}'
+            raise KeyError(errormsg)
+        return mods[name]
+
+    def dim_index(self, name):
+        """ The position of a stratification dimension """
+        names = [strat.name for strat in self.strats]
+        if name not in names:
+            errormsg = f'The model is not stratified by "{name}"; its dimensions are {names}'
+            raise KeyError(errormsg)
+        return names.index(name)
+
+    def group_raw(self):
+        """ In an agent-based run: the group of every agent, as an array indexed by UID """
+        cache = getattr(self, '_group_cache', None)
+        if cache is not None and cache[0] == self.ti and len(cache[1]) == len(self.people.uid.raw):
+            return cache[1]
+        people = self.people
+        out = np.zeros(len(people.uid.raw), dtype=int)
+        for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
+            if strat.edges is not None:
+                levels = np.clip(np.digitize(people[strat.name].raw, strat.edges) - 1, 0, strat.n - 1)
+            else:
+                levels = np.nan_to_num(people[strat.name].raw).astype(int)
+            out += levels*int(mult)
+        self._group_cache = (self.ti, out)
+        return out
+
+    def init_strat_vals(self):
+        """ In an agent-based run: assign each agent a level of every property they do not already have """
+        people = self.people
+        uids = people.auids
+        for strat in self.strats:
+            if strat.kind != 'age':
+                rvs = getattr(self, f'rng_strat_{strat.name}').rvs(uids)
+                people[strat.name][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+        return
+
+    def agent_reasons(self, modules):
+        """ The reasons, if any, that the model has to run as agents """
+        reasons = []
+        if 'n_agents' in self.given:
+            reasons.append('n_agents was given')
+        if 'people' in self.given:
+            reasons.append('people were given')
+        for mod in modules:
+            graph = getattr(mod, 'graph', None)
+            if hasattr(mod, 'agent_reasons'):
+                reasons += mod.agent_reasons()
+            if graph is None:
+                if isinstance(mod, ss.Network):
+                    reasons.append(f'{type(mod).__name__} is an individual-level network')
+                elif not isinstance(mod, (ss.MixingPool, ss.MixingPools)) and not getattr(mod, 'compartmental', False):
+                    reasons.append(f'{type(mod).__name__} only works on agents')
+            else:
+                for method in ['step', 'step_state']:
+                    if getattr(type(mod), method) is not getattr(ss.Disease, method):
+                        reasons.append(f'"{mod.name}" defines its own {method}()')
+                for p in graph.all_pars():
+                    raw = p.raw
+                    if callable(raw) and not isinstance(raw, ss.Dist) and len(inspect.signature(raw).parameters) >= 2:
+                        reasons.append(f'the function "{raw.__name__}" takes uids')
+                if self.pars.approx is False:
+                    for name,tr in graph.transitions.items():
+                        raw = None if tr.dur is None else tr.dur.raw
+                        if isinstance(raw, ss.Dist) and tr.stages is None and type(raw).__name__ not in ['expon', 'gamma']:
+                            reasons.append(f'"{name}" has a {type(raw).__name__} dwell time, and approx=False')
+        return reasons
+
+    def try_functions(self):
+        """ Try each function in the model on groups, to see whether the model can run as compartments; returns the reasons it cannot """
+        funcs = [p for mod in self.declared for p in mod.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, ss.Dist)]
+        funcs += [mod for mod in list(self.pars.interventions.values()) + list(self.pars.connectors.values()) if hasattr(mod, 'try_groups')]
+        if not funcs or not hasattr(self, 'inputs'):
+            return []
+        reasons = []
+        try:
+            probe = self.new(solver='ode', verbose=0, approx=True).init()
+            for mod in probe.declared:
+                mod.engine.start_step()
+                for p in mod.graph.all_pars():
+                    if callable(p.raw) and not isinstance(p.raw, ss.Dist):
+                        try:
+                            mod.engine.value(p)
+                        except Exception as E:
+                            what = str(E).split(':', 1)[-1].split('.')[0].strip() if isinstance(E, ss.CodedError) else f'{type(E).__name__}: {E}'
+                            reasons.append(f'the function "{p.raw.__name__}" does not work on groups ({what})')
+            for mod in probe.interventions() + probe.connectors():
+                if hasattr(mod, 'try_groups'):
+                    try:
+                        mod.try_groups()
+                    except Exception as E:
+                        what = str(E).split(':', 1)[-1].split('\n')[0].strip() if isinstance(E, ss.CodedError) else f'{type(E).__name__}: {E}'
+                        reasons.append(f'"{mod.name}" does not work on groups ({what})')
+        except ss.CodedError as E:
+            reasons.append(f'the model does not run as compartments ({str(E).splitlines()[0]})')
+        return reasons
+
+    def init_unit(self):
+        """ Work out the sim's unit: from unit=, then dt, then start and stop, then the typed values in the model; else time is in timesteps """
+        pars = self.pars
+        time = ss.time
+        unit = source = None
+        def base(obj):
+            return type(obj).base.removesuffix('s')
+        def is_dur(obj):
+            return isinstance(obj, ss.dur) and not isinstance(obj, ss.datedur)
+        dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
+        years = [v for v in [pars.start, pars.stop] if sc.isnumber(v) and time.assume_cal_year(v)]
+        durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
+        if pars.unit is not None:
+            unit = pars.unit.removesuffix('s')
+        elif is_dur(pars.dt):
+            unit, source = base(pars.dt), 'dt'
+        elif isinstance(pars.dt, str):
+            unit, source = pars.dt.removesuffix('s'), 'dt'
+        elif dates:
+            unit, source = 'day', 'start and stop dates'
+        elif years:
+            unit, source = 'year', 'start and stop years'
+        elif durs:
+            unit, source = base(durs[0]), 'start and stop'
+        else:
+            units = [u.removesuffix('s') for mod in self.declared for u in mod.graph.unit_values()]
+            units += [base(mod.t.dt) for mod in self.declared if is_dur(mod.t.dt)]
+            if units:
+                order = ['day', 'week', 'month', 'year']
+                unit = sorted(set(units), key=order.index)[0]
+                source = 'the typed values in the model'
+                if len(set(units)) > 1:
+                    source += f', which have different units ({sc.strjoin(sorted(set(units), key=order.index))}); the smallest is used for bare numbers. Set unit= to choose'
+        self.unit = unit
+        self.unit_source = source
+        self.unit_base = unit or 'day'
+
+        # Give the timeline the unit
+        dur_class = time.get_dur_class(self.unit_base)
+        if pars.dt is None or sc.isnumber(pars.dt):
+            pars.dt = dur_class(sc.ifelse(pars.dt, 1.0))
+        if not dates and not years:
+            if pars.start is None or sc.isnumber(pars.start):
+                pars.start = dur_class(sc.ifelse(pars.start, 0))
+            if sc.isnumber(pars.stop):
+                pars.stop = dur_class(pars.stop)
+        return
+
+    def describe(self, output=False):
+        """
+        Print the resolved model: every state, transition, and default, with each guess marked
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+        """
+        if not self.initialized:
+            self.init()
+        pars = self.pars
+        unit = self.unit or 'step'
+        mods = list(self.modules)
+        lines = []
+        def add(key, text, guess=None):
+            line = f'{key:12s} {text}'
+            if guess:
+                line = f'{line:60s} [{guess}]'
+            lines.append(line.rstrip())
+            return
+        popguess = '' if ('total_pop' in self.given or 'n_agents' in self.given) else ' [guessed]'
+        t = self.t
+        lines.append(f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {unit}s {t.start} to {t.stop}' if self.unit is None or not t.is_absolute else
+                     f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {t.start} to {t.stop}')
+        if self.declared:
+            guessed = pars.solver in ['auto', 'stochastic']
+            add('solver', self.solver, f'guessed: {self.solver_reason}' if guessed else 'requested')
+            if self.solver == 'abm':
+                scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
+                add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in self.given else 'guessed')
+            if self.unit is None:
+                add('unit', 'none: time is in timesteps', 'nothing in the model has a unit')
+            else:
+                add('unit', self.unit, f'from {self.unit_source}' if self.unit_source else None)
+        for mod in mods:
+            if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
+                lines += ['', mod.describe(output=True)]
+        if self.declared:
+            lines.append('')
+            nets = list(self.networks.values()) + getattr(self, 'mixed', [])
+            if nets:
+                for net in nets:
+                    term = [term for term in self.mixing.terms if term.name == net.name] if self.solver != 'abm' else []
+                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': contact matrix by {self.strats[term[0].dim].name}'
+                    add('mixing', f'{net.name} ({type(net).__name__}){how}')
+            else:
+                add('mixing', f'homogeneous, 1 contact per {unit}, frequency-dependent', 'guessed: no network given')
+            for mod in list(self.connectors()) + list(self.interventions()):
+                if isinstance(mod, ss.modify):
+                    add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
+                elif isinstance(mod, ss.Delivery):
+                    add('delivery', mod.describe())
+            for mod in self.declared:
+                names = [f'n_{name}' for name in mod.graph.states]
+                extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
+                add('results', f'{", ".join(names)}, and one flow per transition' + (f'; also {", ".join(extra)}' if extra else ''))
+            for note in self.notes:
+                add('note', note)
+
+        # The schedule: one line per timestep in use
+        groups = sc.ddict(list)
+        for mod in mods:
+            groups[mod.t.dt.to(self.unit_base).value if self.declared else mod.t.dt.years].append(mod.name)
+        for i,(dt,names) in enumerate(sorted(groups.items())):
+            every = f'every {unit}' if dt == 1 else f'every {dt:n} {unit}s'
+            add('schedule' if i == 0 else '', f'{every}: {", ".join(names)}')
+        text = '\n'.join(lines)
+        return text if output else print(text)
+
+    def solvers(self, output=False):
+        """
+        Print which solvers can run the model: one row per ingredient that matters, one column per solver
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+        """
+        if not self.initialized:
+            self.init()
+        rows = []
+        for net in list(self.networks.values()) + getattr(self, 'mixed', []):
+            if isinstance(net, ss.Network):
+                rows.append([f'network: {type(net).__name__}', 'approx (contact rates)', 'approx (contact rates)', 'yes'])
+        for mod in self.modules:
+            graph = getattr(mod, 'graph', None)
+            if graph is None:
+                if not isinstance(mod, ss.Route) and not getattr(mod, 'compartmental', False):
+                    rows.append([f'module: {mod.name}', 'no (works on agents)', 'no (works on agents)', 'yes'])
+                continue
+            for name,tr in graph.transitions.items():
+                raw = None if tr.dur is None else tr.dur.raw
+                if isinstance(raw, ss.Dist) and type(raw).__name__ != 'expon':
+                    shape = raw.pars.get('a')
+                    exact = tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
+                    how = 'yes (Erlang stages)' if exact else 'approx (Erlang stages)'
+                    rows.append([f'dwell time: {name} ({type(raw).__name__})', how, how, 'yes'])
+            for p in graph.all_pars():
+                raw = p.raw
+                if callable(raw) and not isinstance(raw, ss.Dist):
+                    agent_only = len(inspect.signature(raw).parameters) >= 2
+                    how = 'no (takes uids)' if agent_only else '? (tried when run)'
+                    rows.append([f'function: {raw.__name__}', how, how, 'yes'])
+        header = ['', 'ode', 'stochastic', 'abm']
+        table = [header] + rows
+        widths = [max(len(row[i]) for row in table) + 3 for i in range(4)]
+        lines = [''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in table]
+        if not rows:
+            lines.append('(every part of the model runs under every solver)')
+        reasons = self.agent_reasons(list(self.modules)) if self.declared else ['the model is written as code']
+        choice = f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'
+        lines += ['', f'auto would choose: {choice}']
+        text = '\n'.join(lines)
+        return text if output else print(text)
+
+    def hash(self):
+        """
+        The run's identity: short hashes of the model's structure, its parameter values, and the run settings, plus the seed
+
+        Two sims with the same `model` hash have the same states and transitions; the
+        same `pars` hash, the same values. This tells apart the many runs that come
+        from one script (a sweep, a calibration), and tests whether two models written
+        differently are the same model.
+        """
+        if not self.initialized:
+            self.init()
+        spec = self.to_spec()
+        digest = ss.utils.short_hash
+        model = dict(modules=spec['modules'], networks=spec['networks'], stratify=spec['stratify'])
+        structure, values = ss.utils.split_numbers(model, unit=self.unit, skip=['guessed', 'label', 'doc', 'source'])
+        config = {k:v for k,v in spec['config'].items() if k != 'rand_seed'}
+        return sc.objdict(model=digest(structure), pars=digest(values), config=digest(config), scenario=digest(spec['interventions']), seed=self.pars.rand_seed)
+
+    def to_spec(self, filename=None, **kwargs):
+        """
+        The model spec: everything needed to rebuild the model (modules, networks, interventions, and run settings), as plain data
+
+        Args:
+            filename (str): if provided, save to this file
+            kwargs (dict): passed to `sc.savejson()`
+        """
+        if not self.initialized:
+            self.init()
+        pars = self.pars
+        def modspec(mod):
+            if getattr(mod, 'graph', None) is not None or isinstance(mod, (ss.modify, ss.Delivery)):
+                return mod.to_json()
+            return sc.jsonify(ss.Module.to_json(mod))
+        def tstr(val):
+            return float(val.value) if isinstance(val, ss.dur) else str(val)
+        out = sc.objdict()
+        out.schema = 'lingua-franca/1.0'
+        out.modules = [modspec(mod) for key in ['custom', 'demographics', 'diseases'] for mod in self[key]()]
+        out.networks = [modspec(mod) for mod in list(self.networks()) + getattr(self, 'mixed', [])]
+        out.stratify = [sc.dcp(strat.spec) for strat in getattr(self, 'strats', []) if getattr(strat, 'owner', None) is None]
+        out.modifiers = [modspec(mod) for mod in self.connectors()]
+        out.interventions = [modspec(mod) for mod in self.interventions()]
+        out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=self.unit,
+                                start=tstr(self.t.start), stop=tstr(self.t.stop), dt=float(self.t.dt.to(self.unit_base).value),
+                                total_pop=float(pars.total_pop), n_agents=int(pars.n_agents) if self.solver == 'abm' else None, rand_seed=pars.rand_seed)
+        out.meta = sc.objdict(library_version=ss.__version__, solver_chosen=self.solver, solver_reason=self.solver_reason, notes=list(self.notes))
+        out = sc.jsonify(out)
+        if filename is not None:
+            return sc.savejson(filename, out, **kwargs)
+        return out
 
     def add_module(self, module, key=None):
         """
@@ -367,13 +976,27 @@ class Sim(ss.Base):
         people = self.pars.pop('people')
         n_agents = self.pars.n_agents
         verbose = sc.ifelse(verbose, self.pars.verbose)
-        if verbose > 0:
+        if verbose > 0 and self.solver == 'abm':
             labelstr = f' "{self.label}"' if self.label else ''
             print(f'Initializing sim{labelstr} with {n_agents:0n} agents')
 
         # If people have not been supplied, make them -- typical use case
         if people is None:
+            if self.solver == 'abm' and self.strats: # Properties that people are stratified by, other than age
+                extra = [ss.FloatArr(strat.name, default=0, label=strat.name) for strat in self.strats if strat.kind != 'age']
+                kwargs['extra_states'] = sc.mergelists(kwargs.get('extra_states'), extra)
+                for strat in self.strats: # Ages follow the split of the age groups, so every solver starts from the same population
+                    if strat.kind == 'age' and strat.edges is not None and 'age_data' not in kwargs:
+                        top = max(100, strat.edges[-1] + 10)
+                        kwargs['age_data'] = np.column_stack([np.append(strat.edges, top), np.append(strat.split, 0)])
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
+        elif self.solver == 'abm':
+            for strat in self.strats:
+                if strat.name not in people.states:
+                    state = ss.FloatArr(strat.name, default=0, label=strat.name)
+                    people.states.append(state)
+                    setattr(people, strat.name, state)
+                    state.link_people(people)
 
         # Finish up (NB: the People object is not yet initialized)
         self.people = people
@@ -540,7 +1163,13 @@ class Sim(ss.Base):
     def init_data(self, data=None):
         """ Initialize or add data to the sim """
         data = data if data is not None else self.data
+        if isinstance(data, ss.data):
+            data = data.load(self)
+        elif isinstance(data, str):
+            data = ss.data(data).load(self)
         self.data = ss.validate_sim_data(data)
+        if self.data is not None and getattr(self, 'declared', None):
+            ss.data.check(self, self.data)
         return
 
     def set_diagnostics(self, rvs=True, states=True, detailed=False):
@@ -628,7 +1257,7 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, profile=False):
+    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, profile=False, solver=None, n_runs=None):
         """
         Run the model -- the main method for running a simulation.
 
@@ -638,7 +1267,17 @@ class Sim(ss.Base):
             shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
+            solver (str): the solver to use, if different from the sim's (only before the sim is initialized)
+            n_runs (int): if provided, run the sim this many times with different seeds, and return an `ss.MultiSim`; a shortcut for `ss.parallel(sim, n_runs=n_runs)`
         """
+        if n_runs is not None:
+            return ss.parallel(self, n_runs=n_runs)
+        if solver is not None:
+            if self.initialized:
+                errormsg = 'The solver can only be chosen before the sim is initialized; use sim.new(solver=...) to get a fresh copy'
+                raise RuntimeError(errormsg)
+            self.pars.solver = solver
+
         # Initialization steps
         if not self.initialized: self.init() # Automatically initialize if not initialized
         if verbose is not None:

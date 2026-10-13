@@ -141,6 +141,68 @@ class Result(ss.BaseArr):
                 raise ValueError(errormsg)
         return self.values
 
+    def select(self, **dims):
+        """
+        Select groups of a stratified result by name: keeps the given levels of each dimension, and sums over the rest
+
+        Args:
+            dims (dict): the dimension and the level (or list of levels) to keep, by label or by position, e.g. `age=0` or `risk='high'`
+
+        Examples:
+            ```python
+            res = sim.results.sir
+            res.n_I.select(age=0) # The youngest age group
+            res.n_I.select(sex='female', risk='high')
+            ```
+        """
+        strats = self._check_strata()
+        coords = strats[0].sim_coords
+        keep = np.ones(self.strata.shape[1], dtype=bool)
+        for dim,levels in dims.items():
+            names = [strat.name for strat in strats]
+            if dim not in names:
+                errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
+                raise KeyError(errormsg)
+            d = names.index(dim)
+            inds = [strats[d].index(level) for level in sc.tolist(levels)]
+            keep &= np.isin(coords[:, d], inds)
+        out = self._substrata(keep)
+        out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})'
+        return out
+
+    def by(self, dim):
+        """
+        Split a stratified result by one dimension, summing over the rest; returns a 2D result with one column per level
+
+        Args:
+            dim (str): the dimension, e.g. 'age'
+        """
+        strats = self._check_strata()
+        names = [strat.name for strat in strats]
+        if dim not in names:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
+            raise KeyError(errormsg)
+        d = names.index(dim)
+        strat = strats[d]
+        coords = strat.sim_coords
+        values = np.column_stack([self.strata[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
+                     values=values, shape=values.shape[0], columns=[str(label) for label in strat.labels], summarize_by=self.summarize_by)
+        return out
+
+    def _check_strata(self):
+        if getattr(self, 'strata', None) is None:
+            errormsg = f'The result "{self.name}" is not stratified, so there is nothing to select'
+            raise ValueError(errormsg)
+        return self.strats
+
+    def _substrata(self, keep):
+        """ A result made of some of the groups of this one """
+        strata = self.strata[:, keep]
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
+                     values=strata.sum(axis=1), shape=strata.shape[0], summarize_by=self.summarize_by)
+        return out
+
     def col(self, col):
         """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result """
         i = self._col_index(col)

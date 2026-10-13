@@ -2,6 +2,8 @@
 Numerical utilities and other helper functions
 """
 import re
+import json
+import hashlib
 import warnings
 import numpy as np
 import numba as nb
@@ -232,6 +234,41 @@ def warn(msg, category=None, verbose=None, die=None):
         raise ValueError(errormsg)
 
     return
+
+
+def short_hash(obj, n=6):
+    """ A short hash of a JSON-compatible object, e.g. for telling model specs apart """
+    string = json.dumps(sc.jsonify(obj), sort_keys=True)
+    return hashlib.sha256(string.encode()).hexdigest()[:n]
+
+
+def split_numbers(obj, unit=None, skip=None):
+    """
+    Split a JSON-compatible object into its structure (with every number replaced by a placeholder) and a list of its numbers
+
+    Used to hash a model's structure separately from its parameter values.
+
+    Args:
+        obj (dict): the object to split
+        unit (str): if provided, convert typed quantities to this unit, so e.g. 7 days and 1 week give the same number
+        skip (list): keys to leave out, e.g. labels
+    """
+    numbers = []
+    def walk(item):
+        if isinstance(item, dict):
+            if unit and item.get('type') in ['dur', 'per', 'prob', 'freq'] and item.get('unit'): # A typed quantity
+                factor = ss.time.get_dur_class(item['unit'])(1).to(unit).value
+                numbers.append(float(item['value']*factor if item['type'] == 'dur' else item['value']/factor))
+                return dict(type=item['type'], value='#')
+            return {key:walk(val) for key,val in item.items() if key not in sc.tolist(skip)}
+        elif isinstance(item, (list, tuple)):
+            return [walk(val) for val in item]
+        elif sc.isnumber(item) and not isinstance(item, bool):
+            numbers.append(float(item))
+            return '#'
+        return item
+    structure = walk(obj)
+    return structure, numbers
 
 
 @nb.jit(cache=True)

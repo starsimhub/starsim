@@ -59,7 +59,7 @@ t('distributions') # Slow import due to scipy.stats
 from .distributions import (
     link_dists, make_dist, dist_list, scale_types, Dists, Dist,
     random, uniform, normal, lognorm_ex, lognorm_im, expon,
-    poisson, nbinom, beta_dist, beta_mean, weibull, gamma, constant,
+    poisson, nbinom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
     randint, rand_raw, bernoulli, choose_n, choice, histogram,
     multi_random,
 )
@@ -94,7 +94,7 @@ from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
     StaticNet, RandomExactNet, RandomNet, RandomSafeNet, ClusterNet, HybridNet, MFNet, MSMNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
-    AgeGroup, MixingPools, MixingPool,
+    AgeGroup, MixingPools, MixingPool, contacts,
 )
 
 t('results')
@@ -106,7 +106,7 @@ from .demographics import (
 )
 
 t('products')
-from .products import Product, Dx, Tx, Vx, simple_vx
+from .products import Product, Dx, Tx, Vx, simple_vx, Vaccine, Treatment, Test
 
 t('interventions')
 from .interventions import (
@@ -115,13 +115,28 @@ from .interventions import (
     BaseTriage, routine_triage, campaign_triage,
     BaseTreatment, treat_num,
     BaseVaccination, routine_vx, campaign_vx,
+    Delivery, vaccinate, treat, screen,
 )
 
 t('analyzers')
 from .analyzers import Analyzer, infection_log, dynamics_by_age
 
 t('connectors')
-from .connectors import Connector, seasonality
+from .connectors import Connector, seasonality, modify, change
+
+t('conditions')
+from . import conditions
+from .conditions import Cond
+
+t('transitions')
+from .transitions import (
+    CodedError, error, note, Expr, par, State, states, null,
+    Transition, transmission, progression, birth, death, outcome, Graph,
+    by, Strat, Transfer, transfer, stratify,
+)
+
+t('solvers')
+from .solvers import solver_names, make_engine, Mixing, Engine, Compartmental, Agents, CountState
 
 t('diseases')
 from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SEIR, SIS
@@ -133,13 +148,14 @@ t('sim')
 from .sim import Sim, AlreadyRunError, demo, diff_sims, check_sims_match
 
 t('run')
-from .run import MultiSim, single_run, multi_run, parallel
+from .run import MultiSim, MultiResult, MultiResults, single_run, multi_run, parallel
 
 t('calibration') # Lazy import to save 500 ms
 from .calibration import (
     Calibration, CalibComponent,
     linear_interp, linear_accum, step_containing,
     BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
+    data, compare, mismatch, Fit, fit,
 )
 
 t('samples')

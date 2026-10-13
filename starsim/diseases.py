@@ -1,6 +1,7 @@
 """
 Base classes for diseases
 """
+import sys
 import numpy as np
 import numba as nb
 import pandas as pd
@@ -18,33 +19,209 @@ class Disease(ss.Module):
     """
     Base module class for diseases.
 
-    Diseases define how agents become infected, progress through health states, and
-    potentially die. They are transmitted via `ss.Network` objects and can be modified
-    by `ss.Intervention` and `ss.Connector` modules. See `ss.Infection` for the
-    standard base class for infectious diseases, and `ss.SIR`/`ss.SEIR`/`ss.SIS` for common
-    compartmental patterns.
-    """
+    A disease can be written in two ways. The first is to declare its states and
+    the transitions between them, in which case no methods need to be defined and
+    the disease can be run with any solver (see `ss.Sim`):
 
-    def __init__(self, pars=None, **kwargs):
+        sir = ss.Disease(
+            infection = ss.transmission('S -> I', beta=0.05),
+            recovery  = ss.progression('I -> R', dur=10),
+        )
+
+    The second is to subclass and define `step()` and friends, as for any other
+    module; see `ss.Infection` for the standard base class for this, and
+    `ss.SIR`/`ss.SEIR`/`ss.SIS` for common patterns. The two can be combined: a
+    subclass can declare states and transitions in its class body and add behavior
+    by defining methods.
+
+    Args:
+        args (list): transitions and outcomes, named from the variables they are assigned to
+        pars (dict): parameter values by name
+        transitions (list): transitions, as a list (for longer models)
+        results (list): extra results: sums and ratios of states
+        outcomes (list): `ss.outcome` objects
+        init_prev (float): the initial prevalence, seeded through the transmission
+        init (dict): the initial fraction or count in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`
+        kwargs (dict): one keyword per state, transition, parameter, result, or function; also `name`, `label`, and `dt`
+
+    Examples:
+        ```python
+        # Operator form: declare the states, then the transitions
+        S, I, R   = ss.states(3)
+        infection = S >> I @ 0.05 * I
+        recovery  = I >> R @ ss.days(10)
+        sir = ss.Disease(infection, recovery, init_prev=0.01)
+        ss.Sim(sir, stop=100).run().plot()
+
+        # Class form: for when there is behavior that is not a transition
+        class SIR(ss.Disease):
+            S, I, R   = ss.states(3)
+            infection = S >> I @ 0.05 * I
+            recovery  = I >> R @ ss.days(10)
+        ```
+    """
+    graph = None # The declared states and transitions, if any; defined on the class so it always exists
+
+    def __init__(self, *args, pars=None, **kwargs):
         super().__init__()
         self.infection_log = None
-        self.update_pars(pars, **kwargs)
+        self.engine = None # Runs the graph; created when the sim is initialized
+        if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
+            pars, args = args[0], args[1:]
+        members = ss.transitions.class_members(type(self))
+        declared = (ss.State, ss.Transition, ss.par, ss.outcome, ss.Expr)
+        if args or members or any(isinstance(v, declared) for v in kwargs.values()):
+            self.init_graph(args, members, pars, kwargs, frame=sys._getframe(1))
+        else:
+            self.update_pars(pars, **kwargs)
         return
+
+    def init_graph(self, args, members, pars, kwargs, frame=None):
+        """ Build the graph of declared states and transitions; see `ss.Graph` """
+        meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
+        timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs}
+        init_prev = kwargs.pop('init_prev', None)
+        init = kwargs.pop('init', None)
+        self.set_metadata(**meta)
+        self.t.update(**timepars)
+        members = sc.mergedicts(sc.dcp(members), kwargs) # Copy class members (together, so they still refer to each other) so instances do not share them
+        if frame is not None and frame.f_code.co_name == '__init__': # Called from a subclass, so the names are not in this frame
+            frame = None
+        self.graph = ss.Graph(self, args, members, init_prev=init_prev, init=init, frame=frame)
+        for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
+            self.setattribute(name, obj) # e.g. sir.S, sir.infection
+        for tr in self.graph.transitions.values():
+            tr.module = self
+        for key in ['rel_sus', 'rel_trans']: # So they can be the target of ss.modify() before the sim exists
+            self.setattribute(key, ss.connectors.Target(self, key))
+        self.define_pars(**{name:p.value for name,p in self.graph.pars.items()})
+        for name,p in self.graph.pars.items(): # Hold the parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify(); after the values, so they are not copied
+            dict.__setitem__(self.pars, name, p)
+        if pars:
+            self.set_pars(pars)
+        return
+
+    def set_pars(self, pars=None, **kwargs):
+        """ Set parameter values by name, e.g. `sir.set_pars(beta=0.1)` """
+        for key,val in sc.mergedicts(pars, kwargs).items():
+            if key not in self.pars:
+                ss.error('E602', f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}; did you mean {ss.transitions.closest(key, self.pars.keys())}?')
+            current = self.pars[key]
+            if isinstance(current, ss.par) and not isinstance(val, ss.par):
+                current.value = val
+            else:
+                self.pars[key] = val
+        return
+
+    def stratify(self, inplace=True, **kwargs):
+        """
+        Stratify the disease by a property of the people in it (age, risk, place, ...), in place, and return it
+
+        Args:
+            split (list): the share of the population in each level
+            adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`
+            kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
+            inplace (bool): if False, return a stratified copy and leave this disease unchanged
+            kwargs (dict): the dimension and its levels (bin edges or labels), e.g. `age=[0, 15, 65]`;
+                an `ss.transfer` passed as a keyword is added under that name
+
+        Examples:
+            ```python
+            sir.stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
+            sir.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust={'infection': [1.0, 3.0]})
+            ```
+        """
+        if self.graph is None:
+            errormsg = f'"{self.name}" has no declared transitions to stratify'
+            raise ValueError(errormsg)
+        mod = self if inplace else self.copy()
+        mod.graph.stratify(**kwargs)
+        for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. eligible=~sir.vaccinated
+            if not hasattr(mod, strat.name):
+                mod.setattribute(strat.name, ss.Cond('dim', strat.name))
+        return mod
+
+    @property
+    def transitions(self):
+        """ The table of declared transitions; printing it also shows the matrix of sources by destinations """
+        return None if self.graph is None else self.graph.transitions
+
+    def describe(self, output=False):
+        """
+        Print the resolved model as text, with every guessed default marked
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+        """
+        if self.graph is None:
+            text = f"{type(self).__name__} '{self.name}': written as code (states: {sc.strjoin(self.state_dict.keys())})"
+        else:
+            text = '\n'.join(self.graph.describe(self.sim))
+        return text if output else print(text)
+
+    def equations(self, output=False):
+        """
+        Print the ODE system of the declared transitions, with symbolic parameter names
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+        """
+        if self.graph is None:
+            errormsg = f'"{self.name}" has no declared transitions, so it has no equations to print'
+            raise ValueError(errormsg)
+        text = '\n'.join(self.graph.equations(self.engine))
+        return text if output else print(text)
+
+    def to_json(self, filename=None, **kwargs):
+        """
+        Export the model spec: the states, parameters, and transitions as plain data
+
+        Args:
+            filename (str): if provided, save to this file
+            kwargs (dict): passed to `sc.savejson()`
+        """
+        if self.graph is None:
+            return super().to_json()
+        out = self.graph.to_json(self.sim)
+        if filename is not None:
+            return sc.savejson(filename, out, **kwargs)
+        return out
 
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
+        if self.graph is not None:
+            self.engine = ss.make_engine(self, sim)
+            self.engine.define()
         super().init_pre(sim)
+        if self.graph is not None:
+            self.engine.init_pre()
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
             self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
+        return
+
+    def init_post(self):
+        """ Initialize the values of the states, and set the initial conditions of any declared states """
+        super().init_post()
+        if self.graph is not None:
+            self.engine.init_post()
+        return
+
+    def start_step(self):
+        super().start_step()
+        if self.graph is not None:
+            self.engine.start_step()
         return
 
     def step_state(self):
         """
         Carry out updates at the start of the timestep (prior to transmission);
-        these are typically state changes
+        these are typically state changes. For a disease with declared transitions,
+        these are the transitions that are not contact-mediated.
         """
-        pass
+        if self.graph is not None:
+            self.engine.step_state()
+        return
 
     def step_die(self, uids):
         """
@@ -97,9 +274,27 @@ class Disease(ss.Module):
         as may be the case for non-communicable diseases.
 
         It is expected that this method will internally call Disease.set_prognoses()
-        at some point.
+        at some point. For a disease with declared transitions, this runs the
+        contact-mediated transitions, followed by any custom functions.
         """
-        pass
+        if self.graph is not None:
+            self.engine.step()
+            for func in self.graph.funcs.values():
+                func(self.sim)
+        return
+
+    def update_results(self):
+        if self.graph is not None:
+            self.engine.update_results()
+        else:
+            super().update_results()
+        return
+
+    def finalize_results(self):
+        super().finalize_results()
+        if self.graph is not None:
+            self.engine.finalize_results()
+        return
 
     # Ideally would use @ss.required(), but can't since it's not called if no infections occur
     def set_prognoses(self, uids, sources=None):

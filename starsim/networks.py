@@ -1684,3 +1684,37 @@ class MixingPool(Route):
         self.dst_uids = self.get_uids(self.pars.dst)
         return
 
+
+
+def contacts(matrix=None, age=None, beta=1.0, **kwargs):
+    """
+    Mixing between age groups from a contact matrix; returns `ss.MixingPools`
+
+    Args:
+        matrix (array/str): `matrix[i,j]` is the number of contacts per unit time that one person in age group `i` has with people in age group `j`
+        age (list): the lower edge of each age group, e.g. `[0, 15, 65]`
+        beta (float): a multiplier on transmission through these contacts
+        kwargs (dict): passed to `ss.MixingPools`
+
+    Examples:
+        ```python
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10))
+        mixing = ss.contacts([[10, 3], [3, 5]], age=[0, 18])
+        sim = ss.Sim(sir, networks=mixing, unit='day', stop=100).run()
+        ```
+    """
+    if isinstance(matrix, str) or matrix is None:
+        ss.error('E605', f'no contact matrix is bundled for "{matrix}" yet. Supply the matrix itself: ss.contacts(matrix, age=[...]).')
+    matrix = np.array(matrix, dtype=float)
+    if age is None or len(age) != matrix.shape[0] or matrix.shape[0] != matrix.shape[1]:
+        errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, e.g. ss.contacts(matrix, age=[0, 15, 65]); got a matrix of shape {matrix.shape} and age={age}'
+        raise ValueError(errormsg)
+    highs = list(age[1:]) + [None]
+    groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(age, highs)}
+    kwargs.setdefault('name', 'contacts')
+    n = len(age)
+    n_contacts = np.empty((n, n), dtype=object)
+    for i in range(n):
+        for j in range(n):
+            n_contacts[j, i] = ss.constant(matrix[i, j]) # ss.MixingPools is indexed [source, destination]; everyone in a group has the same number of contacts
+    return MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=n_contacts, beta=beta, **kwargs)

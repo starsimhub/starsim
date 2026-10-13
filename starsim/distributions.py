@@ -1680,6 +1680,29 @@ class gamma(Dist):
         return rvs
 
 
+def erlang(k=1, mean=1.0, **kwargs):
+    """
+    Erlang distribution: the sum of `k` exponential stages, given by its number of stages and its mean
+
+    This is `ss.gamma` with an integer shape: `ss.erlang(k=3, mean=10)` is `ss.gamma(a=3, scale=10/3)`.
+    As a dwell time, it has an exact compartmental form (`k` sub-stages), so runs the same under every solver.
+
+    Args:
+        k (int): the number of stages (the shape parameter)
+        mean (float): the mean of the distribution (not of each stage)
+        kwargs (dict): passed to `ss.gamma()`
+
+    Examples:
+        ```python
+        ss.erlang(k=3, mean=ss.days(10))
+        ```
+    """
+    if k != int(k) or k < 1:
+        errormsg = f'The number of stages of an Erlang distribution must be a positive whole number, not {k}; for other shapes, use ss.gamma()'
+        raise ValueError(errormsg)
+    return gamma(a=int(k), scale=mean/k, **kwargs)
+
+
 class constant(Dist):
     """
     Constant (delta) distribution: equivalent to np.full()

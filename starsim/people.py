@@ -103,6 +103,14 @@ class People:
             raise ValueError(errormsg)
         return
 
+    def __getattr__(self, attr):
+        """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
+        missing = self.__dict__.get('_no_groups', [])
+        if attr in missing:
+            ss.error('E804', f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
+                             f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
+        raise AttributeError(f'People object has no attribute "{attr}"')
+
     def __getitem__(self, key):
         """
         Allow people['attr'] instead of getattr(people, 'attr')

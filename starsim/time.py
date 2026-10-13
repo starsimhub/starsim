@@ -28,6 +28,7 @@ TimePar  # All time parameters
 """
 import numbers
 import collections
+import functools as ft
 import matplotlib
 import datetime as dt
 import dateutil.relativedelta as drd
@@ -773,6 +774,24 @@ class TimePar:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._set_factors()
+        cls._defer_ops()
+        return
+
+    @classmethod
+    def _defer_ops(cls):
+        """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n """
+        def defer(func):
+            def wrapper(self, other):
+                if getattr(other, '_is_expr', False):
+                    return NotImplemented
+                return func(self, other)
+            return ft.wraps(func)(wrapper)
+
+        for op in ['add', 'sub', 'mul', 'truediv']:
+            for name in [f'__{op}__', f'__r{op}__']:
+                func = cls.__dict__.get(name)
+                if func is not None:
+                    setattr(cls, name, defer(func))
         return
 
     @classmethod

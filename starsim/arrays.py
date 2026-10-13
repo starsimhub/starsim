@@ -428,6 +428,8 @@ class Arr(BaseArr):
         Returns:
             A BoolArr with the result of the operation.
         """
+        if not self.initialized and not inplace: # Before the sim exists, this builds a lazy condition instead: see ss.Cond
+            return ss.conditions.lazy(op, self, other)
         self_raw = self.raw # Always size N
         both_raw = True # Assume this by default
         if isinstance(other, Arr):
@@ -957,6 +959,8 @@ class BoolArr(Arr):
 
     def __invert__(self):
         """ Bitwise NOT """
+        if not self.initialized:
+            return ss.conditions.lazy('~', self)
         return self.asnew(~self.raw, cls=BoolArr, copy=False)
 
     # For BoolArr instances implement true in-place operators that reuse the memory from the underlying array

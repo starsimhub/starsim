@@ -284,6 +284,14 @@ class SimPars(Pars):
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
 
+        # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
+        self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
+        self.solver     = 'auto' # 'auto', 'ode', 'gillespie', 'tau', 'binomial', 'sde', 'abm', or 'stochastic'
+        self.approx     = None   # None prints a note for each approximation; True hides the note; False makes it an error
+        self.integrator = None   # The ODE integration scheme: 'rk4' (the default), 'euler', or a scipy.integrate.solve_ivp method such as 'RK45' or 'LSODA'
+        self.substeps   = None   # For the 'rk4' and 'euler' integrators, the number of substeps per timestep (default: enough that no compartment turns over by more than a quarter in one)
+        self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
+
         # Demographic parameters
         self.birth_rate = None
         self.death_rate = None
