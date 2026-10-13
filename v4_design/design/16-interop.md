@@ -1,6 +1,6 @@
 # Working with other frameworks
 
-Importing models from, and exporting them to, the other frameworks reviewed in [approaches](../approaches). This is different from changing the run method ([12-backends.md](12-backends.md)), which runs one model in different ways; this moves a model between languages.
+Importing models from, and exporting them to, the other frameworks reviewed in [approaches](../approaches). This is different from changing the solver ([12-backends.md](12-backends.md)), which runs one model in different ways; this moves a model between languages.
 
 Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-conversion.md) and the reviews in [approaches](../approaches).
 
@@ -46,9 +46,10 @@ Most frameworks write a transition as a general rate expression: `beta * S * I /
 1. **Strip the source state.** A flow written as a total (`gamma * I` out of `I`) becomes a per-person rate (`gamma`).
 2. **A rate that mentions another state, divided by a population total, is exposure to that state.** `beta * S * I / N` out of `S` becomes `S >> I @ beta * I`. The bare `I` means exposure through the model's routes, which with no network is `I / N` ([06-routes.md](06-routes.md)).
 3. **A rate that mentions another state with no division by a total** (`beta * S * I`) is density-dependent mass action. It is imported the same way, with the mixing set to `dependence='density'` and `n_ref` chosen so the numbers match; the choice is printed.
-4. **A rate that mentions only parameters** is a spontaneous transition: `I >> R @ gamma`. With no source it is a birth, and with no destination a death.
-5. **Anything else is kept exactly as written, as a literal expression of counts**: `S >> I @ beta * W.n / (W.n + K)`. Counts (`.n`) are used literally, so any arithmetic the source framework could write can be carried over. This is correct by construction, and it runs under every method.
-6. **If the source is code that cannot be turned into an expression** (an arbitrary R or Python function), it is kept as a function in the rate slot and the import says so. The model then runs wherever that function runs ([03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot)).
+4. **A rate that mentions only parameters** is a spontaneous transition: `I >> R @ gamma`. With no source it is an inflow from `ss.null` (a birth), and with no destination an outflow to it (a death).
+5. **Anything else is kept exactly as written, as a literal expression of counts**: `S >> I @ beta * W.n / (W.n + K)`. Counts (`.n`) are used literally, so any arithmetic the source framework could write can be carried over. This is correct by construction, and it runs under every solver.
+6. **A compartment that is not people is an ordinary state.** An environmental reservoir, a vector population, or a continuous per-node variable (SimInf's `v`) becomes an `ss.State` in the same disease as the compartments it is coupled to, with its inflows and outflows written against `ss.null` and the rates that use it written with counts (`W.n`). The library works out that it is not people from the transitions; the importer writes `ss.State(people=False)` anyway, because it knows.
+7. **If the source is code that cannot be turned into an expression** (an arbitrary R or Python function), it is kept as a function in the rate slot and the import says so. The model then runs wherever that function runs ([03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot)).
 
 Rules 2 and 3 are guesses about what the source meant, and the difference matters when the population changes. The importer prints which it chose for each transition, and `describe()` shows the result. If an expression matches neither pattern cleanly, rule 5 applies: the literal form loses nothing, it only means the transition will not pick up a network or contact matrix if one is added later.
 
@@ -59,15 +60,15 @@ Rules 2 and 3 are guesses about what the source meant, and the difference matter
 | **Starsim v3** | States declared, transitions in `step()` code, interventions, calibration components | Runs unchanged, since existing Starsim modules are valid modules. Turning `step()` logic into declared transitions is assisted, not automatic |
 | **epipack** | Reaction tuples | Nearly complete: 3-tuples are spontaneous transitions, 5-tuples are contact-mediated |
 | **summer2** | Named flow kinds, stratifications, requested outputs | Good: each flow kind is one transition with the matching rate, `stratify_with` becomes `stratify`, adjustments become `adjust=` |
-| **SimInf** | `mparse` transition strings, a continuous state `v`, events | Good for the compartments; `v` becomes an `ss.Compartments` module; scheduled events become `ss.Mobility(data=...)` or interventions, which is the harder part |
+| **SimInf** | `mparse` transition strings, a continuous state `v`, events | Good for the compartments; `v` becomes a state that is not people (`ss.State(people=False)`) in the same disease, with its update function as transitions where it can be written as rates and as a function otherwise; scheduled events become `ss.Mobility(data=...)` or interventions, which is the harder part |
 | **odin** | `deriv`/`update`/`initial` equations, `data()` with a likelihood | Fair: scalar models classify by the rules above; array-indexed models need their indices turned into stratifications or are kept as literal expressions |
 | **EMULSION** | A YAML state machine | Good, and useful: its shipped models already exercise switching between compartmental and individual-based runs |
-| **flepiMoP** | Compartment products, `proportional_to` rates, modifiers, an outcomes chain | Fair for structure, good for outcomes, which map directly to `ss.outcome` |
+| **flepiMoP** | Compartment products, `proportional_to` rates, modifiers, an outcomes chain | Fair for structure, good for outcomes, which map directly to `ss.outcome` (a `probability` becomes the weight on the source flow) |
 | **EpiModel** | A derivative function (`dcm`) or network modules (`netsim`) | `dcm` models are code, so they import as functions; `netsim` is better, since `inf.prob` and `act.rate` are `beta` and the network's acts |
-| **Atomica** | A transition matrix, characteristics, programs, a databook | Good: the framework workbook is close to `sir.transitions` and the databook to `sim.needs(to=...)` |
+| **Atomica** | A transition matrix, characteristics, programs, a databook | Good: the framework workbook is close to `sir.transitions` and the databook to `sim.requires(to=...)` |
 | **SBML, Petri-net formats** | Species and reactions | Fair: reactions are classified by the rules above; anything else is a literal expression |
 | **EMOD, EpiHiper** | JSON campaigns and rule files | Poor for disease structure (it is in compiled code); good for interventions, whose targeting maps onto `eligible=` conditions |
-| **epydemix, MetaCast, epymorph** | Python code | Fair; their contact and mobility datasets are more valuable as data providers for `ss.contacts` and `ss.Mobility` |
+| **epydemix, MetaCast, epymorph** | Python code | Fair; their contact and mobility datasets are the more valuable part, and are worth adapting once into `starsim_data`, with the provenance recorded, as data for `ss.contacts` and `ss.Mobility`. The library does not depend on those packages |
 
 The two worth doing first are **Starsim v3**, because existing users need it to work, and **EMULSION**, because its example models are a ready-made test of running one model several ways.
 
@@ -93,7 +94,7 @@ changed: lognormal dwell time on 'recovery' written as 11 Erlang stages
 
 An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported ([14-model-spec.md](14-model-spec.md#functions)).
 
-The diagram is produced by `sir.diagram()`. A generated data-entry form (Atomica's databook, `sim.needs(to='form.csv')` in [04-parameters.md](04-parameters.md#requirements)) is deferred from v1.
+The diagram is produced by `sir.diagram()`. A generated data-entry form (Atomica's databook, `sim.requires(to='form.csv')` in [04-parameters.md](04-parameters.md#requirements)) is deferred from v1.
 
 ## Comparing two models
 
@@ -110,7 +111,7 @@ config:   same
 scenario: baseline -> vaccine
 ```
 
-The report is in the user's terms (states, transitions, parameters), not a diff of JSON text. The same function compares an imported model with its hand-written translation.
+The report is in the user's terms (states, transitions, parameters), not a diff of JSON text, and its four lines are the four hashed parts of `sim.hash()` ([14-model-spec.md](14-model-spec.md#hashing)). The same function compares an imported model with its hand-written translation.
 
 ## The vignette test
 
@@ -118,7 +119,7 @@ Whether this language can express what the other frameworks do is something to t
 
 1. **It runs.**
 2. **It matches.** Its results agree with the original framework's to a stated tolerance ([18-conformance.md](18-conformance.md)).
-3. **It is no longer.** The lingua franca version has no more lines of model code than the original.
+3. **It is no longer.** The lingua franca version has no more lines of model code than the original. Where the original calls a built-in written for one situation (`interventions=close_schools_uk()`), the lines inside that built-in count as the original's.
 4. **It is no slower.** It takes no more wall-clock time to run than the original.
 
 Points 3 and 4 are the north star: a model should never be easier to write without the lingua franca than with it, and each main framework's own examples should be implementable in no more lines and no more compute time. How lines and time are measured is in [18-conformance.md](18-conformance.md#13-north-star).
