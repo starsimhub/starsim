@@ -37,7 +37,7 @@ ss.modify(sir.rel_sus, multiply=0.6, where=sir.has_net)
 **Vaccination as a move between strata** is `ss.transfer` ([05-dimensions.md](05-dimensions.md#moving-between-coordinates-sstransfer)). The disease does not mention vaccination; protection is declared on the dimension and delivery is a transfer:
 
 ```python
-sir_vax = sir.stratify(vaccinated=[False, True], adjust={'infection': [1.0, 0.15]})
+sir.stratify(vaccinated=[False, True], adjust={'infection': [1.0, 0.15]})    # 85% protection, declared once
 rollout = ss.transfer(vaccinated=True, coverage=0.7, years=[2021, 2022], eligible=ppl.age > 65)
 ```
 
@@ -82,7 +82,8 @@ ss.treat(treatment, **delivery)
 | `eligible=` | who can receive it: a [condition](07-effects.md#conditions) |
 | `coverage=` | the fraction of eligible people reached |
 | `capacity=` | the number that can be delivered |
-| `when=`, `min_duration=` | a [trigger](#triggers): deliver only while a function of the sim is true |
+| `on=` | an event in another module that [triggers delivery](#event-triggered-delivery), such as `on=anc.visit` |
+| `when=` | a [trigger](#triggers): deliver only on steps where a function of the sim returns `True` |
 
 ```python
 ss.vaccinate(bcg, coverage=0.7, years=[2021, 2025], eligible=ppl.age < 5)                # two campaign rounds
@@ -149,6 +150,33 @@ ss.treat(drug, on=tb.diagnosis, coverage=0.85)                                # 
 
 `on=` accepts a transition (the people who went through it this step), a boolean state or condition belonging to any module (the people for whom it is true this step), or a function of the sim returning UIDs. `eligible=`, `coverage=`, and `capacity=` then apply to those people. `on_positive=X` is the same as giving `X` an `on=` that is "this test came back positive". The worked example in [07-effects.md](07-effects.md#plain-code-in-step) shows an event-triggered delivery next to the same logic written as `step()` code.
 
+### What a delivery reports
+
+Every delivery is a module with results of its own, in total and selectable by stratum like any other result ([09-results.md](09-results.md)): the number delivered each step, the realized coverage, and the total cost if the product has `cost=`.
+
+An intervention that tests also reports what it found. `ss.screen` has a `diagnosed` result: the number of positive results each step, counted on the step the result is available (so after the test's `delay`). For an intervention named `screening` it is `sim.results.screening.diagnosed`. These are flows, so they can be summed, scaled, and compared with data by name.
+
+**Reported cases, when testing is modeled.** `ss.outcome` ([09-results.md](09-results.md)) is a shortcut for a reporting process the model does not represent: "about half of infections are reported, five days later". When the model does represent testing, through one or more interventions, the outcome is not used for cases. Each testing intervention reports the diagnoses it made, and reported cases are their sum:
+
+```python
+symptomatic_testing = ss.screen(pcr, on=sir.symptom_onset, coverage=0.6)
+screening           = ss.screen(rapid_test, coverage=0.1, interval=ss.weeks(1))
+
+cases = symptomatic_testing.diagnosed + screening.diagnosed
+```
+
+So an outcome and a testing intervention never both produce the same cases: if the model has tests, the tests produce the cases. The sum is a result like any other sum of flows, and it is what the `cases` column of a data file is matched to. It belongs to neither intervention, and whether it is declared on the sim or on the disease that both test for is open ([19-open-questions.md](19-open-questions.md)).
+
+The choice between the three ways of representing an observed quantity:
+
+| The model contains | Use |
+|---|---|
+| No testing or reporting process | `ss.outcome`, a weighted sum of flows with a delay |
+| Testing, as one or more interventions | the interventions' own `diagnosed` results, summed |
+| Something that changes what happens to the person (a diagnosed person is treated, or isolates) | a state, set by the intervention (`on_positive=`) |
+
+An intervention marks individuals (a positive result leads to a follow-up, or sets `hiv.diagnosed`); an outcome never does, because it never recorded who they were.
+
 ## `ss.change`
 
 The simplest time-varying intervention is a list of times and a list of values:
@@ -173,12 +201,40 @@ ss.change(sir.pars.beta, at=[ss.days(30), ss.days(60)], to=[0.02, 0.05])
 ```python
 def many_cases(sim):
     new = sim.results.sir.new_infections
-    return new[-7:].sum() > 1000   # inside a run, a result holds only the steps so far
+    return new[max(0, sim.ti - 7):sim.ti].sum() > 1000      # the last seven completed steps
 
-ss.modify(school.pars.n_contacts, multiply=0.2, when=many_cases, min_duration=ss.weeks(4))
+ss.modify(school.pars.n_contacts, multiply=0.2, when=many_cases)
 ```
 
-The function is called each step, at the intervention's place in the loop, and can read anything in the sim, including results up to the previous step. During a run a result is a view of the steps completed so far, so `new[-7:]` is the last seven steps and not the preallocated future ([09-results.md](09-results.md#ssresult)). `min_duration=` keeps the intervention on for at least that long once the function first returns `True`; without it, a threshold policy switches on and off every few steps as the quantity crosses the threshold, so a threshold trigger SHOULD have one.
+- The function is called each step, at the intervention's place in the loop, and can read anything in the sim, including results up to the previous step. Results are read as in Starsim: storage is preallocated for the whole run and the steps completed so far are `[:sim.ti]`. A shorter spelling for "the steps so far" would be a convenience and is not specified ([19-open-questions.md](19-open-questions.md)).
+- It can read any result, including an outcome ([09-results.md](09-results.md)): `when=lambda sim: sim.results.sir.n_hosp[sim.ti - 1] > 500` acts on hospital occupancy without hospitalization being a state.
+- There is no built-in vocabulary for calendar conditions. "No school contacts on Fridays" is `ss.modify(school.pars.n_contacts, multiply=lambda sim: 0.0 if sim.now.weekday() == 4 else 1.0)`.
+
+**`when=` has no memory.** The intervention is active on exactly the steps where the function returns `True`. A bare threshold therefore switches on and off as the quantity crosses it, which is rarely the policy meant. There is no `min_duration=` or other keyword to fix that: a rule that remembers what it did (stay closed for at least four weeks, reopen only after two weeks below the threshold, close at most three times) is a module with a `step()`, where the memory is an ordinary attribute and can be read, printed, and tested:
+
+```python
+class SchoolClosure(ss.Intervention):
+    def __init__(self, threshold=1000, hold=ss.weeks(4), **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(threshold=threshold, hold=hold)
+        self.closed      = False
+        self.date_closed = None
+
+    def step(self):
+        sim = self.sim
+        new = sim.results.sir.new_infections
+        many = new[max(0, sim.ti - 7):sim.ti].sum() > self.pars.threshold
+        if many and not self.closed:
+            self.closed, self.date_closed = True, sim.now
+        elif self.closed and not many and sim.now - self.date_closed >= self.pars.hold:
+            self.closed = False
+
+closure = SchoolClosure()
+effect  = ss.modify(school.pars.n_contacts, multiply=0.2, when=lambda sim: sim.interventions.closure.closed)
+sim     = ss.Sim(sir, networks=[home, school, work, community], interventions=[closure, effect])
+```
+
+The class decides and remembers; the modifier applies the effect, so the base contact rate is never overwritten and comes back when `closed` is cleared ([07-effects.md](07-effects.md#plain-code-in-step)). Whether `when=` should exist at all, given how little it can say safely, is open ([19-open-questions.md](19-open-questions.md)).
 
 ## Scenarios
 
@@ -188,17 +244,17 @@ prep = ss.Sim(hiv, networks=ss.MFNet(), interventions=[art_program, prep_rollout
 
 sims = ss.parallel(baseline=base, prep=prep)
 sims.plot()
-sims.to_df()                # one tidy table indexed by scenario, replicate, and time
+sims.to_df()                # one tidy table indexed by scenario, run, and time
 sims.diff('baseline')       # differences from the baseline, with intervals
 ```
 
 - **A scenario is a sim.** It contains exactly the interventions passed to it. The baseline contains whatever is really in place (antiretroviral therapy in an HIV model, routine immunization in a measles model); it is not a run with everything switched off.
-- `ss.parallel` runs the sims, in parallel, and returns them as one object keyed by the names given.
+- `ss.parallel` runs the sims, in parallel, and returns them as one object keyed by the names given. (Starsim's `ss.parallel` takes sims positionally today; the keyword labels are an addition.) With `n_runs=` each scenario is run several times and the object is indexed by scenario, run, and time ([09-results.md](09-results.md)).
 - With common random numbers ([11-random.md](11-random.md)), the scenarios share their random draws, so the difference between two scenarios is the effect of the intervention and not noise.
 
-## How each method realizes an intervention
+## How each solver realizes an intervention
 
-Conditions, coverage functions, and `deliver=` functions are tried on what the method provides ([07-effects.md](07-effects.md#on-agents-and-on-groups)): agents in an agent-based run, groups in a compartmental one. Nothing is classified in advance; if something asks for per-agent information in a compartmental run, the run stops and says what was asked for.
+Conditions, coverage functions, and `deliver=` functions are tried on what the solver provides ([07-effects.md](07-effects.md#on-agents-and-on-groups)): agents in an agent-based run, groups in a compartmental one. Nothing is classified in advance; if something asks for per-agent information in a compartmental run, the run stops and says what was asked for.
 
 | Declaration | Compartmental | Agent-based |
 |---|---|---|
@@ -206,6 +262,8 @@ Conditions, coverage functions, and `deliver=` functions are tried on what the m
 | `ss.transfer(dim=..., coverage=)` | a flow between the dimension's compartments | select eligible agents, thin to coverage, change the property |
 | `ss.vaccinate`, `ss.treat` with a product | adds a "holds this product" dimension to the model (printed) and moves people along it; exponential waning is a flow back, other shapes use stages | records who holds the product and when they got it |
 | `ss.screen` with follow-ups | flows thinned by sensitivity and specificity; needs the tested and result states as dimensions, added automatically | a result per agent |
+| `when=fn(sim)` | called once per step | called once per step |
+| a module with `step()` (a trigger with memory) | works if the code uses only what groups have | works |
 | `eligible=` using stratifications and states | selects groups | selects agents |
 | `eligible=` using a per-agent attribute | stops with a message naming the attribute | selects agents |
 | `capacity=` | a cap on the total flow, shared across groups in proportion to the eligible | a cap on the number of agents |
@@ -219,5 +277,7 @@ Conditions, coverage functions, and `deliver=` functions are tried on what the m
 - **Interventions that are off unless a scenario turns them on.** A sim contains its interventions; a baseline usually has some.
 - **Interventions as extra compartments written into the disease.** A transfer along a dimension, or a product, does this without touching the disease.
 - **A rule language with its own variables, sets, and operations.** Conditions and functions in Python say the same thing in a line.
+- **`min_duration=` on a trigger.** It is one case of a rule with memory, and the general form is a `step()`.
+- **An outcome and a testing intervention both producing cases.** If the model has tests, the tests produce the cases.
 - **`days=` as the time keyword of `ss.change`.** `at=` takes dates, years, or durations.
 - **Budget optimization and optimal control in v1.** `cost=` keeps the door open.
