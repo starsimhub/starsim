@@ -191,7 +191,7 @@ sim.needs()             # what this model requires, as a table
 sim.needs(to='form.csv')  # Atomica's databook: the data-entry contract, generated  (deferred from v1; see design/19)
 ```
 
-This is optional metadata. A module without `requires` works exactly as before, and a module with it is not restricted to what it listed: it can still read anything in the sim. The declaration exists to produce the table and the form, not to police access. (Which modules write to which quantities is found by observing a run, not by declaration; see [composition-and-effects.md](composition-and-effects.md).)
+This is optional metadata. A module without `requires` works exactly as before, and a module with it is not restricted to what it listed: it can still read anything in the sim. The declaration exists to produce the table and the form, not to police access. (Which modules write to which quantities is found by observing a run, not by declaration; see [composition-and-effects.md](composition-and-effects.md).) [CK: let's just keep `requires()`, no need to have `requires` attribute, `ss.Needs` class, and `sim.needs()` method. we can do `requires` and `ss.Requires()` if necessary]
 
 ### Named data, not just values
 
@@ -207,7 +207,7 @@ Its review: "A lingua franca that can express a contact matrix but cannot say *w
 epymorph's ADRIOs are the pull-based version with caching and provenance; camdl has `read("data/lga_pop.tsv", column="patch")`; [LASER](../approaches/laser.md) ships a library of migration models. All four say the same thing: **a reference to data is part of the model.**
 
 ```python
-sim = ss.Sim(sir, people=ss.People('Kenya', year=2024),
+sim = ss.Sim(sir, people=ss.People('Kenya', year=2024), # [CK: capitalization should be consistent, i think ss.people() here?]
                   networks=ss.contacts('Kenya', source='prem_2021'))
 ```
 
@@ -218,7 +218,7 @@ with the provenance carried into `sim.describe()` and the run hash, and the fetc
 - **Declaration means adding a parameter to a custom module is two edits** (declare, use). Starsim already works this way and it is worth it. Most parameters live in their transition and are never named at all.
 - **A generated data form is only as good as the requirement declarations.** A module that reads something it did not list will be missing from the form. Enforcing the list (Vivarium's `PopulationView`, where a module sees only what it declared) would close that gap, but people forget declarations and they drift from the code, so it is left as optional metadata.
 - **A function in a parameter slot is only known to work in the run methods it has been tried in.** `sir.methods()` reports what happened; nothing is promised in advance.
-- **Bundled data goes stale and is large.** Prefer epymorph's pull-with-cache over Epydemix's bundle, and pin the source in the hash so a re-run with a changed upstream is detectable rather than silent.
+- **Bundled data goes stale and is large.** Prefer epymorph's pull-with-cache over Epydemix's bundle, and pin the source in the hash so a re-run with a changed upstream is detectable rather than silent. [CK: yes, but ... we can do a bit of both. see /home/cliffk/idm/starsim_data for current thinking on this; happy to revisit, but i think 'bundle small and common, pull everything else' is the right compromise.]
 - **Optional `source=` will mostly be empty.** True, and it costs nothing when unused, and the models that matter most are the ones where someone bothered.
 
 ## Rejected
@@ -227,11 +227,11 @@ with the provenance carried into `sim.describe()` and the run hash, and the fetc
 - **Mandatory value/model separation** (camdl). The capability is right; requiring two files for an SIR is not.
 - **String-concatenated parameter names** ([MetaCast](../approaches/metacast.md)'s `parameters['p' + subpop_suffix]`, `'beta_[high,vaccinated]'`). Its review: "the lesson is in the split, not the mechanism." Shapes do this job properly.
 - **`Use_Defaults: 1`** ([EMOD](../approaches/emod.md)), where "much of a model's behavior is not visible in its files". We guess defaults aggressively and *print every one*, which is the opposite policy despite sounding similar.
-- **New distribution names.** Starsim's names stay (`ss.lognorm_ex`, not a new `ss.lognorm`; `ss.nbinom`, not `ss.neg_binomial`), and there is no separate `ss.erlang`: use `ss.gamma` with an integer shape, or `stages=` on the transition. Starsim's review flags "~20 distributions" as part of the surface-area problem, so the documentation teaches the dozen listed above; the others, and any SciPy distribution via `ss.Dist`, remain available.
+- **New distribution names.** Starsim's names stay (`ss.lognorm_ex`, not a new `ss.lognorm`; `ss.nbinom`, not `ss.neg_binomial`), and there is no separate `ss.erlang`: use `ss.gamma` with an integer shape, or `stages=` on the transition. Starsim's review flags "~20 distributions" as part of the surface-area problem, so the documentation teaches the dozen listed above; the others, and any SciPy distribution via `ss.Dist`, remain available. [CK: i think we can revisit the list of starsim distributions, i'm not wedded to them necessarily.]
 - **Enforced requirement views** (Vivarium). See the trade-off above.
 - **Repeating the unit on every distribution parameter.** Once is enough.
 
 ## Open questions
 
-- Should `bounds=` and `prior=` be the same field? camdl has one (`in [lo, hi] ~ prior`); they serve calibration and validation respectively, and collapsing them may be right.
-- What does a compartmental run do with a distribution that varies between people? A dwell-time distribution has a standard answer (sub-stages). A distribution on `beta` or `rel_sus` does not, short of adding a dimension or using the mean. Under `method='auto'` such a model runs as agents; what an explicit `method='ode'` should do is a question for [paradigm-conversion.md](paradigm-conversion.md).
+- Should `bounds=` and `prior=` be the same field? camdl has one (`in [lo, hi] ~ prior`); they serve calibration and validation respectively, and collapsing them may be right. [CK: hm, this is a good question! i think pros and cons either way. i think keep both to start and then we can decide.]
+- What does a compartmental run do with a distribution that varies between people? A dwell-time distribution has a standard answer (sub-stages). A distribution on `beta` or `rel_sus` does not, short of adding a dimension or using the mean. Under `method='auto'` such a model runs as agents; what an explicit `method='ode'` should do is a question for [paradigm-conversion.md](paradigm-conversion.md). [CK: either stratify, or simplify .... right?]
