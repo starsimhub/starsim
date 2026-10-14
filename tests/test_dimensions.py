@@ -5,6 +5,7 @@ Test dimensions that are more than a property of people: states with dimensions 
 # %% Imports and settings
 import pytest
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
@@ -176,6 +177,7 @@ def test_space():
         away    = ss.Mobility(ss.gravity(), away=0.2), # Commuting, with 20% of time spent away
         visit   = ss.Mobility(ss.gravity(), away=0.2, kind='visit'), # The same, but travelers do not infect the people they visit
         migrate = ss.Mobility(ss.gravity(k=2e-5), kind='migrate'),
+        force   = ss.Mobility(ss.gravity(), away=0.2, kind='force'), # Nobody moves; 20% of each town's force of infection goes to the others
     )
     peaks = sc.objdict()
     for key,mob in mobility.items():
@@ -194,7 +196,15 @@ def test_space():
     assert peaks.gravity_ode[0] < peaks.gravity_ode[1] < peaks.gravity_ode[2] # The nearer town is reached first
     assert np.ptp(peaks.away_ode) < 3 < np.ptp(peaks.gravity_ode) # The more time people spend away, the closer together the towns peak
     text = sim.describe(output=True)
-    assert 'patch (space): north, south, east' in text and 'migrate' in text
+    assert 'patch (space): north, south, east' in text and "kind='force'" in text
+
+    # A moving force of infection goes only where the matrix sends it: from a to b, not from b to a
+    for matrix,reached in [([[0, 0.1], [0, 0]], True), ([[0, 0], [0.1, 0]], False)]:
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(place=[10, 0])), name='sir')
+        sir.stratify(place=['a', 'b'], kind='space', mobility=ss.Mobility(matrix=matrix, kind='force'))
+        for solver in ['ode', 'abm']:
+            attack = run(sir, solver, total_pop=20_000, unit='day', stop=200).results.sir.cum_infection.by('place').values[-1]
+            assert attack[0] > 5000 and (attack[1] > 5000) == reached, f'Expected b to be reached: {reached}, with {solver}, not {attack}'
 
     # A count has one value per place, and a count in a rate is the count in the same place
     S, I, R, W = ss.states(4)
@@ -309,12 +319,32 @@ def test_mixing():
         n_I = start(solver).results.sir.n_I.by('patch').values[0]
         assert n_I[0] == 0 and n_I[2] == 0 and 400 < n_I[1] <= 500
 
-    # Age groups given as ages do not age if the sim says not to
+    # Age groups given as ages age by default, and do not if the sim says not to
     youngest = dict()
-    for use_aging in [True, False]:
+    for use_aging in [None, True, False]:
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), name='sir').stratify(age=[0, 5, 20]) # Nobody is infected, so everyone stays susceptible
         youngest[use_aging] = ss.Sim(sir, start=2000, stop=2010, use_aging=use_aging, **kw).run().results.sir.n_S.by('age').values[-1, 0]
-    assert youngest[False] > 2*youngest[True]
+    assert youngest[False] > 2*youngest[True] and youngest[None] == youngest[True]
+
+    # A split over two dimensions at once, a value for every combination of levels, and a contact matrix within each place
+    def make_places(mobility=None):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.05)), recovery=ss.progression('I -> R', dur=ss.days(10)),
+                         init=dict(I=ss.by(pd.DataFrame(dict(age=['0-4'], place=['a'], value=[10])))), name='sir')
+        sir.stratify(age=[0, 5, 50])
+        sir.stratify(place=['a', 'b'], kind='space', split=ss.by([[3000, 1000], [5000, 2000], [2000, 500]], dims=['age', 'place']), mobility=mobility)
+        return ss.Sim(sir, networks=ss.contacts([[12, 4, 1], [4, 8, 2], [1, 2, 3]], age=[0, 5, 50]), total_pop=13_500, unit='day', stop=100, **kw)
+    alone = make_places().run().results.sir
+    n = [sum(alone[f'n_{k}'].select(age=age, place=place)[0] for k in 'SIR') for age in ['0-4', '50+'] for place in ['a', 'b']]
+    assert np.allclose(n, [3000, 1000, 2000, 500])
+    assert alone.n_I.select(age='0-4', place='a')[0] == 10 and alone.n_I[0] == 10
+    assert alone.cum_infection.by('place').values[-1, 1] == 0 and alone.cum_infection[-1] > 5000 # Nobody moves, so the epidemic stays in a
+    many = make_places().new(solver='binomial').run(n_runs=3).results.sir # Many runs keep their values by group too
+    assert many.n_I.select(age='0-4', place='a').values.shape == (3, 101) and np.all(many.cum_infection.by('place')['b'].values == 0)
+    moving = make_places(ss.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
+    assert moving.run().results.sir.cum_infection.by('place').values[-1, 1] > 1000
+    agents = make_places().new(n_agents=13_500).run()
+    shares = [np.mean((agents.people.place[agents.people.age < 5] == 0)), np.mean((agents.people.place[agents.people.age >= 50] == 0))]
+    assert np.allclose(shares, [0.75, 0.8], atol=0.05) # As agents, where people live depends on their age
     return sims
 
 

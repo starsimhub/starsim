@@ -468,6 +468,48 @@ def test_outcomes():
 
 
 @sc.timer()
+def test_likelihood():
+    sc.heading('Testing likelihoods and model comparison')
+    def make(beta=0.4, k=10, exposed=False):
+        beta = ss.par(ss.perday(beta), bounds=[0.05, 1.0])
+        k = ss.par(k, bounds=[0.1, 100])
+        S, E, I, R = ss.states(4)
+        infection = S >> (E if exposed else I) @ beta * I
+        stages = [E >> I @ ss.days(3)] if exposed else []
+        cases = ss.outcome(0.6 * infection, every=ss.weeks(1), likelihood=ss.nbinom(n=k))
+        N = S + E + I + R if exposed else S + I + R
+        sir = ss.Disease(infection, *stages, I >> R @ ss.days(7), cases, prevalence=I/N, init=dict(I=10), name='sir')
+        return ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(20), label='SEIR' if exposed else 'SIR', **kw)
+
+    # Data drawn from a negative binomial around the cases of an SEIR
+    truth = make(exposed=True).run().results.sir
+    weekly = truth.cases.values > 0
+    mean = truth.cases.values[weekly]
+    rng = np.random.default_rng(1)
+    df = sc.dataframe(t=truth.timevec[weekly], cases=rng.negative_binomial(10, 10/(10 + mean)))
+
+    # The declared likelihood is used, and its dispersion is fitted with beta
+    fit = make(beta=0.2, k=3, exposed=True).calibrate(data=df)
+    fit.summarize()
+    assert fit.measure == 'negative log-likelihood'
+    assert np.isclose(fit.pars.beta.value, 0.4, rtol=0.05)
+    assert 2 < fit.pars.k < 100
+    assert np.isclose(ss.loglik(fit.sim), -fit.mismatch)
+
+    # A likelihood can be given at calibration time, for a result that is not an outcome
+    prev = sc.dataframe(t=truth.timevec[::7], prevalence=truth.prevalence.values[::7])
+    fit2 = make(beta=0.2, exposed=True).calibrate(data=prev, likelihood=dict(prevalence=ss.normal(scale=0.01)))
+    assert fit2.measure == 'negative log-likelihood'
+    assert np.isclose(fit2.pars.beta.value, 0.4, rtol=0.01)
+
+    # The model that made the data predicts the held-out weeks better
+    comp = ss.compare_models([make(), make(exposed=True)], data=df)
+    assert comp.table.index[0] == 'SEIR'
+    assert list(comp.fits.keys()) == ['SIR', 'SEIR']
+    return comp
+
+
+@sc.timer()
 def test_modify():
     sc.heading('Testing modifiers, scenarios, and many runs')
     sir = make_sir()
@@ -625,6 +667,7 @@ if __name__ == '__main__':
     strat = test_stratify()
     trans = test_transfer()
     fit   = test_outcomes()
+    comp  = test_likelihood()
     msim  = test_modify()
     funcs = test_functions()
     times = test_time_values()

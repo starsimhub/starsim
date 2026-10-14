@@ -75,13 +75,14 @@ All Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps
 
 **`ss.by`** (one value per stratum), **`ss.timeseries`** (varies in time), **`ss.seasonal`** (a yearly cycle). The other forms a parameter can take (a number, a typed quantity, a distribution, a function) need no names of their own.
 
-### Mixing and space: 10
+### Mixing and space: 11
 
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
 | `ss.RandomNet` `ss.MFNet` `ss.StaticNet` | Individual-level networks (Starsim's; its other networks are available too). `ss.MFNet` gains two keywords, `n_contacts` and `concurrency` |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
+| **`ss.PartnerNet`** | Partnerships that form and dissolve, described by targets for the number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`) and their duration |
 | **`ss.contacts`** | A named contact matrix as mixing pools: `ss.contacts('Kenya')` |
 | **`ss.geo`** | A named geography: names, populations, centroids, distances |
 | **`ss.Mobility`** | Movement between patches from a matrix, a data file, or a movement model |
@@ -135,14 +136,14 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solver
 | Time | 22 | 0 |
 | Distributions | 13 | 0 |
 | Parameter forms | 3 | 3 |
-| Mixing and space | 10 | 4 |
+| Mixing and space | 11 | 5 |
 | Interactions and interventions | 8 | 8 |
 | Running, comparing, saving | 7 | 2 |
 | Optional metadata | 1 | 1 |
 | Types you get back or subclass | 6 | 0 |
-| **`ss.` names** | **93** | **33** |
+| **`ss.` names** | **94** | **34** |
 | Methods and attributes | 39 | 25 |
-| **Total** | **132** | **58** |
+| **Total** | **133** | **59** |
 
 The two-line SIR uses five of them: `ss.Disease`, `ss.transmission`, `ss.progression`, `ss.Sim`, and `run` (six with `plot`). The operator form swaps the two constructors for `ss.states` and adds `ss.days` if the duration is typed. A stratified, calibrated national model with interventions uses perhaps forty.
 

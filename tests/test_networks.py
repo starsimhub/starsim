@@ -3,6 +3,7 @@ Test networks
 """
 
 # %% Imports and settings
+import pytest
 import sciris as sc
 import numpy as np
 import starsim as ss
@@ -532,6 +533,32 @@ def test_hybrid():
     return sim
 
 
+@sc.timer()
+def test_partners():
+    sc.heading('Testing partnerships with a target number of partners at a time')
+    net = ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50) # EpiModel's introductory network
+    S, I = ss.states(2)
+    sis = ss.Disease(S >> I @ ss.prob(0.64), I >> S @ ss.prob(0.05), init=dict(I=10), name='sis')
+    sim = ss.Sim(sis, networks=net, n_agents=medium, stop=400, verbose=0).run()
+    net = sim.networks[0]
+    res = net.results
+    k = np.arange(4)
+    assert np.isclose(net.dist_degree @ k, 0.7) and np.isclose(net.dist_degree[2:].sum(), 0.22) # The targets
+    assert np.isclose(res.mean_degree[200:].mean(), 0.7, rtol=0.05) # ... are what the network has
+    assert np.isclose(res.concurrency[200:].mean(), 0.22, rtol=0.1)
+    assert net.degrees(sim.people.alive.uids).max() <= 3
+    assert sim.results.sis.n_I[-1] > 100 # Infection spreads through the partnerships
+    table = net.check(n_runs=2, output=True)
+    assert list(table.index) == ['mean_degree', 'concurrency', 'max_contacts']
+
+    # Targets that cannot be met together are an error, and a compartmental run uses the mean number of partners
+    with pytest.raises(ValueError):
+        ss.PartnerNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
+    ode = ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
+    assert ode.results.sis.n_I[-1] > 10
+    return sim
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -557,5 +584,6 @@ if __name__ == '__main__':
     dyn  = test_dynamic()
     clus = test_cluster()
     hyb  = test_hybrid()
+    part = test_partners()
 
     T.toc()

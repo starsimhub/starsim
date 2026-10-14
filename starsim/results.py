@@ -203,6 +203,18 @@ class Result(ss.BaseArr):
             raise KeyError(errormsg)
         return
 
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ Arithmetic on results; the values by group are kept only where they can be: for a sum or difference of stratified results, or one scaled by a number """
+        out = super().__array_ufunc__(ufunc, method, *inputs, **kwargs)
+        if isinstance(out, Result) and getattr(out, 'strata', None) is not None:
+            stratified = [x for x in inputs if isinstance(x, Result) and getattr(x, 'strata', None) is not None]
+            numbers = [x for x in inputs if np.ndim(x) == 0]
+            same = all(x.strata.shape == stratified[0].strata.shape for x in stratified)
+            linear = (ufunc in [np.add, np.subtract] and len(stratified) == len(inputs)) or (ufunc in [np.multiply, np.divide, np.true_divide, np.negative] and len(stratified) == 1 and len(numbers) == len(inputs) - 1 and (ufunc is not np.divide and ufunc is not np.true_divide or inputs[0] is stratified[0]))
+            strata = [x.strata if isinstance(x, Result) else x for x in inputs]
+            out.strata = getattr(ufunc, method)(*strata) if method == '__call__' and not kwargs and same and linear else None # Otherwise (e.g. a ratio of two results) the value of the whole is not the sum of the values by group
+        return out
+
     def _substrata(self, keep):
         """ A result made of some of the groups of this one """
         strata = self.strata[:, keep]

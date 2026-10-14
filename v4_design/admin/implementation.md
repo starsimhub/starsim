@@ -19,17 +19,17 @@ The nine build steps from [examples/README.md](../examples/README.md).
 ## Held-out set
 
 - [x] Wave 1: for each framework, the simplest example that shows what it is for. The originals, their environments, and the Starsim versions are kept in the `lingua_franca_design` repository (`examples/`, `_envs/`, and `vignettes/`), not here.
-    - [x] camdl: SIR with weekly reported cases
+    - [x] camdl: SIR with weekly reported cases, and a negative-binomial likelihood
     - [x] summer2: SIR by age and location, with a mixing matrix for each
     - [x] epydemix: SIR in Kenya's population, with contact matrices by age
     - [x] Atomica: the SIR demo, stepped a year at a time
     - [x] EMULSION: one SIR as compartments and as individuals
-    - [x] LASER: SEIR in a hub and spokes with gravity coupling (runs, but the two frameworks couple places differently, so the results differ)
+    - [x] LASER: SEIR in a hub and spokes with gravity coupling (agrees, with the force of infection moving between places as in LASER)
     - [x] MEmilio: SECIR with severity branches and a change in contacts
     - [x] flepiMoP: SEIR in two provinces whose residents visit each other
     - [x] odin: a stochastic SIR, with its array of replicates as many runs
     - [x] SimInf: SIR in 1,600 herds, with 466,692 scheduled events as a movement register (agrees with the original; one Gillespie run takes 9.5 s, against 0.08 s)
-    - [x] EpiModel: SIS over partnerships that form and dissolve (runs, but the network cannot be given EpiModel's target statistics, and the results differ)
+    - [x] EpiModel: SIS over partnerships that form and dissolve (agrees at equilibrium with `ss.PartnerNet` and EpiModel's target statistics; the epidemic grows about 12% more slowly at first)
 - [x] Wave 2: the other eight conformance corpus models
     - [x] 4. SIR with a lognormal dwell time
     - [x] 7. Patches with gravity mobility, and with none
@@ -39,7 +39,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] 16. A threshold-triggered intervention, with and without memory
     - [x] 17. TB with resistance as a strain
     - [x] 18. Two diseases with age stratified on the sim
-- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB
+- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB (the models still to be chosen, except camdl's)
+    - [x] camdl: SEIR by age and patch, with contacts by age within each patch, aging, movement, and a vaccination (agrees as an ODE; as chain-binomial, the same peaks a day sooner at a step of a day)
+    - [x] Ghana measles: stochastic SEIR in 260 districts with gravity mixing, seasonality, births with vaccination, deaths, importation, and reported cases (the `gm-port` rewrite; agrees, with no change to Starsim)
 
 ## By section of the spec
 
@@ -78,8 +80,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
 ### 05 Dimensions
 
 - [x] `stratify()` on a disease and on the sim, `split=`, `adjust=`
-- [x] `ss.transfer` as a rate, `ss.by`
-- [x] Aging between age groups
+- [x] `ss.transfer` as a rate, `ss.by` (one dimension, a product over several, a table, or an array with named axes)
+- [x] `split=` over several dimensions at once (`split=ss.by(pop, dims=['age', 'patch'])`); as agents, the other levels are drawn given the age group
+- [x] Aging between age groups (it was off unless there were births or deaths; now on with an age stratification, unless `use_aging=False`)
 - [x] `states=` on `stratify()`: dimensions of some states only, including states that are not people
 - [x] Strain dimensions: a force of infection for each strain, the infector's strain passed on, `adjust` by strain
 - [x] Space: mixing within each place, counts per place, `ss.geo`, `ss.gravity`, and `ss.Mobility` (commuting, visiting, and migration)
@@ -90,16 +93,18 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] `where=` on `stratify()`
 - [x] Movement registers (`ss.Mobility(data=)`): people moved between places, added, and removed on given dates, under every solver
 - [ ] Named geographies (`ss.geo('Kenya')`)
-- [ ] A contact matrix by age within each place, in a compartmental run; networks that know about places, as agents
+- [x] A contact matrix by age within each place, in a compartmental run, with commuting, visiting, or a moving force of infection
+- [ ] Networks that know about places, as agents (a contact matrix as agents mixes people across places)
 
 ### 06 Routes
 
 - [x] Homogeneous mixing, `ss.MixingPool`, `ss.contacts` matrices
 - [x] A contact matrix for each of the model's own dimensions, multiplied together (`ss.contacts(age=..., location=...)`)
-- [ ] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated
+- [x] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated (`ss.PartnerNet`, `net.check()`)
+- [ ] Other target statistics (mixing by attribute, triangles), and `n_contacts`/`concurrency` on `ss.MFNet`
 - [x] Scheduled events that add, remove, or move individuals: one register, where a row with no `from` adds people and one with no `to` removes them. Each event happens at the start of the first step on or after its date, in the order of the table; people are chosen at random from the states it names (by default, everyone), and added to its states (by default, the first). In a compartmental run with several diseases, each draws its own people
 - [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
-- [ ] Coupling between places that moves the force of infection, as LASER does
+- [x] Coupling between places that moves the force of infection, as LASER does (`ss.Mobility(kind='force')`)
 - [x] Networks, as agents and (approximated, with a note) as compartments
 - [ ] Multi-disease coupling in a compartmental run
 
@@ -145,7 +150,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Result expressions (sums and ratios of states)
 - [x] `ss.outcome`, with delays, durations, and reporting periods
 - [x] `res.select()` and `res.by()` on stratified results, including cumulative ones; a state has only the dimensions it was stratified by
-- [ ] `select()` and `by()` on the results of many runs
+- [x] `select()` and `by()` on the results of many runs (kept by group in one kernel call unless that would take more than 500 MB)
 - [x] A parameter as the weight of a flow in an outcome (`rho * infection`)
 - [ ] Flows in ratio results
 - [ ] Extinction reporting
@@ -185,7 +190,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - [x] `ss.data`, `sim.calibrate()`, `ss.Fit`
 - [ ] Data matched by name to summed results
-- [ ] Likelihoods, `ss.compare_models`
+- [x] Likelihoods (`ss.poisson`, `ss.nbinom`, `ss.normal`, `ss.lognorm_ex`, with the model's value as the mean), fitted by maximum likelihood; `ss.compare_models`, with `holdout=` and `folds=`
+- [ ] Posterior methods (NUTS, particle MCMC, ABC-SMC) and priors
 - [ ] Identifiability notes
 
 ### 14 to 16 Model spec, errors, and interop
@@ -219,7 +225,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 ## Known issues
 
 - The kernels are compiled the first time they are used after Starsim is installed or changed, which takes about 12 s; after that they are loaded from a cache.
-- With `sim.run(n_runs=)` in one call to the kernel, the results that are kept by group are not returned for each run, and reported outcomes are drawn for all the runs at once, so differ (in the draw, not the distribution) from those of a single run with the same seed.
+- With `sim.run(n_runs=)` in one call to the kernel, only the states and transitions are kept by group (not outcomes or results given as expressions), and reported outcomes are drawn for all the runs at once, so differ (in the draw, not the distribution) from those of a single run with the same seed.
 - The kernels draw random numbers from Numba's generator, so a stochastic compartmental run gives different numbers (from the same distribution) with `engine.use_kernels = False`.
 - A typed quantity that is changed in place during a run (the number inside an `ss.perday`, say) is not seen, since a converted value is kept for as long as the parameter holds the same object; assigning a new value is.
 - A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`).
@@ -233,3 +239,5 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - An ODE and an agent-based run of the same model differ by an amount of order `dt` (about 6% in the prevalence of an SIS model with a daily step).
 - As agents, people added by a movement register in a step are made at its end, so the other events of the same step cannot choose them; and people who moved into a place in a step are chosen after those who were already there.
 - A movement register cannot add people to a state that splits on entry into branches.
+- A condition on a property of people (`ppl.age < 5`) needs a `ppl` object (`ss.People(1)`) even in a compartmental model, which has none.
+- Arithmetic on stratified results keeps the values by group only for sums, differences, and scaling by a number; for anything else (a ratio), `select()` says the result is not stratified.

@@ -92,7 +92,7 @@ from .modules import (
 t('networks')
 from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomExactNet, RandomNet, RandomSafeNet, ClusterNet, HybridNet, MFNet, MSMNet,
+    StaticNet, RandomExactNet, RandomNet, PartnerNet, RandomSafeNet, ClusterNet, HybridNet, MFNet, MSMNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )
@@ -156,7 +156,7 @@ from .calibration import (
     Calibration, CalibComponent,
     linear_interp, linear_accum, step_containing,
     BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
-    data, compare, mismatch, Fit, fit,
+    data, compare, mismatch, loglik, Fit, fit, ModelComparison, compare_models,
 )
 
 t('samples')

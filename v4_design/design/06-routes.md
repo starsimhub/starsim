@@ -222,6 +222,14 @@ ss.MFNet(
 
 `net.check()` simulates the network alone and reports, for each target statistic it was given, the target, the realized mean, and the spread across replicates (`W402 TargetStatsNotRecovered` if a target is missed). Running it is recommended before trusting results from a fitted network.
 
+A one-mode network of partnerships is described the same way, by `ss.PartnerNet`, with the targets EpiModel's introductory network is fitted to:
+
+```python
+ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)   # 175 partnerships among 500, 110 people with two or more, nobody with four or more
+```
+
+The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target; other structure an ERGM can target (mixing by attribute, triangles) is not covered.
+
 ## Frequency and density dependence
 
 This is an option on the mixing, not on the transition, and `describe()` prints which is in force:
@@ -303,6 +311,8 @@ Under `commute`, a person's home patch does not change. They spend a share `away
 ```
 
 This is the standard time-share form of a commuting model. It needs no change to the timestep and works under every solver. It does not represent the time of day; a model that needs daytime and nighttime mixing uses a sub-daily `dt` with separate layers.
+
+A third form moves neither people nor time: `kind='force'` moves the force of infection itself, as LASER does. With `M[i,k]` the movement from `i` to `k` (scaled by `away=`), each patch keeps `1 − Σ_k M[i,k]` of its own force of infection and receives `M[k,i]` of each other patch's, unweighted by the patches' sizes. It is less mechanistic than commuting, but it is what LASER models are written in, and the same gravity matrix gives different epidemics under the two forms (in LASER's hub-and-spoke example, 88% infected against 80%).
 
 Commuting couples patches without mixing their populations; migration does both. If `kind=` is not given, a gravity model or matrix is treated as `commute` and a movement register as `migrate`, and the choice is printed.
 

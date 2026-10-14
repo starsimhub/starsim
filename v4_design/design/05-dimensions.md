@@ -260,6 +260,8 @@ A negative multiplier raises `E306 InvalidAdjustment`. A multiplier that pushes 
 
 Parameters that differ by level can also be given directly in the base model with `ss.by(age=[...])` ([04-parameters.md](04-parameters.md)); `adjust` is for when the base model should not know about the dimension.
 
+A population that is not the product of a split by each dimension (more children in one patch than another) is given as one split over several dimensions: `sir.stratify(patch=['north', 'south'], split=ss.by(pop, dims=['age', 'patch']))`, where `pop` has a row for each age group and a column for each patch. Each dimension's own split is then the total over the others.
+
 ## Mixing over a dimension
 
 Who mixes with whom is given to the sim, not to `stratify`:

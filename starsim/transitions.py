@@ -1699,20 +1699,114 @@ def func_source(func):
 
 class by:
     """
-    A value for each level of a stratification, e.g. `ss.by(age=[0.0, 0.02, 0.01])`
+    A value for each level of one or more stratifications
+
+    With several dimensions as keywords, the value of a group is the product of
+    its value in each. A table gives every combination directly: it has a column
+    for each stratification (holding the labels of its levels) and a column of values.
 
     Args:
-        kwargs (dict): the dimension, and one value per level
+        table (df/array): a dataframe (or a dict of columns) with a column per stratification and a column named `value`; or, with `dims`, an array with one axis per dimension
+        dims (list): the dimensions of the axes of an array given as `table`
+        kwargs (dict): each dimension, and one value per level
+
+    Examples:
+        ```python
+        beta = ss.by(age=[0.08, 0.05, 0.03])
+        beta = ss.by(age=[0.08, 0.05, 0.03], sex=[1.0, 0.8]) # One per age group and sex: the product
+        init = ss.by(pd.DataFrame(age=['child', 'adult'], patch=['north', 'north'], value=[10, 5])) # Every other combination is 0
+        pop = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch']) # Ages by row, places by column
+        ```
     """
-    def __init__(self, **kwargs):
-        if len(kwargs) != 1:
-            errormsg = 'ss.by() takes one dimension, e.g. ss.by(age=[0.1, 0.2, 0.3])'
+    def __init__(self, table=None, dims=None, **kwargs):
+        if (table is None) == (not kwargs):
+            errormsg = 'ss.by() takes a table, or one value per level for each dimension, e.g. ss.by(age=[0.1, 0.2, 0.3])'
             raise ValueError(errormsg)
-        self.dim, self.values = list(kwargs.items())[0]
+        self.array = None
+        if dims is not None: # An array with one axis for each dimension
+            self.array = np.array(table, dtype=float)
+            if self.array.ndim != len(dims):
+                errormsg = f'ss.by() was given {len(dims)} dimensions ({sc.strjoin(dims)}), but an array with {self.array.ndim} axes'
+                raise ValueError(errormsg)
+            self.table = None
+            self.dims = list(dims)
+        elif table is not None:
+            table = sc.dataframe(table)
+            if 'value' not in table.columns:
+                errormsg = f'A table given to ss.by() needs a column named "value"; its columns are {list(table.columns)}'
+                raise KeyError(errormsg)
+            self.table = table
+            self.dims = [col for col in table.columns if col != 'value']
+        else:
+            self.table = None
+            self.dims = list(kwargs.keys())
+        self.given = kwargs
         return
 
+    @property
+    def dim(self):
+        """ The dimension, if there is one """
+        return self.dims[0] if len(self.dims) == 1 else None
+
+    @property
+    def values(self):
+        """ The values, if there is one dimension """
+        return self.given[self.dim] if self.given and len(self.dims) == 1 else None
+
     def __repr__(self):
-        return f'by({self.dim}={self.values})'
+        if self.array is not None:
+            return f'by({self.array.tolist()}, dims={self.dims})'
+        if self.table is not None:
+            return f'by(table of {len(self.table)} rows by {sc.strjoin(self.dims)})'
+        return f'by({", ".join(f"{k}={v}" for k,v in self.given.items())})'
+
+    def grid(self, sim, convert=None):
+        """
+        The value for every combination of the levels of its dimensions
+
+        Returns the positions of the dimensions in the sim, and an array with one axis for each
+        """
+        convert = convert or (lambda v: v)
+        ds = [sim.dim_index(dim) for dim in self.dims]
+        strats = [sim.strats[d] for d in ds]
+        if self.array is not None:
+            shape = tuple(strat.n for strat in strats)
+            if self.array.shape != shape:
+                error('E603', f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
+            return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if convert is not None and self.array.size else self.array.copy()
+        if self.table is None:
+            out = np.ones([strat.n for strat in strats])
+            for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
+                vals = np.array([convert(v) for v in sc.toarray(vals)], dtype=float)
+                if len(vals) != strat.n:
+                    error('E603', f'ss.by({dim}=...) has {len(vals)} values, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                shape = [1]*len(strats)
+                shape[i] = strat.n
+                out = out*vals.reshape(shape)
+            return ds, out
+        out = np.zeros([strat.n for strat in strats])
+        for _,row in self.table.iterrows():
+            index = []
+            for strat in strats:
+                labels = [str(label) for label in strat.labels]
+                label = str(row[strat.name])
+                if label not in labels:
+                    error('E603', f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                index.append(labels.index(label))
+            out[tuple(index)] += convert(row['value'])
+        return ds, out
+
+    def per_group(self, sim, convert=None):
+        """ The value for each group of the sim """
+        ds, grid = self.grid(sim, convert)
+        return grid[tuple(sim.group_coords[:, d] for d in ds)]
+
+    def is_count(self):
+        """ Whether the values are whole numbers (so that a 1 is one person rather than everyone) """
+        if self.array is not None:
+            return bool(np.all(self.array == np.round(self.array)))
+        vals = self.table['value'] if self.table is not None else [v for vals in self.given.values() for v in sc.toarray(vals)]
+        return np.asarray(vals).dtype.kind in 'iu'
 
 
 class TimeValue:
@@ -1965,7 +2059,10 @@ class Mobility:
     People either commute (they keep their home, and spend a share of their time in
     other places, where they are exposed and expose others), visit (the same, but
     they are exposed to the residents of the places they go to and do not expose
-    anyone there), or migrate (they relocate).
+    anyone there), or migrate (they relocate). Or, with `kind='force'`, nobody moves
+    and the force of infection does, as in LASER: with `M[i,k]` the movement from
+    `i` to `k` (scaled by `away=`), each place keeps `1 − Σ_k M[i,k]` of its own
+    force of infection and receives `M[k,i]` of each other place's.
 
     A movement register (`data=`) is a table of events on given dates, with columns
     `date`, `from`, `to`, `n`, and optionally `states`. Each row moves `n` people from
@@ -1981,8 +2078,8 @@ class Mobility:
         model (gravity): a movement model (instead of `matrix`)
         matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there
         data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
-        kind (str): 'commute', 'visit', or 'migrate'; by default 'migrate' for a register and 'commute' otherwise
-        away (float): for commuting and visiting, the share of their time people spend away from home; the movement is rescaled to give it
+        kind (str): 'commute', 'visit', 'migrate', or 'force'; by default 'migrate' for a register and 'commute' otherwise
+        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that leaves it); the movement is rescaled to give it
 
     Examples:
         ```python
@@ -1997,8 +2094,8 @@ class Mobility:
             raise ValueError(errormsg)
         if kind is None:
             kind = 'migrate' if data is not None else 'commute'
-        if kind not in ['commute', 'visit', 'migrate']:
-            errormsg = f'The kind of ss.Mobility() is "commute", "visit", or "migrate", not "{kind}"'
+        if kind not in ['commute', 'visit', 'migrate', 'force']:
+            errormsg = f'The kind of ss.Mobility() is "commute", "visit", "migrate", or "force", not "{kind}"'
             raise ValueError(errormsg)
         if data is not None and kind != 'migrate':
             errormsg = f'A movement register moves people from one place to another, so its kind is "migrate", not "{kind}"'
@@ -2096,6 +2193,12 @@ class Mobility:
         np.fill_diagonal(out, 1 - out.sum(axis=1))
         return out
 
+    def coupling(self, strat):
+        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives """
+        share = self.time_share(strat)
+        moved = share - np.diag(np.diag(share)) # The share of each place's force that goes to each other place
+        return moved.T + np.diag(np.diag(share))
+
 
 class Strat:
     """
@@ -2148,6 +2251,10 @@ class Strat:
             if np.any(vals < 0):
                 error('E306', f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
+        self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
+        if isinstance(split, by):
+            self.joint = split
+            split = None
         if split is not None:
             split = np.array(split, dtype=float)
             if len(split) != self.n:
@@ -2177,7 +2284,7 @@ class Strat:
     def spec(self):
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist(), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states,
+        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states,
                     mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property

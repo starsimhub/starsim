@@ -66,8 +66,8 @@ class Mixing:
             errormsg = f'The model has more than one spatial dimension ({sc.strjoin(sim.strats[d].name for d in spaces)}); a person is in one place at a time, so combine them into one'
             raise ValueError(errormsg)
         self.space = spaces[0] if spaces else None # The position of the spatial dimension
-        self.time_share = None # For commuting: the share of their time that people from each place spend in each place
-        self.visit = False
+        self.time_share = None # For commuting and visiting: the share of their time that people from each place spend in each place; for a moving force of infection, the share of each place's force that each place receives
+        self.present = False # Whether the time share also changes who is present in each place (for commuting)
         self.migration = None # For migration: the rate of moving from each place to each place
         self.register = None # For a movement register: the mobility that holds it; its events are worked out once the sim has a timeline
         self._events = None
@@ -77,7 +77,9 @@ class Mixing:
             mobility = strat.mobility
             if mobility is not None and mobility.kind in ['commute', 'visit']:
                 self.time_share = mobility.time_share(strat)
-                self.visit = mobility.kind == 'visit' # Visitors are exposed to the residents of a place, and do not expose anyone there
+                self.present = mobility.kind == 'commute' # Visitors are exposed to the residents of a place, and do not expose anyone there
+            elif mobility is not None and mobility.kind == 'force':
+                self.time_share = mobility.coupling(strat)
             elif mobility is not None and mobility.data is not None:
                 self.register = mobility
             elif mobility is not None:
@@ -106,7 +108,7 @@ class Mixing:
         num = np.bincount(places, weights=infectious, minlength=n_places)
         den = np.bincount(places, weights=n, minlength=n_places)
         share = self.time_share
-        if share is not None and not self.visit: # Who is present in each place
+        if share is not None and self.present: # Who is present in each place
             num, den = num @ share, den @ share
         prev = np.divide(num, den, out=np.zeros(n_places), where=den>0)
         return prev if share is None else share @ prev
@@ -142,7 +144,7 @@ class Mixing:
             elif isinstance(net, ss.Network):
                 n_contacts = net.pars.get('n_contacts')
                 kind = type(net).__name__
-                if n_contacts is None or not isinstance(net, (ss.RandomNet, ss.StaticNet)):
+                if n_contacts is None or not isinstance(net, (ss.RandomNet, ss.StaticNet, ss.PartnerNet)):
                     ss.error('E804', f'cannot run with solver="{sim.solver}": {kind} has no compartmental approximation yet. Run with solver="abm".')
                 contacts = self.mean(n_contacts)
                 what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim.unit or "step"}'
@@ -151,6 +153,28 @@ class Mixing:
                 elif approx is None:
                     ss.note(what, sim=sim)
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=contacts, name=net.name))
+        if self.space is not None and any(term.kind == 'matrix' for term in self.terms):
+            self.init_space() # A contact matrix can add an age stratification, which changes the groups
+            for term in self.terms:
+                if term.kind == 'matrix':
+                    self.within_places(term)
+        return
+
+    def within_places(self, term):
+        """
+        Make a contact matrix act within each place
+
+        The cells of the matrix become pairs of a place and a level, and the movement
+        between places applies to each level: people mix by the matrix with the people
+        present where they are.
+        """
+        n_places = self.sim.strats[self.space].n
+        levels = term.cells if 'cells' in term else self.sim.group_coords[:, term.dim]
+        size = term.matrix.shape[0]
+        share = self.time_share if self.time_share is not None else np.eye(n_places)
+        term.cells = self.places*size + levels
+        term.pre = np.kron(share, np.eye(size)) if self.present else None # Who is present in each place
+        term.matrix = np.kron(share, term.matrix)
         return
 
     def age_matrix(self, net, beta):
@@ -217,13 +241,13 @@ class Mixing:
             elif term.kind == 'homogeneous':
                 total = n.sum()
                 out = out + (term.contacts*infectious.sum()/total if total else 0.0)
-            elif self.space is not None:
-                ss.error('E804', f'cannot run the contact matrix "{term.name}" with solver="{self.sim.solver}" in a model with places: mixing by age within each place has no compartmental form yet. Run with solver="abm".')
             else:
                 levels = term.cells if 'cells' in term else self.sim.group_coords[:, term.dim]
                 size = term.matrix.shape[0]
                 num = np.bincount(levels, weights=infectious, minlength=size)
                 den = np.bincount(levels, weights=n, minlength=size)
+                if term.get('pre') is not None: # Who is present in each place
+                    num, den = num @ term.pre, den @ term.pre
                 prev = np.divide(num, den, out=np.zeros(size), where=den>0)
                 out = out + (term.matrix @ prev)[levels]
         return out
@@ -335,6 +359,10 @@ class Engine:
                     local = local*first
                     collapse = collapse - levels*int(sim.group_mults[d])
                 flags.append(flag)
+            if sim.joint is not None and all(flags[d] for d in sim.joint[0]): # A split over several dimensions at once replaces the product of their own splits
+                ds, grid = sim.joint
+                product = np.prod([sim.strats[d].split[coords[:, d]] for d in ds], axis=0)
+                split = split*np.divide(grid[tuple(coords[:, d] for d in ds)], product, out=np.zeros(sim.n_groups), where=product>0)
             self.applies[state.name] = np.array(flags, dtype=bool)
             self.state_split[state.name] = split
             self.inflow_splits[state.name] = inflow
@@ -461,13 +489,8 @@ class Engine:
         return self.cache[key]
 
     def by_group(self, by):
-        """ Expand a value for each level of a dimension to a value for each group """
-        sim = self.sim
-        d = sim.dim_index(by.dim)
-        vals = np.array([self.convert(v) for v in by.values], dtype=float)
-        if len(vals) != sim.strats[d].n:
-            ss.error('E603', f'ss.by({by.dim}=...) has {len(vals)} values, but "{by.dim}" has {sim.strats[d].n} levels ({sc.strjoin(sim.strats[d].labels)}).')
-        return vals[sim.group_coords[:, d]]
+        """ Expand a value for each level of one or more dimensions to a value for each group """
+        return by.per_group(self.sim, self.convert)
 
     def init_adjust(self):
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
@@ -611,23 +634,21 @@ class Engine:
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
-            if isinstance(init, ss.by): # A value for each level of a dimension: a number of people, or a fraction of the people at that level
+            if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
                 sim = self.sim
-                strat = sim.strats[sim.dim_index(init.dim)]
-                given = np.asarray(init.values)
-                vals = given.astype(float)
-                if len(vals) != strat.n:
-                    ss.error('E603', f'the initial value of "{state.name}" has {len(vals)} values, but "{init.dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                ds, grid = init.grid(sim)
+                index = tuple(sim.group_coords[:, d] for d in ds)
+                cells = np.ravel_multi_index(index, grid.shape) # The combination of levels each group is in
+                split = np.bincount(cells, weights=sim.group_split, minlength=grid.size)[cells] # The share of people at that combination
                 if state.people:
-                    size = self.total_pop*strat.split
-                    count = (vals > 1) | ((vals == 1) & (given.dtype.kind in 'iu')) # As for a single value: an integer 1 is one person, and 1.0 is everyone
-                    vals = np.where(count, np.divide(vals, size, out=np.zeros(strat.n), where=size>0), vals)
-                    fracs[state.name] = vals[sim.group_coords[:, sim.dim_index(init.dim)]]
+                    vals = grid[index] # For each group
+                    size = self.total_pop*split
+                    count = (vals > 1) | ((vals == 1) & init.is_count()) # As for a single value: an integer 1 is one person, and 1.0 is everyone
+                    fracs[state.name] = np.where(count, np.divide(vals, size, out=np.zeros(sim.n_groups), where=size>0), vals)
                 else:
-                    levels = sim.group_coords[:, sim.dim_index(init.dim)]
-                    share = np.divide(self.state_split[state.name], strat.split[levels], out=np.zeros(sim.n_groups), where=strat.split[levels]>0) # Its split over the other dimensions
-                    counts[state.name] = vals.sum()
-                    self.state_split[state.name] = share*vals[levels]/max(vals.sum(), 1e-300)
+                    share = np.divide(self.state_split[state.name], split, out=np.zeros(sim.n_groups), where=split>0) # Its split over the other dimensions
+                    counts[state.name] = grid.sum()
+                    self.state_split[state.name] = share*grid[index]/max(grid.sum(), 1e-300)
                 continue
             if not state.people:
                 counts[state.name] = float(init)
@@ -956,6 +977,8 @@ class Compartmental(Engine):
     transitions into a flat list of flows, each with a source compartment, a rate,
     and the compartments it feeds. Every solver steps the same list of flows.
     """
+    max_bytes = 500e6 # The most memory that run_many() may use for the values of each group; above it, only the totals are kept
+
     def __init__(self, module, sim):
         super().__init__(module, sim)
         self.n_groups = sim.n_groups
@@ -1484,8 +1507,6 @@ class Compartmental(Engine):
                     for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
                         check(leaf)
                 starts.append(len(ops))
-            if any(term.kind != 'homogeneous' for term in mixing.terms) and mixing.space is not None:
-                raise NotImplementedError
         except NotImplementedError:
             self.program = False
             return
@@ -1500,11 +1521,11 @@ class Compartmental(Engine):
                 levels[t] = mixing.places
                 sizes[t] = sim.strats[mixing.space].n
                 share = mixing.time_share
-                mats[t] = [None if mixing.visit else share, share]
+                mats[t] = [share if mixing.present else None, share]
             elif term.kind != 'homogeneous':
                 levels[t] = term.cells if 'cells' in term else sim.group_coords[:, term.dim]
                 sizes[t] = len(term.matrix)
-                mats[t] = [None, term.matrix]
+                mats[t] = [term.get('pre'), term.matrix]
         size = sizes.max()
         pre, post = np.zeros((nt, size, size)), np.zeros((nt, size, size))
         for t,(a,b) in enumerate(mats):
@@ -1735,8 +1756,9 @@ class Compartmental(Engine):
         Args:
             seeds (list): the seed of each run, as would be given to the sim as `rand_seed`
 
-        Returns each result that is a single series, as runs by steps. The results that are
-        kept by group are not: only the totals come back from the kernels.
+        Returns each result that is a single series, as runs by steps, and (as `out.groups`) the
+        values by group of the results that keep them, as runs by steps by groups, unless that
+        would take more than `max_bytes` of memory.
         """
         graph = self.graph
         res = self.mod.results
@@ -1750,7 +1772,21 @@ class Compartmental(Engine):
         self.sim.pars.rand_seed = base
         states = list(graph.states)
         state_of = np.array([states.index(comp.state.name) for comp in self.comps])
-        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, state_of, len(states))
+        n_flows = self.program.n_trans + len(self.program.mov_mat)
+        by_group = self.sim.strats != [] and len(seeds)*self.mod.t.npts*(len(states) + n_flows)*self.n_groups*8 <= self.max_bytes
+        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, state_of, len(states), by_group)
+        groups = sc.objdict()
+        if by_group:
+            for i,name in enumerate(states):
+                groups[f'n_{name}'] = stocks[:, :, i, :]
+            for name,ind in self.tr_index.items():
+                groups[name] = flows[:, :, ind, :]
+            if 'new_infections' in res and 'new_infections' not in graph.transitions:
+                groups.new_infections = sum(groups[tr.name] for tr in graph.transmissions)
+            for key in list(groups.keys()):
+                if getattr(res.get(key), 'strata', None) is None:
+                    del groups[key]
+        stocks, flows = stocks.sum(axis=-1), flows.sum(axis=-1)
         n = sc.objdict({name:stocks[:, :, i] for i,name in enumerate(states)})
         new = sc.objdict({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
         out = sc.objdict({f'n_{name}':vals for name,vals in n.items()})
@@ -1762,6 +1798,10 @@ class Compartmental(Engine):
             out[f'cum_{name}'] = np.cumsum(out[name], axis=-1)
         if 'cum_infections' in res and 'new_infections' in out:
             out.cum_infections = np.cumsum(out.new_infections, axis=-1)
+        for key in list(groups.keys()):
+            if f'cum_{key}' in res and getattr(res[f'cum_{key}'], 'strata', None) is not None:
+                groups[f'cum_{key}'] = np.cumsum(groups[key], axis=1)
+        out.groups = groups
         self.cache.clear()
         return out
 

@@ -704,23 +704,26 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg
 
 
 @jit
-def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_trans, reg, state_of, n_states):
+def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_trans, reg, state_of, n_states, by_group):
     """
-    Take every step of many runs that differ only in their seed, keeping the totals over groups
+    Take every step of many runs that differ only in their seed
 
     Args:
         seeds (array): the seed of each run
         state_of (array): the state that each compartment is part of
         n_states (int): the number of states
+        by_group (bool): whether to keep the values of each group, or only their totals
         (the others are as for `run()`)
 
     Returns the number in each state at the start of each step, and the total of each transition and
-    mover over each step, both as runs by steps by states (or transitions).
+    mover over each step, both as runs by steps by states (or transitions) by groups (one, the total,
+    unless `by_group`).
     """
     nc, ng = y0.shape
     nflows = p.n_trans + len(p.mov_mat)
-    stocks = np.zeros((len(seeds), npts, n_states))
-    flows = np.zeros((len(seeds), npts, nflows))
+    nk = ng if by_group else 1
+    stocks = np.zeros((len(seeds), npts, n_states, nk))
+    flows = np.zeros((len(seeds), npts, nflows, nk))
     y = np.empty_like(y0)
     w = workspace(y, p)
     whole = solver >= 2 and solver != 5
@@ -732,13 +735,13 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
             set_step(p, ti, fixed, mult, consts, rel_trans)
             for c in range(nc):
                 for g in range(ng):
-                    stocks[r, ti, state_of[c]] += y[c, g]
+                    stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
             step(y, p, w, dt, n_sub, solver, now)
             if len(reg.src):
                 apply_events(y, reg, ti + 1, whole)
             for f in range(nflows):
                 for g in range(ng):
-                    flows[r, ti, f] += now[f, g]
+                    flows[r, ti, f, g if by_group else 0] += now[f, g]
     return stocks, flows
 
 

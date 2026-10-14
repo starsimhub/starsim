@@ -364,11 +364,8 @@ class Selector:
         """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
         sim = self.sim
         if isinstance(val, ss.by):
-            d = sim.dim_index(val.dim)
-            vals = np.array(val.values, dtype=float)
-            if len(vals) != sim.strats[d].n:
-                ss.error('E603', f'ss.by({val.dim}=...) has {len(vals)} values, but "{val.dim}" has {sim.strats[d].n} levels ({sc.strjoin(sim.strats[d].labels)}).')
-            return vals[self.dim(val.dim)]
+            ds, grid = val.grid(sim)
+            return grid[tuple(self.dim(sim.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):
             val = val(sim)
         if isinstance(val, ss.TimePar) and convert is not None:

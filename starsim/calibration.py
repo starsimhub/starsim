@@ -1298,6 +1298,66 @@ def mismatch(sim, df=None, weights=None, gof=None):
     return total/wsum if wsum else np.nan
 
 
+def likelihoods(sim, df=None, likelihood=None):
+    """ The likelihood of each data series: given at calibration time (by column or result name), else declared on the outcome, else None """
+    df = sim.data if df is None else df
+    out = sc.objdict()
+    for col in df.columns:
+        res = data.match(sim, col)
+        given = (likelihood or {}).get(col, (likelihood or {}).get(res.name))
+        if given is None:
+            for mod in sim.declared:
+                if mod.name == res.module and res.name in mod.graph.outcomes:
+                    given = mod.graph.outcomes[res.name].likelihood
+        out[col] = given
+    return out
+
+
+def logpdf(dist, observed, model):
+    """
+    The log-likelihood of each observed value, when the model's value is the mean of the distribution
+
+    The distribution's other parameters are taken as given (a parameter that is an
+    `ss.par` takes its current value). Supported: `ss.poisson`, `ss.nbinom` (with
+    `n` as the dispersion), `ss.normal` (with `scale`), and `ss.lognorm_ex` (with `std`).
+    """
+    pars = {key:(val.raw if isinstance(val, ss.par) else val) for key,val in dist.pars.items()}
+    mean = np.maximum(model, 1e-9)
+    if isinstance(dist, ss.poisson):
+        return sps.poisson.logpmf(observed, mean)
+    elif isinstance(dist, ss.nbinom):
+        n = pars['n']
+        return sps.nbinom.logpmf(observed, n, n/(n + mean))
+    elif isinstance(dist, ss.normal):
+        return sps.norm.logpdf(observed, model, pars['scale'])
+    elif isinstance(dist, ss.lognorm_ex):
+        sigma2 = np.log1p(pars['std']**2/mean**2)
+        return sps.lognorm.logpdf(observed, s=np.sqrt(sigma2), scale=mean*np.exp(-sigma2/2))
+    errormsg = f'{type(dist).__name__} cannot be used as a likelihood; use ss.poisson(), ss.nbinom(n=...), ss.normal(scale=...), or ss.lognorm_ex(std=...)'
+    raise TypeError(errormsg)
+
+
+def loglik(sim, df=None, likelihood=None, weights=None, by_series=False):
+    """
+    The log-likelihood of a sim's data (larger is better): the sum over the series, which are treated as independent
+
+    Args:
+        sim (`ss.Sim`): a sim that has been run
+        df (df): the data, if not the sim's
+        likelihood (dict): the likelihood of each series, if not declared on its outcome
+        weights (dict): a multiplier on each series' log-likelihood (default 1)
+        by_series (bool): return a dict of the log-likelihood of each series instead of the total
+    """
+    liks = likelihoods(sim, df, likelihood)
+    out = sc.objdict()
+    for col,(expected,model) in compare(sim, df).items():
+        if liks[col] is None:
+            errormsg = f'The data series "{col}" has no likelihood; declare one on its outcome (ss.outcome(..., likelihood=ss.poisson())) or pass likelihood=dict({col}=...)'
+            raise ValueError(errormsg)
+        out[col] = (weights or {}).get(col, 1.0)*logpdf(liks[col], expected, model).sum()
+    return out if by_series else float(sum(out.values()))
+
+
 class Fit(sc.prettyobj):
     """
     The result of fitting a sim to its data; see `ss.fit()`
@@ -1307,10 +1367,12 @@ class Fit(sc.prettyobj):
         pars (dict): the best-fit value of each fitted parameter; can be passed to `ss.Sim(pars=...)`
         table (df): parameter, initial value, best fit, and bounds
         before (`ss.Sim`): the sim with the initial values, already run
-        mismatch (float): the goodness of fit of the calibrated sim
+        mismatch (float): the goodness of fit of the calibrated sim, or its negative log-likelihood if the fit used likelihoods
+        measure (str): what `mismatch` measures
         trials (df): every evaluation
     """
-    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before):
+    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure='goodness of fit'):
+        self.measure = measure
         self.sim = sim
         self.before = before
         self.pars = pars
@@ -1325,7 +1387,7 @@ class Fit(sc.prettyobj):
         """ Print the estimates and the goodness of fit before and after """
         print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
         print(self.table.to_string(index=False))
-        print(f'Goodness of fit: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after')
+        print(f'{self.measure.capitalize()}: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after')
         for par in self.table.itertuples():
             span = par.high - par.low
             if min(par.best - par.low, par.high - par.best) < 0.01*span:
@@ -1352,7 +1414,7 @@ class Fit(sc.prettyobj):
         return ss.return_fig(fig)
 
 
-def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
+def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
     """
     Fit a sim's parameters to its data; usually called as `sim.calibrate()`
 
@@ -1364,6 +1426,7 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
         pars (list): the names of the parameters to fit (default: all that have bounds)
         data (df): the data to fit to (default: the sim's data)
         weights (dict): the relative weight of each data series (default: equal)
+        likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim
         method (str): 'nelder-mead' (the default for a deterministic sim), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
         scan (int): for the SciPy methods, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from the best of them
@@ -1389,15 +1452,38 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
     base = sim.new(verbose=0)
     if data is not None:
         base.data = data
-    probe = sim.new(verbose=0).init() # To find the parameters and check the data
+    probe = sim.new(verbose=0) # To find the parameters and check the data
+    if data is not None:
+        probe.data = data
+    probe.init()
     if probe.data is None:
         ss.error('E1302', 'calibrate() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit.')
+    verbose = sc.ifelse(verbose, ss.options.verbose)
+    liks = likelihoods(probe, likelihood=likelihood)
+    use_lik = all(lik is not None for lik in liks.values()) and gof is None
+    used = [id(val) for lik in liks.values() if use_lik and lik is not None for val in lik.pars.values()]
+    unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if id(val) not in used]
     fitted = sc.objdict()
     for mod in probe.declared:
         for name,p in mod.graph.pars.items():
+            if id(p) in unused: # A parameter of a likelihood that is not used in this fit
+                continue
+            given = mod.pars.get(name)
+            if isinstance(given, ss.par) and given.bounds is not None: # Bounds given with the sim's pars, e.g. pars=dict(k=ss.par(3, bounds=[0.1, 100]))
+                p = given
             if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
                 key = name if sum(name in m.graph.pars for m in probe.declared) == 1 else f'{mod.name}.{name}'
                 fitted[key] = p
+    n_model = len(fitted)
+    if use_lik:
+        for col,lik in liks.items(): # A parameter of a likelihood given at calibration time, with bounds, is fitted too
+            for key,val in lik.pars.items():
+                if isinstance(val, ss.par) and val.module is None and val.bounds is not None and (pars is None or val.name in sc.tolist(pars)):
+                    fitted[val.name or f'{col}_{key}'] = val
+        if verbose:
+            print(f'Fitting by maximum likelihood: the sum of the log-likelihoods of {sc.strjoin(liks.keys())}, treated as independent' + (' (weighted)' if weights else ''))
+    elif any(lik is not None for lik in liks.values()) and verbose:
+        print(f'Note: not every data series has a likelihood, so the likelihoods of {sc.strjoin([k for k,v in liks.items() if v is not None])} are not used')
     if not fitted:
         ss.error('E1301', 'calibrate() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
     names = list(fitted.keys())
@@ -1406,15 +1492,22 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
     x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)
     types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in fitted.values()] # Keep the unit of typed values
     logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are searched on a log scale
-    verbose = sc.ifelse(verbose, ss.options.verbose)
     if verbose and logs.any():
         print(f'Searching on a log scale: {sc.strjoin(np.array(names)[logs])}')
     stochastic = probe.solver not in ['ode']
     method = sc.ifelse(method, 'optuna' if stochastic else 'nelder-mead')
     n_runs = sc.ifelse(n_runs, 1)
 
+    external = [i >= n_model for i in range(len(fitted))] # Parameters of a likelihood given at calibration time
+
     def to_pars(x):
-        return {name:(cls(val) if cls is not None else float(val)) for name,val,cls in zip(names, x, types)}
+        for p,val,ext in zip(fitted.values(), x, external):
+            if ext:
+                p.value = float(val)
+        return {name:(cls(val) if cls is not None else float(val)) for name,val,cls,ext in zip(names, x, types, external) if not ext}
+
+    def measure(sim):
+        return -loglik(sim, likelihood=likelihood, weights=weights) if use_lik else mismatch(sim, weights=weights, gof=gof)
 
     runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
     runner.data = base.data
@@ -1430,7 +1523,7 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
 
     trials = []
     def objective(x):
-        values = [mismatch(run(x, seed=None if n_runs == 1 else i + 1), weights=weights, gof=gof) for i in range(n_runs)]
+        values = [measure(run(x, seed=None if n_runs == 1 else i + 1)) for i in range(n_runs)]
         value = float(np.mean(values))
         trials.append(dict(zip(names, x), mismatch=value))
         return value
@@ -1463,10 +1556,199 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
         result = spo.minimize(lambda z: objective(decode(z)), encode(start), method=method, bounds=bounds, options=options)
         best = decode(result.x)
 
-    best_pars = sc.objdict(to_pars(best))
-    after = run(best, fresh=True)
     before = run(x0, fresh=True)
+    after = run(best, fresh=True) # Last, so a likelihood's own parameters keep their best values
+    best_pars = sc.objdict(zip(names, [cls(val) if cls is not None else float(val) for val,cls in zip(best, types)]))
     table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
     out = Fit(sim=after, before=before, pars=best_pars, table=table, trials=pd.DataFrame(trials), method=method,
-              mismatch=mismatch(after, weights=weights, gof=gof), mismatch_before=mismatch_before)
+              mismatch=measure(after), mismatch_before=mismatch_before, measure='negative log-likelihood' if use_lik else 'goodness of fit')
     return out
+
+
+def split_data(df, holdout=0.25, folds=None):
+    """
+    Split data into the part to fit to and the part to predict, for each fold
+
+    Each series is split on its own times. With a fraction, the last `holdout` of
+    each series' points is held out; with `folds=k`, that part is cut into k blocks,
+    and fold j fits to everything before block j and predicts block j. With a date
+    or time, everything from it on is held out.
+
+    Returns a list of (fitting data, held-out data) pairs, one per fold.
+    """
+    k = folds or 1
+    out = []
+    for j in range(k):
+        train = df.copy().astype(float)
+        test = df.copy().astype(float)
+        for col in df.columns:
+            ok = np.flatnonzero(np.isfinite(df[col].values.astype(float)))
+            if sc.isnumber(holdout) and 0 < holdout < 1:
+                n_out = max(k, int(np.ceil(holdout*len(ok))))
+                blocks = np.array_split(ok[len(ok)-n_out:], k)
+                predict = blocks[j]
+            else:
+                if k > 1:
+                    errormsg = 'folds= needs holdout= to be a fraction'
+                    raise ValueError(errormsg)
+                index = df.index.values
+                after = (np.array([ss.date(t).years for t in index]) >= ss.date(holdout).years) if not sc.isnumber(index[0]) else (index.astype(float) >= float(holdout))
+                predict = ok[after[ok]]
+            if not len(predict) or predict[0] == ok[0]:
+                errormsg = f'Holding out {holdout} leaves no data to fit to, or none to predict, for "{col}"'
+                raise ValueError(errormsg)
+            fit_part = ok[ok < predict[0]]
+            train.iloc[np.setdiff1d(np.arange(len(df)), fit_part), train.columns.get_loc(col)] = np.nan
+            test.iloc[np.setdiff1d(np.arange(len(df)), predict), test.columns.get_loc(col)] = np.nan
+        out.append((train, test))
+    return out
+
+
+class ModelComparison(sc.prettyobj):
+    """
+    The result of comparing models by how well they predict held-out data; see `ss.compare_models()`
+
+    Attributes:
+        fits (dict): each model's `ss.Fit` (a list of them, one per fold, if there are several folds)
+        table (df): the fitted parameters, the error on the data fitted to, the prediction error, and the rank of each model
+        holdout (str): a description of what was held out
+        measure (str): how the prediction error is measured
+    """
+    def __init__(self, fits, table, holdout, measure, splits, clear=True):
+        self.fits = fits
+        self.table = table
+        self.holdout = holdout
+        self.measure = measure
+        self.splits = splits
+        self.clear = clear
+        return
+
+    def summarize(self):
+        """ Print the table """
+        print(f'held out: {self.holdout}')
+        print(self.table.to_string())
+        print(f'prediction error is {self.measure} on held-out data (lower is better)')
+        if not self.clear:
+            print('the spread of the prediction error across folds is larger than the difference between the best two models, so there is no clear difference between them')
+        return self.table
+
+    def to_df(self):
+        """ The table, as a dataframe """
+        return self.table
+
+    def plot(self, **kwargs):
+        """ Plot each model's fit and prediction against the data, with the held-out data hollow """
+        train, test = self.splits[-1]
+        cols = list(train.columns)
+        fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kwargs)
+        for ax,col in zip(axs.flatten(), cols):
+            for label,fits in self.fits.items():
+                fit = sc.tolist(fits)[-1]
+                res = data.match(fit.sim, col)
+                ax.plot(res.timevec, res.values, label=label, alpha=0.8)
+            ax.scatter(train.index, train[col], c='k', s=15, label='Fitted to', zorder=10)
+            ax.scatter(test.index, test[col], facecolors='none', edgecolors='k', s=15, label='Held out', zorder=10)
+            ax.set_title(col)
+            ax.legend(frameon=False)
+        sc.figlayout(fig=fig)
+        return ss.return_fig(fig)
+
+
+def compare_models(sims, data=None, holdout=0.25, folds=None, verbose=None, **kwargs):
+    """
+    Compare models by how well they predict data they were not fitted to
+
+    Each model is fitted (with `sim.calibrate()`) to all but the last part of each
+    data series, run forward over that part, and scored on it: by the default
+    goodness of fit, or by the log predictive density if every series has a likelihood.
+    A model with more parameters usually fits better; the prediction error needs no
+    separate penalty for them.
+
+    Args:
+        sims (list/dict): the sims to compare; labeled by their `label`, else by position (or by the keys of a dict)
+        data (df/str): the data, attached to every sim (default: each sim's own data, which must be the same for all)
+        holdout (float/date): the fraction of each series to hold out (default: the last 25%), or the date (or time) from which to hold it out
+        folds (int): if given, repeat the comparison with this many cut points over the held-out part (fit to the first part, predict the next block), and report the mean and spread of the prediction error
+        verbose (bool): whether to print the table
+        kwargs (dict): passed to `sim.calibrate()`, e.g. `weights=`
+
+    Returns:
+        An `ss.ModelComparison`; `comp.fits` holds each model's fit
+
+    Examples:
+        ```python
+        comp = ss.compare_models([sim_sir, sim_seir], data=df)
+        comp.plot()
+        ```
+    """
+    verbose = sc.ifelse(verbose, ss.options.verbose)
+    if isinstance(sims, dict):
+        labels, sims = list(sims.keys()), list(sims.values())
+    else:
+        sims = sc.tolist(sims)
+        labels = [sim.label or f'model {i+1}' for i,sim in enumerate(sims)]
+    if len(set(labels)) < len(labels):
+        labels = [f'{label} ({i+1})' for i,label in enumerate(labels)]
+
+    # Find the data
+    probes = []
+    for sim in sims:
+        probe = sim.new(verbose=0)
+        if data is not None:
+            probe.data = data
+        probes.append(probe.init())
+    dfs = [probe.data for probe in probes]
+    if any(df is None for df in dfs):
+        ss.error('E1302', 'compare_models() needs data: pass data=, or attach the same data to every sim.')
+    if data is None and not all(df.equals(dfs[0]) for df in dfs[1:]):
+        errormsg = 'The sims have different data; pass data= to compare them on the same data'
+        raise ValueError(errormsg)
+    df = dfs[0]
+    splits = split_data(df, holdout=holdout, folds=folds)
+
+    # Describe what was held out
+    train, test = splits[-1] if folds is None else (splits[0][0], pd.concat([s[1] for s in splits]).groupby(level=0).first())
+    spans = []
+    for col in df.columns:
+        times = test.index[np.isfinite(test[col].values.astype(float))]
+        fmt = lambda t: f'{round(t, 6):g}' if sc.isnumber(t) else str(t)
+        spans.append(f'{col}: {fmt(times[0])} to {fmt(times[-1])}')
+    what = f'the last {holdout:.0%} of each series' if sc.isnumber(holdout) and 0 < holdout < 1 else f'from {holdout}'
+    desc = f'{what}{f", in {folds} folds" if folds else ""} ({"; ".join(spans)})'
+
+    # Fit and predict
+    liks = [likelihoods(probe, likelihood=kwargs.get('likelihood')) for probe in probes]
+    use_lik = all(lik is not None for lk in liks for lik in lk.values()) and kwargs.get('gof') is None
+    fits = sc.objdict()
+    rows = []
+    for label,sim,probe in zip(labels, sims, probes):
+        fold_fits = []
+        fit_errors = []
+        errors = []
+        for train,test in splits:
+            fit = ss.fit(sim, data=train, verbose=False, **kwargs)
+            fold_fits.append(fit)
+            fit_errors.append(fit.mismatch)
+            if use_lik:
+                errors.append(-loglik(fit.sim, df=test, likelihood=kwargs.get('likelihood'), weights=kwargs.get('weights')))
+            else:
+                errors.append(mismatch(fit.sim, df=test, weights=kwargs.get('weights'), gof=kwargs.get('gof')))
+        fits[label] = fold_fits if folds else fold_fits[0]
+        row = dict(model=label, fitted_pars=len(fold_fits[0].pars), fit_error=np.mean(fit_errors), prediction_error=np.mean(errors))
+        if folds:
+            row['spread'] = np.std(errors)
+        rows.append(row)
+    table = pd.DataFrame(rows).set_index('model')
+    table['rank'] = table['prediction_error'].rank(method='min').astype(int)
+    table = table.sort_values('rank')
+
+    # Check whether the difference is larger than the spread
+    clear = True
+    if folds and len(table) > 1:
+        diff = table['prediction_error'].iloc[1] - table['prediction_error'].iloc[0]
+        clear = diff > table['spread'].iloc[:2].max()
+    measure = 'the negative log predictive density' if use_lik else 'the normalized absolute error' if kwargs.get('gof') is None else f'the goodness of fit ({kwargs["gof"]})'
+    comp = ModelComparison(fits=fits, table=table, holdout=desc, measure=measure, splits=splits, clear=clear)
+    if verbose:
+        comp.summarize()
+    return comp

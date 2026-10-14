@@ -529,8 +529,22 @@ class Sim(ss.Base):
         self.group_coords = np.indices(self.group_shape).reshape(len(self.strats), -1).T if self.strats else np.zeros((1, 0), dtype=int) # The level of each group in each dimension
         split = np.ones(self.n_groups)
         births = np.ones(self.n_groups)
+        joints = [strat.joint for strat in self.strats if strat.joint is not None]
+        if len(joints) > 1:
+            errormsg = 'Only one split= can cover several dimensions at once'
+            raise ValueError(errormsg)
+        self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
+        if joints:
+            ds, grid = joints[0].grid(self)
+            grid = grid/grid.sum()
+            for i,d in enumerate(ds): # Each dimension's own split is the total over the others
+                self.strats[d].split = grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
+                self.strats[d].guessed.pop('split', None)
+            self.joint = (ds, grid)
+            split *= grid[tuple(self.group_coords[:, d] for d in ds)]
         for d,strat in enumerate(self.strats):
-            split *= strat.split[self.group_coords[:, d]]
+            if self.joint is None or d not in self.joint[0]:
+                split *= strat.split[self.group_coords[:, d]]
             first = np.zeros(strat.n)
             first[0] = 1
             births *= (first if strat.kind == 'age' else strat.split)[self.group_coords[:, d]] # People are born into the youngest group
@@ -541,7 +555,7 @@ class Sim(ss.Base):
         for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
             if strat.kind != 'age':
                 setattr(self, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
-        if self.strats and self.pars.use_aging is None and any(strat.kind == 'age' for strat in self.strats):
+        if self.strats and 'use_aging' not in self.given and any(strat.kind == 'age' for strat in self.strats): # People age between age groups, unless told not to (by default, use_aging is turned off earlier when there are no demographics)
             self.pars.use_aging = True
         return
 
@@ -600,10 +614,23 @@ class Sim(ss.Base):
         """ In an agent-based run: assign each agent a level of every property they do not already have """
         people = self.people
         uids = people.auids
-        for strat in self.strats:
-            if strat.kind != 'age':
+        joint = self.joint[0] if self.joint is not None else []
+        for d,strat in enumerate(self.strats):
+            if strat.kind != 'age' and d not in joint:
                 rvs = getattr(self, f'rng_strat_{strat.name}').rvs(uids)
                 people[strat.attr][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+        if joint: # The levels of a joint split, together, given the age group if age is one of them
+            ds, grid = self.joint
+            ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
+            others = [i for i in range(len(ds)) if i not in ages]
+            grid = np.moveaxis(grid, ages + others, list(range(len(ds)))).reshape(len(ages) and self.strats[ds[ages[0]]].n or 1, -1) # Rows: the age group (one row if no age); columns: the other levels together
+            row = np.clip(np.digitize(people.age[uids], self.strats[ds[ages[0]]].edges) - 1, 0, grid.shape[0] - 1) if ages else np.zeros(len(uids), dtype=int)
+            cdf = np.cumsum(grid, axis=1)
+            cdf = cdf/np.maximum(cdf[:, -1:], 1e-300)
+            rvs = getattr(self, f'rng_strat_{self.strats[ds[others[0]]].name}').rvs(uids)
+            cell = np.minimum((cdf[row] <= rvs[:, None]).sum(axis=1), grid.shape[1] - 1)
+            for i,level in zip(others, np.unravel_index(cell, [self.strats[ds[i]].n for i in others])):
+                people[self.strats[ds[i]].attr][uids] = level
         return
 
     def agent_reasons(self, modules):

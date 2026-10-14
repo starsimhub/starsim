@@ -895,12 +895,15 @@ class MultiResult(sc.prettyobj):
         labels (list): the label (scenario) of each run
         label (str): a human-readable name
     """
-    def __init__(self, name, values, timevec, labels=None, label=None):
+    def __init__(self, name, values, timevec, labels=None, label=None, strata=None, like=None):
         self.name = name
         self.label = label or name
         self.values = np.asarray(values)
         self.timevec = timevec
         self.labels = labels
+        self.strata = strata # For a stratified result: the value of each group, as runs by steps by groups
+        self.strats = getattr(like, 'strats', None) # The stratifications, and the dimensions this result has, from a result of one run
+        self.dims = getattr(like, 'dims', None)
         return
 
     def __len__(self):
@@ -916,8 +919,28 @@ class MultiResult(sc.prettyobj):
     def median(self):
         return np.median(self.values, axis=0)
 
-    def select(self, run=None, scenario=None):
-        """ Select one run by position, or the runs of one scenario by its label """
+    def select(self, run=None, scenario=None, **dims):
+        """
+        Select one run by position, the runs of one scenario by its label, or groups of a stratified result
+
+        Args:
+            run (int): the position of one run; returns its values
+            scenario (str): the label of a scenario; returns its runs
+            dims (dict): for a stratified result, the dimension and the level (or levels) to keep, summing over the rest, as for `ss.Result.select()`
+
+        Examples:
+            ```python
+            msim = sim.run(n_runs=100)
+            msim.results.sir.n_I.select(age='0-4').quantiles()
+            ```
+        """
+        if dims:
+            keep = self._keep(dims)
+            out = MultiResult(self.name, self.strata[:, :, keep].sum(axis=-1), self.timevec, labels=self.labels,
+                              label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})', strata=self.strata[:, :, keep], like=self)
+            if run is not None or scenario is not None:
+                return out.select(run=run, scenario=scenario)
+            return out
         if run is not None:
             return self.values[run]
         keep = [i for i,label in enumerate(self.labels) if label == scenario]
@@ -925,6 +948,32 @@ class MultiResult(sc.prettyobj):
             errormsg = f'No runs are labelled "{scenario}"; the labels are {sorted(set(self.labels))}'
             raise KeyError(errormsg)
         return MultiResult(self.name, self.values[keep], self.timevec, labels=[self.labels[i] for i in keep], label=self.label)
+
+    def by(self, dim):
+        """ Split a stratified result by one dimension, summing over the rest: a dict of results, one per level """
+        strat = self._strat(dim)
+        return sc.objdict({str(label):self.select(**{dim:label}) for label in strat.labels})
+
+    def _strat(self, dim):
+        if self.strata is None:
+            errormsg = f'The result "{self.name}" is not kept by group across the runs, so there is nothing to select'
+            raise ValueError(errormsg)
+        names = self.dims or [strat.name for strat in self.strats]
+        if dim not in names:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
+            raise KeyError(errormsg)
+        return [strat for strat in self.strats if strat.name == dim][0]
+
+    def _keep(self, dims):
+        """ Which groups have the given levels """
+        coords = self.strats[0].sim_coords
+        names = [strat.name for strat in self.strats]
+        keep = np.ones(self.strata.shape[-1], dtype=bool)
+        for dim,levels in dims.items():
+            strat = self._strat(dim)
+            inds = [strat.index(level) for level in sc.tolist(levels)]
+            keep &= np.isin(coords[:, names.index(dim)], inds)
+        return keep
 
     def diff(self, baseline):
         """
@@ -994,9 +1043,12 @@ class MultiResults(ss.Results):
             modres = sc.objdict()
             for key,res in mod.results.items():
                 if isinstance(res, ss.Result) and np.ndim(res.values) == 1:
-                    values = [np.asarray(sim.results[mod.name][key].values) for sim in sims if mod.name in sim.results and key in sim.results[mod.name]]
+                    found = [sim.results[mod.name][key] for sim in sims if mod.name in sim.results and key in sim.results[mod.name]]
+                    values = [np.asarray(r.values) for r in found]
                     if len(values) == len(sims) and len({len(v) for v in values}) == 1:
-                        modres[key] = MultiResult(key, values, res.timevec, labels=labels, label=res.label)
+                        strata = [getattr(r, 'strata', None) for r in found]
+                        strata = np.stack(strata) if all(x is not None for x in strata) and len({x.shape for x in strata}) == 1 else None
+                        modres[key] = MultiResult(key, values, res.timevec, labels=labels, label=res.label, strata=strata, like=res)
             if len(modres):
                 nested[mod.name] = modres
         return MultiResults('MultiSim', nested=nested)
@@ -1022,17 +1074,23 @@ def restart_runs(sims, n_runs):
         runners.append(runner)
     labels = [sim.label for sim in runners for i in range(n_runs)]
     values = sc.ddict(list)
+    groups = sc.ddict(list)
     for sim in runners:
         seed = sim.pars.rand_seed
         for mod in sim.declared: # All the runs of each module are one call to the kernels
-            for key,vals in mod.engine.run_many(seed + np.arange(n_runs)).items():
+            out = mod.engine.run_many(seed + np.arange(n_runs))
+            for key,vals in out.pop('groups').items():
+                groups[mod.name, key].append(vals)
+            for key,vals in out.items():
                 values[mod.name, key].append(vals)
         sim.restart(rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
     nested = sc.objdict()
     for (modname,key),vals in values.items():
         res = runners[0].results[modname][key]
         if len(vals) == len(runners):
-            nested.setdefault(modname, sc.objdict())[key] = MultiResult(key, np.concatenate(vals), res.timevec, labels=labels, label=res.label)
+            strata = groups.get((modname, key))
+            strata = np.concatenate(strata) if strata is not None and len(strata) == len(runners) else None
+            nested.setdefault(modname, sc.objdict())[key] = MultiResult(key, np.concatenate(vals), res.timevec, labels=labels, label=res.label, strata=strata, like=res)
     msim = MultiSim(sims=runners)
     msim.results = MultiResults('MultiSim', nested=nested)
     return msim

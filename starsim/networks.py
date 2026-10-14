@@ -5,6 +5,8 @@ import inspect
 import itertools
 import numpy as np
 import numba as nb
+import scipy.stats as sps
+import scipy.optimize as spo
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -829,6 +831,215 @@ class RandomNet(RandomExactNet):
             target = source
         self.dist.jump() # Reset the RNG manually, as in RandomExactNet.get_edges
         return source, target
+
+
+class PartnerNet(DynamicNetwork):
+    """
+    Partnerships that form and dissolve, with a given number of partners at a time
+
+    The number of partners people have at any moment (`n_contacts`) is a target
+    for the whole population, not a fixed number for each person: partnerships end
+    at random, and people look for new ones at a rate that depends on how many
+    they already have, chosen so that the distribution of the number of partners
+    stays at the target. Everyone moves through it over time, as in EpiModel's
+    networks fitted to target statistics. The network starts at the target.
+
+    Args:
+        n_contacts (float/`ss.Dist`): the number of partners a person has at a time: a distribution over whole numbers (e.g. `ss.poisson(0.7)`), or a number, which is the mean of a Poisson
+        dur (float/`ss.dur`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit
+        concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
+        max_contacts (int): if given, nobody has more partners than this at once
+        beta (float): the default beta for each partnership
+
+    The realized network is recorded in the results (`mean_degree`, `concurrency`),
+    and `net.check()` compares it with the targets.
+
+    Examples:
+        ```python
+        # EpiModel's introductory network: 175 partnerships among 500 people, 110 people with two or more partners, nobody with four or more, and partnerships lasting 50 steps
+        net = ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)
+        ```
+    """
+    def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, beta=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            n_contacts = 1.0,
+            dur = 10,
+            concurrency = None,
+            max_contacts = None,
+            beta = 1.0,
+        )
+        self.update_pars(pars, **kwargs)
+        self.rng_degree = ss.random() # The number of partners each person starts with
+        self.rng_order  = ss.random() # The order in which people are paired
+        self.rng_seek   = ss.random() # Whether each person looks for a partner on this step
+        self.rng_end    = ss.random() # When each partnership ends, if it ends at a constant rate
+        self.rng_stubs  = ss.random() # For shuffling the partners people start with
+        self.waiting = None # Someone who looked for a partner on the last step and was left over
+        return
+
+    @staticmethod
+    def degree_dist(n_contacts, concurrency=None, max_contacts=None):
+        """ The target share of people with 0, 1, 2, ... partners at a time """
+        if sc.isnumber(n_contacts):
+            n_contacts = ss.poisson(lam=n_contacts)
+        pars = {k:v for k,v in n_contacts.pars.items()}
+        top = max_contacts if max_contacts is not None else None
+        if isinstance(n_contacts, ss.poisson):
+            mean = pars['lam']
+            k = np.arange(sc.ifelse(top, int(mean + 10*np.sqrt(mean) + 10)) + 1)
+            base = sps.poisson.pmf(k, mean)
+        elif isinstance(n_contacts, ss.constant):
+            mean = int(pars['v'])
+            k = np.arange(sc.ifelse(top, mean) + 1)
+            base = (k == mean).astype(float)
+        else: # Any other distribution, by sampling a copy of it
+            draws = np.round(sc.dcp(n_contacts).init(force=True).rvs(100_000)).astype(int)
+            mean = draws.mean()
+            k = np.arange(sc.ifelse(top, draws.max()) + 1)
+            base = np.bincount(np.clip(draws, 0, k[-1]), minlength=len(k)).astype(float)
+        if concurrency is None and max_contacts is None:
+            return base/base.sum()
+
+        def tilt(x): # Reweight the distribution exponentially in the number of partners and in having two or more
+            w = base*np.exp(x[0]*k + (x[1] if len(x) > 1 else 0)*(k >= 2))
+            return w/w.sum()
+        if concurrency is None:
+            x = [spo.brentq(lambda a: tilt([a]) @ k - mean, -50, 50)]
+        else:
+            x = spo.fsolve(lambda x: [tilt(x) @ k - mean, tilt(x)[2:].sum() - concurrency], [0, 0])
+        out = tilt(x)
+        if abs(out @ k - mean) > 1e-6 or (concurrency is not None and abs(out[2:].sum() - concurrency) > 1e-6):
+            errormsg = f'No distribution of the number of partners has a mean of {mean:n}{f", {concurrency:n} with two or more," if concurrency is not None else ""} and a maximum of {max_contacts}'
+            raise ValueError(errormsg)
+        return out
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        p = self.pars
+        self.dist_degree = self.degree_dist(p.n_contacts, p.concurrency, p.max_contacts)
+        if isinstance(p.dur, ss.Dist):
+            self.mean_dur = None
+        else:
+            dur = ss.solvers.convert(p.dur, sim.unit_base) if isinstance(p.dur, ss.TimePar) else p.dur
+            self.mean_dur = dur/self.t.dt.to(sim.unit_base).value # In steps
+            if self.mean_dur < 1:
+                errormsg = f'Partnerships of "{self.name}" last {self.mean_dur:n} steps on average; they need to last at least one'
+                raise ValueError(errormsg)
+        k = np.arange(len(self.dist_degree))
+        p_end = 1/(self.mean_dur if self.mean_dur is not None else self.dwell_mean())
+        ratio = np.divide(self.dist_degree[1:], self.dist_degree[:-1], out=np.zeros(len(k) - 1), where=self.dist_degree[:-1] > 0)
+        self.p_seek = np.minimum(np.append((k[:-1] + 1)*p_end*ratio, 0), 1) # Chosen so the target is the stationary distribution: those with k partners who gain one balance those with k+1 who lose one
+        return
+
+    def dwell_mean(self):
+        """ The mean of a distribution of durations, in steps """
+        return float(np.mean(sc.dcp(self.pars.dur).init(force=True).rvs(100_000)))
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('mean_degree', label='Mean number of partners', auto_plot=False),
+            ss.Result('concurrency', label='Share with two or more partners', auto_plot=False),
+        )
+        return
+
+    def degrees(self, uids):
+        """ The number of partners each person has """
+        size = int(uids.max()) + 1 if len(uids) else 0
+        counts = np.bincount(self.edges.p1, minlength=size)[:size] + np.bincount(self.edges.p2, minlength=size)[:size]
+        return counts[uids]
+
+    def end_times(self, p1):
+        """ How many steps each new partnership lasts """
+        if self.mean_dur is None:
+            return self.pars.dur.rvs(p1)
+        u = self.rng_end.rvs(p1)
+        return np.maximum(np.ceil(np.log1p(-u)/np.log1p(-1/self.mean_dur)), 1) # Geometric, so partnerships end at a constant rate
+
+    def pair(self, p1, p2):
+        """ Add partnerships between two lists of people, leaving out pairs who are already partners """
+        if len(self):
+            existing = set(zip(np.minimum(self.edges.p1, self.edges.p2).tolist(), np.maximum(self.edges.p1, self.edges.p2).tolist()))
+            new = zip(np.minimum(p1, p2).tolist(), np.maximum(p1, p2).tolist())
+            keep = np.array([pair not in existing for pair in new], dtype=bool)
+            p1, p2 = p1[keep], p2[keep]
+        keep = p1 != p2
+        p1, p2 = p1[keep], p2[keep]
+        self.append(p1=p1, p2=p2, beta=np.full(len(p1), self.pars.beta, dtype=ss_float), dur=self.end_times(p1))
+        return
+
+    def init_post(self):
+        """ Start at the target: give each person a number of partners, and pair them at random """
+        super().init_post(add_pairs=False)
+        uids = self.sim.people.alive.uids
+        cdf = np.cumsum(self.dist_degree)
+        degree = np.minimum(np.searchsorted(cdf, self.rng_degree.rvs(uids)), len(cdf) - 1)
+        stubs = np.repeat(uids, degree)
+        fisher_yates_shuffle(stubs, self.rng_stubs.rng.random(len(stubs)))
+        self.rng_stubs.jump() # Reset the RNG manually, as in RandomExactNet.get_edges
+        n = len(stubs)//2
+        self.pair(stubs[:n].view(ss.uids), stubs[n:2*n].view(ss.uids))
+        return
+
+    def add_pairs(self):
+        """ People look for partners at a rate that depends on how many they have, and those looking are paired at random """
+        uids = self.sim.people.alive.uids
+        degree = np.minimum(self.degrees(uids), len(self.p_seek) - 1)
+        prob = self.p_seek[degree]
+        seek = self.rng_seek.rvs(uids) < prob
+        if self.waiting is not None: # Someone left over last step looks again
+            seek |= (uids == self.waiting) & (prob > 0)
+        seekers = uids[seek]
+        seekers = seekers[np.argsort(self.rng_order.rvs(seekers), kind='stable')]
+        self.waiting = seekers[-1] if len(seekers) % 2 else None
+        n = len(seekers)//2
+        if n:
+            self.pair(seekers[:n], seekers[n:2*n])
+        return
+
+    def update_results(self):
+        super().update_results()
+        uids = self.sim.people.alive.uids
+        degree = self.degrees(uids)
+        self.results.mean_degree[self.ti] = degree.mean() if len(degree) else 0
+        self.results.concurrency[self.ti] = (degree >= 2).mean() if len(degree) else 0
+        return
+
+    def check(self, n_runs=3, output=False):
+        """
+        Run the sim again, and compare the network it makes with the network's targets
+
+        Reports, for each target (the mean number of partners, the share with two or
+        more, the maximum), the target, the mean over the second half of each run, and
+        the spread across runs; a target that is missed by more than the spread is a
+        `W402` warning.
+
+        Args:
+            n_runs (int): the number of runs
+            output (bool): return the table instead of printing it
+        """
+        rows = []
+        for i in range(n_runs):
+            run = self.sim.new(rand_seed=i + 1, verbose=0).run()
+            net = run.networks[self.name]
+            res = net.results
+            half = len(res.mean_degree)//2
+            rows.append(dict(mean_degree=res.mean_degree[half:].mean(), concurrency=res.concurrency[half:].mean(), max_contacts=net.degrees(run.people.alive.uids).max()))
+        df = sc.dataframe(rows)
+        k = np.arange(len(self.dist_degree))
+        targets = dict(mean_degree=self.dist_degree @ k, concurrency=self.dist_degree[2:].sum(), max_contacts=self.pars.max_contacts)
+        table = sc.dataframe(dict(target=[targets[c] for c in df.columns], realized=df.mean().values, spread=df.std().values), index=df.columns)
+        for name,row in table.iterrows():
+            if row.target is None:
+                continue
+            missed = row.realized > row.target if name == 'max_contacts' else abs(row.realized - row.target) > max(2*row.spread, 0.02*abs(row.target))
+            if missed:
+                ss.warn(f'W402 TargetStatsNotRecovered: the network "{self.name}" has {name} {row.realized:.3g}, against a target of {row.target:.3g}')
+        if output:
+            return table
+        print(table)
+        return
 
 
 class RandomSafeNet(DynamicNetwork):

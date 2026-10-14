@@ -117,6 +117,7 @@ beta = 0.05                                    # the same everywhere
 beta = ss.by(age=[0.08, 0.05, 0.03])           # one per age group
 beta = ss.by(age=[0.08, 0.05, 0.03], sex=[1.0, 0.8])     # one per age group and sex: the product of the two
 beta = ss.by(table)                            # a dataframe with a column per stratification and a value column
+pop  = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch'])   # an array with one axis per stratification
 ```
 
 `ss.by` names the stratification each axis belongs to, so values never depend on the order strata happen to be stored in. A value with fewer axes than the model is used for every level of the missing ones; `describe()` shows this (`beta: by age (3); the same for every patch (47)`). A value whose length does not match its stratification, such as four values for three age groups, raises `E603 ShapeError`, naming the parameter, the transition, and both lengths.
