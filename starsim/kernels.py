@@ -155,21 +155,22 @@ def split(n, a, b, weights, credit, out, comps, which, maps, scratch):
 
 
 @jit
-def step_binomial(y, p, w, dt, flows):
+def draw(y, p, w, dt, flows, tau):
     """
-    One timestep of the chain-binomial solver: one multinomial draw per compartment over the flows that leave it
+    Draw whole numbers of events over a time dt, and add them to the flows
 
-    Called by `step()`, which has worked out the rates.
+    For the chain-binomial solver, one multinomial draw per compartment over the flows
+    that leave it. For tau-leaping, a Poisson number of events for each flow. Called
+    by `step()`, which has worked out the rates.
     """
     ng = y.shape[1]
     rates, groups, new = w[0], w[3], w[7]
     total, left, n = groups[3], groups[4], groups[5]
     new[:] = y
-    flows[:] = 0
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
         src = p.src[p.src_flows[a]]
-        if src >= 0:
+        if src >= 0 and not tau:
             for g in range(ng):
                 total[g] = 0
                 for k in range(a, b):
@@ -181,6 +182,9 @@ def step_binomial(y, p, w, dt, flows):
             for g in range(ng):
                 if src < 0: # An inflow
                     n[g] = np.random.poisson(max(rates[f, g]*p.inflow[f, g]*dt, 0.0))
+                elif tau: # Cannot take more than are there
+                    n[g] = min(np.random.poisson(max(rates[f, g]*y[src, g]*dt, 0.0)), new[src, g])
+                    new[src, g] -= n[g]
                 else:
                     hazard = max(rates[f, g], 0.0)
                     n[g] = binomial(left[g], hazard/total[g]) if total[g] > 0 else 0.0
@@ -220,7 +224,7 @@ def step(y, p, w, dt, n_sub, solver, flows):
         p (Program): the flows
         w (tuple): the arrays to work in: see `workspace()`
         dt (float): the timestep
-        n_sub (int): for the ODE, the number of substeps (if 0, enough that no compartment turns over by more than a quarter in one)
+        n_sub (int): the number of substeps; if 0, for the ODE, enough that no compartment turns over by more than a quarter in one (tau-leaping chooses its own leaps)
         solver (int): which of `solvers` to use
         flows (array): filled in with the total of each transition and mover over the step
     """
@@ -232,6 +236,8 @@ def step(y, p, w, dt, n_sub, solver, flows):
     nflows = p.n_trans + len(p.mov_mat)
     stages = 4 if solver == 0 else 1
     h = dt
+    elapsed = 0.0 # For tau-leaping: how much of the timestep has been taken
+    fastest = 0.0
     sub = 0
     while True:
         for stage in range(stages):
@@ -328,25 +334,30 @@ def step(y, p, w, dt, n_sub, solver, flows):
                         for g in range(ng):
                             rates[f, g] = stack[0, g]*p.mult[f, g]
 
+            if solver == 3 or (sub == 0 and stage == 0 and n_sub <= 0): # The fastest rate at which any compartment is being left
+                fastest = 0.0
+                for f in range(nf):
+                    if p.src[f] >= 0:
+                        for g in range(ng):
+                            fastest = max(fastest, rates[f, g])
             if sub == 0 and stage == 0:
-                if solver == 2: # The stochastic solver takes it from here
-                    step_binomial(y, p, w, dt, flows)
-                    return
-                if n_sub <= 0: # Enough substeps that no compartment turns over by more than a quarter in one
-                    fastest = 0.0
-                    for f in range(nf):
-                        if p.src[f] >= 0:
-                            for g in range(ng):
-                                fastest = max(fastest, rates[f, g])
+                if solver < 2 and n_sub <= 0: # Enough substeps that no compartment turns over by more than a quarter in one
                     for m in range(len(p.mov_mat)):
                         for g in range(ng):
                             for k in range(ng):
                                 fastest = max(fastest, p.mov_mat[m, g, k])
-                    n_sub = max(int(np.ceil(fastest*dt/0.25)), 1)
+                    n_sub = int(np.ceil(fastest*dt/0.25))
+                n_sub = max(n_sub, 1)
                 h = dt/n_sub
                 for f in range(nflows):
                     for g in range(ng):
                         flows[f, g] = 0
+            if solver >= 2: # The stochastic solvers take it from here
+                if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
+                    h = min(dt - elapsed, 0.03/max(fastest, 1e-12))
+                draw(y, p, w, h, flows, solver == 3)
+                elapsed += h
+                continue
 
             # The rate of change of each compartment, and the rate of each transition and mover
             for c in range(nc):
@@ -395,7 +406,9 @@ def step(y, p, w, dt, n_sub, solver, flows):
                     for g in range(ng):
                         yt[c, g] = y[c, g] + ahead*dy[stage, c, g]
 
-        if stages == 1:
+        if solver >= 2:
+            pass
+        elif stages == 1:
             for c in range(nc):
                 for g in range(ng):
                     y[c, g] += h*dy[0, c, g]
@@ -410,7 +423,7 @@ def step(y, p, w, dt, n_sub, solver, flows):
                 for g in range(ng):
                     flows[f, g] += h/6*(df[0, f, g] + 2*df[1, f, g] + 2*df[2, f, g] + df[3, f, g])
         sub += 1
-        if sub >= n_sub:
+        if (solver == 3 and elapsed >= dt - 1e-12) or (solver != 3 and sub >= n_sub):
             break
     for c in range(nc):
         for g in range(ng):
@@ -428,7 +441,7 @@ def seed(value):
 
 #%% A whole run
 
-solvers = dict(rk4=0, euler=1, binomial=2)
+solvers = dict(rk4=0, euler=1, binomial=2, tau=3)
 
 @jit
 def set_step(p, ti, fixed, mult, consts, rel_trans):
@@ -526,3 +539,50 @@ def levels(raw):
         if raw[i] == raw[i]: # Not NaN
             out[i] = int(raw[i])
     return out
+
+
+@jit
+def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust, mult, dt):
+    """
+    The agents who could be infected this step, and the probability for each: one pass over the agents
+
+    Args:
+        susceptible (array): whether each agent is in the state, by UID
+        auids (array): the agents to consider
+        groups (array): the group of each agent, by UID
+        rate (array): the rate of infection for a person of average susceptibility, by group
+        rel_sus (array): the susceptibility of each agent, by UID
+        state_sus (float): the susceptibility of the state
+        adjust (array): the multiplier on the transition, by group
+        mult (float): any other multiplier on susceptibility
+        dt (float): the timestep
+
+    Returns the UIDs of the agents with some chance of infection, and that chance.
+    """
+    uids = np.empty(len(auids), dtype=np.int64)
+    probs = np.empty(len(auids))
+    usual = np.empty(len(rate)) # The probability for someone of average susceptibility, which is most people
+    for g in range(len(rate)):
+        usual[g] = -np.expm1(-max(rate[g]*1.0*state_sus*adjust[g]*mult, 0.0)*dt)
+    n = 0
+    for uid in auids: # Written every time and kept only if n advances, since a branch on who is susceptible cannot be predicted
+        g = groups[uid]
+        if rel_sus[uid] == 1:
+            prob = usual[g]
+        else:
+            prob = -np.expm1(-max(rate[g]*rel_sus[uid]*state_sus*adjust[g]*mult, 0.0)*dt) # In this order, to match the arithmetic of the general case
+        uids[n] = uid
+        probs[n] = prob
+        n += susceptible[uid] & (prob > 0)
+    return uids[:n], probs[:n]
+
+
+@jit
+def count_groups(members, auids, groups, collapse, n_groups):
+    """ The number of agents in a state, by the group they are counted in: one pass over the agents, with no list of who they are """
+    counts = np.zeros((4, n_groups)) # Four running counts, taken in turn: adding to one count each time would wait on the last addition when neighbors are in the same group
+    for i in range(len(auids)):
+        uid = auids[i]
+        if members[uid]:
+            counts[i & 3, collapse[groups[uid]]] += 1
+    return counts.sum(axis=0)

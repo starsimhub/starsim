@@ -164,12 +164,16 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] The kernel step as one function of loops over single numbers (a step of a three-compartment ODE takes 1.4 µs, from 8.5: passing the program to a Numba function costs about 0.4 µs each time)
 - [x] A jump of a distribution only records its index; the generator is moved when it is next needed, which for draws for agents (hashed from the index) is never. Starsim 3 sims give the same results, 35% faster with 200 agents and 6% with 20,000
 - [x] Agents: each state counted once a step, not twice; the level of each agent in each dimension kept with the group; exposure by place from two counts
-- [ ] Kernels for `tau`, `gillespie`, and `sde`, and for the `scipy` integrators
+- [x] A distribution whose parameters are plain values keeps what they were processed into, instead of working it out at every draw; `ss.normal` and the lognormals work out their inverse CDF directly (the same arithmetic as SciPy's, to the last bit). With the jumps, a Starsim 3 SIS sim of 200 agents takes 25 ms, from 54, with the same results
+- [x] `solver="binomial"` takes a substep for each stage of the dwell time with the most stages (it moves people at most one stage a step, so with whole steps a dwell time in 49 stages of a mean of 7 days came out as 49 days). The LASER example as compartments now gives 1,427,000 recovered, against 1,394,000 as an ODE; it gave 198,000
+- [x] A kernel for `tau`: the LASER example takes 6.7 s, from 93 s, and agrees with the ODE
+- [ ] Kernels for `gillespie` and `sde`, and for the `scipy` integrators
 - [ ] A whole run in the kernel with modifiers, transfers, and deliveries (the run is stepped from Python, with one kernel call a step)
 - [ ] Many runs in one call with different parameter values (a restarted run is 0.5 to 1 ms, most of it Python around the kernel)
 - [ ] Faster building of a sim (20 to 50 ms, which is now nearly all of a single run)
-- [ ] A compiled path for agents: the LASER example takes about 25 ns for each agent on each step (it was 45), against about 1 ns in the original, in NumPy passes over all the agents for each state
-- [ ] The cost of each draw in a small agent-based sim (about 100 µs for each call of `rvs()`, whatever the number of agents: copying parameters and saving the generator's state)
+- [x] Agents: under homogeneous mixing with one strain, the probability of infection for everyone susceptible and exposed in one compiled pass (the rate is worked out once for each group, and the draw is the one made before, so the same agents are infected); each state counted by group in one pass; the level of each agent in a dimension reused until the property changes. The LASER example takes 3.5 ms a step, from 4.4 (8.5 at the start)
+- [ ] Agents: the same for scheduled exits, exposure by place, and the counts of all the states at once: perhaps another 20%. A pass over 175,000 agents costs 0.1 to 0.2 ms however it is written, and a step needs about fifteen
+- Not planned: a whole agent-based run in one kernel, as for compartments. A prototype of the best case (one compiled pass over 175,000 agents a step) took 1.1 ms a step on one thread, against 4.4 ms now, so 4 times at most; it reaches the 1 ns for each agent of LASER only on 20 threads, which Starsim usually spends on running sims side by side. And it would run only models with nothing in Python between steps, which are the ones the compartmental solvers already run
 - [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
 - [ ] Time-varying values read at the times the ODE integrator evaluates the rates (they are read once a step)
 - [ ] JAX and gradients

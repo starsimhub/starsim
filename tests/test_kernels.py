@@ -93,21 +93,43 @@ def test_ode():
 
 
 @sc.timer()
-def test_binomial():
-    sc.heading('Testing the chain-binomial kernel against Python')
+def test_stochastic():
+    sc.heading('Testing the stochastic kernels against Python')
     n = 25 # Runs of each
-    for key in ['sir', 'ages']:
-        finals = sc.objdict()
-        for how in ['python', 'all']:
-            runs = [run(key, how, solver='binomial', rand_seed=seed, total_pop=10_000) for seed in range(n)]
-            name = runs[0].declared[0].name
-            finals[how] = np.array([[sim.results[name].n_S[-1], sim.results[name].n_I.max()] for sim in runs])
-            assert np.all(finals[how] == np.round(finals[how])) # Whole people
-        diff = np.abs(finals.all.mean(axis=0) - finals.python.mean(axis=0))
-        se = np.sqrt(finals.all.var(axis=0)/n + finals.python.var(axis=0)/n)
-        print(f'{key:8s} difference in means {diff}, standard error {se}')
-        assert np.all(diff < 4*se + 1), f'{key}: the kernel differs from Python by more than chance'
+    for solver,keys in dict(binomial=['sir', 'ages'], tau=['sir']).items():
+        for key in keys:
+            finals = sc.objdict()
+            for how in ['python', 'all']:
+                runs = [run(key, how, solver=solver, rand_seed=seed, total_pop=10_000) for seed in range(n)]
+                name = runs[0].declared[0].name
+                finals[how] = np.array([[sim.results[name].n_S[-1], sim.results[name].n_I.max()] for sim in runs])
+                assert np.all(finals[how] == np.round(finals[how])) # Whole people
+            diff = np.abs(finals.all.mean(axis=0) - finals.python.mean(axis=0))
+            se = np.sqrt(finals.all.var(axis=0)/n + finals.python.var(axis=0)/n)
+            print(f'{solver:8s} {key:8s} difference in means {diff}, standard error {se}')
+            assert np.all(diff < 4*se + 1), f'{key}: the {solver} kernel differs from Python by more than chance'
     return finals
+
+
+@sc.timer()
+def test_stages():
+    sc.heading('Testing that a dwell time in many stages is as long as it should be under every solver')
+    def make():
+        return ss.Disease(
+            infection = ss.transmission('S -> E', beta=0.4, source='I'),
+            latency   = ss.progression('E -> I', dur=ss.normal(7, 1.4)), # 25 stages
+            recovery  = ss.progression('I -> R', dur=10),
+            init      = dict(I=0.001),
+            name      = 'seir',
+        )
+    peaks = sc.objdict()
+    for solver in ['ode', 'binomial', 'tau', 'abm']:
+        pars = dict(n_agents=20_000) if solver == 'abm' else {}
+        sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
+        peaks[solver] = np.mean([np.argmax(sim.results.seir.n_I) for sim in sims])
+        print(f'{solver:8s} infectious peak on day {peaks[solver]:n}')
+    assert max(peaks.values()) - min(peaks.values()) < 6 # The chain-binomial solver takes a substep for each stage; with whole steps the latent period would be 25 days, not 7, and the peak weeks later
+    return peaks
 
 
 @sc.timer()
@@ -157,7 +179,8 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sims = test_ode()
-    finals = test_binomial()
+    finals = test_stochastic()
+    peaks = test_stages()
     msim = test_restart()
 
     T.toc()

@@ -567,16 +567,29 @@ class Sim(ss.Base):
         if cache is not None and cache[0] == self.ti and len(cache[1]) == len(self.people.uid.raw):
             return cache[1]
         people = self.people
-        out = np.zeros(len(people.uid.raw), dtype=int)
+        kept = getattr(self, '_level_cache', None) # The values each level was worked out from: most properties change rarely, and checking is much cheaper than working the levels out again
+        if kept is None:
+            kept = self._level_cache = dict()
         levels = []
-        for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
-            if strat.edges is not None:
-                levels.append(np.clip(np.digitize(people[strat.attr].raw, strat.edges) - 1, 0, strat.n - 1))
-            else:
-                levels.append(ss.kernels.levels(people[strat.attr].raw))
-            out += levels[-1]*int(mult)
-        self._group_cache = (self.ti, out, levels)
-        return out
+        changed = False
+        for strat in self.strats:
+            raw = people[strat.attr].raw
+            old = kept.get(strat.name)
+            if old is None or len(old[0]) != len(raw) or not np.array_equal(old[0], raw):
+                if strat.edges is not None:
+                    new = np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1)
+                else:
+                    new = ss.kernels.levels(raw)
+                old = kept[strat.name] = (raw.copy(), new)
+                changed = True
+            levels.append(old[1])
+        if changed or '' not in kept:
+            out = np.zeros(len(people.uid.raw), dtype=int)
+            for level,mult in zip(levels, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
+                out += level*int(mult)
+            kept[''] = out
+        self._group_cache = (self.ti, kept[''], levels)
+        return kept['']
 
     def level_raw(self, d):
         """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID """

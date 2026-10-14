@@ -556,11 +556,10 @@ class Engine:
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, ss.by)): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
-            if np.ndim(mean) == 0 and mean > 0 and dw.k*dt/mean > 0.1:
-                x = dw.k*dt/mean
-                ss.note(f'{name} has rate × dt = {x:.2g} ({dw.k/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {-np.expm1(-x):.2g} of people leave in a step; sim.check_dt() shows how much a smaller step changes the results', code='W102', sim=sim)
-                if sim.solver == 'binomial' and dw.k > 1 and x > 1: # Far worse than the usual error of a large step
-                    ss.note(f'{name} is {dw.k} stages, and solver="binomial" passes at most one stage a step, so its dwell time will be about {dw.k*dt/-np.expm1(-x):.3g} {unit}s, not {mean:.3g}; use a step below {mean/dw.k:.2g} {unit}s, or solver="tau", "ode", or "abm"', code='W102', sim=sim)
+            k = 1 if sim.solver == 'binomial' else dw.k # The chain-binomial solver takes a substep for each stage: see substeps()
+            if np.ndim(mean) == 0 and mean > 0 and k*dt/mean > 0.1:
+                x = k*dt/mean
+                ss.note(f'{name} has rate × dt = {x:.2g} ({k/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {-np.expm1(-x):.2g} of people leave in a step; sim.check_dt() shows how much a smaller step changes the results', code='W102', sim=sim)
         return
 
     def note_stages(self, name, dw):
@@ -1603,7 +1602,7 @@ class Compartmental(Engine):
         for i,matrix in enumerate(self._mover_rates):
             self.program.mov_mat[i] = matrix
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
-        return [self.y, self.program, self.dt, self.mod.t.npts, solver, sim.pars.substeps or 0], self.tables()
+        return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables()
 
     def run_all(self):
         """ Take every step of the run in one call to the kernels, and fill in the results from what comes back """
@@ -1731,6 +1730,18 @@ class Compartmental(Engine):
 
     #%% Stepping
 
+    def substeps(self):
+        """
+        The number of substeps to take in each timestep (0 to let the solver choose)
+
+        The chain-binomial solver moves people at most one stage in a step, so a dwell
+        time in k stages takes k substeps: it is then as accurate as one with a single stage.
+        """
+        n_sub = self.sim.pars.substeps
+        if n_sub is None and self.sim.solver == 'binomial':
+            n_sub = max([dw.k for dw in self.dwells.values() if dw.staged] + [1])
+        return n_sub or 0
+
     def step_state(self):
         return
 
@@ -1833,9 +1844,16 @@ class Compartmental(Engine):
     def step_binomial(self, dt):
         """ Chain-binomial: one multinomial draw per compartment over the flows that leave it """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
+        n_sub = self.substeps()
         if self.program:
-            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['binomial'], 0)
+            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['binomial'], n_sub)
             return flows
+        if n_sub > 1: # As a number of shorter steps
+            return sum(self.step_binomial_once(dt/n_sub) for i in range(n_sub))
+        return self.step_binomial_once(dt)
+
+    def step_binomial_once(self, dt):
+        nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         rates = dict(zip(map(id, self.flows), self.rates()))
         y = self.y.copy()
         flows = np.zeros((nt, ng))
@@ -1863,6 +1881,9 @@ class Compartmental(Engine):
     def step_tau(self, dt, eps=0.03):
         """ Tau-leaping: Poisson numbers of events over leaps short enough that rates change little """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
+        if self.program:
+            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['tau'], 0)
+            return flows
         flows = np.zeros((nt, ng))
         t = 0.0
         while t < dt - 1e-12:
@@ -1970,6 +1991,7 @@ class Agents(Engine):
 
         # Distributions: each is called at most once per step
         self.dists = sc.objdict()
+        self.by_groups = dict() # Whether the rate of each transmission is the same for everyone in a group: see same_in_group()
         def add(key, dist):
             dist.name = f'rng_{key}'
             mod.setattribute(f'rng_{key}', dist)
@@ -2068,10 +2090,12 @@ class Agents(Engine):
 
     def stock(self, state):
         if state.people:
-            uids = self.mod[state.name].uids
-            if self.sim.n_groups > 1:
-                self.stock_groups[state.name] = np.bincount(self.groups(uids, state), minlength=self.sim.n_groups).astype(float)
-            return float(len(uids))
+            sim = self.sim
+            if sim.n_groups == 1:
+                return float(self.mod[state.name].count())
+            counts = ss.kernels.count_groups(self.mod[state.name].raw, sim.people.auids.view(np.ndarray), sim.group_raw(), self.collapse[state.name], sim.n_groups)
+            self.stock_groups[state.name] = counts
+            return float(counts.sum())
         if self.sim.n_groups > 1:
             self.stock_groups[state.name] = self.counts[state.name].copy()
         return self.counts[state.name].sum()
@@ -2111,7 +2135,7 @@ class Agents(Engine):
             self.cache['place_sizes'] = np.bincount(places[self.sim.people.auids], minlength=n_places).astype(float)
         num = np.bincount(places[uids], weights=infectious, minlength=n_places)
         prev = mixing.by_place(np.arange(n_places), num, self.cache['place_sizes'], n_places)
-        return prev[places] if self._by_group else prev[places[self._uids]] # For the agents the rate is being worked out for
+        return prev[mixing.places] if self._by_group else prev[places[self._uids]] # For each group, or for the agents the rate is being worked out for
 
     def place_raw(self):
         """ The place of each agent, as an array indexed by UID """
@@ -2136,8 +2160,9 @@ class Agents(Engine):
         return func(self.sim, self._uids)
 
     def by_group(self, by):
-        """ A value for each level of a dimension becomes a value for each of the agents being evaluated """
-        return super().by_group(by)[self.groups(self._uids)]
+        """ A value for each level of a dimension becomes a value for each of the agents being evaluated (or for each group, when rates are being worked out by group) """
+        out = super().by_group(by)
+        return out if self._by_group else out[self.groups(self._uids)]
 
     def value(self, p):
         if isinstance(p.raw, ss.by): # Depends on which agents are being evaluated, so is not cached
@@ -2402,21 +2427,23 @@ class Agents(Engine):
             self.events.pop(tr.name, None)
         for tr in self.graph.transmissions:
             for src in tr.src:
-                sus = mod[src.name].uids
-                if len(sus):
-                    new = self.infect(tr, src, sus)
-                    self.move(tr, src, new)
+                self.move(tr, src, self.infect(tr, src))
         self.finish_moves(mod.ti + 1)
         return
 
-    def infect(self, tr, src, sus):
-        """ Work out who is infected this step """
+    def infect(self, tr, src):
+        """ Work out who in a state is infected this step """
         mod = self.mod
         sim = self.sim
         dt = self.dt
         routes = list(sim.networks.items())
-        adjust = self.adjusted(tr.name, sus)
         strains = self.strain_levels()
+        if not routes and strains == [None] and self.same_in_group(tr): # The usual case, in one pass over the agents
+            return self.infect_groups(tr, src)
+        sus = mod[src.name].uids
+        if not len(sus):
+            return ss.uids()
+        adjust = self.adjusted(tr.name, sus)
         if not routes: # Homogeneous mixing: the same hazard for everyone, scaled by their susceptibility
             hazards = []
             for strain in strains:
@@ -2487,6 +2514,34 @@ class Agents(Engine):
         if not new_cases:
             return ss.uids()
         return ss.uids.concatenate(new_cases).unique()
+
+    def same_in_group(self, tr):
+        """ Whether the rate of a transmission is the same for everyone in a group, apart from their own susceptibility """
+        if tr.name not in self.by_groups:
+            leaves = [leaf.raw for leaf in tr.rate.leaves if isinstance(leaf, ss.par)]
+            funcs = [raw for raw in leaves if callable(raw) and not isinstance(raw, (ss.Dist, ss.transitions.TimeValue))]
+            self.by_groups[tr.name] = not any(len(inspect.signature(func).parameters) >= 2 for func in funcs) # A function of the agents can give each a rate of their own
+        return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0
+
+    def infect_groups(self, tr, src):
+        """
+        Work out who is infected under homogeneous mixing, when the rate is the same for everyone in a group
+
+        The rate is worked out once for each group, and one compiled pass over the agents
+        gives the probability for everyone who is susceptible and exposed. The draw is the
+        one the general case makes, so the agents infected are the same.
+        """
+        sim = self.sim
+        mod = self.mod
+        ng = sim.n_groups
+        self._by_group = True
+        rate = np.broadcast_to(np.asarray(self.eval(tr.rate), dtype=float), ng)
+        self._by_group = False
+        adjust = (1.0 if self.adjust[tr.name] is None else self.adjust[tr.name])*self.mult_raw('transition', tr.name)
+        uids, probs = ss.kernels.infection_probs(mod[src.name].raw, sim.people.auids.view(np.ndarray), sim.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw,
+                                                 float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float), float(self.mult_raw('rel_sus')), self.dt)
+        uids = ss.uids(uids)
+        return uids[self.dists[f'mix_{tr.name}'].rvs(uids) < probs]
 
     def draw_infections(self, tr, sus, hazards, dt):
         """ Draw who is infected from a hazard for each strain (or one hazard, if there are no strains), and give each new case their strain """
