@@ -158,6 +158,10 @@ class Pars(sc.objdict):
             #         new[key] = old.__class__(val)
             self[key] = new
 
+        # It's a distribution, e.g. a duration that varies; replace it
+        elif isinstance(new, ss.Dist):
+            self[key] = new
+
         # Give up
         else:
             errormsg = f'Updating timepar {old} from {type(old)} to {type(new)} is not supported'

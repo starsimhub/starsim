@@ -570,9 +570,9 @@ class Sim(ss.Base):
         out = np.zeros(len(people.uid.raw), dtype=int)
         for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
             if strat.edges is not None:
-                levels = np.clip(np.digitize(people[strat.name].raw, strat.edges) - 1, 0, strat.n - 1)
+                levels = np.clip(np.digitize(people[strat.attr].raw, strat.edges) - 1, 0, strat.n - 1)
             else:
-                levels = np.nan_to_num(people[strat.name].raw).astype(int)
+                levels = np.nan_to_num(people[strat.attr].raw).astype(int)
             out += levels*int(mult)
         self._group_cache = (self.ti, out)
         return out
@@ -584,7 +584,7 @@ class Sim(ss.Base):
         for strat in self.strats:
             if strat.kind != 'age':
                 rvs = getattr(self, f'rng_strat_{strat.name}').rvs(uids)
-                people[strat.name][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+                people[strat.attr][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
         return
 
     def agent_reasons(self, modules):
@@ -1037,7 +1037,7 @@ class Sim(ss.Base):
         # If people have not been supplied, make them -- typical use case
         if people is None:
             if self.solver == 'abm' and self.strats: # Properties that people are stratified by, other than age
-                extra = [ss.FloatArr(strat.name, default=0, label=strat.name) for strat in self.strats if strat.kind != 'age']
+                extra = [ss.FloatArr(strat.attr, default=0, label=strat.name) for strat in self.strats if strat.kind != 'age']
                 kwargs['extra_states'] = sc.mergelists(kwargs.get('extra_states'), extra)
                 for strat in self.strats: # Ages follow the split of the age groups, so every solver starts from the same population
                     if strat.kind == 'age' and strat.edges is not None and 'age_data' not in kwargs:
@@ -1046,10 +1046,10 @@ class Sim(ss.Base):
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
         elif self.solver == 'abm':
             for strat in self.strats:
-                if strat.name not in people.states:
-                    state = ss.FloatArr(strat.name, default=0, label=strat.name)
+                if strat.attr not in people.states:
+                    state = ss.FloatArr(strat.attr, default=0, label=strat.name)
                     people.states.append(state)
-                    setattr(people, strat.name, state)
+                    setattr(people, strat.attr, state)
                     state.link_people(people)
 
         # Finish up (NB: the People object is not yet initialized)

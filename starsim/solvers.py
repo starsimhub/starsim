@@ -26,7 +26,8 @@ def convert(val, unit):
     """ Convert a typed quantity to a plain number in a unit: a duration to units, a rate to per unit """
     if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
-            return -np.log1p(-val.value)/val.unit.to(unit).value
+            period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
+            return -np.log1p(-val.value)/period
         return val.to(unit).value
     return val
 
@@ -66,13 +67,15 @@ class Mixing:
             raise ValueError(errormsg)
         self.space = spaces[0] if spaces else None # The position of the spatial dimension
         self.time_share = None # For commuting: the share of their time that people from each place spend in each place
+        self.visit = False
         self.migration = None # For migration: the rate of moving from each place to each place
         if spaces:
             strat = sim.strats[self.space]
             self.places = sim.group_coords[:, self.space] # The place of each group
             mobility = strat.mobility
-            if mobility is not None and mobility.kind == 'commute':
+            if mobility is not None and mobility.kind in ['commute', 'visit']:
                 self.time_share = mobility.time_share(strat)
+                self.visit = mobility.kind == 'visit' # Visitors are exposed to the residents of a place, and do not expose anyone there
             elif mobility is not None:
                 self.migration = mobility.matrix(strat)
         return
@@ -93,7 +96,7 @@ class Mixing:
         num = np.bincount(places, weights=infectious, minlength=n_places)
         den = np.bincount(places, weights=n, minlength=n_places)
         share = self.time_share
-        if share is not None: # Who is present in each place
+        if share is not None and not self.visit: # Who is present in each place
             num, den = num @ share, den @ share
         prev = np.divide(num, den, out=np.zeros(n_places), where=den>0)
         return prev if share is None else share @ prev
@@ -118,7 +121,9 @@ class Mixing:
         self.terms = []
         for net in nets:
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
-            if isinstance(net, ss.MixingPools):
+            if isinstance(net, ss.MixingPools) and getattr(net, 'dims', None):
+                self.terms.append(self.dim_matrices(net, beta))
+            elif isinstance(net, ss.MixingPools):
                 self.terms.append(self.age_matrix(net, beta))
             elif isinstance(net, ss.MixingPool):
                 if net.pars.src is not None or net.pars.dst is not None:
@@ -170,6 +175,22 @@ class Mixing:
             ss.note(f'contact matrix "{net.name}" aggregated from {len(bands)} age groups to the model\'s {strat.n} ({sc.strjoin(strat.labels)})', code='W404', sim=sim)
         return sc.objdict(kind='matrix', dim=d, matrix=matrix*beta, name=net.name)
 
+    def dim_matrices(self, net, beta):
+        """ A contact matrix for each of one or more of the model's dimensions: the contacts between two groups are the product of the entries """
+        sim = self.sim
+        matrix = np.ones((1, 1))
+        cells = np.zeros(sim.n_groups, dtype=int) # Which row of the combined matrix each group is in
+        for dim,mat in net.dims.items():
+            names = [strat.name for strat in sim.strats]
+            if dim not in names:
+                ss.error('E1102', f'the contacts "{net.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+            strat = sim.strats[names.index(dim)]
+            if len(mat) != strat.n:
+                ss.error('E603', f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+            cells = cells*strat.n + sim.group_coords[:, names.index(dim)]
+            matrix = np.kron(matrix, mat)
+        return sc.objdict(kind='matrix', cells=cells, matrix=matrix*beta, name=net.name, dim=names.index(list(net.dims)[0]))
+
     def exposure(self, infectious, n):
         """
         Exposure of each group to an infectious state: contacts per unit time, times the chance that a contact is infectious
@@ -189,7 +210,7 @@ class Mixing:
             elif self.space is not None:
                 ss.error('E804', f'cannot run the contact matrix "{term.name}" with solver="{self.sim.solver}" in a model with places: mixing by age within each place has no compartmental form yet. Run with solver="abm".')
             else:
-                levels = self.sim.group_coords[:, term.dim]
+                levels = term.cells if 'cells' in term else self.sim.group_coords[:, term.dim]
                 size = term.matrix.shape[0]
                 num = np.bincount(levels, weights=infectious, minlength=size)
                 den = np.bincount(levels, weights=n, minlength=size)
@@ -571,6 +592,22 @@ class Engine:
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
+            if isinstance(init, ss.by): # A value for each level of a dimension: a number of people, or a fraction of the people at that level
+                sim = self.sim
+                strat = sim.strats[sim.dim_index(init.dim)]
+                vals = np.array(init.values, dtype=float)
+                if len(vals) != strat.n:
+                    ss.error('E603', f'the initial value of "{state.name}" has {len(vals)} values, but "{init.dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                if state.people:
+                    size = self.total_pop*strat.split
+                    vals = np.where(vals > 1, np.divide(vals, size, out=np.zeros(strat.n), where=size>0), vals)
+                    fracs[state.name] = vals[sim.group_coords[:, sim.dim_index(init.dim)]]
+                else:
+                    levels = sim.group_coords[:, sim.dim_index(init.dim)]
+                    share = np.divide(self.state_split[state.name], strat.split[levels], out=np.zeros(sim.n_groups), where=strat.split[levels]>0) # Its split over the other dimensions
+                    counts[state.name] = vals.sum()
+                    self.state_split[state.name] = share*vals[levels]/max(vals.sum(), 1e-300)
+                continue
             if not state.people:
                 counts[state.name] = float(init)
             elif init > 1 or (init == 1 and isinstance(init, (int, np.integer)) and not isinstance(init, bool)):
@@ -597,8 +634,8 @@ class Engine:
         # Whatever is left over goes to the first state
         first = graph.people_states[0].name if graph.people_states else None
         total = sum(fracs.values())
-        if total > 1 + 1e-9:
-            errormsg = f'The initial fractions of "{self.mod.name}" sum to {total:n}, which is more than 1: {dict(fracs)}'
+        if np.max(total) > 1 + 1e-9:
+            errormsg = f'The initial fractions of "{self.mod.name}" sum to {np.max(total):n}, which is more than 1: {dict(fracs)}'
             raise ValueError(errormsg)
         if first is not None:
             fracs[first] += 1 - total
@@ -885,7 +922,7 @@ class Compartmental(Engine):
         self.movers = []
         for d,strat in enumerate(sim.strats):
             comps = [ind for state in graph.people_states if self.applies[state.name][d] for ind in self.state_comps[state.name]]
-            if strat.kind == 'age' and strat.edges is not None and comps:
+            if strat.kind == 'age' and strat.edges is not None and comps and sim.pars.use_aging is not False:
                 if sim.unit is None:
                     ss.note('nobody ages, since time is in timesteps and age is in years; give the sim a unit to turn aging on', sim=sim)
                     continue
@@ -1539,7 +1576,7 @@ class Agents(Engine):
 
     def strain_raw(self):
         """ The strain each agent carries, as an array indexed by UID """
-        return np.nan_to_num(self.sim.people[self.sim.strats[self.strain].name].raw).astype(int)
+        return np.nan_to_num(self.sim.people[self.sim.strats[self.strain].attr].raw).astype(int)
 
     def adjusted(self, name, uids):
         """ The multiplier on a transition for each agent, from the adjust= of the stratifications (1 if there is none) """
@@ -1582,11 +1619,17 @@ class Agents(Engine):
             people = self.sim.people
             uids = people.auids
             rvs = self.dists.init.rvs(uids)
-            edges = np.cumsum([0.0] + list(fracs.values()))
-            for i,name in enumerate(fracs.keys()):
-                inds = uids[(rvs >= edges[i]) & (rvs < edges[i+1])]
-                mod[name][inds] = True
-                mod[f'ti_{name}'][inds] = 0
+            names = list(fracs.keys())
+            groups = self.groups(uids) if any(np.ndim(frac) for frac in fracs.values()) else np.zeros(len(uids), dtype=int) # Fractions can differ between groups
+            for g in np.unique(groups):
+                inds = uids[groups == g]
+                inds = inds[np.argsort(rvs[groups == g], kind='stable')] # In a random order
+                share = np.array([np.broadcast_to(fracs[name], self.sim.n_groups)[g] for name in names])
+                edges = np.cumsum(np.append(0, Compartmental.round_preserving(share*len(inds)))).astype(int) # The number in each state is exact, as it is in a compartmental run
+                for i,name in enumerate(names):
+                    chosen = inds[edges[i]:edges[i+1]]
+                    mod[name][chosen] = True
+                    mod[f'ti_{name}'][chosen] = 0
         return
 
     #%% The context used to evaluate expressions
@@ -1639,7 +1682,7 @@ class Agents(Engine):
     def place_raw(self):
         """ The place of each agent, as an array indexed by UID """
         sim = self.sim
-        return np.nan_to_num(sim.people[sim.strats[sim.mixing.space].name].raw).astype(int)
+        return np.nan_to_num(sim.people[sim.strats[sim.mixing.space].attr].raw).astype(int)
 
     def local_count(self, states):
         """ In a model with places: the number in the same place as each agent, or, when the counts are being advanced, as each group """
@@ -1743,7 +1786,7 @@ class Agents(Engine):
                 if lacked:
                     new = uids[np.isin(uids, ss.uids.concatenate(lacked))]
                     if len(new):
-                        sim.people[strat.name][new] = np.minimum(np.searchsorted(np.cumsum(strat.split), self.dists[key].rvs(new), side='right'), strat.n - 1)
+                        sim.people[strat.attr][new] = np.minimum(np.searchsorted(np.cumsum(strat.split), self.dists[key].rvs(new), side='right'), strat.n - 1)
                         sim._group_cache = None
         return
 
@@ -1857,7 +1900,7 @@ class Agents(Engine):
             if strat.kind == 'age':
                 errormsg = f'The transfer "{name}" cannot move agents between age groups: agents get older by themselves'
                 raise ValueError(errormsg)
-            arr = sim.people[tf.dim]
+            arr = sim.people[strat.attr]
             dst = strat.index(tf.dst)
             eligible = (arr == strat.index(tf.src)) if tf.src is not None else (arr != dst)
             d = sim.dim_index(tf.dim)
@@ -1878,7 +1921,7 @@ class Agents(Engine):
         rates = sim.mixing.migration
         if rates is not None and mod is sim.declared[0]: # People relocating between places; they are the same people for every module, so it is done once
             uids = sim.people.auids
-            arr = sim.people[sim.strats[sim.mixing.space].name]
+            arr = sim.people[sim.strats[sim.mixing.space].attr]
             places = self.place_raw()[uids]
             p = -np.expm1(-rates.sum(axis=1)*dt)[places]
             rvs = self.dists.migrate.rvs(uids)
@@ -2027,7 +2070,7 @@ class Agents(Engine):
 
     def set_strain(self, uids, strain):
         sim = self.sim
-        sim.people[sim.strats[self.strain].name][ss.uids(uids)] = strain
+        sim.people[sim.strats[self.strain].attr][ss.uids(uids)] = strain
         sim._group_cache = None
         return
 

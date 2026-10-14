@@ -18,7 +18,18 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 ## Held-out set
 
-- [ ] Wave 1: one simple example from each framework (MEmilio, EpiModel, epydemix, summer2, SimInf, odin, EMULSION, flepiMoP, Atomica, LASER, camdl). The originals have not been collected in `examples/` yet.
+- [ ] Wave 1: for each framework, the simplest example that shows what it is for. The originals, their environments, and the Starsim versions are kept in the `lingua_franca_design` repository (`examples/`, `_envs/`, and `vignettes/`), not here.
+    - [x] camdl: SIR with weekly reported cases
+    - [x] summer2: SIR by age and location, with a mixing matrix for each
+    - [x] epydemix: SIR in Kenya's population, with contact matrices by age
+    - [x] Atomica: the SIR demo, stepped a year at a time
+    - [x] EMULSION: one SIR as compartments and as individuals
+    - [x] LASER: SEIR in a hub and spokes with gravity coupling (runs, but the two frameworks couple places differently, so the results differ)
+    - [x] MEmilio: SECIR with severity branches and a change in contacts
+    - [x] flepiMoP: SEIR in two provinces whose residents visit each other
+    - [x] odin: a stochastic SIR, with its array of replicates as many runs
+    - [ ] SimInf: SIR in 1,600 herds. Not written: it needs scheduled events that add, remove, and move individuals (a movement register)
+    - [x] EpiModel: SIS over partnerships that form and dissolve (runs, but the network cannot be given EpiModel's target statistics, and the results differ)
 - [x] Wave 2: the other eight conformance corpus models
     - [x] 4. SIR with a lognormal dwell time
     - [x] 7. Patches with gravity mobility, and with none
@@ -71,8 +82,10 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Aging between age groups
 - [x] `states=` on `stratify()`: dimensions of some states only, including states that are not people
 - [x] Strain dimensions: a force of infection for each strain, the infector's strain passed on, `adjust` by strain
-- [x] Space: mixing within each place, counts per place, `ss.geo`, `ss.gravity`, and `ss.Mobility` (commuting and migration)
+- [x] Space: mixing within each place, counts per place, `ss.geo`, `ss.gravity`, and `ss.Mobility` (commuting, visiting, and migration)
 - [x] Dimensions listed by `describe()`, with the states each applies to and the mobility
+- [x] Initial conditions for each level of a dimension (`init=dict(I=ss.by(patch=[...]))`)
+- [x] Age groups given as labels, kept apart from the age people have; `use_aging=False` in a compartmental run
 - [ ] `immunity=` between strains
 - [ ] `where=` on `stratify()`
 - [ ] Named geographies (`ss.geo('Kenya')`) and movement registers (`ss.Mobility(data=)`)
@@ -81,6 +94,11 @@ The nine build steps from [examples/README.md](../examples/README.md).
 ### 06 Routes
 
 - [x] Homogeneous mixing, `ss.MixingPool`, `ss.contacts` matrices
+- [x] A contact matrix for each of the model's own dimensions, multiplied together (`ss.contacts(age=..., location=...)`)
+- [ ] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated
+- [ ] Scheduled events that add, remove, or move individuals (`ss.Mobility(data=)`, and the same for births and deaths)
+- [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
+- [ ] Coupling between places that moves the force of infection, as LASER does
 - [x] Networks, as agents and (approximated, with a note) as compartments
 - [ ] Multi-disease coupling in a compartmental run
 
@@ -126,6 +144,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Result expressions (sums and ratios of states)
 - [x] `ss.outcome`, with delays, durations, and reporting periods
 - [x] `res.select()` and `res.by()` on stratified results, including cumulative ones; a state has only the dimensions it was stratified by
+- [ ] `select()` and `by()` on the results of many runs
+- [x] A parameter as the weight of a flow in an outcome (`rho * infection`)
 - [ ] Flows in ratio results
 - [ ] Extinction reporting
 
@@ -137,6 +157,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `sim.loop.insert()` of a module, which moves its `step()`
 - [x] `sim.check_dt()`
 - [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
+- [ ] Time-varying values read at the times the ODE integrator evaluates the rates (they are read once a step)
 - [ ] JAX and gradients
 
 ### 13 Inference
@@ -171,10 +192,15 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - `ss.gravity` gives `k × pop[i]^(a−1) × pop[j]^b / distance^c`: for commuting, the share of time a person from `i` spends in `j` (capped so that it sums to at most 1, or rescaled to `away=`), and for migration the rate of moving.
 - An inflow whose rate uses a count (`xi * I.n`, or `ss.birth`) arrives in each place according to the count there; an inflow at a fixed rate is shared between places by their split.
 - A new infection is recorded under the strain acquired, and a state that a dimension does not apply to is counted at that dimension's first level.
+- As agents, the number who start in each state is exact (rounded to whole agents), not a chance for each agent.
 - A level of a stratification named like an attribute of a result (`low`, `high`) is a column called `<dimension>_<level>` in `result.by()`.
 
 ## Known issues
 
+- A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`).
+- `sim.new(n_agents=None)` does not turn an agent-based sim into a compartmental one; the argument has to be left out.
+- A bare number as the duration of a network's contacts is in years, even in a sim that counts time in steps.
+- With `stop=ss.weeks(12)` and no `unit=`, the sim runs in weeks even if every rate is per day.
 - As agents, a dwell time is sampled when someone enters a state, so an `adjust` on a duration does not follow a person who later moves to another level (through an `ss.transfer`, or by aging). A rate does.
 - A strain's initial share is the split of the dimension (equal by default), which applies to everyone who starts in an infected state.
 - A function of the sim that compares ages with a number that is not a bin edge runs in a compartmental model without complaint (each group has the age of its midpoint); the lazy form (`ppl.age > 70`) is checked.

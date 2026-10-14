@@ -776,7 +776,7 @@ class Delivery(Intervention):
         if self.selector.abm:
             uids = self.uids(sel)
             for d,level in changes.items():
-                sim.people[sim.strats[d].name][uids] = level
+                sim.people[sim.strats[d].attr][uids] = level
             sim._group_cache = None
         else:
             for mod in sim.declared:

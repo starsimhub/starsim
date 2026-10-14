@@ -770,10 +770,22 @@ class outcome:
     def __repr__(self):
         return f'outcome({self.name})'
 
+    @property
+    def weights(self):
+        """ The weights of its sources that are expressions, e.g. the rho in rho * infection """
+        source = self.source
+        items = source.items if isinstance(source, FlowSum) else sc.tolist(source)
+        weights = [item.flow_of[1] for item in items if not isinstance(item, str) and item.flow_of]
+        return [weight for weight in weights if isinstance(weight, Expr)]
+
     def to_json(self, unit=None):
         """ The outcome as it is written in the model spec """
         def flow_str(item):
             base, weight = item.flow_of or (item, 1)
+            if isinstance(weight, BinOp) and is_one(weight.a): # From 1 * rho
+                weight = weight.b
+            if isinstance(weight, Expr):
+                weight = format_expr(weight)
             return base.name if sc.isnumber(weight) and weight == 1 else f'{weight} * {base.name}'
         source = self.source
         items = source.items if isinstance(source, FlowSum) else sc.tolist(source)
@@ -1217,18 +1229,19 @@ class Graph:
             clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions
             self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
 
-        # Register the explicit ss.par objects used in the transitions
-        for tr in self.transitions.values():
-            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
-                if expr is not None:
-                    for leaf in expr.leaves:
-                        if isinstance(leaf, par) and not leaf.literal and leaf.module is None:
-                            if leaf.name is None:
-                                leaf.name = find_name(leaf, frame)
-                            if leaf.name is None:
-                                errormsg = f'Could not find a name for the parameter {leaf.value} used in "{tr.name}"; give it one with ss.par(..., name="beta")'
-                                raise ValueError(errormsg)
-                            self._add_par(leaf, name=leaf.name)
+        # Register the explicit ss.par objects used in the transitions, and in the weights of the outcomes
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
+        used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
+        for name,expr in used:
+            if expr is not None:
+                for leaf in expr.leaves:
+                    if isinstance(leaf, par) and not leaf.literal and leaf.module is None:
+                        if leaf.name is None:
+                            leaf.name = find_name(leaf, frame)
+                        if leaf.name is None:
+                            errormsg = f'Could not find a name for the parameter {leaf.value} used in "{name}"; give it one with ss.par(..., name="beta")'
+                            raise ValueError(errormsg)
+                        self._add_par(leaf, name=leaf.name)
         return
 
     def resolve_exits(self):
@@ -1948,13 +1961,15 @@ class Mobility:
     Movement between the levels of a spatial stratification
 
     People either commute (they keep their home, and spend a share of their time in
-    other places, where they are exposed and expose others) or migrate (they relocate).
+    other places, where they are exposed and expose others), visit (the same, but
+    they are exposed to the residents of the places they go to and do not expose
+    anyone there), or migrate (they relocate).
 
     Args:
         model (gravity): a movement model (instead of `matrix`)
         matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there
-        kind (str): 'commute' (the default) or 'migrate'
-        away (float): for commuting, the share of their time people spend away from home; the movement is rescaled to give it
+        kind (str): 'commute' (the default), 'visit', or 'migrate'
+        away (float): for commuting and visiting, the share of their time people spend away from home; the movement is rescaled to give it
 
     Examples:
         ```python
@@ -1969,8 +1984,8 @@ class Mobility:
         if (model is None) == (matrix is None):
             errormsg = 'ss.Mobility() takes a movement model (e.g. ss.gravity()) or matrix=, and not both'
             raise ValueError(errormsg)
-        if kind not in ['commute', 'migrate']:
-            errormsg = f'The kind of ss.Mobility() is "commute" or "migrate", not "{kind}"'
+        if kind not in ['commute', 'visit', 'migrate']:
+            errormsg = f'The kind of ss.Mobility() is "commute", "visit", or "migrate", not "{kind}"'
             raise ValueError(errormsg)
         self.model = model
         self.given = None if matrix is None else np.array(matrix, dtype=float)
@@ -2044,6 +2059,9 @@ class Strat:
         else:
             self.labels = levels
         self.n = len(self.labels)
+        if self.kind == 'age' and self.edges is None and kind is None: # Age groups given as labels have no ages, so nobody ages between them
+            self.kind = 'plain'
+            self.guessed['kind'] = 'plain, since the age groups are labels and not ages'
         self.adjust = sc.objdict()
         for key,vals in (adjust or {}).items():
             vals = np.array(vals, dtype=float)
@@ -2071,6 +2089,11 @@ class Strat:
 
     def __repr__(self):
         return f'Strat({self.name}: {sc.strjoin(self.labels)})'
+
+    @property
+    def attr(self):
+        """ The name of the property of people that holds each agent's level; a dimension with labels that is named like something people already have (age) is kept apart from it """
+        return f'{self.name}_group' if (self.name == 'age' and self.edges is None) else self.name
 
     @property
     def spec(self):

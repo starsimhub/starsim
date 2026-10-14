@@ -174,6 +174,7 @@ def test_space():
         none    = None,
         gravity = ss.gravity(k=2e-4), # Commuting, with the share of time away from the gravity model
         away    = ss.Mobility(ss.gravity(), away=0.2), # Commuting, with 20% of time spent away
+        visit   = ss.Mobility(ss.gravity(), away=0.2, kind='visit'), # The same, but travelers do not infect the people they visit
         migrate = ss.Mobility(ss.gravity(k=2e-5), kind='migrate'),
     )
     peaks = sc.objdict()
@@ -219,7 +220,51 @@ def test_space():
     return peaks
 
 
+@sc.timer()
+def test_mixing():
+    sc.heading('Testing contact matrices by dimension, and where people start')
+    def make():
+        sir = ss.Disease(
+            infection = ss.transmission('S -> I', beta=2),
+            recovery  = ss.progression('I -> R', rate=1/3),
+            init      = dict(I=10),
+            name      = 'sir',
+        )
+        sir.stratify(age=['young', 'old']) # Labels, so not the age that people have
+        sir.stratify(location=['urban', 'rural'], split=[0.7, 0.3])
+        return sir
+    mixing = ss.contacts(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]])
+    sims = sc.objdict({solver:run(make(), solver, networks=mixing, total_pop=10_000, dt=0.1, stop=20) for solver in solvers})
+    res = sims.ode.results.sir
+    assert sims.ode.strats[0].kind == 'plain'
+    attack = {(a,l):res.n_R.select(age=a, location=l)[-1]/res.n_S.select(age=a, location=l)[0] for a in ['young', 'old'] for l in ['urban', 'rural']}
+    assert attack['old', 'urban'] > attack['young', 'urban'] > attack['young', 'rural'] # Old people have more contacts, and most contacts are with one's own kind of place
+    for solver in ['binomial', 'abm']:
+        assert np.isclose(sims[solver].results.sir.n_R[-1], res.n_R[-1], rtol=0.1), f'Expected {solver} to match the ODE'
+    assert sims.abm.results.sir.n_I[0] <= 10 # As agents, the number who start in each state is exact (less anyone who has already recovered)
+    with pytest.raises(ss.CodedError, match='E603'):
+        ss.Sim(make(), networks=ss.contacts(location=np.ones((3, 3))), **kw).init()
+
+    # Where people start can be given for each level of a dimension
+    def start(solver):
+        sir = make_towns()
+        sir.graph.states.I.init = ss.by(patch=[0, 500, 0])
+        return run(sir, solver, total_pop=100_000, unit='day', stop=5)
+    for solver in solvers:
+        n_I = start(solver).results.sir.n_I.by('patch').values[0]
+        assert n_I[0] == 0 and n_I[2] == 0 and 400 < n_I[1] <= 500
+
+    # Age groups given as ages do not age if the sim says not to
+    youngest = dict()
+    for use_aging in [True, False]:
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), name='sir').stratify(age=[0, 5, 20]) # Nobody is infected, so everyone stays susceptible
+        youngest[use_aging] = ss.Sim(sir, start=2000, stop=2010, use_aging=use_aging, **kw).run().results.sir.n_S.by('age').values[-1, 0]
+    assert youngest[False] > 2*youngest[True]
+    return sims
+
+
 if __name__ == '__main__':
+    mixing  = test_mixing()
     states  = test_states()
     strains = test_strains()
     space   = test_space()

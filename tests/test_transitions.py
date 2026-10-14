@@ -145,6 +145,10 @@ def test_time():
     res = [ss.Sim(mod, stop=30, unit='day', **kw).run().diseases[0].results.n_I for mod in [a, b]]
     assert np.allclose(res[0], res[1])
     assert np.isclose(res[0][7], 10_000*np.exp(-1), rtol=1e-4)
+
+    # With no unit, a probability is per step
+    c = ss.Disease(recovery=ss.progression('I -> R', rate=ss.prob(0.05)), init=dict(I=1.0))
+    assert np.isclose(ss.Sim(c, stop=10, **kw).run().diseases[0].results.n_I[10], 10_000*0.95**10)
     return sim
 
 
@@ -428,6 +432,15 @@ def test_outcomes():
         ss.Sim(make(0.3), **pars).calibrate()
     with pytest.raises(ss.CodedError, match='E702'):
         ss.Sim(ss.Disease(recovery=ss.progression('I -> R', dur=3), cases=ss.outcome('infection')), **kw).init()
+
+    # The share of a flow that is reported can be a parameter
+    rho = ss.par(0.6)
+    S, I, R = ss.states(3)
+    infection = S >> I @ 0.3 * I
+    reported = ss.Disease(infection, I >> R @ ss.days(10), ss.outcome(rho * infection, name='cases'), init_prev=0.01, name='reported')
+    half = ss.Sim(reported, pars=dict(rho=0.3), stop=50, **kw).run().results.reported
+    assert 'rho' in reported.pars
+    assert np.isclose(half.cases.sum(), 0.3*half.infection.sum(), rtol=0.01)
     return fit
 
 

@@ -218,7 +218,7 @@ class Selector:
         sim = self.sim
         if self.abm:
             strat = sim.strats[sim.dim_index(name)]
-            raw = sim.people[name].raw
+            raw = sim.people[strat.attr].raw
             if strat.edges is not None:
                 return np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1)
             return np.nan_to_num(raw).astype(int)

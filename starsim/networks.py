@@ -2,6 +2,7 @@
 Networks that connect people within a population
 """
 import inspect
+import itertools
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -1412,6 +1413,25 @@ class AgeGroup(sc.prettyobj):
         return f'age({self.low}-{self.high})'
 
 
+class LevelGroup(sc.prettyobj):
+    """ A filter that returns the uids of the agents at given levels of the sim's stratifications, e.g. `LevelGroup(age=0, location=1)` """
+    def __init__(self, **levels):
+        self.levels = levels
+        self.name = repr(self)
+        return
+
+    def __call__(self, sim):
+        in_group = sim.people.alive
+        for dim,level in self.levels.items():
+            strat = sim.strats[sim.dim_index(dim)]
+            raw = sim.people[strat.attr]
+            in_group = in_group & ((raw >= strat.edges[level]) & (raw < np.append(strat.edges, np.inf)[level+1]) if strat.edges is not None else (raw == level))
+        return ss.uids(in_group)
+
+    def __repr__(self):
+        return ','.join(f'{dim}={level}' for dim,level in self.levels.items())
+
+
 class MixingPools(Route):
     """
     A container for creating a rectangular array of MixingPool instances
@@ -1686,23 +1706,53 @@ class MixingPool(Route):
 
 
 
-def contacts(matrix=None, age=None, beta=1.0, **kwargs):
+def contacts(matrix=None, age=None, beta=1.0, name='contacts', **dims):
     """
-    Mixing between age groups from a contact matrix; returns `ss.MixingPools`
+    Mixing between groups from a contact matrix; returns `ss.MixingPools`
+
+    There are two forms. A matrix with the lower edge of each of its age groups
+    (`ss.contacts(matrix, age=[0, 15, 65])`) has its own age groups, which need not
+    be the model's. A matrix for each of one or more of the model's stratifications
+    (`ss.contacts(age=..., location=...)`) uses the model's own levels, and the
+    contacts between two groups are the product of the entries for each dimension.
 
     Args:
         matrix (array/str): `matrix[i,j]` is the number of contacts per unit time that one person in age group `i` has with people in age group `j`
-        age (list): the lower edge of each age group, e.g. `[0, 15, 65]`
+        age (list/array): the lower edge of each age group of `matrix`, e.g. `[0, 15, 65]`; or, with no `matrix`, the matrix for the model's own age groups
         beta (float): a multiplier on transmission through these contacts
-        kwargs (dict): passed to `ss.MixingPools`
+        name (str): the name of the mixing
+        dims (dict): a matrix for each stratification, e.g. `location=[[0.8, 0.2], [0.2, 0.8]]`
 
     Examples:
         ```python
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10))
         mixing = ss.contacts([[10, 3], [3, 5]], age=[0, 18])
         sim = ss.Sim(sir, networks=mixing, unit='day', stop=100).run()
+
+        sir.stratify(risk=['low', 'high'])
+        mixing = ss.contacts(risk=[[2, 1], [1, 8]])
         ```
     """
+    if matrix is None and (age is not None or dims): # A matrix for each of the model's own dimensions
+        dims = sc.mergedicts(dict(age=age) if age is not None else {}, dims)
+        dims = {dim:np.array(mat, dtype=float) for dim,mat in dims.items()}
+        for dim,mat in dims.items():
+            if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
+                errormsg = f'ss.contacts({dim}=...) needs a square matrix, with a row and a column for each level of "{dim}"; got shape {mat.shape}'
+                raise ValueError(errormsg)
+        levels = list(itertools.product(*[range(len(mat)) for mat in dims.values()]))
+        groups = {}
+        for combo in levels:
+            group = LevelGroup(**dict(zip(dims.keys(), combo)))
+            groups[group.name] = group
+        n_contacts = np.empty((len(levels), len(levels)), dtype=object)
+        for i,a in enumerate(levels):
+            for j,b in enumerate(levels):
+                n_contacts[j, i] = ss.constant(np.prod([mat[a[d], b[d]] for d,mat in enumerate(dims.values())])) # ss.MixingPools is indexed [source, destination]
+        out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=n_contacts, beta=beta, name=name)
+        out.dims = dims # So a compartmental run can use the matrices directly
+        return out
+    kwargs = dict(dims)
     if isinstance(matrix, str) or matrix is None:
         ss.error('E605', f'no contact matrix is bundled for "{matrix}" yet. Supply the matrix itself: ss.contacts(matrix, age=[...]).')
     matrix = np.array(matrix, dtype=float)
@@ -1711,7 +1761,7 @@ def contacts(matrix=None, age=None, beta=1.0, **kwargs):
         raise ValueError(errormsg)
     highs = list(age[1:]) + [None]
     groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(age, highs)}
-    kwargs.setdefault('name', 'contacts')
+    kwargs.setdefault('name', name)
     n = len(age)
     n_contacts = np.empty((n, n), dtype=object)
     for i in range(n):

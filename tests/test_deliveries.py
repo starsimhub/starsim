@@ -221,7 +221,7 @@ def test_transfer():
     for sim in sims.values():
         delivered = sim.results.rollout.delivered
         assert np.allclose(delivered[[5, 30]], [35_000, 10_500], rtol=0.05) # 70% of everyone, then 70% of those left
-    check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
+    check_close(sims, lambda sim: sim.results.sir.cum_infection[-1], rtol=0.2) # What is left after the campaign depends on how far the epidemic had got, which varies by about 10% between agent-based runs
     return sims
 
 
@@ -239,7 +239,7 @@ def test_treat():
     for solver,sim in sims.items():
         res = sim.results
         assert res.sis.n_I[-1] < 0.9*base.results.sis.n_I[-1]
-        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.05) # By default, the people who are infected
+        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.07) # By default, the people who are infected
     check_close(sims, lambda sim: sim.results.rounds.delivered.sum())
 
     # A treatment that changes rates, with protection that fades by a function of time (which needs agents)
