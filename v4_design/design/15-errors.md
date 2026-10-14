@@ -96,6 +96,7 @@ Every code cited anywhere in this folder is listed here: 54 codes, of which 34 a
 |---|---|---|---|
 | `E504` | `UnmodifiableTarget` | error | The target of `ss.modify` or `ss.change` cannot be resolved to a named numeric quantity (a plain number, a boolean state, a name that does not exist). Lists the closest names |
 | `W502` | `OverlappingSet` | warning | Two `set=` modifiers are active for the same people at once; the one later in the loop is used. Names both |
+| `W503` | `ClippedToRange` | note | The modifiers of a rate, duration, or multiplier made it negative, so it was set to 0 where it was. Said once per quantity; `what_modifies()` says so too |
 
 ### 6xx: parameters and data
 

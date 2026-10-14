@@ -72,7 +72,8 @@ beta = ss.by(age=[0.08, 0.05, 0.03])                 # one value per stratum
 beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03      # a function
 ```
 
-- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, or `'spline'`.
+- `ss.timeseries(..., period=ss.years(1))` repeats with the period given, as a seasonal pattern written out over one year does.
+- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, `'cosine'` (an S-shaped change between each value and the next), or `'spline'`.
 - A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the solver provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
 - The forms combine: `ss.by(age=[...])` may hold time series, and a function may return any of the others' values.
 - Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a source.
@@ -99,7 +100,7 @@ A compartmental run has no individuals to draw for, so variation between people 
 
 To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `E804 CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
 
-The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. An Erlang distribution is `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`); sub-stages are also `stages=3` on the transition.
+The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.truncnorm` (a normal between `low` and `high`, as flepiMoP draws its parameters), `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. An Erlang distribution is `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`); sub-stages are also `stages=3` on the transition.
 
 The unit of a distribution is given once, either with `unit=` or on one of its parameters; the other parameters of the same dimension take it:
 

@@ -39,9 +39,20 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] 16. A threshold-triggered intervention, with and without memory
     - [x] 17. TB with resistance as a strain
     - [x] 18. Two diseases with age stratified on the sim
-- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB (the models still to be chosen, except camdl's)
+- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB (all but TB done; SimInf's spread between herds still differs)
     - [x] camdl: SEIR by age and patch, with contacts by age within each patch, aging, movement, and a vaccination (agrees as an ODE; as chain-binomial, the same peaks a day sooner at a step of a day)
     - [x] Ghana measles: stochastic SEIR in 260 districts with gravity mixing, seasonality, births with vaccination, deaths, importation, and reported cases (the `gm-port` rewrite; agrees, with no change to Starsim)
+    - [x] MEmilio: the age-resolved ODE SECIR, with seasonality, a cosine-smoothed cut in contacts, and test-and-trace capacity (agrees within 1.5 people of 10,000, the error of the reference itself; everything declared)
+    - [x] summer2: SEIR by age with a clinical stratification of `I` only, entered by age, with infectiousness by level and derived outputs (agrees within 0.0006 people of 1,000)
+    - [x] epydemix: COVID-19 in Massachusetts, nine age groups, an Erlang delay to death, seasonality, mobility, reopening scenarios, and calibration (agrees at fixed values within 1%; the calibration is a point estimate, not ABC-SMC)
+    - [x] flepiMoP: two provinces with vaccination and waning, three scenarios of stacked modifiers, and chained outcomes (agrees exactly by province with the original's draws)
+    - [x] odin: SEIR in 5 age groups with births, deaths, aging, waning, and a fixed 14-day latent period (`delay()`) (agrees within 1.6%, from the stages; the youngest group differs because odin's latent people do not age)
+    - [x] Atomica: the HIV care cascade by sex, with programs and three budget scenarios (identical to rounding error)
+    - [x] EMULSION: the quickstart's three state machines (age, gestation, health), births on farrowing, minimum stays, a calendar, and a quarantine capacity (agrees within 1.8 animals with EMULSION's effective quarantine window)
+    - [x] EpiModel: HIV with a care cascade and PrEP over two dynamic networks, four scenarios (agrees within the noise of the runs; 62 lines against 405, 2.5 s against 54)
+    - [x] LASER: measles in England and Wales (53 places within 100 km of Norwich, at their real sizes, for 10 years), with births, life-table deaths, seasonality, importations, and gravity coupling (agrees: 106,466 infections against 106,639; 131 s against 3.0 s)
+    - [ ] SimInf: SISe3 in 1,600 herds with an environmental pressure and 783,773 events, aging by the register's `to_states` (fully declared; within each herd it agrees, but infection spreads between herds about 25% more slowly, about 3 standard errors, cause not found; 14 s a run as Gillespie against 0.1 s)
+    - [ ] TB: not chosen
 
 ## By section of the spec
 
@@ -50,14 +61,15 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `ss.Sim(model, ...)`, with modules named from their variables
 - [x] `sim.new()`, `sim.describe()`, `sim.solvers()`, `sim.hash()`
 - [x] `sim.run(n_runs=)` and `ss.parallel(name=sim, n_runs=)`
-- [ ] `ss.load()` of a model spec
-- [ ] `sim.diagram()`, `sim.R0()`
+- [x] `ss.load()` of a model spec (`ss.from_spec()`), giving the same spec and hash: declared diseases (states, parameters, transitions, outcomes and results, values by group, time series, seasonal values, and functions of NumPy's in rates) and their stratifications, and the run settings. Not yet: networks, modifiers, interventions, Python functions, priors and likelihoods, movement between places, and joint splits, each of which raises `NotImplementedError` saying so
+- [x] `sim.R0()` and `disease.R0()`, from the next-generation matrix at the disease-free state (with the sim's mixing, stratification, and places; a count that infection depends on, such as a water reservoir, counts as infected)
+- [x] `disease.diagram()`: a Matplotlib figure, or the text of a Mermaid flowchart
 
 ### 02 Types
 
 - [x] The unit rules for declared sims (`unit=`, typed `dt`, dates, typed values, timesteps)
 - [x] Typed durations and rates in expressions
-- [x] `W102 LargeStep`, for the solvers that take whole steps
+- [x] `W102 LargeStep`, for the solvers that take whole steps (including Euler with `substeps=` given, where outflows that would take more than everyone in a compartment are scaled down together, as Atomica does)
 - [ ] The other unit notes
 
 ### 03 States and transitions
@@ -65,32 +77,39 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Arrow strings, `>>` and `@`, `ss.Transition`, and the class form
 - [x] `ss.null`, births and deaths, branches with `p=`, competing hazards
 - [x] People versus count states, inferred
+- [x] Counts are real under every solver: deterministic, at their expected values, under `gillespie`, `tau`, and `binomial` (SimInf's environmental pressure died out when it was drawn as whole numbers), and advanced by RK4 over each step as agents (it was biased by 5% and a step early)
+- [x] As agents, counts in rates are those at the start of the step for every transition (they depended on the order the states were declared)
 - [x] Dwell-time distributions, `stages=`, `ss.erlang`
 - [x] Functions as parameter values (the try-it rule)
-- [ ] `states=` on transmission, `where=` on a transition
+- [x] NumPy functions of counts and parameters in a rate (`np.minimum`, `np.maximum`, `np.clip`, `np.exp`, `np.log`, `np.sqrt`, `np.abs`, `np.sin`, `np.cos`), and comparisons (`Q.n < 20`, 1 or 0), declared, and run in the kernels
+- [x] `where=` on a transition (`ss.progression('J -> A', rate=..., where=ppl.age > 1)`): a modifier that sets its rate to 0 for everyone else, so it runs wherever a modifier with that condition does
+- [ ] `states=` on transmission
 
 ### 04 Parameters
 
 - [x] `ss.par` with bounds, priors, and docs; parameters named from their slots
 - [x] `pars=` by name on the sim
-- [x] `ss.timeseries` (constant, linear, spline) and `ss.seasonal`, in rates, durations, modifier amounts, coverage, and capacity
-- [ ] A time series inside `ss.by`
+- [x] `ss.timeseries` (constant, linear, cosine, spline) and `ss.seasonal`, in rates, durations, modifier amounts, coverage, and capacity
+- [x] A time series inside `ss.by` (or `ss.seasonal`), in the keyword and table forms; tabulated by group for the kernels
 - [ ] `requires=` and `sim.requires()`
 
 ### 05 Dimensions
 
-- [x] `stratify()` on a disease and on the sim, `split=`, `adjust=`
-- [x] `ss.transfer` as a rate, `ss.by` (one dimension, a product over several, a table, or an array with named axes)
+- [x] `stratify()` on a disease and on the sim, `split=`, `adjust=` (of a transition, or of `rel_trans` and `rel_sus`)
+- [x] `ss.transfer` as a rate (a parameter in it is registered, so `pars=` sets it, and `ss.modify(sir.vaccination, ...)` scales it, under every solver), `ss.by` (one dimension, a product over several, a table, or an array with named axes)
 - [x] `split=` over several dimensions at once (`split=ss.by(pop, dims=['age', 'patch'])`); as agents, the other levels are drawn given the age group
 - [x] Aging between age groups (it was off unless there were births or deaths; now on with an age stratification, unless `use_aging=False`)
 - [x] `states=` on `stratify()`: dimensions of some states only, including states that are not people
+- [x] Entering a dimension of some states only with a split that depends on another dimension (`split=ss.by(..., dims=['age', 'clinical'])`, each row the share entering each level), under every solver; an `adjust` that cannot apply, since the people it moves have no level of the dimension, raises `E306`
 - [x] Strain dimensions: a force of infection for each strain, the infector's strain passed on, `adjust` by strain
 - [x] Space: mixing within each place, counts per place, `ss.geo`, `ss.gravity`, and `ss.Mobility` (commuting, visiting, and migration)
 - [x] Dimensions listed by `describe()`, with the states each applies to and the mobility
 - [x] Initial conditions for each level of a dimension (`init=dict(I=ss.by(patch=[...]))`)
 - [x] Age groups given as labels, kept apart from the age people have; `use_aging=False` in a compartmental run
-- [ ] `immunity=` between strains
+- [x] `immunity=` between strains: people in a state that has a strain and is not otherwise infected (`R`) can be infected by each strain, as far as their past strains do not protect them. A compartmental run keeps only the last strain (noted); agents keep every strain they have had. Not yet over networks as agents
 - [ ] `where=` on `stratify()`
+- [x] As agents, a split is assigned exactly (rounded to whole agents) in a random order
+- [x] A register's `to_states` column moves the people chosen from each state to the matching one of another list (SimInf's shift matrix), under every solver
 - [x] Movement registers (`ss.Mobility(data=)`): people moved between places, added, and removed on given dates, under every solver
 - [ ] Named geographies (`ss.geo('Kenya')`)
 - [x] A contact matrix by age within each place, in a compartmental run, with commuting, visiting, or a moving force of infection
@@ -100,7 +119,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - [x] Homogeneous mixing, `ss.MixingPool`, `ss.contacts` matrices
 - [x] A contact matrix for each of the model's own dimensions, multiplied together (`ss.contacts(age=..., location=...)`)
-- [x] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated (`ss.PartnerNet`, `net.check()`)
+- [x] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated (`ss.PartnerNet`, `net.check()`); partnerships ended by a partner dying are allowed for, as EpiModel's `d.rate` correction does, so the mean degree holds with births and deaths
+- [x] Networks given by name (`networks=dict(main=..., casual=...)`), and an `ss.PartnerNet` named from its variable
 - [ ] Other target statistics (mixing by attribute, triangles), and `n_contacts`/`concurrency` on `ss.MFNet`
 - [x] Scheduled events that add, remove, or move individuals: one register, where a row with no `from` adds people and one with no `to` removes them. Each event happens at the start of the first step on or after its date, in the order of the table; people are chosen at random from the states it names (by default, everyone), and added to its states (by default, the first). In a compartmental run with several diseases, each draws its own people
 - [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
@@ -121,8 +141,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] Network parameters as targets (`school.pars.n_contacts`)
 - [ ] Base and effective values on arrays (`.base`), `track_writes=`
 - [ ] A condition on another module's state in a compartmental run
-- [ ] A multiplier on a transition that is a `p=` branch, or (as agents) one whose dwell time has already been sampled
-- [ ] Clipping of modified values to the quantity's range
+- [x] As agents, a multiplier on a transition whose dwell time has already been drawn: when it changes, what is left of each person's dwell time is rescaled by the change in the rate (a modifier that started during the run had no effect on the people already waiting)
+- [ ] A multiplier on a transition that is a `p=` branch
+- [x] Clipping of modified values to the quantity's range: a rate, duration, or multiplier made negative is 0, with `W503 ClippedToRange` once and a line in `what_modifies()` (a branch probability was already clipped to [0, 1])
 
 ### 08 Interventions
 
@@ -137,7 +158,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Delivery results: `delivered`, `eligible`, `coverage`, `cost`, `diagnosed`
 - [x] Both kinds of solver: a product dimension in a compartmental run, per-agent records in an agent-based one
 - [x] Scenarios: `sims.diff('baseline')`
-- [ ] Delivery results by stratum
+- [x] Delivery results by stratum (`delivered`, `eligible`, `coverage`, `cost`, `diagnosed`), under every solver
 - [ ] Waning by a function of time in a compartmental run (stages)
 - [ ] A test delay in a compartmental run
 - [x] Time series for `coverage=` and `capacity=` (`ss.timeseries`)
@@ -149,11 +170,14 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] A count per state and a flow per transition, with the timing convention
 - [x] Result expressions (sums and ratios of states)
 - [x] `ss.outcome`, with delays, durations, and reporting periods
-- [x] `res.select()` and `res.by()` on stratified results, including cumulative ones; a state has only the dimensions it was stratified by
+- [x] `res.select()` and `res.by()` on stratified results, including cumulative ones and outcomes (with their delays, durations, and reporting periods kept for each group); a state has only the dimensions it was stratified by
 - [x] `select()` and `by()` on the results of many runs (kept by group in one kernel call unless that would take more than 500 MB)
 - [x] A parameter as the weight of a flow in an outcome (`rho * infection`)
+- [x] A set of states as their sum (`Ih / (Ia | Is | Ih)`, `(Ia | Is).n`), and a sum of states as the sources of a transition (`(Ia + Is) >> R`)
+- [x] `select()` and `by()` chained (`res.n_I.select(age='0-4').by('sex')`); declared sums of states stratified, and ratios of two sums too (each keeps its numerator and denominator by group, adds each up over the groups selected, and then divides)
+- [x] A flow into a dimension that its source does not have is recorded at the level people arrive at (summer2's incidence by clinical status), under every solver
 - [ ] Flows in ratio results
-- [ ] Extinction reporting
+- [x] Extinction reporting: `msim.extinction()` (not yet in `msim.summarize()`)
 
 ### 10 to 12 Execution, random numbers, and solvers
 
@@ -175,20 +199,25 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] A kernel for `tau`: the LASER example takes 6.7 s, from 93 s, and agrees with the ODE
 - [x] Kernels for `gillespie` and `sde`, stepped and for a whole run. A Gillespie SIR in 100,000 people takes 0.16 s, from 4.2, and the malaria model in 1,000 people 0.45 s, from 27; the SDE was already cheap (17 ms, from 28). The SDE now takes `substeps=` in Python as well
 - [ ] Kernels for the `scipy` integrators
-- [ ] Gillespie with many groups: every rate is worked out again after each event, though in a model where places do not mix within a step only the place of the event changes. The SimInf herds take 9.5 s (about 18 µs an event, over 1,600 herds), against 0.08 s for SimInf, which runs each herd on its own
-- [ ] A whole run in the kernel with modifiers, transfers, and deliveries (the run is stepped from Python, with one kernel call a step)
+- [x] Gillespie with many groups: where places do not affect each other within a step (people mix within their place, and no transition moves them between groups), each place has its own events over the step, and only its rates are worked out again after each one. The SimInf herds take 3.0 s, from 9.5 (SimInf: 0.08 s); a movement register of 466,692 events is read in 0.9 s, from 41
+- [x] A whole run in the kernel with modifiers that depend only on time (no `where=`, `when=`, or function as the amount): the program is worked out for every step before the run. flepiMoP's scenarios with four modifiers no longer need the loop
+- [ ] A whole run in the kernel with other modifiers, transfers, and deliveries (the run is stepped from Python, with one kernel call a step)
 - [ ] Many runs in one call with different parameter values (a restarted run is 0.5 to 1 ms, most of it Python around the kernel)
+- [x] Building a sim with modifiers or values that vary in time no longer builds a second, probe sim to try them on groups (they always work on groups), and a modifier's search for time parameters no longer walks into the modules its condition names: flepiMoP's scenarios build in 26 ms, from 62
 - [ ] Faster building of a sim (20 to 50 ms, which is now nearly all of a single run)
 - [x] Agents: under homogeneous mixing with one strain, the probability of infection for everyone susceptible and exposed in one compiled pass (the rate is worked out once for each group, and the draw is the one made before, so the same agents are infected); each state counted by group in one pass; the level of each agent in a dimension reused until the property changes. The LASER example takes 3.5 ms a step, from 4.4 (8.5 at the start)
+- [x] Agents: each agent's group is worked out again only for the agents whose level changed (births, moves, a new strain), which the code that changes it says (`sim.groups_changed(uids)`), and only dimensions binned from a property that changes on its own (age) are checked every step; and a state's members are read from its array rather than through the living agents. LASER's England and Wales model as agents runs 38% faster (100 days in 2.1 s, from 3.4), with the same results
 - [ ] Agents: the same for scheduled exits, exposure by place, and the counts of all the states at once: perhaps another 20%. A pass over 175,000 agents costs 0.1 to 0.2 ms however it is written, and a step needs about fifteen
 - Not planned: a whole agent-based run in one kernel, as for compartments. A prototype of the best case (one compiled pass over 175,000 agents a step) took 1.1 ms a step on one thread, against 4.4 ms now, so 4 times at most; it reaches the 1 ns for each agent of LASER only on 20 threads, which Starsim usually spends on running sims side by side. And it would run only models with nothing in Python between steps, which are the ones the compartmental solvers already run
+- [ ] The chain-binomial solver with many stages: a substep for each stage (40 a day for LASER's latent period; fewer makes each stage too long). Moving people several stages in one substep, as many as an Erlang chain would in that time, would be exact with one substep
 - [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
-- [ ] Time-varying values read at the times the ODE integrator evaluates the rates (they are read once a step)
+- [x] Values that vary smoothly in time (`ss.seasonal`, and `ss.timeseries` other than `mode='constant'`) read at the time of each stage of an RK4 step, in the kernels (from their values at the start, middle, and end of each step) and in Python (and by the `scipy` integrators). A step function is held for the whole step, as `ss.change()` is. MEmilio's age-resolved SECIR at a step of a day went from 9 people in 10,000 to 1.5, the error of the reference itself
 - [ ] JAX and gradients
 
 ### 13 Inference
 
 - [x] `ss.data`, `sim.calibrate()`, `ss.Fit`
+- [x] Fitting a parameter wherever it is used: in an initial count (`init=dict(E=I0/2, I=I0)`), inside `ss.seasonal` or `ss.timeseries` (`mean=(1 + smin)/2`), or shared by several modules or by models built more than once (registered with each, and fitted once)
 - [ ] Data matched by name to summed results
 - [x] Likelihoods (`ss.poisson`, `ss.nbinom`, `ss.normal`, `ss.lognorm_ex`, with the model's value as the mean), fitted by maximum likelihood; `ss.compare_models`, with `holdout=` and `folds=`
 - [ ] Posterior methods (NUTS, particle MCMC, ABC-SMC) and priors
@@ -198,13 +227,14 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - [x] `sim.to_spec()` and the model hash
 - [x] Coded errors and notes (`E204`, `E804`, `W1205`, ...)
-- [ ] The notes `W1201` to `W1204`
+- [x] `W1201 SmallCounts` (an ODE or SDE that starts with fewer than 10 infected) and `W1202 ExtinctionPossible` (the number infected falls below one and rises again)
+- [ ] The notes `W1203` and `W1204` (`W102` says what `W1204` would)
 - [ ] Interop with other formats
 
 ## Departures from the spec
 
 - Sims with no declared states keep Starsim 3's time defaults.
-- Rates are written as strings in the model spec, and the spec is `sim.to_spec()`; `sim.to_json()` is unchanged from Starsim 3.
+- Rates are written as strings in the model spec, and the spec is `sim.to_spec()`; `sim.to_json()` is unchanged from Starsim 3. `ss.load()` reads the strings back with a parser that accepts only arithmetic, comparisons, the functions allowed in rates, typed quantities (`perday(0.5)`), and the names the module declares, so loading a spec runs no code from it.
 - The default ODE integrator is fixed-step RK4 with automatic substeps.
 - A stratified population has ages from 0 to 100.
 - Every agent's dwell time is sampled, including exponential ones.
@@ -240,4 +270,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - As agents, people added by a movement register in a step are made at its end, so the other events of the same step cannot choose them; and people who moved into a place in a step are chosen after those who were already there.
 - A movement register cannot add people to a state that splits on entry into branches.
 - A condition on a property of people (`ppl.age < 5`) needs a `ppl` object (`ss.People(1)`) even in a compartmental model, which has none.
-- Arithmetic on stratified results keeps the values by group only for sums, differences, and scaling by a number; for anything else (a ratio), `select()` says the result is not stratified.
+- Arithmetic on stratified results keeps the values by group only for sums, differences, and scaling by a number; for anything else (a ratio), `select()` says the result is not stratified. (A ratio declared on the disease, `prev=I/N`, is stratified: it keeps its numerator and denominator.)
+- With `immunity=` between strains, a compartmental run keeps only each person's last strain (noted), so with partial protection people can go from A to B and back to A; as agents, every strain is kept, but not yet over networks.
+- Code that changes a property of people that a dimension is made from (`people.patch`) has to call `sim.groups_changed(uids)`, or the agents' groups are not worked out again (dimensions binned from a property that changes on its own, such as age, are checked every step).
+- A state that is not people is deterministic under the stochastic solvers, so a vector population whose own randomness matters cannot be drawn.
+- Under the exact solver, places are run one at a time between steps only when people mix within their place and nothing moves them between groups within a step; otherwise every rate is worked out again after each event.
+- A plain `duration=` on an outcome is an exponential stay, while `delay=` is an exact shift.

@@ -1,6 +1,7 @@
 """
 Define core Sim classes
 """
+import os
 import sys
 import inspect
 import itertools
@@ -107,7 +108,7 @@ class Sim(ss.Base):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
         for arg in args:
             for mod in sc.tolist(arg):
-                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery)) else []
+                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
                     if obj is not None and obj._default_name:
@@ -291,6 +292,16 @@ class Sim(ss.Base):
         solvers = ss.solvers
         modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
         self.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
+        for mod in self.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
+            for name,tr in mod.graph.transitions.items():
+                where = getattr(tr, 'where', None)
+                key = f'where_{mod.name}_{name}'
+                if where is not None and key not in pars.connectors:
+                    if callable(where) and not isinstance(where, ss.Cond): # A function of the sim
+                        others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
+                    else: # A condition, a state, or an array
+                        others = ~ss.conditions.as_cond(where)
+                    pars.connectors[key] = ss.modify(f'{mod.name}.{name}', set=0, where=others, name=key)
         solver = solvers.aliases.get(pars.solver, pars.solver)
         if solver not in ss.solver_names:
             errormsg = f'Unknown solver "{pars.solver}"; the choices are {sc.strjoin(ss.solver_names)}'
@@ -300,6 +311,7 @@ class Sim(ss.Base):
         self.unit_source = None
         self.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), ss.change(), and the efficacy of products
         self.overlaps = [] # Pairs of modifiers that set the same quantity at once, which is noted
+        self.clipped = set() # Quantities whose modifiers took them out of their range, which were clipped to it
         self.set_par_values()
         self.init_strats()
         self.mixing = solvers.Mixing(self)
@@ -364,9 +376,15 @@ class Sim(ss.Base):
 
     def set_par_values(self):
         """ Apply parameter values given by name (pars=dict(beta=0.1), or 'sir.beta' if the name is used by more than one module) """
+        for mod in self.declared: # A parameter shared with a module outside this sim (e.g. one model built twice from the same ss.par) belongs to the first module here that uses it
+            for p in mod.graph.pars.values():
+                if p.module is None or not any(p.module is m for m in self.declared):
+                    p.module = mod
         for key,val in (self.par_values or {}).items():
             modname, _, name = key.rpartition('.')
             mods = [mod for mod in self.declared if name in mod.pars and modname in ['', mod.name]]
+            if len(mods) > 1 and all(mod.graph.pars.get(name) is mods[0].graph.pars.get(name) is not None for mod in mods): # One parameter shared by several modules
+                mods = mods[:1]
             if len(mods) != 1:
                 options = [f'{mod.name}.{k}' for mod in self.declared for k in mod.graph.pars]
                 ss.error('E602', f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
@@ -464,6 +482,8 @@ class Sim(ss.Base):
         mods = self.modifiers.get((modname, kind, name), [])
         lines = [path, '  modifiers' if mods else '  modifiers: none']
         lines += [f'    {mod.describe()}' for mod in mods]
+        if path in self.clipped:
+            lines.append('  clipped: the modifiers made it negative during the run, so it was set to 0 where it was')
         text = '\n'.join(lines)
         if output:
             return text
@@ -529,7 +549,9 @@ class Sim(ss.Base):
         self.group_coords = np.indices(self.group_shape).reshape(len(self.strats), -1).T if self.strats else np.zeros((1, 0), dtype=int) # The level of each group in each dimension
         split = np.ones(self.n_groups)
         births = np.ones(self.n_groups)
-        joints = [strat.joint for strat in self.strats if strat.joint is not None]
+        for d,strat in enumerate(self.strats):
+            strat.dim = d
+        joints = [strat.joint for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
             errormsg = 'Only one split= can cover several dimensions at once'
             raise ValueError(errormsg)
@@ -548,6 +570,20 @@ class Sim(ss.Base):
             first = np.zeros(strat.n)
             first[0] = 1
             births *= (first if strat.kind == 'age' else strat.split)[self.group_coords[:, d]] # People are born into the youngest group
+        for d,strat in enumerate(self.strats): # A split of a dimension of some states only, given the levels of others (e.g. clinical severity by age): normalized over this dimension
+            if strat.joint is not None and strat.states is not None:
+                ds, grid = strat.joint.grid(self)
+                if d not in ds:
+                    errormsg = f'The split of "{strat.name}" is given over {sc.strjoin(strat.joint.dims)}, which does not include "{strat.name}"'
+                    raise ValueError(errormsg)
+                axis = ds.index(d)
+                totals = grid.sum(axis=axis, keepdims=True)
+                grid = np.divide(grid, totals, out=np.full(grid.shape, 1/strat.n), where=totals>0)
+                strat.cond = (ds, grid)
+                weights = np.prod([self.strats[dd].split[self.group_coords[:, dd]] for dd in ds if dd != d], axis=0) # The split overall, for anything that has no group to go by
+                split_all = np.bincount(self.group_coords[:, d], weights=weights*strat.shares(self.group_coords), minlength=strat.n)
+                strat.split = split_all/split_all.sum()
+                strat.guessed.pop('split', None)
         self.group_split = split
         self.birth_split = births
         for strat in self.strats:
@@ -575,32 +611,94 @@ class Sim(ss.Base):
             raise KeyError(errormsg)
         return names.index(name)
 
+    def groups_changed(self, uids=None):
+        """
+        Say that the level of some agents in a dimension has changed (or of any agent, if uids is None), so their groups are worked out again
+
+        Code that changes a property of people that a dimension is made from (e.g. `people.patch`)
+        calls this; see `group_raw()`.
+        """
+        self._group_cache = None
+        dirty = getattr(self, '_group_dirty', None)
+        if uids is None or dirty is False:
+            self._group_dirty = False # Everyone
+        else:
+            self._group_dirty = (dirty or []) + [np.asarray(uids, dtype=np.int64)]
+        return
+
     def group_raw(self):
-        """ In an agent-based run: the group of every agent, as an array indexed by UID """
+        """
+        In an agent-based run: the group of every agent, as an array indexed by UID
+
+        It is kept until `groups_changed()` says it has changed, and then only the groups of the
+        agents named are worked out again. A dimension binned from a property that changes on its
+        own, such as age, is checked again on every step.
+        """
         cache = getattr(self, '_group_cache', None)
-        if cache is not None and cache[0] == self.ti and len(cache[1]) == len(self.people.uid.raw):
+        n = len(self.people.uid.raw)
+        binned = any(strat.edges is not None for strat in self.strats)
+        if cache is not None and (cache[0] == self.ti or not binned) and len(cache[1]) == n:
             return cache[1]
+        dirty = getattr(self, '_group_dirty', None)
+        self._group_dirty = None
+        kept = getattr(self, '_level_cache', None)
+        if isinstance(dirty, list) and not binned and kept is not None and '' in kept and len(kept['']) == n: # Only some agents have changed, and we know which: work out their groups alone
+            uids = np.unique(np.concatenate(dirty))
+            levels = []
+            out = kept[''].copy()
+            for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
+                raw = self.people[strat.attr].raw
+                old_raw, old_level = kept[strat.name]
+                if len(old_raw) != n: # The arrays have grown since: work everything out
+                    self._group_dirty = False
+                    return self.group_raw()
+                if len(uids):
+                    level = old_level.copy()
+                    level[uids] = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw[uids])
+                    old_raw[uids] = raw[uids]
+                    out[uids] += (level[uids] - old_level[uids])*int(mult)
+                    kept[strat.name] = (old_raw, level)
+                levels.append(kept[strat.name][1])
+            kept[''] = out
+            self._group_cache = (self.ti, out, levels)
+            return out
         people = self.people
         kept = getattr(self, '_level_cache', None) # The values each level was worked out from: most properties change rarely, and checking is much cheaper than working the levels out again
         if kept is None:
             kept = self._level_cache = dict()
         levels = []
         changed = False
-        for strat in self.strats:
+        def level_of(strat, raw):
+            return np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw)
+        mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]
+        n = len(people.uid.raw)
+        rebuild = '' not in kept or len(kept['']) != n # The last, for a sim with no dimensions whose people have grown
+        updates = [] # For each dimension whose values changed for some agents: who, their old level, and their new one
+        for strat,mult in zip(self.strats, mults):
             raw = people[strat.attr].raw
             old = kept.get(strat.name)
-            if old is None or len(old[0]) != len(raw) or not np.array_equal(old[0], raw):
-                if strat.edges is not None:
-                    new = np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1)
-                else:
-                    new = ss.kernels.levels(raw)
-                old = kept[strat.name] = (raw.copy(), new)
-                changed = True
+            if old is None or len(old[0]) != len(raw):
+                old = kept[strat.name] = (raw.copy(), level_of(strat, raw))
+                rebuild = True
+            else:
+                idx = np.flatnonzero(old[0] != raw) # Usually few: those born, or who moved, since it was last worked out
+                if len(idx):
+                    before = old[1][idx]
+                    levels_new = old[1].copy() # A copy, since the old one may be held by whoever asked for it
+                    levels_new[idx] = level_of(strat, raw[idx])
+                    old[0][idx] = raw[idx]
+                    old = kept[strat.name] = (old[0], levels_new)
+                    updates.append((idx, before, levels_new[idx], int(mult)))
             levels.append(old[1])
-        if changed or '' not in kept or len(kept['']) != len(people.uid.raw): # The last, for a sim with no dimensions whose people have grown
-            out = np.zeros(len(people.uid.raw), dtype=int)
-            for level,mult in zip(levels, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
+        if rebuild:
+            out = np.zeros(n, dtype=int)
+            for level,mult in zip(levels, mults):
                 out += level*int(mult)
+            kept[''] = out
+        elif updates:
+            out = kept[''].copy()
+            for idx,before,after,mult in updates:
+                out[idx] += (after - before)*mult
             kept[''] = out
         self._group_cache = (self.ti, kept[''], levels)
         return kept['']
@@ -616,9 +714,11 @@ class Sim(ss.Base):
         uids = people.auids
         joint = self.joint[0] if self.joint is not None else []
         for d,strat in enumerate(self.strats):
-            if strat.kind != 'age' and d not in joint:
+            if strat.kind != 'age' and d not in joint and strat.cond is None: # Exactly the split, rounded to whole agents, in a random order
                 rvs = getattr(self, f'rng_strat_{strat.name}').rvs(uids)
-                people[strat.attr][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+                counts = ss.Compartmental.round_preserving(strat.split*len(uids)).astype(int)
+                levels = np.repeat(np.arange(strat.n), counts)
+                people[strat.attr][uids[np.argsort(rvs, kind='stable')]] = levels
         if joint: # The levels of a joint split, together, given the age group if age is one of them
             ds, grid = self.joint
             ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
@@ -631,6 +731,11 @@ class Sim(ss.Base):
             cell = np.minimum((cdf[row] <= rvs[:, None]).sum(axis=1), grid.shape[1] - 1)
             for i,level in zip(others, np.unravel_index(cell, [self.strats[ds[i]].n for i in others])):
                 people[self.strats[ds[i]].attr][uids] = level
+        for strat in self.strats: # A split given the levels of other dimensions, once those are known
+            if strat.cond is not None:
+                self.groups_changed()
+                people[strat.attr][uids] = strat.draw(self, uids, getattr(self, f'rng_strat_{strat.name}').rvs(uids))
+        self.groups_changed()
         return
 
     def agent_reasons(self, modules):
@@ -666,8 +771,9 @@ class Sim(ss.Base):
 
     def try_functions(self):
         """ Try each function in the model on groups, to see whether the model can run as compartments; returns the reasons it cannot """
-        funcs = [p for mod in self.declared for p in mod.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, ss.Dist)]
-        funcs += [mod for mod in list(self.pars.interventions.values()) + list(self.pars.connectors.values()) if hasattr(mod, 'try_groups')]
+        timed = (ss.Dist, ss.transitions.TimeValue) # Values that always work on groups, so need no trying
+        funcs = [p for mod in self.declared for p in mod.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, timed)]
+        funcs += [mod for mod in list(self.pars.interventions.values()) + list(self.pars.connectors.values()) if hasattr(mod, 'try_groups') and not getattr(mod, 'timed', False)]
         if not funcs or not hasattr(self, 'inputs'):
             return []
         reasons = []
@@ -676,7 +782,7 @@ class Sim(ss.Base):
             for mod in probe.declared:
                 mod.engine.start_step()
                 for p in mod.graph.all_pars():
-                    if callable(p.raw) and not isinstance(p.raw, ss.Dist):
+                    if callable(p.raw) and not isinstance(p.raw, timed):
                         try:
                             mod.engine.value(p)
                         except Exception as E:
@@ -703,7 +809,8 @@ class Sim(ss.Base):
         def is_dur(obj):
             return isinstance(obj, ss.dur) and not isinstance(obj, ss.datedur)
         dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
-        years = [v for v in [pars.start, pars.stop] if sc.isnumber(v) and time.assume_cal_year(v)]
+        unit_given = pars.unit is not None and pars.unit.removesuffix('s') != 'year' # A bare number is then in that unit, however large (stop=3650 days), not a calendar year
+        years = [v for v in [pars.start, pars.stop] if sc.isnumber(v) and time.assume_cal_year(v)] if not unit_given else []
         durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
         if pars.unit is not None:
             unit = pars.unit.removesuffix('s')
@@ -779,6 +886,8 @@ class Sim(ss.Base):
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else ''
                 if strat.kind == 'space':
                     text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                elif strat.kind == 'age':
+                    text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if self.unit is None else '; people age between the groups'
                 add('dimension', text, f'guessed: {"; ".join(strat.guessed.values())}' if strat.guessed else None)
         for mod in mods:
             if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
@@ -860,6 +969,20 @@ class Sim(ss.Base):
         text = '\n'.join(lines)
         return text if output else print(text)
 
+    def R0(self):
+        """
+        The basic reproduction number of each declared disease, with the sim's mixing and stratification: see `ss.Disease.R0()`
+
+        Returns a number if the sim has one declared disease with a transmission, and otherwise a dict by disease.
+        """
+        sim = self.new(solver='ode', verbose=0).init()
+        out = sc.objdict()
+        for dis in sim.diseases():
+            ngm = dis.engine.next_generation() if dis.graph is not None else None
+            if ngm is not None:
+                out[dis.name] = float(np.max(np.abs(np.linalg.eigvals(ngm))))
+        return out[0] if len(out) == 1 else out
+
     def hash(self):
         """
         The run's identity: short hashes of the model's structure, its parameter values, and the run settings, plus the seed
@@ -899,7 +1022,7 @@ class Sim(ss.Base):
         out.schema = 'lingua-franca/1.0'
         out.modules = [modspec(mod) for key in ['custom', 'demographics', 'diseases'] for mod in self[key]()]
         out.networks = [modspec(mod) for mod in list(self.networks()) + getattr(self, 'mixed', [])]
-        out.stratify = [sc.dcp(strat.spec) for strat in getattr(self, 'strats', []) if getattr(strat, 'owner', None) is None]
+        out.stratify = [sc.dcp(strat.spec) for strat in getattr(self, 'sim_strats', [])] # Those of a module are in its own spec, and those of an intervention are part of the scenario
         out.modifiers = [modspec(mod) for mod in self.connectors()]
         out.interventions = [modspec(mod) for mod in self.interventions()]
         out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=self.unit,
@@ -1265,7 +1388,7 @@ class Sim(ss.Base):
         data = data if data is not None else self.data
         if isinstance(data, ss.data):
             data = data.load(self)
-        elif isinstance(data, str):
+        elif isinstance(data, (str, os.PathLike)):
             data = ss.data(data).load(self)
         self.data = ss.validate_sim_data(data)
         if self.data is not None and getattr(self, 'declared', None):
@@ -1418,11 +1541,30 @@ class Sim(ss.Base):
         
         return self # Allows e.g. ss.Sim().run().plot()
 
+    def kernel_reason(self):
+        """ Why the sim is not run in one call to the kernels (see `sim.kernel_only()`), in a few words """
+        if self.solver == 'abm' or not getattr(self, 'declared', None):
+            return 'it runs as agents' if self.solver == 'abm' else 'it has no declared model'
+        elif self.loop.index or self.loop.insertions or self.diagnostics or self.verbose >= 1:
+            return 'it has inserted functions, diagnostics, or verbose output'
+        names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'} - {mod.name for mod in self.modules if getattr(mod, 'timed', False)}
+        others = [mod.name for mod in self.modules if mod.name in names and not isinstance(getattr(mod, 'engine', None), ss.Compartmental)]
+        if others:
+            return f'{sc.strjoin(others)} {"has" if len(others) == 1 else "have"} a step of {"its" if len(others) == 1 else "their"} own (a modifier with where=, when=, or a function as its amount, an intervention, or an analyzer)'
+        for mod in self.declared:
+            engine = mod.engine
+            if not engine.kernel_only():
+                if engine.program is False:
+                    return f'a rate in "{mod.name}" is a function of the sim, so is worked out in Python each step'
+                return f'"{mod.name}" has custom methods, transfers, branch probabilities that vary, or its own timestep'
+        return 'unknown'
+
     def kernel_only(self):
         """ Whether the sim is nothing but compartments that the kernels can run from start to finish: see `ss.Compartmental.kernel_only()` """
         if self.loop.index or self.loop.insertions or self.diagnostics or self.verbose >= 1 or not getattr(self, 'declared', None) or self.solver == 'abm':
             return False
         names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'}
+        names -= {mod.name for mod in self.modules if getattr(mod, 'timed', False)} # A modifier that depends only on time is tabulated by the engines: see ss.Compartmental.tables()
         mods = [mod for mod in self.modules if mod.name in names]
         return len(mods) == len(names) and all(isinstance(getattr(mod, 'engine', None), ss.Compartmental) and mod.engine.kernel_only() for mod in mods)
 
@@ -1449,7 +1591,7 @@ class Sim(ss.Base):
             self.init()
         self.loop.index = 0
         if not self.kernel_only():
-            errormsg = 'Only a sim that is nothing but compartments can be restarted; use sim.new() to get a fresh copy instead'
+            errormsg = f'This sim cannot be restarted, since it is not run in one call to the kernels: {self.kernel_reason()}. Use sim.new() to get a fresh copy instead'
             raise ValueError(errormsg)
         if rand_seed is not None:
             self.pars.rand_seed = rand_seed
@@ -1938,7 +2080,9 @@ class Sim(ss.Base):
                             found = True
                             break
                     if found:
-                        ax.scatter(df.index.values, df[dfkey].values, **kw.data)
+                        x = df.index.values
+                        x = ss.DateArray(x) if len(x) and isinstance(x[0], ss.date) else x # As the results' time vector is, so they share an axis
+                        ax.scatter(x, df[dfkey].values, **kw.data)
 
                 # Plot results, with one line per column for 2D results
                 if res.columns is None:

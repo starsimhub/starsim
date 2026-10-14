@@ -182,11 +182,11 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':Dists}, flatten=True)
+            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':(Dists, ss.Compartmental)}, flatten=True) # A compartmental engine draws from its own generator; the distributions in the model are found through its graph
             skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
-            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':Dists}, flatten=True)
+            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':(Dists, ss.Compartmental)}, flatten=True)
         else:
             dists = sc.search(obj, type=Dist, flatten=True)
         self.dists = dists
@@ -1321,7 +1321,7 @@ class Dist:
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
-dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
+dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognorm_ex', 'lognorm_im', 'expon',
              'poisson', 'nbinom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
              'randint', 'rand_raw', 'bernoulli', 'choose_n', 'choice', 'histogram']
 
@@ -1395,6 +1395,39 @@ class normal(Dist):
         if not np.all(scale > 0): # Leave the unusual cases to SciPy
             return super().ppf(rands)
         return sp_special.ndtri(rands)*scale + np.asarray(self.dist.kwds['loc'])
+
+
+class truncnorm(Dist):
+    """
+    Normal distribution truncated to an interval
+
+    Args:
+        loc (float): the mean of the normal distribution before truncation (default 0.0)
+        scale (float): its standard deviation (default 1.0)
+        low (float): the lowest value (default -inf)
+        high (float): the highest value (default inf)
+
+    Examples:
+        ```python
+        ss.truncnorm(loc=2.5, scale=0.5, low=1.0, high=4.0, strict=False).rvs(1000)
+        ```
+    """
+    scaling = scale_types.both
+    unit_pars = ('loc', 'scale', 'low', 'high')
+
+    def __init__(self, loc=0.0, scale=1.0, low=-np.inf, high=np.inf, **kwargs):
+        super().__init__(distname='truncnorm', loc=loc, scale=scale, low=low, high=high, **kwargs)
+        return
+
+    def ppf(self, rands):
+        """ The inverse CDF: a uniform draw between the normal's CDF at the two ends """
+        p = self._pars
+        a = sp_special.ndtr((p.low - p.loc)/p.scale)
+        b = sp_special.ndtr((p.high - p.loc)/p.scale)
+        return p.loc + p.scale*sp_special.ndtri(a + rands*(b - a))
+
+    def make_rvs(self):
+        return self.ppf(self.rand(self._size))
 
 
 class lognorm_im(Dist):

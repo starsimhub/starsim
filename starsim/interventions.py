@@ -744,7 +744,27 @@ class Delivery(Intervention):
         if isinstance(self.product, ss.Test):
             results += [ss.Result('diagnosed', dtype=float, scale=abm, label='Number diagnosed', summarize_by='sum')]
         self.define_results(*results)
+        ng = self.sim.n_groups
+        if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()
+            for res in results:
+                res.strats = self.sim.strats
+                res.dims = [strat.name for strat in self.sim.strats]
+                res.strata = np.zeros((len(res), ng))
         return
+
+    def tally(self, key, sel, weight=1.0):
+        """ Add the people selected to a result, in total and by group; returns the total """
+        res = self.results[key]
+        ti = self.sim.ti
+        n = self.count(sel)*weight
+        res[ti] += n
+        if getattr(res, 'strata', None) is not None and n:
+            if self.selector.abm:
+                uids = self.uids(sel)
+                res.strata[ti] += np.bincount(self.sim.group_raw()[uids], minlength=self.sim.n_groups)*weight
+            else:
+                res.strata[ti] += (sel*self.eng.state_counts()).sum(axis=0)*weight
+        return n
 
     def try_groups(self):
         """ Check that the conditions and functions of this delivery can be evaluated on groups """
@@ -777,7 +797,7 @@ class Delivery(Intervention):
             uids = self.uids(sel)
             for d,level in changes.items():
                 sim.people[sim.strats[d].attr][uids] = level
-            sim._group_cache = None
+            sim.groups_changed(uids)
         else:
             for mod in sim.declared:
                 frac = sel
@@ -865,7 +885,7 @@ class Delivery(Intervention):
             sel = sel*(selector.dim(self.offered) == 0)
         if abm:
             sel = sel & selector.to_selection(self.sim.people.auids)
-        self.results.eligible[self.sim.ti] += self.count(sel)
+        self.tally('eligible', sel)
 
         # Coverage
         cov = selector.per_person(1.0 if self.coverage is None else self.coverage)
@@ -916,10 +936,9 @@ class Delivery(Intervention):
         ti = self.sim.ti
         if self.capacity is not None and not capped:
             chosen = self.cap(chosen.copy(), chosen)[1]
-        n = self.count(chosen)
-        res.delivered[ti] += n
+        n = self.tally('delivered', chosen)
         if 'cost' in res:
-            res.cost[ti] += n*product.cost
+            self.tally('cost', chosen, product.cost)
         if not n:
             return
 
@@ -979,7 +998,7 @@ class Delivery(Intervention):
 
     def report(self, pos, neg):
         """ Count the diagnoses, and pass the people with each result to its follow-up """
-        self.results.diagnosed[self.sim.ti] += self.count(pos)
+        self.tally('diagnosed', pos)
         for followup,sel in [(self.on_positive, pos), (self.on_negative, neg)]:
             if isinstance(followup, Delivery):
                 followup.receive(sel)
@@ -992,6 +1011,8 @@ class Delivery(Intervention):
         res = self.results
         ti = self.sim.ti
         res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0
+        if getattr(res.coverage, 'strata', None) is not None:
+            res.coverage.strata[ti] = np.divide(res.delivered.strata[ti], res.eligible.strata[ti], out=np.zeros(self.sim.n_groups), where=res.eligible.strata[ti]>0)
         return
 
     def describe(self):

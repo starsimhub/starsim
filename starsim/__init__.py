@@ -58,7 +58,7 @@ from .arrays import (
 t('distributions') # Slow import due to scipy.stats
 from .distributions import (
     link_dists, make_dist, dist_list, scale_types, Dists, Dist,
-    random, uniform, normal, lognorm_ex, lognorm_im, expon,
+    random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
     poisson, nbinom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
     randint, rand_raw, bernoulli, choose_n, choice, histogram,
     multi_random,
@@ -144,6 +144,9 @@ from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SEIR, SIS
 
 t('loop')
 from .loop import Loop
+
+t('spec')
+from .spec import from_spec
 
 t('sim')
 from .sim import Sim, AlreadyRunError, demo, diff_sims, check_sims_match

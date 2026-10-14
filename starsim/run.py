@@ -539,6 +539,50 @@ class MultiSim:
             raise ValueError(errormsg)
         return self.results.diff(baseline)
 
+    def extinction(self, output=False):
+        """
+        How often each declared disease died out: the share of runs in which nobody was infected by the end, and the median time it happened
+
+        Reported for each scenario, if there are several. Runs that start with nobody infected are not counted as dying out.
+
+        Args:
+            output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
+
+        Examples:
+            ```python
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2))
+            msim = ss.Sim(sir, total_pop=200, solver='gillespie', unit='day', stop=100).run(n_runs=100)
+            msim.extinction() # e.g. "sir: died out in 41% of 100 runs (median time 6 days)"
+            ```
+        """
+        if not isinstance(self.results, MultiResults):
+            errormsg = 'msim.extinction() is only available for sims with declared states and transitions'
+            raise ValueError(errormsg)
+        base = self.base_sim if isinstance(self.base_sim, ss.Sim) else self.sims[0]
+        rows = []
+        for dis in getattr(base, 'declared', []):
+            infected = [s for s in dis.graph.infected if s.people]
+            if not infected or dis.name not in self.results.nested:
+                continue
+            res = self.results.nested[dis.name]
+            first = res[f'n_{infected[0].name}']
+            labels = first.labels if first.labels is not None and len(set(first.labels)) > 1 else [None]*len(first.values)
+            n = sum(res[f'n_{s.name}'].values for s in infected) # Runs by steps
+            for label in dict.fromkeys(labels):
+                runs = n[[i for i,lab in enumerate(labels) if lab == label]]
+                over = (runs[:, -1] <= 0) & (runs[:, 0] > 0)
+                times = [first.timevec[len(row) - np.argmax(row[::-1] > 0)] for row in runs[over]] if over.any() else [] # The step after the last with anyone infected
+                rows.append(dict(disease=dis.name, scenario=label, runs=len(runs), share=over.mean(), median_time=float(np.median(times)) if times else None))
+        df = sc.dataframe(rows)
+        if output:
+            return df
+        for row in rows:
+            scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
+            unit = f' {base.unit}s' if getattr(base, 'unit', None) else ''
+            when = f' (median time {row["median_time"]:n}{unit})' if row['median_time'] is not None else ''
+            print(f'{row["disease"]}{scenario}: died out in {row["share"]:.0%} of {row["runs"]} runs{when}')
+        return
+
     def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):
         """
         Plot a bar chart comparing the sims, with one panel per result; see `msim.compare()`.

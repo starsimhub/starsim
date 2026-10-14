@@ -314,8 +314,9 @@ class Held(Product):
         if len(uids):
             dis = sim.get_declared(self.disease)
             p = -np.expm1(-dis.engine.dt/dis.engine.convert(self.waning))
-            arr[uids[self.rng_wane.rvs(uids) < p]] = 0
-            sim._group_cache = None
+            lost = uids[self.rng_wane.rvs(uids) < p]
+            arr[lost] = 0
+            sim.groups_changed(lost)
         return
 
     def describe(self):

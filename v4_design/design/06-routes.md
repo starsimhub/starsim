@@ -288,10 +288,10 @@ Movement models are given by name and parameters; a matrix or a data file is als
 ```python
 ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0)    # distances and populations come from the geography
 ss.Mobility(matrix=M)                     # a matrix you already have
-ss.Mobility(data='movements.csv')         # a movement register: columns date, from, to, n, [states]
+ss.Mobility(data='movements.csv')         # a movement register: columns date, from, to, n, [states], [to_states]
 ```
 
-Other named models (radiation, Stouffer, competing destinations, the set LASER ships) are deferred until a vignette needs one ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); a matrix covers them meanwhile. The generators are implemented in the library itself. It does not call LASER's migration module or any other framework's package for them: an outside dependency is harder to keep working than a few lines of code we control. `ss.gravity()` on a dimension with no geography raises `E402 NoGeography`: there are no distances to compute it from, and no reasonable guess. In a movement register, `states` defaults to all disease states, sampled in proportion to how many are in each at the origin; naming states covers selective movement (only healthy animals are sold).
+Other named models (radiation, Stouffer, competing destinations, the set LASER ships) are deferred until a vignette needs one ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); a matrix covers them meanwhile. The generators are implemented in the library itself. It does not call LASER's migration module or any other framework's package for them: an outside dependency is harder to keep working than a few lines of code we control. `ss.gravity()` on a dimension with no geography raises `E402 NoGeography`: there are no distances to compute it from, and no reasonable guess. In a movement register, `states` defaults to all disease states, sampled in proportion to how many are in each at the origin; naming states covers selective movement (only healthy animals are sold). `to_states` moves the people chosen from each named state to the matching state of its list, in the same place or another, which is SimInf's shift matrix: `states='S1, I1'`, `to_states='S2, I2'` ages calves into young stock, keeping each one's infection status.
 
 ### Commuting and migration
 

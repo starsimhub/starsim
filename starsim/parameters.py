@@ -293,7 +293,7 @@ class SimPars(Pars):
         self.solver     = 'auto' # 'auto', 'ode', 'gillespie', 'tau', 'binomial', 'sde', 'abm', or 'stochastic'
         self.approx     = None   # None prints a note for each approximation; True hides the note; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default), 'euler', or a scipy.integrate.solve_ivp method such as 'RK45' or 'LSODA'
-        self.substeps   = None   # For the 'rk4' and 'euler' integrators, the number of substeps per timestep (default: enough that no compartment turns over by more than a quarter in one)
+        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over by more than a quarter in one), and the 'binomial' and 'sde' solvers (default: one for each stage of the dwell time with the most stages for 'binomial', and 1 for 'sde')
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
 
         # Demographic parameters
@@ -452,7 +452,8 @@ class SimPars(Pars):
         if name in names:
             if mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
-                ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
+                if not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
+                    ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
             else:
                 errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
                 raise ValueError(errormsg)
@@ -518,7 +519,17 @@ class SimPars(Pars):
             moddictvals = ssmoddict.values()
             expected_cls = modmap[modkey]
 
-            if isinstance(self[modkey], list):
+            given = self[modkey]
+            if isinstance(given, list) and len(given) == 1 and isinstance(given[0], dict): # A dict, wrapped in a list on the way in
+                given = given[0]
+            if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
+                modlist = []
+                for name,mod in given.items():
+                    if mod._default_name:
+                        mod.name = mod.label = name
+                        mod._default_name = False
+                    modlist.append(mod)
+            elif isinstance(self[modkey], list):
                 modlist = self[modkey]
             elif isinstance(self[modkey], ss.ndict):
                 # If it is an ndict, then assume the keys specify names the values represent modules

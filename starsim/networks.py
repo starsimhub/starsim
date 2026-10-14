@@ -876,6 +876,8 @@ class PartnerNet(DynamicNetwork):
         self.rng_end    = ss.random() # When each partnership ends, if it ends at a constant rate
         self.rng_stubs  = ss.random() # For shuffling the partners people start with
         self.waiting = None # Someone who looked for a partner on the last step and was left over
+        self.departures = 0.0 # The share of partnerships ended each step by a partner leaving (dying), estimated as the run goes
+        self.lost = 0 # Partnerships ended that way on this step
         return
 
     @staticmethod
@@ -955,7 +957,8 @@ class PartnerNet(DynamicNetwork):
         if self.mean_dur is None:
             return self.pars.dur.rvs(p1)
         u = self.rng_end.rvs(p1)
-        return np.maximum(np.ceil(np.log1p(-u)/np.log1p(-1/self.mean_dur)), 1) # Geometric, so partnerships end at a constant rate
+        p_end = max(1/self.mean_dur - self.departures, 0.1/self.mean_dur) # Partnerships also end when a partner leaves, so they are dissolved less often, to last as long as given on average (as EpiModel's d.rate correction does)
+        return np.maximum(np.ceil(np.log1p(-u)/np.log1p(-p_end)), 1) # Geometric, so partnerships end at a constant rate
 
     def pair(self, p1, p2):
         """ Add partnerships between two lists of people, leaving out pairs who are already partners """
@@ -982,8 +985,18 @@ class PartnerNet(DynamicNetwork):
         self.pair(stubs[:n].view(ss.uids), stubs[n:2*n].view(ss.uids))
         return
 
+    def remove_uids(self, uids):
+        """ Remove the partnerships of people who leave, counting them (see `end_times()`) """
+        n = len(self)
+        super().remove_uids(uids)
+        self.lost += n - len(self)
+        return
+
     def add_pairs(self):
         """ People look for partners at a rate that depends on how many they have, and those looking are paired at random """
+        if len(self) or self.lost: # The share of partnerships ended by a partner leaving, smoothed over about 20 steps
+            self.departures += 0.05*(self.lost/max(len(self) + self.lost, 1) - self.departures)
+            self.lost = 0
         uids = self.sim.people.alive.uids
         degree = np.minimum(self.degrees(uids), len(self.p_seek) - 1)
         prob = self.p_seek[degree]

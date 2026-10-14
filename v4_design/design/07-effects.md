@@ -27,7 +27,7 @@ Read as: *for people with active syphilis, multiply HIV transmissibility by 2.*
 | `target` | the quantity to change |
 | `multiply=`, `add=`, `set=` | what to do to it; exactly one |
 | `where=` | who it applies to: a [condition](#conditions). Omitted means everyone |
-| `start=`, `stop=` | the period it applies in (dates, years, or durations since the start of the sim). Omitted means always |
+| `start=`, `stop=` | the period it applies in (dates, years, or durations since the start of the sim): from the step at `start` up to, but not including, the step at `stop`. Omitted means always |
 | `when=` | a function of the sim returning `True` or `False`, for anything `start`/`stop` cannot say. The modifier applies on exactly the steps where it returns `True`; it has no memory. A rule with memory (stay on for four weeks once triggered) is `step()` code ([08-interventions.md](08-interventions.md#triggers)) |
 | `name=` | used in `describe()` and `what_modifies()`; defaults to the variable or keyword name |
 

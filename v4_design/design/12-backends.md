@@ -232,8 +232,8 @@ A state that is not people (bacteria in water, mosquitoes; [03-states-and-transi
 | Solver | What such a state is |
 |---|---|
 | `ode`, `sde` | One more real-valued compartment (or one per patch). Nothing distinguishes it from the others except that it is not counted in `N` |
-| `gillespie`, `tau`, `binomial` | One more integer count, with its transitions drawn like any other. A reservoir with very large counts makes exact Gillespie simulation expensive, since every bacterium shed is an event; `solver='stochastic'` picks tau-leaping for such a model |
-| `abm` | A count, never agents. People are agents and the reservoir stays a number, advanced once per step alongside them ([10-execution.md](10-execution.md#states-that-are-not-people)) |
+| `gillespie`, `tau`, `binomial` | A real-valued count, whose flows are their expected values over each step (or each event's interval, under `gillespie`), while people are drawn. This is SimInf's split between continuous-time events for animals and a deterministic environmental pressure, and it keeps the cost of a reservoir independent of its size |
+| `abm` | A count, never agents. People are agents and the reservoir stays a number, advanced over each step as an ODE (by RK4) with the people as they were at its start ([10-execution.md](10-execution.md#states-that-are-not-people)) |
 
 Rates that use the count are written with `.n` (`beta * W.n / (W.n + K)`, `shed * I.n`) and are used exactly as written under every solver: there is no contact rate and no network in them. Under `'auto'` a model with such states runs as an ODE unless something else makes it agent-based; adding `n_agents=` makes the people agents and leaves the count a count.
 

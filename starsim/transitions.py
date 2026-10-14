@@ -18,6 +18,7 @@ import itertools
 import numpy as np
 import pandas as pd
 import sciris as sc
+import matplotlib.pyplot as plt
 import starsim as ss
 
 __all__ = ['CodedError', 'error', 'note', 'Expr', 'par', 'State', 'states', 'null',
@@ -36,7 +37,7 @@ codes = dict(
     E703='OutcomeCycle', E704='DataMisaligned', E705='UnknownDataColumn', E804='CapabilityError', E1003='RunAfterFinish',
     E1102='MissingDimension', E1301='NothingToFit', E1302='NoData',
     W101='UnitInferred', W102='LargeStep', W103='UnitsDisagree', W207='UnreachableState', W212='StateNotPeople',
-    W309='LargeStateSpace', W404='MatrixAggregated', W502='OverlappingSet', W1205='StagesUnderAuto',
+    W309='LargeStateSpace', W404='MatrixAggregated', W502='OverlappingSet', W503='ClippedToRange', W1201='SmallCounts', W1202='ExtinctionPossible', W1205='StagesUnderAuto',
 )
 
 
@@ -84,6 +85,8 @@ def as_expr(obj):
     """ Convert an object to an expression: anything that is not one becomes an anonymous parameter """
     if isinstance(obj, Expr):
         return obj
+    elif isinstance(obj, StateSet): # A set of states is their sum
+        return obj.sum()
     elif isinstance(obj, Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
         raise TypeError(errormsg)
@@ -96,7 +99,26 @@ class Expr:
     counts, parameters, and arithmetic on them.
     """
     _is_expr = True # Checked by ss.TimePar so e.g. ss.peryear(0.02) * N.n defers to the expression
-    __array_ufunc__ = None # Likewise for NumPy scalars
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ NumPy functions of an expression (np.minimum(I.n, K), np.exp(-k * I.n)) are expressions too, as is arithmetic with NumPy numbers """
+        name = ufunc.__name__
+        if method != '__call__' or kwargs:
+            return NotImplemented
+        elif name in binops:
+            return BinOp(binops[name], *inputs)
+        elif name == 'negative':
+            return BinOp('*', -1, inputs[0])
+        elif name == 'clip':
+            return as_expr(inputs[0]).clip(*inputs[1:])
+        elif name in Func.names:
+            return Func(name, *inputs)
+        return NotImplemented
+
+    def clip(self, min=None, max=None, out=None):
+        """ The expression kept between two values (`np.clip(x, lo, hi)` calls this) """
+        out = self if min is None else Func('maximum', self, min)
+        return out if max is None else Func('minimum', out, max)
 
     def __add__(self, other):      return BinOp('+', self, other)
     def __radd__(self, other):     return BinOp('+', other, self)
@@ -108,6 +130,10 @@ class Expr:
     def __rtruediv__(self, other): return BinOp('/', other, self)
     def __pow__(self, other):      return BinOp('**', self, other)
     def __neg__(self):             return BinOp('*', -1, self)
+    def __lt__(self, other):       return Func('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
+    def __le__(self, other):       return Func('less_equal', self, other)
+    def __gt__(self, other):       return Func('greater', self, other)
+    def __ge__(self, other):       return Func('greater_equal', self, other)
 
     def __matmul__(self, driver):
         """ A weighted destination: (p*A + (1-p)*B) @ rate """
@@ -241,6 +267,32 @@ class Count(Expr):
         return f'{inner}.{self.kind}'
 
 
+binops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', power='**')
+comparisons = dict(less='<', less_equal='<=', greater='>', greater_equal='>=')
+
+
+class Func(Expr):
+    """ A NumPy function of one or two expressions, e.g. `np.minimum(I.n, K)` or `np.exp(-k * I.n)` """
+    names = dict(exp=1, log=1, sqrt=1, absolute=1, sin=1, cos=1, minimum=2, maximum=2, less=2, less_equal=2, greater=2, greater_equal=2) # The functions, and how many arguments each takes
+
+    def __init__(self, name, *args):
+        if self.names.get(name) != len(args):
+            errormsg = f'np.{name}() cannot be used in a rate; the functions that can are {sc.strjoin(f"np.{k}()" for k in self.names)}, and np.clip()'
+            raise TypeError(errormsg)
+        self.name = name
+        self.args = [as_expr(arg) for arg in args]
+        return
+
+    @property
+    def leaves(self):
+        return [leaf for arg in self.args for leaf in arg.leaves]
+
+    def to_str(self, parent=False):
+        if self.name in comparisons:
+            return f'({self.args[0].to_str()} {comparisons[self.name]} {self.args[1].to_str()})'
+        return f'{self.name}({", ".join(arg.to_str() for arg in self.args)})'
+
+
 class BinOp(Expr):
     """ Arithmetic between two expressions """
     def __init__(self, op, a, b):
@@ -249,13 +301,29 @@ class BinOp(Expr):
         self.b = as_expr(b)
         return
 
+    def __rshift__(self, other):
+        """ A plain sum of states as the sources of a transition, e.g. (Ia + Is) >> R, is the same as (Ia | Is) >> R """
+        return StateSet(self._sum_states()) >> other
+
     @property
     def leaves(self):
         return self.a.leaves + self.b.leaves
 
     def to_str(self, parent=False):
-        string = f'{self.a.to_str(True)} {self.op} {self.b.to_str(True)}'
-        return f'({string})' if parent and self.op in '+-' else string
+        return join_binop(self, lambda e: e.to_str())
+
+
+precedence = {'+':1, '-':1, '*':2, '/':2, '**':3}
+
+def join_binop(e, fmt, op=None):
+    """ Write arithmetic between two expressions, with parentheses only where they are needed: a - (b - c), a / (b * c), (a + b) ** c """
+    p = precedence[e.op]
+    a, b = fmt(e.a), fmt(e.b)
+    if isinstance(e.a, BinOp) and (precedence[e.a.op] < p or (e.op == '**' and precedence[e.a.op] == p)):
+        a = f'({a})'
+    if isinstance(e.b, BinOp) and (precedence[e.b.op] < p or (precedence[e.b.op] == p and e.op in ['-', '/'])):
+        b = f'({b})'
+    return f'{a} {op or e.op} {b}'
 
 
 def linear(expr):
@@ -303,6 +371,10 @@ def linear(expr):
             if ta or tb:
                 nonlinear()
             return expr, {}
+    elif isinstance(expr, Func):
+        if any(linear(arg)[1] for arg in expr.args):
+            nonlinear()
+        return expr, {}
     return expr, {} # A parameter or a count
 
 
@@ -323,6 +395,8 @@ def evaluate(expr, ctx):
         elif op == '*': return a * b
         elif op == '/': return a / b
         else:           return a ** b
+    elif isinstance(expr, Func):
+        return 1.0*getattr(np, expr.name)(*[evaluate(arg, ctx) for arg in expr.args]) # A comparison is 1 or 0
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
@@ -449,6 +523,31 @@ class StateSet:
     def __invert__(self):
         return ~ss.conditions.as_cond(self)
 
+    # In arithmetic, a set of states is their sum, e.g. Ih / (Ia | Is | Ih) or (Ia | Is).n
+    def sum(self):
+        """ The states added together, as an expression """
+        out = self.states[0]
+        for state in self.states[1:]:
+            out = out + state
+        return out
+
+    def __add__(self, other):      return self.sum() + other
+    def __radd__(self, other):     return other + self.sum()
+    def __sub__(self, other):      return self.sum() - other
+    def __rsub__(self, other):     return other - self.sum()
+    def __mul__(self, other):      return self.sum() * other
+    def __rmul__(self, other):     return other * self.sum()
+    def __truediv__(self, other):  return self.sum() / other
+    def __rtruediv__(self, other): return other / self.sum()
+
+    @property
+    def n(self):
+        return self.sum().n
+
+    @property
+    def frac(self):
+        return self.sum().frac
+
 
 def states(arg):
     """
@@ -498,7 +597,8 @@ def parse_arrow(arrow):
     if len(parts) != 2:
         errormsg = f'Could not understand "{arrow}": expecting an arrow such as "S -> I"'
         raise ValueError(errormsg)
-    src = parts[0].strip() or null
+    src = [name.strip() for name in parts[0].split('|') if name.strip()] or null # Several sources, e.g. 'M | S | R ->'
+    src = src[0] if isinstance(src, list) and len(src) == 1 else src
     dst = [name.strip() for name in parts[1].split('|') if name.strip()] or null
     return src, dst
 
@@ -518,6 +618,7 @@ class Transition:
         dur (any): a dwell time: a duration or a distribution of durations (instead of `rate`)
         p (float/list): branch probability
         stages (int): number of sub-stages used to realize the dwell time
+        where (Cond/func): who it applies to: a condition (e.g. `ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -526,9 +627,10 @@ class Transition:
         S, I, R = ss.states(3)
         infection = ss.Transition(S, I, rate=0.05 * I)
         recovery  = ss.Transition(I, R, dur=ss.days(10))
+        maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes rate= or dur=, not both'
             raise ValueError(errormsg)
@@ -542,6 +644,7 @@ class Transition:
         self.label = label
         self.beta = beta # For ss.transmission(): the rate is beta times the source of infection, resolved when the module is built
         self.source = source
+        self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.flow_of = None # For arithmetic on a finished transition, e.g. 0.5 * infection: the original transition and the weight
@@ -576,6 +679,20 @@ class Transition:
         else:
             self.dst = sc.tolist(dst)
         return self
+
+    @property
+    def dur(self):
+        """ The dwell time, as a parameter (or None, if the transition has a rate) """
+        return self.__dict__.get('_dur')
+
+    @dur.setter
+    def dur(self, value):
+        current = self.__dict__.get('_dur')
+        if isinstance(current, par) and current.module is not None and not isinstance(value, Expr): # Once the model is built, a new value is the parameter's value, e.g. sir.recovery.dur = ss.erlang(k=3, mean=10)
+            current.value = value
+        else:
+            self.__dict__['_dur'] = None if value is None else as_expr(value)
+        return
 
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, anything else is a rate """
@@ -640,7 +757,7 @@ class Transition:
         if self.dur is not None:
             return f'dur = {value_str(self.dur.raw)}'
         elif self.rate is not None:
-            return str(self.rate)
+            return format_expr(self.rate)
         elif self.beta is not None:
             return f'{as_expr(self.beta)} * source'
         return ''
@@ -651,7 +768,7 @@ class Transition:
         return f'Transition({name}{self.arrow}{driver})'
 
 
-def transmission(arrow, beta=None, source=None, p=None, name=None, label=None):
+def transmission(arrow, beta=None, source=None, p=None, where=None, name=None, label=None):
     """
     A contact-mediated transition: people move at rate `beta` times their exposure to the source of infection
 
@@ -662,14 +779,15 @@ def transmission(arrow, beta=None, source=None, p=None, name=None, label=None):
         beta (any): the transmission rate (per contact, if networks are given); a dict gives one value per network
         source (str/list): the infectious state(s); if not given, the states declared `infectious=True`, else the destination
         p (list): branch probabilities, if there are several destinations
+        where (Cond/func): who it applies to (see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, beta=sc.ifelse(beta, 1.0), source=source, p=p, name=name, label=label)
+    return Transition(src, dst, beta=sc.ifelse(beta, 1.0), source=source, p=p, where=where, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -679,11 +797,12 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, name=None, labe
         rate (any): the hazard (instead of `dur`)
         p (float/list): branch probabilities
         stages (int): number of sub-stages used to realize the dwell time
+        where (Cond/func): who it applies to (see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, name=name, label=label)
 
 
 def birth(arrow='-> S', rate=None, name=None, label=None):
@@ -968,6 +1087,8 @@ class Graph:
         self._declared = [] # States that were passed in directly
         unnamed = sc.autolist()
         for name,obj in named:
+            if isinstance(obj, FlowSum): # A sum of flows, e.g. recovery + death, is an outcome
+                obj = outcome(obj)
             if isinstance(obj, (Transition, outcome, par, State)):
                 if name is not None:
                     obj.name = name
@@ -1022,7 +1143,8 @@ class Graph:
         """ Register a parameter with the module """
         obj.name = name
         obj.literal = False
-        obj.module = self.module
+        if obj.module is None: # A parameter shared by several modules belongs to the first, and is registered with each
+            obj.module = self.module
         self.add(self.pars, name, obj)
         return
 
@@ -1222,7 +1344,7 @@ class Graph:
                     slots.append((tr, 'p', p))
 
         # Name the anonymous ones after their slot, qualified by the transition where two would clash
-        anon = [(tr, slot, p) for tr,slot,p in slots if p.literal]
+        anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or (p.name is None and find_name(p, frame) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1])
         counts = sc.objdict()
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
@@ -1234,10 +1356,13 @@ class Graph:
         used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if isinstance(val, par)]
+        used += [(f'init of {state.name}', state.init) for state in self.states.values() if isinstance(state.init, Expr)] # So an initial count can be fitted
+        used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] # And a parameter in the rate of a transfer
+        used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, TimeValue) for inner in leaf.value.pars] # And a parameter inside a value that varies in time
         for name,expr in used:
             if expr is not None:
                 for leaf in expr.leaves:
-                    if isinstance(leaf, par) and not leaf.literal and leaf.module is None:
+                    if isinstance(leaf, par) and not leaf.literal and not any(p is leaf for p in self.pars.values()):
                         if leaf.name is None:
                             leaf.name = find_name(leaf, frame)
                         if leaf.name is None:
@@ -1338,15 +1463,18 @@ class Graph:
                 add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
-                        add('', f'{leaf.name} = {quantity_str(leaf.raw, "rate", unit)}')
-                if sim is None or not len(sim.pars.networks):
+                        add('', f'{leaf.name} = {quantity_str(leaf.raw, "rate" if leaf.slot == "rate" else None, unit)}') # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
+                terms = getattr(getattr(sim, 'mixing', None), 'terms', [])
+                if sim is None or (not len(sim.pars.networks) and all(term.kind == 'homogeneous' for term in terms)):
                     expanded = format_expr(tr.rate, values='number', bare=lambda s: f'{s.name}.n / N', mul='×')
                     add('', f'rate = {expanded}', 'homogeneous mixing')
+                elif not len(sim.pars.networks):
+                    add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}', 'exposure through the contact matrices')
                 else:
                     add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}', 'exposure through the networks')
             else:
-                add(name, f'{tr.arrow}   spontaneous')
-                if tr.dur is not None or (engine is not None and name in engine.dwells):
+                add(name, f'{tr.arrow}   spontaneous' if not tr.inflow else f'{tr.arrow}   inflow, in total per {unit or "step"}')
+                if not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
                     p = tr.dur if tr.dur is not None else tr.rate
                     raw = p.raw
                     dw = engine.dwells.get(name) if engine is not None else None
@@ -1368,6 +1496,107 @@ class Graph:
             if tr.p is not None:
                 add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in tr.p)}')
         return lines
+
+    def edges(self):
+        """ Each transition as (source, destination, name, kind), with None for `ss.null`; a transition to every state (`ss.death()`) is one edge from each """
+        out = []
+        for name,tr in self.transitions.items():
+            kind = 'contact' if tr.contact else 'spontaneous'
+            for src in tr.src or [None]:
+                for dst in tr.dst or [None]:
+                    out.append((src, dst, name, kind))
+        return out
+
+    def influences(self, tr):
+        """ The states a transition's rate depends on, apart from the states it moves people out of: the source of an infection, or a count """
+        out = []
+        everyone = len(self.people_states)
+        for leaf in [] if tr.rate is None else tr.rate.leaves:
+            states = [leaf] if isinstance(leaf, State) else (leaf.states if isinstance(leaf, Count) and len(leaf.states) < everyone else [])
+            out += [state for state in states if not any(state is src for src in tr.src or []) and not any(state is o for o in out)]
+        return out
+
+    def layout(self):
+        """ A position for each state: a column for each step from the first state, and counts (states that are not people) in a row below """
+        depth = {id(self.first): 0}
+        todo = [self.first]
+        while todo:
+            state = todo.pop(0)
+            for src,dst,name,kind in self.edges():
+                if src is state and dst is not None and id(dst) not in depth:
+                    depth[id(dst)] = depth[id(state)] + 1
+                    todo.append(dst)
+        pos = {}
+        rows = sc.ddict(int)
+        for state in self.people_states:
+            col = depth.get(id(state), max(depth.values()) + 1)
+            pos[id(state)] = (col, -rows[col])
+            rows[col] += 1
+        bottom = -max(rows.values()) - 0.5 if rows else 0
+        for i,state in enumerate(self.count_states): # Below the people it is linked to
+            cols = []
+            for tr in self.transitions.values():
+                ends = [pos[id(s)][0] for s in (tr.src or []) + (tr.dst or []) if id(s) in pos]
+                if any(state is s for s in self.influences(tr)):
+                    cols += ends
+                if any(state is s for s in (tr.src or []) + (tr.dst or [])):
+                    cols += [pos[id(s)][0] for s in self.influences(tr) if id(s) in pos]
+            pos[id(state)] = (np.mean(cols) if cols else i, bottom)
+        return pos
+
+    def diagram(self, format='plot', **kwargs):
+        """ The state-transition diagram; see `ss.Disease.diagram()` """
+        edges = self.edges()
+        if format == 'mermaid':
+            lines = ['flowchart LR']
+            nulls = 0
+            for src,dst,name,kind in edges:
+                ends = []
+                for state in [src, dst]:
+                    if state is None:
+                        nulls += 1
+                        ends.append(f'null{nulls}(( ))')
+                    else:
+                        ends.append(state.label_name)
+                arrow = '-.->' if kind == 'contact' else '-->'
+                lines.append(f'    {ends[0]} {arrow}|{name}| {ends[1]}')
+            return '\n'.join(lines)
+        elif format != 'plot':
+            errormsg = f'The format of a diagram is "plot" or "mermaid", not "{format}"'
+            raise ValueError(errormsg)
+
+        pos = self.layout()
+        fig = plt.figure(**sc.mergedicts(dict(figsize=(2 + 2*len(set(x for x,y in pos.values())), 2 + 1.5*len(set(y for x,y in pos.values())))), kwargs))
+        ax = plt.gca()
+        colors = dict(spontaneous='k', contact='tab:red')
+        for src,dst,name,kind in edges:
+            if src is None and dst is None:
+                continue
+            a = pos[id(src)] if src is not None else (pos[id(dst)][0] - 0.6, pos[id(dst)][1] + 0.5) # An inflow comes from nowhere, above and to the left
+            b = pos[id(dst)] if dst is not None else (pos[id(src)][0] + 0.6, pos[id(src)][1] - 0.5) # An outflow goes nowhere
+            back = b[0] < a[0] or (b[0] == a[0] and b[1] > a[1]) # Curve the other way going back, so a pair of arrows does not overlap
+            rad = -0.3 if back else (0.3 if src is not None and dst is not None and any(e[0] is dst and e[1] is src for e in edges) else 0)
+            ax.annotate('', xy=b, xytext=a, arrowprops=dict(arrowstyle='-|>', color=colors[kind], lw=1.5, shrinkA=22 if src is not None else 0, shrinkB=22 if dst is not None else 0,
+                                                            connectionstyle=f'arc3,rad={rad}', ls='--' if kind == 'contact' else '-'))
+            mid = ((a[0] + b[0])/2, (a[1] + b[1])/2 + (0.12 if not rad else 0.25*np.sign(rad)*(1 if back else -1)))
+            ax.text(*mid, name, ha='center', va='center', fontsize=9, color=colors[kind], bbox=dict(fc='w', ec='none', alpha=0.8, pad=1))
+        for tr in self.transitions.values(): # What a rate depends on, as a dotted line to the middle of the arrow
+            ends = [pos[id(s)] for s in (tr.src or []) + (tr.dst or []) if id(s) in pos]
+            for state in self.influences(tr):
+                if ends:
+                    mid = tuple(np.mean(ends, axis=0)) if len(ends) > 1 else (ends[0][0] + (0.3 if tr.src else -0.3), ends[0][1] + (-0.25 if tr.src else 0.25))
+                    ax.annotate('', xy=mid, xytext=pos[id(state)], arrowprops=dict(arrowstyle='-|>', color='0.6', lw=1, ls=':', shrinkA=18, shrinkB=8, connectionstyle='arc3,rad=0.2'))
+        for state in self.states.values():
+            x, y = pos[id(state)]
+            ax.text(x, y, state.label_name, ha='center', va='center', fontsize=12, fontweight='bold',
+                    bbox=dict(boxstyle='round,pad=0.5' if state.people else 'square,pad=0.5', fc='tab:red' if state.infectious else ('w' if state.people else '0.9'), alpha=0.3 if state.infectious else 1, ec='k'))
+        xs = [x for x,y in pos.values()]
+        ys = [y for x,y in pos.values()]
+        ax.set_xlim(min(xs) - 0.8, max(xs) + 0.8)
+        ax.set_ylim(min(ys) - 0.8, max(ys) + 0.8)
+        ax.set_axis_off()
+        ax.set_title(self.module.name)
+        return ss.return_fig(fig)
 
     def equations(self, engine=None):
         """ The ODE system, with symbolic parameter names; see `ss.Disease.equations()` """
@@ -1446,7 +1675,7 @@ class Graph:
         out.type = 'Disease' if isinstance(mod, ss.Disease) else type(mod).__name__
         out.dt = None if (mod.t.dt is None or sim is None or mod.t.dt == sim.t.dt) else float(mod.t.dt.to(sim.unit_base).value)
         out.init_prev = self.init_prev.raw if isinstance(self.init_prev, par) else self.init_prev
-        out.states = [dict(name=s.name, people=bool(s.people), init=s.init, infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
+        out.states = [dict(name=s.name, people=bool(s.people), init=s.init if s.init is None or sc.isnumber(s.init) else quantity_json(s.init, None, unit), infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
 
         def par_json(p, kind):
             return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=None if p.prior is None else str(p.prior), source=p.source, doc=p.doc)
@@ -1489,7 +1718,7 @@ class Graph:
         out.guessed = sorted(guessed)
         return out
 
-    def stratify(self, split=None, adjust=None, states=None, where=None, kind=None, mobility=None, **kwargs):
+    def stratify(self, split=None, adjust=None, states=None, where=None, kind=None, mobility=None, immunity=None, frame=None, **kwargs):
         """ Stratify the graph by one or more dimensions; see `ss.Disease.stratify()` """
         if where is not None:
             errormsg = 'stratify(where=...) is not implemented yet: a dimension applies to every group'
@@ -1501,23 +1730,31 @@ class Graph:
                     error('E204', f'states= names a state "{name}" that "{self.module.name}" does not have. Its states are {sc.strjoin(self.states.keys())}; did you mean {closest(name, self.states.keys())}?')
         dims = {k:v for k,v in kwargs.items() if not isinstance(v, Transfer)}
         transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
-        if len(dims) > 1 and (split is not None or adjust is not None or states is not None or mobility is not None):
+        if len(dims) > 1 and (split is not None or adjust is not None or states is not None or mobility is not None or immunity is not None):
             errormsg = 'When using split=, adjust=, states=, or mobility=, give one dimension per call to stratify(), so it is clear which one they belong to'
             raise ValueError(errormsg)
         for key in (adjust or {}):
-            if key not in self.transitions:
-                error('E301', f'adjust= names a transition "{key}" that "{self.module.name}" does not have. Its transitions are {sc.strjoin(self.transitions.keys())}.')
+            if key not in self.transitions and key not in ['rel_trans', 'rel_sus']:
+                error('E301', f'adjust= names a transition "{key}" that "{self.module.name}" does not have. Its transitions are {sc.strjoin(self.transitions.keys())} (and it can also adjust rel_trans and rel_sus).')
         for name,levels in dims.items():
             if any(s.name == name for s in self.strats):
                 error('E305', f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
-            strat = Strat(name, levels, split=split, adjust=adjust, kind=kind, states=states, mobility=mobility)
+            strat = Strat(name, levels, split=split, adjust=adjust, kind=kind, states=states, mobility=mobility, immunity=immunity)
             if strat.kind == 'strain' and states is None: # A strain belongs to an infection, so the states people can be in without ever being infected have none
                 strat.states = [s.name for s in self.people_states if s.name not in self.uninfected]
                 strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(self.uninfected)})'
             self.strats.append(strat)
         for name,tf in transfers.items():
             tf.name = name
+            tf.module = self.module
             self.add(self.transfers, name, tf)
+            self.module.setattribute(name, tf) # So it can be the target of ss.modify()
+            for expr in [tf.rate, tf.dur]: # Register its parameters, as for those of the transitions
+                for leaf in [] if expr is None else expr.leaves:
+                    if isinstance(leaf, par) and not leaf.literal and not any(p is leaf for p in self.pars.values()):
+                        self._add_par(leaf, name=leaf.name or find_name(leaf, frame) or f'rate_{name}')
+                        self.module.define_pars(**{leaf.name:leaf.value})
+                        dict.__setitem__(self.module.pars, leaf.name, leaf)
         return self.module
 
     @property
@@ -1564,6 +1801,9 @@ class Graph:
             elif isinstance(val, TimeValue):
                 for v in val.typed:
                     check(v)
+            elif isinstance(val, by):
+                for v in val.items:
+                    check(v)
         for p in self.all_pars():
             check(p.raw)
         for oc in self.outcomes.values():
@@ -1595,12 +1835,11 @@ def format_expr(expr, values=False, bare=None, mul='*'):
     """
     def fmt(e, parent=False):
         if isinstance(e, BinOp):
-            op = mul if e.op == '*' else e.op
-            a = fmt(e.a, parent=e.op in '*/')
-            b = fmt(e.b, parent=e.op in '*/-' or e.op == '/')
-            if e.op == '/' and isinstance(e.b, BinOp): b = f'({fmt(e.b)})'
-            string = f'{a} {op} {b}'
-            return f'({string})' if parent and e.op in '+-' else string
+            return join_binop(e, fmt, op=mul if e.op == '*' else e.op)
+        elif isinstance(e, Func):
+            if e.name in comparisons:
+                return f'({fmt(e.args[0])} {comparisons[e.name]} {fmt(e.args[1])})'
+            return f'{e.name}({", ".join(fmt(arg) for arg in e.args)})'
         elif isinstance(e, par):
             if e.name and not e.literal and not values:
                 return e.name
@@ -1621,9 +1860,11 @@ def quantity_str(raw, kind, unit):
     elif isinstance(raw, ss.Rate) and raw.unit is not None:
         word = 'per' if isinstance(raw, ss.per) else 'probability per' if isinstance(raw, ss.prob) else 'events per'
         return f'{raw.value:n} {word} {type(raw.unit).base.removesuffix("s")}'
-    elif sc.isnumber(raw):
-        return f'{raw:n} per {unit}' if kind == 'rate' else f'{raw:n} {unit}{"s" if raw != 1 else ""}'
-    return value_str(raw)
+    elif sc.isnumber(raw) and kind == 'rate':
+        return f'{raw:n} per {unit}'
+    elif sc.isnumber(raw) and kind == 'dur':
+        return f'{raw:n} {unit}{"s" if raw != 1 else ""}'
+    return value_str(raw) # A plain number, e.g. one factor of a rate
 
 
 def quantity_json(raw, kind, unit):
@@ -1638,14 +1879,17 @@ def quantity_json(raw, kind, unit):
         out = dict(dist=type(raw).__name__)
         for key,val in raw.pars.items():
             if not (key == 'loc' and sc.isnumber(val) and val == 0): # Leave out the default location
-                out[key] = quantity_json(dist_unit(raw, val), 'dur', unit)
+                unitless = key in (raw.unitless_pars or [])
+                out[key] = quantity_json(val if unitless else dist_unit(raw, val), None if unitless else 'dur', unit)
         return out
     elif sc.isnumber(raw):
         if kind in ['rate', 'dur']:
             return dict(type='per' if kind == 'rate' else 'dur', value=float(raw), unit=unit)
         return float(raw)
-    elif isinstance(raw, TimeValue):
+    elif isinstance(raw, (TimeValue, by)):
         return raw.to_json()
+    elif isinstance(raw, Expr):
+        return format_expr(raw)
     elif callable(raw):
         return dict(fn=getattr(raw, '__name__', 'function'))
     elif isinstance(raw, dict):
@@ -1710,12 +1954,15 @@ class by:
         dims (list): the dimensions of the axes of an array given as `table`
         kwargs (dict): each dimension, and one value per level
 
+    A value may itself vary in time (`ss.timeseries` or `ss.seasonal`), in the keyword and table forms.
+
     Examples:
         ```python
         beta = ss.by(age=[0.08, 0.05, 0.03])
         beta = ss.by(age=[0.08, 0.05, 0.03], sex=[1.0, 0.8]) # One per age group and sex: the product
         init = ss.by(pd.DataFrame(age=['child', 'adult'], patch=['north', 'north'], value=[10, 5])) # Every other combination is 0
         pop = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch']) # Ages by row, places by column
+        beta = ss.by(age=[ss.timeseries({2020: 0.08, 2021: 0.04}), 0.05, 0.03]) # Children's value changes in 2021
         ```
     """
     def __init__(self, table=None, dims=None, **kwargs):
@@ -1743,6 +1990,61 @@ class by:
         self.given = kwargs
         return
 
+
+    def to_json(self):
+        """ The value as it is written in the model spec """
+        if self.array is not None:
+            return dict(by=self.dims, array=self.array.tolist())
+        elif self.table is not None:
+            return dict(by=self.dims, table={col:quantity_json(list(vals), None, None) for col,vals in self.table.items()})
+        values = {dim:quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
+        return dict(by=self.dims, values=values[self.dims[0]]) if len(self.dims) == 1 else dict(by=self.dims, product=values)
+    def map(self, func):
+        """ A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product) """
+        if self.array is not None:
+            return by(func(self.array), dims=self.dims)
+        elif self.table is not None:
+            table = self.table.copy()
+            table['value'] = [func(v) for v in table['value']]
+            return by(table)
+        elif len(self.dims) == 1:
+            return by(**{self.dim:[func(v) for v in sc.tolist(self.values)]})
+        errormsg = f'Arithmetic on an ss.by() of several dimensions given as keywords ({sc.strjoin(self.dims)}) is not defined, since each group\'s value is a product; give it as a table or an array with dims= instead'
+        raise TypeError(errormsg)
+
+    def _op(self, other, func):
+        """ Arithmetic with a number, or level by level with another ss.by over the same one dimension; anything else (an expression) is left to the other side """
+        if sc.isnumber(other):
+            return self.map(lambda v: func(v, other))
+        elif isinstance(other, by) and self.dim is not None and other.dim == self.dim:
+            return by(**{self.dim:[func(a, b) for a,b in zip(sc.tolist(self.values), sc.tolist(other.values))]})
+        return NotImplemented
+
+    def __mul__(self, other):      return self._op(other, lambda a,b: a*b)
+    def __rmul__(self, other):     return self._op(other, lambda a,b: b*a)
+    def __truediv__(self, other):  return self._op(other, lambda a,b: a/b)
+    def __rtruediv__(self, other): return self._op(other, lambda a,b: b/a)
+    def __add__(self, other):      return self._op(other, lambda a,b: a + b)
+    def __radd__(self, other):     return self._op(other, lambda a,b: b + a)
+    def __sub__(self, other):      return self._op(other, lambda a,b: a - b)
+    def __rsub__(self, other):     return self._op(other, lambda a,b: b - a)
+    def __pow__(self, other):      return self._op(other, lambda a,b: a**b)
+    def __neg__(self):             return self.map(lambda v: -v)
+
+    @property
+    def items(self):
+        """ Every value it holds """
+        if self.array is not None:
+            return list(self.array.flat)
+        if self.table is not None:
+            return list(self.table['value'])
+        return [v for vals in self.given.values() for v in sc.tolist(vals)]
+
+    @property
+    def varies(self):
+        """ Whether any of its values varies in time """
+        return any(isinstance(v, TimeValue) for v in self.items)
+
     @property
     def dim(self):
         """ The dimension, if there is one """
@@ -1760,20 +2062,22 @@ class by:
             return f'by(table of {len(self.table)} rows by {sc.strjoin(self.dims)})'
         return f'by({", ".join(f"{k}={v}" for k,v in self.given.items())})'
 
-    def grid(self, sim, convert=None):
+    def grid(self, sim, convert=None, year=None):
         """
         The value for every combination of the levels of its dimensions
 
-        Returns the positions of the dimensions in the sim, and an array with one axis for each
+        Returns the positions of the dimensions in the sim, and an array with one axis for each.
+        A value that varies in time is taken at the sim's current time, or at `year` if given.
         """
-        convert = convert or (lambda v: v)
+        given = convert or (lambda v: v)
+        convert = lambda v: given((v(sim) if year is None else v.at(year, sim)) if isinstance(v, TimeValue) else v)
         ds = [sim.dim_index(dim) for dim in self.dims]
         strats = [sim.strats[d] for d in ds]
         if self.array is not None:
             shape = tuple(strat.n for strat in strats)
             if self.array.shape != shape:
                 error('E603', f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
-            return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if convert is not None and self.array.size else self.array.copy()
+            return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if self.array.size else self.array.copy()
         if self.table is None:
             out = np.ones([strat.n for strat in strats])
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
@@ -1796,21 +2100,39 @@ class by:
             out[tuple(index)] += convert(row['value'])
         return ds, out
 
-    def per_group(self, sim, convert=None):
+    def per_group(self, sim, convert=None, year=None):
         """ The value for each group of the sim """
-        ds, grid = self.grid(sim, convert)
+        ds, grid = self.grid(sim, convert, year)
         return grid[tuple(sim.group_coords[:, d] for d in ds)]
 
     def is_count(self):
         """ Whether the values are whole numbers (so that a 1 is one person rather than everyone) """
         if self.array is not None:
             return bool(np.all(self.array == np.round(self.array)))
-        vals = self.table['value'] if self.table is not None else [v for vals in self.given.values() for v in sc.toarray(vals)]
-        return np.asarray(vals).dtype.kind in 'iu'
+        return np.asarray(self.items).dtype.kind in 'iu'
+
+
+class Static:
+    """ What an expression of parameters alone is evaluated with, outside the engine: see `const_value()` """
+    @staticmethod
+    def value(p):
+        return p.raw
+
+
+def const_value(val):
+    """ The value of a number or of an expression of parameters (e.g. (1 + smin)/2), as it is now """
+    return evaluate(val, Static) if isinstance(val, Expr) else val
 
 
 class TimeValue:
     """ Base class for values that vary in time: called with the sim, they return the value at the current time """
+    fields = [] # The attributes that can hold parameters
+
+    @property
+    def pars(self):
+        """ The parameters in its values, e.g. smin in ss.seasonal(mean=(1 + smin)/2, ...) """
+        return [leaf for name in self.fields for v in sc.tolist(getattr(self, name)) if isinstance(v, Expr) for leaf in v.leaves if isinstance(leaf, par)]
+
     def __call__(self, sim):
         return self.at(sim.t.now('year'), sim)
 
@@ -1836,26 +2158,29 @@ class timeseries(TimeValue):
         data (dict/str/dataframe): the value at each time, as a dict, a dataframe (the first column is
             the time, the second the value), or the name of a file holding one. A time is a date, or a
             number: a year if the sim has dates, and otherwise a time in the sim's unit
-        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', or 'spline'
+        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings), or 'spline'
+        period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
 
     Examples:
         ```python
         beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
+        decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
         sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
         ```
     """
-    def __init__(self, data, mode='constant'):
+    def __init__(self, data, mode='constant', period=None):
         if isinstance(data, str):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if not isinstance(data, dict):
             data = dict(zip(data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()))
-        if mode not in ['constant', 'linear', 'spline']:
-            errormsg = f'The mode of ss.timeseries() is "constant", "linear", or "spline", not "{mode}"'
+        if mode not in ['constant', 'linear', 'cosine', 'spline']:
+            errormsg = f'The mode of ss.timeseries() is "constant", "linear", "cosine", or "spline", not "{mode}"'
             raise ValueError(errormsg)
         self.times = list(data.keys())
         self.values = list(data.values())
         self.mode = mode
+        self.period = period
         self._years = None # The times as years, worked out for the sim it is used in
         return
 
@@ -1879,25 +2204,35 @@ class timeseries(TimeValue):
             self._years = (sim, np.array(out, dtype=float))
         return self._years[1]
 
+    fields = ['values']
+
     def at(self, year, sim):
         years = self.years(sim)
-        vals = self.values
+        vals = [const_value(v) for v in self.values]
+        if self.period is not None: # Fold the time into one period from the first time
+            period = self.period.years if isinstance(self.period, ss.dur) else float(self.period)
+            year = years[0] + (year - years[0]) % period
         i = int(np.clip(np.searchsorted(years, year + 1e-9, side='right') - 1, 0, len(vals) - 1))
         if self.mode == 'constant' or year <= years[0] or i == len(vals) - 1:
             return vals[i]
-        elif self.mode == 'linear':
+        elif self.mode in ['linear', 'cosine']:
             w = (year - years[i])/(years[i+1] - years[i])
+            if self.mode == 'cosine':
+                w = (1 - np.cos(np.pi*w))/2
             return vals[i]*(1 - w) + vals[i+1]*w
         import scipy.interpolate as spi
         return float(spi.CubicSpline(years, np.array(vals, dtype=float))(year))
 
     def __deepcopy__(self, memo): # The cached times belong to one sim
         new = object.__new__(type(self))
-        new.__dict__.update(times=list(self.times), values=sc.dcp(self.values, memo=memo), mode=self.mode, _years=None)
+        new.__dict__.update(times=list(self.times), values=sc.dcp(self.values, memo=memo), mode=self.mode, period=self.period, _years=None)
         return new
 
     def to_json(self):
-        return dict(timeseries={str(time):quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
+        out = dict(timeseries={str(time):quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
+        if self.period is not None:
+            out['period'] = quantity_json(self.period, 'dur', None)
+        return out
 
 
 class seasonal(TimeValue):
@@ -1942,8 +2277,10 @@ class seasonal(TimeValue):
     def typed(self):
         return [self.mean]
 
+    fields = ['mean', 'amplitude']
+
     def at(self, year, sim=None):
-        return self.mean*max(0.0, 1 + self.amplitude*np.cos(2*np.pi*(year - self.peak_frac)))
+        return const_value(self.mean)*max(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)))
 
     def to_json(self):
         return dict(seasonal=dict(mean=quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak))
@@ -2126,9 +2463,12 @@ class Mobility:
             errormsg = f'A movement register needs the columns date, from, to, and n (and optionally states), but {sc.strjoin(missing)} {"is" if len(missing) == 1 else "are"} missing; its columns are {list(df.columns)}'
             raise KeyError(errormsg)
         out = sc.dataframe(date=df['date'].values, n=np.asarray(df['n'], dtype=float))
-        for col in ['from', 'to', 'states']:
+        for col in ['from', 'to', 'states', 'to_states']:
             vals = df[col].values if col in df.columns else [None]*len(df)
             out[col] = np.array([None if Mobility.blank(v) else v for v in vals], dtype=object)
+        if any(not Mobility.blank(ts) and (Mobility.blank(src) or Mobility.blank(dst) or Mobility.blank(states)) for src,dst,states,ts in zip(out['from'], out['to'], out['states'], out['to_states'])):
+            errormsg = 'A row of a movement register with to_states moves people from its states to those states (in order, e.g. states "S1, I1" and to_states "S2, I2"), so it needs a from, a to (which can be the same place), and states'
+            raise ValueError(errormsg)
         if any(Mobility.blank(src) and Mobility.blank(dst) for src,dst in zip(out['from'], out['to'])):
             errormsg = 'Every row of a movement register needs a from, a to, or both'
             raise ValueError(errormsg)
@@ -2166,9 +2506,16 @@ class Mobility:
             return labels[key]
         order = np.argsort(ti[inside], kind='stable')
         rows = np.flatnonzero(inside)[order]
-        states = [None if Mobility.blank(df['states'][i]) else tuple(s.strip() for s in str(df['states'][i]).replace(';', ',').split(',')) for i in rows]
-        return sc.objdict(ti=ti[rows], src=np.array([level(df['from'][i]) for i in rows], dtype=np.int64), dst=np.array([level(df['to'][i]) for i in rows], dtype=np.int64),
-                          n=np.asarray(df['n'].values[rows], dtype=float), states=states)
+        cols = {col:np.asarray(df[col].values, dtype=object)[rows] for col in ['from', 'to', 'states', 'to_states'] if col in df.columns} # As arrays, since reading a dataframe one cell at a time is slow
+        names = lambda v: None if Mobility.blank(v) else tuple(s.strip() for s in str(v).replace(';', ',').split(','))
+        states = [names(v) for v in cols['states']]
+        to_states = [names(v) for v in cols['to_states']] if 'to_states' in cols else [None]*len(rows)
+        for a,b in zip(states, to_states):
+            if b is not None and len(a) != len(b):
+                errormsg = f'A row of a movement register moves people from the states {a} to {b}, which need to be the same number'
+                raise ValueError(errormsg)
+        return sc.objdict(ti=ti[rows], src=np.array([level(v) for v in cols['from']], dtype=np.int64), dst=np.array([level(v) for v in cols['to']], dtype=np.int64),
+                          n=np.asarray(df['n'].values[rows], dtype=float), states=states, to_states=to_states)
 
     def matrix(self, strat):
         """ The movement between each pair of levels, with nothing on the diagonal """
@@ -2212,8 +2559,9 @@ class Strat:
         kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
         states (list): the names of the states it applies to (default: every state that is people)
         mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
+        immunity (array): for a strain, the protection that past infection with each strain (rows) gives against each strain (columns); 1 is complete
     """
-    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, mobility=None):
+    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, mobility=None, immunity=None):
         self.name = name
         self.geo = levels if isinstance(levels, geo) else None
         self.kind = kind or ('space' if self.geo is not None else kinds.get(name, 'plain'))
@@ -2236,7 +2584,7 @@ class Strat:
         if numeric: # Bin edges; the last bin is open-ended
             self.edges = np.array(levels, dtype=float)
             ends = list(levels[1:]) + [None]
-            self.labels = [f'{lo:n}-{hi-1:n}' if hi is not None else f'{lo:n}+' for lo,hi in zip(levels, ends)]
+            self.labels = [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(levels, ends)] # e.g. 0, 1-4, 5+
         else:
             self.labels = levels
         self.n = len(self.labels)
@@ -2251,7 +2599,17 @@ class Strat:
             if np.any(vals < 0):
                 error('E306', f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
+        self.immunity = None
+        if immunity is not None:
+            immunity = np.array(immunity, dtype=float)
+            if self.kind != 'strain':
+                errormsg = f'immunity= is for a strain dimension, but "{name}" is of kind "{self.kind}"; pass kind="strain" if it is one'
+                raise ValueError(errormsg)
+            if immunity.shape != (self.n, self.n):
+                error('E603', f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
+            self.immunity = immunity
         self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
+        self.cond = None # For a dimension of some states only, a split given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
         if isinstance(split, by):
             self.joint = split
             split = None
@@ -2274,6 +2632,29 @@ class Strat:
 
     def __repr__(self):
         return f'Strat({self.name}: {sc.strjoin(self.labels)})'
+
+    def draw(self, sim, uids, rvs):
+        """ A level for each of some agents, from uniform random numbers: in proportion to the split, or to its row for each agent's levels of the other dimensions """
+        if getattr(self, 'cond', None) is None:
+            return np.minimum(np.searchsorted(np.cumsum(self.split), rvs, side='right'), self.n - 1)
+        coords = sim.group_coords[sim.group_raw()[uids]]
+        cdf = np.cumsum(np.stack([self.shares(coords, np.full(len(uids), level)) for level in range(self.n)], axis=1), axis=1)
+        return np.minimum((cdf <= rvs[:, None]).sum(axis=1), self.n - 1)
+
+    def shares(self, coords, levels=None):
+        """
+        The share of each group in its level of this dimension (or in `levels`, if given): from the split, or, for a split given the levels of other dimensions, from the row of that split for the group
+
+        Args:
+            coords (array): the level of each group in every dimension of the sim, by row
+            levels (array): the levels of this dimension to give the share of (by default, each group's own)
+        """
+        d = self.dim
+        levels = coords[:, d] if levels is None else levels
+        if getattr(self, 'cond', None) is None:
+            return self.split[levels]
+        ds, grid = self.cond
+        return grid[tuple(levels if dd == d else coords[:, dd] for dd in ds)]
 
     @property
     def attr(self):

@@ -1192,7 +1192,7 @@ class data:
 
     def load(self, sim=None):
         """ Load the data and rename the columns """
-        df = sc.dataframe(pd.read_csv(self.source) if isinstance(self.source, str) else self.source)
+        df = sc.dataframe(pd.read_csv(self.source) if isinstance(self.source, (str, os.PathLike)) else self.source)
         for name,col in self.aliases.items():
             if col not in df.columns:
                 errormsg = f'The alias {name}="{col}" names a column the data does not have; its columns are {list(df.columns)}'
@@ -1471,8 +1471,9 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
             given = mod.pars.get(name)
             if isinstance(given, ss.par) and given.bounds is not None: # Bounds given with the sim's pars, e.g. pars=dict(k=ss.par(3, bounds=[0.1, 100]))
                 p = given
-            if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
-                key = name if sum(name in m.graph.pars for m in probe.declared) == 1 else f'{mod.name}.{name}'
+            if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars) and not any(p is q for q in fitted.values()): # A parameter shared by several modules is fitted once
+                same = [m.graph.pars[name] for m in probe.declared if name in m.graph.pars]
+                key = name if all(q is same[0] for q in same) else f'{mod.name}.{name}'
                 fitted[key] = p
     n_model = len(fitted)
     if use_lik:

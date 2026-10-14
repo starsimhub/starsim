@@ -556,6 +556,20 @@ def test_partners():
         ss.PartnerNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
     ode = ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
     assert ode.results.sis.n_I[-1] > 10
+
+    # With births and deaths, partnerships also end when a partner dies, which is allowed for so the mean holds
+    net = ss.PartnerNet(n_contacts=0.5, dur=50, name='main')
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.0), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+    demog = [ss.Births(birth_rate=ss.peryear(50)), ss.Deaths(death_rate=ss.peryear(50))]
+    vital = ss.Sim(sir, networks=net, demographics=demog, n_agents=2000, dt=ss.weeks(1), start=2000, stop=2030, verbose=0).run()
+    assert abs(vital.networks.main.results.mean_degree[-500:].mean() - 0.5) < 0.03
+
+    # Several networks of the same kind take their names from their variables, or from the keys of a dict
+    main, casual = ss.PartnerNet(n_contacts=0.5, dur=50), ss.PartnerNet(n_contacts=0.3, dur=5)
+    two = ss.Disease(infection=ss.transmission('S -> I', beta=dict(main=0.1, casual=0.05)), recovery=ss.progression('I -> R', dur=10), init_prev=0.05, name='two')
+    assert list(ss.Sim(two, networks=[main, casual], n_agents=500, stop=5, verbose=0).init().networks.keys()) == ['main', 'casual']
+    keyed = ss.Sim(two, networks=dict(main=ss.PartnerNet(dur=50), casual=ss.PartnerNet(dur=5)), n_agents=500, stop=5, verbose=0).init()
+    assert list(keyed.networks.keys()) == ['main', 'casual']
     return sim
 
 

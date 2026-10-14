@@ -598,6 +598,8 @@ def validate_sim_data(data=None, die=None):
                         raise ValueError(errormsg)
                     data.set_index(timecol, inplace=True)
                     found = True
+            if len(data.index) and all(isinstance(v, str) for v in data.index): # Dates written as text, e.g. '2020-01-08', are dates, so they can be plotted against the sim's
+                data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
             success = True
 
         # Data loading failed
@@ -659,8 +661,13 @@ def load(filename, **kwargs):
         kwargs (dict): passed to `sc.loadany()`
 
     Returns:
-        The loaded object
+        The loaded object; a model spec (written by `sim.to_spec()`) is built into a sim, see `ss.from_spec()`
     """
+    if str(filename).endswith('.json'):
+        spec = sc.loadjson(filename)
+        if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
+            return ss.from_spec(spec)
+        return spec
     return sc.loadany(filename, **kwargs)
 
 

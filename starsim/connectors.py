@@ -127,7 +127,7 @@ def parse_target(target):
         return target.module, 'par', target.name
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
-    elif isinstance(target, ss.Transition) and getattr(target, 'module', None) is not None:
+    elif isinstance(target, (ss.Transition, ss.transitions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
         return target.module, 'transition', target.name
     elif isinstance(target, str) and '.' in target:
         parts = target.split('.')
@@ -207,6 +207,8 @@ class modify(Connector):
     compartmental = True # It works on groups as well as on agents
     has_product = False # So it can be passed as an intervention
 
+    timepar_skip = ['where', 'when', 'target_module'] # These refer to other modules, which hold their own time parameters: see Module.link_timepars()
+
     def __init__(self, target, multiply=None, add=None, set=None, where=None, start=None, stop=None, when=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set).items() if val is not None]
@@ -215,6 +217,8 @@ class modify(Connector):
             raise ValueError(errormsg)
         self.target_module, self.target_kind, self.target_name = parse_target(target) # Resolved by name when the sim is built, since the sim works on copies
         self.op = given[0]
+        if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
+            self.name = self.label = f'{self.target_name or self.target_kind}_{self.op}'
         self.amount = dict(multiply=multiply, add=add, set=set)[self.op]
         self.where = None if where is None else ss.conditions.as_cond(where)
         self.start = start
@@ -239,13 +243,19 @@ class modify(Connector):
         if modname in mods:
             graph = mods[modname].graph
             if kind is None:
-                kind = 'transition' if name in graph.transitions else 'par'
-            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and name in graph.transitions)
+                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'par'
+            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers))
         if modname not in mods or not found:
             ss.error('E504', f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}; did you mean {ss.transitions.closest(self.target, options)}?')
         self.target_module, self.target_kind = modname, kind
         sim.modifiers[(modname, kind, name)].append(self)
         return
+
+    @property
+    def timed(self):
+        """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
+        amount = self.amount
+        return self.where is None and self.when is None and (not callable(amount) or isinstance(amount, ss.transitions.TimeValue))
 
     @property
     def active(self):

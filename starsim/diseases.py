@@ -69,8 +69,8 @@ class Disease(ss.Module):
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.par, ss.outcome, ss.Expr)
-        if args or members or any(isinstance(v, declared) for v in kwargs.values()):
+        declared = (ss.State, ss.Transition, ss.par, ss.outcome, ss.Expr, ss.transitions.FlowSum)
+        if args or members or any(isinstance(v, declared) for v in kwargs.values()) or any(key in kwargs for key in ss.Graph.reserved):
             self.init_graph(args, members, pars, kwargs, frame=sys._getframe(1))
         else:
             self.update_pars(pars, **kwargs)
@@ -79,7 +79,8 @@ class Disease(ss.Module):
     def init_graph(self, args, members, pars, kwargs, frame=None):
         """ Build the graph of declared states and transitions; see `ss.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs}
+        declared = (ss.State, ss.Transition, ss.outcome, ss.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
+        timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
         self.set_metadata(**meta)
@@ -90,8 +91,10 @@ class Disease(ss.Module):
         self.graph = ss.Graph(self, args, members, init_prev=init_prev, init=init, frame=frame)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection
-        for tr in self.graph.transitions.values():
+        for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
             tr.module = self
+        for name,tf in self.graph.transfers.items(): # e.g. sir.vaccination, so it can be the target of ss.modify()
+            self.setattribute(name, tf)
         for key in ['rel_sus', 'rel_trans']: # So they can be the target of ss.modify() before the sim exists
             self.setattribute(key, ss.connectors.Target(self, key))
         self.define_pars(**{name:p.value for name,p in self.graph.pars.items()})
@@ -137,7 +140,7 @@ class Disease(ss.Module):
             errormsg = f'"{self.name}" has no declared transitions to stratify'
             raise ValueError(errormsg)
         mod = self if inplace else self.copy()
-        mod.graph.stratify(**kwargs)
+        mod.graph.stratify(frame=sys._getframe(1), **kwargs)
         for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. eligible=~sir.vaccinated
             if not hasattr(mod, strat.name):
                 mod.setattribute(strat.name, ss.Cond('dim', strat.name))
@@ -173,6 +176,66 @@ class Disease(ss.Module):
             raise ValueError(errormsg)
         text = '\n'.join(self.graph.equations(self.engine))
         return text if output else print(text)
+
+    def diagram(self, format='plot', **kwargs):
+        """
+        Draw the state-transition diagram
+
+        States are placed in columns by how many transitions they are from the first
+        state, with counts (states that are not people) in a row below. Transmissions
+        are dashed and red, infectious states are shaded, and a dotted grey line shows
+        a state that a rate depends on (the source of an infection, or a count).
+
+        Args:
+            format (str): 'plot' (a Matplotlib figure), or 'mermaid' (the text of a Mermaid flowchart)
+            kwargs (dict): passed to `plt.figure()`
+
+        **Example**:
+
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
+            sir.diagram()
+            print(sir.diagram('mermaid'))
+        """
+        if self.graph is None:
+            errormsg = f'"{self.name}" has no declared transitions, so it has no diagram'
+            raise ValueError(errormsg)
+        return self.graph.diagram(format=format, **kwargs)
+
+    def R0(self, matrix=False):
+        """
+        The basic reproduction number, from the next-generation matrix at the disease-free state
+
+        The model is laid out as an ODE: if the disease is in a sim, a copy of that sim
+        is made with `solver='ode'`; otherwise a sim with the disease alone, under
+        homogeneous mixing (so use `sim.R0()` for a disease with a contact matrix or
+        places). Values that vary in time are taken at the start.
+
+        This is the largest eigenvalue of the next-generation matrix. Where infection
+        passes through a vector (people infect mosquitoes, which infect people), each
+        passage is a generation, so R0 is the square root of the classical Ross–Macdonald
+        value. Shedding into a reservoir that is a count (such as water) is not an infection,
+        so there R0 is the number of people infected through the reservoir by one person.
+
+        Args:
+            matrix (bool): if True, return the next-generation matrix (over the infected compartments of every group) rather than its largest eigenvalue
+
+        **Example**:
+
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
+            sir.R0() # 3.0
+        """
+        if self.graph is None:
+            errormsg = f'"{self.name}" has no declared transitions, so R0 cannot be worked out from them'
+            raise ValueError(errormsg)
+        if self.sim is not None and self.sim.initialized:
+            sim = self.sim.new(solver='ode', verbose=0)
+        else:
+            sim = ss.Sim(sc.dcp(self), solver='ode', verbose=0)
+        ngm = sim.init().diseases[self.name].engine.next_generation()
+        if ngm is None:
+            errormsg = f'Nothing in "{self.name}" moves people into an infected state, so it has no R0'
+            raise ValueError(errormsg)
+        return ngm if matrix else float(np.max(np.abs(np.linalg.eigvals(ngm))))
 
     def to_json(self, filename=None, **kwargs):
         """
@@ -242,9 +305,11 @@ class Disease(ss.Module):
         the agents who will die.
 
         Depending on the module and the results it produces, it may or may not be necessary
-        to implement this.
+        to implement this. A disease with declared states run as agents takes the dead out of every state.
         """
-        pass
+        if isinstance(self.engine, ss.Agents):
+            self.engine.die(uids)
+        return
 
     def make_naive(self, uids, skip_states=None):
         """

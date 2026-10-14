@@ -229,6 +229,8 @@ class People:
         """
         if age_data is None:
             dist = ss.uniform(low=0, high=60, name='Age distribution')
+        elif isinstance(age_data, ss.Dist): # A distribution of ages, used as is
+            dist = age_data
         else:
             # Try loading from file
             if isinstance(age_data, str) or isinstance(age_data, Path):
@@ -244,6 +246,9 @@ class People:
             elif isinstance(age_data, pd.DataFrame):
                 age_bins = age_data['age'].values
                 age_props = age_data['value'].values
+            else:
+                errormsg = f'age_data must be a file, an array, a Series, a dataframe, or an ss.Dist, not {type(age_data)}'
+                raise TypeError(errormsg)
 
             # Convert to a histogram
             dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')

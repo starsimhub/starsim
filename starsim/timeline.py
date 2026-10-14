@@ -387,6 +387,8 @@ class Timeline:
         # Convert start and stop from numbers to either durations or dates
         if use_dates:
             if self.start is not None: self.start = ss.date(self.start)  # Convert numbers, durations, etc. to dates
+            if isinstance(self.stop, ss.dur) and not ss.time.assume_cal_year(self.stop) and self.start is not None: # A duration such as ss.days(735) is the length of the run, not a date
+                self.stop = self.start + self.stop
             if self.stop  is not None: self.stop  = ss.date(self.stop)
             self.default_start = ss.date(self.default_start) # e.g. ss.date('2000.01.01')
         elif cal_year_like:

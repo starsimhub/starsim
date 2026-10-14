@@ -114,7 +114,7 @@ An outcome is a reported quantity: a flow worked out from other flows. It covers
 ss.outcome(
     source,               # a transition, another outcome, or a weighted sum of them
     delay      = None,    # time from the source event to this one: a duration, a distribution, or a function of the sim
-    duration   = None,    # if given, also produces n_<name>: the number currently in this outcome
+    duration   = None,    # if given, also produces n_<name>: the number currently in this outcome; a duration (an exponential stay) or a distribution (ss.constant for a fixed stay)
     every      = None,    # a reporting period (ss.weeks(1)): the outcome is totaled over each period
     likelihood = None,    # optional; see below
 )
@@ -217,7 +217,7 @@ n_I.values                                   # the full array, runs by time
 
 The names `lines=True` and `.values` for "every run" and "the full array" are placeholders and are listed as open.
 
-Where extinction is possible, the MultiSim's results summary (`msim.summarize()`, Starsim's name) SHOULD report it:
+Where extinction is possible, `msim.extinction()` reports it, for each declared disease and scenario: the share of runs with nobody infected at the end (not counting runs that started with nobody infected), and the median time it happened. The MultiSim's results summary (`msim.summarize()`, Starsim's name) SHOULD also report it:
 
 ```text
 extinction: 41% of 500 runs (median time 23 days)

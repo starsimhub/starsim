@@ -165,8 +165,31 @@ def test_restart():
     assert set(msim.results.sir.keys()) == {key for key,res in one.results.sir.items() if isinstance(res, ss.Result)}
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.cum_infection.values[:, -1].mean() - 0.6) < 0.05
 
-    # A sim that needs the loop cannot be restarted, and still runs the usual way
-    masks = ss.modify('sir.pars.beta', multiply=0.5, start=20)
+    # The exact solver runs place by place when places do not affect each other within a step, with the same results as event by event over all places
+    def herds(local):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(10)), init=dict(I=ss.by(herd=[5]*20)), name='herds')
+        sir.stratify(herd=[str(i) for i in range(20)], kind='space')
+        out = []
+        for seed in range(10):
+            sim = ss.Sim(sir, total_pop=20*200, solver='gillespie', unit='day', stop=100, rand_seed=seed, **kw).init()
+            engine = sim.diseases.herds.engine
+            engine.init_program()
+            if not local:
+                engine._local_mixing = False
+                engine.pack_targets()
+            assert engine.program.local == local
+            out.append(sim.run().results.herds.n_R[-1])
+        return np.mean(out), np.std(out)/np.sqrt(len(out))
+    (a, se_a), (b, se_b) = herds(True), herds(False)
+    assert abs(a - b) < 3*np.hypot(se_a, se_b) + 1
+
+    # How often a small outbreak dies out
+    small = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2), name='small')
+    ext = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50).extinction(output=True)
+    assert 0.3 < ext.share[0] < 0.9 and ext.runs[0] == 50
+
+    # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
+    masks = ss.modify('sir.pars.beta', multiply=0.5, when=lambda sim: sim.ti >= 20)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
     assert not sim.kernel_only()
     assert sim.run().results.sir.n_I.max() < new[1]

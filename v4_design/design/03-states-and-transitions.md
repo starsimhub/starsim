@@ -244,6 +244,8 @@ S >> I  @ beta * W.n / (W.n + K)      # environmental: saturating dose-response 
 Sh >> Eh @ a * b * Iv.n / Nh          # vector-borne: bites per person from infectious mosquitoes
 ```
 
+NumPy's elementary functions of an expression are expressions too, so a rate can saturate, switch, or ramp without becoming a function of the sim: `np.minimum`, `np.maximum`, `np.clip`, `np.exp`, `np.log`, `np.sqrt`, `np.abs`, `np.sin`, and `np.cos`. For example, MEmilio's extra risk from symptomatic people once testing and tracing is overwhelmed is `0.35 - 0.1 * np.cos(np.pi * np.clip((0.455 * INS.n - 35) / 140, 0, 1))`. A transition for some people only takes `where=`, a condition as for `ss.modify` ([07-effects.md](07-effects.md#conditions)): `ss.progression('J -> A', rate=ss.perday(1), where=ppl.age > 1)`. It is the same as a modifier that sets the transition's rate to 0 for everyone else. A comparison is 1 or 0, so a rate can stop at a capacity: `I >> Q @ 0.5 * (Q.n < 20)`. A bare state may not appear inside a function or a comparison, since the force of infection must stay linear in the infectious.
+
 This is how environmental and vector-borne transmission are written. There is no separate route kind for them and no separate class for the reservoir or the vector; worked examples are under [States that are not people](#states-that-are-not-people) below. A transition whose rate uses only counts is spontaneous: every member of the source state has the same hazard.
 
 ### Source inference in the string form, and its limits

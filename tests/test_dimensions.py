@@ -134,6 +134,40 @@ def test_states():
 
     with pytest.raises(ss.CodedError, match='E204'):
         make_malaria().stratify(species=['gambiae', 'funestus'], states=['Sv', 'Evv'])
+
+    # A dimension of some states only, entered with a split that depends on age, as summer2's clinical strata
+    def clinical(adjust=None):
+        seir = ss.Disease(infection=ss.transmission('S -> E', beta=0.4, source='I'), onset=ss.progression('E -> I', dur=3), recovery=ss.progression('I -> R', dur=7), init=dict(I=0.01), name='seir')
+        seir.stratify(age=[0, 20, 60], split=[0.3, 0.5, 0.2])
+        seir.stratify(clinical=['mild', 'severe'], states=['I'], split=ss.by([[0.9, 0.1], [0.7, 0.3], [0.2, 0.8]], dims=['age', 'clinical']), adjust=adjust)
+        return seir
+    for solver,agents in [('ode', {}), ('binomial', {}), ('abm', dict(n_agents=50_000))]:
+        res = ss.Sim(clinical(), solver=solver, stop=100, **agents, **kw).run().results.seir
+        severe = [res.n_I.select(age=age, clinical='severe').values.sum()/res.n_I.select(age=age).values.sum() for age in ['0-19', '20-59', '60+']]
+        assert np.allclose(severe, [0.1, 0.3, 0.8], atol=0.03), f'Expected the share severe to depend on age with {solver}'
+        assert np.allclose([res.n_S.select(age=age).values[0] for age in ['0-19', '20-59', '60+']], np.array([0.3, 0.5, 0.2])*res.n_S.values[0], rtol=0.02)
+    # A flow into such a dimension is recorded at the level people arrive at
+    for solver,agents in [('ode', {}), ('abm', dict(n_agents=20_000))]:
+        onset = ss.Sim(clinical(), solver=solver, stop=100, **agents, **kw).run().results.seir.onset.by('clinical').values.sum(axis=0)
+        assert np.isclose(onset[1]/onset.sum(), 0.3*0.1 + 0.5*0.3 + 0.2*0.8, atol=0.02)
+
+    # A starting count by level of such a dimension is that many people, and the first state has everyone else
+    seir = clinical()
+    seir.graph.states.I.init = ss.by(clinical=[10, 0])
+    res = ss.Sim(seir, total_pop=1000, stop=2, **kw).run().results.seir
+    assert np.isclose(res.n_I.select(clinical='mild').values[0], 10) and np.isclose(res.n_I.values[0], 10)
+    assert np.isclose(res.n_S.values[0], 990)
+
+    with pytest.raises(ss.CodedError, match='E306'): # People in E have no clinical level, so an adjustment of their onset cannot apply
+        ss.Sim(clinical(adjust={'onset': [1, 2]}), **kw).init()
+
+    # Infectiousness by clinical level: none at all stops transmission, and the solvers agree on the rest
+    assert ss.Sim(clinical(adjust={'rel_trans': [0, 0]}), stop=100, **kw).run().results.seir.n_R.values[-1] < 101
+    sizes = [ss.Sim(clinical(adjust={'rel_trans': [0.5, 2]}), solver=solver, stop=150, total_pop=20_000, **agents, **kw).run().results.seir.n_R.values[-1]
+             for solver,agents in [('ode', {}), ('abm', dict(n_agents=20_000))]]
+    assert np.isclose(*sizes, rtol=0.05)
+    with pytest.raises(ss.CodedError, match='E306'): # Susceptible people have no clinical level
+        ss.Sim(clinical(adjust={'rel_sus': [1, 2]}), **kw).init()
     return sims
 
 
@@ -165,6 +199,19 @@ def test_strains():
         res = run(make([1.0, 1.5]), solver, stop=300, total_pop=50_000).results.sis
         n_I = res.n_I.by('strain').values
         assert n_I[0, 0] > 5*n_I[0, 1] and n_I[-1, 1] > 5*n_I[-1, 0], f'Expected the more transmissible strain to take over with {solver}'
+    # Cross-immunity between strains: complete protection is the base model; none lets each person have each strain (as agents, who keep every strain they have had)
+    def flu(immunity):
+        dis = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=7), init_prev=0.01, name='flu')
+        return dis.stratify(strain=['A', 'B'], immunity=immunity)
+    total = lambda immunity, **kwargs: ss.Sim(flu(immunity), unit='day', stop=200, **kwargs, **kw).run().results.flu.infection.sum()
+    once = total(None)
+    assert np.isclose(total(np.ones((2, 2))), once)
+    twice = total(np.eye(2), n_agents=10_000)
+    assert 1.5*once < twice < 2.2*once
+    assert total(np.eye(2)) > twice # A compartmental run keeps only the last strain, so people can go from A to B and back
+    with pytest.raises(ss.CodedError, match='E603'):
+        flu(np.eye(3))
+
     return sims
 
 
@@ -282,6 +329,22 @@ def test_register():
         ss.Mobility(data=register.drop(columns='n'))
     with pytest.raises(ValueError, match='migrate'):
         ss.Mobility(data=register, kind='commute')
+    # An event can move people to other states in the same place, as SimInf's shift matrix does when animals age
+    def ages(data):
+        S1, I1 = ss.states('S1 I1')
+        S2, I2 = ss.State('S2', people=True), ss.State('I2', people=True)
+        dis = ss.Disease(S1, I1, S2, I2, inf1=S1 >> I1 @ 0*I1, inf2=S2 >> I2 @ 0*I2, rec1=I1 >> S1 @ 0.0, rec2=I2 >> S2 @ 0.0, init=dict(I1=0.2), name='dis')
+        return dis.stratify(herd=['a', 'b'], kind='space', mobility=ss.Mobility(data=data))
+    aging = pd.DataFrame({'date':[5, 5], 'from':['a', 'b'], 'to':['a', 'b'], 'n':[100, 50], 'states':['S1, I1']*2, 'to_states':['S2, I2']*2})
+    for solver,agents in [('ode', {}), ('gillespie', {}), ('abm', dict(n_agents=1000))]:
+        res = ss.Sim(ages(aging), total_pop=1000, stop=10, solver=solver, **agents, **kw).run().results.dis
+        assert np.allclose(res.n_S2.by('herd').values[6] + res.n_I2.by('herd').values[6], [100, 50])
+        assert np.isclose(res.n_I2.values[6]/(res.n_S2.values[6] + res.n_I2.values[6]), 0.2, atol=0.1) # Infected and not move to their own states
+    mixed = pd.concat([aging, pd.DataFrame({'date':[6], 'from':['a'], 'to':[None], 'n':[10], 'states':['S1']})]) # Rows with no to_states are read as such
+    ss.Sim(ages(mixed), total_pop=1000, stop=10, **kw).run()
+    with pytest.raises(ValueError): # As many states to move people to as to move them from
+        ss.Sim(ages(aging.assign(states=['S1, I1', 'S1'])), total_pop=1000, stop=10, **kw).init()
+
     return sims
 
 

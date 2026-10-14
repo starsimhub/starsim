@@ -123,6 +123,7 @@ def test_conditions():
     for sim in sims.values():
         n_S = sim.results.sir.n_S.by('age').values[5, 0]
         assert np.isclose(sim.results.kids.delivered[5], n_S, rtol=0.02) # Every susceptible child, and nobody else
+        assert np.allclose(sim.results.kids.delivered.by('age').values[5], [sim.results.kids.delivered[5], 0, 0]) # By stratum: all in the youngest group
     check_close(sims, lambda sim: sim.results.kids.delivered.sum(), rtol=0.05)
 
     # A function of the sim does the same
