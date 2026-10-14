@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Copy Claude Code transcripts for this repo into transcripts/, and extract the
-prompts that are not yet recorded in prompts.md.
+Copy Claude Code transcripts for this repo into admin/transcripts/, and extract
+the prompts that are not yet recorded in admin/prompts.md.
 
 Usage:
     copy_prompts.py status              # List sessions and how many prompts are new
@@ -17,9 +17,13 @@ import collections
 from pathlib import Path
 
 repo = Path(__file__).resolve().parents[3]
-source = Path.home() / '.claude' / 'projects' / re.sub(r'[^a-zA-Z0-9]', '-', str(repo))
-dest = repo / 'transcripts'
-prompts_md = repo / 'prompts.md'
+admin = repo / 'admin'
+dest = admin / 'transcripts'
+prompts_md = admin / 'prompts.md'
+
+# Sessions are recorded under the folder they were started in: the design repo before it moved into Starsim, and the Starsim checkout after
+folders = [repo.parent.parent / 'lingua_franca_design', repo.parent]
+sources = [Path.home() / '.claude' / 'projects' / re.sub(r'[^a-zA-Z0-9]', '-', str(folder)) for folder in folders]
 
 # User-role messages that were not typed by the user
 skip_prefixes = (
@@ -62,14 +66,15 @@ def load_session(path):
         if is_prompt(entry, text):
             turns.append(dict(time=entry.get('timestamp', ''), prompt=text, reply=''))
         elif entry.get('type') == 'assistant' and not entry.get('isSidechain') and text.strip() and turns:
-            turns[-1]['reply'] = text # Keep the last text reply before the next prompt
+            if not re.fullmatch(r'_Staged .*_', text.strip()): # Skip the apprentice's note on staged lessons
+                turns[-1]['reply'] = text # Keep the last text reply before the next prompt
     return turns
 
 
 def load_sessions():
     """ Load all sessions that contain at least one prompt, oldest first """
     sessions = {}
-    for path in source.glob('*.jsonl'):
+    for path in [path for source in sources for path in source.glob('*.jsonl')]:
         turns = load_session(path)
         if turns:
             sessions[path] = turns
@@ -101,7 +106,7 @@ def needs_copy(src, dst):
 
 def status():
     sessions = mark_new(load_sessions())
-    print(f'Source: {source}\n')
+    print('Sources:\n' + '\n'.join(str(source) for source in sources) + '\n')
     print(f'{"session":38s} {"started":18s} {"prompts":>7s} {"new":>4s}  copied')
     for path, turns in sessions.items():
         n_new = sum(turn['new'] for turn in turns)

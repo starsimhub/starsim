@@ -1230,9 +1230,10 @@ class Graph:
             clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions
             self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
 
-        # Register the explicit ss.par objects used in the transitions, and in the weights of the outcomes
+        # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
         used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
+        used += [(oc.name, val) for oc in self.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if isinstance(val, par)]
         for name,expr in used:
             if expr is not None:
                 for leaf in expr.leaves:
