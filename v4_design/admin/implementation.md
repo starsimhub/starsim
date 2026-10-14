@@ -202,7 +202,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Gillespie with many groups: where places do not affect each other within a step (people mix within their place, and no transition moves them between groups), each place has its own events over the step, and only its rates are worked out again after each one. The SimInf herds take 3.0 s, from 9.5 (SimInf: 0.08 s); a movement register of 466,692 events is read in 0.9 s, from 41
 - [x] A whole run in the kernel with modifiers that depend only on time (no `where=`, `when=`, or function as the amount): the program is worked out for every step before the run. flepiMoP's scenarios with four modifiers no longer need the loop
 - [ ] A whole run in the kernel with other modifiers, transfers, and deliveries (the run is stepped from Python, with one kernel call a step)
-- [ ] Many runs in one call with different parameter values (a restarted run is 0.5 to 1 ms, most of it Python around the kernel)
+- [x] Many runs with different parameter values: `ss.parallel(sim, pars=dict(beta=[...]))`. With `integrator='jax'`, an ODE takes them all in one call to JAX: 1,000 runs of a year of an SIR in 0.5 s, from 1.2 s one at a time (the JAX run itself is 0.05 s; the rest is setting up each run and working out its results). Otherwise each set is one call to the kernels for all its seeds
 - [x] Building a sim with modifiers or values that vary in time no longer builds a second, probe sim to try them on groups (they always work on groups), and a modifier's search for time parameters no longer walks into the modules its condition names: flepiMoP's scenarios build in 26 ms, from 62
 - [ ] Faster building of a sim (20 to 50 ms, which is now nearly all of a single run)
 - [x] Agents: under homogeneous mixing with one strain, the probability of infection for everyone susceptible and exposed in one compiled pass (the rate is worked out once for each group, and the draw is the one made before, so the same agents are infected); each state counted by group in one pass; the level of each agent in a dimension reused until the property changes. The LASER example takes 3.5 ms a step, from 4.4 (8.5 at the start)
@@ -212,7 +212,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] The chain-binomial solver with many stages: a substep for each stage (40 a day for LASER's latent period; fewer makes each stage too long). Moving people several stages in one substep, as many as an Erlang chain would in that time, would be exact with one substep
 - [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
 - [x] Values that vary smoothly in time (`ss.seasonal`, and `ss.timeseries` other than `mode='constant'`) read at the time of each stage of an RK4 step, in the kernels (from their values at the start, middle, and end of each step) and in Python (and by the `scipy` integrators). A step function is held for the whole step, as `ss.change()` is. MEmilio's age-resolved SECIR at a step of a day went from 9 people in 10,000 to 1.5, the error of the reference itself
-- [ ] JAX and gradients
+- [x] JAX and gradients (`starsim/gradients.py`): `integrator='jax'` runs the same RK4 (or Euler) steps as the kernels in JAX, from the same program, and matches them to 1e-15. `sim.gradient(results, pars)` gives the derivative of each result with respect to each parameter; it agrees with finite differences to 1e-10, including through a function in a rate (`np.exp(-I.frac)`) and an outcome with a delay. `sim.calibrate()` on an ODE fits by L-BFGS-B with these gradients when JAX is installed: with 8 parameters it recovers the true values in 110 evaluations (6 s), where Nelder-Mead stops at its limit of 1,600 without them. With 3 it is slower than Nelder-Mead (1.7 s against 0.25, including about 1 s to compile), since each gradient costs as much as about 8 runs
 
 ### 13 Inference
 
@@ -220,7 +220,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Fitting a parameter wherever it is used: in an initial count (`init=dict(E=I0/2, I=I0)`), inside `ss.seasonal` or `ss.timeseries` (`mean=(1 + smin)/2`), or shared by several modules or by models built more than once (registered with each, and fitted once)
 - [ ] Data matched by name to summed results
 - [x] Likelihoods (`ss.poisson`, `ss.nbinom`, `ss.normal`, `ss.lognorm_ex`, with the model's value as the mean), fitted by maximum likelihood; `ss.compare_models`, with `holdout=` and `folds=`
-- [ ] Posterior methods (NUTS, particle MCMC, ABC-SMC) and priors
+- [ ] Posterior methods (NUTS, particle MCMC, ABC-SMC) and priors (the gradients for NUTS are there: see `ss.gradients.gradient()`)
 - [ ] Identifiability notes
 
 ### 14 to 16 Model spec, errors, and interop
@@ -235,7 +235,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - Sims with no declared states keep Starsim 3's time defaults.
 - Rates are written as strings in the model spec, and the spec is `sim.to_spec()`; `sim.to_json()` is unchanged from Starsim 3. `ss.load()` reads the strings back with a parser that accepts only arithmetic, comparisons, the functions allowed in rates, typed quantities (`perday(0.5)`), and the names the module declares, so loading a spec runs no code from it.
-- The default ODE integrator is fixed-step RK4 with automatic substeps.
+- The default ODE integrator is fixed-step RK4 with automatic substeps, in the Numba kernels, with or without gradients being asked for; JAX is used only for `integrator='jax'`, `sim.gradient()`, and gradient-based fitting. `integrator='jax'` takes the same RK4 steps (not an adaptive JAX integrator), so its results are the kernels'.
+- What JAX differentiates is the run, from the numbers in the program and the compartments at the start to the compartments and flows at every step. The steps either side are Python (the parameters to those numbers, and the run to the results, outcomes, and goodness of fit), and are differentiated by central differences along the direction of each parameter. So a gradient is exact to about 1e-10, not to the last bit, and costs two restarts and two runs' worth of results for each parameter.
 - A stratified population has ages from 0 to 100.
 - Every agent's dwell time is sampled, including exponential ones.
 - The property of people that says they hold a product is named `has_<product>` (e.g. `has_bcg`), and the record that a routine delivery has been offered is `offered_<delivery>`. The product's own name is taken by the product module.
@@ -276,3 +277,6 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A state that is not people is deterministic under the stochastic solvers, so a vector population whose own randomness matters cannot be drawn.
 - Under the exact solver, places are run one at a time between steps only when people mix within their place and nothing moves them between groups within a step; otherwise every rate is worked out again after each event.
 - A plain `duration=` on an outcome is an exponential stay, while `delay=` is an exact shift.
+- Once JAX has been used in a process (by `sim.gradient()`, a fit, or `integrator='jax'`), running sims in parallel by forking processes (`ss.parallel()` of agent-based sims, or Optuna with several workers) can deadlock, as JAX warns.
+- Gradients need a sim that the kernels run from start to finish (no interventions, modifiers with conditions, transfers, or movement register), and a rate that is a Python function of the sim has none (one written with NumPy functions of counts does).
+- The JAX run is compiled the first time it is used for a model (about 1 s), and again if a step needs more substeps than it has allowed for.

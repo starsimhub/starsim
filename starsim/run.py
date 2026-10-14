@@ -1098,7 +1098,21 @@ class MultiResults(ss.Results):
         return MultiResults('MultiSim', nested=nested)
 
 
-def restart_runs(sims, n_runs):
+def par_sets(pars):
+    """ A list of sets of parameter values, from a list of dicts or a dict of lists (one value per set) """
+    if pars is None:
+        return [None]
+    if isinstance(pars, dict):
+        lens = {len(sc.tolist(v)) for v in pars.values()}
+        if len(lens) != 1:
+            errormsg = f'Each parameter in pars= needs the same number of values, not {sc.strjoin(sorted(lens))}'
+            raise ValueError(errormsg)
+        n = lens.pop()
+        return [{key:sc.tolist(vals)[i] for key,vals in pars.items()} for i in range(n)]
+    return [dict(p) for p in pars]
+
+
+def restart_runs(sims, n_runs, pars=None):
     """
     Run each sim a number of times, each with its own seed, by building it once and restarting it
 
@@ -1106,6 +1120,9 @@ def restart_runs(sims, n_runs):
     is many times faster than running copies. Returns None if any of the sims is not.
     The MultiSim that comes back has the results of every run, and one sim for each
     that was given, as it was after its last run.
+
+    With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times. A sim
+    run with `integrator='jax'` takes all of its runs in one call to JAX (see `ss.gradients`).
     """
     if not all(hasattr(sim, 'inputs') and not sim.initialized for sim in sims):
         return None
@@ -1116,31 +1133,43 @@ def restart_runs(sims, n_runs):
         if not runner.kernel_only():
             return None
         runners.append(runner)
-    labels = [sim.label for sim in runners for i in range(n_runs)]
+    sets = par_sets(pars)
+    labels = [sim.label for sim in runners for p in sets for i in range(n_runs)]
     values = sc.ddict(list)
     groups = sc.ddict(list)
     for sim in runners:
         seed = sim.pars.rand_seed
-        for mod in sim.declared: # All the runs of each module are one call to the kernels
-            out = mod.engine.run_many(seed + np.arange(n_runs))
+        if pars is not None and sim.jax and ss.gradients.reason(sim) is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+            outs = list(ss.gradients.run_sets(sim, [p for p in sets for i in range(n_runs)]).items())
+        else:
+            outs = []
+            for p in sets: # All the runs of each module with each set of values are one call to the kernels
+                if p is not None:
+                    sim.restart(pars=p)
+                outs += [(mod.name, mod.engine.run_many(seed + np.arange(n_runs))) for mod in sim.declared]
+        for modname,out in outs:
             for key,vals in out.pop('groups').items():
-                groups[mod.name, key].append(vals)
+                groups[modname, key].append(vals)
             for key,vals in out.items():
-                values[mod.name, key].append(vals)
-        sim.restart(rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
+                values[modname, key].append(vals)
+        sim.restart(pars=sets[-1], rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
     nested = sc.objdict()
     for (modname,key),vals in values.items():
         res = runners[0].results[modname][key]
-        if len(vals) == len(runners):
+        vals = np.concatenate(vals)
+        if len(vals) == len(labels): # A result that every sim has
             strata = groups.get((modname, key))
-            strata = np.concatenate(strata) if strata is not None and len(strata) == len(runners) else None
-            nested.setdefault(modname, sc.objdict())[key] = MultiResult(key, np.concatenate(vals), res.timevec, labels=labels, label=res.label, strata=strata, like=res)
+            strata = np.concatenate(strata) if strata is not None else None
+            strata = strata if strata is not None and len(strata) == len(labels) else None
+            nested.setdefault(modname, sc.objdict())[key] = MultiResult(key, vals, res.timevec, labels=labels, label=res.label, strata=strata, like=res)
     msim = MultiSim(sims=runners)
     msim.results = MultiResults('MultiSim', nested=nested)
+    if pars is not None:
+        msim.run_pars = sc.dataframe([p for sim in runners for p in sets for i in range(n_runs)]) # The values of each run
     return msim
 
 
-def parallel(*args, n_runs=None, **kwargs):
+def parallel(*args, n_runs=None, pars=None, **kwargs):
     """
     A shortcut to `ss.MultiSim()`, allowing the quick running of multiple simulations
     at once.
@@ -1148,6 +1177,7 @@ def parallel(*args, n_runs=None, **kwargs):
     Args:
         args (list): The simulations to run
         n_runs (int): if provided, run each sim this many times, each with its own seed
+        pars (dict/list): sets of values of model parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), and `msim.run_pars` has the values of each run
         kwargs (dict): sims passed as keywords are labelled with the keyword, e.g. `ss.parallel(baseline=s1, vaccine=s2)`;
             everything else is passed to multi_run()
 
@@ -1162,6 +1192,7 @@ def parallel(*args, n_runs=None, **kwargs):
         ss.parallel(s1, s2).plot()
         msim = ss.parallel([s1, s2], shrink=False)
         msim = ss.parallel(s1, n_runs=10) # Ten runs of one sim
+        msim = ss.parallel(sim, pars=dict(beta=np.linspace(0.1, 0.5, 100))) # One run with each value of beta (for a sim with declared states and transitions)
         ```
     """
     sims = sc.mergelists(*args)
@@ -1170,10 +1201,16 @@ def parallel(*args, n_runs=None, **kwargs):
             sim = kwargs.pop(key)
             sim.label = key
             sims.append(sim)
+    if pars is not None:
+        n_runs = sc.ifelse(n_runs, 1)
     if n_runs is not None and not kwargs: # Built once and restarted for each run, where the sims allow, which is many times faster
-        msim = restart_runs(sims, n_runs)
+        msim = restart_runs(sims, n_runs, pars=pars)
         if msim is not None:
             return msim
+    if pars is not None: # Otherwise, a copy of each sim for each set of values
+        sets = par_sets(pars)
+        run_pars = sc.dataframe([p for sim in sims for p in sets for i in range(n_runs)])
+        sims = [sim.new(pars=p, label=sim.label) for sim in sims for p in sets]
     if n_runs is not None:
         replicates = []
         for sim in sims:
@@ -1186,6 +1223,8 @@ def parallel(*args, n_runs=None, **kwargs):
         kwargs.setdefault('reseed', False) # The seeds have just been set
     msim = MultiSim(sims=sims, **kwargs)
     msim.run()
+    if pars is not None:
+        msim.run_pars = run_pars
     if any(getattr(sim, 'declared', None) for sim in msim.sims):
         msim.results = MultiResults.from_sims(msim.sims)
     return msim

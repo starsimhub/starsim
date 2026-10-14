@@ -148,6 +148,9 @@ from .loop import Loop
 t('spec')
 from .spec import from_spec
 
+t('gradients')
+from . import gradients # Used as ss.gradients; JAX is imported only when it is used
+
 t('sim')
 from .sim import Sim, AlreadyRunError, demo, diff_sims, check_sims_match
 

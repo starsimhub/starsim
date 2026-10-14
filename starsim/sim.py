@@ -72,6 +72,7 @@ class Sim(ss.Base):
         self._name_modules(sys._getframe(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._add_followups(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
+        self.jax = False # Whether the ODE is run in JAX (integrator='jax'): see ss.gradients
         if isinstance(pars, dict) and len(pars) and not any(key in self.pars for key in pars):
             self.par_values, pars = dict(pars), None
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
@@ -355,6 +356,9 @@ class Sim(ss.Base):
                     ss.error('E804', f'cannot run with solver="{solver}": the module "{mod.name}" ({type(mod).__name__}) only works on agents.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
             self.integrator = sc.ifelse(pars.integrator, 'rk4')
+            self.jax = self.integrator == 'jax' # The same RK4 steps, run in JAX (see ss.gradients)
+            if self.jax:
+                self.integrator = 'rk4'
             pars.pop_scale = 1.0
             pars.people_results = False
 
@@ -1516,9 +1520,15 @@ class Sim(ss.Base):
         try:
             # Main simulation loop -- just one line!!!
             kernels = until is None and not profile and self.kernel_only()
+            use_jax = False
+            if self.jax:
+                why = ss.gradients.reason(self)
+                use_jax = why is None
+                if why:
+                    ss.note(f'integrator="jax" cannot run this sim, since {why}, so it is run by the RK4 kernels', sim=self)
             if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
-                    mod.engine.run_all()
+                    mod.engine.run_all(use_jax=use_jax)
                 self.loop.index = len(self.loop.plan)
             else:
                 self.loop.run(until, profile=profile)
@@ -1567,6 +1577,34 @@ class Sim(ss.Base):
         names -= {mod.name for mod in self.modules if getattr(mod, 'timed', False)} # A modifier that depends only on time is tabulated by the engines: see ss.Compartmental.tables()
         mods = [mod for mod in self.modules if mod.name in names]
         return len(mods) == len(names) and all(isinstance(getattr(mod, 'engine', None), ss.Compartmental) and mod.engine.kernel_only() for mod in mods)
+
+    def gradient(self, results=None, pars=None):
+        """
+        The derivative of results with respect to parameters, at their current values
+
+        The ODE run is differentiated by JAX (see `ss.gradients`), so this needs JAX, a sim
+        with `solver='ode'`, and one that the kernels run from start to finish (see
+        `sim.kernel_only()`). The sim itself is not changed.
+
+        Args:
+            results (str/list): the results, by name (`'n_I'`, or `'sir.n_I'` where needed); default: every result of the declared modules
+            pars (str/list): the parameters, by name; default: every parameter that has bounds
+
+        Returns:
+            An `sc.objdict` by parameter, then module, then result, of the derivative at each step
+
+        Example:
+            ```python
+            beta = ss.par(0.3, bounds=[0.1, 1])
+            S, I, R = ss.states(3)
+            sir = ss.Disease(S >> I @ beta * I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+            sim = ss.Sim(sir, unit='day', stop=100)
+            grad = sim.gradient('n_I')
+            grad.beta.sir.n_I # How the number infectious at each step changes with beta
+            ```
+        """
+        sim = self.new(verbose=0).init()
+        return ss.gradients.of_results(sim, results=results, pars=pars)
 
     def restart(self, pars=None, rand_seed=None):
         """

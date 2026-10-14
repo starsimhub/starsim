@@ -3,6 +3,7 @@ Define the calibration class
 """
 import os
 import tempfile
+import functools
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -1228,13 +1229,19 @@ class data:
         return
 
 
+@functools.lru_cache(maxsize=64)
+def date_years(dates):
+    """ Dates as years, kept for the next call with the same dates (each evaluation of a fit compares with the same data) """
+    return np.array([ss.date(t).years for t in dates])
+
+
 def data_times(sim, df):
     """ The times of the data, on the sim's own time axis (the result timevec as numbers) """
     timevec = sim.t.timevec
     index = df.index
     if sim.t.is_absolute:
-        sim_t = np.array([ss.date(t).years for t in timevec])
-        data_t = np.array([ss.date(t).years for t in index])
+        sim_t = np.asarray(sim.t.yearvec, dtype=float)
+        data_t = date_years(tuple(index)).copy()
     else:
         sim_t = np.asarray(timevec, dtype=float)
         data_t = np.asarray(index, dtype=float)
@@ -1428,7 +1435,7 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         weights (dict): the relative weight of each data series (default: equal)
         likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim
-        method (str): 'nelder-mead' (the default for a deterministic sim), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
+        method (str): 'l-bfgs-b' (the default for a deterministic sim, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
         scan (int): for the SciPy methods, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from the best of them
         n_runs (int): runs per evaluation, for a stochastic sim (default 1)
         rand_seed (int): the random seed for the fitting method
@@ -1496,7 +1503,6 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
     if verbose and logs.any():
         print(f'Searching on a log scale: {sc.strjoin(np.array(names)[logs])}')
     stochastic = probe.solver not in ['ode']
-    method = sc.ifelse(method, 'optuna' if stochastic else 'nelder-mead')
     n_runs = sc.ifelse(n_runs, 1)
 
     external = [i >= n_model for i in range(len(fitted))] # Parameters of a likelihood given at calibration time
@@ -1513,6 +1519,13 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
     runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
     runner.data = base.data
     restart = runner.init().kernel_only()
+    no_grad = ss.gradients.reason(runner) # Why there are no gradients, if there are not
+    if method is None:
+        method = 'optuna' if stochastic else 'nelder-mead' if no_grad else 'l-bfgs-b'
+        if verbose:
+            why = 'a stochastic sim' if stochastic else f'no gradients, since {no_grad}' if no_grad else 'gradients by automatic differentiation'
+            print(f'Fitting by {method} ({why}; override with method=)')
+    use_grad = method.lower() in ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] and not no_grad
 
     def run(x, seed=None, fresh=False):
         if restart and not fresh:
@@ -1528,6 +1541,13 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         value = float(np.mean(values))
         trials.append(dict(zip(names, x), mismatch=value))
         return value
+
+    def with_gradient(x):
+        """ The objective and its gradient, through the run in JAX """
+        value, derivs = ss.gradients.gradient(runner, lambda x: runner.restart(pars=to_pars(x)), x, measure)
+        value = float(value)
+        trials.append(dict(zip(names, x), mismatch=value))
+        return value, np.array(derivs, dtype=float)
 
     def encode(x): return np.where(logs, np.log(np.maximum(x, 1e-300)), x)
     def decode(z): return np.clip(np.where(logs, np.exp(np.minimum(z, 700)), z), lows, highs)
@@ -1554,7 +1574,14 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
     else:
         bounds = list(zip(encode(lows), encode(highs)))
         options = sc.mergedicts(dict(xatol=1e-4, fatol=1e-6) if method == 'nelder-mead' else None, kwargs)
-        result = spo.minimize(lambda z: objective(decode(z)), encode(start), method=method, bounds=bounds, options=options)
+        if use_grad: # The gradient with respect to the scale searched on: d/dz = x d/dx where x = exp(z)
+            def fun(z):
+                x = decode(z)
+                value, grad = with_gradient(x)
+                return value, grad*np.where(logs, x, 1.0)
+            result = spo.minimize(fun, encode(start), method=method, jac=True, bounds=bounds, options=options)
+        else:
+            result = spo.minimize(lambda z: objective(decode(z)), encode(start), method=method, bounds=bounds, options=options)
         best = decode(result.x)
 
     before = run(x0, fresh=True)

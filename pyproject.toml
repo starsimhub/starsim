@@ -49,6 +49,11 @@ fastmath = [
   "intel-cmplr-lib-rt"
 ]
 
+# For running an ODE in JAX, and for gradients (see ss.gradients)
+jax = [
+  "jax",
+]
+
 # For running the tests
 test = [
     "pytest>=7.4",

@@ -1157,6 +1157,8 @@ class Compartmental(Engine):
         self.last_flows = dict() # The flow along each transition in the last step, by group
         self.program = None # The flows as arrays, for the kernels: see init_program()
         self.whole = None # Whether the kernels can take the whole run in one call: see kernel_only()
+        self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
+        self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.use_kernels = True # Whether to step with the kernels where the model allows (if False, everything is worked out in Python, which is slower but the same)
         return
 
@@ -2076,14 +2078,20 @@ class Compartmental(Engine):
             self.init_register()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables()
 
-    def run_all(self):
-        """ Take every step of the run in one call to the kernels, and fill in the results from what comes back """
+    def run_all(self, use_jax=False):
+        """ Take every step of the run in one call to the kernels (or to JAX: see `ss.gradients`), and fill in the results from what comes back """
         mod = self.mod
         graph = self.graph
         res = mod.results
-        args, tables = self.run_args()
-        seed = int(self.rng.integers(2**31))
-        self.y, stocks, flows, short = ss.kernels.run(*args, seed, *tables, self.register, self.per_step())
+        if self.given is not None: # The run has been taken already, by ss.gradients
+            out, self.given = self.given, None
+        elif use_jax:
+            out = ss.gradients.run(self)
+        else:
+            args, tables = self.run_args()
+            seed = int(self.rng.integers(2**31))
+            out = ss.kernels.run(*args, seed, *tables, self.register, self.per_step())
+        self.y, stocks, flows, short = out
         self.check_short(short)
         self.sim.t.ti = mod.t.ti = mod.t.npts
 
@@ -2131,7 +2139,6 @@ class Compartmental(Engine):
         would take more than `max_bytes` of memory.
         """
         graph = self.graph
-        res = self.mod.results
         self.restart()
         args, tables = self.run_args()
         base = self.sim.pars.rand_seed
@@ -2145,6 +2152,22 @@ class Compartmental(Engine):
         n_flows = self.program.n_trans + len(self.program.mov_mat)
         by_group = self.sim.strats != [] and len(seeds)*self.mod.t.npts*(len(states) + n_flows)*self.n_groups*8 <= self.max_bytes
         stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, state_of, len(states), by_group, self.per_step())
+        return self.collect(stocks, flows)
+
+    def collect(self, stocks, flows):
+        """
+        The results of many runs, from the number in each state and the flow along each transition and mover
+
+        Args:
+            stocks (array): runs by steps by states by groups (or by one group, the total)
+            flows (array): runs by steps by transitions and movers by groups (or one)
+
+        Returns the results as `run_many()` describes them.
+        """
+        graph = self.graph
+        res = self.mod.results
+        states = list(graph.states)
+        by_group = stocks.shape[-1] == self.n_groups and self.sim.strats != [] # Whether the values of each group were kept
         groups = sc.objdict()
         if by_group:
             for i,name in enumerate(states):
