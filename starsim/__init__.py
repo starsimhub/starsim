@@ -126,6 +126,7 @@ from .connectors import Connector, seasonality, modify, change
 
 t('conditions')
 from . import conditions
+from . import kernels
 from .conditions import Cond
 
 t('transitions')

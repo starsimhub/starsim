@@ -1002,6 +1002,42 @@ class MultiResults(ss.Results):
         return MultiResults('MultiSim', nested=nested)
 
 
+def restart_runs(sims, n_runs):
+    """
+    Run each sim a number of times, each with its own seed, by building it once and restarting it
+
+    Only for sims that are nothing but compartments (see `ss.Sim.restart()`), where this
+    is many times faster than running copies. Returns None if any of the sims is not.
+    The MultiSim that comes back has the results of every run, and one sim for each
+    that was given, as it was after its last run.
+    """
+    if not all(hasattr(sim, 'inputs') and not sim.initialized for sim in sims):
+        return None
+    runners = []
+    for sim in sims:
+        runner = sim.new().init()
+        runner.label = sim.label
+        if not runner.kernel_only():
+            return None
+        runners.append(runner)
+    labels = [sim.label for sim in runners for i in range(n_runs)]
+    values = sc.ddict(list)
+    for sim in runners:
+        seed = sim.pars.rand_seed
+        for mod in sim.declared: # All the runs of each module are one call to the kernels
+            for key,vals in mod.engine.run_many(seed + np.arange(n_runs)).items():
+                values[mod.name, key].append(vals)
+        sim.restart(rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
+    nested = sc.objdict()
+    for (modname,key),vals in values.items():
+        res = runners[0].results[modname][key]
+        if len(vals) == len(runners):
+            nested.setdefault(modname, sc.objdict())[key] = MultiResult(key, np.concatenate(vals), res.timevec, labels=labels, label=res.label)
+    msim = MultiSim(sims=runners)
+    msim.results = MultiResults('MultiSim', nested=nested)
+    return msim
+
+
 def parallel(*args, n_runs=None, **kwargs):
     """
     A shortcut to `ss.MultiSim()`, allowing the quick running of multiple simulations
@@ -1032,6 +1068,10 @@ def parallel(*args, n_runs=None, **kwargs):
             sim = kwargs.pop(key)
             sim.label = key
             sims.append(sim)
+    if n_runs is not None and not kwargs: # Built once and restarted for each run, where the sims allow, which is many times faster
+        msim = restart_runs(sims, n_runs)
+        if msim is not None:
+            return msim
     if n_runs is not None:
         replicates = []
         for sim in sims:

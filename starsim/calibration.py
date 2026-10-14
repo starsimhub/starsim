@@ -1416,7 +1416,13 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
     def to_pars(x):
         return {name:(cls(val) if cls is not None else float(val)) for name,val,cls in zip(names, x, types)}
 
-    def run(x, seed=None):
+    runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
+    runner.data = base.data
+    restart = runner.init().kernel_only()
+
+    def run(x, seed=None, fresh=False):
+        if restart and not fresh:
+            return runner.restart(pars=to_pars(x), rand_seed=seed).run()
         kw = {} if seed is None else dict(rand_seed=seed)
         new = base.new(pars=to_pars(x), **kw)
         new.data = base.data
@@ -1458,8 +1464,8 @@ def fit(sim, pars=None, data=None, weights=None, gof=None, method=None, n_runs=N
         best = decode(result.x)
 
     best_pars = sc.objdict(to_pars(best))
-    after = run(best)
-    before = run(x0)
+    after = run(best, fresh=True)
+    before = run(x0, fresh=True)
     table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
     out = Fit(sim=after, before=before, pars=best_pars, table=table, trials=pd.DataFrame(trials), method=method,
               mismatch=mismatch(after, weights=weights, gof=gof), mismatch_before=mismatch_before)

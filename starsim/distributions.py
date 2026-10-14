@@ -207,7 +207,7 @@ class Dists(sc.prettyobj):
         """ Advance all RNGs, e.g. to call "to", by jumping """
         out = sc.autolist()
         for dist in self.dists.values():
-            out += dist.jump(to=to, delta=delta, force=force)
+            out.append(dist.jump(to=to, delta=delta, force=force))
         return out
 
     def jump_dt(self, ti=None, force=False): # Could this be simplified with jump(), or nice to have the parallel with Dist?
@@ -219,7 +219,7 @@ class Dists(sc.prettyobj):
         """
         out = sc.autolist()
         for dist in self.dists.values():
-            out += dist.jump_dt(ti=ti, force=force)
+            out.append(dist.jump_dt(ti=ti, force=force))
         return out
 
     def reset(self):
@@ -522,6 +522,37 @@ class Dist:
                 # Otherwise (e.g. a function or None), use the new value directly
         return
 
+    _rng = None
+    _synced = True # Whether the generator has been moved to the current index: see jump()
+
+    @property
+    def rng(self):
+        """
+        The random number generator
+
+        A jump only records the new index; the generator is moved there when it is
+        next needed. Draws for agents are hashed from the index and never use the
+        generator, so for most distributions the move is never made.
+        """
+        if not self._synced and self._rng is not None:
+            self._synced = True
+            self.sync(self.ind)
+        return self._rng
+
+    @rng.setter
+    def rng(self, value):
+        self._rng = value
+        self._synced = True # A new generator is where it should be
+        return
+
+    def sync(self, ind):
+        """ Move the generator to an index: its initial state, jumped that many times """
+        bitgen = self._rng._bit_generator
+        bitgen.state = self.history[0].copy() # First back to the initial state (in case of different numbers of calls)
+        if ind: # Seems to randomize state if jumps=0
+            bitgen.state = bitgen.jumped(jumps=ind).state
+        return
+
     @property
     def bitgen(self):
         try:    return self.rng._bit_generator
@@ -547,7 +578,7 @@ class Dist:
         """ Store the current state in history """
         if reset:
             self.history = []
-        self.history.append(self.get_state()) # Store the initial state
+        self.history.append(self.get_state() if self._synced else self.ind) # Store the state, or the index it is at if the generator has not been moved there
         return
 
     def reset(self, state=0):
@@ -573,7 +604,11 @@ class Dist:
         """
         if not isinstance(state, dict):
             state = self.history[state]
-        self.rng._bit_generator.state = state.copy()
+        self._synced = True
+        if isinstance(state, dict):
+            self._rng._bit_generator.state = state.copy()
+        else: # An index, stored before the generator had been moved to it
+            self.sync(state)
         self.ready = True
         return self.state
 
@@ -597,12 +632,11 @@ class Dist:
                         'random numbers twice. If you are sure you want to do this, set force=True.'
             raise DistSeedRepeatError(msg=errormsg)
 
-        # Do the jumping
+        # Do the jumping: the generator itself is moved when it is next needed (see rng)
         self.ind = jumps
-        self.reset() # First reset back to the initial state (used in case of different numbers of calls)
-        if jumps: # Seems to randomize state if jumps=0
-            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
-        return self.state
+        self._synced = False
+        self.ready = True
+        return
 
     def jump_dt(self, ti=None, force=False):
         """
@@ -1159,7 +1193,7 @@ class Dist:
             sizestr = f'with size={self._size}, '
             slotstr = f'Σ(slots)={np.asarray(self._slots).sum()}, ' if self._slots is not None else '<no slots>, '
             rvstr   = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
-            pre_state = str(self.history[-1]['state']['state'])[-5:]
+            pre_state = str(self.history[-1]['state']['state'])[-5:] if isinstance(self.history[-1], dict) else f'index {self.history[-1]}'
             post_state = str(self.state_int)[-5:]
             statestr = f"state {pre_state}→{post_state}"
             print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')

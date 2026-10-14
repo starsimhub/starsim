@@ -270,7 +270,8 @@ class Engine:
         self.sim = sim
         self.graph = module.graph
         self.cache = dict() # Parameter values for the current step
-        self.rng = np.random.default_rng([int(sim.pars.rand_seed or 0), sum(ord(c) for c in module.name)]) # For draws that are not per agent
+        self.fixed = dict() # Converted values of plain parameters, which hold for the whole run
+        self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.objdict() # Dwell-time information for each transition that has one
         self.flowcounts = sc.objdict({name:0.0 for name in self.graph.transitions}) # Events in the current step
         self.stocks = sc.objdict() # The number in each state at the start of the step
@@ -278,6 +279,9 @@ class Engine:
         self.strain = None # The position of the module's strain dimension, if it has one
         self._strain = None # The strain whose force of infection is being worked out
         return
+
+    def make_rng(self):
+        return np.random.default_rng([int(self.sim.pars.rand_seed or 0), sum(ord(c) for c in self.mod.name)])
 
     #%% Dimensions
 
@@ -409,7 +413,10 @@ class Engine:
         elif isinstance(raw, ss.by):
             out = self.by_group(raw)
         else:
-            out = self.convert(raw)
+            fixed = self.fixed.get(key) # A plain value is converted once, and reused for as long as the parameter holds the same object
+            if fixed is None or fixed[0] is not raw:
+                fixed = self.fixed[key] = (raw, self.convert(raw))
+            out = fixed[1]
         out = self.modified(p, out)
         self.cache[key] = out
         return out
@@ -806,8 +813,9 @@ class Engine:
             self.flowcounts[name] = 0.0
         if hasattr(self, 'flow_groups'):
             self.flow_groups.clear()
-        for state in self.graph.states.values():
-            self.stocks[state.name] = self.stock(state)
+        if self.sim.solver != 'abm': # Agents are counted once the state changes of the step have been made: see Agents.step_state()
+            for state in self.graph.states.values():
+                self.stocks[state.name] = self.stock(state)
         return
 
     def update_results(self):
@@ -857,26 +865,33 @@ class Engine:
 
 
 class StockCtx:
-    """ Evaluates result expressions (sums and ratios of states) from the counts at the start of the step """
-    def __init__(self, engine):
+    """
+    Evaluates result expressions (sums and ratios of states) from the counts at the start of the step
+
+    Args:
+        engine (`ss.Engine`): the engine
+        stocks (dict): the number in each state: one number for the current step (the default), or an array over the steps
+    """
+    def __init__(self, engine, stocks=None):
         self.engine = engine
+        self.stocks = engine.stocks if stocks is None else stocks
         return
 
     def value(self, p):
         return self.engine.value(p)
 
     def count(self, states):
-        return sum(self.engine.stocks[s.name] for s in states)
+        return sum(self.stocks[s.name] for s in states)
 
     def frac(self, states):
-        n = sum(self.engine.stocks[s.name] for s in self.engine.graph.people_states)
-        return self.count(states)/n if n else 0
+        n = sum(self.stocks[s.name] for s in self.engine.graph.people_states)
+        return np.divide(self.count(states), n, out=np.zeros(np.shape(n)), where=n>0)[()]
 
     local_count = count # A result is a total, wherever the people are
     local_frac = frac
 
     def exposure(self, state): # In a result, a bare state stands for the number of people in it
-        return self.engine.stocks[state.name]
+        return self.stocks[state.name]
 
 
 #%% Compartmental
@@ -894,6 +909,9 @@ class Compartmental(Engine):
         super().__init__(module, sim)
         self.n_groups = sim.n_groups
         self.last_flows = dict() # The flow along each transition in the last step, by group
+        self.program = None # The flows as arrays, for the kernels: see init_program()
+        self.whole = None # Whether the kernels can take the whole run in one call: see kernel_only()
+        self.use_kernels = True # Whether to step with the kernels where the model allows (if False, everything is worked out in Python, which is slower but the same)
         return
 
     def define(self):
@@ -1034,6 +1052,13 @@ class Compartmental(Engine):
         for tr in graph.inflows:
             add_flow(tr, None, 'inflow')
 
+        for flow in self.flows: # The expression each flow's rate is worked out from, if it is not a dwell time, and whether that can change within a step
+            tr = flow.tr
+            flow.expr = None if (flow.kind == 'stage' or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
+            if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
+                flow.expr = flow.expr - tr.const
+            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.transitions.Count)) for leaf in flow.expr.leaves)
+
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
         self.people_comps = [i for i,comp in enumerate(self.comps) if comp.state.people]
@@ -1057,6 +1082,18 @@ class Compartmental(Engine):
             self.arrive(name, count*self.state_split[name], self.y)
         if self.integer:
             self.y = self.round_preserving(self.y)
+        self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
+        return
+
+    def restart(self):
+        """ Go back to the start of the run, with the current values of the parameters and the seed: see `ss.Sim.restart()` """
+        self.rng = self.make_rng()
+        self.cache.clear()
+        self.y = np.zeros((self.n_comps, self.n_groups))
+        self.init_post()
+        for info in self.outcomes.values():
+            info.update(now=0.0, n=0.0, total=0.0)
+            info.pending[:] = 0
         return
 
     @staticmethod
@@ -1239,6 +1276,10 @@ class Compartmental(Engine):
                     flow.credits += [(ind, w*p) for ind,w in credits]
                 if flow.strain is not None:
                     flow.record = self.dim_map(src, src, flow.strain, record=True)
+        if self.program:
+            weights = [item[1] for flow in self.flows for item in flow.targets + flow.credits]
+            if len(weights) != len(self._weights) or not all(np.array_equal(a, b) for a,b in zip(weights, self._weights)):
+                self.pack_targets()
         return
 
     def land(self, n, dim_map):
@@ -1258,28 +1299,221 @@ class Compartmental(Engine):
             y[ind] += amount*w
         return
 
+    def flow_base(self, flow):
+        """ The rate of a flow before its multipliers: the only part that can depend on the number in each compartment """
+        if flow.expr is None:
+            return (flow.stages if flow.kind == 'stage' else 1)/self.dwell_mean(flow.tr.name)
+        self._strain = flow.strain
+        rate = self.eval(flow.expr)
+        self._strain = None
+        return rate
+
+    def flow_mult(self, flow):
+        """ The multipliers on a flow's rate, which hold for the whole step """
+        tr = flow.tr
+        mult = 1.0
+        if flow.kind == 'contact':
+            mult = flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
+            if flow.strain is not None and self.strain_adjust[tr.name] is not None:
+                mult = mult*self.strain_adjust[tr.name][flow.strain]
+        if self.adjust[tr.name] is not None:
+            mult = mult*self.adjust[tr.name]
+        if flow.src is not None:
+            mult = mult*self.mult_raw('transition', tr.name, state=flow.state)
+        return mult
+
     def rates(self):
         """ The rate of every flow, per unit time and per member of its source compartment (or in total, for an inflow) """
-        out = []
-        for flow in self.flows:
-            tr = flow.tr
-            if flow.kind == 'stage':
-                rate = flow.stages/self.dwell_mean(tr.name)
-            elif flow.kind == 'contact':
-                self._strain = flow.strain
-                rate = self.strain_rate(tr, self.eval(tr.rate), flow.strain)*flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
-                self._strain = None
-            elif tr.dur is not None:
-                rate = 1/self.dwell_mean(tr.name)
+        return [self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows]
+
+    #%% The program run by the kernels
+
+    def init_program(self):
+        """
+        Flatten the flows into arrays for the kernels: see `ss.kernels`
+
+        The program is left as False if something in the model has to be worked out
+        in Python each time the rates are, in which case the solvers below do that.
+        """
+        sim = self.sim
+        mixing = sim.mixing
+        kn = ss.kernels
+        ng, nf = self.n_groups, len(self.flows)
+        pars, sets, exposures = dict(), dict(), dict() # What the operations act on, in order
+        ops, args, starts = [], [], [0]
+
+        def add(items, key, val=None):
+            """ The position of an item, adding it if it is new """
+            items.setdefault(key, val)
+            return list(items).index(key)
+
+        def check(p):
+            raw = p.raw
+            if isinstance(raw, dict) or (callable(raw) and not isinstance(raw, (ss.Dist, ss.transitions.TimeValue))):
+                raise NotImplementedError # A function of the sim can read the compartments, so has to be called as they change
+            if isinstance(raw, ss.transitions.TimeValue) and not any(p is par for par in self.time_pars):
+                self.time_pars.append(p)
+
+        def flatten(expr, strain):
+            """ Add the operations for an expression, and return the size of stack they need """
+            if isinstance(expr, ss.transitions.BinOp):
+                a = flatten(expr.a, strain)
+                b = flatten(expr.b, strain)
+                ops.append(kn.opcodes[expr.op])
+                args.append(0)
+                return max(a, b + 1)
+            elif isinstance(expr, ss.par):
+                check(expr)
+                ops.append(kn.CONST)
+                args.append(add(pars, id(expr), expr))
+            elif isinstance(expr, ss.transitions.Count):
+                ops.append(kn.COUNT if expr.kind == 'n' else kn.FRAC)
+                args.append(add(sets, tuple(ind for state in expr.states for ind in self.state_comps[state.name])))
+            elif isinstance(expr, ss.State):
+                ops.append(kn.EXPOSURE)
+                args.append(add(exposures, (expr.name, strain), expr))
             else:
-                rate = self.eval(tr.rate)
-            adjust = self.adjust[tr.name]
-            if adjust is not None:
-                rate = rate*adjust
-            if flow.src is not None:
-                rate = rate*self.mult_raw('transition', tr.name, state=flow.state)
-            out.append(rate)
-        return out
+                raise NotImplementedError
+            return 1
+
+        self.time_pars = [] # The parameters whose value changes over time
+        self.series = dict() # Their values at each step: see tables()
+        try:
+            depth = 1
+            for flow in self.flows:
+                if flow.dynamic:
+                    depth = max(depth, flatten(flow.expr, flow.strain))
+                else:
+                    for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
+                        check(leaf)
+                starts.append(len(ops))
+            if any(term.kind != 'homogeneous' for term in mixing.terms) and mixing.space is not None:
+                raise NotImplementedError
+        except NotImplementedError:
+            self.program = False
+            return
+
+        # Exposure: each mixing term is a matrix between cells, and each group is in one cell
+        nt = len(mixing.terms)
+        sizes = np.ones(nt, dtype=int)
+        levels = np.zeros((nt, ng), dtype=int)
+        mats = [[None, None] for term in mixing.terms] # What is applied before and after prevalence is worked out
+        for t,term in enumerate(mixing.terms):
+            if term.kind == 'homogeneous' and mixing.space is not None: # People mix where they are
+                levels[t] = mixing.places
+                sizes[t] = sim.strats[mixing.space].n
+                share = mixing.time_share
+                mats[t] = [None if mixing.visit else share, share]
+            elif term.kind != 'homogeneous':
+                levels[t] = term.cells if 'cells' in term else sim.group_coords[:, term.dim]
+                sizes[t] = len(term.matrix)
+                mats[t] = [None, term.matrix]
+        size = sizes.max()
+        pre, post = np.zeros((nt, size, size)), np.zeros((nt, size, size))
+        for t,(a,b) in enumerate(mats):
+            if a is not None: pre[t, :sizes[t], :sizes[t]] = a
+            if b is not None: post[t, :sizes[t], :sizes[t]] = b
+
+        self.prog_pars = list(pars.values())
+        self.prog_exposures = []
+        for (name,strain),state in exposures.items():
+            add(sets, tuple(self.state_comps[name]))
+            masked = strain is not None and self.applies[name][self.strain] # Only the people who carry this strain
+            self.prog_exposures.append((state, (sim.group_coords[:, self.strain] == strain) if masked else 1.0))
+        setlist = list(sets)
+        order = {id(flow):i for i,flow in enumerate(self.flows)}
+        flat = lambda lists: np.array([i for item in lists for i in item], dtype=int)
+        ends = lambda lists: np.cumsum([0] + [len(item) for item in lists])
+
+        self.program = kn.Program(
+            n_trans    = self.n_trans,
+            src        = np.array([-1 if flow.src is None else flow.src for flow in self.flows]),
+            named      = np.array([flow.named for flow in self.flows]),
+            index      = np.array([flow.index for flow in self.flows]),
+            record     = np.full(nf, -1),
+            inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng),
+            fixed      = np.zeros((nf, ng)),
+            mult       = np.ones((nf, ng)),
+            depth      = depth,
+            starts     = np.array(starts),
+            ops        = np.array(ops, dtype=int),
+            args       = np.array(args, dtype=int),
+            consts     = np.zeros((len(pars), ng)),
+            set_starts = ends(setlist),
+            set_comps  = flat(setlist),
+            people     = np.array(self.people_comps, dtype=int),
+            places     = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int),
+            n_places   = sim.strats[mixing.space].n if mixing.space is not None else 1,
+            exp_set    = np.array([setlist.index(tuple(self.state_comps[name])) for name,strain in exposures], dtype=int),
+            rel_trans  = np.ones((len(exposures), ng)),
+            levels     = levels,
+            sizes      = sizes,
+            contacts   = np.array([term.get('contacts', 1.0) for term in mixing.terms], dtype=float),
+            use_pre    = np.array([a is not None for a,b in mats]),
+            pre        = pre,
+            use_post   = np.array([b is not None for a,b in mats]),
+            post       = post,
+            tgt_starts = np.zeros(nf + 1, dtype=int),
+            tgt_comp   = np.zeros(0, dtype=int),
+            tgt_w      = np.zeros((0, ng)),
+            tgt_map    = np.zeros(0, dtype=int),
+            crd_starts = np.zeros(nf + 1, dtype=int),
+            crd_index  = np.zeros(0, dtype=int),
+            crd_w      = np.zeros((0, ng)),
+            maps       = np.zeros((0, ng, ng)),
+            mov_starts = ends([mover.comps for mover in self.movers]),
+            mov_comps  = flat([mover.comps for mover in self.movers]),
+            mov_mat    = np.zeros((len(self.movers), ng, ng)),
+            src_starts = ends(list(self.by_src.values())),
+            src_flows  = flat([[order[id(flow)] for flow in flows] for flows in self.by_src.values()]),
+        )
+        self.pack_targets()
+        kn.seed(int(self.make_rng().integers(2**31))) # Without drawing from the engine's own generator, so that a run does not depend on when this was called
+        return
+
+    def pack_targets(self):
+        """ Put where each flow goes into the program; done again whenever a branch probability changes """
+        ng = self.n_groups
+        maps = dict() # Each map that is used, once
+
+        def which(dim_map):
+            if dim_map is None:
+                return -1
+            maps.setdefault(id(dim_map), dim_map)
+            return list(maps).index(id(dim_map))
+
+        self._weights = [item[1] for flow in self.flows for item in flow.targets + flow.credits] # To tell when they change
+        targets = [(ind, w, which(dim_map)) for flow in self.flows for ind,w,dim_map in flow.targets]
+        credits = [(ind, w) for flow in self.flows for ind,w in flow.credits]
+        weights = lambda items: np.array([np.broadcast_to(item[1], ng) for item in items], dtype=float).reshape(len(items), ng)
+        self.program = self.program._replace(
+            record     = np.array([which(flow.record) for flow in self.flows]),
+            tgt_starts = np.cumsum([0] + [len(flow.targets) for flow in self.flows]),
+            tgt_comp   = np.array([item[0] for item in targets], dtype=int),
+            tgt_w      = weights(targets),
+            tgt_map    = np.array([item[2] for item in targets], dtype=int),
+            crd_starts = np.cumsum([0] + [len(flow.credits) for flow in self.flows]),
+            crd_index  = np.array([item[0] for item in credits], dtype=int),
+            crd_w      = weights(credits),
+            maps       = np.array(list(maps.values()), dtype=float).reshape(len(maps), ng, ng),
+        )
+        return
+
+    def refresh_program(self):
+        """ Set the numbers in the program that hold for this step: the rates that do not depend on the compartments, and the values the others use """
+        p = self.program
+        for i,flow in enumerate(self.flows):
+            if flow.dynamic:
+                p.mult[i] = self.flow_mult(flow)
+            else:
+                p.fixed[i] = self.flow_base(flow)*self.flow_mult(flow)
+        for i,par in enumerate(self.prog_pars):
+            p.consts[i] = self.value(par)
+        for i,(state,mask) in enumerate(self.prog_exposures):
+            p.rel_trans[i] = state.rel_trans*self.mult_raw('rel_trans', state=state)*mask
+        for i,matrix in enumerate(self._mover_rates):
+            p.mov_mat[i] = matrix
+        return p
 
     def derivs(self, t, yf):
         """ The right-hand side of the ODE: the compartments, followed by the cumulative flow of each transition """
@@ -1305,6 +1539,194 @@ class Compartmental(Engine):
                 df[ind] += amount*w
         return np.concatenate([dy.ravel(), df.ravel()])
 
+    #%% A whole run in the kernels
+
+    def kernel_only(self):
+        """ Whether the whole run can be taken in one call to the kernels: that is, whether nothing in Python needs to see the model between one step and the next """
+        sim = self.sim
+        mod = self.mod
+        graph = self.graph
+        solver = sim.integrator if sim.solver == 'ode' else sim.solver
+        if not self.use_kernels or solver not in ss.kernels.solvers or any(sim.modifiers.values()):
+            return False
+        if self.whole is None: # The rest cannot change, so is checked once
+            plain = all(getattr(type(mod), name) is getattr(ss.Disease, name) for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'])
+            exprs = [p for tr in graph.transitions.values() for p in sc.tolist(tr.p) if p is not None] # The values that are read once for the whole run
+            exprs += [w for info in self.outcomes.values() for key,w in info.sources if isinstance(w, ss.Expr)]
+            fixed = all(isinstance(leaf, ss.par) and (isinstance(leaf.raw, ss.Dist) or not callable(leaf.raw)) for expr in exprs for leaf in expr.leaves)
+            if self.program is None:
+                self.init_program()
+            self.whole = bool(self.program) and plain and fixed and not graph.transfers and mod.t.npts == sim.t.npts
+        return self.whole
+
+    def tables(self):
+        """
+        The parts of the program that can change over time, at each step (or as a single entry, if nothing varies)
+
+        A value that varies in time is worked out for every step the first time it is
+        needed, and kept for as long as the parameter holds the same object, so a sim
+        that is run again does not work it out again.
+        """
+        sim = self.sim
+        mod = self.mod
+        p = self.program
+        npts = mod.t.npts
+        self.cache.clear()
+        for par in self.time_pars:
+            raw = par.raw
+            kept = self.series.get(id(par))
+            if kept is None or kept[0] is not raw:
+                vals = []
+                for ti in range(npts):
+                    sim.t.ti = mod.t.ti = ti
+                    vals.append(self.convert(raw(sim)))
+                kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(npts, 1))
+            self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
+        sim.t.ti = mod.t.ti = 0
+        shape = (npts if self.time_pars else 1, self.n_groups)
+        table = lambda vals: np.array([np.broadcast_to(val, shape) for val in vals], dtype=float).reshape(len(vals), *shape).swapaxes(0, 1)
+        fixed     = table([0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows])
+        mult      = table([self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows])
+        consts    = table([self.value(par) for par in self.prog_pars])
+        rel_trans = table([state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures])
+        for par in self.time_pars: # For the results, a value is a series over the steps
+            self.cache[id(par)] = self.cache[id(par)][:, 0]
+        return [np.ascontiguousarray(table) for table in [fixed, mult, consts, rel_trans]]
+
+    def run_args(self):
+        """ What the kernels need for a whole run, apart from the seed """
+        sim = self.sim
+        self.update_targets()
+        self._mover_rates = self.mover_rates()
+        for i,matrix in enumerate(self._mover_rates):
+            self.program.mov_mat[i] = matrix
+        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        return [self.y, self.program, self.dt, self.mod.t.npts, solver, sim.pars.substeps or 0], self.tables()
+
+    def run_all(self):
+        """ Take every step of the run in one call to the kernels, and fill in the results from what comes back """
+        mod = self.mod
+        graph = self.graph
+        res = mod.results
+        args, tables = self.run_args()
+        seed = int(self.rng.integers(2**31))
+        self.y, stocks, flows = ss.kernels.run(*args, seed, *tables)
+        self.sim.t.ti = mod.t.ti = mod.t.npts
+
+        def store(key, vals):
+            res[key][:] = vals.sum(axis=1)
+            if getattr(res[key], 'strata', None) is not None:
+                res[key].strata[:] = vals
+            return res[key].values
+
+        n = sc.objdict({name:store(f'n_{name}', stocks[:, self.state_comps[name]].sum(axis=1)) for name in graph.states})
+        new = sc.objdict({name:store(name, flows[:, ind]) for name,ind in self.tr_index.items()})
+        if 'new_infections' in res and 'new_infections' not in graph.transitions:
+            store('new_infections', sum(flows[:, self.tr_index[tr.name]] for tr in graph.transmissions))
+        for key,vals in self.derived(n, new).items():
+            res[key][:] = vals
+        self.cache.clear()
+        return
+
+    def run_many(self, seeds):
+        """
+        Take many runs that differ only in their seed, in one call to the kernels
+
+        Args:
+            seeds (list): the seed of each run, as would be given to the sim as `rand_seed`
+
+        Returns each result that is a single series, as runs by steps. The results that are
+        kept by group are not: only the totals come back from the kernels.
+        """
+        graph = self.graph
+        res = self.mod.results
+        self.restart()
+        args, tables = self.run_args()
+        base = self.sim.pars.rand_seed
+        own = []
+        for seed in seeds: # The seed that each run would have drawn for itself
+            self.sim.pars.rand_seed = seed
+            own.append(self.make_rng().integers(2**31))
+        self.sim.pars.rand_seed = base
+        states = list(graph.states)
+        state_of = np.array([states.index(comp.state.name) for comp in self.comps])
+        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, state_of, len(states))
+        n = sc.objdict({name:stocks[:, :, i] for i,name in enumerate(states)})
+        new = sc.objdict({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
+        out = sc.objdict({f'n_{name}':vals for name,vals in n.items()})
+        out.update(new)
+        if 'new_infections' in res and 'new_infections' not in graph.transitions:
+            out.new_infections = sum(new[tr.name] for tr in graph.transmissions)
+        out.update(self.derived(n, new))
+        for name in graph.transitions: # As in finalize_results()
+            out[f'cum_{name}'] = np.cumsum(out[name], axis=-1)
+        if 'cum_infections' in res and 'new_infections' in out:
+            out.cum_infections = np.cumsum(out.new_infections, axis=-1)
+        self.cache.clear()
+        return out
+
+    def derived(self, n, new):
+        """
+        The results that are worked out from the number in each state and the flow along each transition
+
+        Args:
+            n (dict): the number in each state at each step: a series, or an array whose last dimension is the steps
+            new (dict): the same for the flow along each transition
+
+        Returns a dict of the outcomes, the prevalence, and the results given as expressions.
+        This is what `update_results()` does on each step, for every step at once.
+        """
+        graph = self.graph
+        res = self.mod.results
+        out = self.derived_outcomes(new)
+        if self.standard and 'prevalence' in res and 'prevalence' not in graph.exprs:
+            people = sum(n[s.name] for s in graph.people_states)
+            infected = sum(n[s.name] for s in graph.infected)
+            out.prevalence = np.divide(infected, people, out=np.zeros(np.shape(people)), where=people>0)
+        if graph.exprs:
+            ctx = StockCtx(self, n)
+            for name,expr in graph.exprs.items():
+                out[name] = ss.transitions.evaluate(expr, ctx)
+        return out
+
+    def derived_outcomes(self, new):
+        """ What `step_outcomes()` does on each step, for every step at once """
+        npts = self.mod.t.npts
+        out = sc.objdict()
+        for name,info in self.outcomes.items():
+            amount = 0.0
+            for key,weight in info.sources:
+                flow = new[key] if key in new else out[key]
+                if isinstance(weight, ss.Expr):
+                    weight = self.eval(weight)
+                if self.integer and 0 <= weight <= 1: # A fraction of whole events is a draw
+                    amount = amount + self.rng.binomial(np.round(flow).astype(int), weight)
+                else:
+                    amount = amount + flow*weight
+            kernel = info.kernel
+            if len(kernel) == 1:
+                now = amount*kernel[0]
+            elif self.integer: # Each event is reported after a delay drawn for it
+                now = np.zeros(amount.shape[:-1] + (npts + len(kernel),))
+                for ind in zip(*np.nonzero(amount)):
+                    now[ind[:-1]][ind[-1]:ind[-1]+len(kernel)] += self.rng.multinomial(int(round(amount[ind])), kernel/kernel.sum())
+                now = now[..., :npts]
+            else:
+                now = np.apply_along_axis(np.convolve, -1, amount, kernel)[..., :npts]
+            if info.p_leave is not None:
+                current = np.zeros(now.shape[:-1])
+                out[f'n_{name}'] = np.zeros(now.shape)
+                for ti in range(npts):
+                    current = current + now[..., ti] - current*info.p_leave
+                    out[f'n_{name}'][..., ti] = current
+            if info.every is None:
+                out[name] = now
+            else: # Totaled over each reporting period
+                ends = np.arange(info.every - 1, npts, info.every)
+                out[name] = np.zeros(now.shape)
+                out[name][..., ends] = np.diff(np.cumsum(now, axis=-1)[..., ends], prepend=0, axis=-1)
+        return out
+
     #%% Stepping
 
     def step_state(self):
@@ -1315,6 +1737,8 @@ class Compartmental(Engine):
         self.cache.clear() # The interventions have run since the step started
         self.update_targets()
         self._mover_rates = self.mover_rates()
+        if self.program is None and self.use_kernels:
+            self.init_program()
         solver = self.sim.solver
         dt = self.dt
         if   solver == 'ode':       flows = self.step_ode(dt)
@@ -1325,7 +1749,7 @@ class Compartmental(Engine):
         else:
             errormsg = f'Unknown solver "{solver}"'
             raise ValueError(errormsg)
-        if solver != 'ode':
+        if len(flows) == self.n_trans: # The movers are not in it yet
             flows = np.concatenate([flows, self.step_movers(dt)])
         for name,ind in self.tr_index.items():
             self.flowcounts[name] += flows[ind].sum()
@@ -1356,7 +1780,10 @@ class Compartmental(Engine):
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans + len(self.movers)
         y0 = np.concatenate([self.y.ravel(), np.zeros(nt*ng)])
         method = self.sim.integrator
-        if method in ['rk4', 'euler']:
+        if self.program and method in ['rk4', 'euler']:
+            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers[method], self.sim.pars.substeps or 0)
+            return flows
+        elif method in ['rk4', 'euler']:
             n_sub = self.sim.pars.substeps
             if n_sub is None: # Enough substeps that no compartment turns over by more than a quarter in one
                 rates = [np.max(rate) for flow,rate in zip(self.flows, self.rates()) if flow.src is not None]
@@ -1404,6 +1831,9 @@ class Compartmental(Engine):
     def step_binomial(self, dt):
         """ Chain-binomial: one multinomial draw per compartment over the flows that leave it """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
+        if self.program:
+            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['binomial'], 0)
+            return flows
         rates = dict(zip(map(id, self.flows), self.rates()))
         y = self.y.copy()
         flows = np.zeros((nt, ng))
@@ -1576,7 +2006,7 @@ class Agents(Engine):
 
     def strain_raw(self):
         """ The strain each agent carries, as an array indexed by UID """
-        return np.nan_to_num(self.sim.people[self.sim.strats[self.strain].attr].raw).astype(int)
+        return self.sim.level_raw(self.strain)
 
     def adjusted(self, name, uids):
         """ The multiplier on a transition for each agent, from the adjust= of the stratifications (1 if there is none) """
@@ -1674,15 +2104,16 @@ class Agents(Engine):
         if mixing.space is None:
             return infectious.sum()/max(len(self.sim.people), 1)
         places = self.place_raw() # People mix within their own place, so there is one value per agent
-        auids = self.sim.people.auids
         n_places = self.sim.strats[mixing.space].n
-        return mixing.by_place(np.concatenate([places[uids], places[auids]]), np.concatenate([infectious, np.zeros(len(auids))]),
-                               np.concatenate([np.zeros(len(uids)), np.ones(len(auids))]), n_places)[places]
+        if 'place_sizes' not in self.cache:
+            self.cache['place_sizes'] = np.bincount(places[self.sim.people.auids], minlength=n_places).astype(float)
+        num = np.bincount(places[uids], weights=infectious, minlength=n_places)
+        prev = mixing.by_place(np.arange(n_places), num, self.cache['place_sizes'], n_places)
+        return prev[places] if self._by_group else prev[places[self._uids]] # For the agents the rate is being worked out for
 
     def place_raw(self):
         """ The place of each agent, as an array indexed by UID """
-        sim = self.sim
-        return np.nan_to_num(sim.people[sim.strats[sim.mixing.space].attr].raw).astype(int)
+        return self.sim.level_raw(self.sim.mixing.space)
 
     def local_count(self, states):
         """ In a model with places: the number in the same place as each agent, or, when the counts are being advanced, as each group """
@@ -1795,8 +2226,8 @@ class Agents(Engine):
         rest = 1.0 - sum(p for p in ps if p is not None)
         return [rest if p is None else p for p in ps]
 
-    def schedule(self, state):
-        """ For agents who have just entered a state: choose their branch, sample its dwell time, and schedule the exit """
+    def schedule(self, state, members):
+        """ For the agents in a state who have just entered it: choose their branch, sample its dwell time, and schedule the exit """
         mod = self.mod
         name = state.name
         exits = self.graph.exits[name]
@@ -1804,7 +2235,7 @@ class Agents(Engine):
         if not candidates:
             return
         ti_exit = mod[f'ti_exit_{name}']
-        new = (mod[name] & ti_exit.isnan).uids
+        new = members[np.isnan(ti_exit.raw[members])]
         if not len(new):
             return
         entered = mod[f'ti_{name}'][new]
@@ -1859,10 +2290,10 @@ class Agents(Engine):
                 self.events.pop(name, None)
         self.step_counts(dt)
 
-        for state in graph.people_states:
-            self.schedule(state)
-
         members = {state.name: mod[state.name].uids for state in graph.people_states} # Who is where before anyone moves
+        for state in graph.people_states:
+            self.schedule(state, members[state.name])
+
         for state in graph.people_states:
             name = state.name
             exits = graph.exits[name]

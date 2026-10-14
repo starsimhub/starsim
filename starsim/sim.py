@@ -568,14 +568,20 @@ class Sim(ss.Base):
             return cache[1]
         people = self.people
         out = np.zeros(len(people.uid.raw), dtype=int)
+        levels = []
         for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
             if strat.edges is not None:
-                levels = np.clip(np.digitize(people[strat.attr].raw, strat.edges) - 1, 0, strat.n - 1)
+                levels.append(np.clip(np.digitize(people[strat.attr].raw, strat.edges) - 1, 0, strat.n - 1))
             else:
-                levels = np.nan_to_num(people[strat.attr].raw).astype(int)
-            out += levels*int(mult)
-        self._group_cache = (self.ti, out)
+                levels.append(np.nan_to_num(people[strat.attr].raw).astype(int))
+            out += levels[-1]*int(mult)
+        self._group_cache = (self.ti, out, levels)
         return out
+
+    def level_raw(self, d):
+        """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID """
+        self.group_raw()
+        return self._group_cache[2][d]
 
     def init_strat_vals(self):
         """ In an agent-based run: assign each agent a level of every property they do not already have """
@@ -1278,8 +1284,8 @@ class Sim(ss.Base):
             raise AlreadyRunError(errormsg)
 
         # Print out progress if needed
-        self.elapsed = self.timer.toc(output=True)
         if self.verbose: # Print progress
+            self.elapsed = self.timer.toc(output=True)
             t = self.t
             simlabel = f'"{self.label}": ' if self.label else ''
             string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
@@ -1346,16 +1352,23 @@ class Sim(ss.Base):
 
         try:
             # Main simulation loop -- just one line!!!
-            self.loop.run(until, profile=profile)
+            kernels = until is None and not profile and self.kernel_only()
+            if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
+                for mod in self.declared:
+                    mod.engine.run_all()
+                self.loop.index = len(self.loop.plan)
+            else:
+                self.loop.run(until, profile=profile)
 
             # Check if the simulation is complete
             if self.loop.index == len(self.loop.plan):
                 self.complete = True
 
             # If simulation reached the end, finalize the results
+            self.elapsed = self.timer.toc(output=True)
             if self.complete:
                 self.finalize()
-                if check_method_calls:
+                if check_method_calls and not kernels:
                     self.check_method_calls()
                 if shrink:
                     self.shrink(full=False)
@@ -1364,6 +1377,56 @@ class Sim(ss.Base):
             self.dists.clear_run_caches()
         
         return self # Allows e.g. ss.Sim().run().plot()
+
+    def kernel_only(self):
+        """ Whether the sim is nothing but compartments that the kernels can run from start to finish: see `ss.Compartmental.kernel_only()` """
+        if self.loop.index or self.loop.insertions or self.diagnostics or self.verbose >= 1 or not getattr(self, 'declared', None) or self.solver == 'abm':
+            return False
+        names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'}
+        mods = [mod for mod in self.modules if mod.name in names]
+        return len(mods) == len(names) and all(isinstance(getattr(mod, 'engine', None), ss.Compartmental) and mod.engine.kernel_only() for mod in mods)
+
+    def restart(self, pars=None, rand_seed=None):
+        """
+        Take a sim back to its start so that it can be run again, without building it again
+
+        Only for a sim that is nothing but compartments (see `sim.kernel_only()`), where
+        it makes repeated runs many times faster. `sim.run(n_runs=...)` and `ss.fit()`
+        use it where they can.
+
+        Args:
+            pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
+            rand_seed (int): the seed for the next run
+
+        Example:
+            ```python
+            sir = ss.Disease(ss.transmission('S -> I', beta=0.3), ss.progression('I -> R', dur=8), init=dict(I=0.01))
+            sim = ss.Sim(sir, unit='day', stop=100).init()
+            peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.n_I.max() for beta in [0.2, 0.3, 0.4]]
+            ```
+        """
+        if not self.initialized:
+            self.init()
+        self.loop.index = 0
+        if not self.kernel_only():
+            errormsg = 'Only a sim that is nothing but compartments can be restarted; use sim.new() to get a fresh copy instead'
+            raise ValueError(errormsg)
+        if rand_seed is not None:
+            self.pars.rand_seed = rand_seed
+        if pars:
+            if any(isinstance(val, ss.Dist) for val in pars.values()):
+                errormsg = 'A sim cannot be restarted with a new distribution, since its compartments were laid out for the old one; use sim.new(pars=...) instead'
+                raise ValueError(errormsg)
+            self.par_values = sc.mergedicts(self.par_values, pars)
+            self.set_par_values()
+        self.complete = False
+        self.results_ready = False
+        self.t.ti = 0
+        for mod in self.declared:
+            mod.t.ti = 0
+            mod.finalized = False
+            mod.engine.restart()
+        return self
 
     def finalize(self):
         """ Compute final results """

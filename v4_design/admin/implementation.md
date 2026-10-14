@@ -156,6 +156,20 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Approximations noted, and refused with `approx=False`
 - [x] `sim.loop.insert()` of a module, which moves its `step()`
 - [x] `sim.check_dt()`
+- [x] Numba kernels for the compartmental solvers (`starsim/kernels.py`): the flows and rate expressions are flattened into arrays once, and one kernel, the same for every model, takes a step of `rk4`, `euler`, or `binomial`. Falls back to Python where a rate is a function of the sim
+- [x] A whole run in one call to the kernel, when the sim is nothing but compartments (no interventions, modifiers, transfers, or inserted functions); used by `sim.run()` without being asked
+- [x] `sim.restart(pars=, rand_seed=)`: run a built sim again without building it again; used by `ss.fit()`
+- [x] `sim.run(n_runs=)` as one call to the kernel for all the runs, when the sim is nothing but compartments
+- [x] Values that vary in time are tabulated once for a sim, and kept when it is restarted
+- [x] The kernel step as one function of loops over single numbers (a step of a three-compartment ODE takes 1.4 µs, from 8.5: passing the program to a Numba function costs about 0.4 µs each time)
+- [x] A jump of a distribution only records its index; the generator is moved when it is next needed, which for draws for agents (hashed from the index) is never. Starsim 3 sims give the same results, 35% faster with 200 agents and 6% with 20,000
+- [x] Agents: each state counted once a step, not twice; the level of each agent in each dimension kept with the group; exposure by place from two counts
+- [ ] Kernels for `tau`, `gillespie`, and `sde`, and for the `scipy` integrators
+- [ ] A whole run in the kernel with modifiers, transfers, and deliveries (the run is stepped from Python, with one kernel call a step)
+- [ ] Many runs in one call with different parameter values (a restarted run is 0.5 to 1 ms, most of it Python around the kernel)
+- [ ] Faster building of a sim (20 to 50 ms, which is now nearly all of a single run)
+- [ ] A compiled path for agents: the LASER example takes about 25 ns for each agent on each step (it was 45), against about 1 ns in the original, in NumPy passes over all the agents for each state
+- [ ] The cost of each draw in a small agent-based sim (about 100 µs for each call of `rvs()`, whatever the number of agents: copying parameters and saving the generator's state)
 - [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
 - [ ] Time-varying values read at the times the ODE integrator evaluates the rates (they are read once a step)
 - [ ] JAX and gradients
@@ -197,6 +211,10 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 ## Known issues
 
+- The kernels are compiled the first time they are used after Starsim is installed or changed, which takes about 12 s; after that they are loaded from a cache.
+- With `sim.run(n_runs=)` in one call to the kernel, the results that are kept by group are not returned for each run, and reported outcomes are drawn for all the runs at once, so differ (in the draw, not the distribution) from those of a single run with the same seed.
+- The kernels draw random numbers from Numba's generator, so a stochastic compartmental run gives different numbers (from the same distribution) with `engine.use_kernels = False`.
+- A typed quantity that is changed in place during a run (the number inside an `ss.perday`, say) is not seen, since a converted value is kept for as long as the parameter holds the same object; assigning a new value is.
 - A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`).
 - `sim.new(n_agents=None)` does not turn an agent-based sim into a compartmental one; the argument has to be left out.
 - A bare number as the duration of a network's contacts is in years, even in a sim that counts time in steps.
