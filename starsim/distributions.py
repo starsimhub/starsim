@@ -6,6 +6,7 @@ import sciris as sc
 import numpy as np
 import numba as nb
 import scipy.stats as sps
+import scipy.special as sp_special
 import starsim as ss
 import matplotlib.pyplot as plt
 ss_int = ss.dtypes.int
@@ -61,6 +62,13 @@ def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
         z = z ^ (z >> _U31)
         out[i] = max(z >> shift, 0.5) * scale # Map 0 to half a step, so the output is strictly in (0, 1) (e.g. ss.normal() never gives -inf)
     return
+
+
+static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
+
+def same_objects(a, b):
+    """ Whether two lists hold the same objects, or plain values that are equal and of the same type """
+    return b is not None and len(a) == len(b) and all(x is y or (type(x) is type(y) and isinstance(x, static_types) and x == y) for x,y in zip(a, b))
 
 
 def hash_uniforms(seed, ind, slots, dtype=None):
@@ -819,15 +827,37 @@ class Dist:
             raise ValueError(errormsg)
         return
 
+    _static = None # The last parameters that were all plain values, and what they were processed into: see process_pars()
+
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
-        # self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
+        # Parameters that are plain values (not functions or arrays) give the same result every time,
+        # so if they are the same objects as last time, reuse it: this is most of the cost of a small draw
+        static = self._static
+        if call and static is not None and same_objects(static[0], self.signature()):
+            self._pars = static[1]
+            if self._use_ppf != False:
+                self._use_ppf = None
+            return static[2]
+
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
         self.convert_timepars()
         spars = self.sync_pars() # Synchronize parameters between the NumPy and SciPy distributions
+        signature = self.signature() if call else None
+        self._static = None if signature is None else (signature, self._pars, spars)
         return spars
+
+    def signature(self):
+        """ Each parameter and what it is scaled by, if the parameters are all plain values (otherwise None); not for the user """
+        out = [self.module, self.unit]
+        for val in self.pars.values():
+            inner = val.value if isinstance(val, ss.TimePar) else val
+            if not isinstance(inner, static_types):
+                return None
+            out += [val, inner]
+        return out
 
     def convert_timepars(self):
         """
@@ -1359,6 +1389,13 @@ class normal(Dist):
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
 
+    def ppf(self, rands):
+        """ The inverse CDF: the same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw """
+        scale = np.asarray(self.dist.kwds['scale'])
+        if not np.all(scale > 0): # Leave the unusual cases to SciPy
+            return super().ppf(rands)
+        return sp_special.ndtri(rands)*scale + np.asarray(self.dist.kwds['loc'])
+
 
 class lognorm_im(Dist):
     """
@@ -1404,8 +1441,11 @@ class lognorm_im(Dist):
         return spars
 
     def ppf(self, rands):
+        s = np.asarray(self.dist.kwds['s'])
+        scale = np.asarray(self.dist.kwds['scale'])
+        if np.all(s > 0) and np.all(scale > 0): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
+            return np.exp(s*sp_special.ndtri(rands))*scale + np.asarray(self.dist.kwds['loc'])
         rvs = Dist.ppf(self, rands)
-        s = self.dist.kwds['s']
         if np.any(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
             rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
         return rvs

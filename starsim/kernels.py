@@ -514,3 +514,15 @@ def one_step(y, p, dt, solver, n_sub):
     flows = np.empty((p.n_trans + len(p.mov_mat), y.shape[1]))
     step(y, p, workspace(y, p), dt, n_sub, solver, flows)
     return y, flows
+
+
+#%% For agents
+
+@jit
+def levels(raw):
+    """ The level of each agent in a dimension, as whole numbers (0 for an agent with none) """
+    out = np.zeros(len(raw), dtype=np.int64)
+    for i in range(len(raw)):
+        if raw[i] == raw[i]: # Not NaN
+            out[i] = int(raw[i])
+    return out

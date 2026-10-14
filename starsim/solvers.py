@@ -559,6 +559,8 @@ class Engine:
             if np.ndim(mean) == 0 and mean > 0 and dw.k*dt/mean > 0.1:
                 x = dw.k*dt/mean
                 ss.note(f'{name} has rate × dt = {x:.2g} ({dw.k/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {-np.expm1(-x):.2g} of people leave in a step; sim.check_dt() shows how much a smaller step changes the results', code='W102', sim=sim)
+                if sim.solver == 'binomial' and dw.k > 1 and x > 1: # Far worse than the usual error of a large step
+                    ss.note(f'{name} is {dw.k} stages, and solver="binomial" passes at most one stage a step, so its dwell time will be about {dw.k*dt/-np.expm1(-x):.3g} {unit}s, not {mean:.3g}; use a step below {mean/dw.k:.2g} {unit}s, or solver="tau", "ode", or "abm"', code='W102', sim=sim)
         return
 
     def note_stages(self, name, dw):

@@ -573,7 +573,7 @@ class Sim(ss.Base):
             if strat.edges is not None:
                 levels.append(np.clip(np.digitize(people[strat.attr].raw, strat.edges) - 1, 0, strat.n - 1))
             else:
-                levels.append(np.nan_to_num(people[strat.attr].raw).astype(int))
+                levels.append(ss.kernels.levels(people[strat.attr].raw))
             out += levels[-1]*int(mult)
         self._group_cache = (self.ti, out, levels)
         return out
