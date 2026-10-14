@@ -266,6 +266,29 @@ def test_counts():
 
 
 @sc.timer()
+def test_births():
+    sc.heading('Testing births and deaths, as compartments and as agents')
+    def make():
+        return ss.Disease(
+            infection = ss.transmission('S -> I', beta=0.3),
+            recovery  = ss.progression('I -> R', dur=10),
+            births    = ss.birth('-> S', rate=ss.peryear(0.5)),
+            deaths    = ss.death(rate=ss.peryear(0.2)),
+            init      = dict(I=0.01),
+            name      = 'sir',
+        )
+    sims = sc.objdict()
+    for solver in ['ode', 'abm']:
+        pars = dict(n_agents=5_000) if solver == 'abm' else {} # The agents grow past the space first set aside for them
+        sims[solver] = ss.Sim(make(), unit='day', stop=365, total_pop=10_000, solver=solver, **pars, **kw).run()
+    n = sc.objdict({solver:sum(sim.results.sir[f'n_{s}'][-1] for s in 'SIR') for solver,sim in sims.items()})
+    assert np.isclose(n.ode, 10_000*np.exp(0.3), rtol=1e-3)
+    assert np.isclose(n.abm, n.ode, rtol=0.03), f'Expected as many people as agents ({n.abm:n}) as as compartments ({n.ode:n})'
+    assert np.isclose(sims.abm.results.sir.cum_births[-1], sims.ode.results.sir.cum_births[-1], rtol=0.05)
+    return sims
+
+
+@sc.timer()
 def test_describe():
     sc.heading('Testing describe(), equations(), and the transition table')
     sir = ss.Disease(
@@ -597,6 +620,7 @@ if __name__ == '__main__':
     sims  = test_solvers(do_plot=do_plot)
     auto  = test_auto()
     count = test_counts()
+    birth = test_births()
     desc  = test_describe()
     strat = test_stratify()
     trans = test_transfer()

@@ -583,7 +583,7 @@ class Sim(ss.Base):
                 old = kept[strat.name] = (raw.copy(), new)
                 changed = True
             levels.append(old[1])
-        if changed or '' not in kept:
+        if changed or '' not in kept or len(kept['']) != len(people.uid.raw): # The last, for a sim with no dimensions whose people have grown
             out = np.zeros(len(people.uid.raw), dtype=int)
             for level,mult in zip(levels, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
                 out += level*int(mult)

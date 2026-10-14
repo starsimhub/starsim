@@ -221,6 +221,61 @@ def test_space():
 
 
 @sc.timer()
+def test_register():
+    sc.heading('Testing a movement register: people moved, added, and removed on given dates')
+    register = sc.dataframe({
+        'date':   [0, 10, 20, 30, 40],
+        'from':   ['a', None, 'b', 'a', 'c'],
+        'to':     ['b', 'c', None, 'c', 'a'],
+        'n':      [1000, 500, 300, 200, 100],
+        'states': [None, 'S', None, 'R', 'I'],
+    })
+    def make(data=register, init=ss.by(place=[20, 0, 0])):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(10)), init=dict(I=init), name='sir')
+        return sir.stratify(place=['a', 'b', 'c'], kind='space', split=[0.5, 0.3, 0.2], mobility=ss.Mobility(data=data))
+
+    sims = sc.objdict()
+    for solver in ['ode', 'gillespie', 'abm']:
+        with pytest.warns(RuntimeWarning, match='more people than there were'): # Nobody in c is ever infected, so the last event finds nobody to move
+            sims[solver] = sim = run(make(), solver, total_pop=10_000, unit='day', stop=60)
+        res = sim.results.sir
+        n = np.sum([res[f'n_{s}'].by('place').values for s in 'SIR'], axis=0) # People in each place, on each day
+        assert np.allclose(n[10] - n[9], [0, 0, 500]) # Added to c
+        assert np.allclose(n[20] - n[19], [0, -300, 0]) # Removed from b
+        assert np.allclose(n[30] - n[29], [-200, 0, 200]) # Moved from a to c
+        assert np.allclose(n[40] - n[39], 0) # Nobody to move
+        assert np.allclose(n.sum(axis=1)[[0, 15, 25, 60]], [10_000, 10_500, 10_200, 10_200])
+        assert res.n_S.by('place').values[10, 2] - res.n_S.by('place').values[9, 2] == 500 # Added as susceptible
+        assert res.n_R.by('place').values[30, 2] - res.n_R.by('place').values[29, 2] == 200 # Only people who had recovered were moved
+        if solver != 'abm': # Agents are given their places at random, so the numbers in each start near the split, not on it
+            assert np.allclose(n[0], [4000, 4000, 2000]) # An event on the first day happens before it is counted
+    assert sims.ode.results.sir.cum_infection.by('place').values[-1, 1] > 1000 # People moved from a took the epidemic to b
+
+    # Stepping gives what the whole run in one call does; a date is placed on the sim's calendar; a whole number is a count of people
+    with pytest.warns(RuntimeWarning):
+        stepped = ss.Sim(make(), solver='ode', total_pop=10_000, unit='day', stop=60, **kw).run(profile=True)
+    assert np.allclose(stepped.results.sir.n_I.values, sims.ode.results.sir.n_I.values)
+    dated = register.copy()
+    dated['date'] = [ss.date('2020-01-01') + ss.days(int(d)) for d in register['date']]
+    with pytest.warns(RuntimeWarning):
+        sim = ss.Sim(make(dated), solver='ode', total_pop=10_000, unit='day', start='2020-01-01', stop='2020-03-01', **kw).run()
+    assert np.allclose(sim.results.sir.n_S.values, sims.ode.results.sir.n_S.values)
+    res = ss.Sim(make(register.iloc[:1], init=ss.by(place=[1, 0, 0])), solver='ode', total_pop=10_000, unit='day', stop=5, **kw).run().results.sir
+    assert np.allclose(res.n_I.by('place').values[0], [0.8, 0.2, 0]) # One person in a (not all of them), of whom 1000 in 5000 moved to b
+
+    # Mistakes
+    with pytest.raises(KeyError, match='not a level'):
+        ss.Sim(make(register.assign(to=['b', 'd', None, 'c', 'a'])), **kw).run()
+    with pytest.raises(KeyError, match='no disease has'):
+        ss.Sim(make(register.assign(states=[None, 'X', None, 'R', 'I'])), **kw).run()
+    with pytest.raises(KeyError, match='columns'):
+        ss.Mobility(data=register.drop(columns='n'))
+    with pytest.raises(ValueError, match='migrate'):
+        ss.Mobility(data=register, kind='commute')
+    return sims
+
+
+@sc.timer()
 def test_mixing():
     sc.heading('Testing contact matrices by dimension, and where people start')
     def make():
@@ -268,3 +323,4 @@ if __name__ == '__main__':
     states  = test_states()
     strains = test_strains()
     space   = test_space()
+    register = test_register()

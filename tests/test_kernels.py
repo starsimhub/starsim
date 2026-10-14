@@ -96,14 +96,16 @@ def test_ode():
 def test_stochastic():
     sc.heading('Testing the stochastic kernels against Python')
     n = 25 # Runs of each
-    for solver,keys in dict(binomial=['sir', 'ages'], tau=['sir']).items():
+    for solver,keys in dict(binomial=['sir', 'ages'], tau=['sir'], gillespie=['sir', 'towns'], sde=['sir', 'towns']).items():
+        pop = 2000 if solver == 'gillespie' else 10_000 # One event at a time is slow in Python
         for key in keys:
             finals = sc.objdict()
             for how in ['python', 'all']:
-                runs = [run(key, how, solver=solver, rand_seed=seed, total_pop=10_000) for seed in range(n)]
+                runs = [run(key, how, solver=solver, rand_seed=seed, total_pop=pop) for seed in range(n)]
                 name = runs[0].declared[0].name
                 finals[how] = np.array([[sim.results[name].n_S[-1], sim.results[name].n_I.max()] for sim in runs])
-                assert np.all(finals[how] == np.round(finals[how])) # Whole people
+                if solver != 'sde':
+                    assert np.all(finals[how] == np.round(finals[how])) # Whole people
             diff = np.abs(finals.all.mean(axis=0) - finals.python.mean(axis=0))
             se = np.sqrt(finals.all.var(axis=0)/n + finals.python.var(axis=0)/n)
             print(f'{solver:8s} {key:8s} difference in means {diff}, standard error {se}')

@@ -16,6 +16,7 @@ import math
 import inspect
 import itertools
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
@@ -1965,41 +1966,117 @@ class Mobility:
     they are exposed to the residents of the places they go to and do not expose
     anyone there), or migrate (they relocate).
 
+    A movement register (`data=`) is a table of events on given dates, with columns
+    `date`, `from`, `to`, `n`, and optionally `states`. Each row moves `n` people from
+    one place to another; a row with no `from` adds them to `to` (births, purchases),
+    and one with no `to` removes them from `from` (deaths, sales out of the model).
+    The people who move or leave are chosen at random from those in `states` (by
+    default, everyone); people who are added go into `states` (by default, the first
+    state). Each event happens at the start of the first step that begins on or after
+    its date, before that step's transitions, and the events of a step happen in the
+    order of the table.
+
     Args:
         model (gravity): a movement model (instead of `matrix`)
         matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there
-        kind (str): 'commute' (the default), 'visit', or 'migrate'
+        data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
+        kind (str): 'commute', 'visit', or 'migrate'; by default 'migrate' for a register and 'commute' otherwise
         away (float): for commuting and visiting, the share of their time people spend away from home; the movement is rescaled to give it
 
     Examples:
         ```python
         sir.stratify(patch=towns, mobility=ss.Mobility(ss.gravity(), kind='commute', away=0.4))
         sir.stratify(patch=['a', 'b'], mobility=ss.Mobility(matrix=[[0, 0.1], [0.2, 0]]))
+        sir.stratify(herd=herds, mobility=ss.Mobility(data='movements.csv'))
         ```
     """
-    def __init__(self, model=None, matrix=None, kind='commute', away=None, data=None):
-        if data is not None:
-            errormsg = 'ss.Mobility(data=...) (a movement register) is not implemented yet; give a matrix or a movement model'
-            raise NotImplementedError(errormsg)
-        if (model is None) == (matrix is None):
-            errormsg = 'ss.Mobility() takes a movement model (e.g. ss.gravity()) or matrix=, and not both'
+    def __init__(self, model=None, matrix=None, kind=None, away=None, data=None):
+        if sum(arg is not None for arg in [model, matrix, data]) != 1:
+            errormsg = 'ss.Mobility() takes one of a movement model (e.g. ss.gravity()), matrix=, or data='
             raise ValueError(errormsg)
+        if kind is None:
+            kind = 'migrate' if data is not None else 'commute'
         if kind not in ['commute', 'visit', 'migrate']:
             errormsg = f'The kind of ss.Mobility() is "commute", "visit", or "migrate", not "{kind}"'
             raise ValueError(errormsg)
+        if data is not None and kind != 'migrate':
+            errormsg = f'A movement register moves people from one place to another, so its kind is "migrate", not "{kind}"'
+            raise ValueError(errormsg)
         self.model = model
         self.given = None if matrix is None else np.array(matrix, dtype=float)
+        self.data = None if data is None else self.load(data)
         self.kind = kind
         self.away = away
         return
 
     def __repr__(self):
-        what = self.model if self.model is not None else 'matrix'
+        what = self.model if self.model is not None else 'matrix' if self.data is None else f'register of {len(self.data):n} events'
         away = f', away={self.away}' if self.away is not None else ''
         return f'Mobility({what}, kind={self.kind!r}{away})'
 
+    @staticmethod
+    def blank(v):
+        """ Whether an entry of a register is empty """
+        return v is None or (isinstance(v, float) and np.isnan(v)) or (isinstance(v, str) and not v.strip())
+
+    @staticmethod
+    def load(data):
+        """ Read a movement register, with a blank `from` or `to` (or a blank `states`) as None """
+        df = sc.dataframe(pd.read_csv(data) if isinstance(data, str) else data)
+        missing = [col for col in ['date', 'from', 'to', 'n'] if col not in df.columns]
+        if missing:
+            errormsg = f'A movement register needs the columns date, from, to, and n (and optionally states), but {sc.strjoin(missing)} {"is" if len(missing) == 1 else "are"} missing; its columns are {list(df.columns)}'
+            raise KeyError(errormsg)
+        out = sc.dataframe(date=df['date'].values, n=np.asarray(df['n'], dtype=float))
+        for col in ['from', 'to', 'states']:
+            vals = df[col].values if col in df.columns else [None]*len(df)
+            out[col] = np.array([None if Mobility.blank(v) else v for v in vals], dtype=object)
+        if any(Mobility.blank(src) and Mobility.blank(dst) for src,dst in zip(out['from'], out['to'])):
+            errormsg = 'Every row of a movement register needs a from, a to, or both'
+            raise ValueError(errormsg)
+        if (out['n'] < 0).any():
+            errormsg = 'The numbers of people in a movement register cannot be negative'
+            raise ValueError(errormsg)
+        return out
+
+    def events(self, strat, sim):
+        """
+        The register, resolved against the levels and the timeline of a sim
+
+        Returns the step at whose start each event happens, the position of the place each leaves
+        (-1 for none) and goes to (-1 for none), the number of people, and the states it names (None
+        for the default), in the order of the table within each step. Events before the start or
+        after the last step are dropped, with a note.
+        """
+        df = self.data
+        times = sc.dataframe(index=list(df['date']))
+        sim_t, data_t = ss.calibration.data_times(sim, times)
+        tol = 1e-9*max(np.abs(sim_t).max(initial=1), 1)
+        ti = np.searchsorted(sim_t, data_t - tol, side='left') # The first step that starts on or after each date
+        inside = (data_t >= sim_t[0] - tol) & (ti < len(sim_t))
+        if not inside.all():
+            ss.note(f'{(~inside).sum():n} of the {len(df):n} events in the movement register for "{strat.name}" fall outside the run, and are left out', sim=sim)
+        labels = {str(label):i for i,label in enumerate(strat.labels)}
+        def level(v):
+            """ Places are given by label (a number read from a file with blanks in it is read as a float, so 5.0 is "5") """
+            if Mobility.blank(v):
+                return -1
+            key = str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)
+            if key not in labels:
+                errormsg = f'The movement register names a place "{v}", which is not a level of "{strat.name}"; places are given by label, e.g. {sc.strjoin(list(labels)[:3])}'
+                raise KeyError(errormsg)
+            return labels[key]
+        order = np.argsort(ti[inside], kind='stable')
+        rows = np.flatnonzero(inside)[order]
+        states = [None if Mobility.blank(df['states'][i]) else tuple(s.strip() for s in str(df['states'][i]).replace(';', ',').split(',')) for i in rows]
+        return sc.objdict(ti=ti[rows], src=np.array([level(df['from'][i]) for i in rows], dtype=np.int64), dst=np.array([level(df['to'][i]) for i in rows], dtype=np.int64),
+                          n=np.asarray(df['n'].values[rows], dtype=float), states=states)
+
     def matrix(self, strat):
         """ The movement between each pair of levels, with nothing on the diagonal """
+        if self.data is not None:
+            errormsg = 'A movement register has no matrix of rates; its events are applied on their dates'
+            raise ValueError(errormsg)
         out = self.model.matrix(strat) if self.model is not None else self.given.copy()
         if out.shape != (strat.n, strat.n):
             error('E603', f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
@@ -2100,7 +2177,7 @@ class Strat:
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
         return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist(), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states,
-                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, matrix=self.mobility.matrix(self).tolist(), away=self.mobility.away))
+                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property
     def mids(self):

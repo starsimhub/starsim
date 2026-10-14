@@ -18,7 +18,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 ## Held-out set
 
-- [ ] Wave 1: for each framework, the simplest example that shows what it is for. The originals, their environments, and the Starsim versions are kept in the `lingua_franca_design` repository (`examples/`, `_envs/`, and `vignettes/`), not here.
+- [x] Wave 1: for each framework, the simplest example that shows what it is for. The originals, their environments, and the Starsim versions are kept in the `lingua_franca_design` repository (`examples/`, `_envs/`, and `vignettes/`), not here.
     - [x] camdl: SIR with weekly reported cases
     - [x] summer2: SIR by age and location, with a mixing matrix for each
     - [x] epydemix: SIR in Kenya's population, with contact matrices by age
@@ -28,7 +28,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] MEmilio: SECIR with severity branches and a change in contacts
     - [x] flepiMoP: SEIR in two provinces whose residents visit each other
     - [x] odin: a stochastic SIR, with its array of replicates as many runs
-    - [ ] SimInf: SIR in 1,600 herds. Not written: it needs scheduled events that add, remove, and move individuals (a movement register)
+    - [x] SimInf: SIR in 1,600 herds, with 466,692 scheduled events as a movement register (agrees with the original; one Gillespie run takes 9.5 s, against 0.08 s)
     - [x] EpiModel: SIS over partnerships that form and dissolve (runs, but the network cannot be given EpiModel's target statistics, and the results differ)
 - [x] Wave 2: the other eight conformance corpus models
     - [x] 4. SIR with a lognormal dwell time
@@ -88,7 +88,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Age groups given as labels, kept apart from the age people have; `use_aging=False` in a compartmental run
 - [ ] `immunity=` between strains
 - [ ] `where=` on `stratify()`
-- [ ] Named geographies (`ss.geo('Kenya')`) and movement registers (`ss.Mobility(data=)`)
+- [x] Movement registers (`ss.Mobility(data=)`): people moved between places, added, and removed on given dates, under every solver
+- [ ] Named geographies (`ss.geo('Kenya')`)
 - [ ] A contact matrix by age within each place, in a compartmental run; networks that know about places, as agents
 
 ### 06 Routes
@@ -96,7 +97,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Homogeneous mixing, `ss.MixingPool`, `ss.contacts` matrices
 - [x] A contact matrix for each of the model's own dimensions, multiplied together (`ss.contacts(age=..., location=...)`)
 - [ ] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated
-- [ ] Scheduled events that add, remove, or move individuals (`ss.Mobility(data=)`, and the same for births and deaths)
+- [x] Scheduled events that add, remove, or move individuals: one register, where a row with no `from` adds people and one with no `to` removes them. Each event happens at the start of the first step on or after its date, in the order of the table; people are chosen at random from the states it names (by default, everyone), and added to its states (by default, the first). In a compartmental run with several diseases, each draws its own people
 - [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
 - [ ] Coupling between places that moves the force of infection, as LASER does
 - [x] Networks, as agents and (approximated, with a note) as compartments
@@ -167,7 +168,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] A distribution whose parameters are plain values keeps what they were processed into, instead of working it out at every draw; `ss.normal` and the lognormals work out their inverse CDF directly (the same arithmetic as SciPy's, to the last bit). With the jumps, a Starsim 3 SIS sim of 200 agents takes 25 ms, from 54, with the same results
 - [x] `solver="binomial"` takes a substep for each stage of the dwell time with the most stages (it moves people at most one stage a step, so with whole steps a dwell time in 49 stages of a mean of 7 days came out as 49 days). The LASER example as compartments now gives 1,427,000 recovered, against 1,394,000 as an ODE; it gave 198,000
 - [x] A kernel for `tau`: the LASER example takes 6.7 s, from 93 s, and agrees with the ODE
-- [ ] Kernels for `gillespie` and `sde`, and for the `scipy` integrators
+- [x] Kernels for `gillespie` and `sde`, stepped and for a whole run. A Gillespie SIR in 100,000 people takes 0.16 s, from 4.2, and the malaria model in 1,000 people 0.45 s, from 27; the SDE was already cheap (17 ms, from 28). The SDE now takes `substeps=` in Python as well
+- [ ] Kernels for the `scipy` integrators
+- [ ] Gillespie with many groups: every rate is worked out again after each event, though in a model where places do not mix within a step only the place of the event changes. The SimInf herds take 9.5 s (about 18 µs an event, over 1,600 herds), against 0.08 s for SimInf, which runs each herd on its own
 - [ ] A whole run in the kernel with modifiers, transfers, and deliveries (the run is stepped from Python, with one kernel call a step)
 - [ ] Many runs in one call with different parameter values (a restarted run is 0.5 to 1 ms, most of it Python around the kernel)
 - [ ] Faster building of a sim (20 to 50 ms, which is now nearly all of a single run)
@@ -228,3 +231,5 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A function of the sim that compares ages with a number that is not a bin edge runs in a compartmental model without complaint (each group has the age of its midpoint); the lazy form (`ppl.age > 70`) is checked.
 - As agents, someone tested on the step they were infected may already have recovered (about `dt/2` of a dwell time), so event-triggered tests find slightly fewer cases than in a compartmental run.
 - An ODE and an agent-based run of the same model differ by an amount of order `dt` (about 6% in the prevalence of an SIS model with a daily step).
+- As agents, people added by a movement register in a step are made at its end, so the other events of the same step cannot choose them; and people who moved into a place in a step are chosen after those who were already there.
+- A movement register cannot add people to a state that splits on entry into branches.

@@ -69,6 +69,8 @@ class Mixing:
         self.time_share = None # For commuting: the share of their time that people from each place spend in each place
         self.visit = False
         self.migration = None # For migration: the rate of moving from each place to each place
+        self.register = None # For a movement register: the mobility that holds it; its events are worked out once the sim has a timeline
+        self._events = None
         if spaces:
             strat = sim.strats[self.space]
             self.places = sim.group_coords[:, self.space] # The place of each group
@@ -76,9 +78,17 @@ class Mixing:
             if mobility is not None and mobility.kind in ['commute', 'visit']:
                 self.time_share = mobility.time_share(strat)
                 self.visit = mobility.kind == 'visit' # Visitors are exposed to the residents of a place, and do not expose anyone there
+            elif mobility is not None and mobility.data is not None:
+                self.register = mobility
             elif mobility is not None:
                 self.migration = mobility.matrix(strat)
         return
+
+    def events(self):
+        """ The events of the movement register, on the sim's timeline: see `ss.Mobility.events()` """
+        if self._events is None:
+            self._events = self.register.events(self.sim.strats[self.space], self.sim)
+        return self._events
 
     def by_place(self, places, infectious, n, n_places):
         """
@@ -278,6 +288,7 @@ class Engine:
         self._by_group = False # Whether rates are being worked out for groups rather than for agents (in an agent-based run, for the states that are counts)
         self.strain = None # The position of the module's strain dimension, if it has one
         self._strain = None # The strain whose force of infection is being worked out
+        self.register = None # The movement register, as arrays for the kernels
         return
 
     def make_rng(self):
@@ -603,12 +614,14 @@ class Engine:
             if isinstance(init, ss.by): # A value for each level of a dimension: a number of people, or a fraction of the people at that level
                 sim = self.sim
                 strat = sim.strats[sim.dim_index(init.dim)]
-                vals = np.array(init.values, dtype=float)
+                given = np.asarray(init.values)
+                vals = given.astype(float)
                 if len(vals) != strat.n:
                     ss.error('E603', f'the initial value of "{state.name}" has {len(vals)} values, but "{init.dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
                 if state.people:
                     size = self.total_pop*strat.split
-                    vals = np.where(vals > 1, np.divide(vals, size, out=np.zeros(strat.n), where=size>0), vals)
+                    count = (vals > 1) | ((vals == 1) & (given.dtype.kind in 'iu')) # As for a single value: an integer 1 is one person, and 1.0 is everyone
+                    vals = np.where(count, np.divide(vals, size, out=np.zeros(strat.n), where=size>0), vals)
                     fracs[state.name] = vals[sim.group_coords[:, sim.dim_index(init.dim)]]
                 else:
                     levels = sim.group_coords[:, sim.dim_index(init.dim)]
@@ -849,6 +862,43 @@ class Engine:
                 res[name][ti] = ss.transitions.evaluate(expr, ctx)
         return
 
+    def register_sets(self):
+        """
+        For a movement register: the sets of states its events name, with the default (None) first,
+        and for each, the states of this module that people are chosen from and that people are added to
+
+        A state that the register names must belong to some module of the sim; one that is not in
+        this module is left out, and a module with none of the states of a set uses its default.
+        """
+        sim = self.sim
+        graph = self.graph
+        d = sim.mixing.space
+        placed = [s.name for s in graph.people_states if self.applies[s.name][d]] # States that people in a place can be in
+        sets = [None]
+        for states in sim.mixing.events().states:
+            if states is not None and states not in sets:
+                sets.append(states)
+        known = {s.name for mod in sim.declared for s in mod.graph.people_states}
+        out = []
+        for states in sets:
+            if states is not None:
+                unknown = [name for name in states if name not in known]
+                if unknown:
+                    errormsg = f'The movement register names the state{"s" if len(unknown) > 1 else ""} {sc.strjoin(unknown)}, which no disease has; the states are {sc.strjoin(sorted(known))}'
+                    raise KeyError(errormsg)
+            own = [name for name in (states or []) if name in placed]
+            out.append(sc.objdict(states=states, chosen=own or placed, added=own or placed[:1]))
+        if any(src < 0 and states is None for src,states in zip(sim.mixing.events().src, sim.mixing.events().states)):
+            ss.note(f'people added by the movement register go into {placed[0]}, the first state of "{self.mod.name}", since the register does not name states for them', sim=sim)
+        return out
+
+    def check_short(self, short):
+        """ Warn, once, if events of a movement register asked for more people than there were """
+        if short > 0 and not getattr(self, '_warned_short', False):
+            self._warned_short = True
+            ss.warn(f'Events of the movement register asked "{self.mod.name}" for {short:n} more people than there were in the places and states they named; they moved (or removed) everyone there was instead')
+        return
+
     def finalize_results(self):
         """ Cumulative results, computed after scaling """
         res = self.mod.results
@@ -982,6 +1032,50 @@ class Compartmental(Engine):
             self.movers.append(sc.objdict(name=None, comps=comps, matrix=matrix, transfer=None))
         return
 
+    def init_register(self):
+        """ The movement register as arrays for the kernels (with no events, if there is none): see `ss.kernels.Register` """
+        sim = self.sim
+        mixing = sim.mixing
+        ng = self.n_groups
+        npts = self.mod.t.npts
+        ints = lambda vals: np.array(vals, dtype=np.int64)
+        ends = lambda lists: ints(np.cumsum([0] + [len(x) for x in lists]))
+        if mixing.register is None or not self.graph.people_states:
+            self.register = ss.kernels.Register(starts=ints([0]), src=ints([]), dst=ints([]), n=np.zeros(0), sel=ints([]), sel_starts=ints([0]), sel_comps=ints([]),
+                                                ent_starts=ints([0]), ent_comps=ints([]), ent_w=np.zeros((0, ng)), pg_starts=ints([0]), pg_groups=ints([]), step=0)
+            return self.register
+        ev = mixing.events()
+        d = mixing.space
+        sets = self.register_sets()
+        index = {s.states:i for i,s in enumerate(sets)}
+        chosen = [[c for name in s.chosen for c in self.state_comps[name]] for s in sets]
+        added = []
+        for s in sets:
+            for name in s.added:
+                tracks = [track for track in self.tracks[name] if track.first is not None]
+                if len(self.tracks[name]) > 1:
+                    errormsg = f'The movement register adds people to "{name}", which splits on entry into {len(self.tracks[name])} branches; adding people to such a state is not supported yet'
+                    raise NotImplementedError(errormsg)
+                added.append((tracks[0].first, self.inflow_local[name]))
+        places = sim.group_coords[:, d]
+        groups = [np.flatnonzero(places == i) for i in range(sim.strats[d].n)]
+        self.register = ss.kernels.Register(
+            starts     = ints(np.searchsorted(ev.ti, np.arange(npts + 1))),
+            src        = ev.src,
+            dst        = ev.dst,
+            n          = ev.n,
+            sel        = ints([index[states] for states in ev.states]),
+            sel_starts = ends(chosen),
+            sel_comps  = ints([c for comps in chosen for c in comps]),
+            ent_starts = ends([s.added for s in sets]),
+            ent_comps  = ints([comp for comp,w in added]),
+            ent_w      = np.array([w for comp,w in added], dtype=float).reshape(len(added), ng),
+            pg_starts  = ends(groups),
+            pg_groups  = ints([g for grp in groups for g in grp]),
+            step       = int(sim.group_mults[d]),
+        )
+        return self.register
+
     def mover_rates(self):
         """ The current rate matrix of each mover, from group to group """
         out = []
@@ -1083,6 +1177,8 @@ class Compartmental(Engine):
             self.arrive(name, count*self.state_split[name], self.y)
         if self.integer:
             self.y = self.round_preserving(self.y)
+        if self.sim.mixing.register is not None: # The events at the start of the first step
+            self.check_short(ss.kernels.apply_events(self.y, self.init_register(), 0, self.integer))
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
         return
 
@@ -1602,6 +1698,8 @@ class Compartmental(Engine):
         for i,matrix in enumerate(self._mover_rates):
             self.program.mov_mat[i] = matrix
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        if self.register is None:
+            self.init_register()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables()
 
     def run_all(self):
@@ -1611,7 +1709,8 @@ class Compartmental(Engine):
         res = mod.results
         args, tables = self.run_args()
         seed = int(self.rng.integers(2**31))
-        self.y, stocks, flows = ss.kernels.run(*args, seed, *tables)
+        self.y, stocks, flows, short = ss.kernels.run(*args, seed, *tables, self.register)
+        self.check_short(short)
         self.sim.t.ti = mod.t.ti = mod.t.npts
 
         def store(key, vals):
@@ -1651,7 +1750,7 @@ class Compartmental(Engine):
         self.sim.pars.rand_seed = base
         states = list(graph.states)
         state_of = np.array([states.index(comp.state.name) for comp in self.comps])
-        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, state_of, len(states))
+        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, state_of, len(states))
         n = sc.objdict({name:stocks[:, :, i] for i,name in enumerate(states)})
         new = sc.objdict({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
         out = sc.objdict({f'n_{name}':vals for name,vals in n.items()})
@@ -1773,6 +1872,8 @@ class Compartmental(Engine):
             if mover.name is not None:
                 self.flowcounts[mover.name] += flows[self.n_trans + i].sum()
                 self.flow_groups[mover.name] = flows[self.n_trans + i]
+        if self.sim.mixing.register is not None: # The events at the start of the next step
+            self.check_short(ss.kernels.apply_events(self.y, self.register, self.mod.ti + 1, self.integer))
         return
 
     def step_movers(self, dt):
@@ -1906,6 +2007,9 @@ class Compartmental(Engine):
     def step_gillespie(self, dt):
         """ The exact stochastic simulation algorithm (direct method), one event at a time """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
+        if self.program:
+            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['gillespie'], 0)
+            return flows
         flows = np.zeros((nt, ng))
         t = 0.0
         nf = len(self.flows)
@@ -1933,6 +2037,16 @@ class Compartmental(Engine):
 
     def step_sde(self, dt):
         """ The diffusion approximation (Euler-Maruyama): each flow gets Gaussian noise with its Poisson variance """
+        nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
+        n_sub = self.substeps()
+        if self.program:
+            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['sde'], n_sub)
+            return flows
+        if n_sub > 1: # As a number of shorter steps
+            return sum(self.step_sde_once(dt/n_sub) for i in range(n_sub))
+        return self.step_sde_once(dt)
+
+    def step_sde_once(self, dt):
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         y = self.y.copy()
         flows = np.zeros((nt, ng))
@@ -2008,6 +2122,15 @@ class Agents(Engine):
             add(f'transfer_{name}', ss.random())
         if self.sim.mixing.migration is not None:
             add('migrate', ss.random())
+        adders = [f'born_{tr.name}' for tr in graph.inflows if tr.people] # What adds people: births, and a movement register
+        if self.sim.mixing.register is not None:
+            add('register', ss.random()) # The order in which people in a place are chosen
+            adders.append('register')
+        for key in adders: # For the people added: their state, and their level of each dimension other than place and age
+            add(f'{key}_state', ss.random())
+            for strat in self.sim.strats:
+                if strat.kind not in ['space', 'age']:
+                    add(f'{key}_{strat.name}', ss.random())
         for strat in self.sim.strats: # For a dimension that only some states have: the level people take when they enter one of those states
             if strat.name in [own.name for own in graph.strats] and strat.states is not None:
                 add(f'enter_{strat.name}', ss.random())
@@ -2084,6 +2207,10 @@ class Agents(Engine):
                     chosen = inds[edges[i]:edges[i+1]]
                     mod[name][chosen] = True
                     mod[f'ti_{name}'][chosen] = 0
+        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events at the start of the first step, once every module has its people
+            self.step_register(0)
+            self.sim.people.step_die() # Whoever left is gone before the first step is counted
+            self.sim.people.remove_dead()
         return
 
     #%% The context used to evaluate expressions
@@ -2344,9 +2471,33 @@ class Agents(Engine):
                 for i,tr in enumerate(exits.hazards):
                     self.move(tr, state, uids[leaving & (rvs >= edges[i]) & (rvs < edges[i+1])])
         self.finish_moves(ti)
+        self.step_births(dt)
         self.step_transfers(dt)
         for state in graph.states.values(): # Record the stocks: this is the state of the model at the time the step is labelled with
             self.stocks[state.name] = self.stock(state)
+        return
+
+    def step_births(self, dt):
+        """ Inflows of people (`ss.birth`): a number of new agents in each place, drawn from the expected number """
+        sim = self.sim
+        d = sim.mixing.space
+        for tr in self.graph.inflows:
+            if not tr.people:
+                continue
+            self._by_group = True
+            adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
+            amount = np.maximum(self.eval(tr.rate)*adjust*dt*self.inflow_split(tr), 0)/self.scale # Agents, by group
+            self._by_group = False
+            amount = np.broadcast_to(amount, sim.n_groups)
+            places = sim.group_coords[:, d] if d is not None else np.zeros(sim.n_groups, dtype=int)
+            born = self.rng.poisson(np.bincount(places, weights=amount)) # By place; the other levels are drawn as people are born into them
+            enter = [(place, (tr.dst[0].name,), k) for place,k in enumerate(born) if k]
+            new = self.add_people(enter, self.mod.ti, f'born_{tr.name}')
+            if not any(strat.kind == 'age' for strat in sim.strats):
+                sim.people.age[new] = 0
+            self.flowcounts[tr.name] += len(new)
+            if sim.n_groups > 1:
+                self.flow_groups[tr.name] = np.bincount(self.groups(new), minlength=sim.n_groups)
         return
 
     def step_transfers(self, dt):
@@ -2429,7 +2580,120 @@ class Agents(Engine):
             for src in tr.src:
                 self.move(tr, src, self.infect(tr, src))
         self.finish_moves(mod.ti + 1)
+        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events at the start of the next step, after every module's transmissions; the people are the same for every module, so it is done once
+            self.step_register(mod.ti + 1)
         return
+
+    def step_register(self, ti):
+        """
+        Apply the events of a movement register that happen at the start of a step, in order: see `ss.Mobility`
+
+        The people in each place are put in a random order once, and each event that moves or
+        removes people takes the first of them who are still there and in its states. People
+        who are added are made at the end, so the other events of the step do not choose them.
+        """
+        sim = self.sim
+        people = sim.people
+        mixing = sim.mixing
+        ev = mixing.events()
+        a, b = np.searchsorted(ev.ti, [ti, ti + 1])
+        if a == b:
+            return
+        d = mixing.space
+        place = people[sim.strats[d].attr]
+        uids = people.auids
+        levels = sim.level_raw(d)[uids]
+        order = np.lexsort((self.dists.register.rvs(uids), levels))
+        ordered = uids[order]
+        bounds = np.searchsorted(levels[order], np.arange(sim.strats[d].n + 1))
+        moved_in = sc.ddict(list) # People who moved into each place in this step, who can be chosen after those who were there
+        removed = np.zeros(len(people.uid.raw), dtype=bool)
+        masks = dict() # Who is in each set of states
+        scale = self.scale
+        carry = getattr(self, '_carry', 0.0) # The fraction of an agent left over from rounding
+        short = 0.0
+        enter = [] # The places and states of the people to add, and how many
+        for e in range(a, b):
+            src, dst, states = ev.src[e], ev.dst[e], ev.states[e]
+            want = ev.n[e]/scale + carry
+            k = int(np.floor(want + 1e-9))
+            carry = want - k
+            if src < 0:
+                enter.append((dst, states, k))
+                continue
+            cand = ordered[bounds[src]:bounds[src+1]]
+            if moved_in[src]:
+                cand = np.concatenate([cand, moved_in[src]])
+            ok = (place.raw[cand] == src) & ~removed[cand]
+            if states is not None:
+                if states not in masks:
+                    masks[states] = np.zeros(len(people.uid.raw), dtype=bool)
+                    for mod in sim.declared:
+                        for name in states:
+                            if name in mod.graph.states and mod.graph.states[name].people:
+                                masks[states] |= mod[name].raw
+                ok &= masks[states][cand]
+            chosen = ss.uids(cand[ok][:k])
+            short += k - len(chosen)
+            if dst >= 0:
+                place[chosen] = dst
+                moved_in[dst].extend(chosen.tolist())
+            else:
+                removed[chosen] = True
+                people.request_death(chosen)
+        self._carry = carry
+        self.add_people(enter, ti, 'register')
+        sim._group_cache = None # The groups have changed
+        self.check_short(short*scale)
+        return
+
+    def add_people(self, enter, ti, key):
+        """
+        Add agents to places, in given states
+
+        Args:
+            enter (list): for each place (0, if there are no places), the states to put people in (None for each module's first state) and the number of agents
+            ti (int): the time they enter their states
+            key (str): what adds them, which names the distributions their levels and states are drawn from
+
+        Returns the UIDs of the new agents.
+        """
+        sim = self.sim
+        people = sim.people
+        total = sum(k for dst,states,k in enter)
+        if not total:
+            return ss.uids()
+        new = people.grow(total)
+        dsts = np.concatenate([np.full(k, dst) for dst,states,k in enter])
+        sets = [states for dst,states,k in enter for i in range(k)]
+        d = sim.mixing.space
+        for i,strat in enumerate(sim.strats): # The place given, and the other levels as people are born into them
+            if i == d:
+                people[strat.attr][new] = dsts
+            elif strat.kind == 'age':
+                if strat.edges is not None:
+                    people.age[new] = strat.edges[0]
+                else:
+                    people[strat.attr][new] = 0
+            else:
+                rvs = self.dists[f'{key}_{strat.name}'].rvs(new)
+                people[strat.attr][new] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+        rvs = self.dists[f'{key}_state'].rvs(new)
+        for mod in sim.declared:
+            engine = mod.engine
+            placed = [s.name for s in mod.graph.people_states if d is None or engine.applies[s.name][d]]
+            if not placed:
+                continue
+            choice = np.empty(total, dtype=object)
+            for j,states in enumerate(sets):
+                own = [name for name in (states or []) if name in placed] or placed[:1]
+                choice[j] = own[min(int(rvs[j]*len(own)), len(own) - 1)] # Shared equally between the states named
+            for name in set(choice):
+                inds = new[choice == name]
+                mod[name][inds] = True
+                mod[f'ti_{name}'][inds] = ti
+        sim._group_cache = None
+        return new
 
     def infect(self, tr, src):
         """ Work out who in a state is infected this step """

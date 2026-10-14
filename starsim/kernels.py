@@ -15,7 +15,7 @@ import collections
 import numpy as np
 import numba as nb
 
-__all__ = ['Program', 'opcodes']
+__all__ = ['Program', 'Register', 'opcodes']
 
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW = range(9)
@@ -71,6 +71,25 @@ fields = [
 ]
 
 Program = collections.namedtuple('Program', fields)
+
+# A movement register (see ss.Mobility), as the kernels apply it
+register_fields = [
+    'starts',     # Where each step's events start and end
+    'src',        # The place each event takes people from (-1 if it adds them)
+    'dst',        # The place it takes them to (-1 if they leave)
+    'n',          # The number of people
+    'sel',        # The set of states it chooses them from, or adds them to
+    'sel_starts', # For each set: where the compartments that people are chosen from start and end
+    'sel_comps',
+    'ent_starts', # For each set: where the compartments that people are added to (the first of each state) start and end
+    'ent_comps',
+    'ent_w',      # For each of those: the share of the people added to a place who go into each of its groups (by group)
+    'pg_starts',  # Where the groups in each place start and end
+    'pg_groups',
+    'step',       # How far apart adjacent places are, in groups
+]
+
+Register = collections.namedtuple('Register', register_fields)
 
 jit = nb.jit(nopython=True, cache=True, error_model='numpy')
 
@@ -194,7 +213,7 @@ def draw(y, p, w, dt, flows, tau):
                 land(n, p.record[f], p.maps, flows[p.index[f]])
             split(n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
             split(n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
-    for m in range(len(p.mov_mat)): # Movement between groups
+    for m in range(len(p.mov_mat)): # Movement between groups: as move() does, but written out, since a call here (once a leap) slows tau-leaping by a few percent
         for g in range(ng):
             for h in range(ng):
                 if p.mov_mat[m, g, h] != 0:
@@ -210,11 +229,124 @@ def draw(y, p, w, dt, flows, tau):
 
 
 @jit
+def move(y, mov_mat, mov_starts, mov_comps, n_trans, dt, flows, whole):
+    """ Move people between groups over a time dt: as whole numbers drawn at random, or as the expected share (for the exact solver and the diffusion approximation, once a step) """
+    ng = y.shape[1]
+    for m in range(len(mov_mat)):
+        for g in range(ng):
+            for h in range(ng):
+                if mov_mat[m, g, h] != 0:
+                    prob = -np.expm1(-mov_mat[m, g, h]*dt)
+                    for k in range(mov_starts[m], mov_starts[m+1]):
+                        c = mov_comps[k]
+                        moved = binomial(y[c, g], prob) if whole else y[c, g]*prob
+                        y[c, g] -= moved
+                        y[c, h] += moved
+                        flows[n_trans + m, g] += moved
+    return
+
+
+@jit
+def propensity(y, p, rates, f, g):
+    """ The rate at which events of a flow happen in a group: per member of its source compartment, or in total for an inflow """
+    s = p.src[f]
+    return max(rates[f, g]*(y[s, g] if s >= 0 else p.inflow[f, g]), 0.0)
+
+
+@jit
+def event(y, p, w, dt, flows):
+    """
+    For the exact solver: the time to the next event and, if it comes within dt, the event itself
+
+    Called by `step()`, which has worked out the rates. Returns the time taken, which is
+    dt if the next event comes after it.
+    """
+    nf, ng = len(p.src), y.shape[1]
+    rates, groups = w[0], w[3]
+    n = groups[5]
+    total = 0.0
+    for f in range(nf):
+        for g in range(ng):
+            total += propensity(y, p, rates, f, g)
+    if total <= 0:
+        return dt
+    wait = np.random.exponential(1/total)
+    if wait > dt:
+        return dt
+
+    # Which event: the last one with any chance, if rounding leaves the draw past the end
+    target = np.random.random()*total
+    cum = 0.0
+    which, where = -1, -1
+    for f in range(nf):
+        for g in range(ng):
+            rate = propensity(y, p, rates, f, g)
+            if rate > 0:
+                cum += rate
+                which, where = f, g
+                if cum > target:
+                    break
+        if cum > target:
+            break
+
+    for g in range(ng):
+        n[g] = 0.0
+    n[where] = 1.0
+    if p.src[which] >= 0:
+        y[p.src[which], where] -= 1
+    if p.named[which]:
+        land(n, p.record[which], p.maps, flows[p.index[which]])
+    split(n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups)
+    split(n, p.crd_starts[which], p.crd_starts[which+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+    return wait
+
+
+@jit
+def diffuse(y, p, w, dt, flows):
+    """
+    For the diffusion approximation (Euler-Maruyama): each flow over a time dt, with Gaussian noise of its Poisson variance
+
+    Called by `step()`, which has worked out the rates.
+    """
+    ng = y.shape[1]
+    rates, new = w[0], w[7]
+    new[:] = y
+    for f in range(len(p.src)):
+        s = p.src[f]
+        for g in range(ng):
+            mean = propensity(y, p, rates, f, g)*dt
+            amount = max(mean + np.sqrt(mean)*np.random.standard_normal(), 0.0)
+            if s >= 0: # Cannot take more than are there
+                amount = min(amount, new[s, g])
+                new[s, g] -= amount
+            if amount != 0:
+                if p.named[f]:
+                    if p.record[f] < 0:
+                        flows[p.index[f], g] += amount
+                    else:
+                        for j in range(ng):
+                            flows[p.index[f], j] += amount*p.maps[p.record[f], g, j]
+                for k in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                    if p.tgt_map[k] < 0:
+                        new[p.tgt_comp[k], g] += amount*p.tgt_w[k, g]
+                    else:
+                        for j in range(ng):
+                            new[p.tgt_comp[k], j] += amount*p.tgt_w[k, g]*p.maps[p.tgt_map[k], g, j]
+                for k in range(p.crd_starts[f], p.crd_starts[f+1]):
+                    flows[p.crd_index[k], g] += amount*p.crd_w[k, g]
+    for c in range(y.shape[0]):
+        for g in range(ng):
+            y[c, g] = max(new[c, g], 0.0)
+    return
+
+
+@jit
 def step(y, p, w, dt, n_sub, solver, flows):
     """
     Take one timestep
 
-    The ODE is stepped by Euler's method or fourth-order Runge-Kutta. Everything is in
+    The ODE is stepped by Euler's method or fourth-order Runge-Kutta; the stochastic
+    solvers work out the rates here and hand them to `draw()`, `event()`, or `diffuse()`. Everything is in
     this one function, and written as loops over single numbers, because that is many
     times faster for a small model: a call that is passed the program costs more than
     working out the rates of a few compartments does.
@@ -224,7 +356,7 @@ def step(y, p, w, dt, n_sub, solver, flows):
         p (Program): the flows
         w (tuple): the arrays to work in: see `workspace()`
         dt (float): the timestep
-        n_sub (int): the number of substeps; if 0, for the ODE, enough that no compartment turns over by more than a quarter in one (tau-leaping chooses its own leaps)
+        n_sub (int): the number of substeps; if 0, for the ODE, enough that no compartment turns over by more than a quarter in one (tau-leaping and the exact solver choose their own)
         solver (int): which of `solvers` to use
         flows (array): filled in with the total of each transition and mover over the step
     """
@@ -236,7 +368,8 @@ def step(y, p, w, dt, n_sub, solver, flows):
     nflows = p.n_trans + len(p.mov_mat)
     stages = 4 if solver == 0 else 1
     h = dt
-    elapsed = 0.0 # For tau-leaping: how much of the timestep has been taken
+    timed = solver == 3 or solver == 4 # Tau-leaping and the exact solver take steps of their own length
+    elapsed = 0.0 # For these: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
     while True:
@@ -353,9 +486,14 @@ def step(y, p, w, dt, n_sub, solver, flows):
                     for g in range(ng):
                         flows[f, g] = 0
             if solver >= 2: # The stochastic solvers take it from here
-                if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
-                    h = min(dt - elapsed, 0.03/max(fastest, 1e-12))
-                draw(y, p, w, h, flows, solver == 3)
+                if solver == 4: # The exact solver: up to the next event
+                    h = event(y, p, w, dt - elapsed, flows)
+                elif solver == 5:
+                    diffuse(y, p, w, h, flows)
+                else:
+                    if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
+                        h = min(dt - elapsed, 0.03/max(fastest, 1e-12))
+                    draw(y, p, w, h, flows, solver == 3)
                 elapsed += h
                 continue
 
@@ -423,8 +561,10 @@ def step(y, p, w, dt, n_sub, solver, flows):
                 for g in range(ng):
                     flows[f, g] += h/6*(df[0, f, g] + 2*df[1, f, g] + 2*df[2, f, g] + df[3, f, g])
         sub += 1
-        if (solver == 3 and elapsed >= dt - 1e-12) or (solver != 3 and sub >= n_sub):
+        if (timed and elapsed >= dt - 1e-12) or (not timed and sub >= n_sub):
             break
+    if solver == 4 or solver == 5: # These move people between groups once, over the whole step
+        move(y, p.mov_mat, p.mov_starts, p.mov_comps, p.n_trans, dt, flows, solver == 4)
     for c in range(nc):
         for g in range(ng):
             if y[c, g] < 0:
@@ -439,9 +579,83 @@ def seed(value):
     return
 
 
+@jit
+def apply_events(y, r, ti, whole):
+    """
+    Apply the events of a movement register that are dated in a step, in order
+
+    People who move or leave are chosen at random from the chosen compartments of their
+    place: as whole people (a multivariate hypergeometric draw, one compartment and group
+    at a time), or as the expected share of each. People who are added are shared
+    equally between the states of their set, and between the groups of their place as
+    births are.
+
+    Args:
+        y (array): the compartments, by group; changed in place
+        r (Register): the events
+        ti (int): the step
+        whole (bool): whether the compartments hold whole people
+
+    Returns the number of people that events asked for and could not find.
+    """
+    short = 0.0
+    if ti >= len(r.starts) - 1:
+        return short
+    for e in range(r.starts[ti], r.starts[ti+1]):
+        src, dst, s = r.src[e], r.dst[e], r.sel[e]
+        n = r.n[e]
+        if src >= 0: # Move people, or remove them
+            total = 0.0
+            for k in range(r.sel_starts[s], r.sel_starts[s+1]):
+                for j in range(r.pg_starts[src], r.pg_starts[src+1]):
+                    total += y[r.sel_comps[k], r.pg_groups[j]]
+            if n > total:
+                short += n - total
+                n = total
+            left = n
+            rest = total
+            for k in range(r.sel_starts[s], r.sel_starts[s+1]):
+                c = r.sel_comps[k]
+                for j in range(r.pg_starts[src], r.pg_starts[src+1]):
+                    g = r.pg_groups[j]
+                    have = y[c, g]
+                    if left <= 0 or rest <= 0:
+                        break
+                    if have <= 0:
+                        continue
+                    if whole:
+                        take = float(np.random.hypergeometric(int(have), int(rest - have), int(left)))
+                    else:
+                        take = left*have/rest
+                    rest -= have
+                    left -= take
+                    y[c, g] -= take
+                    if dst >= 0:
+                        y[c, g + (dst - src)*r.step] += take
+        else: # Add people
+            left = n
+            for k in range(r.ent_starts[s], r.ent_starts[s+1]):
+                remaining = r.ent_starts[s+1] - k # The states not yet given their share
+                part = binomial(left, 1/remaining) if whole else left/remaining
+                left -= part
+                wrest = 0.0
+                for j in range(r.pg_starts[dst], r.pg_starts[dst+1]):
+                    wrest += r.ent_w[k, r.pg_groups[j]]
+                for j in range(r.pg_starts[dst], r.pg_starts[dst+1]):
+                    g = r.pg_groups[j]
+                    w = r.ent_w[k, g]
+                    if part <= 0 or wrest <= 0:
+                        break
+                    take = binomial(part, w/wrest) if whole else part*w/wrest
+                    y[r.ent_comps[k], g] += take
+                    part -= take
+                    wrest -= w
+    return short
+
+
 #%% A whole run
 
-solvers = dict(rk4=0, euler=1, binomial=2, tau=3)
+solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, sde=5)
 
 @jit
 def set_step(p, ti, fixed, mult, consts, rel_trans):
@@ -454,7 +668,7 @@ def set_step(p, ti, fixed, mult, consts, rel_trans):
 
 
 @jit
-def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans):
+def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg):
     """
     Take every step of a run
 
@@ -468,24 +682,29 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans):
         seed (int): the seed for the random numbers
         fixed, mult, consts, rel_trans (arrays): the values of these parts of the program at each step, or a single
             entry if they are the same throughout
+        reg (Register): the events of a movement register, applied at the start of each step (those of the first are already in y)
 
-    Returns the compartments at the end, the compartments at the start of each step, and the total of each
-    transition and mover over each step.
+    Returns the compartments at the end, the compartments at the start of each step, the total of each
+    transition and mover over each step, and the number of people that events of the register could not find.
     """
     np.random.seed(seed)
     y = y.copy()
     w = workspace(y, p)
+    whole = solver >= 2 and solver != 5
     stocks = np.empty((npts, y.shape[0], y.shape[1]))
     flows = np.empty((npts, p.n_trans + len(p.mov_mat), y.shape[1]))
+    short = 0.0
     for ti in range(npts):
         set_step(p, ti, fixed, mult, consts, rel_trans)
         stocks[ti] = y
         step(y, p, w, dt, n_sub, solver, flows[ti])
-    return y, stocks, flows
+        if len(reg.src): # The events at the start of the next step (not called if there are none, since passing the register costs as much as a small step)
+            short += apply_events(y, reg, ti + 1, whole)
+    return y, stocks, flows, short
 
 
 @jit
-def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_trans, state_of, n_states):
+def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_trans, reg, state_of, n_states):
     """
     Take every step of many runs that differ only in their seed, keeping the totals over groups
 
@@ -504,6 +723,7 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
     flows = np.zeros((len(seeds), npts, nflows))
     y = np.empty_like(y0)
     w = workspace(y, p)
+    whole = solver >= 2 and solver != 5
     now = np.empty((nflows, ng))
     for r in range(len(seeds)):
         np.random.seed(seeds[r])
@@ -514,6 +734,8 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
                 for g in range(ng):
                     stocks[r, ti, state_of[c]] += y[c, g]
             step(y, p, w, dt, n_sub, solver, now)
+            if len(reg.src):
+                apply_events(y, reg, ti + 1, whole)
             for f in range(nflows):
                 for g in range(ng):
                     flows[r, ti, f] += now[f, g]
