@@ -187,6 +187,10 @@ class DateArray(np.ndarray):
             die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
         """
         day_round = sc.ifelse(day_round, not(self.subdaily))
+        if day_round and self.unit is ss.years and len(self) and not inplace: # All at once
+            years = self.to_float(to_numpy=True)
+            if np.all(years >= 1):
+                return ss.date.from_array(years)
         try:
             vals = [ss.date(x, day_round=day_round, allow_zero=False) for x in self]
         except Exception as e:
@@ -572,6 +576,13 @@ class date(pd.Timestamp):
             date_type = cls
         kwargs = {}
         if date_type is ss.date:
+            years = np.asarray(array)
+            if day_round and years.ndim == 1 and years.dtype.kind in 'if' and np.all(years >= 1): # All at once, as from_year() does for each
+                full = years.astype(np.int64)
+                leap = (full % 4 == 0) & ((full % 100 != 0) | (full % 400 == 0))
+                days = np.round((years - full)*np.where(leap, 366, 365)).astype(np.int64)
+                stamps = (full - 1970).astype('datetime64[Y]').astype('datetime64[D]') + days
+                return DateArray([cls._reset_class(stamp) for stamp in pd.DatetimeIndex(stamps.astype('datetime64[us]'))])
             kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.datedur
         return DateArray(np.vectorize(date_type)(array, **kwargs))
 

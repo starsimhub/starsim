@@ -69,7 +69,7 @@ class Loop:
         self.func_list = []
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
-        self.plan = None
+        self._plan = None # Made when it is first needed: see the plan property
         self.insertions = []
         self.index = 0 # The next function to execute
         self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
@@ -83,9 +83,20 @@ class Loop:
         """ Parse the sim into the integration plan """
         self.collect_funcs()
         self.collect_abs_tvecs()
-        self.make_plan()
+        self._plan = None
         self.initialized = True
         return
+
+    @property
+    def plan(self):
+        """ The list of `LoopEntry` events in execution order; made the first time it is needed, since a sim run by the kernels in one call never needs it """
+        if self._plan is None and self.initialized:
+            self.make_plan()
+        return self._plan
+
+    @plan.setter
+    def plan(self, value):
+        self._plan = value
 
     def __len__(self):
         if self.initialized:
@@ -442,8 +453,9 @@ class Loop:
             until = ss.date(until)
 
         # Loop over every function in the integration loop, e.g. disease.step()
-        while self.index < len(self.plan):
-            entry = self.plan[self.index]
+        plan = self.plan
+        while self.index < len(plan):
+            entry = plan[self.index]
             if verbose:
                 now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting
                 print(f'Running t={now}, step={self.index}, {entry.label}()')

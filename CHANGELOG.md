@@ -35,6 +35,7 @@ This version adds a way to write a model as declared states and transitions, whi
 
 ### Performance
 - `sim.calibrate()` on a sim with dates is 2–3 times faster: the data and the sim's times are no longer converted to years at every evaluation.
+- Building a sim (`sim.init()`) is 2–5 times faster: the search for distributions and time parameters no longer walks results, timelines, or the copy of the inputs kept for `sim.new()`, nor (on its second pass) everything it has already searched; dates are made from years directly (all at once for a timeline); and the plan of the integration loop is made only when the loop runs (a sim run by the kernels in one call never needs it). A 30-year TB model with weekly steps builds in 22 ms (from 106), and an agent-based sim with HIV and births in 52 ms (from 114).
 
 
 ## Version 3.7.2 (2026-10-06)
