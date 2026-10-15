@@ -258,6 +258,12 @@ class modify(Connector):
         return self.where is None and self.when is None and (not callable(amount) or isinstance(amount, ss.transitions.TimeValue))
 
     @property
+    def tabulated(self):
+        """ Whether the engines can work out the modifier for every step before a run (see `ss.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
+        amount = self.amount
+        return self.when is None and (not callable(amount) or isinstance(amount, ss.transitions.TimeValue)) and ss.conditions.is_static(self.where, self.sim)
+
+    @property
     def active(self):
         """ Whether the modifier applies on the current step """
         sim = self.sim

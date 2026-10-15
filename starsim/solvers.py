@@ -320,6 +320,12 @@ class Crossing:
     def __repr__(self):
         return f'Crossing({" × ".join(self.names)})'
 
+    def reset(self):
+        """ Forget who has the people, and any whole run not yet handed out, before the run starts again """
+        self.owner = None
+        self.outs = None
+        return
+
     def joint(self, engine):
         """ The people in an engine as one array over the dimensions of the sim, with the engine's own compartments as the levels of its dimension """
         d = self.sim.dim_index(engine.mod.name)
@@ -358,6 +364,78 @@ class Crossing:
             engine.record_stocks()
         self.owner = self.engines[0]
         return
+
+    def init_maps(self):
+        """ For each engine: where each of its people's compartments, in each group, is in the joint array (flattened), or -1 for the groups it keeps empty (those not at the first level of its own dimension) """
+        sim = self.sim
+        index = np.arange(int(np.prod(sim.group_shape)), dtype=float).reshape(sim.group_shape)
+        self.maps = []
+        for engine in self.engines:
+            d = sim.dim_index(engine.mod.name)
+            n = len(engine.people_comps)
+            out = np.full((n,) + sim.group_shape, -1.0)
+            out[(slice(None),)*(d+1) + (0,)] = np.moveaxis(index, d, 0)
+            self.maps.append(out.reshape(n, -1).astype(np.int64))
+        return
+
+    def can_run_whole(self):
+        """ Whether the diseases can take a whole run together (see `run()`): an ODE with the RK4 or Euler kernels, and no movement register """
+        sim = self.sim
+        return sim.solver == 'ode' and sim.integrator in ['rk4', 'euler'] and sim.mixing.register is None
+
+    def run(self):
+        """
+        A whole run of the diseases, each taking each step in turn on the same people, as they do in `sim.run()` step by step
+
+        Returns, for each engine, what `ss.kernels.run()` does.
+        """
+        engines = self.engines
+        sim = self.sim
+        setup = [engine.run_args() for engine in engines]
+        npts = engines[0].mod.t.npts
+        self.init_maps()
+        valid = [G >= 0 for G in self.maps]
+        joint = np.zeros(int(np.prod(sim.group_shape)))
+        lead = engines.index(self.owner) if self.owner in engines else 0
+        joint[self.maps[lead][valid[lead]]] = engines[lead].y[engines[lead].people_comps][valid[lead]]
+        ys, stocks, flows, works = [], [], [], []
+        for engine,(args,tables) in zip(engines, setup):
+            y, p = args[0].copy(), args[1]
+            ys.append(y)
+            works.append(ss.kernels.workspace(y, p))
+            stocks.append(np.empty((npts,) + y.shape))
+            flows.append(np.zeros((npts, p.n_trans + len(p.mov_mat), y.shape[1])))
+
+        def gather(k):
+            rows = engines[k].people_comps
+            ys[k][rows] = np.where(valid[k], joint[np.maximum(self.maps[k], 0)], 0.0)
+            return
+
+        for k in range(len(engines)):
+            gather(k)
+            stocks[k][0] = ys[k]
+        for ti in range(1, npts): # Each disease in turn, as in the loop
+            for k,engine in enumerate(engines):
+                gather(k)
+                (y, p, dt, _, solver, n_sub), tables = setup[k]
+                ss.kernels.step_at(ys[k], p, works[k], dt, ti, solver, n_sub, flows[k][ti], *tables, engine.per_step())
+                joint[self.maps[k][valid[k]]] = ys[k][engine.people_comps][valid[k]]
+            for k in range(len(engines)): # Each records the people after all of them have stepped (see Compartmental.update_results())
+                gather(k)
+                stocks[k][ti] = ys[k]
+        return [(ys[k], stocks[k], flows[k], 0.0) for k in range(len(engines))]
+
+    def whole_run(self, engine, use_jax=False):
+        """ The output of a whole run for one engine: the first engine to ask takes the run for all of them """
+        if not getattr(self, 'outs', None):
+            outs = ss.gradients.run_crossing(self) if use_jax else self.run()
+            self.outs = dict(zip([e.mod.name for e in self.engines], outs))
+        out = self.outs.pop(engine.mod.name)
+        self.owner = engine
+        self.version += 1
+        for e in self.engines:
+            e.seen = self.version # They all end with the same people
+        return out
 
     def check(self):
         """
@@ -2226,7 +2304,7 @@ class Compartmental(Engine):
         mod = self.mod
         graph = self.graph
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
-        if not self.use_kernels or self.cross is not None or solver not in ss.kernels.solvers or any(not getattr(m, 'timed', False) for mods in sim.modifiers.values() for m in mods):
+        if not self.use_kernels or (self.cross is not None and not self.cross.can_run_whole()) or solver not in ss.kernels.solvers or any(not getattr(m, 'tabulated', False) for mods in sim.modifiers.values() for m in mods):
             return False
         if self.whole is None: # The rest cannot change, so is checked once
             plain = all(getattr(type(mod), name) is getattr(ss.Disease, name) for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'])
@@ -2235,8 +2313,20 @@ class Compartmental(Engine):
             fixed = all(isinstance(leaf, ss.par) and (isinstance(leaf.raw, ss.Dist) or not callable(leaf.raw)) for expr in exprs for leaf in expr.leaves)
             if self.program is None:
                 self.init_program()
-            self.whole = bool(self.program) and plain and fixed and not graph.transfers and mod.t.npts == sim.t.npts
+            self.whole = bool(self.program) and plain and fixed and all(self.constant_transfer(tf) for tf in graph.transfers.values()) and mod.t.npts == sim.t.npts
         return self.whole
+
+    @property
+    def transfer_index(self):
+        """ The position of each transfer among the flows of a whole run (after the transitions, with the other movers) """
+        return {mover.name:self.n_trans + i for i,mover in enumerate(self.movers) if mover.transfer is not None}
+
+    def constant_transfer(self, tf):
+        """ Whether a transfer's rate holds for the whole run, so its mover can be set once before it (see `run_args()`): a rate or duration of plain values, with no modifiers """
+        if self.sim.modifiers.get((self.mod.name, 'transition', tf.name)):
+            return False
+        exprs = [expr for expr in [tf.rate, tf.dur] if expr is not None]
+        return all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not isinstance(leaf.raw, ss.by) for expr in exprs for leaf in expr.leaves)
 
     def tables(self):
         """
@@ -2334,6 +2424,8 @@ class Compartmental(Engine):
         res = mod.results
         if self.given is not None: # The run has been taken already, by ss.gradients
             out, self.given = self.given, None
+        elif self.cross is not None: # Together with the other diseases in the crossing
+            out = self.cross.whole_run(self, use_jax=use_jax)
         elif use_jax:
             out = ss.gradients.run(self)
         else:
@@ -2352,6 +2444,8 @@ class Compartmental(Engine):
 
         n = sc.objdict({name:store(f'n_{name}', stocks[:, self.state_comps[name]].sum(axis=1)) for name in graph.states})
         new = sc.objdict({name:store(name, flows[:, ind]) for name,ind in self.tr_index.items()})
+        for name,ind in self.transfer_index.items():
+            store(name, flows[:, ind])
         if 'new_infections' in res and 'new_infections' not in graph.transitions:
             store('new_infections', sum(flows[:, self.tr_index[tr.name]] for tr in graph.transmissions))
         grouped = self.outcomes and self.n_groups > 1 # Outcomes are then worked out by group, and summed: a weight can be one per group
@@ -2403,13 +2497,14 @@ class Compartmental(Engine):
         stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, state_of, len(states), by_group, self.per_step())
         return self.collect(stocks, flows)
 
-    def collect(self, stocks, flows):
+    def collect(self, stocks, flows, expected=False):
         """
         The results of many runs, from the number in each state and the flow along each transition and mover
 
         Args:
             stocks (array): runs by steps by states by groups (or by one group, the total)
             flows (array): runs by steps by transitions and movers by groups (or one)
+            expected (bool): whether outcomes of whole events are their expected number, rather than drawn (as a particle filter needs)
 
         Returns the results as `run_many()` describes them.
         """
@@ -2421,7 +2516,7 @@ class Compartmental(Engine):
         if by_group:
             for i,name in enumerate(states):
                 groups[f'n_{name}'] = stocks[:, :, i, :]
-            for name,ind in self.tr_index.items():
+            for name,ind in (self.tr_index | self.transfer_index).items():
                 groups[name] = flows[:, :, ind, :]
             if 'new_infections' in res and 'new_infections' not in graph.transitions:
                 groups.new_infections = sum(groups[tr.name] for tr in graph.transmissions)
@@ -2433,10 +2528,11 @@ class Compartmental(Engine):
         new = sc.objdict({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
         out = sc.objdict({f'n_{name}':vals for name,vals in n.items()})
         out.update(new)
+        out.update({name:flows[:, :, ind] for name,ind in self.transfer_index.items()})
         if 'new_infections' in res and 'new_infections' not in graph.transitions:
             out.new_infections = sum(new[tr.name] for tr in graph.transmissions)
-        out.update(self.derived(n, new))
-        for name in graph.transitions: # As in finalize_results()
+        out.update(self.derived(n, new, expected=expected))
+        for name in list(graph.transitions) + list(graph.transfers): # As in finalize_results()
             out[f'cum_{name}'] = np.cumsum(out[name], axis=-1)
         if 'cum_infections' in res and 'new_infections' in out:
             out.cum_infections = np.cumsum(out.new_infections, axis=-1)
@@ -2447,20 +2543,22 @@ class Compartmental(Engine):
         self.cache.clear()
         return out
 
-    def derived(self, n, new, outcomes=True):
+    def derived(self, n, new, outcomes=True, expected=False):
         """
         The results that are worked out from the number in each state and the flow along each transition
 
         Args:
             n (dict): the number in each state at each step: a series, or an array whose last dimension is the steps
             new (dict): the same for the flow along each transition
+            outcomes (bool): whether to work out the outcomes
+            expected (bool): see `derived_outcomes()`
 
         Returns a dict of the outcomes, the prevalence, and the results given as expressions.
         This is what `update_results()` does on each step, for every step at once.
         """
         graph = self.graph
         res = self.mod.results
-        out = self.derived_outcomes(new) if outcomes else sc.objdict()
+        out = self.derived_outcomes(new, expected=expected) if outcomes else sc.objdict()
         if self.standard and 'prevalence' in res and 'prevalence' not in graph.exprs:
             people = sum(n[s.name] for s in graph.people_states)
             infected = sum(n[s.name] for s in graph.infected)
@@ -2471,9 +2569,10 @@ class Compartmental(Engine):
                 out[name] = ss.transitions.evaluate(expr, ctx)
         return out
 
-    def derived_outcomes(self, new):
-        """ What `step_outcomes()` does on each step, for every step at once """
+    def derived_outcomes(self, new, expected=False):
+        """ What `step_outcomes()` does on each step, for every step at once (with `expected`, outcomes of whole events are their expected number, rather than drawn) """
         npts = self.mod.t.npts
+        draw = self.integer and not expected
         out = sc.objdict()
         for name,info in self.outcomes.items():
             amount = 0.0
@@ -2483,14 +2582,14 @@ class Compartmental(Engine):
                     weight = self.eval(weight)
                     if np.ndim(weight) == 1 and np.ndim(flow) >= 2 and np.shape(flow)[-2] == len(weight): # A weight for each group, with the flows by group
                         weight = weight[:, None]
-                if self.integer and np.all((0 <= weight) & (weight <= 1)): # A fraction of whole events is a draw
+                if draw and np.all((0 <= weight) & (weight <= 1)): # A fraction of whole events is a draw
                     amount = amount + self.rng.binomial(np.round(flow).astype(int), weight)
                 else:
                     amount = amount + flow*weight
             kernel = info.kernel
             if len(kernel) == 1:
                 now = amount*kernel[0]
-            elif self.integer: # Each event is reported after a delay drawn for it
+            elif draw: # Each event is reported after a delay drawn for it
                 now = np.zeros(amount.shape[:-1] + (npts + len(kernel),))
                 for ind in zip(*np.nonzero(amount)):
                     now[ind[:-1]][ind[-1]:ind[-1]+len(kernel)] += self.rng.multinomial(int(round(amount[ind])), kernel/kernel.sum())
@@ -2498,7 +2597,7 @@ class Compartmental(Engine):
             else:
                 now = np.apply_along_axis(np.convolve, -1, amount, kernel)[..., :npts]
             if info.stay is not None: # Each arrival leaves after a stay drawn for it
-                if self.integer:
+                if draw:
                     leaving = np.zeros(now.shape[:-1] + (npts + len(info.stay),))
                     for ind in zip(*np.nonzero(now)):
                         leaving[ind[:-1]][ind[-1]:ind[-1]+len(info.stay)] += self.rng.multinomial(int(round(now[ind])), info.stay)

@@ -258,17 +258,18 @@ class Run:
             df = df + self.credit_mat @ ((self.gather_crd @ amount)*X['crd_w'])
         return dy, df
 
-    def function(self, clamp=False):
+    def stepper(self, X, clamp=False):
         """
-        The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed
+        One step of the run, as a function of the compartments at its start and its number: returns the compartments at its end, the flows over it, and the substeps it needed
 
         Args:
+            X (dict): the numbers in the run (see `capture()`)
             clamp (bool): if True, a step takes at most `n_max` substeps, so that the run is the same function everywhere (for sampling, where it cannot be taken again with more)
         """
         jx = jax()
         jnp = jx.numpy
         lax = jx.lax
-        dt, npts, per_step, n_max = self.dt, self.npts, self.per_step, self.n_max
+        dt, per_step, n_max = self.dt, self.per_step, self.n_max
         rk4 = self.solver == 0
 
         def at(table, ti, th):
@@ -283,51 +284,70 @@ class Run:
                 return a*table[row] + b*table[row+1] + c*table[row+2]
             return table[row]
 
-        def run(X):
-            def vals(ti, th):
-                return [at(X[name], ti, th) for name in table_fields] + [X]
+        def vals(ti, th):
+            return [at(X[name], ti, th) for name in table_fields] + [X]
 
-            def step(y, ti):
-                if self.n_sub:
-                    n = self.n_sub
-                else: # Enough substeps that no compartment turns over by more than a quarter in one
-                    rates0 = self.rates(y, vals(ti, 0.0))
-                    fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
-                    if len(self.p.mov_mat):
-                        fastest = jnp.maximum(fastest, jnp.max(X['mov_mat']))
-                    n = jnp.maximum(jnp.ceil(lax.stop_gradient(fastest)*dt/0.25), 1)
-                    if clamp:
-                        n = jnp.minimum(n, n_max)
-                h = dt/n
+        def step(y, ti):
+            if self.n_sub:
+                n = self.n_sub
+            else: # Enough substeps that no compartment turns over by more than a quarter in one
+                rates0 = self.rates(y, vals(ti, 0.0))
+                fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
+                if len(self.p.mov_mat):
+                    fastest = jnp.maximum(fastest, jnp.max(X['mov_mat']))
+                n = jnp.maximum(jnp.ceil(lax.stop_gradient(fastest)*dt/0.25), 1)
+                if clamp:
+                    n = jnp.minimum(n, n_max)
+            h = dt/n
 
-                def sub(s, carry):
-                    y, flows = carry
-                    th = lambda frac: (s + frac)/n
-                    dy1, df1 = self.derivs(y, self.rates(y, vals(ti, th(0.0))), X, h)
-                    if rk4:
-                        dy2, df2 = self.derivs(y + h/2*dy1, self.rates(y + h/2*dy1, vals(ti, th(0.5))), X, h)
-                        dy3, df3 = self.derivs(y + h/2*dy2, self.rates(y + h/2*dy2, vals(ti, th(0.5))), X, h)
-                        dy4, df4 = self.derivs(y + h*dy3, self.rates(y + h*dy3, vals(ti, th(1.0))), X, h)
-                        new_y = y + h/6*(dy1 + 2*dy2 + 2*dy3 + dy4)
-                        new_f = flows + h/6*(df1 + 2*df2 + 2*df3 + df4)
-                    else:
-                        new_y = y + h*dy1
-                        new_f = flows + h*df1
-                    active = s < n
-                    return jnp.where(active, new_y, y), jnp.where(active, new_f, flows)
-
-                flows = jnp.zeros((self.nflows, self.ng))
-                if self.n_sub: # A given number of substeps: written out, which XLA runs faster than a loop inside the loop over steps
-                    carry = (y, flows)
-                    for s in range(self.n_sub):
-                        carry = sub(s, carry)
-                    y_end, flows = carry
+            def sub(s, carry):
+                y, flows = carry
+                th = lambda frac: (s + frac)/n
+                dy1, df1 = self.derivs(y, self.rates(y, vals(ti, th(0.0))), X, h)
+                if rk4:
+                    dy2, df2 = self.derivs(y + h/2*dy1, self.rates(y + h/2*dy1, vals(ti, th(0.5))), X, h)
+                    dy3, df3 = self.derivs(y + h/2*dy2, self.rates(y + h/2*dy2, vals(ti, th(0.5))), X, h)
+                    dy4, df4 = self.derivs(y + h*dy3, self.rates(y + h*dy3, vals(ti, th(1.0))), X, h)
+                    new_y = y + h/6*(dy1 + 2*dy2 + 2*dy3 + dy4)
+                    new_f = flows + h/6*(df1 + 2*df2 + 2*df3 + df4)
                 else:
-                    y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
-                y_end = jnp.maximum(y_end, 0.0)
-                return y_end, (y_end, flows, n) # The compartments after the step, as the kernels record them
+                    new_y = y + h*dy1
+                    new_f = flows + h*df1
+                active = s < n
+                return jnp.where(active, new_y, y), jnp.where(active, new_f, flows)
 
-            y_end, (stocks, flows, n) = lax.scan(step, X['y'], jnp.arange(npts - 1)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
+            flows = jnp.zeros((self.nflows, self.ng))
+            if self.n_sub: # A given number of substeps: written out, which XLA runs faster than a loop inside the loop over steps
+                carry = (y, flows)
+                for s in range(self.n_sub):
+                    carry = sub(s, carry)
+                y_end, flows = carry
+            else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time)
+                def body(carry):
+                    s, y, flows = carry
+                    y, flows = sub(s, (y, flows))
+                    return s + 1, y, flows
+                _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
+            return jnp.maximum(y_end, 0.0), flows, n # The compartments after the step, as the kernels record them
+
+        return step
+
+    def function(self, clamp=False):
+        """
+        The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed
+
+        Args:
+            clamp (bool): see `stepper()`
+        """
+        jx = jax()
+        jnp = jx.numpy
+
+        def run(X):
+            step = self.stepper(X, clamp)
+            def body(y, ti):
+                y_end, flows, n = step(y, ti)
+                return y_end, (y_end, flows, n)
+            y_end, (stocks, flows, n) = jx.lax.scan(body, X['y'], jnp.arange(self.npts - 1)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
             stocks = jnp.concatenate([X['y'][None], stocks]) # The start, then the end of each step, as the kernels record them
             flows = jnp.concatenate([jnp.zeros((1,) + flows.shape[1:]), flows])
             return y_end, stocks, flows, jnp.max(n)
@@ -337,15 +357,96 @@ class Run:
     def get(self, kind='run'):
         """ The compiled run: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
         if kind not in self.compiled:
-            jx = jax()
-            run = self.function()
-            if kind == 'run':
-                fn = jx.jit(run)
-            elif kind == 'many':
-                fn = jx.jit(jx.vmap(run))
-            else:
-                fn = jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
-            self.compiled[kind] = fn
+            self.compiled[kind] = compile_run(self.function(), kind)
+        return self.compiled[kind]
+
+
+def compile_run(run, kind):
+    """ A run compiled for one use: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
+    jx = jax()
+    if kind == 'run':
+        return jx.jit(run)
+    elif kind == 'many':
+        return jx.jit(jx.vmap(run))
+    return jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
+
+
+class JointRun:
+    """
+    The diseases of a crossing, run together: each takes each step in turn on the same people, as in `ss.Crossing.run()`
+
+    Called with a tuple of the numbers of each disease's run, and returns what `Run.function()` does, with a tuple over the diseases for each of the first three.
+
+    Args:
+        runs (list): the `Run` of each disease, in the order they step
+        maps (list): for each, where each of its people's compartments in each group is in the joint array (see `ss.Crossing.init_maps()`)
+        people (list): for each, its compartments of people
+    """
+    def __init__(self, runs, maps, people):
+        self.runs = runs
+        self.maps = maps
+        self.people = [np.asarray(rows) for rows in people]
+        self.valid = [G >= 0 for G in maps]
+        self.size = int(max(G.max() for G in maps)) + 1
+        self.npts = runs[0].npts
+        self.n_sub = runs[0].n_sub if all(run.n_sub for run in runs) else 0
+        self.compiled = dict()
+        return
+
+    @property
+    def n_max(self):
+        return max(run.n_max for run in self.runs)
+
+    @n_max.setter
+    def n_max(self, value):
+        for run in self.runs:
+            run.n_max = run.n_sub if run.n_sub else value
+        return
+
+    def gather(self, joint, y, k):
+        """ Disease k's compartments, with its people as they are in the joint array """
+        jnp = jax().numpy
+        return y.at[self.people[k]].set(jnp.where(self.valid[k], joint[np.maximum(self.maps[k], 0)], 0.0))
+
+    def scatter(self, joint, y, k):
+        """ The joint array, with the people as disease k has them """
+        valid = self.valid[k]
+        return joint.at[self.maps[k][valid]].set(y[self.people[k]][valid])
+
+    def function(self, clamp=False):
+        jx = jax()
+        jnp = jx.numpy
+        K = len(self.runs)
+
+        def run(Xs):
+            steps = [r.stepper(X, clamp) for r,X in zip(self.runs, Xs)]
+            joint = self.scatter(jnp.zeros(self.size), Xs[0]['y'], 0) # Every disease starts with the same people
+            ys = tuple(self.gather(joint, Xs[k]['y'], k) for k in range(K))
+
+            def body(carry, ti):
+                joint, ys = carry
+                ys = list(ys)
+                flows, ns = [], []
+                for k in range(K): # Each disease in turn
+                    y = self.gather(joint, ys[k], k)
+                    y_end, f, n = steps[k](y, ti)
+                    joint = self.scatter(joint, y_end, k)
+                    ys[k] = y_end
+                    flows.append(f)
+                    ns.append(n)
+                ys = tuple(self.gather(joint, ys[k], k) for k in range(K)) # Each records the people after all of them have stepped
+                return (joint, ys), (ys, tuple(flows), jnp.max(jnp.stack([jnp.asarray(n, dtype=float) for n in ns])))
+
+            (joint, y_end), (stocks, flows, n) = jx.lax.scan(body, (joint, ys), jnp.arange(self.npts - 1))
+            stocks = tuple(jnp.concatenate([y0[None], s]) for y0,s in zip(ys, stocks))
+            flows = tuple(jnp.concatenate([jnp.zeros((1,) + f.shape[1:]), f]) for f in flows)
+            return y_end, stocks, flows, jnp.max(n)
+
+        return run
+
+    def get(self, kind='run'):
+        if kind not in self.compiled:
+            self.compiled[kind] = compile_run(self.function(), kind)
         return self.compiled[kind]
 
 
@@ -371,6 +472,34 @@ def runner(engine, program, how):
         run = kept[3]
     engine.jax_run = (key, program, how, run)
     return run
+
+
+def joint_runner(cross, captured):
+    """ The `JointRun` of a crossing, from the program and how to run each of its engines; made again only if one of their runs has changed """
+    runs = [runner(engine, program, how) for engine,(program,how) in zip(cross.engines, captured)]
+    kept = getattr(cross, 'jax_run', None)
+    if kept is not None and all(a is b for a,b in zip(kept.runs, runs)):
+        return kept
+    cross.init_maps()
+    cross.jax_run = JointRun(runs, cross.maps, [engine.people_comps for engine in cross.engines])
+    return cross.jax_run
+
+
+def units(sim):
+    """ The declared modules that are run together, by their positions in `sim.declared`: the diseases of each crossing (in the order they step), and each other one on its own """
+    names = [mod.name for mod in sim.declared]
+    out = [[names.index(name) for name in cross.names] for cross in sim.crossings]
+    crossed = {j for unit in out for j in unit}
+    out += [[j] for j in range(len(names)) if j not in crossed]
+    return out
+
+
+def run_crossing(cross):
+    """ Take a whole run of the diseases of a crossing in JAX: returns, for each, what `ss.kernels.run()` does """
+    captured = [capture(engine) for engine in cross.engines]
+    run = joint_runner(cross, [c[:2] for c in captured])
+    ys, stocks, flows, n = call(run, 'run', tuple(c[2] for c in captured))
+    return [(np.asarray(ys[k]), np.asarray(stocks[k]), np.asarray(flows[k]), 0.0) for k in range(len(captured))]
 
 
 def call(run, kind, *args):
@@ -416,18 +545,24 @@ def check_same(programs):
 
 def outputs(sim, Xs, kind='run', dX=None):
     """ Take the runs of each engine: Xs is, for each engine, its program, how to run it, and its numbers (a list of them, for kind='many') """
-    out = []
-    for j,mod in enumerate(sim.declared):
-        engine = mod.engine
+    out = [None]*len(sim.declared)
+    for unit in units(sim):
         if kind == 'many':
-            programs = [(program, how) for program,how,X in Xs[j]]
-            check_same(programs)
-            args = [stack([X for program,how,X in Xs[j]])]
+            programs = [[(program, how) for program,how,X in Xs[j]] for j in unit]
+            for progs in programs:
+                check_same(progs)
+            args = [tuple(stack([X for program,how,X in Xs[j]]) for j in unit)]
         else:
-            programs = [Xs[j][:2]]
-            args = [Xs[j][2]] + ([stack(dX[j])] if kind == 'jvp' else [])
-        run = runner(engine, *programs[0])
-        out.append([np.asarray(v) for v in call(run, kind, *args)])
+            programs = [[Xs[j][:2]] for j in unit]
+            args = [tuple(Xs[j][2] for j in unit)] + ([tuple(stack(dX[j]) for j in unit)] if kind == 'jvp' else [])
+        if len(unit) == 1:
+            run = runner(sim.declared[unit[0]].engine, *programs[0][0])
+            out[unit[0]] = [np.asarray(v) for v in call(run, kind, *[arg[0] for arg in args])]
+        else:
+            cross = sim.declared[unit[0]].engine.cross
+            res = call(joint_runner(cross, [progs[0] for progs in programs]), kind, *args)
+            for k,j in enumerate(unit):
+                out[j] = [np.asarray(v[k]) for v in res[:3]] + [np.asarray(v) for v in res[3:]]
     return out
 
 
@@ -673,10 +808,9 @@ class Density:
         self.likelihood = likelihood
         self.weights = weights or {}
         self.external = external or [False]*len(x0)
-        if len(sim.declared) != 1:
-            raise Unsupported('a sim with more than one declared disease')
-        self.engine = sim.declared[0].engine
-        self.mod = self.engine.mod
+        self.mods = list(sim.declared)
+        self.engines = [mod.engine for mod in self.mods]
+        self.units = units(sim)
         self.index = self.par_index()
         self.init_program()
         self.init_outputs()
@@ -688,12 +822,15 @@ class Density:
         for i,(name,p) in enumerate(zip(self.names, self.fitted)):
             out[id(p)] = i
             if not self.external[i]:
-                key = name.rpartition('.')[2]
-                graph_par = self.mod.graph.pars.get(key)
-                if graph_par is not None:
-                    out[id(graph_par)] = i
-                if self.sim.modifiers.get((self.mod.name, 'par', key)):
-                    raise Unsupported(f'a modifier of the fitted parameter "{name}"')
+                modname, _, key = name.rpartition('.')
+                for mod in self.mods:
+                    if modname and mod.name != modname:
+                        continue
+                    graph_par = mod.graph.pars.get(key)
+                    if graph_par is not None:
+                        out[id(graph_par)] = i
+                    if self.sim.modifiers.get((mod.name, 'par', key)):
+                        raise Unsupported(f'a modifier of the fitted parameter "{name}"')
         return out
 
     def convert(self, i, val):
@@ -712,117 +849,139 @@ class Density:
     #%% The numbers in the run
 
     def capture(self, x):
-        """ The numbers in the run with some parameter values, worked out in Python """
+        """ The numbers in the run of each engine with some parameter values, worked out in Python """
         self.set_pars(x)
-        program, how, X = capture(self.engine)
-        return program, how, X
+        return [capture(engine) for engine in self.engines]
 
     def init_program(self):
         """ Work out which numbers in the run depend on which parameters, and how """
-        engine = self.engine
-        self.program, self.how, self.X0 = self.capture(self.x0)
-        if self.how[3]: # Given substeps: as many as that
-            n_max = self.how[3]
-        else: # The most a step needs at the start, with room to spare
-            out = call(runner(engine, self.program, self.how), 'run', self.X0)
-            n_max = int(2**np.ceil(np.log2(max(2*np.max(out[3]), 1))))
-        self.run = Run(self.program, *self.how, n_max=n_max)
-        self.consts = {k:self.index[id(p)] for k,p in enumerate(engine.prog_pars) if id(p) in self.index} # The values in the rates that are fitted
-        self.fixed = [] # The flows whose rate is worked out from fitted parameters alone
-        for f,flow in enumerate(engine.flows):
-            if flow.dynamic:
-                continue
-            dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
-            leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
-            if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
-                raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
-            if any(id(leaf) in self.index for leaf in leaves):
-                mult = np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)
-                self.fixed.append((f, flow, dw, mult))
+        captured = self.capture(self.x0)
+        self.programs = [c[0] for c in captured]
+        self.hows = [c[1] for c in captured]
+        self.X0 = [c[2] for c in captured]
+
+        # The run of each set of engines that are run together, with room to spare for the substeps
+        self.runs = []
+        for unit in self.units:
+            if len(unit) == 1:
+                j = unit[0]
+                base = runner(self.engines[j], self.programs[j], self.hows[j])
+                args = self.X0[j]
+            else:
+                cross = self.engines[unit[0]].cross
+                base = joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit])
+                args = tuple(self.X0[j] for j in unit)
+            if not base.n_sub: # The most a step needs at the start, with room to spare
+                out = call(base, 'run', args)
+                n_max = int(2**np.ceil(np.log2(max(2*np.asarray(out[3]).max(), 1)))) # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
+            else:
+                n_max = base.n_sub
+            runs = [Run(self.programs[j], *self.hows[j], n_max=n_max) for j in unit]
+            self.runs.append(runs[0] if len(unit) == 1 else JointRun(runs, cross.maps, [self.engines[j].people_comps for j in unit]))
+
+        # The values in the rates that are fitted, and the flows whose rate is worked out from fitted parameters alone
+        self.consts = []
+        self.fixed = []
+        for engine in self.engines:
+            self.consts.append({k:self.index[id(p)] for k,p in enumerate(engine.prog_pars) if id(p) in self.index})
+            fixed = []
+            for f,flow in enumerate(engine.flows):
+                if flow.dynamic:
+                    continue
+                dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
+                leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
+                if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
+                    raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
+                if any(id(leaf) in self.index for leaf in leaves):
+                    mult = np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)
+                    fixed.append((f, flow, dw, mult))
+            self.fixed.append(fixed)
 
         # The rest, by how they change with each parameter
         h = 1e-4*np.where(self.x0 != 0, np.abs(self.x0), 1.0)
-        self.slopes = {}
+        self.slopes = [{} for engine in self.engines]
+        keys = [Run.key(program, *how) for program,how in zip(self.programs, self.hows)]
         for i in range(len(self.x0)):
             sides = []
             for sign in [1, -1]:
                 x = self.x0.copy()
                 x[i] += sign*h[i]
-                program, how, X = self.capture(x)
-                if Run.key(program, *how) != Run.key(self.program, *self.how):
+                captured = self.capture(x)
+                if any(Run.key(program, *how) != key for (program,how,X),key in zip(captured, keys)):
                     raise Unsupported(f'the fitted parameter "{self.names[i]}" changes how the model is laid out')
-                sides.append(X)
-            for key in self.X0:
-                slope = (sides[0][key] - sides[1][key])/(2*h[i])
-                if np.any(slope != 0):
-                    self.slopes.setdefault(key, {})[i] = slope
+                sides.append([c[2] for c in captured])
+            for j,X0 in enumerate(self.X0):
+                for key in X0:
+                    slope = (sides[0][j][key] - sides[1][j][key])/(2*h[i])
+                    if np.any(slope != 0):
+                        self.slopes[j].setdefault(key, {})[i] = slope
         self.set_pars(self.x0)
         return
 
     def numbers(self, x):
-        """ The numbers in the run, as JAX arrays, at some parameter values """
+        """ The numbers in the run of each engine, as JAX arrays, at some parameter values """
         jnp = jax().numpy
-        X = {}
-        for key,X0 in self.X0.items():
-            val = jnp.asarray(X0)
-            for i,slope in self.slopes.get(key, {}).items(): # Linear in each parameter (checked in check()); the values in the rates are replaced below by what they exactly are
-                val = val + slope*(x[i] - self.x0[i])
-            X[key] = val
-        for k,i in self.consts.items():
-            X['consts'] = X['consts'].at[:, k, :].set(self.convert(i, x[i]))
-        ctx = Context(self, self.engine, x)
-        for f,flow,dw,mult in self.fixed:
-            if flow.expr is None: # A dwell time: the stages over the mean
-                val = ctx.value(dw.par)
-                mean = 1/val if dw.is_rate else val
-                base = (flow.stages if flow.kind == 'stage' else 1)/mean
-            else:
-                base = ss.transitions.evaluate(flow.expr, ctx)
-            X['fixed'] = X['fixed'].at[:, f, :].set(base*mult)
-        return X
+        out = []
+        for j,engine in enumerate(self.engines):
+            X = {}
+            for key,X0 in self.X0[j].items():
+                val = jnp.asarray(X0)
+                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in ss.fit()); the values in the rates are replaced below by what they exactly are
+                    val = val + slope*(x[i] - self.x0[i])
+                X[key] = val
+            for k,i in self.consts[j].items():
+                X['consts'] = X['consts'].at[:, k, :].set(self.convert(i, x[i]))
+            ctx = Context(self, engine, x)
+            for f,flow,dw,mult in self.fixed[j]:
+                if flow.expr is None: # A dwell time: the stages over the mean
+                    val = ctx.value(dw.par)
+                    mean = 1/val if dw.is_rate else val
+                    base = (flow.stages if flow.kind == 'stage' else 1)/mean
+                else:
+                    base = ss.transitions.evaluate(flow.expr, ctx)
+                X['fixed'] = X['fixed'].at[:, f, :].set(base*mult)
+            out.append(X)
+        return out
 
     #%% What is compared with the data
 
     def init_outputs(self):
         """ Which result each data series is compared with, and the matrix that lines it up with the data """
         sim = self.sim
-        engine = self.engine
-        graph = engine.graph
-        sim_t, data_t = ss.calibration.data_times(sim, sim.data)
-        eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9
-        inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
         liks = ss.calibration.likelihoods(sim, likelihood=self.likelihood)
-        self.member = np.array([[comp.state.name == name for comp in engine.comps] for name in graph.states], dtype=float) # Which compartments each state is
+        lined = ss.calibration.lineup(sim)
+        self.member = [np.array([[comp.state.name == name for comp in engine.comps] for name in engine.graph.states], dtype=float) for engine in self.engines] # Which compartments each state is
         self.series = []
         for col in sim.data.columns:
-            res = ss.data.match(sim, col)
-            if res.module != self.mod.name:
-                raise Unsupported(f'the data series "{col}" is of "{res.module}", which is not the fitted disease')
+            base, dims = ss.data.parse(col)
+            res = ss.data.match_name(sim, base)
+            owners = [j for j,mod in enumerate(self.mods) if mod.results.get(res.name) is res] # By the result itself, since its module is a label
+            keep = None
+            if dims: # The groups of a stratum
+                keep = np.ones(sim.n_groups)
+                for dim,level in ss.data.levels(sim, dims).items():
+                    d = sim.dim_index(dim)
+                    keep = keep*(sim.group_coords[:, d] == sim.strats[d].index(level))
+            if not owners:
+                raise Unsupported(f'the data series "{col}", which is not a result of a declared disease')
+            j = owners[0]
+            engine = self.engines[j]
+            graph = engine.graph
             name = res.name
-            if not (name.startswith('n_') and name[2:] in graph.states) and name not in graph.transitions and name not in graph.outcomes and name not in graph.exprs:
+            staying = name.startswith('n_') and name[2:] in engine.outcomes # The number in an outcome that people stay in
+            if not (name.startswith('n_') and name[2:] in graph.states) and not staying and name not in graph.transitions and name not in graph.outcomes and name not in graph.exprs:
                 raise Unsupported(f'the data series "{col}" is the result "{name}", which is not a state, a transition, an outcome, or an expression')
-            if name in graph.outcomes and name not in engine.outcomes:
+            if (name in graph.outcomes and name not in engine.outcomes) or (staying and engine.outcomes[name[2:]].stay is None and engine.outcomes[name[2:]].p_leave is None):
                 raise Unsupported(f'the outcome "{name}"')
-            expected = np.asarray(sim.data[col], dtype=float)
-            ok = inside & np.isfinite(expected)
-            npts = len(sim_t)
-            if res.summarize_by == 'sum':
-                spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
-                starts = np.append(data_t[0] - spacing, data_t[:-1])
-                W = np.array([((sim_t > lo + eps) & (sim_t <= hi + eps)).astype(float) for lo,hi in zip(starts, data_t)])
-            else:
-                W = np.array([np.interp(data_t, sim_t, row) for row in np.eye(npts)]).T
-            self.series.append(sc.objdict(col=col, name=name, W=W[ok], expected=expected[ok], lik=liks[col], weight=self.weights.get(col, 1.0)))
+            W, expected, rows = lined[col]
+            self.series.append(sc.objdict(col=col, j=j, name=name, keep=keep, W=W, expected=expected, lik=liks[col], weight=ss.calibration.series_weight(self.weights, col)))
         return
 
-    def outcomes(self, ctx, new, npts):
+    def outcomes(self, engine, ctx, new, npts):
         """ The outcomes, as `ss.Compartmental.derived_outcomes()` works them out """
         jnp = jax().numpy
-        engine = self.engine
         out = {}
         for name,info in engine.outcomes.items():
-            if info.stay is not None or info.p_leave is not None:
-                raise Unsupported(f'the outcome "{name}", which people stay in')
             amount = 0.0
             for key,weight in info.sources:
                 flow = new[key] if key in new else out[key]
@@ -833,6 +992,12 @@ class Density:
                 amount = amount + flow*weight
             kernel = info.kernel
             now = amount*kernel[0] if len(kernel) == 1 else jnp.convolve(amount, jnp.asarray(kernel))[:npts]
+            if info.stay is not None: # Each arrival leaves after a stay drawn for it
+                leaving = jnp.convolve(now, jnp.asarray(info.stay))[:npts]
+                out[f'n_{name}'] = jnp.cumsum(now - leaving)
+            elif info.p_leave is not None: # A share leaves at each step: the arrivals of each step, decaying since
+                decay = (1 - np.asarray(info.p_leave, dtype=float))**np.arange(npts)
+                out[f'n_{name}'] = jnp.convolve(now, jnp.asarray(decay))[:npts]
             if info.every is not None: # Totaled over each reporting period
                 ends = np.arange(info.every, npts, info.every)
                 totals = jnp.diff(jnp.cumsum(now)[ends], prepend=0.0)
@@ -841,26 +1006,30 @@ class Density:
         return out
 
     def results(self, x, stocks, flows):
-        """ The results that have data, from the run """
-        engine = self.engine
-        graph = engine.graph
-        stocks = stocks.sum(axis=-1) @ self.member.T # Steps by states
-        flows = flows.sum(axis=-1)
-        n = {name:stocks[:, s] for s,name in enumerate(graph.states)}
-        new = {name:flows[:, ind] for name,ind in engine.tr_index.items()}
-        ctx = Context(self, engine, x, n=n)
-        outcomes = self.outcomes(ctx, new, stocks.shape[0]) if any(s.name in graph.outcomes for s in self.series) else {}
+        """ The results that have data, from the run of each engine: a dict by data column """
         out = {}
-        for s in self.series:
-            name = s.name
-            if name.startswith('n_') and name[2:] in n:
-                out[name] = n[name[2:]]
-            elif name in new:
-                out[name] = new[name]
-            elif name in outcomes:
-                out[name] = outcomes[name]
-            else:
-                out[name] = ss.transitions.evaluate(graph.exprs[name], ctx)
+        for j,engine in enumerate(self.engines):
+            graph = engine.graph
+            for keep in {None if s.keep is None else tuple(s.keep) for s in self.series if s.j == j}: # Everyone, or the groups of each stratum with data
+                series = [s for s in self.series if s.j == j and (None if s.keep is None else tuple(s.keep)) == keep]
+                weight = 1.0 if keep is None else np.array(keep)
+                counts = (stocks[j]*weight).sum(axis=-1) @ self.member[j].T # Steps by states
+                totals = (flows[j]*weight).sum(axis=-1)
+                n = {name:counts[:, s] for s,name in enumerate(graph.states)}
+                new = {name:totals[:, ind] for name,ind in engine.tr_index.items()}
+                ctx = Context(self, engine, x, n=n)
+                outcomes = self.outcomes(engine, ctx, new, counts.shape[0]) if any(s.name in graph.outcomes or s.name[2:] in graph.outcomes for s in series) else {}
+                for s in series:
+                    name = s.name
+                    if name.startswith('n_') and name[2:] in n:
+                        val = n[name[2:]]
+                    elif name in new:
+                        val = new[name]
+                    elif name in outcomes:
+                        val = outcomes[name]
+                    else:
+                        val = ss.transitions.evaluate(graph.exprs[name], ctx)
+                    out[s.col] = val
         return out
 
     def loglik(self, dist, observed, model, x):
@@ -918,12 +1087,20 @@ class Density:
 
     def __call__(self, x):
         """ The log of the posterior density at some parameter values (a JAX array), up to a constant """
-        X = self.numbers(x)
-        y_end, stocks, flows, n = self.run.function(clamp=True)(X)
+        Xs = self.numbers(x)
+        stocks = [None]*len(self.engines)
+        flows = [None]*len(self.engines)
+        for unit,run in zip(self.units, self.runs):
+            if len(unit) == 1:
+                y_end, stocks[unit[0]], flows[unit[0]], n = run.function(clamp=True)(Xs[unit[0]])
+            else:
+                y_end, unit_stocks, unit_flows, n = run.function(clamp=True)(tuple(Xs[j] for j in unit))
+                for k,j in enumerate(unit):
+                    stocks[j], flows[j] = unit_stocks[k], unit_flows[k]
         results = self.results(x, stocks, flows)
         total = 0.0
         for s in self.series:
-            model = jax().numpy.asarray(s.W) @ results[s.name]
+            model = jax().numpy.asarray(s.W) @ results[s.col]
             total = total + s.weight*self.loglik(s.lik, s.expected, model, x).sum()
         for i in range(len(self.fitted)):
             total = total + self.logprior(i, x[i])

@@ -1468,6 +1468,8 @@ class Sim(ss.Base):
         elif isinstance(data, (str, os.PathLike)):
             data = ss.data(data).load(self)
         self.data = ss.validate_sim_data(data)
+        if self.data is not None and getattr(self, 'strats', None):
+            self.data = ss.data.widen(self, self.data)
         if self.data is not None and getattr(self, 'declared', None):
             ss.data.check(self, self.data)
         return
@@ -1630,7 +1632,7 @@ class Sim(ss.Base):
             return 'it runs as agents' if self.solver == 'abm' else 'it has no declared model'
         elif self.loop.index or self.loop.insertions or self.diagnostics or self.verbose >= 1:
             return 'it has inserted functions, diagnostics, or verbose output'
-        names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'} - {mod.name for mod in self.modules if getattr(mod, 'timed', False)}
+        names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'} - {mod.name for mod in self.modules if getattr(mod, 'tabulated', False)}
         others = [mod.name for mod in self.modules if mod.name in names and not isinstance(getattr(mod, 'engine', None), ss.Compartmental)]
         if others:
             return f'{sc.strjoin(others)} {"has" if len(others) == 1 else "have"} a step of {"its" if len(others) == 1 else "their"} own (a modifier with where=, when=, or a function as its amount, an intervention, or an analyzer)'
@@ -1649,7 +1651,7 @@ class Sim(ss.Base):
         if self.loop.index or self.loop.insertions or self.diagnostics or self.verbose >= 1 or not getattr(self, 'declared', None) or self.solver == 'abm':
             return False
         names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'}
-        names -= {mod.name for mod in self.modules if getattr(mod, 'timed', False)} # A modifier that depends only on time is tabulated by the engines: see ss.Compartmental.tables()
+        names -= {mod.name for mod in self.modules if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.Compartmental.tables()
         mods = [mod for mod in self.modules if mod.name in names]
         return len(mods) == len(names) and all(isinstance(getattr(mod, 'engine', None), ss.Compartmental) and mod.engine.kernel_only() for mod in mods)
 
@@ -1717,10 +1719,14 @@ class Sim(ss.Base):
         self.complete = False
         self.results_ready = False
         self.t.ti = 0
+        for crossing in self.crossings: # So no engine takes the people over from a run that has ended
+            crossing.reset()
         for mod in self.declared:
             mod.t.ti = 0
             mod.finalized = False
             mod.engine.restart()
+        for crossing in self.crossings: # As in init()
+            crossing.init()
         return self
 
     def finalize(self):

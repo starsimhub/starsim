@@ -1201,15 +1201,63 @@ class data:
                 raise KeyError(errormsg)
             df = df.rename(columns={col:name})
         if sim is not None and self.ignore_extra:
-            keep = [col for col in df.columns if col in self.time_cols or self.match(sim, col) is not None]
+            dims = [strat.name for strat in getattr(sim, 'strats', [])] # Columns that say which stratum a row is for
+            keep = [col for col in df.columns if col in self.time_cols or col in dims or self.match(sim, col) is not None]
             df = df[keep]
         return df
 
     time_cols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year']
 
     @staticmethod
+    def widen(sim, df):
+        """
+        Data in long form, with columns that say which stratum each row is for (named after dimensions of the sim, e.g. `age`), as one column for each result and stratum, e.g. `cases[age=0-15]`
+
+        A level is given by its label (or its position).
+        """
+        dims = [strat.name for strat in getattr(sim, 'strats', []) if strat.name in df.columns]
+        if not dims:
+            return df
+        parts = []
+        for key,group in df.groupby(dims, sort=False):
+            tag = ', '.join(f'{dim}={level}' for dim,level in zip(dims, key if isinstance(key, tuple) else [key]))
+            parts.append(group.drop(columns=dims).rename(columns=lambda col: f'{col}[{tag}]'))
+        return sc.dataframe(pd.concat(parts, axis=1))
+
+    @staticmethod
+    def parse(col):
+        """ A column's result and stratum: "cases[age=0-15]" gives "cases" and {'age': '0-15'} """
+        name, _, rest = col.partition('[')
+        dims = {}
+        for item in rest.rstrip(']').split(', ') if rest else []:
+            dim, _, level = item.partition('=')
+            dims[dim] = level
+        return name, dims
+
+    @staticmethod
+    def levels(sim, dims):
+        """ The levels of a stratum as `ss.Result.select()` takes them: by label, or by position if no label matches """
+        out = {}
+        for dim,level in dims.items():
+            strat = sim.strats[sim.dim_index(dim)]
+            labels = [str(label) for label in strat.labels]
+            out[dim] = strat.labels[labels.index(level)] if level in labels else int(level)
+        return out
+
+    @staticmethod
     def match(sim, col):
-        """ Find the result that a data column corresponds to: "cases", or "sir.cases" if the name is used by more than one module """
+        """ Find the result that a data column corresponds to: "cases", or "sir.cases" if the name is used by more than one module, or the sum over some groups, "cases[age=0-15]" """
+        col, dims = data.parse(col)
+        res = data.match_name(sim, col)
+        if res is not None and dims:
+            if getattr(res, 'strata', None) is None:
+                return None
+            res = res.select(**data.levels(sim, dims))
+        return res
+
+    @staticmethod
+    def match_name(sim, col):
+        """ The result a column corresponds to, by name; see `match()` """
         modname, _, name = col.replace('_', '.', 1).rpartition('.') if '.' not in col and col.split('_')[0] in sim.results else col.rpartition('.')
         matches = []
         for mod in sim.modules:
@@ -1224,6 +1272,15 @@ class data:
         """ Check that every data column matches a result, and that the data overlaps the simulated period """
         options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
         for col in df.columns:
+            name, dims = data.parse(col)
+            base = data.match_name(sim, name)
+            if dims and base is not None:
+                for dim,level in dims.items():
+                    strat = sim.strats[sim.dim_index(dim)]
+                    if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
+                        ss.error('E705', f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
+                if getattr(base, 'strata', None) is None:
+                    ss.error('E705', f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
             if data.match(sim, col) is None:
                 ss.error('E705', f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
                                  f"     Rename it with ss.data(..., aliases=dict(result='{col}')), or drop it with ss.data(..., ignore_extra=True).")
@@ -1240,7 +1297,8 @@ def data_times(sim, df):
     """ The times of the data, on the sim's own time axis (the result timevec as numbers) """
     timevec = sim.t.timevec
     index = df.index
-    if sim.t.is_absolute:
+    dated = isinstance(index, pd.DatetimeIndex) or (len(index) and isinstance(index[0], ss.date))
+    if sim.t.is_absolute or (dated and len(timevec) and isinstance(timevec[0], ss.date)): # A sim that starts in a year has dates, although its time is not absolute
         sim_t = np.asarray(sim.t.yearvec, dtype=float)
         data_t = date_years(tuple(index)).copy()
     else:
@@ -1280,6 +1338,34 @@ def compare(sim, df=None):
     return out
 
 
+def lineup(sim, df=None):
+    """
+    The matrix that lines up each result that has data with its data, as `compare()` does
+
+    Returns a dict of `{column: (W, data values, rows)}`, where the model's values at the data
+    (those that are inside the simulated period and not missing, which are at these rows of the
+    data) are W @ the result.
+    """
+    df = sim.data if df is None else df
+    sim_t, data_t = data_times(sim, df)
+    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9
+    inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
+    npts = len(sim_t)
+    out = sc.objdict()
+    for col in df.columns:
+        res = data.match(sim, col)
+        expected = np.asarray(df[col], dtype=float)
+        ok = inside & np.isfinite(expected)
+        if res.summarize_by == 'sum':
+            spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
+            starts = np.append(data_t[0] - spacing, data_t[:-1])
+            W = np.array([((sim_t > lo + eps) & (sim_t <= hi + eps)).astype(float) for lo,hi in zip(starts, data_t)])
+        else:
+            W = np.array([np.interp(data_t, sim_t, row) for row in np.eye(npts)]).T
+        out[col] = (W[ok], expected[ok], np.flatnonzero(ok))
+    return out
+
+
 def mismatch(sim, df=None, weights=None, gof=None):
     """
     The goodness of fit between a sim and its data (smaller is better)
@@ -1301,10 +1387,16 @@ def mismatch(sim, df=None, weights=None, gof=None):
         scale = np.abs(expected).mean() or np.ptp(expected) or 1.0
         diff = model - expected
         value = np.sqrt(np.mean(diff**2))/scale if gof == 'rmse' else np.mean(np.abs(diff))/scale
-        weight = (weights or {}).get(col, 1.0)
+        weight = series_weight(weights, col)
         total += weight*value
         wsum += weight
     return total/wsum if wsum else np.nan
+
+
+def series_weight(weights, col):
+    """ The weight of a data series: given for its column, or for its result (which applies to every stratum of it) """
+    weights = weights or {}
+    return weights.get(col, weights.get(data.parse(col)[0], 1.0))
 
 
 def likelihoods(sim, df=None, likelihood=None):
@@ -1312,11 +1404,12 @@ def likelihoods(sim, df=None, likelihood=None):
     df = sim.data if df is None else df
     out = sc.objdict()
     for col in df.columns:
-        res = data.match(sim, col)
-        given = (likelihood or {}).get(col, (likelihood or {}).get(res.name))
+        name = data.parse(col)[0] # A stratum of a result has the likelihood of the result
+        res = data.match_name(sim, name)
+        given = (likelihood or {}).get(col, (likelihood or {}).get(name, (likelihood or {}).get(res.name)))
         if given is None:
             for mod in sim.declared:
-                if mod.name == res.module and res.name in mod.graph.outcomes:
+                if mod.results.get(res.name) is res and res.name in mod.graph.outcomes: # By the result itself, since its module is a label
                     given = mod.graph.outcomes[res.name].likelihood
         out[col] = given
     return out
@@ -1363,7 +1456,7 @@ def loglik(sim, df=None, likelihood=None, weights=None, by_series=False):
         if liks[col] is None:
             errormsg = f'The data series "{col}" has no likelihood; declare one on its outcome (ss.outcome(..., likelihood=ss.poisson())) or pass likelihood=dict({col}=...)'
             raise ValueError(errormsg)
-        out[col] = (weights or {}).get(col, 1.0)*logpdf(liks[col], expected, model).sum()
+        out[col] = series_weight(weights, col)*logpdf(liks[col], expected, model).sum()
     return out if by_series else float(sum(out.values()))
 
 
@@ -1380,6 +1473,237 @@ def logprior(par, x):
         errormsg = f'The prior of "{par.name}" ({type(prior).__name__}) has no density to use; use e.g. ss.normal(), ss.lognorm_ex(), ss.gamma(), ss.beta_dist(), or ss.uniform()'
         raise TypeError(errormsg)
     return frozen.logpdf(x)
+
+
+class ParticleFilter:
+    """
+    An estimate of the likelihood of a stochastic sim's data, from a bootstrap particle filter (see `ss.fit()` with `method='pmcmc'`)
+
+    Many runs of the sim (the particles) go forward together. At each data point, each is
+    weighted by the likelihood of the data given its results, and when the weights become
+    uneven, the runs are drawn again in proportion to them, so that runs that have strayed
+    from the data are dropped and those that follow it are copied. The product over the data
+    of the mean weight is an unbiased estimate of the likelihood (Andrieu, Doucet & Holenstein 2010),
+    which is what particle MCMC needs.
+
+    Each declared disease is filtered on its own, since the diseases of a sim that the kernels run
+    whole do not affect each other. An outcome is compared with the data as its expected number
+    (rather than drawn, as a run of the sim draws it), as the likelihood would compare it.
+
+    Args:
+        sim (`ss.Sim`): the sim, initialized; it is restarted with each set of values before the filter is called
+        likelihood (dict): the likelihood of each data series, if not declared on its outcome
+        weights (dict): a multiplier on each series' log-likelihood (default 1)
+    """
+    def __init__(self, sim, likelihood=None, weights=None):
+        liks = likelihoods(sim, likelihood=likelihood)
+        missing = [col for col,lik in liks.items() if lik is None]
+        why = self.reason(sim) or (f'the data series {sc.strjoin(missing)} have no likelihood' if missing else None)
+        if why:
+            errormsg = f'The particle filter cannot run this sim, since {why}; use method="optuna" instead'
+            raise ValueError(errormsg)
+        self.sim = sim
+        lined = lineup(sim)
+        mods = list(sim.declared)
+        self.series = []
+        for col in sim.data.columns:
+            base, dims = data.parse(col)
+            res = data.match_name(sim, base)
+            j = [j for j,mod in enumerate(mods) if mod.results.get(res.name) is res][0]
+            engine = mods[j].engine
+            keep = None
+            if dims: # The groups of a stratum
+                keep = np.ones(sim.n_groups)
+                for dim,level in data.levels(sim, dims).items():
+                    d = sim.dim_index(dim)
+                    keep = keep*(sim.group_coords[:, d] == sim.strats[d].index(level))
+            W, expected, rows = lined[col]
+            spans = [(np.flatnonzero(w).min(initial=0), np.flatnonzero(w).max(initial=0) + 1) for w in W] # The steps that each data point is worked out from
+            self.series.append(sc.objdict(col=col, j=j, name=res.name, read=self.reader(engine, res.name), keep=keep, W=W, spans=spans, expected=expected, rows=rows,
+                                          lik=liks[col], weight=series_weight(weights, col)))
+        self.engines = {j:mods[j].engine for j in sorted({s.j for s in self.series})}
+        return
+
+    @staticmethod
+    def reason(sim):
+        """ Why the particle filter cannot run a sim (apart from any data series without a likelihood), if it cannot """
+        if sim.solver not in ['sde', 'binomial', 'tau', 'gillespie']:
+            return f'it has solver="{sim.solver}", not a stochastic compartmental one'
+        elif not sim.kernel_only():
+            return f'it is not run in one call to the kernels ({sim.kernel_reason()})'
+        elif sim.data is None:
+            return 'it has no data'
+        for col in sim.data.columns:
+            base, dims = data.parse(col)
+            res = data.match_name(sim, base)
+            mods = [mod for mod in sim.declared if mod.results.get(res.name) is res]
+            if not mods:
+                return f'the data series "{col}" is not a result of a declared disease'
+            if dims and ParticleFilter.reader(mods[0].engine, res.name) is None:
+                return f'the data series "{col}" is a stratum of "{res.name}", which is not a state or a transition'
+        return None
+
+    @staticmethod
+    def reader(engine, name):
+        """ Where a result is in the stocks or flows of a run, if it is read straight from them: ('stocks' or 'flows', indices to sum) """
+        graph = engine.graph
+        if name.startswith('n_') and name[2:] in graph.states:
+            return 'stocks', [list(graph.states).index(name[2:])]
+        flows = engine.tr_index | engine.transfer_index
+        if name in flows:
+            return 'flows', [flows[name]]
+        if name == 'new_infections' and graph.transmissions:
+            return 'flows', [engine.tr_index[tr.name] for tr in graph.transmissions]
+        return None
+
+    def __call__(self, n_particles=100, seed=None):
+        """ The estimate of the log-likelihood, for the sim as it was last restarted """
+        rng = np.random.default_rng(seed)
+        return sum(self.filter(j, engine, n_particles, rng) for j,engine in self.engines.items())
+
+    def filter(self, j, engine, n, rng):
+        """ The estimate of the log-likelihood of the data of one disease """
+        series = [s for s in self.series if s.j == j]
+        (y0, prog, dt, npts, solver, n_sub), tables = engine.run_args()
+        states = list(engine.graph.states)
+        state_of = np.array([states.index(comp.state.name) for comp in engine.comps])
+        n_flows = prog.n_trans + len(prog.mov_mat)
+        by_group = any(s.keep is not None for s in series)
+        nk = engine.n_groups if by_group else 1
+        stocks = np.zeros((n, npts, len(states), nk))
+        flows = np.zeros((n, npts, n_flows, nk))
+        for c,state in enumerate(state_of):
+            stocks[:, 0, state] += y0[c] if by_group else y0[c].sum()
+        ys = np.ascontiguousarray(np.repeat(y0[None], n, axis=0))
+
+        # The data points in order, with the last step each needs and the first step that any later one needs
+        points = sc.ddict(list)
+        for s in series:
+            for i,row in enumerate(s.rows):
+                points[row].append((s, i))
+        order = sorted(points)
+        last = np.maximum.accumulate([max(s.spans[i][1] - 1 for s,i in points[row]) for row in order])
+        first = [min(s.spans[i][0] if s.read is not None else 0 for s,i in points[row]) for row in order]
+        needed = np.append(np.minimum.accumulate(first[::-1])[::-1][1:], npts) # For each point, the earliest step of the runs that the points after it read
+
+        ss.kernels.seed(int(rng.integers(2**31)))
+        logw = np.full(n, -np.log(n)) # The normalized log-weight of each particle
+        total = 0.0
+        done = 0
+        for k,row in enumerate(order):
+            if last[k] > done:
+                ss.kernels.advance(ys, prog, dt, done, last[k], solver, n_sub, *tables, engine.register, state_of, stocks, flows)
+                done = last[k]
+            out = None
+            obs = np.zeros(n)
+            for s,i in points[row]:
+                lo, hi = s.spans[i]
+                if s.read is None: # A result worked out from the others, as a run works it out
+                    if out is None:
+                        out = engine.collect(stocks, flows, expected=True)
+                    vals = out[s.name][:, lo:hi]
+                else:
+                    kind, inds = s.read
+                    arr = (stocks if kind == 'stocks' else flows)[:, lo:hi, inds, :].sum(axis=2)
+                    vals = (arr*s.keep).sum(axis=-1) if s.keep is not None else arr.sum(axis=-1)
+                obs += s.weight*logpdf(s.lik, s.expected[i], vals @ s.W[i, lo:hi])
+            obs = np.where(np.isnan(obs), -np.inf, obs)
+            joint = logw + obs
+            top = joint.max()
+            if not np.isfinite(top): # No run can give this data
+                return -np.inf
+            norm = top + np.log(np.exp(joint - top).sum())
+            total += norm
+            logw = joint - norm
+            weights = np.exp(logw)
+            if 1/(weights**2).sum() < n/2 and k < len(order) - 1: # Too uneven: draw the runs again (systematically), and keep the steps that are still needed
+                cum = np.cumsum(weights)
+                picks = np.minimum(np.searchsorted(cum, (rng.random() + np.arange(n))/n*cum[-1]), n - 1)
+                ys = ys[picks]
+                lo = needed[k]
+                if lo <= done:
+                    stocks[:, lo:done+1] = stocks[picks, lo:done+1]
+                    flows[:, lo:done+1] = flows[picks, lo:done+1]
+                logw = np.full(n, -np.log(n))
+        engine.cache.clear()
+        return total
+
+
+def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, seed=None, parallel=True, verbose=True):
+    """
+    Sample from a posterior by particle marginal Metropolis-Hastings: a random-walk Metropolis sampler on a log-density that is estimated by a particle filter
+
+    Since the estimate of the likelihood is unbiased, the chains sample from the exact
+    posterior (Andrieu, Doucet & Holenstein 2010), however noisy it is; more noise only
+    makes them move more slowly. In the warm-up, the proposal's covariance is learned from
+    the chain so far (Haario et al. 2001), and its scale is tuned toward accepting 15% of
+    proposals (about the best when the estimate is noisy; Sherlock et al. 2015). In the first
+    half of the warm-up, the estimate where the chain is is made again at each step, so that
+    a chain far from the posterior, where the estimate is noisiest, cannot be held by a lucky one.
+
+    Args:
+        logpost (func): called with a point (an array, on an unbounded scale), a random number generator (`np.random.Generator`) to draw any seeds from, and the number of particles; returns an estimate of the log of the posterior density there
+        z0 (array): the point to start each chain from
+        draws (int): the draws to keep from each chain
+        warmup (int): the draws for the warm-up of each chain, which are not kept
+        chains (int): the number of chains
+        particles (int): the number of particles; by default, each chain uses 100 for the first half of its warm-up, and then enough that the variance of the estimate at the middle of where it has been lately is about 1 (Doucet et al. 2015)
+        seed (int): the random seed
+        parallel (bool): whether to run the chains in parallel processes
+        verbose (bool): whether to say what is being done
+
+    Returns:
+        The draws (chains × draws × values), the estimate of the log-density at each (chains × draws), the share of proposals accepted after the warm-up in each chain, and the number of particles that each chain used
+    """
+    z0 = np.asarray(z0, dtype=float)
+    d = len(z0)
+
+    def one_chain(chain_seed):
+        rng = np.random.default_rng(chain_seed)
+        n = particles or 100
+        out = np.zeros((draws, d))
+        logdens = np.zeros(draws)
+        accepted = 0.0
+        z = z0.copy()
+        lp = logpost(z, rng, n)
+        log_scale = np.log(2.38**2/d)
+        cov = np.eye(d)*0.01
+        history = []
+        for i in range(warmup + draws):
+            if i < warmup//2: # Early in the warm-up, the estimate where the chain is is made again each time, so a lucky one cannot hold it (the draws are not kept)
+                lp = logpost(z, rng, n)
+            elif particles is None and i == warmup//2: # Near the posterior by now, so the number of particles it needs there (at the middle of where the chain has been lately) can be found
+                center = np.mean(history[len(history)//2:], axis=0)
+                spread = np.var([logpost(center, rng, n) for k in range(10)])
+                n = int(np.clip(np.ceil(n*spread), 50, 5000)) if np.isfinite(spread) else 5000
+                lp = logpost(z, rng, n)
+            prop = rng.multivariate_normal(z, np.exp(log_scale)*cov)
+            lp_prop = logpost(prop, rng, n)
+            accept = np.log(rng.random()) < lp_prop - lp
+            if accept:
+                z, lp = prop, lp_prop
+            if i < warmup: # Learn the shape of the posterior, and tune the scale
+                history.append(z)
+                log_scale += (float(accept) - 0.15)/np.sqrt(i + 1)
+                if i >= 50 and i % 10 == 0:
+                    cov = np.cov(np.array(history[len(history)//2:]).T).reshape(d, d) + 1e-8*np.eye(d)
+            else:
+                out[i - warmup] = z
+                logdens[i - warmup] = lp
+                accepted += accept/draws
+        return out, logdens, accepted, n
+
+    T = sc.timer()
+    seeds = np.random.default_rng(seed).integers(2**31, size=chains)
+    if parallel and chains > 1:
+        results = sc.parallelize(one_chain, iterarg=list(seeds))
+    else:
+        results = [one_chain(chain_seed) for chain_seed in seeds]
+    out, logdens, accepted, n = [np.array(v) for v in zip(*results)]
+    if verbose:
+        print(f'Particle MCMC: {chains} chain{"s" if chains != 1 else ""}{" in parallel" if parallel and chains > 1 else ""}, each of {warmup} warm-up draws and then {draws} draws, '
+              f'in {T.tt(output=True):.1f} s; particles: {sc.strjoin(n)}; proposals accepted: {sc.strjoin([f"{a:.0%}" for a in accepted])}')
+    return out, logdens, accepted, n
 
 
 def nuts(logpost, z0, draws=500, warmup=500, chains=4, seed=None, verbose=True):
@@ -1608,13 +1932,15 @@ class Fit(sc.prettyobj):
         mismatch (float): the goodness of fit of the calibrated sim, or its negative log-likelihood if the fit used likelihoods
         measure (str): what `mismatch` measures
         trials (df): every evaluation
-        samples (df): with `method='nuts'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
+        samples (df): with `method='nuts'` or `'pmcmc'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
         divergences (int): with `method='nuts'`, the number of draws that followed a divergent trajectory (which suggests the sampler missed part of the posterior)
-        band (dict): with `method='nuts'`, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from the posterior
+        acceptance (array): with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up
+        band (dict): with `method='nuts'` or `'pmcmc'`, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from the posterior (with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
     """
-    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure='goodness of fit', samples=None, divergences=None, band=None):
+    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure='goodness of fit', samples=None, divergences=None, acceptance=None, band=None):
         self.samples = samples
         self.divergences = divergences
+        self.acceptance = acceptance
         self.band = band
         self.measure = measure
         self.sim = sim
@@ -1629,12 +1955,17 @@ class Fit(sc.prettyobj):
 
     def summarize(self):
         """ Print the estimates and the goodness of fit before and after """
-        print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
+        if self.samples is None:
+            print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
+        else: # The evaluations in JAX are not recorded
+            print(f'Fitted {len(self.pars)} parameter(s) by {self.method}')
         print(self.table.to_string(index=False))
         print(f'{self.measure.capitalize()}: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after')
         if self.samples is not None:
             n_chains = self.samples.chain.nunique()
             print(f'Posterior: {len(self.samples):,} draws from {n_chains} chain{"s" if n_chains != 1 else ""} (best: the draw with the highest posterior density; median, lower, and upper: the median and 95% interval of the posterior)')
+            if self.acceptance is not None:
+                print(f'Proposals accepted by each chain: {sc.strjoin([f"{a:.0%}" for a in self.acceptance])}')
             unsettled = self.table.par[self.table.rhat > 1.01].tolist()
             if unsettled or self.divergences:
                 ss.warn(f'W1304 NotConverged: {f"the chains disagree about {sc.strjoin(unsettled)} (R-hat above 1.01)" if unsettled else ""}{"; " if unsettled and self.divergences else ""}{f"{self.divergences} draws diverged" if self.divergences else ""}; '
@@ -1667,6 +1998,77 @@ class Fit(sc.prettyobj):
         return ss.return_fig(fig)
 
 
+def product_pairs(sim, names):
+    """
+    The pairs of fitted parameters that appear in the model only multiplied together, or only one divided by the other, so that data can determine only their product (or ratio)
+
+    Args:
+        sim (`ss.Sim`): the sim, initialized
+        names (list): the names of the fitted parameters of the model ("beta", or "sir.beta")
+
+    Returns a list of (name, name, 'product' or 'ratio').
+    """
+    found = {}
+    for name in names:
+        modname, _, key = name.rpartition('.')
+        found[name] = [mod.graph.pars[key] for mod in sim.declared if key in mod.graph.pars and modname in ['', mod.name]]
+    uses = [] # Every expression that a parameter can appear in
+    for mod in sim.declared:
+        graph = mod.graph
+        for tr in graph.transitions.values():
+            uses += [tr.rate, tr.dur] + sc.tolist(tr.p)
+        for tf in graph.transfers.values():
+            uses += [tf.rate, tf.dur]
+        for oc in graph.outcomes.values():
+            uses += [oc.source, oc.delay, oc.duration]
+        uses += list(graph.exprs.values()) + [state.init for state in graph.states.values()]
+    uses += [m.amount for mods in sim.modifiers.values() for m in mods]
+    uses = [use for use in uses if isinstance(use, ss.Expr)]
+
+    def signs(expr, sign=1, out=None):
+        """ The parameters that are factors of an expression: +1 for one it is multiplied by, -1 for one it is divided by """
+        out = {} if out is None else out
+        if isinstance(expr, ss.transitions.BinOp) and expr.op in ['*', '/']:
+            signs(expr.a, sign, out)
+            signs(expr.b, sign if expr.op == '*' else -sign, out)
+        elif isinstance(expr, ss.par):
+            out[id(expr)] = out.get(id(expr), 0) + sign
+        return out
+
+    out = []
+    for i,a in enumerate(names):
+        for b in names[i+1:]:
+            relation = None
+            for use in uses:
+                ids = [id(leaf) for leaf in use.leaves]
+                n_a = sum(ids.count(id(p)) for p in found[a])
+                n_b = sum(ids.count(id(p)) for p in found[b])
+                if n_a == 0 and n_b == 0:
+                    continue
+                factors = signs(use)
+                sa = sum(factors.get(id(p), 0) for p in found[a])
+                sb = sum(factors.get(id(p), 0) for p in found[b])
+                if n_a != 1 or n_b != 1 or abs(sa) != 1 or abs(sb) != 1 or relation not in [None, sa*sb]: # Each once, as a factor, the same way everywhere
+                    relation = 0
+                    break
+                relation = sa*sb
+            if relation:
+                out.append((a, b, 'product' if relation > 0 else 'ratio'))
+    return out
+
+
+def correlated_pairs(names, values, threshold):
+    """ The pairs of parameters whose values (one row each, e.g. draws from a posterior) are correlated beyond a threshold: (name, name, r) """
+    out = []
+    if len(names) > 1 and values.shape[1] > 2:
+        r = np.corrcoef(values)
+        for i in range(len(names)):
+            for k in range(i+1, len(names)):
+                if np.isfinite(r[i, k]) and abs(r[i, k]) > threshold:
+                    out.append((names[i], names[k], r[i, k]))
+    return out
+
+
 def default_method(sim, use_lik, posterior=True):
     """
     The fitting method that suits a sim, and why: see `ss.fit()`
@@ -1678,6 +2080,8 @@ def default_method(sim, use_lik, posterior=True):
     """
     no_grad = ss.gradients.reason(sim)
     if sim.solver != 'ode':
+        if posterior and use_lik and ParticleFilter.reason(sim) is None:
+            return 'pmcmc', 'a stochastic compartmental sim whose data series all have a likelihood, so a posterior, from particle MCMC'
         return 'optuna', 'a stochastic sim'
     elif no_grad:
         return 'nelder-mead', f'no gradients, since {no_grad}'
@@ -1702,12 +2106,12 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         weights (dict): the relative weight of each data series (default: equal)
         likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim
-        method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with the chains started from the initial values; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
-        scan (int): for the SciPy methods, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from the best of them
+        method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with the chains started from the initial values; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, 'pmcmc' (particle MCMC, the default for a stochastic compartmental sim whose data series all have a likelihood: a posterior, from a random-walk Metropolis sampler with the likelihood estimated by a particle filter; see `ss.ParticleFilter`), or 'optuna' (the default for other stochastic sims, including agent-based ones: a best fit, not a posterior)
+        scan (int): for the SciPy methods and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search (or the chains) starts from the best of them
         n_runs (int): runs per evaluation, for a stochastic sim (default 1)
         rand_seed (int): the random seed for the fitting method
         verbose (bool): whether to print progress
-        kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, or `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults)
+        kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.calibration.pmmh()`), or `parallel=False` to run its chains one after another
 
     Returns:
         An `ss.Fit` object
@@ -1762,6 +2166,7 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
     if not fitted:
         ss.error('E1301', 'calibrate() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
     names = list(fitted.keys())
+    products = product_pairs(probe, names[:n_model]) # Parameters that the data cannot tell apart, from the model
     lows = np.array([p.bounds[0] for p in fitted.values()], dtype=float)
     highs = np.array([p.bounds[1] for p in fitted.values()], dtype=float)
     x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)
@@ -1791,12 +2196,16 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         method, why = default_method(runner, use_lik)
         if verbose:
             print(f'Fitting by {method} ({why}; override with method=)')
-    sample = method == 'nuts'
-    if sample: # The posterior is sampled from around the maximum likelihood, which is found first
-        if not use_lik or no_grad:
-            why = 'not every data series has a likelihood' if not use_lik else f'it has no gradients, since {no_grad}'
-            ss.error('E1303', f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
-        sampling = {key:kwargs.pop(key) for key in ['draws', 'warmup', 'chains'] if key in kwargs}
+    sample = method in ['nuts', 'pmcmc']
+    if method == 'nuts' and (not use_lik or no_grad):
+        why = 'not every data series has a likelihood' if not use_lik else f'it has no gradients, since {no_grad}'
+        ss.error('E1303', f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
+    elif method == 'pmcmc' and (not use_lik or ParticleFilter.reason(runner)):
+        why = 'not every data series has a likelihood' if not use_lik else ParticleFilter.reason(runner)
+        ss.error('E1303', f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, but {why}.')
+    if sample:
+        sampling = {key:kwargs.pop(key) for key in ['draws', 'warmup', 'chains'] + (['parallel'] if method == 'pmcmc' else []) if key in kwargs}
+        n_particles = kwargs.pop('particles', None)
     use_grad = method.lower() in ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] and not no_grad
 
     def run(x, seed=None, fresh=False):
@@ -1826,8 +2235,8 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
 
     mismatch_before = objective(x0)
     start = x0
-    scan = kwargs.pop('scan', None if method in ['optuna', 'nuts'] else 10*len(names))
-    if scan: # The fit can have several local optima, so start from the best of a spread of points
+    scan = kwargs.pop('scan', None if method in ['optuna', 'nuts', 'pmcmc'] else 10*len(names))
+    if scan and method != 'pmcmc': # The fit can have several local optima, so start from the best of a spread of points
         sampler = sps.qmc.LatinHypercube(d=len(names), seed=rand_seed if rand_seed is not None else 1)
         points = decode(encode(lows) + sampler.random(scan)*(encode(highs) - encode(lows)))
         values = [objective(x) for x in points]
@@ -1862,9 +2271,8 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
             result = spo.minimize(lambda z: objective(decode(z)), encode(start), method=method, bounds=bounds, options=options)
         best = decode(result.x)
 
-    samples = divergences = band = None
+    samples = divergences = acceptance = band = None
     if sample: # On a scale on which every value is allowed: the logit of each value's place between its bounds (of its log, for one searched on a log scale)
-        method = 'nuts'
         base_lows = np.where(logs, np.log(np.where(logs, lows, 1.0)), lows)
         span = np.where(logs, np.log(np.where(logs, highs, 1.0)), highs) - base_lows
 
@@ -1880,72 +2288,113 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
             share = share_of(x)
             return np.log(share/(1 - share))
 
-        def logpost(z):
-            x, share = to_x(z)
-            dxdz = span*share*(1 - share)*np.where(logs, x, 1.0)
-            value, derivs = ss.gradients.gradient(runner, lambda x: runner.restart(pars=to_pars(x)), x, measure)
-            hs = 1e-6*np.maximum(np.abs(x), 1e-6)
-            prior = sum(logprior(p, val) for p,val in zip(fitted.values(), x))
-            dprior = np.array([(logprior(p, val + h) - logprior(p, val - h))/(2*h) if p.prior is not None else 0.0 for p,val,h in zip(fitted.values(), x, hs)])
-            dlogjac = 1 - 2*share + np.where(logs, span*share*(1 - share), 0.0) # The derivative of log(dx/dz)
-            return -float(value) + prior + np.log(dxdz).sum(), (dprior - np.array(derivs, dtype=float))*dxdz + dlogjac
+        if method == 'pmcmc': # A random walk, on a likelihood estimated by a particle filter
+            filt = ParticleFilter(runner.restart(), likelihood=likelihood, weights=weights)
+            rng = np.random.default_rng(rand_seed)
 
-        def exact(z): # The log of the posterior density at a point, from a run of the sim
-            x, share = to_x(z)
-            return -measure(run(x)) + sum(logprior(p, val) for p,val in zip(fitted.values(), x)) + np.log(span*share*(1 - share)*np.where(logs, x, 1.0)).sum()
+            def logpost_pf(z, rng, n):
+                x, share = to_x(z)
+                runner.restart(pars=to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
+                return filt(n_particles=n, seed=int(rng.integers(2**31))) + sum(logprior(p, val) for p,val in zip(fitted.values(), x)) + np.log(span*share*(1 - share)*np.where(logs, x, 1.0)).sum()
 
-        try: # The log-density as one function in JAX, if the model allows; otherwise each gradient is worked out with Python in the loop
-            density = ss.gradients.Density(runner, fitted, x0, lambda x: runner.restart(pars=to_pars(x)), likelihood=likelihood, weights=weights, external=external)
-        except ss.gradients.Unsupported as E:
-            density = None
-            if verbose:
-                print(f'Note: sampling with Python in the loop, which is slower, since the log-density in JAX does not cover {E} yet')
-        if density is not None:
-            jnp = ss.gradients.jax().numpy
-            def logpost_jax(z):
-                share = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
-                pos = base_lows + span*share
-                x = jnp.where(logs, jnp.exp(pos), pos)
-                return density(x) + jnp.log(span*share*(1 - share)*jnp.where(logs, x, 1.0)).sum()
-            zs, logdens, divergent = nuts_jax(logpost_jax, to_z(x0), seed=rand_seed, verbose=verbose, **sampling)
-            flat_z, flat_lp = zs.reshape(-1, len(names)), logdens.reshape(-1)
-            for i in np.linspace(0, len(flat_lp) - 1, 3).astype(int): # The JAX log-density is the one the sim gives, at a few of the draws
-                expected = exact(flat_z[i])
-                if not np.isclose(flat_lp[i], expected, rtol=1e-6, atol=1e-6):
-                    ss.warn(f'The log-density in JAX ({flat_lp[i]:.10g}) differs from the one from the sim ({expected:.10g}) at {dict(zip(names, to_x(flat_z[i])[0]))}, so the posterior is sampled again with Python in the loop')
-                    density = None
-                    break
-        if density is None:
-            zs, logdens, divergent = nuts(logpost, to_z(x0), seed=rand_seed, verbose=verbose, **sampling)
+            starts = [x0] # The chains start from the best of the initial values and a spread of points
+            sampler = sps.qmc.LatinHypercube(d=len(names), seed=rand_seed if rand_seed is not None else 1)
+            starts += list(decode(encode(lows) + sampler.random(scan or 10*len(names))*(encode(highs) - encode(lows))))
+            start = starts[int(np.argmax([logpost_pf(to_z(x), rng, 100) for x in starts]))]
+            zs, logdens, acceptance, n_particles = pmmh(logpost_pf, to_z(start), particles=n_particles, seed=rand_seed, verbose=verbose, **sampling)
+        else: # NUTS
+            def logpost(z):
+                x, share = to_x(z)
+                dxdz = span*share*(1 - share)*np.where(logs, x, 1.0)
+                value, derivs = ss.gradients.gradient(runner, lambda x: runner.restart(pars=to_pars(x)), x, measure)
+                hs = 1e-6*np.maximum(np.abs(x), 1e-6)
+                prior = sum(logprior(p, val) for p,val in zip(fitted.values(), x))
+                dprior = np.array([(logprior(p, val + h) - logprior(p, val - h))/(2*h) if p.prior is not None else 0.0 for p,val,h in zip(fitted.values(), x, hs)])
+                dlogjac = 1 - 2*share + np.where(logs, span*share*(1 - share), 0.0) # The derivative of log(dx/dz)
+                return -float(value) + prior + np.log(dxdz).sum(), (dprior - np.array(derivs, dtype=float))*dxdz + dlogjac
+
+            def exact(z): # The log of the posterior density at a point, from a run of the sim
+                x, share = to_x(z)
+                return -measure(run(x)) + sum(logprior(p, val) for p,val in zip(fitted.values(), x)) + np.log(span*share*(1 - share)*np.where(logs, x, 1.0)).sum()
+
+            try: # The log-density as one function in JAX, if the model allows; otherwise each gradient is worked out with Python in the loop
+                density = ss.gradients.Density(runner, fitted, x0, lambda x: runner.restart(pars=to_pars(x)), likelihood=likelihood, weights=weights, external=external)
+            except ss.gradients.Unsupported as E:
+                density = None
+                if verbose:
+                    print(f'Note: sampling with Python in the loop, which is slower, since the log-density in JAX does not cover {E} yet')
+            if density is not None:
+                jnp = ss.gradients.jax().numpy
+                def logpost_jax(z):
+                    share = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
+                    pos = base_lows + span*share
+                    x = jnp.where(logs, jnp.exp(pos), pos)
+                    return density(x) + jnp.log(span*share*(1 - share)*jnp.where(logs, x, 1.0)).sum()
+                zs, logdens, divergent = nuts_jax(logpost_jax, to_z(x0), seed=rand_seed, verbose=verbose, **sampling)
+                flat_z, flat_lp = zs.reshape(-1, len(names)), logdens.reshape(-1)
+                for i in np.linspace(0, len(flat_lp) - 1, 3).astype(int): # The JAX log-density is the one the sim gives, at a few of the draws
+                    expected = exact(flat_z[i])
+                    if not np.isclose(flat_lp[i], expected, rtol=1e-6, atol=1e-6):
+                        ss.warn(f'The log-density in JAX ({flat_lp[i]:.10g}) differs from the one from the sim ({expected:.10g}) at {dict(zip(names, to_x(flat_z[i])[0]))}, so the posterior is sampled again with Python in the loop')
+                        density = None
+                        break
+            if density is None:
+                zs, logdens, divergent = nuts(logpost, to_z(x0), seed=rand_seed, verbose=verbose, **sampling)
         xs = np.array([[to_x(z)[0] for z in chain] for chain in zs])
         logjac = np.log(span*share_of(xs)*(1 - share_of(xs))*np.where(logs, xs, 1.0)).sum(axis=-1)
         best = xs.reshape(-1, len(names))[np.argmax((logdens - logjac).reshape(-1))] # The draw with the highest posterior density (of the values themselves, not on the sampler's scale)
-        n_chains, n_draws = divergent.shape
+        n_chains, n_draws = zs.shape[:2]
         rhat, n_eff = diagnose(xs)
         samples = pd.DataFrame(xs.reshape(-1, len(names)), columns=names)
         samples.insert(0, 'chain', np.repeat(np.arange(n_chains), n_draws))
         samples.insert(1, 'draw', np.tile(np.arange(n_draws), n_chains))
-        divergences = int(divergent.sum())
+        divergences = int(divergent.sum()) if method == 'nuts' else None
         table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
         table['median'] = np.median(samples[names].values, axis=0)
         table['lower'], table['upper'] = np.percentile(samples[names].values, [2.5, 97.5], axis=0)
         table['rhat'], table['ess'] = rhat, n_eff
         picks = samples[names].values[np.linspace(0, len(samples) - 1, min(100, len(samples))).astype(int)] # Spread evenly over the draws
         values = sc.ddict(list)
-        for x in picks:
-            sim = run(x)
+        for k,x in enumerate(picks):
+            sim = run(x, seed=k + 1 if method == 'pmcmc' else None) # A stochastic run takes a seed of its own, so the band includes chance
             for col in sim.data.columns:
                 values[col].append(np.array(ss.data.match(sim, col).values, dtype=float)) # ss.data, since data is an argument here
         band = {col:np.percentile(vals, [2.5, 97.5], axis=0) for col,vals in values.items()}
 
     else:
         table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
+    unidentifiable = []
+    for a,b,how in products:
+        va, vb = best[names.index(a)], best[names.index(b)]
+        unidentifiable.append(f'"{a}" and "{b}" appear in the model only {"multiplied together" if how == "product" else "one divided by the other"}, so the data can determine only their {how} '
+                              f'({va*vb if how == "product" else va/vb:.3g}), not each of them; fit one and fix the other')
+    known = [{a, b} for a,b,how in products]
+    if sample: # From the fit: parameters almost perfectly correlated over the posterior (of their logs, for those searched on a log scale)
+        draws = np.where(logs[:, None], np.log(np.maximum(samples[names].values.T, 1e-300)), samples[names].values.T)
+        for a,b,r in correlated_pairs(names, draws, 0.95):
+            if {a, b} not in known:
+                unidentifiable.append(f'"{a}" and "{b}" are almost perfectly correlated in the posterior (r = {r:.3f}), so the data determine a combination of them rather than each')
+    elif use_grad and len(names) > 1: # Or parameters that change the fitted results in almost the same way at the best fit
+        def read(sim):
+            parts = [model/max(np.abs(expected).mean(), 1e-12) for expected,model in compare(sim).values()]
+            return np.concatenate(parts)
+        value, derivs = ss.gradients.gradient(runner, lambda x: runner.restart(pars=to_pars(x)), best, read)
+        slopes = np.array([d*x for d,x in zip(derivs, best)]) # Relative to each value, so the scale of a parameter does not matter
+        norms = np.linalg.norm(slopes, axis=1)
+        for i in range(len(names)):
+            for k in range(i+1, len(names)):
+                cos = slopes[i] @ slopes[k]/(norms[i]*norms[k]) if norms[i]*norms[k] > 0 else 0.0
+                if abs(cos) > 0.999 and {names[i], names[k]} not in known:
+                    unidentifiable.append(f'"{names[i]}" and "{names[k]}" change the fitted results in almost the same way at the best fit (r = {cos:.4f}), so the data can hardly tell them apart')
+
     before = run(x0, fresh=True)
     after = run(best, fresh=True) # Last, so a likelihood's own parameters keep their best values
+    for msg in unidentifiable:
+        ss.note(msg, code='W1302', sim=after, verbose=verbose)
     best_pars = sc.objdict(zip(names, [cls(val) if cls is not None else float(val) for val,cls in zip(best, types)]))
     out = Fit(sim=after, before=before, pars=best_pars, table=table, trials=pd.DataFrame(trials), method=method,
               mismatch=measure(after), mismatch_before=mismatch_before, measure='negative log-likelihood' if use_lik else 'goodness of fit',
-              samples=samples, divergences=divergences, band=band)
+              samples=samples, divergences=divergences, acceptance=acceptance, band=band)
     return out
 
 

@@ -162,7 +162,7 @@ from .calibration import (
     Calibration, CalibComponent,
     linear_interp, linear_accum, step_containing,
     BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
-    data, compare, mismatch, loglik, Fit, fit, ModelComparison, compare_models,
+    data, compare, mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models,
 )
 
 t('samples')

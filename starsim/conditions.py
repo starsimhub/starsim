@@ -139,6 +139,32 @@ def state_refs(obj):
     return out
 
 
+def is_static(cond, sim):
+    """ Whether a condition selects the same people in a compartmental run at every step: one on states and stratifications only (not on transitions, other arrays, or a function of the sim) """
+    if cond is None:
+        return True
+    if callable(cond) and not isinstance(cond, Cond):
+        return False
+    cond = as_cond(cond)
+    if not isinstance(cond, Cond):
+        return True
+    op, args = cond.op, cond.args
+    dims = [strat.name for strat in sim.strats]
+    if op == 'dim':
+        return True
+    elif op == 'people':
+        return args[0] in dims
+    elif op == 'state':
+        name = args[1]
+        mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]
+        return any(name in m.graph.states for m in mods) and not any(name in m.graph.transitions for m in mods)
+    elif op == 'array':
+        return False
+    elif op == 'isin':
+        return is_static(args[0], sim)
+    return all(is_static(arg, sim) for arg in args)
+
+
 def evaluate(obj, ctx):
     return obj.eval(ctx) if isinstance(obj, Cond) else obj
 

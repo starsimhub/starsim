@@ -3,6 +3,8 @@ Test the ODE run in JAX: that it matches the kernels, its gradients, gradient-ba
 """
 
 # %% Imports and settings
+import warnings
+import importlib.util
 import pytest
 import numpy as np
 import pandas as pd
@@ -36,7 +38,7 @@ def test_jax_run():
         stepped = [note for note in sims[1].notes if 'integrator="jax" cannot' in note]
         print(f'{key:8s} {diff:0.1e} {"(run by the kernels: " + stepped[0] + ")" if stepped else ""}')
         assert diff < 1e-9, f'{key}: the run in JAX differs from the kernels by {diff}'
-        assert bool(stepped) == (key == 'tb') # The TB model has a transfer, so is stepped by the kernels
+        assert not stepped # Including the TB model, whose transfer has a constant rate
     return sims
 
 
@@ -73,6 +75,25 @@ def test_fit():
 
 
 @sc.timer()
+def test_identifiability():
+    sc.heading('Testing the notes on parameters that the data cannot tell apart')
+    def make(kind='product', data=None):
+        beta = ss.par(0.1, bounds=[0.01, 1], name='beta')
+        c = ss.par(4, bounds=[1, 10], name='c')
+        S, I, R = ss.states(3)
+        rate = beta * c * I if kind == 'product' else (beta + c/40) * I if kind == 'sum' else beta * I
+        sir = ss.Disease(S >> I @ rate, I >> R @ ss.par(ss.days(8), bounds=[2, 20], name='dur'), init=dict(I=0.01), name='sir')
+        return ss.Sim(sir, unit='day', stop=100, data=data, **kw)
+    truth = make().run().results.sir
+    data = pd.DataFrame(dict(n_I=truth.n_I.values[::7]), index=truth.timevec[::7])
+    notes = {kind:make(kind, data=data).calibrate(pars=['beta', 'dur'] + (['c'] if kind != 'plain' else [])).sim.notes for kind in ['product', 'sum', 'plain']}
+    assert any('only multiplied together' in note for note in notes['product']) # From the model
+    assert any('almost the same way' in note for note in notes['sum']) # From the gradients at the best fit
+    assert not notes['plain']
+    return notes
+
+
+@sc.timer()
 def test_posterior():
     sc.heading('Testing a posterior from NUTS')
     pytest.importorskip('blackjax')
@@ -89,6 +110,87 @@ def test_posterior():
     assert fit.band['cases'].shape == (2, len(truth.cases))
     with pytest.raises(ss.CodedError, match='E1303'): # A posterior needs a likelihood
         make_sir(data=data).calibrate(pars=['beta'], method='nuts')
+    return fit
+
+
+def make_coinfection(beta=0.15, data=None, **kwargs):
+    """ Two diseases that modify each other, so whose states are tracked jointly (see ss.Crossing), one with a transfer at a constant rate """
+    beta = ss.par(beta, bounds=[0.05, 0.5], name='beta')
+    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=beta), death=ss.death('I ->', rate=0.05), init_prev=0.05, name='hiv')
+    hiv.stratify(art=[False, True], states=['I'], adjust=dict(death=[1.0, 0.2]), move=ss.transfer(art=True, rate=ss.peryear(0.1)))
+    syph = ss.Disease(infection=ss.transmission('S -> I', beta=1.0), cure=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='syph')
+    coinfection = [
+        ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
+        ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
+    ]
+    return ss.Sim(diseases=[hiv, syph], connectors=coinfection, solver='ode', start=2000, stop=2030, dt=ss.years(0.25), total_pop=20_000, data=data, **kw, **kwargs)
+
+
+@sc.timer()
+def test_crossing():
+    sc.heading('Testing diseases tracked jointly: a whole run, in JAX, restarted, differentiated, and fitted')
+    sim = make_coinfection()
+    sim.init()
+    assert sim.kernel_only() # Modifiers on states, and a transfer at a constant rate, are worked out before the run
+    sim.run()
+    stepped = make_coinfection().run(until=2030) # Step by step
+    jax = make_coinfection(integrator='jax').run()
+    for other in [stepped, jax]:
+        for key in ['hiv', 'syph']:
+            assert np.allclose(other.results[key].n_I, sim.results[key].n_I, rtol=1e-9)
+    assert sim.results.hiv.move[1:].sum() > 0 # The transfer's flow is recorded
+
+    # Restarted with other values, as a fresh sim
+    restarted = make_coinfection().init().restart(pars={'hiv.beta':0.2}).run()
+    assert np.allclose(restarted.results.hiv.n_I, make_coinfection(beta=0.2).run().results.hiv.n_I, rtol=1e-12)
+
+    # The gradient of each disease's results, through the other
+    grad = make_coinfection().gradient(results=['n_I'], pars=['hiv.beta'])
+    step = 1e-6
+    runs = [make_coinfection(beta=0.15 + sign*step).run().results for sign in [1, -1]]
+    for key in ['hiv', 'syph']:
+        fd = (runs[0][key].n_I.values - runs[1][key].n_I.values)/(2*step)
+        assert np.abs(grad['hiv.beta'][key].n_I - fd).max() < 1e-5*np.abs(fd).max()
+
+    # NUTS, with the log-density in JAX
+    if importlib.util.find_spec('blackjax') is not None:
+        truth = make_coinfection(beta=0.2).run().results
+        data = pd.DataFrame({'hiv.n_I':truth.hiv.n_I.values, 'syph.n_I':truth.syph.n_I.values}, index=truth.hiv.timevec)[::8]
+        fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        table = fit.table.set_index('par')
+        assert fit.method == 'nuts'
+        assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
+    return sim
+
+
+@sc.timer()
+def test_posterior_data():
+    sc.heading('Testing a posterior from data by stratum, and from the number in an outcome')
+    pytest.importorskip('blackjax')
+    def make(beta=0.4, data=None):
+        beta = ss.par(beta, bounds=[0.1, 1], name='beta')
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta * I
+        hosp = ss.outcome(0.05 * infection, delay=ss.days(3), duration=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)))
+        sir = ss.Disease(infection, I >> R @ ss.days(8), hosp, init=dict(I=0.01), name='sir')
+        sir.stratify(age=[0, 15, 65])
+        return ss.Sim(sir, unit='day', stop=100, total_pop=1e5, data=data, **kw)
+
+    # Data in long form: a column says which age group each row is for
+    truth = make(beta=0.5).run().results.sir
+    rows = [dict(t=t, age=age, n_I=n, n_hosp=h) for age in ['0-14', '15-64', '65+'] for t,n,h in zip(truth.timevec[::10], truth.n_I.select(age=age).values[::10], truth.n_hosp.select(age=age).values[::10])]
+    sim = make(data=pd.DataFrame(rows)).init()
+    assert 'n_I[age=15-64]' in sim.data.columns
+    with pytest.raises(ss.CodedError, match='E705'): # Not a level of age
+        make(data=pd.DataFrame([dict(t=10, age='0-4', n_I=1)])).init()
+
+    # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
+    with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(n_I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+    assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
+    table = fit.table.set_index('par')
+    assert table.lower.beta < 0.5 < table.upper.beta
     return fit
 
 
@@ -115,7 +217,10 @@ if __name__ == '__main__':
     sims = test_jax_run()
     grad = test_gradient()
     fit = test_fit()
+    ident = test_identifiability()
     post = test_posterior()
+    cross = test_crossing()
+    post_data = test_posterior_data()
     msim = test_parallel_pars()
 
     T.toc()

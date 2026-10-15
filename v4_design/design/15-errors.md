@@ -115,7 +115,7 @@ Every code cited anywhere in this folder is listed here: 54 codes, of which 34 a
 | `E702` | `UnknownOutcomeSource` | error | The source of an `ss.outcome` names nothing in the model |
 | `E703` | `OutcomeCycle` | error | Outcomes chain back to themselves |
 | `E704` | `DataMisaligned` | error | The data lies entirely outside the simulated period. (Data partly outside is used where it overlaps, with a note) |
-| `E705` | `UnknownDataColumn` | error | A data column matches no result. Lists the closest result names and suggests `ss.data(..., aliases=dict(result='Column'))` to rename it or `ignore_extra=True` to drop it |
+| `E705` | `UnknownDataColumn` | error | A data column matches no result. Lists the closest result names and suggests `ss.data(..., aliases=dict(result='Column'))` to rename it or `ignore_extra=True` to drop it. Also data by stratum for a level the dimension does not have, or for a result that is not kept by group |
 
 ### 8xx and 12xx: solvers
 
@@ -149,9 +149,9 @@ Each of the first four notes names the quantity involved and a solver that would
 |---|---|---|---|
 | `E1301` | `NothingToFit` | error | `calibrate()` is called and no parameter has `bounds` |
 | `E1302` | `NoData` | error | `calibrate()` is called and no result has data |
-| `E1303` | `NoPosterior` | error | `method='nuts'` is asked for, and not every data series has a likelihood, or the sim has no gradients |
+| `E1303` | `NoPosterior` | error | `method='nuts'` or `method='pmcmc'` is asked for, and not every data series has a likelihood, or the sim cannot be sampled that way (no gradients, for NUTS; not a stochastic compartmental sim that the kernels run whole, for particle MCMC) |
 | `W1301` | `AtBound` | warning | A best-fit value is at or near one of its bounds |
-| `W1302` | `Unidentifiable` | note | Two fitted parameters appear in the model only as a product, or are almost perfectly correlated in the fit |
+| `W1302` | `Unidentifiable` | note | Two fitted parameters appear in the model only as a product (or a ratio), or are almost perfectly correlated in the fit: over the draws of a posterior, or in how they change the fitted results at the best fit |
 | `W1303` | `StageStopped` | warning | A stage of a staged fit did not converge; the sequence stops and the last completed fit is returned |
 | `W1304` | `NotConverged` | warning | The chains of a posterior disagree (R-hat above 1.01), or some draws diverged |
 

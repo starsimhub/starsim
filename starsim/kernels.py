@@ -1038,6 +1038,54 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
 
 
 @jit
+def advance(ys, p, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, state_of, stocks, flows):
+    """
+    Take steps start+1 to end of many runs (the particles of a particle filter), each from its own compartments
+
+    Args:
+        ys (array): the compartments of each run, by group; changed in place
+        start, end (int): the time points to step from and to
+        state_of (array): the state that each compartment is part of
+        stocks, flows (arrays): filled in at time points start+1 to end, as `run_many()` returns them (by group, or the
+            total in one group if they have only one)
+        (the others are as for `run()`, with one row of the tables per step)
+    """
+    nc, ng = ys.shape[1], ys.shape[2]
+    nflows = p.n_trans + len(p.mov_mat)
+    by_group = stocks.shape[3] == ng
+    w = workspace(ys[0], p)
+    whole = solver >= 2 and solver != 5
+    now = np.empty((nflows, ng))
+    tables = (fixed, mult, consts, rel_trans)
+    for r in range(len(ys)):
+        y = ys[r]
+        for ti in range(start + 1, end + 1):
+            set_step(p, ti-1, fixed, mult, consts, rel_trans)
+            step(y, p, w, dt, n_sub, solver, now, tables, -1)
+            if len(reg.src):
+                apply_events(y, reg, ti, whole)
+            if solver == 4 and p.local and p.has_det:
+                settle_places(y, p, dt, now)
+            stocks[r, ti] = 0
+            flows[r, ti] = 0
+            for c in range(nc):
+                for g in range(ng):
+                    stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
+            for f in range(nflows):
+                for g in range(ng):
+                    flows[r, ti, f, g if by_group else 0] += now[f, g]
+    return
+
+
+@jit
+def step_at(y, p, w, dt, ti, solver, n_sub, flows, fixed, mult, consts, rel_trans, per_step):
+    """ Take step ti of a whole run in place, as `run()` does (for runs that are stepped from outside, e.g. the diseases of a crossing in turn) """
+    set_step(p, (ti-1)*per_step, fixed, mult, consts, rel_trans)
+    step(y, p, w, dt, n_sub, solver, flows, (fixed, mult, consts, rel_trans), (ti-1)*per_step if per_step == 3 else -1)
+    return
+
+
+@jit
 def one_step(y, p, dt, solver, n_sub, tables, row):
     """ Take one step, and return the compartments after it and the total of each transition and mover over it: see `run()` and `step()` """
     y = y.copy()
