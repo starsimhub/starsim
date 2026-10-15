@@ -147,6 +147,7 @@ def disease(spec):
                 held = [p['name'] for p in spec['pars'] if p['value'] == dur]
                 tr['dur'] = pars[held[0]] if held else quantity(dur)
         trans = ss.Transition(ss.null if src is None else src, ss.null if dst is None else dst, **tr)
+        trans.migration = t.get('migration', False)
         if f'transitions.{t["name"]}.name' in spec['guessed']: # Named from its endpoints again
             unnamed.append(trans)
         else:

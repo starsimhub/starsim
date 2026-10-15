@@ -381,6 +381,22 @@ def gillespie_places(y, p, w, dt, flows):
 
 
 @jit
+def settle_places(y, p, dt, flows):
+    """
+    For the exact solver by place: the counts settled over the step, with the people as they are at its end, after the events of a movement register
+
+    As SimInf updates its continuous state after each day's scheduled events, so that people
+    who move count towards the place they arrive at; see `gillespie_places()` and `settle()`.
+    """
+    w = workspace(y, p)
+    expo = np.zeros(max(len(p.exp_set), 1))
+    for i in range(len(p.pl_starts) - 1):
+        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w[0], w[2], expo)
+    settle(y, p, w[0], dt, flows)
+    return
+
+
+@jit
 def settle(y, p, rates, dt, flows):
     """
     For the solvers that draw whole events: the flows of states that are not people (a reservoir), as expected values over a time dt
@@ -743,7 +759,7 @@ def step(y, p, w, dt, n_sub, solver, flows, tables, row):
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(dt - elapsed, 0.03/max(fastest, 1e-12))
                     draw(y, p, w, h, flows, solver == 3)
-                if solver != 5 and p.has_det:
+                if solver != 5 and p.has_det and not (solver == 4 and p.local): # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, rates, h, flows)
                 elapsed += h
                 continue
@@ -967,6 +983,8 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg
         step(y, p, w, dt, n_sub, solver, flows[ti], tables, (ti-1)*per_step if per_step == 3 else -1)
         if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
             short += apply_events(y, reg, ti, whole)
+        if solver == 4 and p.local and p.has_det:
+            settle_places(y, p, dt, flows[ti])
         stocks[ti] = y
     return y, stocks, flows, short
 
@@ -1008,6 +1026,8 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
             step(y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step if per_step == 3 else -1)
             if len(reg.src):
                 apply_events(y, reg, ti, whole)
+            if solver == 4 and p.local and p.has_det:
+                settle_places(y, p, dt, now)
             for c in range(nc):
                 for g in range(ng):
                     stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]

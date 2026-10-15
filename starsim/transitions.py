@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import starsim as ss
 
 __all__ = ['CodedError', 'error', 'note', 'Expr', 'par', 'State', 'states', 'null',
-           'Transition', 'transmission', 'progression', 'birth', 'death', 'outcome', 'Graph',
+           'Transition', 'transmission', 'progression', 'birth', 'death', 'immigration', 'emigration', 'outcome', 'Graph',
            'by', 'timeseries', 'seasonal', 'geo', 'gravity', 'Mobility', 'Strat', 'Transfer', 'transfer', 'stratify']
 
 
@@ -660,6 +660,7 @@ class Transition:
                 self.move[dim] = level
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
+        self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.flow_of = None # For arithmetic on a finished transition, e.g. 0.5 * infection: the original transition and the weight
         self.guessed = sc.objdict() # Which fields were guessed, and why
         if src is not None:
@@ -852,6 +853,44 @@ def death(arrow=None, rate=None, dur=None, name=None, label=None):
     else:
         src, dst = parse_arrow(arrow if '>' in arrow else f'{arrow} ->')
         out = Transition(src, null, rate=rate, dur=dur, name=name, label=label)
+    return out
+
+
+def immigration(arrow='-> S', rate=None, name=None, label=None):
+    """
+    People arriving from outside the population, e.g. `ss.immigration('-> S', rate=ss.peryear(100))`
+
+    Unlike `ss.birth()`, the rate is the number arriving per unit time (not per person), and as
+    agents they arrive at ages drawn from the population's age distribution rather than as newborns.
+
+    Args:
+        arrow (str): the state people arrive in, e.g. `'-> S'`
+        rate (any): the number arriving per unit time
+        name (str): the name of the transition
+        label (str): a human-readable name
+    """
+    src, dst = parse_arrow(arrow if '>' in arrow else f'-> {arrow}')
+    out = Transition(null, dst, rate=rate, name=name, label=label)
+    out.migration = True
+    return out
+
+
+def emigration(arrow=None, rate=None, dur=None, name=None, label=None):
+    """
+    People leaving the population, e.g. `ss.emigration(rate=ss.peryear(0.01))`
+
+    As `ss.death()`, but as agents they are recorded as having left (`results.new_emigrants`)
+    rather than as having died.
+
+    Args:
+        arrow (str): the state people leave from, e.g. `'I ->'`; if not given, every state that is people
+        rate (any): the rate of leaving per person per unit time
+        dur (any): the mean time until leaving (instead of `rate`)
+        name (str): the name of the transition
+        label (str): a human-readable name
+    """
+    out = death(arrow, rate=rate, dur=dur, name=name, label=label)
+    out.migration = True
     return out
 
 
@@ -1616,7 +1655,7 @@ class Graph:
         """ The ODE system, with symbolic parameter names; see `ss.Disease.equations()` """
         mod = self.module
         if engine is None or not hasattr(engine, 'flows'): # Not in a compartmental sim, so lay the model out with a stand-in
-            mock = sc.objdict(unit_base='day', solver='ode', n_groups=1, pars=sc.objdict(rand_seed=0, total_pop=1, approx=True), unit=None)
+            mock = sc.objdict(unit_base='day', solver='ode', n_groups=1, pars=sc.objdict(rand_seed=0, total_pop=1, approx=True), unit=None, crossings=[])
             engine = ss.Compartmental(mod, mock)
             engine.init_dwells()
             engine.build_layout()
@@ -1718,6 +1757,8 @@ class Graph:
             entry.p = None if tr.p is None else [None if p is None else format_expr(p) for p in tr.p]
             entry.stages = tr.stages
             entry.label = tr.label
+            if tr.migration: # Only when set, so that other specs are unchanged
+                entry.migration = True
             transitions.append(entry)
         out.pars = [par_json(self.pars[name], kinds.get(id(self.pars[name]))) for name in sorted(self.pars.keys())]
         out.transitions = transitions

@@ -391,6 +391,20 @@ def test_births():
     res = ss.Sim(arrivals, total_pop=1500, stop=3, **kw).run().results.arrivals
     assert np.allclose(res.arrive.by('sex').values[1:], [100, 10]) # None at the start
 
+    # Migration: immigrants arrive at any age (and age group), and emigrants leave without dying
+    for age in [False, True]:
+        S, I = ss.states(2)
+        mig = ss.Disease(S, I, nothing=S >> I @ 0*S.n, arrive=ss.immigration('-> S', rate=ss.peryear(500)), leave=ss.emigration(rate=ss.peryear(0.05)), name='mig')
+        if age:
+            mig.stratify(age=[0, 15, 50])
+        sim = ss.Sim(mig, n_agents=10_000, total_pop=10_000, start=2000, stop=2010, **kw).run()
+        res = sim.results
+        assert res.new_deaths.sum() == 0 and res.new_emigrants.sum() == res.mig.leave.sum() > 0
+        assert np.isclose(res.n_alive[-1], 10_000, rtol=0.05) # As many arrive as leave
+        assert sim.people.age.mean() > 25 # Not newborns
+        if age:
+            assert res.mig.n_S.by('age').values[-1, -1] > 2000 # Arrivals over 50 are in the oldest group
+
     # An Euler step whose outflows would take more than everyone takes everyone, and no more, in the kernels and in Python
     for kernels in [True, False]:
         S, I = ss.states(2)

@@ -261,6 +261,8 @@ class Sim(ss.Base):
                 if strat.kind == 'age':
                     self.people.age[self.people.auids] = strat.mids[self.group_coords[:, d]]
         self.init_modules_post() # Initialize the module values
+        for crossing in self.crossings: # Once every disease in it has its initial conditions
+            crossing.init()
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
@@ -313,6 +315,8 @@ class Sim(ss.Base):
         self.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), ss.change(), and the efficacy of products
         self.overlaps = [] # Pairs of modifiers that set the same quantity at once, which is noted
         self.clipped = set() # Quantities whose modifiers took them out of their range, which were clipped to it
+        self.crossings = [] # Diseases whose states are tracked jointly in a compartmental run: see init_crossings()
+        self.cross_strats = []
         self.set_par_values()
         self.init_strats()
         self.mixing = solvers.Mixing(self)
@@ -350,6 +354,8 @@ class Sim(ss.Base):
             if 'n_agents' not in self.given and 'people' not in self.given and 'total_pop' in self.given:
                 pars.n_agents = int(min(pars.total_pop, pars.n_agents))
                 pars.pop_scale = pars.total_pop/pars.n_agents
+            if 'use_aging' not in self.given and any(tr.people for mod in self.declared for tr in mod.graph.inflows): # Births in a declared model are demographics too, so agents age
+                pars.use_aging = True
         else:
             for mod in modules:
                 if getattr(mod, 'graph', None) is None and not isinstance(mod, ss.Route) and not getattr(mod, 'compartmental', False):
@@ -362,6 +368,7 @@ class Sim(ss.Base):
             pars.pop_scale = 1.0
             pars.people_results = False
 
+            self.init_crossings()
             self.mixing.init(approx=pars.approx)
             self.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
             pars.networks = ss.ndict()
@@ -547,6 +554,10 @@ class Sim(ss.Base):
                 for dim in (mod.move or {}):
                     if dim not in strats:
                         ss.error('E1102', f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+        for strat in self.cross_strats:
+            if strat.name in strats:
+                ss.error('E305', f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
+            strats[strat.name] = strat
         self.strats = list(strats.values())
         self.group_shape = tuple(strat.n for strat in self.strats)
         self.group_mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:] # How far apart adjacent levels of each dimension are, in groups
@@ -598,6 +609,64 @@ class Sim(ss.Base):
                 setattr(self, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
         if self.strats and 'use_aging' not in self.given and any(strat.kind == 'age' for strat in self.strats): # People age between age groups, unless told not to (by default, use_aging is turned off earlier when there are no demographics)
             self.pars.use_aging = True
+        return
+
+    def init_crossings(self):
+        """
+        In a compartmental run: track jointly the states of diseases when a condition in one refers to a state of another
+
+        For example, `ss.modify(hiv.rel_trans, multiply=3, where=syph.I)` needs the number of people with
+        HIV who also have syphilis. Each disease in a crossing becomes a dimension of the sim, whose levels
+        are its compartments and which applies to the people of the others, so the model grows to the
+        product of their compartments. See `ss.Crossing`.
+        """
+        names = [mod.name for mod in self.declared]
+        links = {name:{name} for name in names}
+        for mod in list(self.pars.connectors.values()) + list(self.pars.interventions.values()):
+            home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) # The disease whose engine evaluates the conditions
+            home = ss.conditions.modname(home)
+            if home not in links:
+                continue
+            for other,state in ss.conditions.state_refs(mod):
+                if other in links and other != home and state in self.get_declared(other).graph.states:
+                    group = links[home] | links[other]
+                    for name in group:
+                        links[name] = group
+        groups = []
+        for name in names:
+            if len(links[name]) > 1 and links[name] not in groups:
+                groups.append(links[name])
+        if not groups:
+            return
+
+        # A dimension for each disease, whose levels are its compartments of people
+        for group in groups:
+            members = [name for name in names if name in group] # In the order of the sim
+            for name in members:
+                mod = self.get_declared(name)
+                engine = ss.Compartmental(mod, self) # Only to lay out the compartments; the module's own engine is made later
+                engine.init_dims()
+                engine.init_dwells()
+                engine.build_layout()
+                labels = []
+                for ind in engine.people_comps: # A state with several compartments (branches, or the stages of a dwell time) has a level for each
+                    state = engine.comps[ind].state.name
+                    own = engine.state_comps[state]
+                    labels.append(state if len(own) == 1 else f'{state}.{own.index(ind) + 1}')
+                first = engine.graph.people_states[0].name
+                tracks = [track for track in engine.tracks[first] if not track.immediate]
+                if len(tracks) != 1:
+                    ss.error('E804', f'the states of "{name}" cannot be tracked jointly with those of {sc.strjoin(n for n in members if n != name)} with solver="{self.solver}" yet, since people entering its first state ("{first}") are split between branches.\n'
+                                     f'     Run with solver="abm".')
+                split = np.zeros(len(labels))
+                split[engine.people_comps.index(tracks[0].first)] = 1.0 # Where people born to (or arriving in) the others start: in this disease's first state, as agents do
+                strat = ss.transitions.Strat(name, labels, split=split, kind='disease')
+                strat.holders = [n for n in members if n != name] # The diseases whose people have this dimension
+                strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
+                self.cross_strats.append(strat)
+            self.crossings.append(ss.Crossing(self, members))
+        self.init_strats()
+        self.mixing = ss.solvers.Mixing(self)
         return
 
     def get_declared(self, name):
@@ -888,12 +957,15 @@ class Sim(ss.Base):
                 add('unit', self.unit, f'from {self.unit_source}' if self.unit_source else None)
             for strat in self.strats: # Each dimension: its levels, the states it applies to, and what it generates
                 text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
-                text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else ''
+                text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
                     text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
                 elif strat.kind == 'age':
                     text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if self.unit is None else '; people age between the groups'
                 add('dimension', text, f'guessed: {"; ".join(strat.guessed.values())}' if strat.guessed else None)
+            for crossing in self.crossings:
+                sizes = [self.strats[self.dim_index(name)].n for name in crossing.names]
+                add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} compartments of people in each group', 'a condition in one refers to a state of another')
         for mod in mods:
             if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
                 lines += ['', mod.describe(output=True)]
@@ -1565,6 +1637,8 @@ class Sim(ss.Base):
         for mod in self.declared:
             engine = mod.engine
             if not engine.kernel_only():
+                if engine.cross is not None:
+                    return f'the states of {sc.strjoin(engine.cross.names)} are tracked jointly, so each takes the people over from the others every step'
                 if engine.program is False:
                     return f'a rate in "{mod.name}" is a function of the sim, so is worked out in Python each step'
                 return f'"{mod.name}" has custom methods, transfers, branch probabilities that vary, or its own timestep'

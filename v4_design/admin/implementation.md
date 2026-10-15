@@ -39,7 +39,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] 16. A threshold-triggered intervention, with and without memory
     - [x] 17. TB with resistance as a strain
     - [x] 18. Two diseases with age stratified on the sim
-- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB (all but TB done; SimInf's spread between herds still differs)
+- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB (all but TB done)
     - [x] camdl: SEIR by age and patch, with contacts by age within each patch, aging, movement, and a vaccination (agrees as an ODE; as chain-binomial, the same peaks a day sooner at a step of a day)
     - [x] Ghana measles: stochastic SEIR in 260 districts with gravity mixing, seasonality, births with vaccination, deaths, importation, and reported cases (the `gm-port` rewrite; agrees, with no change to Starsim)
     - [x] MEmilio: the age-resolved ODE SECIR, with seasonality, a cosine-smoothed cut in contacts, and test-and-trace capacity (agrees within 1.5 people of 10,000, the error of the reference itself; everything declared)
@@ -51,8 +51,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] EMULSION: the quickstart's three state machines (age, gestation, health), births on farrowing, minimum stays, a calendar, and a quarantine capacity (agrees within 1.8 animals with EMULSION's effective quarantine window)
     - [x] EpiModel: HIV with a care cascade and PrEP over two dynamic networks, four scenarios (agrees within the noise of the runs; 62 lines against 405, 2.5 s against 54)
     - [x] LASER: measles in England and Wales (53 places within 100 km of Norwich, at their real sizes, for 10 years), with births, life-table deaths, seasonality, importations, and gravity coupling (agrees: 106,466 infections against 106,639; 131 s against 3.0 s)
-    - [ ] SimInf: SISe3 in 1,600 herds with an environmental pressure and 783,773 events, aging by the register's `to_states` (fully declared; within each herd it agrees, but infection spreads between herds about 25% more slowly, about 3 standard errors, cause not found; 14 s a run as Gillespie against 0.1 s)
-    - [ ] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. Not yet: migration, docs and tutorials, second-line regimens after a test for resistance
+    - [x] SimInf: SISe3 in 1,600 herds with an environmental pressure and 783,773 events, aging by the register's `to_states` (fully declared; agrees within and between herds, once counts were settled after the register's events, as SimInf updates `phi`, and `phi`'s rates were made those of SimInf's daily update; 12 s a run as Gillespie against 0.1 s)
+    - [ ] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. migration as `immigration`/`emigration` parameters of `tbsim.TB` (with `ss.immigration()` and `ss.emigration()`). docs, tutorials, and examples ported. Not yet: second-line regimens after a test for resistance, strain-aware TPT, household contact tracing
 
 ## By section of the spec
 
@@ -129,7 +129,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
 - [x] Coupling between places that moves the force of infection, as LASER does (`ss.Mobility(kind='force')`)
 - [x] Networks, as agents and (approximated, with a note) as compartments
-- [ ] Multi-disease coupling in a compartmental run
+- [x] Multi-disease coupling in a compartmental run: diseases that a condition links are crossed (`ss.Crossing`), each a dimension of the sim whose levels are its compartments of people; each engine holds everyone, and takes the people over from the engine that changed them last. Not yet: a dimension that applies to some of the crossed diseases' states but not others (e.g. a strain dimension of infected states only, as in tbsim), a first state that splits on entry, an expression in one disease's rates that counts another's states, and the kernels taking the whole run in one call
 
 ### 07 Effects
 
@@ -138,12 +138,12 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Targets other than parameters: `rel_sus`, `rel_trans`, a transition
 - [x] Time-varying amounts (a function of the sim, `ss.by`)
 - [x] Lazy conditions (`ppl.age > 65`, `sir.I & ~sir.vaccinated`), on agents and on groups
-- [x] Conditions on another disease's state, when both have a state of the same name (agents only)
+- [x] Conditions on another disease's state, when both have a state of the same name
 - [x] `sim.what_modifies()`, for declared modifiers
 - [x] `W502 OverlappingSet`
 - [ ] Network parameters as targets (`school.pars.n_contacts`)
 - [ ] Base and effective values on arrays (`.base`), `track_writes=`
-- [ ] A condition on another module's state in a compartmental run
+- [x] A condition on another module's state in a compartmental run (on a declared disease's state; see 06)
 - [x] As agents, a multiplier on a transition whose dwell time has already been drawn: when it changes, what is left of each person's dwell time is rescaled by the change in the rate (a modifier that started during the run had no effect on the people already waiting)
 - [ ] A multiplier on a transition that is a `p=` branch
 - [x] Clipping of modified values to the quantity's range: a rate, duration, or multiplier made negative is 0, with `W503 ClippedToRange` once and a line in `what_modifies()` (a branch probability was already clipped to [0, 1])

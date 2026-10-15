@@ -27,6 +27,7 @@ TimePar  # All time parameters
         └── freqperyear
 """
 import numbers
+import calendar
 import collections
 import functools as ft
 import matplotlib
@@ -381,9 +382,11 @@ class date(pd.Timestamp):
         elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
-            if day_round:
-                date = sc.yeartodate(year)
-                timestamp = pd.Timestamp(date).round('D')
+            if day_round: # As sc.yeartodate(), but without converting to and from a datetime.date
+                full = int(year)
+                start = pd.Timestamp(year=full, month=1, day=1)
+                days = int(np.round((year - full)*(366 if calendar.isleap(full) else 365)))
+                timestamp = start + pd.Timedelta(days=days)
             else:
                 year_start = pd.Timestamp(year=int(year), month=1, day=1)
                 year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)

@@ -120,6 +120,25 @@ def modname(mod):
     return mod if (mod is None or isinstance(mod, str)) else mod.name
 
 
+def state_refs(obj):
+    """ The states of named modules that the conditions of a module (e.g. an `ss.modify()` or a delivery, and its product) refer to, as (module name, state name) """
+    out = []
+    def walk(cond):
+        if cond.op == 'state':
+            if modname(cond.args[0]) is not None:
+                out.append((modname(cond.args[0]), cond.args[1]))
+        elif cond.op not in leaves:
+            for arg in cond.args:
+                if isinstance(arg, Cond):
+                    walk(arg)
+        return
+    for holder in [obj, getattr(obj, 'product', None)]:
+        for val in (vars(holder).values() if holder is not None else []):
+            if isinstance(val, (Cond, ss.State, ss.transitions.StateSet)):
+                walk(as_cond(val))
+    return out
+
+
 def evaluate(obj, ctx):
     return obj.eval(ctx) if isinstance(obj, Cond) else obj
 
@@ -251,6 +270,8 @@ class Selector:
             return self.in_states([name])
         elif graph is not None and name in graph.transitions:
             return self.event(mod, name)
+        elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.Crossing
+            return np.isin(self.dim(mod.name), self.dim_strat(mod.name).state_levels[name])
         elif name in dims:
             return self.dim(name)
         elif not self.abm:
@@ -266,6 +287,10 @@ class Selector:
             out[engine.events.get(name, ss.uids())] = True
             return out
         return engine.event_frac(name)
+
+    def dim_strat(self, name):
+        """ The stratification of the sim with a given name, if there is one """
+        return next((strat for strat in self.sim.strats if strat.name == name), None)
 
     def is_binned(self, name):
         sim = self.sim
@@ -330,6 +355,8 @@ class Selector:
         if isinstance(out, (Cond, ss.State)):
             return self.select(out)
         if isinstance(out, ss.solvers.CountState):
+            if out.engine.mod is not self.mod: # A state of another module, which may have the same name as one of this module's
+                return self.select(Cond('state', out.engine.mod.name, out.state.name))
             return self.in_states([out.state.name]) * self.everyone()
         if self.abm:
             if isinstance(out, ss.uids):

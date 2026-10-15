@@ -386,6 +386,41 @@ def test_coinfection():
     return sim
 
 
+def test_coinfection_compartments():
+    sc.heading('Testing two diseases that modify each other, as compartments')
+    def make(solver='ode', coinfect=True, interventions=None):
+        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), death=ss.death('I ->', rate=0.05), init_prev=0.05)
+        syph = ss.Disease(infection=ss.transmission('S -> I', beta=1.0), cure=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05)
+        coinfection = [
+            ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
+            ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
+        ]
+        vx = ss.vaccinate(ss.Vaccine(efficacy=1.0), eligible=hiv.I, coverage=1.0, years=[2010], disease='syph') if interventions else None
+        return ss.Sim(diseases=[hiv, syph], connectors=coinfection if coinfect else None, interventions=vx, solver=solver,
+                      start=2000, stop=2030, dt=ss.years(0.1), total_pop=20_000, verbose=0)
+    sims = sc.objdict({solver:make(solver).run() for solver in solvers})
+    base = make(coinfect=False).run()
+
+    # The states of the two diseases are tracked jointly, so they have the same people, and the results of each can be split by the other
+    res = sims.ode.results
+    assert 'hiv × syph: 2 × 2 = 4' in sims.ode.describe(output=True)
+    assert np.allclose(res.hiv.n_S + res.hiv.n_I, res.syph.n_S + res.syph.n_I) # Deaths from HIV are deaths of people with syphilis too
+    with_syph = res.hiv.n_I.by('syph').values[-1] / (res.hiv.n_S.by('syph').values[-1] + res.hiv.n_I.by('syph').values[-1])
+    assert with_syph[1] > with_syph[0] # More HIV among people with syphilis
+    assert res.hiv.n_I[-1] > 1.2*base.results.hiv.n_I[-1]
+    assert res.syph.n_I[-1] > 2*base.results.syph.n_I[-1]
+    for solver in ['binomial', 'abm']:
+        for key in ['hiv', 'syph']:
+            assert np.isclose(sims[solver].results[key].n_I[-1], res[key].n_I[-1], rtol=0.1)
+
+    # A delivery of one disease's product to people in a state of the other
+    sim = make(coinfect=False, interventions=True).run()
+    res = sim.results
+    ti = np.argmax(res.vx.delivered > 0)
+    assert np.isclose(res.vx.delivered[ti], res.hiv.n_I[ti])
+    return sims
+
+
 def test_loop_order():
     sc.heading('Testing moving a module in the loop')
     def make():
@@ -410,6 +445,32 @@ def test_loop_order():
     assert moved.results.screen.diagnosed.sum() > 0
     assert not np.array_equal(moved.results.sir.n_I, sim.results.sir.n_I)
     return moved
+
+
+def test_newborns_and_events():
+    sc.heading('Testing routine delivery to newborns, and deliveries on a transition that an intervention causes')
+    pars = dict(stop=6*365, n_agents=20_000, **kw)
+    ppl = ss.People(100)
+
+    # Routine vaccination of children reaches those born or aging in, in a compartmental run too
+    def make(solver):
+        sir = make_sir(births=ss.birth('-> S', rate=ss.peryear(0.03)), deaths=ss.death(rate=ss.peryear(0.03))).stratify(age=[0, 5])
+        kids = ss.vaccinate(ss.Vaccine(efficacy=0.9), eligible=ppl.age < 5, name='kids')
+        return ss.Sim(sir, interventions=kids, solver=solver, **pars).run()
+    sims = sc.objdict(ode=make('ode'), abm=make('abm'))
+    for sim in sims.values():
+        assert sim.results.kids.delivered[-365:].sum() > 0.5*50_000*0.03 # Still delivering in the last year, to newborns
+    check_close(sims, lambda sim: sim.results.kids.delivered.sum())
+
+    # A delivery on a transition sees the people that a treatment moved along it, as well as those the model did
+    for solver in ['ode', 'abm']:
+        sir = make_sir()
+        cure = ss.treat(ss.Treatment(efficacy=1.0, transition='recovery'), eligible=sir.I, coverage=0.2, interval=1, name='cure')
+        after = ss.screen(ss.Test(sensitivity=1.0), on=sir.recovery, name='after')
+        sim = ss.Sim(sir, interventions=[after, cure], solver=solver, stop=150, n_agents=20_000, **kw).run() # The delivery that reads is first, so it sees them a step later
+        res = sim.results
+        assert np.isclose(res.after.delivered.sum(), res.sir.recovery[:-1].sum(), rtol=0.01) # Everyone who recovered, but on the last step
+    return sims
 
 
 def test_triggers():
@@ -493,5 +554,7 @@ if __name__ == '__main__':
     sens   = test_sensitivity_by_state()
     msim   = test_deliver()
     coinf  = test_coinfection()
+    coinfc = test_coinfection_compartments()
     loop   = test_loop_order()
+    newb   = test_newborns_and_events()
     held   = test_triggers()

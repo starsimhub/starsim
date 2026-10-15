@@ -132,12 +132,12 @@ from .conditions import Cond
 t('transitions')
 from .transitions import (
     CodedError, error, note, Expr, par, State, states, null,
-    Transition, transmission, progression, birth, death, outcome, Graph,
+    Transition, transmission, progression, birth, death, immigration, emigration, outcome, Graph,
     by, timeseries, seasonal, geo, gravity, Mobility, Strat, Transfer, transfer, stratify,
 )
 
 t('solvers')
-from .solvers import solver_names, make_engine, Mixing, Engine, Compartmental, Agents, CountState
+from .solvers import solver_names, make_engine, Mixing, Engine, Compartmental, Agents, CountState, Crossing
 
 t('diseases')
 from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SEIR, SIS

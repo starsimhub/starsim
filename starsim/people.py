@@ -461,7 +461,7 @@ class People:
     def update_post(self):
         """ Final updates at the very end of the timestep """
         sim = self.sim
-        if sim.pars.use_aging:
+        if sim.pars.use_aging and sim.solver == 'abm': # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
             self.age[self.alive.uids] += sim.t.dt_year
         return
 

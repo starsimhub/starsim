@@ -801,6 +801,8 @@ class Delivery(Intervention):
         else:
             for mod in sim.declared:
                 frac = sel
+                if mod is not self.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.Crossing
+                    continue
                 if mod is not self.dis: # Another disease has other states, so the selection cannot depend on the state
                     if not np.all(sel == sel[0]):
                         ss.error('E804', f'"{self.name}" selects people by their state in "{self.dis.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')

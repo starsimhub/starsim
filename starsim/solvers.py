@@ -14,7 +14,7 @@ import starsim as ss
 ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 
-__all__ = ['solver_names', 'make_engine', 'Mixing', 'Engine', 'Compartmental', 'Agents', 'CountState']
+__all__ = ['solver_names', 'make_engine', 'Mixing', 'Engine', 'Compartmental', 'Agents', 'CountState', 'Crossing']
 
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
@@ -295,6 +295,101 @@ class CountState:
         return self.engine.count([self.state], total=False)
 
 
+class Crossing:
+    """
+    Diseases whose states are tracked jointly in a compartmental run, since a condition in one refers to a state of another (e.g. `ss.modify(hiv.rel_trans, multiply=3, where=syph.I)`)
+
+    Each disease in the crossing is a dimension of the sim, named after it, whose levels are
+    its compartments and which applies to the people of the others. So the engine of each
+    holds everyone, by its own compartments and those of the others (with its own dimension
+    at its first level). The engine that changed them last has the current numbers; another
+    copies them before it reads them (`refresh()`), and takes them over before it changes them (`claim()`).
+
+    Args:
+        sim (`ss.Sim`): the sim
+        names (list): the names of the diseases
+    """
+    def __init__(self, sim, names):
+        self.sim = sim
+        self.names = names
+        self.engines = []
+        self.owner = None # The engine that changed the people last
+        self.version = 0 # Counts the changes, so that an engine copies them only once
+        return
+
+    def __repr__(self):
+        return f'Crossing({" × ".join(self.names)})'
+
+    def joint(self, engine):
+        """ The people in an engine as one array over the dimensions of the sim, with the engine's own compartments as the levels of its dimension """
+        d = self.sim.dim_index(engine.mod.name)
+        y = engine.y[engine.people_comps].reshape((-1,) + self.sim.group_shape)
+        return np.moveaxis(np.take(y, 0, axis=d+1), 0, d)
+
+    def put(self, joint, engine):
+        """ Give an engine the people in a joint array """
+        sim = self.sim
+        d = sim.dim_index(engine.mod.name)
+        n = len(engine.people_comps)
+        y = np.zeros((n,) + sim.group_shape)
+        y[(slice(None),)*(d+1) + (0,)] = np.moveaxis(joint, d, 0)
+        engine.y[engine.people_comps] = y.reshape(n, -1)
+        engine.seen = self.version
+        return
+
+    def init(self):
+        """ Start the diseases independent of each other: the share of people in each compartment of one is the same in every compartment of the others """
+        sim = self.sim
+        self.engines = [sim.get_declared(name).engine for name in self.names]
+        self.check()
+        dims = [sim.dim_index(name) for name in self.names]
+        joint = 1.0
+        for engine,d in zip(self.engines, dims):
+            marginal = self.joint(engine).sum(axis=tuple(dd for dd in dims if dd != d), keepdims=True)
+            total = marginal.sum(axis=d, keepdims=True)
+            joint = joint*np.divide(marginal, total, out=np.zeros(marginal.shape), where=total>0)
+        joint = joint*total # The number of people in each group is the same for every disease
+        if self.engines[0].integer:
+            joint = Compartmental.round_preserving(joint)
+        for engine in self.engines:
+            self.put(joint, engine)
+            engine.record_stocks()
+        self.owner = self.engines[0]
+        return
+
+    def check(self):
+        """ Each dimension other than the diseases' own has to apply to every state of people in the crossing, or to none """
+        sim = self.sim
+        for d,strat in enumerate(sim.strats):
+            if strat.kind == 'disease':
+                continue
+            flags = {f'{e.mod.name}.{s.name}':bool(e.applies[s.name][d]) for e in self.engines for s in e.graph.people_states}
+            if len(set(flags.values())) > 1:
+                some = [name for name,flag in flags.items() if flag]
+                ss.error('E804', f'"{strat.name}" applies to some states of {sc.strjoin(self.names)} ({sc.strjoin(some)}) but not to others, so their states cannot be tracked jointly with solver="{sim.solver}" yet.\n'
+                                 f'     Run with solver="abm".')
+        return
+
+    def refresh(self, engine):
+        """ Copy the people into an engine from the one that changed them last, if they have changed since it last had them """
+        if self.owner is not None and self.owner is not engine and engine.seen != self.version:
+            self.put(self.joint(self.owner), engine)
+        return
+
+    def claim(self, engine):
+        """ Before an engine changes the people: give it the current numbers, and make it the one that has them """
+        self.refresh(engine)
+        self.owner = engine
+        self.changed()
+        return
+
+    def changed(self):
+        """ Say that the people have changed, so the other engines copy them again """
+        self.version += 1
+        self.owner.seen = self.version
+        return
+
+
 @contextlib.contextmanager
 def interval(mod):
     """
@@ -376,6 +471,8 @@ class Engine:
             for d,strat in enumerate(sim.strats):
                 names = own[strat.name].states if strat.name in own else ([] if strat.states is not None else None)
                 flag = bool(state.people or strat.kind == 'space') if names is None else state.name in names # A place applies to everything; other properties of people, to people
+                if strat.kind == 'disease': # The compartments of another disease, tracked jointly with this one: see ss.Crossing
+                    flag = bool(state.people) and self.mod.name in strat.holders
                 levels = coords[:, d]
                 first = levels == 0
                 if flag:
@@ -775,7 +872,10 @@ class Engine:
             staged = max([name for name,dw in self.dwells.items() if dw.staged], key=lambda name: self.dwells[name].k)
             ss.note(f'solver="binomial" takes {self.substeps()} substeps a step, so that people can move through the {self.dwells[staged].k} stages of "{staged}" (at most one a substep); '
                     f'substeps=1 takes whole steps, as most chain-binomial models do', code='W102', sim=sim)
+        inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
         for name,dw in self.dwells.items():
+            if name in inflows:
+                continue
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, ss.by)): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
@@ -1255,11 +1355,14 @@ class Compartmental(Engine):
         super().__init__(module, sim)
         self.n_groups = sim.n_groups
         self.last_flows = dict() # The flow along each transition in the last step, by group
+        self.forced = dict() # People moved along a transition by an intervention (see force()) this step, by group, until the step is recorded
         self.program = None # The flows as arrays, for the kernels: see init_program()
         self.whole = None # Whether the kernels can take the whole run in one call: see kernel_only()
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.use_kernels = True # Whether to step with the kernels where the model allows (if False, everything is worked out in Python, which is slower but the same)
+        self.cross = next((c for c in sim.crossings if module.name in c.names), None) # The diseases whose states are tracked jointly with this one's, if any: see ss.Crossing
+        self.seen = None # The change to the people in the crossing that this engine has
         return
 
     def define(self):
@@ -1287,9 +1390,10 @@ class Compartmental(Engine):
         coords = sim.group_coords
         mults = np.cumprod((sim.group_shape + (1,))[::-1])[::-1][1:] # How far apart adjacent levels of each dimension are
         self.movers = []
+        shared = self.shared
         for d,strat in enumerate(sim.strats):
             comps = [ind for state in graph.people_states if self.applies[state.name][d] for ind in self.state_comps[state.name]]
-            if strat.kind == 'age' and strat.edges is not None and comps and sim.pars.use_aging is not False:
+            if strat.kind == 'age' and strat.edges is not None and comps and sim.pars.use_aging is not False and shared:
                 if sim.unit is None:
                     ss.note('nobody ages, since time is in timesteps and age is in years; give the sim a unit to turn aging on', sim=sim)
                     continue
@@ -1312,7 +1416,7 @@ class Compartmental(Engine):
             states = tf.states or [s.name for s in graph.people_states]
             comps = [ind for state in states if self.applies[state][d] for ind in self.state_comps[state]]
             self.movers.append(sc.objdict(name=name, comps=comps, matrix=matrix, transfer=tf))
-        if sim.mixing.migration is not None and graph.people_states: # People relocating between places
+        if sim.mixing.migration is not None and graph.people_states and shared: # People relocating between places
             d = sim.mixing.space
             rates = sim.mixing.migration
             matrix = np.zeros((ng, ng))
@@ -1320,7 +1424,7 @@ class Compartmental(Engine):
                 for dst in np.nonzero(rates[coords[g, d]])[0]:
                     matrix[g, g + (dst - coords[g, d])*int(mults[d])] = rates[coords[g, d], dst]
             self.movers.append(sc.objdict(name=None, comps=self.people_comps, matrix=matrix, transfer=None))
-        for move in sim.dim_moves: # Movement that belongs to the sim, not to this module: e.g. the protection of a product waning
+        for move in (sim.dim_moves if shared else []): # Movement that belongs to the sim, not to this module: e.g. the protection of a product waning
             d = sim.dim_index(move.dim)
             matrix = np.zeros((ng, ng))
             for g in range(ng):
@@ -1329,6 +1433,11 @@ class Compartmental(Engine):
             comps = [ind for state in graph.people_states if self.applies[state.name][d] for ind in self.state_comps[state.name]]
             self.movers.append(sc.objdict(name=None, comps=comps, matrix=matrix, transfer=None))
         return
+
+    @property
+    def shared(self):
+        """ Whether this engine moves people in ways that belong to the sim rather than to the module (aging, relocating, the movement register): in a crossing, only the first engine does, since they all hold the same people """
+        return self.cross is None or self.cross.names[0] == self.mod.name
 
     def init_register(self):
         """ The movement register as arrays for the kernels (with no events, if there is none): see `ss.kernels.Register` """
@@ -1490,7 +1599,7 @@ class Compartmental(Engine):
             self.arrive(name, count*self.state_split[name], self.y)
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
-        if self.sim.mixing.register is not None: # The events dated at the start
+        if self.sim.mixing.register is not None and self.shared: # The events dated at the start
             self.check_short(ss.kernels.apply_events(self.y, self.init_register(), 0, self.integer))
         self.record_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
@@ -1527,6 +1636,8 @@ class Compartmental(Engine):
     #%% The context used to evaluate expressions
 
     def count(self, states, total=True):
+        if self.cross is not None:
+            self.cross.refresh(self)
         out = 0
         for state in states:
             out = out + self.y[self.state_comps[state.name]].sum(axis=0)
@@ -1534,6 +1645,8 @@ class Compartmental(Engine):
 
     def set_count(self, state, value):
         """ Set the number in a state, keeping its split between groups and sub-compartments """
+        if self.cross is not None:
+            self.cross.claim(self)
         inds = self.state_comps[state.name]
         current = self.y[inds]
         total = current.sum()
@@ -1541,6 +1654,8 @@ class Compartmental(Engine):
             self.y[inds] = current*(value/total)
         else:
             self.y[inds[0]] = value*self.state_split[state.name]
+        if self.cross is not None:
+            self.cross.changed()
         return
 
     def n_people(self, total=True):
@@ -1566,6 +1681,8 @@ class Compartmental(Engine):
 
     def state_counts(self):
         """ The number of people in each state (rows) and group (columns) """
+        if self.cross is not None:
+            self.cross.refresh(self)
         return np.array([self.y[self.state_comps[name]].sum(axis=0) for name in self.selector.states]).reshape(self.selector.shape)
 
     def take(self, y, frac):
@@ -1589,6 +1706,8 @@ class Compartmental(Engine):
             frac (arr): the fraction to move, states by groups
             changes (dict): the level to move them to, for each dimension that changes
         """
+        if self.cross is not None:
+            self.cross.claim(self)
         target = self.targets(changes)
         moving = target != np.arange(self.n_groups)
         moved = np.zeros(self.n_groups)
@@ -1598,10 +1717,14 @@ class Compartmental(Engine):
                 self.y[comp] -= n
                 np.add.at(self.y[comp], target, n)
                 moved += n
+        if self.cross is not None:
+            self.cross.changed()
         return moved
 
     def force(self, frac, tr, dst):
         """ Move a fraction of the people in each infected state and group to a state, along a transition (as when a treatment cures) """
+        if self.cross is not None:
+            self.cross.claim(self)
         total = np.zeros(self.n_groups)
         entry = self.entry[dst.name][0]
         for state in self.graph.infected:
@@ -1623,6 +1746,9 @@ class Compartmental(Engine):
         else:
             self.arrive(dst.name, total, self.y)
         self.flowcounts[tr.name] += total.sum()
+        self.forced[tr.name] = self.forced.get(tr.name, 0) + total
+        if self.cross is not None:
+            self.cross.changed()
         return total
 
     def event_frac(self, name):
@@ -2081,7 +2207,7 @@ class Compartmental(Engine):
         mod = self.mod
         graph = self.graph
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
-        if not self.use_kernels or solver not in ss.kernels.solvers or any(not getattr(m, 'timed', False) for mods in sim.modifiers.values() for m in mods):
+        if not self.use_kernels or self.cross is not None or solver not in ss.kernels.solvers or any(not getattr(m, 'timed', False) for mods in sim.modifiers.values() for m in mods):
             return False
         if self.whole is None: # The rest cannot change, so is checked once
             plain = all(getattr(type(mod), name) is getattr(ss.Disease, name) for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'])
@@ -2397,6 +2523,8 @@ class Compartmental(Engine):
     def step(self):
         """ Advance the compartments by one timestep """
         self.cache.clear() # The interventions have run since the step started
+        if self.cross is not None:
+            self.cross.claim(self)
         self.update_targets()
         self._mover_rates = self.mover_rates()
         if self.program is None and self.use_kernels:
@@ -2413,19 +2541,29 @@ class Compartmental(Engine):
             raise ValueError(errormsg)
         if len(flows) == self.n_trans: # The movers are not in it yet
             flows = np.concatenate([flows, self.step_movers(dt)])
+        if self.sim.mixing.register is not None and self.shared: # The events dated at the end of the step
+            self.check_short(ss.kernels.apply_events(self.y, self.register, self.mod.ti + 1, self.integer))
+        if solver == 'gillespie' and self.program and self.program.local and self.program.has_det: # By place, the counts are settled after the events, as in SimInf
+            ss.kernels.settle_places(self.y, self.program, dt, flows)
         for name,ind in self.tr_index.items():
-            self.flowcounts[name] += flows[ind].sum()
-            self.last_flows[name] = flows[ind]
+            self.flowcounts[name] += flows[ind].sum() # Moves by an intervention are counted already
+            flow = flows[ind] + self.forced.pop(name, 0) # As the transition's own, for on= and the results by group
+            self.last_flows[name] = flow
             if self.n_groups > 1:
-                self.flow_groups[name] = flows[ind]
+                self.flow_groups[name] = flow
         for i,mover in enumerate(self.movers):
             if mover.name is not None:
                 self.flowcounts[mover.name] += flows[self.n_trans + i].sum()
                 self.flow_groups[mover.name] = flows[self.n_trans + i]
-        if self.sim.mixing.register is not None: # The events dated at the end of the step
-            self.check_short(ss.kernels.apply_events(self.y, self.register, self.mod.ti + 1, self.integer))
+        if self.cross is not None:
+            self.cross.changed()
         self.record_stocks()
         return
+
+    def update_results(self):
+        if self.cross is not None: # The other diseases in the crossing have stepped since this one did, so people may have died or been born since its stocks were recorded
+            self.record_stocks()
+        return super().update_results()
 
     def step_movers(self, dt):
         """ For the stochastic solvers: move people between groups, as whole numbers where the solver keeps them """
@@ -2655,6 +2793,7 @@ class Agents(Engine):
         for key in ['rel_sus', 'rel_trans']:
             mod.__dict__.pop(key, None)
         self.events = dict() # The agents who went through each transition this step
+        self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
         arrs = [ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
                 ss.FloatArr('rel_trans', default=1.0, label='Relative transmission')]
         for state in graph.people_states:
@@ -2767,7 +2906,7 @@ class Agents(Engine):
     def force(self, uids, tr, dst):
         """ Move agents who are in an infected state to a state, along a transition (as when a treatment cures) """
         mod = self.mod
-        n = 0
+        moved = []
         for state in self.graph.infected:
             if state.people:
                 inds = uids[mod[state.name][uids]]
@@ -2775,9 +2914,13 @@ class Agents(Engine):
                 mod[f'ti_exit_{state.name}'][inds] = np.nan
                 mod[dst.name][inds] = True
                 mod[f'ti_{dst.name}'][inds] = mod.ti
-                n += len(inds)
-        self.flowcounts[tr.name] += n
-        return n
+                moved.append(inds)
+        moved = ss.uids.concatenate(moved) if moved else ss.uids()
+        self.flowcounts[tr.name] += len(moved)
+        if self.sim.n_groups > 1 and len(moved):
+            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(moved, dst), minlength=self.sim.n_groups)
+        self.forced[tr.name] = ss.uids.concatenate([self.forced[tr.name], moved]) if tr.name in self.forced else moved
+        return len(moved)
 
     @property
     def scale(self):
@@ -2948,7 +3091,10 @@ class Agents(Engine):
             tr = trs[name]
             uids = ss.uids.concatenate(uidlist)
             if tr.outflow:
-                self.sim.people.request_death(uids)
+                if tr.migration:
+                    self.sim.people.request_removal(uids)
+                else:
+                    self.sim.people.request_death(uids)
                 continue
             if len(tr.dst) == 1:
                 dsts = [(tr.dst[0], uids)]
@@ -3083,6 +3229,9 @@ class Agents(Engine):
         for name,tr in graph.transitions.items(): # Whoever went through these last step is no longer news
             if not tr.contact:
                 self.events.pop(name, None)
+        for name,uids in self.forced.items(): # Moved by an intervention last step: news now, whatever order the interventions run in
+            self.events[name] = ss.uids.concatenate([self.events[name], uids]) if name in self.events else uids
+        self.forced = dict()
         members = {state.name: self.members(state) for state in graph.people_states} # Who is where before anyone moves
         self._members = members # So counts in rates are the same for every transition this step, whatever order they are taken in
         for state in graph.people_states:
@@ -3146,8 +3295,8 @@ class Agents(Engine):
             places = sim.group_coords[:, d] if d is not None else np.zeros(sim.n_groups, dtype=int)
             born = self.rng.poisson(np.bincount(places, weights=amount)) # By place; the other levels are drawn as people are born into them
             enter = [(place, (tr.dst[0].name,), k) for place,k in enumerate(born) if k]
-            new = self.add_people(enter, self.mod.ti, f'born_{tr.name}')
-            if not any(strat.kind == 'age' for strat in sim.strats):
+            new = self.add_people(enter, self.mod.ti, f'born_{tr.name}', newborn=not tr.migration)
+            if not tr.migration and not any(strat.kind == 'age' for strat in sim.strats):
                 sim.people.age[new] = 0
             self.flowcounts[tr.name] += len(new)
             if sim.n_groups > 1:
@@ -3344,7 +3493,7 @@ class Agents(Engine):
         self.check_short(short*scale)
         return
 
-    def add_people(self, enter, ti, key):
+    def add_people(self, enter, ti, key, newborn=True):
         """
         Add agents to places, in given states
 
@@ -3352,6 +3501,7 @@ class Agents(Engine):
             enter (list): for each place (0, if there are no places), the states to put people in (None for each module's first state) and the number of agents
             ti (int): the time they enter their states
             key (str): what adds them, which names the distributions their levels and states are drawn from
+            newborn (bool): whether they are born, so are in the youngest age group; if not, their ages are drawn from the population's age distribution
 
         Returns the UIDs of the new agents.
         """
@@ -3368,10 +3518,10 @@ class Agents(Engine):
             if i == d:
                 people[strat.attr][new] = dsts
             elif strat.kind == 'age':
-                if strat.edges is not None:
-                    people.age[new] = strat.edges[0]
-                else:
+                if strat.edges is None:
                     people[strat.attr][new] = 0
+                elif newborn: # Otherwise their ages, drawn as the agents were made, give their groups
+                    people.age[new] = strat.edges[0]
             else:
                 rvs = self.dists[f'{key}_{strat.name}'].rvs(new)
                 people[strat.attr][new] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)

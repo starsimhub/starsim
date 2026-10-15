@@ -717,7 +717,7 @@ class Module(Base):
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', [])))) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', [])), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt

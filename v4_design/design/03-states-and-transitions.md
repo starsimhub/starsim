@@ -151,6 +151,8 @@ The lowercase constructors return an `ss.Transition`. Each is a shorter way of w
 | `ss.progression('I -> R \| D', dur=d, p=[0.99, 0.01])` | `ss.Transition('I', ['R', 'D'], dur=d, p=[0.99, 0.01])` |
 | `ss.birth('-> S', rate=r)` | `ss.Transition(ss.null, 'S', rate=r * N.n)`, with `N` everyone alive in the module: an inflow rate is a total per unit time, so the per-capita birth rate is scaled by the population |
 | `ss.death('I ->', rate=r)` | `ss.Transition('I', ss.null, rate=r)`; the arrow is optional, and `ss.death(rate=r)` applies to every state that is people |
+| `ss.immigration('-> S', rate=r)` | `ss.Transition(ss.null, 'S', rate=r)`, whose agents arrive at any age |
+| `ss.emigration('I ->', rate=r)` | as `ss.death()`, whose agents are recorded as emigrants |
 | `ss.transfer(risk='low -> high', rate=r)` | a transition between coordinates of a stratification (below) |
 
 `ss.progression` takes `dur=` or `rate=`, and optionally `p=`. `ss.transmission` takes `beta=` and optionally `source=` and `p=`. The word `transmission` is what stands for "times the source": `ss.transmission('S -> I', beta=b)` is `S >> I @ b * I`, not `S >> I @ b`. There is no `ss.infection` alias; the keyword names the event (`infection=`) and the constructor names the mechanism.
@@ -336,12 +338,14 @@ ss.death(rate=mu)               # every state that is people, to outside the mod
 
 A transition with several sources is one named transition; `.select(source='I')` selects the flow from one source. The same movement for every combination of a stratification (many-to-many) is `ss.transfer`.
 
-## Births and deaths
+## Births, deaths, and migration
 
 ```python
 ss.birth('-> S', rate=ss.peryear(0.02))       # crude birth rate: 0.02 per person per year, into S
 ss.death('I ->', rate=ss.peryear(0.1))        # disease-specific mortality
 ss.death(rate=ss.peryear(0.01))               # background mortality from every state
+ss.immigration('-> S', rate=ss.peryear(500))  # 500 people arriving per year, into S
+ss.emigration(rate=ss.peryear(0.01))          # people leaving, from every state
 
 N = S + I + R
 ss.null >> S @ ss.peryear(0.02) * N.n         # operator forms of the first two
@@ -350,6 +354,7 @@ I >> ss.null @ ss.peryear(0.1)
 
 - An outflow rate is per person in the source state, like any other transition.
 - An inflow has no source state to be "per person" of, so in the operator and explicit forms its rate is the total number entering per unit time. `ss.birth(rate=r)` is the epidemiologist's crude birth rate and is shorthand for `r * N.n`, where `N` is everyone alive in the module.
+- `ss.immigration()` and `ss.emigration()` are an inflow and an outflow like any other in a compartmental run. As agents, immigrants arrive at ages drawn from the population's age distribution (people born with `ss.birth()` are newborns), and emigrants are recorded as having left (`results.new_emigrants`) rather than as having died.
 - In an agent-based run, removals are requested during the step and carried out at its end (Starsim's `request_death`), so a person who dies this step is still visible to the modules that run after the disease ([10-execution.md](10-execution.md)).
 
 Demographic transitions may be declared inside a disease. For anything beyond the simplest case a `ss.Demographics` module (`ss.Births`, `ss.Deaths`, `ss.Pregnancy`) keeps them in one place and lets them run at their own timestep.

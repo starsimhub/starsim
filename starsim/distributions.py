@@ -108,11 +108,16 @@ def hash_uniforms(seed, ind, slots, dtype=None):
     return out
 
 
-def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
+def no_dists():
+    """ The classes of objects that never hold a distribution (or a time parameter), so are not searched for them """
+    return (ss.Result, ss.Results, ss.Timeline, np.dtype, type)
+
+
+def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
-    dists = sc.search(obj, type=Dist, **kwargs)
+    dists = sc.search(obj, type=Dist, skip=sc.tolist(skip) + list(no_dists()), **kwargs)
     for dist in dists.values():
         dist.link_sim(sim, overwrite=overwrite)
         dist.link_module(module, overwrite=overwrite)
@@ -182,11 +187,13 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':(Dists, ss.Compartmental)}, flatten=True) # A compartmental engine draws from its own generator; the distributions in the model are found through its graph
-            skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
+            skip = dict(keys=['module', 'inputs'], subclasses=(Dists, ss.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs are only for building the sim again
+            dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
+            skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
-            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':(Dists, ss.Compartmental)}, flatten=True)
+            skip['subclasses'] += (ss.Module,) # Found on the first round
+            dists += sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
         else:
             dists = sc.search(obj, type=Dist, flatten=True)
         self.dists = dists
