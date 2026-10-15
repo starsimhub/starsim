@@ -86,8 +86,6 @@ class Disease(ss.Module):
         self.set_metadata(**meta)
         self.t.update(**timepars)
         members = sc.mergedicts(sc.dcp(members), kwargs) # Copy class members (together, so they still refer to each other) so instances do not share them
-        if frame is not None and frame.f_code.co_name == '__init__': # Called from a subclass, so the names are not in this frame
-            frame = None
         self.graph = ss.Graph(self, args, members, init_prev=init_prev, init=init, frame=frame)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection

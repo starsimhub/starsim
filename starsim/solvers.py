@@ -6,6 +6,7 @@ The same `ss.Graph` can be run as compartments (`ode`, `binomial`, `tau`,
 engine, which is called from the sim's loop like any other module code.
 """
 import inspect
+import contextlib
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -294,6 +295,26 @@ class CountState:
         return self.engine.count([self.state], total=False)
 
 
+@contextlib.contextmanager
+def interval(mod):
+    """
+    While a declared model, or a delivery, takes a step: the time is that of the start of the step
+
+    The step at time point ti goes from time point ti-1 to ti (at the first there is no step, and the
+    results are the start). Values that vary in time are taken at ti-1, as in a whole run (see
+    `ss.kernels.run()`), and a delivery at time point ti-1 happens then, before the step's flows;
+    the results of the flows are recorded at ti.
+    """
+    sim, t = mod.sim, mod.t
+    ti, sim_ti = t.ti, sim.t.ti
+    t.ti, sim.t.ti = ti - 1, sim_ti - 1
+    try:
+        yield
+    finally:
+        t.ti, sim.t.ti = ti, sim_ti
+    return
+
+
 class Engine:
     """
     Base class for the engines that run a graph
@@ -314,6 +335,7 @@ class Engine:
         self.stocks = sc.objdict() # The number in each state at the start of the step
         self._by_group = False # Whether rates are being worked out for groups rather than for agents (in an agent-based run, for the states that are counts)
         self.strain = None # The position of the module's strain dimension, if it has one
+        self.move_levels = dict() # For each transition with move=: see moves()
         self._strain = None # The strain whose force of infection is being worked out
         self.register = None # The movement register, as arrays for the kernels
         self.offset = 0.0 # How far into the step (in years) values that vary in time are taken, for the stages of an ODE step
@@ -386,7 +408,24 @@ class Engine:
         self.strain = strains[0] if strains else None
         return
 
-    def dim_map(self, src, dst, strain=None, record=False):
+    def moves(self, tr):
+        """ The change of level of a transition with `move=`, as ((dimension, level), ...), or None """
+        if tr.move is None:
+            return None
+        if tr.name not in self.move_levels:
+            out = []
+            for dim,level in tr.move.items():
+                if dim not in [strat.name for strat in self.sim.strats]:
+                    ss.error('E1102', f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", which is not a dimension of the sim. Stratify the disease or the sim by it.')
+                d = self.sim.dim_index(dim)
+                for state in tr.dst:
+                    if not self.applies[state.name][d]:
+                        ss.error('E1102', f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", but the state they go to ("{state.name}") has no level of it.')
+                out.append((d, self.sim.strats[d].index(level)))
+            self.move_levels[tr.name] = tuple(out)
+        return self.move_levels[tr.name]
+
+    def dim_map(self, src, dst, strain=None, record=False, move=None):
         """
         Where the people who leave one state land in another, when the two do not have the same dimensions
 
@@ -399,19 +438,26 @@ class Engine:
             dst (str): the state they enter
             strain (int): for a new infection, the strain of the people it came from
             record (bool): if True, give the groups the flow is recorded in (the source's, with the strain acquired)
+            move (tuple): for a transition with `move=`, the level of each dimension people move to: see `moves()`
         """
-        key = (src, dst, strain, record)
+        key = (src, dst, strain, record, move)
         if key not in self.maps:
             a = self.applies[sc.ifelse(src, dst)]
             b = self.applies[dst]
+            moved = dict(move or ())
             out = None
-            if strain is not None or not np.array_equal(a, b):
+            if strain is not None or moved or not np.array_equal(a, b):
                 out = np.ones((1, 1))
                 for d,strat in enumerate(self.sim.strats):
                     n = strat.n
                     factor = np.zeros((n, n))
-                    if d == self.strain and strain is not None and (b[d] or record):
-                        factor[:, strain] = 1
+                    if d in moved:
+                        factor[:, moved[d]] = 1
+                    elif d == self.strain and strain is not None and (b[d] or record):
+                        if a[d] and not record and strat.carries is not None: # Someone who carries other strains carries this one as well
+                            factor[np.arange(n), strat.adds[:, strain]] = 1
+                        else:
+                            factor[:, strain] = 1
                     elif not b[d]:
                         factor[:, 0] = 1
                     elif a[d]:
@@ -478,8 +524,49 @@ class Engine:
         return bool(np.any(self.applies[tr.dst[0].name] & ~self.applies[src.name]))
 
     def strain_levels(self):
-        """ The levels of the module's strain dimension, if it has one """
-        return [None] if self.strain is None else list(range(self.sim.strats[self.strain].n))
+        """ The strains of the module's strain dimension, if it has one: each has a force of infection of its own """
+        if self.strain is None:
+            return [None]
+        strat = self.sim.strats[self.strain]
+        return list(range(strat.n)) if strat.carries is None else [int(j) for j in strat.base]
+
+    @property
+    def carriage(self):
+        """ The strain dimension, if its levels include people who carry several strains at once (see `ss.Strat.init_carriage()`) """
+        strat = None if self.strain is None else self.sim.strats[self.strain]
+        return strat if strat is not None and strat.carries is not None else None
+
+    def init_strain_weights(self):
+        """
+        The share of the infectiousness of the people at each level of the strain dimension that goes to each strain (levels by strains)
+
+        Someone who carries one strain passes it on; someone who carries several passes on
+        each in proportion to its infectiousness (from `adjust=dict(rel_trans=...)`), and their
+        own infectiousness is that of their level.
+        """
+        self.strain_weights = None
+        if self.strain is None:
+            return
+        strat = self.sim.strats[self.strain]
+        if strat.carries is None:
+            self.strain_weights = np.eye(strat.n)
+            return
+        rel = np.ones(strat.n)
+        for d,vals in self.rel_adjust['rel_trans']:
+            if d == self.strain:
+                rel = rel*vals
+        w = strat.carries*rel[None, :]
+        self.strain_weights = np.divide(w, w.sum(axis=1, keepdims=True), out=np.zeros_like(w), where=w.sum(axis=1, keepdims=True)>0)
+        return
+
+    def can_take(self, levels, strain):
+        """ Whether people at some levels of a strain dimension whose levels carry several strains are changed by infection with a strain: if they do not carry it, and there is a level for carrying it as well """
+        return self.carriage.adds[levels, strain] != levels
+
+    @staticmethod
+    def superinfects(tr, state):
+        """ Whether a transmission leaves people in the state they are in (so only changes the strains they carry) """
+        return len(tr.dst) == 1 and tr.dst[0] is state
 
     @property
     def dt(self):
@@ -600,6 +687,7 @@ class Engine:
                     else:
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*vals[sim.group_coords[:, d]]
+        self.init_strain_weights()
         return
 
     def strain_rate(self, tr, rate, strain):
@@ -984,21 +1072,28 @@ class Engine:
                 store(name, info.now)
             else: # Totaled over each reporting period
                 info.total = info.total + info.now
-                if (ti + 1) % info.every == 0:
+                if ti % info.every == 0 and ti > 0: # The period that ends at this time point
                     store(name, info.total)
                     info.total = 0.0
         return
 
     def start_step(self):
-        """ Record the number in each state at the start of the step, which is the time the step is labelled with """
+        """ Start counting the flows of the step """
         self.cache.clear()
         for name in self.flowcounts:
             self.flowcounts[name] = 0.0
         if hasattr(self, 'flow_groups'):
             self.flow_groups.clear()
-        if self.sim.solver != 'abm': # Agents are counted once the state changes of the step have been made: see Agents.step_state()
-            for state in self.graph.states.values():
-                self.stocks[state.name] = self.stock(state)
+        return
+
+    def interval(self):
+        """ While a step is taken: the time is that of its start (see `ss.solvers.interval()`) """
+        return interval(self.mod)
+
+    def record_stocks(self):
+        """ Record the number in each state at the end of the step (so `n_R[ti]` has the people who recovered in the step that ends at time point `ti`, as `recovery[ti]` does) """
+        for state in self.graph.states.values():
+            self.stocks[state.name] = self.stock(state)
         return
 
     def update_results(self):
@@ -1085,8 +1180,8 @@ class Engine:
         res = self.mod.results
         n = sum(np.asarray(res[f'n_{s.name}'].values, dtype=float) for s in infected)
         name = self.mod.name
-        if 0 < n[0] < 10:
-            ss.note(f'"{name}" starts with {n[0]:.3g} infected, so whether it takes off is a matter of chance, which solver="{sim.solver}" does not show; '
+        if 0 < self.n_start < 10:
+            ss.note(f'"{name}" starts with {self.n_start:.3g} infected, so whether it takes off is a matter of chance, which solver="{sim.solver}" does not show; '
                     f'solver="stochastic" with ss.parallel(n_runs=...) does', code='W1201', sim=sim)
         low = np.flatnonzero((n > 0) & (n < 1))
         if len(low) and n[low[0]:].max() > 10:
@@ -1110,7 +1205,7 @@ class Engine:
 
 class StockCtx:
     """
-    Evaluates result expressions (sums and ratios of states) from the counts at the start of the step
+    Evaluates result expressions (sums and ratios of states) from the counts after the step
 
     Args:
         engine (`ss.Engine`): the engine
@@ -1119,23 +1214,28 @@ class StockCtx:
     def __init__(self, engine, stocks=None):
         self.engine = engine
         self.stocks = engine.stocks if stocks is None else stocks
+        self.scale = engine.scale if isinstance(engine, Agents) else 1.0 # As agents, the stocks are numbers of agents
         return
 
     def value(self, p):
         return self.engine.value(p)
 
+    def stock(self, state):
+        """ The number of people (or the count) in a state """
+        return self.stocks[state.name]*(self.scale if state.people else 1.0)
+
     def count(self, states):
-        return sum(self.stocks[s.name] for s in states)
+        return sum(self.stock(s) for s in states)
 
     def frac(self, states):
-        n = sum(self.stocks[s.name] for s in self.engine.graph.people_states)
+        n = self.count(self.engine.graph.people_states)
         return np.divide(self.count(states), n, out=np.zeros(np.shape(n)), where=n>0)[()]
 
     local_count = count # A result is a total, wherever the people are
     local_frac = frac
 
     def exposure(self, state): # In a result, a bare state stands for the number of people in it
-        return self.stocks[state.name]
+        return self.stock(state)
 
 
 #%% Compartmental
@@ -1390,8 +1490,10 @@ class Compartmental(Engine):
             self.arrive(name, count*self.state_split[name], self.y)
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
-        if self.sim.mixing.register is not None: # The events at the start of the first step
+        if self.sim.mixing.register is not None: # The events dated at the start
             self.check_short(ss.kernels.apply_events(self.y, self.init_register(), 0, self.integer))
+        self.record_stocks() # The results at the first time point are the start
+        self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
         return
 
@@ -1544,7 +1646,7 @@ class Compartmental(Engine):
         """ Exposure to people in a state through the sim's mixing: the chance that a contact is with someone in that state """
         infectious = self.count([state], total=False)*state.rel_trans*self.mult_raw('rel_trans', state=state)
         if self._strain is not None and self.applies[state.name][self.strain]: # Only the people who carry this strain
-            infectious = infectious*(self.sim.group_coords[:, self.strain] == self._strain)
+            infectious = infectious*self.strain_weights[self.sim.group_coords[:, self.strain], self._strain]
         return self.sim.mixing.exposure(infectious, self.n_people(total=False))
 
     #%% Flows
@@ -1584,7 +1686,7 @@ class Compartmental(Engine):
                 src = None if flow.src is None else flow.state.name
                 for dst,p in zip(flow.tr.dst, self.branch_probs(flow.tr)):
                     comps, credits = self.entry[dst.name]
-                    flow.targets += [(ind, w*p, self.dim_map(src, self.comps[ind].state.name, flow.strain)) for ind,w in comps] # (compartment, share, where in it)
+                    flow.targets += [(ind, w*p, self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr))) for ind,w in comps] # (compartment, share, where in it)
                     flow.credits += [(ind, w*p) for ind,w in credits]
                 if flow.strain is not None:
                     flow.record = self.dim_map(src, src, flow.strain, record=True)
@@ -1632,6 +1734,8 @@ class Compartmental(Engine):
                 mult = mult*self.strain_adjust[tr.name][flow.strain]
             if self.immunity is not None and any(flow.state is s for s in self.immune_states):
                 mult = mult*self.protection(self.sim.group_coords[:, self.strain], flow.strain)
+            if flow.strain is not None and self.carriage is not None and self.applies[flow.state.name][self.strain] and self.superinfects(tr, flow.state): # Infected with another strain while staying in the same state: only if they do not carry it already
+                mult = mult*self.can_take(self.sim.group_coords[:, self.strain], flow.strain)
         if self.adjust[tr.name] is not None:
             mult = mult*self.adjust[tr.name]
         if flow.src is not None:
@@ -1743,7 +1847,7 @@ class Compartmental(Engine):
         for (name,strain),state in exposures.items():
             add(sets, tuple(self.state_comps[name]))
             masked = strain is not None and self.applies[name][self.strain] # Only the people who carry this strain
-            self.prog_exposures.append((state, (sim.group_coords[:, self.strain] == strain) if masked else 1.0))
+            self.prog_exposures.append((state, self.strain_weights[sim.group_coords[:, self.strain], strain] if masked else 1.0))
         setlist = list(sets)
         order = {id(flow):i for i,flow in enumerate(self.flows)}
         flat = lambda lists: np.array([i for item in lists for i in item], dtype=int)
@@ -2266,7 +2370,7 @@ class Compartmental(Engine):
             if info.every is None:
                 out[name] = now
             else: # Totaled over each reporting period
-                ends = np.arange(info.every - 1, npts, info.every)
+                ends = np.arange(info.every, npts, info.every) # The periods that end at each of these time points
                 out[name] = np.zeros(now.shape)
                 out[name][..., ends] = np.diff(np.cumsum(now, axis=-1)[..., ends], prepend=0, axis=-1)
         return out
@@ -2318,8 +2422,9 @@ class Compartmental(Engine):
             if mover.name is not None:
                 self.flowcounts[mover.name] += flows[self.n_trans + i].sum()
                 self.flow_groups[mover.name] = flows[self.n_trans + i]
-        if self.sim.mixing.register is not None: # The events at the start of the next step
+        if self.sim.mixing.register is not None: # The events dated at the end of the step
             self.check_short(ss.kernels.apply_events(self.y, self.register, self.mod.ti + 1, self.integer))
+        self.record_stocks()
         return
 
     def step_movers(self, dt):
@@ -2580,9 +2685,12 @@ class Agents(Engine):
         for state in graph.people_states:
             add(f'branch_{state.name}', ss.random())
             add(f'exit_{state.name}', ss.random())
+        carriage = any(getattr(strat, 'carries', None) is not None for strat in self.sim.strats)
         for name,tr in graph.transitions.items():
             add(f'dst_{name}', ss.random())
             add(f'mix_{name}', ss.random())
+            if carriage and tr.contact:
+                add(f'pass_{name}', ss.random()) # Which strain someone who carries several passes on
         for name in graph.transfers:
             add(f'transfer_{name}', ss.random())
         if self.sim.mixing.migration is not None:
@@ -2697,10 +2805,11 @@ class Agents(Engine):
                     chosen = inds[edges[i]:edges[i+1]]
                     mod[name][chosen] = True
                     mod[f'ti_{name}'][chosen] = 0
-        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events at the start of the first step, once every module has its people
+        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the start, once every module has its people
             self.step_register(0)
-            self.sim.people.step_die() # Whoever left is gone before the first step is counted
+            self.sim.people.step_die() # Whoever left is gone before the start is counted
             self.sim.people.remove_dead()
+        self.record_stocks() # The results at the first time point are the start
         return
 
     #%% The context used to evaluate expressions
@@ -2741,9 +2850,11 @@ class Agents(Engine):
         """ Under homogeneous mixing: the infectiousness-weighted fraction of people in the state """
         mod = self.mod
         uids = self.members(state)
+        share = 1.0
         if self._strain is not None and self.applies[state.name][self.strain]: # Only the people who carry this strain
-            uids = uids[self.strain_raw()[uids] == self._strain]
-        infectious = mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans
+            share = self.strain_weights[self.strain_raw()[uids], self._strain]
+            uids, share = uids[share > 0], share[share > 0]
+        infectious = mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans*share
         mixing = self.sim.mixing
         if mixing.space is None:
             return infectious.sum()/max(len(self.sim.people), 1)
@@ -2851,6 +2962,9 @@ class Agents(Engine):
                 mod[dst.name][inds] = True
                 mod[f'ti_{dst.name}'][inds] = ti
                 self.enter_dims(tr, srcs[name], uidlist, dst, inds)
+                for d,level in (self.moves(tr) or ()): # A change of level as well as of state
+                    self.sim.people[self.sim.strats[d].attr][inds] = level
+                    self.sim.groups_changed(inds)
                 if self.sim.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), minlength=self.sim.n_groups)
         return
@@ -3002,20 +3116,14 @@ class Agents(Engine):
         self.finish_moves(ti)
         self.step_births(dt)
         self.step_transfers(dt)
-        for state in graph.states.values(): # Record the stocks: this is the state of the model at the time the step is labelled with
-            self.stocks[state.name] = self.stock(state)
         return
 
     def die(self, uids):
         """ People who died this step (of anything, in any module) leave every state, and are taken out of the counts recorded for it """
         if not len(uids):
-            self.register_removed = None
             return
-        removed = getattr(self, 'register_removed', None)
-        died = uids if removed is None else uids[~np.isin(uids, removed)] # Not those removed by a movement register, which happens at the start of the next step
-        self.register_removed = None
         for state in self.graph.people_states:
-            inds = died[self.mod[state.name][died]]
+            inds = uids[self.mod[state.name][uids]]
             if len(inds):
                 self.stocks[state.name] = self.stocks.get(state.name, 0) - len(inds)
                 if state.name in self.stock_groups:
@@ -3151,8 +3259,9 @@ class Agents(Engine):
             for src in tr.src + self.immune_states: # With immunity= on a strain: people who have had one strain can be infected by another
                 self.move(tr, src, self.infect(tr, src))
         self.finish_moves(mod.ti + 1)
-        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events at the start of the next step, after every module's transmissions; the people are the same for every module, so it is done once
+        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti + 1)
+        self.record_stocks() # Deaths later in the step are taken out of them: see die()
         return
 
     def shift_states(self, uids, states, to_states, ti):
@@ -3229,7 +3338,6 @@ class Agents(Engine):
             else:
                 removed[chosen] = True
                 people.request_death(chosen)
-                self.register_removed = chosen if getattr(self, 'register_removed', None) is None else ss.uids.concatenate([self.register_removed, chosen])
         self._carry = carry
         self.add_people(enter, ti, 'register')
         sim.groups_changed() # People were moved and added
@@ -3298,6 +3406,8 @@ class Agents(Engine):
             return ss.uids()
         adjust = self.adjusted(tr.name, sus)
         immune = any(src is s for s in self.immune_states)
+        carried = self.carriage is not None and self.applies[src.name][self.strain] # People who carry strains already, and can carry another as well
+        superinfects = carried and self.superinfects(tr, src) # ... and stay in the same state, so are only changed if they do not carry it already
         if immune and routes:
             ss.error('E804', f'"{self.mod.name}" has immunity= between strains, which cannot run over networks yet. Use mixing pools or homogeneous mixing, or run as compartments.')
         if not routes: # Homogeneous mixing: the same hazard for everyone, scaled by their susceptibility
@@ -3307,7 +3417,7 @@ class Agents(Engine):
                 protect = self.protection(self.strain_raw()[sus], strain, sus) if immune else 1.0 # The strains they have had protect them in part
                 hazards.append(self.strain_rate(tr, self.eval_for(tr.rate, sus), strain)*mod.rel_sus[sus]*src.rel_sus*adjust*self.mult('rel_sus', None, sus)*protect)
             self._strain = None
-            return self.draw_infections(tr, sus, hazards, dt)
+            return self.draw_infections(tr, sus, hazards, dt, carried, superinfects)
 
         # Otherwise, transmit over each route. Mixing pools give each person a hazard, and networks a chance for each contact
         sus_raw = mod[src.name].raw*mod.rel_sus.raw*src.rel_sus*self.mult_raw('rel_sus')*self.mult_raw('transition', tr.name)
@@ -3356,8 +3466,8 @@ class Agents(Engine):
                             if len(pool.src_uids) and len(pool.dst_uids):
                                 dst = pool.dst_uids
                                 for i,strain in enumerate(strains):
-                                    carried = 1.0 if strain is None else strain_raw[pool.src_uids] == strain
-                                    trans = np.mean(rel_trans.raw[pool.src_uids]*carried) # The infectiousness-weighted fraction of the source group that is infectious
+                                    share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.src_uids], strain]
+                                    trans = np.mean(rel_trans.raw[pool.src_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
                                     pool_hazard[i][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*rel_sus.raw[dst]
                 elif d == 0: # Any other route works out its own transmission
                     new_cases.append(ss.uids(route.compute_transmission(rel_sus, rel_trans, beta, disease=mod)))
@@ -3365,9 +3475,19 @@ class Agents(Engine):
             srcs = np.concatenate([pair[0] for pair in pairs])
             trgs = np.concatenate([pair[1] for pair in pairs])
             trgs, first = np.unique(trgs, return_index=True)
-            self.set_strain(trgs, strain_raw[srcs[first]])
+            strain = strain_raw[srcs[first]]
+            if self.carriage is not None: # Someone who carries several strains passes on one of them
+                weights = np.cumsum(self.strain_weights[strain], axis=1)
+                rvs = self.dists[f'pass_{tr.name}'].rvs(ss.uids(trgs))
+                strain = np.minimum((weights <= rvs[:, None]).sum(axis=1), weights.shape[1] - 1)
+            if superinfects: # Infected with a strain they carry already, or cannot carry as well: no change
+                ok = self.can_take(strain_raw[trgs], strain)
+                drop = trgs[~ok]
+                trgs, strain = trgs[ok], strain[ok]
+                new_cases = [cases[~np.isin(cases, drop)] for cases in new_cases]
+            self.set_strain(trgs, strain, carried)
         if any_pools:
-            new_cases.append(self.draw_infections(tr, sus, [hazard[sus] for hazard in pool_hazard], dt))
+            new_cases.append(self.draw_infections(tr, sus, [hazard[sus] for hazard in pool_hazard], dt, carried, superinfects))
         if not new_cases:
             return ss.uids()
         return ss.uids.concatenate(new_cases).unique()
@@ -3400,9 +3520,12 @@ class Agents(Engine):
         uids = ss.uids(uids)
         return uids[self.dists[f'mix_{tr.name}'].rvs(uids) < probs]
 
-    def draw_infections(self, tr, sus, hazards, dt):
+    def draw_infections(self, tr, sus, hazards, dt, carried=False, superinfects=False):
         """ Draw who is infected from a hazard for each strain (or one hazard, if there are no strains), and give each new case their strain """
         hazards = [np.broadcast_to(np.maximum(hazard, 0), len(sus)) for hazard in hazards]
+        if superinfects: # Only those who do not carry a strain already can be infected with it
+            levels = self.strain_raw()[sus]
+            hazards = [hazard*self.can_take(levels, strain) for hazard,strain in zip(hazards, self.strain_levels())]
         total = np.sum(hazards, axis=0)
         p = -np.expm1(-total*dt)
         rvs = self.dists[f'mix_{tr.name}'].rvs(sus)
@@ -3410,12 +3533,15 @@ class Agents(Engine):
         if self.strain is not None and infected.any(): # The same draw chooses the strain, in proportion to each one's hazard
             share = np.cumsum(hazards, axis=0)[:, infected]/total[infected]
             strain = (rvs[infected]/p[infected] >= share).sum(axis=0)
-            self.set_strain(sus[infected], np.minimum(strain, len(hazards) - 1))
+            self.set_strain(sus[infected], np.array(self.strain_levels())[np.minimum(strain, len(hazards) - 1)], carried)
         return sus[infected]
 
-    def set_strain(self, uids, strain):
+    def set_strain(self, uids, strain, carried=False):
+        """ Give new cases their strain; if they carry strains already (`carried`), they carry this one as well """
         sim = self.sim
         uids = ss.uids(uids)
+        if carried:
+            strain = self.carriage.adds[self.strain_raw()[uids], strain]
         sim.people[sim.strats[self.strain].attr][uids] = strain
         if self.immunity is not None: # Every strain each person has had, so that each protects them
             self.mod.strains_had[uids] = self.mod.strains_had[uids] | (1 << np.asarray(strain, dtype=int))

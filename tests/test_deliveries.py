@@ -56,7 +56,7 @@ def test_change():
     sims = run_each(make, stop=120)
     base = ss.Sim(make_sir(), solver='ode', stop=120, **kw).run()
     res, res0 = sims.ode.results.sir, base.results.sir
-    assert np.allclose(res.n_S[:21], res0.n_S[:21]) # The same until it starts
+    assert np.allclose(res.n_S[:20], res0.n_S[:20]) # The same until it starts, at step 20
     assert res.infection[20:60].sum() < 0.5*res0.infection[20:60].sum()
     assert res.infection[60:].sum() > res0.infection[60:].sum() # The epidemic resumes when the multiplier goes back to 1
     check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
@@ -240,8 +240,8 @@ def test_treat():
     for solver,sim in sims.items():
         res = sim.results
         assert res.sis.n_I[-1] < 0.9*base.results.sis.n_I[-1]
-        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.07) # By default, the people who are infected
-    check_close(sims, lambda sim: sim.results.rounds.delivered.sum())
+        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.07) # By default, the people who are infected at the time
+    check_close(sims, lambda sim: sim.results.rounds.delivered.sum(), rtol=0.12) # As agents, about 9% fewer are infected (a difference of order dt)
 
     # A treatment that changes rates, with protection that fades by a function of time (which needs agents)
     def make_sird():
@@ -276,13 +276,14 @@ def test_screen():
         screening = ss.screen(test, coverage=0.4, interval=7, start=30, on_positive=ss.treat(drug, coverage=0.8))
         return ss.Sim(sis, interventions=screening, **kwargs)
     sims = run_each(rounds)
-    for sim in sims.values():
+    for solver,sim in sims.items():
         res = sim.results
+        rtol = 0.12 if solver == 'abm' else 0.05 # As agents, the exits due in a step happen at its start, before the screening (here a tenth of the infected, with a dwell time of 10 days)
         ti = 37
-        n_I = res.sis.n_I[ti]
+        n_I = res.sis.n_I[ti] # At the time
         expected = 0.4*(0.9*n_I + 0.05*(50_000 - n_I)) # True positives and false positives
         assert np.isclose(res.screening.delivered[ti], 20_000, rtol=0.03)
-        assert np.isclose(res.screening.diagnosed[ti], expected, rtol=0.05)
+        assert np.isclose(res.screening.diagnosed[ti], expected, rtol=rtol)
         assert np.isclose(res.screening_positive.delivered[ti], 0.8*res.screening.diagnosed[ti], rtol=0.05) # The follow-up is a module of its own
     check_close(sims, lambda sim: sim.results.screening.diagnosed.sum())
 
@@ -459,6 +460,27 @@ def test_triggers():
     return held
 
 
+
+def test_sensitivity_by_state():
+    sc.heading('Testing a test whose sensitivity depends on the state, and on age within a state')
+    def make(**kwargs):
+        S, E, I, R = ss.states(4)
+        seir = ss.Disease(S >> E @ 0.3*I, E >> I @ ss.days(4), I >> R @ ss.days(8), init=dict(I=0.01), name='seir').stratify(age=[0, 15])
+        test = ss.Test(sensitivity=dict(I=ss.by(age=[0.5, 0.9]), E=0.2), specificity=1.0)
+        screening = ss.screen(test, coverage=0.5, interval=10, start=20)
+        return ss.Sim(seir, interventions=screening, stop=60, **sc.mergedicts(dict(total_pop=50_000), kwargs))
+    for solver,pars in [('ode', {}), ('abm', dict(n_agents=50_000))]:
+        res = make(solver=solver, **kw, **pars).run().results
+        ti = 30
+        before = lambda name, **sel: res.seir[f'n_{name}'].select(**sel)[ti] if sel else res.seir[f'n_{name}'][ti]
+        expected = 0.5*(0.5*before('I', age=0) + 0.9*before('I', age=1) + 0.2*before('E')) # Nobody else tests positive
+        print(f'{solver}: {res.screening.diagnosed[ti]:.0f} diagnosed, expected {expected:.0f}')
+        assert np.isclose(res.screening.diagnosed[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
+    with pytest.raises(ss.CodedError, match='E505'):
+        ss.Sim(make_sis(), interventions=ss.screen(ss.Test(sensitivity=dict(X=0.5)), interval=10), stop=20, **kw).run()
+    return res
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -468,6 +490,7 @@ if __name__ == '__main__':
     trans  = test_transfer()
     treat  = test_treat()
     screen = test_screen()
+    sens   = test_sensitivity_by_state()
     msim   = test_deliver()
     coinf  = test_coinfection()
     loop   = test_loop_order()

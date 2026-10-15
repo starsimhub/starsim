@@ -219,7 +219,21 @@ tb.stratify(
 
 `resistance` is a dimension of this disease and not of people, so it is stratified on `tb` and not on the sim.
 
-**As a second disease**, when the pathogens are qualitatively different (different natural histories, or a person can carry both at once): write two `ss.Disease` modules and connect them with `ss.modify` ([07-effects.md](07-effects.md)). Co-infection needs this form, because a dimension gives each person one coordinate.
+**Strains carried together.** A level written as other levels joined by `+` is for people who carry those strains at once: `strain=['A', 'B', 'A+B']`. Each strain carried needs a level of its own. Someone who carries several strains is as infectious as their level (`adjust={'rel_trans': [...]}`), and passes each strain on in proportion to that strain's own infectiousness. Someone infected with a strain they do not carry carries it as well, at the level that adds it; if they carry it already, or there is no level for carrying it as well, they keep the strains they have. Superinfection is then a transmission that leaves people in their state, and is not counted for people it does not change:
+
+```python
+superinfection = latent >> latent @ ss.peryear(3) * active
+```
+
+A transition can change a person's level as well as their state with `move=`, an arrow between two levels (which also limits the transition to people at the first) or the level people move to. This is how one of two strains progresses alone, or resistance is acquired on progression:
+
+```python
+ss.progression('latent -> active', rate=ss.peryear(0.1), move=dict(strain='A+B -> A'))
+```
+
+tbsim's drug resistance (`tbsim.TB(drugs=['RIF', 'INH'])`) is built this way: the levels are the sets of strains people can carry, and treatment that fails is a transition that moves people to the strains that were not cured, with any resistance they acquired.
+
+**As a second disease**, when the pathogens are qualitatively different (different natural histories, or carrying both at once changes the course of each): write two `ss.Disease` modules and connect them with `ss.modify` ([07-effects.md](07-effects.md)). Co-infection with a different natural history needs this form, because a dimension gives each person one coordinate (strains carried together, above, share one natural history).
 
 ## Moving between coordinates: `ss.transfer`
 

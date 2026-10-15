@@ -2,6 +2,7 @@
 Test results: export, resampling, plotting, 2D results, and nested results
 """
 import numpy as np
+import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
@@ -132,7 +133,41 @@ def test_nested_results():
     return sim
 
 
+@sc.timer()
+def test_declared_scale():
+    sc.heading('Testing that results declared as sums of states are scaled, as agents')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), ever=I + R, share=I / (S + I + R), init=dict(I=0.01), name='sir')
+    sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=small*10, solver='abm', verbose=0).run()
+    res = sim.results.sir
+    assert np.allclose(res.ever, res.n_I + res.n_R) # Numbers of people, not of agents
+    assert np.allclose(res.share, res.n_I/(res.n_S + res.n_I + res.n_R)) # A ratio is the same either way
+    return sim
+
+
 # %% Run as a script
+def test_time_points():
+    sc.heading('Testing results by time point: the start, then the end of each step')
+    # Deaths requested during a step of a declared model are counted in it
+    def kill(sim):
+        sim.people.request_death(sim.people.auids[:2])
+    S, I = ss.states(2)
+    dis = ss.Disease(infection=ss.transmission('S -> I', beta=0.0, source='I'), init=dict(I=1), kill=kill, name='dis')
+    res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
+    assert np.array_equal(res.n_alive, [1000, 998, 996, 994, 992])
+    assert np.array_equal(res.new_deaths, [0, 2, 2, 2, 2])
+
+    # A weekly outcome is matched to data at the end of each week, whatever the rounding of the sim's times
+    S, I, R = ss.states(3)
+    infection = S >> I @ ss.perday(0.4)*I
+    cases = ss.outcome(0.6*infection, every=ss.weeks(1))
+    sim = ss.Sim(ss.Disease(infection, I >> R @ ss.perday(0.15), cases, init=dict(I=10), name='sir'), total_pop=10_000, unit='day', stop=ss.weeks(12), verbose=0).run()
+    weeks = np.arange(7, 85, 7)
+    data, model = ss.calibration.compare(sim, pd.DataFrame(dict(cases=sim.results.sir.cases.values[weeks]), index=weeks)).cases
+    assert len(model) == 12 and np.allclose(data, model)
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -144,6 +179,8 @@ if __name__ == '__main__':
     sim1 = test_export()
     sim2 = test_2d_results()
     sim3 = test_nested_results()
+    sim4 = test_declared_scale()
+    sim5 = test_time_points()
 
     sc.toc(T)
     plt.show()

@@ -58,6 +58,10 @@ class Loop:
         14. all modules:      finish_step()    # Do any final tidying
         15. people:           finish_step()    # Clean up dead agents
         16. sim:              finish_step()    # Increment the timestep
+
+    The step at time point ti goes from time point ti-1 to ti, and its results are recorded at ti.
+    At the first time point there is no step: only the start functions, the results (of the start),
+    the analyzers, and the modules' and sim's finish functions are called (see `_before_first_step()`).
     """
     def __init__(self, sim):
         self.sim = sim
@@ -188,8 +192,10 @@ class Loop:
                 self += mod.update_results
 
         # Apply analyzers
+        self.analyzer_names = set()
         for ana in sim.analyzers():
             self += ana.step
+            self.analyzer_names.add(ana.name)
 
         # Clean up dead agents, increment the time index, and perform other housekeeping tasks
         for mod in sim.modules:
@@ -254,6 +260,11 @@ class Loop:
             self.plan = self._make_plan_uniform()
         else:
             self.plan = self._make_plan_sorted()
+        self.plan = [entry for entry in self.plan if not self._before_first_step(entry)]
+        at_start = self._at_start_funcs()
+        for entry in self.plan:
+            if entry.label in at_start:
+                entry.func = at_start[entry.label]
 
         # Replay any user insertions tied to the current loop definition
         for insertion in self.insertions:
@@ -334,6 +345,43 @@ class Loop:
         # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
         self._warn_near_identical(times_num[order])
         return plan
+
+    def _at_start_funcs(self):
+        """
+        The step functions that run at the time of the start of the step (see `ss.solvers.interval()`): those of
+        declared models (with any code a subclass adds to them) and of deliveries, by label
+        """
+        def wrap(func, mod):
+            def at_start():
+                with ss.solvers.interval(mod):
+                    func()
+                return
+            return at_start
+        out = {}
+        for mod in self.sim.modules:
+            if isinstance(mod, ss.Disease) and mod.graph is not None:
+                names = ['step_state', 'step']
+            elif isinstance(mod, ss.Delivery):
+                names = ['step']
+            else:
+                continue
+            for name in names:
+                out[f'{mod.name}.{name}'] = wrap(getattr(mod, name), mod)
+        return out
+
+    def _before_first_step(self, entry):
+        """
+        Whether an entry is skipped because it is at the first time point: the step at time point ti goes from ti-1 to ti, so at the first there is no step, and only the results of the start are recorded
+
+        So a result at index ti is the state at time point ti (the start, at 0), and a flow at ti is the number during the step that ends there.
+        """
+        if entry.ti != 0:
+            return False
+        if entry.func_name in ['start_step', 'update_results'] or entry.label in ['sim.finish_step'] or entry.module in self.analyzer_names:
+            return False
+        if entry.func_name == 'finish_step' and entry.module not in ['sim', self.sim.people.__class__.__name__.lower()]: # A module's finish_step advances its own time
+            return False
+        return True
 
     @staticmethod
     def _warn_near_identical(sorted_times):

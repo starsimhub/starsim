@@ -1262,7 +1262,8 @@ def compare(sim, df=None):
     if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
         ss.error('E704', f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
     out = sc.objdict()
-    inside = (data_t >= sim_t.min()) & (data_t <= sim_t.max())
+    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
     for col in df.columns:
         res = data.match(sim, col)
         values = np.asarray(res.values, dtype=float)
@@ -1270,7 +1271,7 @@ def compare(sim, df=None):
         if res.summarize_by == 'sum': # A flow: sum over the interval ending at each data time
             spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
             starts = np.append(data_t[0] - spacing, data_t[:-1])
-            model = np.array([values[(sim_t > lo + 1e-9) & (sim_t <= hi + 1e-9)].sum() for lo,hi in zip(starts, data_t)])
+            model = np.array([values[(sim_t > lo + eps) & (sim_t <= hi + eps)].sum() for lo,hi in zip(starts, data_t)])
         else:
             model = np.interp(data_t, sim_t, values)
         ok = inside & np.isfinite(expected)
@@ -1435,7 +1436,7 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         weights (dict): the relative weight of each data series (default: equal)
         likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim
-        method (str): 'l-bfgs-b' (the default for a deterministic sim, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
+        method (str): 'l-bfgs-b' (the default for a deterministic sim, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
         scan (int): for the SciPy methods, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from the best of them
         n_runs (int): runs per evaluation, for a stochastic sim (default 1)
         rand_seed (int): the random seed for the fitting method
@@ -1571,6 +1572,10 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
             return objective(np.array(x))
         study.optimize(trial_objective, n_trials=kwargs.pop('trials', 100), **kwargs)
         best = np.array([study.best_params[name] for name in names])
+    elif method == 'asd': # Adaptive stochastic descent (sc.asd)
+        lo, hi = encode(lows), encode(highs)
+        result = sc.asd(lambda z: objective(decode(z)), encode(start), xmin=lo, xmax=hi, stepsize=kwargs.pop('stepsize', 0.1), randseed=rand_seed, verbose=0, **kwargs)
+        best = decode(result.x)
     else:
         bounds = list(zip(encode(lows), encode(highs)))
         options = sc.mergedicts(dict(xatol=1e-4, fatol=1e-6) if method == 'nelder-mead' else None, kwargs)

@@ -401,7 +401,7 @@ class Test(Product):
     A diagnostic test: what `ss.screen()` delivers
 
     Args:
-        sensitivity (float): the probability that someone with the condition tests positive
+        sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`), and the test then detects being in those states
         specificity (float): the probability that someone without it tests negative
         delay (dur): the time from the test to the result (agents only)
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
@@ -411,6 +411,7 @@ class Test(Product):
     Examples:
         ```python
         pcr = ss.Test(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
+        xpert = ss.Test(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
         ```
     """
     compartmental = True
@@ -443,6 +444,6 @@ class Test(Product):
         return
 
     def describe(self):
-        detects = 'infection' if self.detects is None else self.detects
+        detects = sc.strjoin(self.sensitivity.keys()) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         delay = '' if self.delay is None else f', result after {self.delay!r}'
         return f'{self.name}: test for {detects} (sensitivity {self.sensitivity}, specificity {self.specificity}{delay})'

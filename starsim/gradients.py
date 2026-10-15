@@ -14,6 +14,7 @@ the run, including outcomes and the goodness of fit), and are differentiated by
 central differences along the direction the run is differentiated in. They are cheap
 and smooth, so this is accurate to about 1e-9 of the value.
 """
+import importlib.util
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -37,12 +38,9 @@ def jax():
 
 
 def available():
-    """ Whether JAX is installed """
-    try:
-        import jax # noqa: F401
-        return True
-    except ImportError:
-        return False
+    """ Whether JAX is installed (without importing it) """
+    return importlib.util.find_spec('jax') is not None
+
 
 
 def reason(sim):
@@ -213,7 +211,7 @@ class Run:
         return dy, df
 
     def function(self):
-        """ The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the start of each step, the flows over each step, and the most substeps a step needed """
+        """ The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed """
         jx = jax()
         jnp = jx.numpy
         lax = jx.lax
@@ -265,9 +263,12 @@ class Run:
 
                 flows = jnp.zeros((self.nflows, self.ng))
                 y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
-                return jnp.maximum(y_end, 0.0), (y, flows, n)
+                y_end = jnp.maximum(y_end, 0.0)
+                return y_end, (y_end, flows, n) # The compartments after the step, as the kernels record them
 
-            y_end, (stocks, flows, n) = lax.scan(step, X['y'], jnp.arange(npts))
+            y_end, (stocks, flows, n) = lax.scan(step, X['y'], jnp.arange(npts - 1)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
+            stocks = jnp.concatenate([X['y'][None], stocks]) # The start, then the end of each step, as the kernels record them
+            flows = jnp.concatenate([jnp.zeros((1,) + flows.shape[1:]), flows])
             return y_end, stocks, flows, jnp.max(n)
 
         return run

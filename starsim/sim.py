@@ -451,10 +451,11 @@ class Sim(ss.Base):
                 if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
                     continue
                 other = fine.results[mod.name][key].values
-                if (res.summarize_by or res.summary_method()) == 'sum': # A flow: total it over each of the larger steps
-                    a, b = res.values[:n], other[:n*factor].reshape(n, factor).sum(axis=1)
-                else:
-                    a, b = res.values, other[::factor]
+                if (res.summarize_by or res.summary_method()) == 'sum': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
+                    a, b = res.values[1:n+1], other[1:n*factor+1].reshape(n, factor).sum(axis=1)
+                else: # A stock: at each of the larger steps' time points
+                    b = other[::factor]
+                    a, b = res.values[:len(b)], b[:len(res.values)]
                 scale = np.abs(a).max()
                 change = np.abs(b - a).max()/scale if scale else 0.0
                 rows.append(dict(module=mod.name, result=key, peak=a.max(), peak_fine=b.max(), change=change))

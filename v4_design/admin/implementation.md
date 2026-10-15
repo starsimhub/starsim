@@ -52,7 +52,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] EpiModel: HIV with a care cascade and PrEP over two dynamic networks, four scenarios (agrees within the noise of the runs; 62 lines against 405, 2.5 s against 54)
     - [x] LASER: measles in England and Wales (53 places within 100 km of Norwich, at their real sizes, for 10 years), with births, life-table deaths, seasonality, importations, and gravity coupling (agrees: 106,466 infections against 106,639; 131 s against 3.0 s)
     - [ ] SimInf: SISe3 in 1,600 herds with an environmental pressure and 783,773 events, aging by the register's `to_states` (fully declared; within each herd it agrees, but infection spreads between herds about 25% more slowly, about 3 standard errors, cause not found; 14 s a run as Gillespie against 0.1 s)
-    - [ ] TB: not chosen
+    - [ ] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. Not yet: migration, docs and tutorials, second-line regimens after a test for resistance
 
 ## By section of the spec
 
@@ -106,6 +106,9 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Dimensions listed by `describe()`, with the states each applies to and the mobility
 - [x] Initial conditions for each level of a dimension (`init=dict(I=ss.by(patch=[...]))`)
 - [x] Age groups given as labels, kept apart from the age people have; `use_aging=False` in a compartmental run
+- [x] Results by time point, as in other frameworks: `n_X[0]` is the start, `n_X[k]` the number at time point k, a flow at k the number during the step that ends at k; no step from `stop` (question 27). The loop skips the steps at the first time point; a declared model's step and a delivery take the time of the step's start (`ss.solvers.interval()`); the kernels and JAX record the start and then each step; a register's events dated at k are in the numbers at k; reporting periods end at their time points
+- [x] Strains carried together: levels such as `'A+B'` (each strain carried needs a level of its own); someone at such a level passes on each strain in proportion to its infectiousness (`adjust=dict(rel_trans=...)`), and infection with a strain someone does not carry adds it, or leaves them as they are if they carry it or there is no level for it (a transmission that leaves people in the same state is then not counted). In every solver, and in the kernels and JAX
+- [x] `move=` on a transition: a change of level in a dimension as well as of state, from one level (an arrow, which also limits the transition to people at that level) or from any
 - [x] `immunity=` between strains: people in a state that has a strain and is not otherwise infected (`R`) can be infected by each strain, as far as their past strains do not protect them. A compartmental run keeps only the last strain (noted); agents keep every strain they have had. Not yet over networks as agents
 - [ ] `where=` on `stratify()`
 - [x] As agents, a split is assigned exactly (rounded to whole agents) in a random order
@@ -212,7 +215,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] The chain-binomial solver with many stages: a substep for each stage (40 a day for LASER's latent period; fewer makes each stage too long). Moving people several stages in one substep, as many as an Erlang chain would in that time, would be exact with one substep
 - [ ] Gillespie thinning for time-varying rates (a rate is held constant within a step)
 - [x] Values that vary smoothly in time (`ss.seasonal`, and `ss.timeseries` other than `mode='constant'`) read at the time of each stage of an RK4 step, in the kernels (from their values at the start, middle, and end of each step) and in Python (and by the `scipy` integrators). A step function is held for the whole step, as `ss.change()` is. MEmilio's age-resolved SECIR at a step of a day went from 9 people in 10,000 to 1.5, the error of the reference itself
-- [x] JAX and gradients (`starsim/gradients.py`): `integrator='jax'` runs the same RK4 (or Euler) steps as the kernels in JAX, from the same program, and matches them to 1e-15. `sim.gradient(results, pars)` gives the derivative of each result with respect to each parameter; it agrees with finite differences to 1e-10, including through a function in a rate (`np.exp(-I.frac)`) and an outcome with a delay. `sim.calibrate()` on an ODE fits by L-BFGS-B with these gradients when JAX is installed: with 8 parameters it recovers the true values in 110 evaluations (6 s), where Nelder-Mead stops at its limit of 1,600 without them. With 3 it is slower than Nelder-Mead (1.7 s against 0.25, including about 1 s to compile), since each gradient costs as much as about 8 runs
+- [x] JAX and gradients (`starsim/gradients.py`): `integrator='jax'` runs the same RK4 (or Euler) steps as the kernels in JAX, from the same program, and matches them to 1e-15. `sim.gradient(results, pars)` gives the derivative of each result with respect to each parameter; it agrees with finite differences to 1e-10, including through a function in a rate (`np.exp(-I.frac)`) and an outcome with a delay. `sim.calibrate()` on an ODE fits by L-BFGS-B with these gradients when JAX is installed: with 8 parameters it recovers the true values in 110 evaluations (6 s), where Nelder-Mead stops at its limit of 1,600 without them. With 3 it is slower than Nelder-Mead (1.7 s against 0.25, including about 1 s to compile), since each gradient costs as much as about 8 runs. `method='asd'` (`sc.asd()`) does no better than Nelder-Mead on these: on the 3-parameter fit it stops after 1,000 evaluations with a mismatch of 1e-3 (Nelder-Mead: 1e-6 in 190), and on the 8-parameter fit at 0.02 after 2,800 (Nelder-Mead: 0.03 after 1,600)
 
 ### 13 Inference
 
@@ -253,6 +256,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - As agents, the number who start in each state is exact (rounded to whole agents), not a chance for each agent.
 - A level of a stratification named like an attribute of a result (`low`, `high`) is a column called `<dimension>_<level>` in `result.by()`.
 
+- `n_<state>[ti]` is the number after step `ti` under every solver, so it agrees with the flows of the step (`n_R[ti] - n_R[ti-1] == recovery[ti]`); the number before the first step is not a result. A result's time vector still labels step `ti` with its start, so data compared with a stock is compared with the number one step later than its label says.
+
 ## Known issues
 
 - The kernels are compiled the first time they are used after Starsim is installed or changed, which takes about 12 s; after that they are loaded from a cache.
@@ -277,6 +282,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A state that is not people is deterministic under the stochastic solvers, so a vector population whose own randomness matters cannot be drawn.
 - Under the exact solver, places are run one at a time between steps only when people mix within their place and nothing moves them between groups within a step; otherwise every rate is worked out again after each event.
 - A plain `duration=` on an outcome is an exponential stay, while `delay=` is an exact shift.
-- Once JAX has been used in a process (by `sim.gradient()`, a fit, or `integrator='jax'`), running sims in parallel by forking processes (`ss.parallel()` of agent-based sims, or Optuna with several workers) can deadlock, as JAX warns.
+- As agents, TB (LSHTM) comes out 5–10% higher than the ODE with weekly steps, and 20–30% higher with monthly ones; this is the difference of order `dt` above, made larger by an epidemic that is near R = 1.
+- `rel_sus` and `rel_trans` on a state are numbers, not `ss.par`s, so they cannot be fitted; the TB models write them into the rates instead.
+- Once JAX has run in a process (`sim.gradient()`, a gradient fit, or `integrator='jax'`), running sims in parallel by forking processes (`ss.parallel()` of agent-based sims, Optuna with several workers) can deadlock, as JAX warns. Spawning instead would be safe but takes about 1.5 s longer to start.
 - Gradients need a sim that the kernels run from start to finish (no interventions, modifiers with conditions, transfers, or movement register), and a rate that is a Python function of the sim has none (one written with NumPy functions of counts does).
 - The JAX run is compiled the first time it is used for a model (about 1 s), and again if a step needs more substeps than it has allowed for.

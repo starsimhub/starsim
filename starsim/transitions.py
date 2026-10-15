@@ -619,6 +619,8 @@ class Transition:
         p (float/list): branch probability
         stages (int): number of sub-stages used to realize the dwell time
         where (Cond/func): who it applies to: a condition (e.g. `ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0
+        move (dict): a change of level in a dimension as well as of state: the dimension, and an arrow between two of its levels
+            (e.g. `move=dict(strain='A+B -> A')`, which applies only to people at the first), or the level people move to
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -628,9 +630,10 @@ class Transition:
         infection = ss.Transition(S, I, rate=0.05 * I)
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
+        selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes rate= or dur=, not both'
             raise ValueError(errormsg)
@@ -645,6 +648,16 @@ class Transition:
         self.beta = beta # For ss.transmission(): the rate is beta times the source of infection, resolved when the module is built
         self.source = source
         self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
+        self.move = None # A change of level in some dimensions: {dim: level}
+        if move:
+            self.move = sc.objdict()
+            for dim,level in move.items():
+                if isinstance(level, str) and re.search(r'->|>>', level):
+                    srcs, dsts = parse_arrow(level)
+                    level = dsts[0]
+                    at = ss.Cond('dim', dim) == srcs # Only people at the level they move from
+                    self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
+                self.move[dim] = level
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.flow_of = None # For arithmetic on a finished transition, e.g. 0.5 * infection: the original transition and the weight
@@ -787,7 +800,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, name=None, l
     return Transition(src, dst, beta=sc.ifelse(beta, 1.0), source=source, p=p, where=where, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -798,11 +811,12 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, nam
         p (float/list): branch probabilities
         stages (int): number of sub-stages used to realize the dwell time
         where (Cond/func): who it applies to (see `ss.Transition`)
+        move (dict): a change of level in a dimension as well (see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, name=name, label=label)
 
 
 def birth(arrow='-> S', rate=None, name=None, label=None):
@@ -2588,6 +2602,9 @@ class Strat:
         else:
             self.labels = levels
         self.n = len(self.labels)
+        self.carries = None # For a strain with levels for people who carry several strains at once ('A+B'): see init_carriage()
+        if self.kind == 'strain' and any('+' in str(label) for label in self.labels):
+            self.init_carriage()
         if self.kind == 'age' and self.edges is None and kind is None: # Age groups given as labels have no ages, so nobody ages between them
             self.kind = 'plain'
             self.guessed['kind'] = 'plain, since the age groups are labels and not ages'
@@ -2628,6 +2645,34 @@ class Strat:
             split = np.ones(self.n)/self.n
             self.guessed['split'] = 'equal across levels'
         self.split = split
+        return
+
+    def init_carriage(self):
+        """
+        For a strain with a level such as 'A+B', for people who carry strains A and B at once: which strains each level carries, and where carrying one more leads
+
+        Each strain carried needs a level of its own ('A' and 'B'). Someone who carries several
+        strains passes on one of them, in proportion to their infectiousness (`adjust=dict(rel_trans=...)`),
+        and someone infected with a strain they do not carry moves to the level that adds it, if there is one
+        (otherwise they keep the strains they have).
+        """
+        sets = [frozenset(part.strip() for part in str(label).split('+')) for label in self.labels]
+        names = {next(iter(s)):i for i,s in enumerate(sets) if len(s) == 1}
+        for label,s in zip(self.labels, sets):
+            missing = s - set(names)
+            if missing:
+                error('E603', f'the level "{label}" of "{self.name}" carries {sc.strjoin(sorted(missing))}, which has no level of its own; each strain carried needs one.')
+        if len(set(sets)) != len(sets):
+            error('E603', f'"{self.name}" has two levels that carry the same strains ({sc.strjoin(self.labels)}).')
+        lookup = {s:i for i,s in enumerate(sets)}
+        self.base = np.array(sorted(names.values())) # The levels of a single strain
+        self.carries = np.zeros((self.n, self.n), dtype=bool) # carries[l, j]: people at level l carry strain j
+        self.adds = np.zeros((self.n, self.n), dtype=int) # adds[l, j]: the level of people at level l once infected with strain j as well (l itself if they carry it already, or there is no level for carrying it as well)
+        for l,s in enumerate(sets):
+            for name in s:
+                self.carries[l, names[name]] = True
+            for name,j in names.items():
+                self.adds[l, j] = lookup.get(s | {name}, l)
         return
 
     def __repr__(self):

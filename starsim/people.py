@@ -547,8 +547,10 @@ class People:
         res = self.sim.results
         for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
             res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
-        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-        res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
+        auids = self.auids # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step())
+        gone = ~self.alive.raw[auids]
+        res.new_deaths[ti] = np.count_nonzero(gone & (self.ti_dead.raw[auids] <= ti)) # Whenever in the step it was requested
+        res.new_emigrants[ti] = np.count_nonzero(gone & (self.ti_removed.raw[auids] <= ti))
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 

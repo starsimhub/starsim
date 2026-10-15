@@ -837,6 +837,7 @@ class Delivery(Intervention):
         return self.when is None or bool(self.when(sim))
 
     def step(self):
+        """ Deliver the product to whoever it is due to now: at the start of the step, before its flows (the loop runs it at that time: see `ss.solvers.interval()`) """
         if self.product is not None:
             self.product.step_waning()
         self.step_results()
@@ -964,11 +965,21 @@ class Delivery(Intervention):
         """ Work out the result of each test, and either act on it or wait for it """
         selector = self.selector
         product = self.product
-        if product.detects is not None:
-            has = selector.select(product.detects)
+        if isinstance(product.sensitivity, dict): # A sensitivity for each state, which are then what the test detects
+            states = self.dis.graph.states
+            has, sens = 0.0, 0.0
+            for name,val in product.sensitivity.items():
+                if name not in states:
+                    ss.error('E505', f'the test "{product.name}" has a sensitivity for "{name}", which is not a state of "{self.dis.name}". Its states are {sc.strjoin(states.keys())}.')
+                inside = selector.in_states([name])*selector.everyone()
+                has = has + inside
+                sens = sens + inside*selector.per_person(val)
         else:
-            has = selector.in_states([s.name for s in self.dis.graph.infected if s.people])*selector.everyone()
-        sens = selector.per_person(product.sensitivity)
+            if product.detects is not None:
+                has = selector.select(product.detects)
+            else:
+                has = selector.in_states([s.name for s in self.dis.graph.infected if s.people])*selector.everyone()
+            sens = selector.per_person(product.sensitivity)
         spec = selector.per_person(product.specificity)
         if selector.abm:
             uids = self.uids(chosen)
@@ -1007,9 +1018,12 @@ class Delivery(Intervention):
         return
 
     def update_results(self):
+        """ The coverage of what was delivered in the step, at the time point it was delivered: the start of the step """
         super().update_results()
         res = self.results
-        ti = self.sim.ti
+        ti = self.sim.ti - 1
+        if ti < 0:
+            return
         res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0
         if getattr(res.coverage, 'strata', None) is not None:
             res.coverage.strata[ti] = np.divide(res.delivered.strata[ti], res.eligible.strata[ti], out=np.zeros(self.sim.n_groups), where=res.eligible.strata[ti]>0)

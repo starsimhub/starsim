@@ -940,32 +940,34 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg
         y (array): the compartments at the start, by group
         p (Program): the flows
         dt (float): the timestep
-        npts (int): the number of steps
+        npts (int): the number of time points: the start, and the end of each of the npts-1 steps
         solver (int): which of `solvers` to use
         n_sub (int): for the ODE, the number of substeps (see `step()`)
         seed (int): the seed for the random numbers
         fixed, mult, consts, rel_trans (arrays): the values of these parts of the program at each step, or a single
             entry if they are the same throughout
-        reg (Register): the events of a movement register, applied at the start of each step (those of the first are already in y)
+        reg (Register): the events of a movement register, applied at the end of the step they are dated in (those of the start are already in y)
         per_step (int): 3 if the tables have the values at the start, middle, and end of each step (for the ODE), and otherwise 1
 
-    Returns the compartments at the end, the compartments at the start of each step, the total of each
-    transition and mover over each step, and the number of people that events of the register could not find.
+    Returns the compartments at the end, the compartments at each time point (the start, then the end of each
+    step), the total of each transition and mover over the step that ends at each time point (0 at the start),
+    and the number of people that events of the register could not find.
     """
     np.random.seed(seed)
     y = y.copy()
     w = workspace(y, p)
     whole = solver >= 2 and solver != 5
     stocks = np.empty((npts, y.shape[0], y.shape[1]))
-    flows = np.empty((npts, p.n_trans + len(p.mov_mat), y.shape[1]))
+    flows = np.zeros((npts, p.n_trans + len(p.mov_mat), y.shape[1]))
     short = 0.0
     tables = (fixed, mult, consts, rel_trans)
-    for ti in range(npts):
-        set_step(p, ti*per_step, fixed, mult, consts, rel_trans)
+    stocks[0] = y
+    for ti in range(1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
+        set_step(p, (ti-1)*per_step, fixed, mult, consts, rel_trans)
+        step(y, p, w, dt, n_sub, solver, flows[ti], tables, (ti-1)*per_step if per_step == 3 else -1)
+        if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
+            short += apply_events(y, reg, ti, whole)
         stocks[ti] = y
-        step(y, p, w, dt, n_sub, solver, flows[ti], tables, ti*per_step if per_step == 3 else -1)
-        if len(reg.src): # The events at the start of the next step (not called if there are none, since passing the register costs as much as a small step)
-            short += apply_events(y, reg, ti + 1, whole)
     return y, stocks, flows, short
 
 
@@ -981,9 +983,9 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
         by_group (bool): whether to keep the values of each group, or only their totals
         (the others are as for `run()`)
 
-    Returns the number in each state at the start of each step, and the total of each transition and
-    mover over each step, both as runs by steps by states (or transitions) by groups (one, the total,
-    unless `by_group`).
+    Returns the number in each state at each time point, and the total of each transition and mover
+    over the step that ends at it, both as runs by time points by states (or transitions) by groups
+    (one, the total, unless `by_group`).
     """
     nc, ng = y0.shape
     nflows = p.n_trans + len(p.mov_mat)
@@ -998,14 +1000,17 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
     for r in range(len(seeds)):
         np.random.seed(seeds[r])
         y[:] = y0
-        for ti in range(npts):
-            set_step(p, ti*per_step, fixed, mult, consts, rel_trans)
+        for c in range(nc):
+            for g in range(ng):
+                stocks[r, 0, state_of[c], g if by_group else 0] += y[c, g]
+        for ti in range(1, npts):
+            set_step(p, (ti-1)*per_step, fixed, mult, consts, rel_trans)
+            step(y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step if per_step == 3 else -1)
+            if len(reg.src):
+                apply_events(y, reg, ti, whole)
             for c in range(nc):
                 for g in range(ng):
                     stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
-            step(y, p, w, dt, n_sub, solver, now, tables, ti*per_step if per_step == 3 else -1)
-            if len(reg.src):
-                apply_events(y, reg, ti + 1, whole)
             for f in range(nflows):
                 for g in range(ng):
                     flows[r, ti, f, g if by_group else 0] += now[f, g]

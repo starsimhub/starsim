@@ -178,7 +178,7 @@ def test_time():
     b = ss.Disease(recovery=ss.progression('I -> R', rate=ss.perday(1/7)), init=dict(I=1.0))
     res = [ss.Sim(mod, stop=30, unit='day', **kw).run().diseases[0].results.n_I for mod in [a, b]]
     assert np.allclose(res[0], res[1])
-    assert np.isclose(res[0][7], 10_000*np.exp(-1), rtol=1e-4)
+    assert np.isclose(res[0][7], 10_000*np.exp(-1), rtol=1e-4) # After seven steps, a week
 
     # A duration as stop= with a start date is the length of the run; a rate of 0 never ends a dwell; and ages can be any distribution
     assert ss.Sim(make_sir(), start='2020-01-01', stop=ss.days(735), **kw).init().t.stop == ss.date('2020-01-01') + ss.days(735)
@@ -187,7 +187,7 @@ def test_time():
 
     # With no unit, a probability is per step
     c = ss.Disease(recovery=ss.progression('I -> R', rate=ss.prob(0.05)), init=dict(I=1.0))
-    assert np.isclose(ss.Sim(c, stop=10, **kw).run().diseases[0].results.n_I[10], 10_000*0.95**10)
+    assert np.isclose(ss.Sim(c, stop=10, **kw).run().diseases[0].results.n_I[10], 10_000*0.95**10) # After ten steps
     return sim
 
 
@@ -389,14 +389,14 @@ def test_births():
     arrivals = ss.Disease(arrive=ss.null >> S @ ss.by(sex=[100, 10]), infection=S >> I @ 0*I, name='arrivals')
     arrivals.stratify(sex=['f', 'm'], split=[1000, 500])
     res = ss.Sim(arrivals, total_pop=1500, stop=3, **kw).run().results.arrivals
-    assert np.allclose(res.arrive.by('sex').values, [100, 10])
+    assert np.allclose(res.arrive.by('sex').values[1:], [100, 10]) # None at the start
 
     # An Euler step whose outflows would take more than everyone takes everyone, and no more, in the kernels and in Python
     for kernels in [True, False]:
         S, I = ss.states(2)
         sim = ss.Sim(ss.Disease(fast=S >> I @ 5, init=dict(S=100), name='fast'), total_pop=100, start=2000, stop=2002, integrator='euler', substeps=1, **kw).init()
         sim.diseases.fast.engine.use_kernels = kernels
-        assert np.allclose(sim.run().results.fast.n_I, [0, 100, 100])
+        assert np.allclose(sim.run().results.fast.n_I, [0, 100, 100]) # Everyone is infected in the first step
     return sims
 
 
@@ -509,8 +509,9 @@ def test_stratify():
     young = ['0-19', '20-59']
     assert np.allclose(rres.prev.select(age=young), rres.n_I.select(age=young)/(rres.n_S + rres.n_I + rres.n_R).select(age=young)) # A ratio adds up its numerator and denominator over the groups selected, then divides
     assert (1/ss.by(sex=[0.5, 2])).values == [2, 0.5] and np.allclose((ss.by([[1, 2]], dims=['a', 'b'])*2).array, [[2, 4]]) # Arithmetic on values by group
-    assert np.allclose(by_age.values[0], [14_850, 49_500, 34_650]) # The split follows the width of the age groups, less the 1% infected
-    attack = [res.infection.select(age=i).sum()/by_age.values[0, i] for i in range(3)]
+    pop = (res.n_S + res.n_I + res.n_R).by('age').values[0]
+    assert np.allclose(pop, [15_000, 50_000, 35_000], rtol=0.01) # The split follows the width of the age groups (after the first day, in which a few people age)
+    attack = [res.infection.select(age=i).sum()/pop[i] for i in range(3)]
     assert attack[0] > attack[2], 'Children have the most contacts, so should have the highest attack rate'
     for solver in ['binomial', 'abm']:
         other = sims[solver].results.sir
@@ -628,7 +629,7 @@ def test_outcomes():
     assert np.isclose(res.prevalence.max(), res.n_I.max()/1e6)
 
     # Fit beta to the weekly cases
-    df = sc.dataframe(date=truth.t.timevec[6::7], cases=res.cases.values[6::7])
+    df = sc.dataframe(date=truth.t.timevec[7::7], cases=res.cases.values[7::7])
     sim = ss.Sim(make(0.15), data=df, **pars)
     fit = sim.calibrate()
     fit.summarize()
@@ -924,8 +925,9 @@ def test_time_values():
             sis = make(ss.seasonal(mean=ss.perday(0.3), amplitude=0.5, peak='January'))
             if extra is not None:
                 sis = ss.Disease(infection=ss.transmission('S -> I', beta=sis.pars.beta.raw), recovery=ss.progression('I -> S', dur=10), death=ss.death('I', rate=extra), init_prev=0.01, name='sis')
-            res.append(ss.Sim(sis, start=2020, stop=2021, dt=ss.days(dt), total_pop=1e4, **kw).run().results.sis.n_I.values[::int(1/dt)])
-        assert np.abs(res[0] - res[1]).max() < 1, 'Expected the ODE to take a seasonal value at each stage of a step'
+            n = int(1/dt)
+            res.append(ss.Sim(sis, start=2020, stop=2021, dt=ss.days(dt), total_pop=1e4, **kw).run().results.sis.n_I.values[::n]) # At the end of each day
+        assert np.abs(res[0][:len(res[1])] - res[1]).max() < 1, 'Expected the ODE to take a seasonal value at each stage of a step'
     draws = ss.truncnorm(loc=2.5, scale=0.5, low=1.0, high=2.6, strict=False).rvs(1000)
     assert draws.min() >= 1 and draws.max() <= 2.6
     yearly = ss.timeseries({'2020-01-01': 1.0, '2020-07-01': 2.0}, period=ss.years(1))
