@@ -49,9 +49,10 @@ fastmath = [
   "intel-cmplr-lib-rt"
 ]
 
-# For running an ODE in JAX, and for gradients (see ss.gradients)
+# For running an ODE in JAX, for gradients (see ss.gradients), and for posteriors from NUTS (sim.calibrate(method='nuts'))
 jax = [
   "jax",
+  "blackjax",
 ]
 
 # For running the tests

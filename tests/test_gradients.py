@@ -73,6 +73,26 @@ def test_fit():
 
 
 @sc.timer()
+def test_posterior():
+    sc.heading('Testing a posterior from NUTS')
+    pytest.importorskip('blackjax')
+    truth = make_sir(beta=0.5, dur=6).run().results.sir
+    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+    fit = make_sir(dur=6, data=data).calibrate(pars=['beta'], likelihood=dict(cases=ss.poisson()), draws=100, warmup=100, chains=2, rand_seed=1, verbose=True) # NUTS, the default when every series has a likelihood
+    fit.summarize()
+    table = fit.table.set_index('par')
+    assert fit.method == 'nuts'
+    assert len(fit.samples) == 200 and list(fit.samples.columns) == ['chain', 'draw', 'beta']
+    assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
+    assert np.all(table.rhat < 1.1)
+    assert fit.band['cases'].shape == (2, len(truth.cases))
+    with pytest.raises(ss.CodedError, match='E1303'): # A posterior needs a likelihood
+        make_sir(data=data).calibrate(pars=['beta'], method='nuts')
+    return fit
+
+
+@sc.timer()
 def test_parallel_pars():
     sc.heading('Testing many runs with different values, in one call')
     betas = [0.3, 0.4, 0.5]
@@ -95,6 +115,7 @@ if __name__ == '__main__':
     sims = test_jax_run()
     grad = test_gradient()
     fit = test_fit()
+    post = test_posterior()
     msim = test_parallel_pars()
 
     T.toc()

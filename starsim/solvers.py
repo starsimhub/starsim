@@ -345,8 +345,10 @@ class Crossing:
         dims = [sim.dim_index(name) for name in self.names]
         joint = 1.0
         for engine,d in zip(self.engines, dims):
-            marginal = self.joint(engine).sum(axis=tuple(dd for dd in dims if dd != d), keepdims=True)
-            total = marginal.sum(axis=d, keepdims=True)
+            own = [d] + [dd for dd,owner in self.private.items() if owner is engine]
+            others = [dd for dd in dims if dd != d] + [dd for dd,owner in self.private.items() if owner is not engine]
+            marginal = self.joint(engine).sum(axis=tuple(others), keepdims=True)
+            total = marginal.sum(axis=tuple(own), keepdims=True)
             joint = joint*np.divide(marginal, total, out=np.zeros(marginal.shape), where=total>0)
         joint = joint*total # The number of people in each group is the same for every disease
         if self.engines[0].integer:
@@ -358,16 +360,26 @@ class Crossing:
         return
 
     def check(self):
-        """ Each dimension other than the diseases' own has to apply to every state of people in the crossing, or to none """
+        """
+        Each dimension other than the diseases' own has to apply to every state of people in the crossing, or to
+        some states of one disease only (e.g. a strain), but not to its first state, where people born to the others start
+        """
         sim = self.sim
+        self.private = dict() # The dimensions of some states of one disease only, and its engine
         for d,strat in enumerate(sim.strats):
             if strat.kind == 'disease':
                 continue
             flags = {f'{e.mod.name}.{s.name}':bool(e.applies[s.name][d]) for e in self.engines for s in e.graph.people_states}
-            if len(set(flags.values())) > 1:
+            if len(set(flags.values())) < 2:
+                continue
+            owners = [e for e in self.engines if any(e.applies[s.name][d] for s in e.graph.people_states)]
+            first = owners[0].graph.people_states[0].name
+            if len(owners) > 1 or owners[0].applies[first][d]:
                 some = [name for name,flag in flags.items() if flag]
-                ss.error('E804', f'"{strat.name}" applies to some states of {sc.strjoin(self.names)} ({sc.strjoin(some)}) but not to others, so their states cannot be tracked jointly with solver="{sim.solver}" yet.\n'
+                ss.error('E804', f'"{strat.name}" applies to some states of {sc.strjoin(self.names)} ({sc.strjoin(some)}) but not to others, so their states cannot be tracked jointly with solver="{sim.solver}" yet. '
+                                 f'A dimension of some states of one disease only works if it is not its first state.\n'
                                  f'     Run with solver="abm".')
+            self.private[d] = owners[0]
         return
 
     def refresh(self, engine):
@@ -436,6 +448,7 @@ class Engine:
         self.offset = 0.0 # How far into the step (in years) values that vary in time are taken, for the stages of an ODE step
         self.immunity = None # Protection between strains, and the states whose people it applies to: see init_immunity()
         self.immune_states = []
+        self.cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.Crossing
         return
 
     def make_rng(self):
@@ -503,6 +516,10 @@ class Engine:
             errormsg = f'"{self.mod.name}" has more than one strain dimension ({sc.strjoin(sim.strats[d].name for d in strains)}); a person carries one strain of a disease at a time, so combine them into one'
             raise ValueError(errormsg)
         self.strain = strains[0] if strains else None
+        self.foreign = set() # In a crossing: the dimensions that only another disease's states have, whose level this one's people keep
+        if self.cross is not None:
+            people = [state.name for state in graph.people_states]
+            self.foreign = {d for d,strat in enumerate(sim.strats) if strat.kind != 'disease' and not any(self.applies[name][d] for name in people)}
         return
 
     def moves(self, tr):
@@ -555,6 +572,8 @@ class Engine:
                             factor[np.arange(n), strat.adds[:, strain]] = 1
                         else:
                             factor[:, strain] = 1
+                    elif d in self.foreign:
+                        factor = np.eye(n)
                     elif not b[d]:
                         factor[:, 0] = 1
                     elif a[d]:
@@ -1361,7 +1380,7 @@ class Compartmental(Engine):
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.use_kernels = True # Whether to step with the kernels where the model allows (if False, everything is worked out in Python, which is slower but the same)
-        self.cross = next((c for c in sim.crossings if module.name in c.names), None) # The diseases whose states are tracked jointly with this one's, if any: see ss.Crossing
+        self.cross = next((c for c in sim.crossings if module.name in c.names), None)
         self.seen = None # The change to the people in the crossing that this engine has
         return
 

@@ -388,9 +388,11 @@ def test_coinfection():
 
 def test_coinfection_compartments():
     sc.heading('Testing two diseases that modify each other, as compartments')
-    def make(solver='ode', coinfect=True, interventions=None):
+    def make(solver='ode', coinfect=True, interventions=None, strains=None):
         hiv = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), death=ss.death('I ->', rate=0.05), init_prev=0.05)
         syph = ss.Disease(infection=ss.transmission('S -> I', beta=1.0), cure=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05)
+        if strains:
+            syph.stratify(strain=['A', 'B'], states=strains, split=[0.5, 0.5], adjust=dict(rel_trans=[1.0, 1.5]))
         coinfection = [
             ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
             ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
@@ -418,6 +420,14 @@ def test_coinfection_compartments():
     res = sim.results
     ti = np.argmax(res.vx.delivered > 0)
     assert np.isclose(res.vx.delivered[ti], res.hiv.n_I[ti])
+
+    # A dimension of some states of one disease only, e.g. a strain
+    sim = make(strains=['I']).run()
+    res = sim.results
+    assert np.allclose(res.syph.n_I.by('strain').values.sum(axis=1), res.syph.n_I)
+    assert np.allclose(res.hiv.n_S + res.hiv.n_I, res.syph.n_S + res.syph.n_I)
+    with pytest.raises(ss.CodedError, match='E804'): # Not yet, since people born to the other disease start in the first state
+        make(strains=['S', 'I']).init()
     return sims
 
 

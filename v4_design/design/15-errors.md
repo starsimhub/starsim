@@ -149,9 +149,11 @@ Each of the first four notes names the quantity involved and a solver that would
 |---|---|---|---|
 | `E1301` | `NothingToFit` | error | `calibrate()` is called and no parameter has `bounds` |
 | `E1302` | `NoData` | error | `calibrate()` is called and no result has data |
+| `E1303` | `NoPosterior` | error | `method='nuts'` is asked for, and not every data series has a likelihood, or the sim has no gradients |
 | `W1301` | `AtBound` | warning | A best-fit value is at or near one of its bounds |
 | `W1302` | `Unidentifiable` | note | Two fitted parameters appear in the model only as a product, or are almost perfectly correlated in the fit |
 | `W1303` | `StageStopped` | warning | A stage of a staged fit did not converge; the sequence stops and the last completed fit is returned |
+| `W1304` | `NotConverged` | warning | The chains of a posterior disagree (R-hat above 1.01), or some draws diverged |
 
 ### 14xx and 16xx: model spec and other formats
 

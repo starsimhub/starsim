@@ -730,7 +730,7 @@ def test_likelihood():
     df = sc.dataframe(t=truth.timevec[weekly], cases=rng.negative_binomial(10, 10/(10 + mean)))
 
     # The declared likelihood is used, and its dispersion is fitted with beta
-    fit = make(beta=0.2, k=3, exposed=True).calibrate(data=df)
+    fit = make(beta=0.2, k=3, exposed=True).calibrate(data=df, method='l-bfgs-b') # The maximum likelihood (the default, NUTS, is tested in test_gradients.py)
     fit.summarize()
     assert fit.measure == 'negative log-likelihood'
     assert np.isclose(fit.pars.beta.value, 0.4, rtol=0.05)
@@ -739,7 +739,7 @@ def test_likelihood():
 
     # A likelihood can be given at calibration time, for a result that is not an outcome
     prev = sc.dataframe(t=truth.timevec[::7], prevalence=truth.prevalence.values[::7])
-    fit2 = make(beta=0.2, exposed=True).calibrate(data=prev, likelihood=dict(prevalence=ss.normal(scale=0.01)))
+    fit2 = make(beta=0.2, exposed=True).calibrate(data=prev, likelihood=dict(prevalence=ss.normal(scale=0.01)), method='l-bfgs-b')
     assert fit2.measure == 'negative log-likelihood'
     assert np.isclose(fit2.pars.beta.value, 0.4, rtol=0.01)
 

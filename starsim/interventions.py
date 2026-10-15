@@ -685,6 +685,10 @@ class Delivery(Intervention):
 
     def init_pre(self, sim):
         declared = [mod.name for mod in sim.declared]
+        if self.disease is None and self.move: # Moving people along a dimension of one disease's states: that disease
+            owners = [mod.name for mod in sim.declared if any(strat.name in self.move for strat in mod.graph.strats)]
+            if len(owners) == 1:
+                self.disease = owners[0]
         if self.disease is None:
             if len(declared) != 1:
                 ss.error('E506', f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}. Use disease=.')

@@ -35,9 +35,9 @@ codes = dict(
     E306='InvalidAdjustment', E308='InconsistentDimension', E402='NoGeography', E403='RouteMismatch', E504='UnmodifiableTarget', E505='UnknownEffect', E506='UnknownDisease',
     E602='UnknownParameter', E603='ShapeError', E604='UnvaluedParameter', E606='OutOfBounds', E702='UnknownOutcomeSource',
     E703='OutcomeCycle', E704='DataMisaligned', E705='UnknownDataColumn', E804='CapabilityError', E1003='RunAfterFinish',
-    E1102='MissingDimension', E1301='NothingToFit', E1302='NoData',
+    E1102='MissingDimension', E1301='NothingToFit', E1302='NoData', E1303='NoPosterior',
     W101='UnitInferred', W102='LargeStep', W103='UnitsDisagree', W207='UnreachableState', W212='StateNotPeople',
-    W309='LargeStateSpace', W404='MatrixAggregated', W502='OverlappingSet', W503='ClippedToRange', W1201='SmallCounts', W1202='ExtinctionPossible', W1205='StagesUnderAuto',
+    W309='LargeStateSpace', W404='MatrixAggregated', W502='OverlappingSet', W503='ClippedToRange', W1304='NotConverged', W1201='SmallCounts', W1202='ExtinctionPossible', W1205='StagesUnderAuto',
 )
 
 
@@ -396,7 +396,7 @@ def evaluate(expr, ctx):
         elif op == '/': return a / b
         else:           return a ** b
     elif isinstance(expr, Func):
-        return 1.0*getattr(np, expr.name)(*[evaluate(arg, ctx) for arg in expr.args]) # A comparison is 1 or 0
+        return 1.0*getattr(getattr(ctx, 'xp', np), expr.name)(*[evaluate(arg, ctx) for arg in expr.args]) # A comparison is 1 or 0; a context can give another NumPy, e.g. jax.numpy
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
@@ -2832,7 +2832,7 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         kwargs (dict): the dimension, and an arrow between two of its levels (e.g. `risk='low -> high'`),
-            or the level people move to (e.g. `vaccinated=True`); and any delivery keywords
+            or the level people move to (e.g. `vaccinated=True`); and any delivery keywords (and `disease=`, if the dimension is not of one disease's states only)
 
     Examples:
         ```python
@@ -2840,7 +2840,7 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
         ss.transfer(vaccinated=True, coverage=0.7, years=[2021, 2022])
         ```
     """
-    opts = {key:kwargs.pop(key) for key in ss.interventions.delivery_keys if key in kwargs}
+    opts = {key:kwargs.pop(key) for key in ss.interventions.delivery_keys + ['disease'] if key in kwargs}
     if opts:
         if rate is not None or dur is not None or len(kwargs) != 1:
             errormsg = f'ss.transfer() as an intervention takes one dimension and delivery keywords, e.g. ss.transfer(vaccinated=True, coverage=0.7, years=[2021]); rate= and dur= are for a transfer that happens all the time, as part of the model'

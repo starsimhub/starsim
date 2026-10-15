@@ -3,6 +3,7 @@ Define the calibration class
 """
 import os
 import tempfile
+import importlib.util
 import functools
 import datetime as dt
 import numpy as np
@@ -1366,6 +1367,235 @@ def loglik(sim, df=None, likelihood=None, weights=None, by_series=False):
     return out if by_series else float(sum(out.values()))
 
 
+def logprior(par, x):
+    """ The log-density of a parameter's prior at a value: its `prior=` if it has one, else uniform over its bounds """
+    prior = par.prior
+    low, high = par.bounds
+    if prior is None:
+        return -np.log(high - low)
+    elif isinstance(prior, ss.uniform):
+        return sps.uniform.logpdf(x, prior.pars.low, prior.pars.high - prior.pars.low)
+    frozen = sc.dcp(prior).init(force=True).dist
+    if frozen is None:
+        errormsg = f'The prior of "{par.name}" ({type(prior).__name__}) has no density to use; use e.g. ss.normal(), ss.lognorm_ex(), ss.gamma(), ss.beta_dist(), or ss.uniform()'
+        raise TypeError(errormsg)
+    return frozen.logpdf(x)
+
+
+def nuts(logpost, z0, draws=500, warmup=500, chains=4, seed=None, verbose=True):
+    """
+    Sample from a posterior with the No-U-Turn sampler (NUTS, from BlackJAX), with Stan's warm-up of the step size and the mass matrix
+
+    The log-density is given as a function of NumPy arrays, so it can be anything (here, a
+    run of the sim, differentiated by `ss.gradients.gradient()`); it is called back from JAX.
+
+    Args:
+        logpost (func): called with a point (an array, on an unbounded scale); returns the log of the posterior density there and its gradient
+        z0 (array): the point to start each chain near
+        draws (int): the draws to keep from each chain
+        warmup (int): the draws for the warm-up of each chain, which are not kept
+        chains (int): the number of chains, which are run one after another
+        seed (int): the random seed
+        verbose (bool): whether to say what is being done
+
+    Returns:
+        The draws (chains × draws × values), the log-density at each (chains × draws), and whether each followed a divergent trajectory (chains × draws)
+    """
+    jax = ss.gradients.jax()
+    try:
+        import blackjax
+    except ImportError as e:
+        errormsg = 'NUTS needs BlackJAX, which is not installed: pip install blackjax (or pip install starsim[jax])'
+        raise ImportError(errormsg) from e
+    jnp = jax.numpy
+    z0 = np.asarray(z0, dtype=float)
+    shape = (jax.ShapeDtypeStruct((), jnp.float64), jax.ShapeDtypeStruct(z0.shape, jnp.float64))
+
+    def host(z):
+        value, grad = logpost(np.asarray(z, dtype=float))
+        if not np.isfinite(value):
+            return np.float64(-np.inf), np.zeros(z0.shape)
+        return np.float64(value), np.asarray(grad, dtype=np.float64)
+
+    @jax.custom_vjp
+    def logdensity(z):
+        return jax.pure_callback(host, shape, z)[0]
+
+    def forward(z):
+        value, grad = jax.pure_callback(host, shape, z)
+        return value, grad
+
+    def backward(grad, cotangent):
+        return (cotangent*grad,)
+
+    logdensity.defvjp(forward, backward)
+    out = np.zeros((chains, draws, len(z0)))
+    logdens = np.zeros((chains, draws))
+    divergent = np.zeros((chains, draws), dtype=bool)
+    x64 = jax.config.jax_enable_x64
+    jax.config.update('jax_enable_x64', True) # For the whole run, since the callbacks are made from other threads, which jax.enable_x64() does not reach
+    try:
+        key = jax.random.key(seed if seed is not None else 0)
+        for c in range(chains):
+            key, start_key, warm_key, run_key = jax.random.split(key, 4)
+            start = jnp.asarray(z0) + 0.01*jax.random.normal(start_key, z0.shape) # Near the optimum, each a little apart
+            if verbose:
+                print(f'NUTS chain {c+1} of {chains}: {warmup} warm-up draws, then {draws} draws')
+            adapt = blackjax.window_adaptation(blackjax.nuts, logdensity)
+            (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
+            step = jax.jit(blackjax.nuts(logdensity, **params).step)
+            for i,draw_key in enumerate(jax.random.split(run_key, draws)):
+                state, info = step(draw_key, state)
+                out[c, i] = np.asarray(state.position)
+                logdens[c, i] = float(state.logdensity)
+                divergent[c, i] = bool(info.is_divergent)
+    finally:
+        jax.config.update('jax_enable_x64', x64)
+    return out, logdens, divergent
+
+
+def nuts_jax(logdensity, z0, draws=500, warmup=500, chains=4, seed=None, verbose=True):
+    """
+    Sample from a posterior with the No-U-Turn sampler (BlackJAX), as `nuts()`, but from a log-density that is a JAX function, so that the whole of the sampling is compiled, with the chains run together
+
+    The gradient is taken in forward mode (one direction per parameter), which for a few
+    parameters is much cheaper than reverse mode through the steps of an ODE.
+
+    Args:
+        logdensity (func): a JAX function of a point (on an unbounded scale) giving the log of the posterior density there
+        z0 (array): the point to start each chain near
+        draws, warmup, chains, seed, verbose: as for `nuts()`
+
+    Returns:
+        The draws (chains × draws × values), the log-density at each (chains × draws), and whether each followed a divergent trajectory (chains × draws)
+    """
+    jax = ss.gradients.jax()
+    import blackjax
+    jnp = jax.numpy
+    z0 = np.asarray(z0, dtype=float)
+    d = len(z0)
+    logdensity = jax.jit(logdensity) # Traced once, rather than wherever the sampler uses it
+
+    @jax.custom_vjp
+    def logp(z):
+        return logdensity(z)
+
+    def forward(z): # The value and every partial derivative, in forward mode
+        values, slopes = jax.vmap(lambda e: jax.jvp(logdensity, (z,), (e,)))(jnp.eye(d))
+        return values[0], slopes
+
+    def backward(slopes, cotangent):
+        return (cotangent*slopes,)
+
+    logp.defvjp(forward, backward)
+
+    def one_chain(key, start):
+        warm_key, run_key = jax.random.split(key)
+        adapt = blackjax.window_adaptation(blackjax.nuts, logp)
+        (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
+        step = blackjax.nuts(logp, **params).step
+        def body(state, key):
+            state, info = step(key, state)
+            return state, (state.position, state.logdensity, info.is_divergent)
+        _, out = jax.lax.scan(body, state, jax.random.split(run_key, draws))
+        return out
+
+    x64 = jax.config.jax_enable_x64
+    jax.config.update('jax_enable_x64', True)
+    try:
+        key = jax.random.key(seed if seed is not None else 0)
+        start_key, chain_key = jax.random.split(key)
+        starts = jnp.asarray(z0) + 0.01*jax.random.normal(start_key, (chains, d)) # Near the optimum, each a little apart
+        keys = jax.random.split(chain_key, chains)
+        devices = jax.devices('cpu')
+        n_dev = max(k for k in range(1, min(len(devices), chains) + 1) if chains % k == 0) # Each device takes the same number of chains
+        shape = lambda arr: arr.reshape((n_dev, chains//n_dev) + arr.shape[1:])
+        T = sc.timer()
+        if n_dev > 1: # Each on cores of its own
+            compiled = jax.pmap(jax.vmap(one_chain), devices=devices[:n_dev]).lower(shape(keys), shape(starts)).compile()
+            args = (shape(keys), shape(starts))
+        else:
+            compiled = jax.jit(jax.vmap(one_chain)).lower(keys, starts).compile()
+            args = (keys, starts)
+        compiling = T.tt(output=True)
+        out = [np.asarray(v).reshape((chains,) + v.shape[2 if n_dev > 1 else 1:]) for v in compiled(*args)]
+        if verbose:
+            print(f'NUTS: {chains} chains on {n_dev} core{"s" if n_dev != 1 else ""}, each of {warmup} warm-up draws and then {draws} draws: compiled in {compiling:.1f} s, sampled in {T.tt(output=True):.1f} s')
+    finally:
+        jax.config.update('jax_enable_x64', x64)
+    return out
+
+
+def rank_normalize(x):
+    """ Draws (chains × draws) replaced by the normal quantiles of their ranks among all of them """
+    ranks = sps.rankdata(x, method='average').reshape(x.shape)
+    return sps.norm.ppf((ranks - 3/8)/(x.size + 1/4))
+
+
+def split_chains(x):
+    """ Each chain (chains × draws) cut into its first and second halves """
+    half = x.shape[1]//2
+    return np.concatenate([x[:, :half], x[:, -half:]])
+
+
+def basic_rhat(x):
+    """ The potential scale reduction of draws (chains × draws) """
+    n = x.shape[1]
+    within = x.var(axis=1, ddof=1).mean()
+    between = n*x.mean(axis=1).var(ddof=1)
+    return np.sqrt((between/within + n - 1)/n) if within > 0 else np.nan
+
+
+def basic_ess(x):
+    """ The effective sample size of draws (chains × draws), from their autocorrelation, with Geyer's initial monotone sequence (as Stan and ArviZ work it out) """
+    m, n = x.shape
+    centered = x - x.mean(axis=1, keepdims=True)
+    size = 2**int(np.ceil(np.log2(2*n)))
+    acov = np.fft.irfft(np.abs(np.fft.rfft(centered, size, axis=1))**2, axis=1)[:, :n]/n # Each chain's autocovariance, by lag
+    mean_var = acov[:, 0].mean()*n/(n - 1)
+    var_plus = mean_var*(n - 1)/n + (x.mean(axis=1).var(ddof=1) if m > 1 else 0)
+    if var_plus <= 0:
+        return float(m*n)
+    rho = np.zeros(n)
+    rho[0] = 1.0
+    even = 1.0
+    odd = 1 - (mean_var - acov[:, 1].mean())/var_plus
+    rho[1] = odd
+    t = 1
+    while t < n - 3 and even + odd > 0: # Sum pairs of lags while they are positive
+        even = 1 - (mean_var - acov[:, t+1].mean())/var_plus
+        odd = 1 - (mean_var - acov[:, t+2].mean())/var_plus
+        if even + odd >= 0:
+            rho[t+1], rho[t+2] = even, odd
+        t += 2
+    max_t = t - 2
+    if even > 0:
+        rho[max_t+1] = even
+    t = 1
+    while t <= max_t - 2: # Make the pairs fall monotonically
+        if rho[t+1] + rho[t+2] > rho[t-1] + rho[t]:
+            rho[t+1] = rho[t+2] = (rho[t-1] + rho[t])/2
+        t += 2
+    tau = -1 + 2*rho[:max_t+1].sum() + rho[max_t+1]
+    return m*n/max(tau, 1/np.log10(m*n))
+
+
+def diagnose(draws):
+    """
+    The R-hat (near 1 if the chains agree) and the effective sample size of each value, from draws (chains × draws × values)
+
+    Both are rank-normalized and from split chains (Vehtari et al. 2021, as Stan, ArviZ, and BlackJAX work them out): the
+    R-hat is the larger of that of the draws and that of their distance from the median, and the effective sample size is of the bulk.
+    """
+    rhat, ess = [], []
+    for j in range(draws.shape[2]):
+        x = split_chains(draws[:, :, j])
+        folded = np.abs(x - np.median(x))
+        rhat.append(max(basic_rhat(rank_normalize(x)), basic_rhat(rank_normalize(folded))))
+        ess.append(basic_ess(rank_normalize(x)))
+    return np.array(rhat), np.array(ess)
+
+
 class Fit(sc.prettyobj):
     """
     The result of fitting a sim to its data; see `ss.fit()`
@@ -1378,8 +1608,14 @@ class Fit(sc.prettyobj):
         mismatch (float): the goodness of fit of the calibrated sim, or its negative log-likelihood if the fit used likelihoods
         measure (str): what `mismatch` measures
         trials (df): every evaluation
+        samples (df): with `method='nuts'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
+        divergences (int): with `method='nuts'`, the number of draws that followed a divergent trajectory (which suggests the sampler missed part of the posterior)
+        band (dict): with `method='nuts'`, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from the posterior
     """
-    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure='goodness of fit'):
+    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure='goodness of fit', samples=None, divergences=None, band=None):
+        self.samples = samples
+        self.divergences = divergences
+        self.band = band
         self.measure = measure
         self.sim = sim
         self.before = before
@@ -1396,6 +1632,13 @@ class Fit(sc.prettyobj):
         print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
         print(self.table.to_string(index=False))
         print(f'{self.measure.capitalize()}: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after')
+        if self.samples is not None:
+            n_chains = self.samples.chain.nunique()
+            print(f'Posterior: {len(self.samples):,} draws from {n_chains} chain{"s" if n_chains != 1 else ""} (best: the draw with the highest posterior density; median, lower, and upper: the median and 95% interval of the posterior)')
+            unsettled = self.table.par[self.table.rhat > 1.01].tolist()
+            if unsettled or self.divergences:
+                ss.warn(f'W1304 NotConverged: {f"the chains disagree about {sc.strjoin(unsettled)} (R-hat above 1.01)" if unsettled else ""}{"; " if unsettled and self.divergences else ""}{f"{self.divergences} draws diverged" if self.divergences else ""}; '
+                        f'try more warm-up (warmup=), or check that the parameters are identifiable')
         for par in self.table.itertuples():
             span = par.high - par.low
             if min(par.best - par.low, par.high - par.best) < 0.01*span:
@@ -1415,11 +1658,34 @@ class Fit(sc.prettyobj):
             for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
                 res = data.match(sim, col)
                 ax.plot(res.timevec, res.values, label=label, alpha=0.8)
+            if self.band is not None:
+                ax.fill_between(res.timevec, *self.band[col], alpha=0.3, label='95% of the posterior')
             ax.scatter(self.sim.data.index, self.sim.data[col], c='k', s=15, label='Data', zorder=10)
             ax.set_title(col)
             ax.legend(frameon=False)
         sc.figlayout(fig=fig)
         return ss.return_fig(fig)
+
+
+def default_method(sim, use_lik, posterior=True):
+    """
+    The fitting method that suits a sim, and why: see `ss.fit()`
+
+    Args:
+        sim (`ss.Sim`): the sim, initialized
+        use_lik (bool): whether every data series has a likelihood
+        posterior (bool): whether a posterior can be the default (if not, a point estimate)
+    """
+    no_grad = ss.gradients.reason(sim)
+    if sim.solver != 'ode':
+        return 'optuna', 'a stochastic sim'
+    elif no_grad:
+        return 'nelder-mead', f'no gradients, since {no_grad}'
+    elif posterior and use_lik:
+        if importlib.util.find_spec('blackjax') is None:
+            return 'l-bfgs-b', 'gradients by automatic differentiation; for a posterior from NUTS, pip install blackjax'
+        return 'nuts', 'every data series has a likelihood, so a posterior, with gradients by automatic differentiation'
+    return 'l-bfgs-b', 'gradients by automatic differentiation'
 
 
 def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
@@ -1436,12 +1702,12 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         weights (dict): the relative weight of each data series (default: equal)
         likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim
-        method (str): 'l-bfgs-b' (the default for a deterministic sim, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
+        method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with the chains started from the initial values; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or 'optuna' (the default for a stochastic sim)
         scan (int): for the SciPy methods, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from the best of them
         n_runs (int): runs per evaluation, for a stochastic sim (default 1)
         rand_seed (int): the random seed for the fitting method
         verbose (bool): whether to print progress
-        kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna or `maxiter=500` for SciPy
+        kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, or `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults)
 
     Returns:
         An `ss.Fit` object
@@ -1490,7 +1756,7 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
                 if isinstance(val, ss.par) and val.module is None and val.bounds is not None and (pars is None or val.name in sc.tolist(pars)):
                     fitted[val.name or f'{col}_{key}'] = val
         if verbose:
-            print(f'Fitting by maximum likelihood: the sum of the log-likelihoods of {sc.strjoin(liks.keys())}, treated as independent' + (' (weighted)' if weights else ''))
+            print(f'Using the likelihood: the sum of the log-likelihoods of {sc.strjoin(liks.keys())}, treated as independent' + (' (weighted)' if weights else ''))
     elif any(lik is not None for lik in liks.values()) and verbose:
         print(f'Note: not every data series has a likelihood, so the likelihoods of {sc.strjoin([k for k,v in liks.items() if v is not None])} are not used')
     if not fitted:
@@ -1522,10 +1788,15 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
     restart = runner.init().kernel_only()
     no_grad = ss.gradients.reason(runner) # Why there are no gradients, if there are not
     if method is None:
-        method = 'optuna' if stochastic else 'nelder-mead' if no_grad else 'l-bfgs-b'
+        method, why = default_method(runner, use_lik)
         if verbose:
-            why = 'a stochastic sim' if stochastic else f'no gradients, since {no_grad}' if no_grad else 'gradients by automatic differentiation'
             print(f'Fitting by {method} ({why}; override with method=)')
+    sample = method == 'nuts'
+    if sample: # The posterior is sampled from around the maximum likelihood, which is found first
+        if not use_lik or no_grad:
+            why = 'not every data series has a likelihood' if not use_lik else f'it has no gradients, since {no_grad}'
+            ss.error('E1303', f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
+        sampling = {key:kwargs.pop(key) for key in ['draws', 'warmup', 'chains'] if key in kwargs}
     use_grad = method.lower() in ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] and not no_grad
 
     def run(x, seed=None, fresh=False):
@@ -1555,14 +1826,16 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
 
     mismatch_before = objective(x0)
     start = x0
-    scan = kwargs.pop('scan', None if method == 'optuna' else 10*len(names))
+    scan = kwargs.pop('scan', None if method in ['optuna', 'nuts'] else 10*len(names))
     if scan: # The fit can have several local optima, so start from the best of a spread of points
         sampler = sps.qmc.LatinHypercube(d=len(names), seed=rand_seed if rand_seed is not None else 1)
         points = decode(encode(lows) + sampler.random(scan)*(encode(highs) - encode(lows)))
         values = [objective(x) for x in points]
         if min(values) < mismatch_before:
             start = points[int(np.argmin(values))]
-    if method == 'optuna':
+    if sample: # The chains start from the initial values, and the warm-up finds the posterior
+        best = x0
+    elif method == 'optuna':
         import optuna
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(sampler=optuna.samplers.TPESampler(seed=rand_seed))
@@ -1589,12 +1862,90 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
             result = spo.minimize(lambda z: objective(decode(z)), encode(start), method=method, bounds=bounds, options=options)
         best = decode(result.x)
 
+    samples = divergences = band = None
+    if sample: # On a scale on which every value is allowed: the logit of each value's place between its bounds (of its log, for one searched on a log scale)
+        method = 'nuts'
+        base_lows = np.where(logs, np.log(np.where(logs, lows, 1.0)), lows)
+        span = np.where(logs, np.log(np.where(logs, highs, 1.0)), highs) - base_lows
+
+        def to_x(z):
+            share = np.clip(1/(1 + np.exp(-z)), 1e-12, 1 - 1e-12)
+            pos = base_lows + span*share
+            return np.where(logs, np.exp(pos), pos), share
+
+        def share_of(x):
+            return np.clip((np.where(logs, np.log(np.maximum(x, 1e-300)), x) - base_lows)/span, 1e-9, 1 - 1e-9)
+
+        def to_z(x):
+            share = share_of(x)
+            return np.log(share/(1 - share))
+
+        def logpost(z):
+            x, share = to_x(z)
+            dxdz = span*share*(1 - share)*np.where(logs, x, 1.0)
+            value, derivs = ss.gradients.gradient(runner, lambda x: runner.restart(pars=to_pars(x)), x, measure)
+            hs = 1e-6*np.maximum(np.abs(x), 1e-6)
+            prior = sum(logprior(p, val) for p,val in zip(fitted.values(), x))
+            dprior = np.array([(logprior(p, val + h) - logprior(p, val - h))/(2*h) if p.prior is not None else 0.0 for p,val,h in zip(fitted.values(), x, hs)])
+            dlogjac = 1 - 2*share + np.where(logs, span*share*(1 - share), 0.0) # The derivative of log(dx/dz)
+            return -float(value) + prior + np.log(dxdz).sum(), (dprior - np.array(derivs, dtype=float))*dxdz + dlogjac
+
+        def exact(z): # The log of the posterior density at a point, from a run of the sim
+            x, share = to_x(z)
+            return -measure(run(x)) + sum(logprior(p, val) for p,val in zip(fitted.values(), x)) + np.log(span*share*(1 - share)*np.where(logs, x, 1.0)).sum()
+
+        try: # The log-density as one function in JAX, if the model allows; otherwise each gradient is worked out with Python in the loop
+            density = ss.gradients.Density(runner, fitted, x0, lambda x: runner.restart(pars=to_pars(x)), likelihood=likelihood, weights=weights, external=external)
+        except ss.gradients.Unsupported as E:
+            density = None
+            if verbose:
+                print(f'Note: sampling with Python in the loop, which is slower, since the log-density in JAX does not cover {E} yet')
+        if density is not None:
+            jnp = ss.gradients.jax().numpy
+            def logpost_jax(z):
+                share = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
+                pos = base_lows + span*share
+                x = jnp.where(logs, jnp.exp(pos), pos)
+                return density(x) + jnp.log(span*share*(1 - share)*jnp.where(logs, x, 1.0)).sum()
+            zs, logdens, divergent = nuts_jax(logpost_jax, to_z(x0), seed=rand_seed, verbose=verbose, **sampling)
+            flat_z, flat_lp = zs.reshape(-1, len(names)), logdens.reshape(-1)
+            for i in np.linspace(0, len(flat_lp) - 1, 3).astype(int): # The JAX log-density is the one the sim gives, at a few of the draws
+                expected = exact(flat_z[i])
+                if not np.isclose(flat_lp[i], expected, rtol=1e-6, atol=1e-6):
+                    ss.warn(f'The log-density in JAX ({flat_lp[i]:.10g}) differs from the one from the sim ({expected:.10g}) at {dict(zip(names, to_x(flat_z[i])[0]))}, so the posterior is sampled again with Python in the loop')
+                    density = None
+                    break
+        if density is None:
+            zs, logdens, divergent = nuts(logpost, to_z(x0), seed=rand_seed, verbose=verbose, **sampling)
+        xs = np.array([[to_x(z)[0] for z in chain] for chain in zs])
+        logjac = np.log(span*share_of(xs)*(1 - share_of(xs))*np.where(logs, xs, 1.0)).sum(axis=-1)
+        best = xs.reshape(-1, len(names))[np.argmax((logdens - logjac).reshape(-1))] # The draw with the highest posterior density (of the values themselves, not on the sampler's scale)
+        n_chains, n_draws = divergent.shape
+        rhat, n_eff = diagnose(xs)
+        samples = pd.DataFrame(xs.reshape(-1, len(names)), columns=names)
+        samples.insert(0, 'chain', np.repeat(np.arange(n_chains), n_draws))
+        samples.insert(1, 'draw', np.tile(np.arange(n_draws), n_chains))
+        divergences = int(divergent.sum())
+        table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
+        table['median'] = np.median(samples[names].values, axis=0)
+        table['lower'], table['upper'] = np.percentile(samples[names].values, [2.5, 97.5], axis=0)
+        table['rhat'], table['ess'] = rhat, n_eff
+        picks = samples[names].values[np.linspace(0, len(samples) - 1, min(100, len(samples))).astype(int)] # Spread evenly over the draws
+        values = sc.ddict(list)
+        for x in picks:
+            sim = run(x)
+            for col in sim.data.columns:
+                values[col].append(np.array(ss.data.match(sim, col).values, dtype=float)) # ss.data, since data is an argument here
+        band = {col:np.percentile(vals, [2.5, 97.5], axis=0) for col,vals in values.items()}
+
+    else:
+        table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
     before = run(x0, fresh=True)
     after = run(best, fresh=True) # Last, so a likelihood's own parameters keep their best values
     best_pars = sc.objdict(zip(names, [cls(val) if cls is not None else float(val) for val,cls in zip(best, types)]))
-    table = pd.DataFrame(dict(par=names, initial=x0, best=best, low=lows, high=highs))
     out = Fit(sim=after, before=before, pars=best_pars, table=table, trials=pd.DataFrame(trials), method=method,
-              mismatch=measure(after), mismatch_before=mismatch_before, measure='negative log-likelihood' if use_lik else 'goodness of fit')
+              mismatch=measure(after), mismatch_before=mismatch_before, measure='negative log-likelihood' if use_lik else 'goodness of fit',
+              samples=samples, divergences=divergences, band=band)
     return out
 
 
@@ -1759,7 +2110,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, verbose=None, **kw
         fit_errors = []
         errors = []
         for train,test in splits:
-            fit = ss.fit(sim, data=train, verbose=False, **kwargs)
+            fit = ss.fit(sim, data=train, verbose=False, **sc.mergedicts(dict(method=default_method(probe, use_lik, posterior=False)[0]), kwargs)) # A point estimate, for each fold
             fold_fits.append(fit)
             fit_errors.append(fit.mismatch)
             if use_lik:

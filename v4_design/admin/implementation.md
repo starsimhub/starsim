@@ -129,7 +129,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
 - [x] Coupling between places that moves the force of infection, as LASER does (`ss.Mobility(kind='force')`)
 - [x] Networks, as agents and (approximated, with a note) as compartments
-- [x] Multi-disease coupling in a compartmental run: diseases that a condition links are crossed (`ss.Crossing`), each a dimension of the sim whose levels are its compartments of people; each engine holds everyone, and takes the people over from the engine that changed them last. Not yet: a dimension that applies to some of the crossed diseases' states but not others (e.g. a strain dimension of infected states only, as in tbsim), a first state that splits on entry, an expression in one disease's rates that counts another's states, and the kernels taking the whole run in one call
+- [x] Multi-disease coupling in a compartmental run: diseases that a condition links are crossed (`ss.Crossing`), each a dimension of the sim whose levels are its compartments of people; each engine holds everyone, and takes the people over from the engine that changed them last. A dimension of some states of one disease only (a strain, or ART) is allowed, if not of its first state (tbsim's TB with resistance and HIV with ART, as an ODE, agree with agents). Not yet: a dimension of some states of several of the diseases, a first state that splits on entry, an expression in one disease's rates that counts another's states, and the kernels taking the whole run in one call
 
 ### 07 Effects
 
@@ -223,7 +223,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Fitting a parameter wherever it is used: in an initial count (`init=dict(E=I0/2, I=I0)`), inside `ss.seasonal` or `ss.timeseries` (`mean=(1 + smin)/2`), or shared by several modules or by models built more than once (registered with each, and fitted once)
 - [ ] Data matched by name to summed results
 - [x] Likelihoods (`ss.poisson`, `ss.nbinom`, `ss.normal`, `ss.lognorm_ex`, with the model's value as the mean), fitted by maximum likelihood; `ss.compare_models`, with `holdout=` and `folds=`
-- [ ] Posterior methods (NUTS, particle MCMC, ABC-SMC) and priors (the gradients for NUTS are there: see `ss.gradients.gradient()`)
+- [x] NUTS and priors: `sim.calibrate()` (the default when every series has a likelihood; `ss.compare_models()` still fits a point estimate for each fold), with BlackJAX and the log-density as one function in JAX (`ss.gradients.Density`: the numbers in the run from the parameters, the run, the results with data, the likelihood, and the priors), checked against runs of the sim at a few draws; chains on cores of their own; rank-normalized R-hat, bulk ESS, and divergences (`W1304 NotConverged`). Against camdl's ODE NUTS on its SIR (2 parameters, 4 chains of 500 + 500 draws, RK4 with steps of a day): the same posterior; sampling 2.5 s against about 2.2 s, with a bulk ESS of about 310 against 211, so more effective draws per second; but 1.9 s of compiling (0.9 s when it has been compiled before, from the cache in `ss.options.jax_cache`) and 1.7 s of imports, so 5.5 s from the command line against camdl's 2.3 s. Not yet: in JAX, more than one declared disease, fitted parameters of dwell-time distributions, modifiers of fitted parameters, and outcomes that people stay in (these are sampled with Python in the loop, one chain at a time); staged fitting (`method=[...]`)
+- [ ] Particle MCMC and ABC-SMC
 - [ ] Identifiability notes
 
 ### 14 to 16 Model spec, errors, and interop
