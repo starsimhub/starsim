@@ -264,12 +264,14 @@ class Transition(Nameable):
             state, n = offspring if isinstance(offspring, (tuple, list)) else (offspring, 1)
             self.offspring = (state, int(n))
         self.move = None # A change of level in some dimensions: {dim: level}
+        self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
         if move:
             self.move = sc.objdict()
             for dim,level in move.items():
                 if isinstance(level, str) and re.search(r'->|>>', level):
                     srcs, dsts = parse_arrow(level)
                     level = dsts[0]
+                    self.move_from[dim] = sc.tolist(srcs)
                     at = ss.conditions.Cond('dim', dim) == srcs # Only people at the level they move from
                     self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
                 self.move[dim] = level

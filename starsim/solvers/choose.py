@@ -59,6 +59,16 @@ def choose_solver(sim):
                     others = ~ss.conditions.as_cond(where)
                 pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=others, name=key)
                 pars.connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in where=
+                level_key = f'level_{mod.name}_{name}'
+                if tr.move_from and tr.p is not None and level_key not in pars.connectors: # A branch for the people at some levels only (a move= arrow): never drawn by people at the others, who would never leave by it
+                    at = None
+                    for dim,levels in tr.move_from.items():
+                        here = None
+                        for level in levels: # At any of the levels it moves people from
+                            eq = ss.conditions.Cond('dim', dim) == level
+                            here = eq if here is None else here | eq
+                        at = here if at is None else at & here
+                    pars.connectors[level_key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=~at, name=level_key)
     for m in list(pars.interventions.values()) + list(pars.connectors.values()): # A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted
         if isinstance(m, ss.modify) and isinstance(m.amount, ss.par):
             p = m.amount

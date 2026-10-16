@@ -1696,6 +1696,17 @@ def test_branches():
         ss.Disease(sev=ss.progression('E -> P', p=0.3), a=ss.progression('E -> A', dur=2), b=ss.progression('E -> R', dur=2))
     with pytest.raises(ss.BadBranchSplit, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
         ss.Disease(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A'))
+
+    # Branches kept to one level each by move= sum to 1 within that level, not across levels (FPsim review: p= per parity)
+    A, B, C = ss.states('A B C')
+    trs = {f'{dst.name.lower()}{k}': ss.Transition(A, dst, p=p, dur=ss.months(1), move=dict(k=f'{k} -> 1')) for dst,p in [(B, 0.9), (C, 0.1)] for k in '01'}
+    d = ss.Disease(A, B, C, **trs, name='d').stratify(k=['0', '1']) # Everyone starts in A
+    res = ss.Sim(d, n_agents=2000, start=2000, stop=2001, dt=ss.months(1), unit='year', **kw).run().results.d
+    assert res.n_A[-1] == 0 and np.isclose(res.n_C[-1]/2000, 0.1, atol=0.03)
+    A, B, C = ss.states('A B C')
+    with pytest.raises(ss.BadBranchSplit, match=r'1.8.*\(b1: .*c1: '): # But still within each
+        ss.Disease(A, B, C, b0=ss.Transition(A, B, p=0.9, dur=1, move=dict(k='0 -> 1')), c0=ss.Transition(A, C, p=0.1, dur=1, move=dict(k='0 -> 1')),
+                   b1=ss.Transition(A, B, p=0.9, dur=1, move=dict(k='1 -> 1')), c1=ss.Transition(A, C, p=0.9, dur=1, move=dict(k='1 -> 1')))
     return sim
 
 

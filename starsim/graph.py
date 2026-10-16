@@ -2,6 +2,7 @@
 The graph of one module: its states, transitions, and parameters, collected, named, completed with defaults (each guess recorded), and checked
 """
 import types
+import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -598,18 +599,32 @@ class Graph(Presentation):
                 if not const and exits.remainder is None and len(exits.timed) == 1: # A share that is worked out as the sim runs (e.g. a function): the timed exit with no p= takes the rest, then
                     exits.remainder = exits.timed.pop()
                     exits.remainder.guessed['p'] = f'1 - {" - ".join(tr.name for tr in exits.branches)}'
-                elif const and not np.isclose(total, 1) and not (exits.remainder is not None and total < 1):
-                    if total < 1 and len(exits.timed) == 1:
+                elif const and (bad := self.bad_splits(exits)):
+                    if all(t < 1 for _,t in bad) and len(exits.timed) == 1:
                         exits.remainder = exits.timed.pop()
-                        exits.remainder.guessed['p'] = f'{1 - total:n}'
+                        exits.remainder.guessed['p'] = f'{1 - bad[0][1]:n}'
                     else:
+                        group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
                         driven = [tr for tr in exits.hazards if not tr.undriven]
                         why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. "{name} -> A | B" with p=[{total:n}, None].' if undriven else ''
                         why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
-                                                f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).{why}')
+                                                f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in group])}).{why}')
         return
+
+    @staticmethod
+    def bad_splits(exits):
+        """ The groups of branches with constant p= whose shares do not sum to 1: those that apply to the people at each level named by a move= arrow are summed within that level; returns [(branches, total)] """
+        bad = []
+        dims = sorted({dim for tr in exits.branches for dim in tr.move_from})
+        levels = [sorted({lev for tr in exits.branches for lev in tr.move_from.get(dim, [])}) for dim in dims]
+        for cell in itertools.product(*levels):
+            group = [tr for tr in exits.branches if all(lev in tr.move_from.get(dim, [lev]) for dim,lev in zip(dims, cell))]
+            total = sum(tr.p[0].raw for tr in group)
+            if group and not np.isclose(total, 1) and not (exits.remainder is not None and total < 1):
+                bad.append((group, total))
+        return bad
 
     def check(self):
         """ Checks that do not need the sim """
