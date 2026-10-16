@@ -251,6 +251,29 @@ def test_memory():
     return sims
 
 
+def test_then():
+    sc.heading('Testing then=: a second product at the same visit, and a list of them')
+    def make(**kwargs):
+        sis = make_sis()
+        drug = ss.Treatment(moves={sis.cure: 0.9})
+        visit = ss.treat(drug, where=sis.I, coverage=0.3, interval=ss.days(10), then=[ss.vaccinate(ss.Vaccine(efficacy=0.5)), ss.screen(ss.Test(), coverage=0.5)])
+        return ss.Sim(sis, interventions=visit, **kwargs)
+    sims = run_both(make, stop=60, pop=200_000, n_agents=200_000)
+    for solver,sim in sims.items():
+        res = sim.results
+        assert np.isclose(res.visit_then1.delivered[0], res.visit.delivered[0]) # Everyone treated, none of whom hold it yet
+        assert 0 < res.visit_then1.delivered.sum() <= res.visit.delivered.sum()
+        assert np.isclose(res.visit_then2.delivered.sum(), 0.5*res.visit.delivered.sum(), rtol=0.05)
+        assert np.isclose(res.visit_then2.diagnosed.sum(), 0.1*res.visit_then2.delivered.sum(), rtol=0.15) # Tested at the same visit, after the drug (which cures 90%)
+    check_close(sims, lambda sim: sim.results.visit_then1.delivered.sum(), rtol=0.1)
+
+    # A function, as agents
+    seen = []
+    sim = ss.Sim(make_sis(), interventions=ss.treat(ss.Treatment(transition='cure'), coverage=0.2, at=[5], then=lambda sim, uids: seen.append(len(uids))), stop=10, n_agents=5000, **kw).run()
+    assert sim.solver == 'abm' and seen == [sim.results.treat.delivered[5]]
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
@@ -259,3 +282,4 @@ if __name__ == '__main__':
     capacity = test_capacity()
     target = test_target()
     memory = test_memory()
+    then = test_then()

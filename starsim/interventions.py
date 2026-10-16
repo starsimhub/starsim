@@ -629,6 +629,8 @@ class Delivery(Intervention):
         dose (int): for a product given in doses (`doses=`), which dose this is: given to people who have had the one before
         on_positive (Delivery/func/list): for a test: what happens to people who test positive: another delivery, a function of `(sim, uids)`, or a list of them
         on_negative (Delivery/func/list): likewise for people who test negative
+        then (Delivery/func/list): what else happens to the people who received it, at the same visit: another delivery (e.g. a
+            second drug, `then=ss.treat(metronidazole, where=ss.People.female)`), a function of `(sim, uids)`, or a list of them
         disease (str): the disease the product acts on (default: the only one; for a treatment that names its transitions, the disease of the first)
         name (str): the name; if not given, taken from the variable the delivery is assigned to
 
@@ -648,7 +650,7 @@ class Delivery(Intervention):
     product_keys = [] # The keywords of the product, with which the delivery makes its own
 
     def __init__(self, product=None, move=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, queue=None, target=None, remove=None, of=None, repeat=None, dose=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
+                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, queue=None, target=None, remove=None, of=None, repeat=None, dose=None, then=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
@@ -735,6 +737,7 @@ class Delivery(Intervention):
             raise ValueError(errormsg)
         self.on_positive = on_positive
         self.on_negative = on_negative
+        self.then = then
         if isinstance(disease, (list, tuple)):
             errormsg = f'disease= of a delivery is one disease, not {len(disease)}: a product acts on one disease, so make one product for each, and deliver each with its own disease='
             raise TypeError(errormsg)
@@ -763,7 +766,7 @@ class Delivery(Intervention):
 
     @property
     def followups(self):
-        return [intv for intv in sc.tolist(self.on_positive) + sc.tolist(self.on_negative) if isinstance(intv, Delivery)]
+        return [intv for intv in sc.tolist(self.on_positive) + sc.tolist(self.on_negative) + sc.tolist(self.then) if isinstance(intv, Delivery)]
 
     @property
     def disease(self):
@@ -894,7 +897,7 @@ class Delivery(Intervention):
     def agent_reasons(self):
         """ The reasons, if any, that this delivery needs agents """
         out = [] if self.product is None else self.product.agent_reasons()
-        for key in ['on_positive', 'on_negative']:
+        for key in ['on_positive', 'on_negative', 'then']:
             if any(callable(f) and not isinstance(f, Delivery) for f in sc.tolist(getattr(self, key))):
                 out.append(f'{key}= of "{self.name}" is a function of (sim, uids)')
         if self.trace is not None:
@@ -2042,11 +2045,41 @@ class Delivery(Intervention):
                 chosen = self.follow(chosen, chosen, {sim.groups.dim_index(product.dim):1})
             else:
                 self.hold(chosen)
+        before = None if abm else self.eng.state_counts()
         if self.edges: # A treatment that cures with a probability
-            self.cure(chosen)
+            moved = self.cure(chosen)
+            if moved is not None: # In a compartmental run: those treated, where they are now
+                N = self.eng.state_counts()
+                chosen = np.clip(np.divide(moved, N, out=np.zeros_like(N), where=N>0), 0, 1)
+                before = None
         elif isinstance(product, ss.Test):
             self.test(chosen)
+        if self.then is not None:
+            self.follow_up(sc.tolist(self.then), chosen if before is None else self.same_people(chosen, before))
         return
+
+    def follow_up(self, followups, sel):
+        """ Pass some people to follow-ups at the same visit (`then=`): each chooses its recipients from them (as agents, all before anyone moves) """
+        if self.selector.abm: # Selections are made once, then applied
+            uids = self.uids(sel)
+            choices = [f.choose(sel.copy()) if isinstance(f, Delivery) else None for f in followups]
+            for f,choice in zip(followups, choices):
+                if choice is not None:
+                    f.finish(*choice)
+                else:
+                    f(self.sim, uids)
+            return
+        before = self.eng.state_counts()
+        for f in followups:
+            here = self.same_people(sel, before) # After the others have moved some people
+            f.receive(here if f.dis is self.dis else self.carried(here, f)) # A function of uids makes the model agent-based
+        return
+
+    def carried(self, sel, other):
+        """ In a compartmental run: a selection of this delivery's people, for a delivery of another disease, which cannot depend on the state """
+        if not np.allclose(sel, sel[0]):
+            raise ss.CapabilityError(f'"{self.name}" passes people chosen by their state in "{self.dis.name}" to "{other.name}", of "{other.dis.name}", with solver="{self.sim.solver}". Run with solver="abm".')
+        return np.broadcast_to(sel[0], other.selector.shape).copy()
 
     def efficacy(self, e, eng, state=None):
         """ The probability of moving along one transition: the treatment's, times the modifiers of the transition if it is undriven (scalar, per agent, or per group) """
@@ -2134,7 +2167,9 @@ class Delivery(Intervention):
             counts = np.array([F[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
             n = home.state_counts()
             fail.receive(np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1))
-        return
+        if cur is not home: # Where the people treated are now, by state and group of this disease (for then=)
+            C = cross.local(cross.joint(cur, C), home)
+        return np.array([C[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
 
     def force_part(self, eng, C, edges):
         """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and those who failed """
@@ -2294,7 +2329,7 @@ class Delivery(Intervention):
             out['product_spec'] = self.product.spec()
         if self.at_age is not None:
             out['at_age'] = spec_value(self.at_age)
-        for key in delivery_keys + ['on_positive', 'on_negative']:
+        for key in delivery_keys + ['on_positive', 'on_negative', 'then']:
             val = getattr(self, dict(at='rounds', where='eligible').get(key, key))
             if val is None or (key == 'at' and not val):
                 continue

@@ -194,8 +194,8 @@ class Sim(ss.Base):
                 out.append(cap)
             out.append(mod)
             if isinstance(mod, ss.Delivery):
-                for key in ['positive', 'negative']:
-                    children = sc.tolist(getattr(mod, f'on_{key}'))
+                for key in ['positive', 'negative', 'then']:
+                    children = sc.tolist(getattr(mod, key if key == 'then' else f'on_{key}'))
                     for i,child in enumerate(children):
                         if isinstance(child, ss.Delivery):
                             add(child, mod, key if len(children) == 1 else f'{key}{i+1}')
