@@ -15,6 +15,21 @@ class Product(ss.Module):
     Products represent diagnostic tests, treatments, or vaccines that can be
     administered to agents by an Intervention.
     """
+    @property
+    def since(self):
+        """ The time since each person last received it, from any delivery (inf if never), as a lazy condition: `where=vx.since >= ss.months(6)` """
+        return ss.conditions.Cond('memory', self, 'since')
+
+    @property
+    def n(self):
+        """ The number of times each person has received it (doses, for a vaccine), as a lazy condition """
+        return ss.conditions.Cond('memory', self, 'n')
+
+    @property
+    def held(self):
+        """ Whether each person holds it now, as a lazy condition """
+        return ss.conditions.Cond('memory', self, 'held') > 0
+
     def init_pre(self, sim):
         """ Initialize the product; skips if already initialized """
         if not self.initialized:
@@ -209,6 +224,8 @@ class Effect:
         level = selector.dim(product.dim)
         holds = level > 0
         efficacy = selector.per_person(self.efficacy)
+        if getattr(product, 'doses', None): # Relative efficacy after each dose
+            efficacy = efficacy*np.concatenate([[0.0], product.doses])[np.clip(np.nan_to_num(level).astype(int), 0, len(product.doses))]
         if callable(product.waning) and selector.abm: # Scaled by how much protection is left, given the time since it was delivered
             elapsed = (product.sim.ti - product.ti_delivered.raw)*engine.dt
             efficacy = efficacy*np.where(holds, product.waning(np.where(holds, elapsed, 0.0)), 0.0)
@@ -232,16 +249,20 @@ class Held(Product):
     default_key = 'acquisition'
     n_stages = 10 # In a compartmental run, the levels of time since delivery for a product whose protection fades by a function of it
 
-    def __init__(self, efficacy=None, waning=None, cost=None, name=None, label=None, **kwargs):
+    def __init__(self, efficacy=None, waning=None, doses=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
         if isinstance(waning, ss.transitions.TimeValue): # Called with the sim, for the value at the current time
             errormsg = f'waning= is a duration or a function of the time since delivery, not {type(waning).__name__}, which varies with the time of the sim; for protection that fades by a table, give e.g. waning=lambda t: np.interp(t, [0, 1, 2], [1, 0.5, 0])'
             raise TypeError(errormsg)
         self.efficacy = efficacy
         self.waning = waning
+        self.doses = None if doses is None else list(doses)
+        if self.doses and waning is not None:
+            errormsg = 'A product given in doses (doses=) cannot wane yet'
+            raise NotImplementedError(errormsg)
         self.cost = cost
         self.disease = None # Set by the delivery
-        self.define_states(ss.FloatArr('ti_delivered', label='Time of delivery'))
+        self.define_states(ss.FloatArr('ti_delivered', label='Time of delivery'), ss.FloatArr('ti_last', label='Time last received'), ss.FloatArr('n_recv', default=0, label='Number of times received'))
         self.rng_wane = ss.random()
         return
 
@@ -373,6 +394,8 @@ class Vaccine(Held):
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
         waning (dur/func): a duration, for protection that is lost after an exponentially distributed time with that mean;
             or a function of the time since delivery returning the fraction of protection that remains (in a compartmental run, kept as levels of time since delivery)
+        doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
+            level per dose, and a delivery gives the next dose, or the one its `dose=` says
         leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the vaccine is assigned to
@@ -649,6 +672,7 @@ class Test(Product):
     compartmental = True
     holds = False
     waning = None
+    doses = None
     spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
     __test__ = False # So pytest does not collect it
 
@@ -660,6 +684,7 @@ class Test(Product):
         self.detects = None if detects is None else ss.conditions.as_cond(detects)
         self.cost = cost
         self.disease = None
+        self.define_states(ss.FloatArr('ti_last', label='Time last received'), ss.FloatArr('n_recv', default=0, label='Number of times received'))
         return
 
     def agent_reasons(self):

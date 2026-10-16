@@ -20,7 +20,7 @@ ops = {
     '&':operator.and_, '|':operator.or_, '+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv,
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
-leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event']
+leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory']
 
 
 class Cond:
@@ -56,6 +56,7 @@ class Cond:
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
         elif op == 'event': return self.label
+        elif op == 'memory': return f'{modname(args[0])}.{args[1]}'
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
         elif op == '~':    return f'~{args[0]!r}'
         elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
@@ -336,7 +337,7 @@ def is_static(cond, sim):
         return True
     op, args = cond.op, cond.args
     dims = [strat.name for strat in sim.groups.strats]
-    if op == 'dim':
+    if op in ['dim', 'memory']: # Delivery memory is a stratification too: see ss.Delivery.memory_dims()
         return True
     elif op == 'people':
         return args[0] in dims
@@ -472,6 +473,8 @@ class Selector:
             return self.incidence(cond)
         elif op == 'event':
             return self.event_of(cond)
+        elif op == 'memory':
+            return self.memory(*args)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):
@@ -531,6 +534,27 @@ class Selector:
             return out
         return engine.event_frac(name)
 
+    def memory(self, owner, kind):
+        """ What a delivery or product remembers of each agent or group: `since` (the time since last received; inf if never), `n` (the number received), or `held` """
+        sim = self.sim
+        name = modname(owner)
+        if kind == 'held':
+            return self.dim(f'has_{name}') > 0
+        if self.abm:
+            obj = ss.interventions.memory_owner(sim, name)
+            if kind == 'n':
+                return obj.n_recv.raw
+            last = obj.ti_last.raw
+            return np.where(np.isnan(last), np.inf, (sim.ti - last)*sim.pars.dt.to(sim.unit_base).value)
+        dim = f'{kind}_{name}'
+        if dim not in [strat.name for strat in sim.groups.strats]: # Not referenced by anything with a threshold: see ss.Delivery.memory_dims()
+            raise ss.CapabilityError(f'{name}.{kind} is kept in a compartmental run only where it is compared with a value (e.g. {name}.{kind} >= ss.years(5)). Run with solver="abm".')
+        level = self.dim(dim)
+        if kind == 'n':
+            return level
+        steps = sim.memory_steps[name]
+        return np.where(level == 0, np.inf, (level - 1)*steps*sim.pars.dt.to(sim.unit_base).value)
+
     def event_of(self, event):
         """ The people an event (`tr.to(B)`, `X.enter`, `X.exit`) happened to """
         mod = self.mod if event.module is None else self.module(modname(event.module))
@@ -554,6 +578,8 @@ class Selector:
 
     def level(self, cond, value):
         """ A label of a stratification (e.g. 'high', or True) becomes its position """
+        if isinstance(cond, Cond) and cond.op == 'memory' and isinstance(value, ss.TimePar): # The time since, in the sim's unit
+            return ss.solvers.convert(value, self.sim.unit_base)
         if isinstance(cond, Cond) and cond.op in leaves and isinstance(value, (str, bool, np.bool_)):
             name = cond.args[-1]
             dims = [strat.name for strat in self.sim.groups.strats]

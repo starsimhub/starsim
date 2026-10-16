@@ -192,6 +192,65 @@ def test_target():
     return sims
 
 
+def test_memory():
+    sc.heading('Testing delivery memory: once per spell, repeat=, .since, .held, and doses')
+
+    # Routine delivery is once per spell of being eligible: each infection is offered treatment once; repeat=False is once ever
+    def spells(repeat=None, **kwargs):
+        sis = make_sis(beta=0.15)
+        clinic = ss.treat(ss.Treatment(moves=sis.cure), where=sis.I, coverage=0.3, repeat=repeat)
+        return ss.Sim(sis, interventions=clinic, **kwargs)
+    each = run_both(spells, stop=200)
+    once = run_both(spells, stop=200, repeat=False)
+    for solver in ['ode', 'abm']:
+        r, res = each[solver].results.clinic, each[solver].results.sis
+        assert np.isclose(r.delivered[1:].sum(), 0.3*res.infection[:-1].sum(), rtol=0.1), f'{solver}: {r.delivered[1:].sum()} vs {0.3*res.infection[:-1].sum()}' # As agents, those whose dwell rounds to no steps recover in the step they are infected, before the clinic sees them (a few %)
+        assert once[solver].results.clinic.delivered.sum() < 0.6*r.delivered.sum()
+    check_close(each, lambda sim: sim.results.clinic.delivered.sum(), rtol=0.15) # As agents, a few % fewer are seen (above), and the epidemic is a few % smaller
+
+    # Not within 30 days of the last time, at a rate per year; and the time since another delivery in a condition
+    def rescreen(**kwargs):
+        sis = make_sir()
+        test = ss.Test(sensitivity=0.9)
+        screening = ss.screen(test, coverage=ss.peryear(4), repeat=ss.days(30))
+        recent = ss.vaccinate(ss.Vaccine(efficacy=0.5), where=screening.since < ss.days(5), coverage=0.1)
+        return ss.Sim(sis, interventions=[screening, recent], **kwargs)
+    sims = run_both(rescreen, stop=120)
+    for solver,sim in sims.items():
+        r = sim.results.screening
+        p = 1 - np.exp(-4/365) # Each day, of those not screened in the last 30 days
+        assert np.isclose(r.coverage[1:31].mean(), p, rtol=0.07) and np.isclose(r.eligible[1], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
+        assert np.isclose(r.eligible[60], 50_000 - r.delivered[31:60].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
+        assert sim.results.recent.delivered[1] > 0 and sim.results.recent.eligible[50] < 6*r.delivered[45:50].sum()
+        if solver == 'abm':
+            screened = sim.interventions.screening.ti_last.raw
+            assert np.nanmin(sim.ti - screened) >= 0
+    check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.05)
+    check_close(sims, lambda sim: sim.results.recent.delivered.sum(), rtol=0.05)
+    assert 'since_screening' in [s.name for s in sims.ode.strats] and 'since_screening' not in [s.name for s in sims.abm.strats]
+
+    # Two doses: the second at least 30 days after the first; and .held
+    def doses(**kwargs):
+        sir = make_sir()
+        vx = ss.Vaccine(efficacy=0.8, doses=[0.5, 1.0])
+        first = ss.vaccinate(vx, dose=1, coverage=0.6, at=[5])
+        second = ss.vaccinate(vx, dose=2, where=vx.since >= ss.days(30), coverage=0.5, interval=1)
+        held = ss.vaccinate(ss.Vaccine(efficacy=0.1, name='other'), where=vx.held, at=[60])
+        return ss.Sim(sir, interventions=[first, second, held], **kwargs)
+    sims = run_both(doses, stop=80)
+    for solver,sim in sims.items():
+        res = sim.results
+        assert np.isclose(res.first.delivered[5], 30_000, rtol=0.02)
+        d2 = res.second.delivered
+        assert d2[:35].sum() == 0 and np.isclose(d2[35], 15_000, rtol=0.03) and np.isclose(d2.sum(), res.first.delivered.sum(), rtol=0.01) # Everyone who had the first, in the end
+        assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
+    check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # Agents are about 10% below the ODE at a step of a day (as in test_transfer), and one run varies too
+    assert [s.labels for s in sims.ode.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
+    with pytest.raises(ValueError):
+        ss.vaccinate(ss.Vaccine(efficacy=0.8), dose=2)
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
@@ -199,3 +258,4 @@ if __name__ == '__main__':
     queue = test_queue()
     capacity = test_capacity()
     target = test_target()
+    memory = test_memory()
