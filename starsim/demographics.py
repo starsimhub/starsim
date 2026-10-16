@@ -464,9 +464,13 @@ class PregnancyPars(ss.Pars):
         return
 
 
-class Pregnancy(Demographics):
+class LegacyPregnancy(Demographics):
     """
-    Create births via pregnancies for each agent.
+    Create births via pregnancies for each agent: the Starsim 3 pregnancy module, written as code (agents only)
+
+    See `ss.Pregnancy` for the declared module, which runs as agents or compartments and whose events
+    (`preg.conception`, `preg.delivery`, `preg.birth`) other modules can use. This class is kept unchanged
+    for code that depends on its methods (e.g. `add_delivery_callback()`, as `ss.library.mnch.FetalHealth` does).
 
     This module models conception, pregnancy, and birth at the individual level using
     age-specific fertility rates. Supports prenatal and postnatal transmission
@@ -503,6 +507,7 @@ class Pregnancy(Demographics):
         super().__init__()
         default_pars = PregnancyPars()
         self.define_pars(**default_pars)
+        kwargs.setdefault('name', 'pregnancy') # As the declared ss.Pregnancy, which other modules look up by name
         self.update_pars(pars, **kwargs)
 
         # A number or duration sets the choice's a to a scalar; use a fixed duration instead

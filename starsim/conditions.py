@@ -13,7 +13,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event', 'clock', 'state', 'any_']
+__all__ = ['Cond', 'Event', 'clock', 'state', 'any_', 'child']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -213,6 +213,81 @@ class Event(Cond):
         if not isinstance(engine, ss.solvers.Agents):
             raise ss.CapabilityError(f'{self.label}.uids is a list of agents, which exist only with solver="abm".')
         return engine.event_uids(**self.spec())
+
+
+class Named:
+    """
+    An event a module records that is not one of its transitions (e.g. `preg.live_birth`), or several events (a tuple of names), for `ss.conditions.Event`
+
+    Args:
+        module (Module/str): the module that records it
+        name (str/tuple): the name of the event, or of several
+    """
+    def __init__(self, module, name):
+        self.module = module
+        self.name = name
+        self.dst = None
+        return
+
+    def __repr__(self):
+        return f'{modname(self.module)}.{self.name}'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+class Child(Event):
+    """
+    `ss.child(event)`: an event on the mother, when one of her children goes through `event` (e.g. `preg.birth`), as agents
+
+    Args:
+        event (Event/Transition): the event that happens to the child
+        under (dur): only children younger than this
+    """
+    def __init__(self, event, under=None):
+        if isinstance(event, ss.Transition):
+            event = Event('tr', event)
+        if not isinstance(event, Event):
+            errormsg = f'ss.child() takes an event (a transition, or e.g. preg.birth), not {event}'
+            raise TypeError(errormsg)
+        Cond.__init__(self, 'event', 'child', event, under)
+        return
+
+    @property
+    def label(self):
+        return f'child({self.args[1].label})'
+
+    @property
+    def module(self):
+        return self.args[1].module
+
+    def spec(self):
+        return self.args[1].spec()
+
+    def mothers(self, sim, uids):
+        """ The mothers of the children an event happened to """
+        ppl = sim.people
+        under = self.args[2]
+        uids = ss.uids(uids)
+        if under is not None:
+            uids = uids[ppl.age.raw[uids] < ss.dur(under).years]
+        parent = ppl.parent.raw[uids]
+        return ss.uids(np.unique(parent[parent != ppl.parent.nan]))
+
+    @property
+    def uids(self):
+        return self.mothers(self.module.sim, self.args[1].uids)
+
+
+def child(event, under=None):
+    """
+    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
+
+    Args:
+        event (Event/Transition): the event that happens to the child
+        under (dur): only children younger than this
+    """
+    return Child(event, under=under)
 
 
 def set_states(cond):
@@ -582,9 +657,12 @@ class Selector:
         engine = mod.engine
         if self.abm:
             out = np.zeros(self.shape, dtype=bool)
-            out[engine.event_uids(**event.spec())] = True
+            uids = engine.event_uids(**event.spec())
+            out[event.mothers(self.sim, uids) if isinstance(event, Child) else uids] = True
             return out
         spec = event.spec()
+        if isinstance(event, Child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
+            raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
         if 'tr' in spec:
             return engine.event_frac(spec['tr'], to=spec.get('to'))
         raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')

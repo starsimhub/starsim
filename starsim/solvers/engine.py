@@ -659,6 +659,13 @@ class Engine:
         raise ss.CapabilityError(f'{clock} cannot run with solver="{self.sim.solver}" yet: a clock is kept per agent, and its compartmental form (levels of elapsed time) is not built yet.\n'
                                  f'     Run with solver="abm".')
 
+    def mother(self, expr):
+        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the mother of an unborn person is kept per agent, and the fetal levels of the mother\'s compartments are not built yet.\n'
+                                 f'     Run with solver="abm".')
+
+    def since(self, expr):
+        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the time since an event is kept per agent. Run with solver="abm".')
+
     def frac(self, states):
         return self.count(states)/self.n_people()
 

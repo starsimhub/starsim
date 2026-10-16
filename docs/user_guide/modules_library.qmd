@@ -121,7 +121,7 @@ Real DHS data requires registration, so `dhs_data='default'` generates synthetic
 import numpy as np
 
 sim = ss.Sim(diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'),
-             demographics=ss.Pregnancy(), **endemic)
+             demographics=ss.LegacyPregnancy(), **endemic)
 sim.run()
 
 # Note: use the sim's copy of the network, since modules are copied on initialization
@@ -146,7 +146,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 
 ## Maternal, newborn, and child health
 
-The `ssl.mnch` submodule contains examples of vertical transmission and birth outcomes — patterns that are considerably harder to discover than a standard disease module. All of them build on `ss.Pregnancy` and `ss.PrenatalNet`.
+The `ssl.mnch` submodule contains examples of vertical transmission and birth outcomes — patterns that are considerably harder to discover than a standard disease module. All of them build on `ss.LegacyPregnancy` and `ss.PrenatalNet`.
 
 | Class | Base | Description |
 | --- | --- | --- |
@@ -158,13 +158,13 @@ The `ssl.mnch` submodule contains examples of vertical transmission and birth ou
 
 ### Congenital outcomes
 
-`CongenitalDisease` demonstrates the generic congenital framework built into `ss.Infection`. When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it around delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state. Fetal losses (`'stillborn'`, `'miscarriage'`) are scheduled one timestep before delivery so that they happen in utero — otherwise `ss.Pregnancy`, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:
+`CongenitalDisease` demonstrates the generic congenital framework built into `ss.Infection`. When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it around delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state. Fetal losses (`'stillborn'`, `'miscarriage'`) are scheduled one timestep before delivery so that they happen in utero — otherwise `ss.LegacyPregnancy`, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:
 
 ```{python}
 mnch_pars = dict(start='2000', stop='2005', n_agents=2000, dt=ss.weeks(1))
 sim = ss.Sim(
     diseases      = ssl.mnch.CongenitalDisease(beta=ss.peryear(20), init_prev=0.2),
-    demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
+    demographics  = [ss.LegacyPregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     networks      = [ss.PrenatalNet(), ss.RandomNet()],
     **mnch_pars,
 )
@@ -181,12 +181,12 @@ To use the framework in your own disease, define `birth_outcome_keys` and `birth
 
 ### Neonatal deaths
 
-`NeonatalSepsis` illustrates that neonatal death detection is *passive*: any mechanism that kills an agent aged 0–28 days is automatically classified as a neonatal death by the `ss.Pregnancy` module, with no registration or callback needed. Results therefore appear on the pregnancy module, not the disease:
+`NeonatalSepsis` illustrates that neonatal death detection is *passive*: any mechanism that kills an agent aged 0–28 days is automatically classified as a neonatal death by the `ss.LegacyPregnancy` module, with no registration or callback needed. Results therefore appear on the pregnancy module, not the disease:
 
 ```{python}
 sim = ss.Sim(
     diseases     = ssl.mnch.NeonatalSepsis(),
-    demographics = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
+    demographics = [ss.LegacyPregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     networks     = [ss.PrenatalNet(), ss.RandomNet()],
     **mnch_pars,
 )
@@ -205,7 +205,7 @@ The `fetal_infection` connector pulls those levers when a pregnant woman is infe
 ```{python}
 sim = ss.Sim(
     diseases      = ssl.AgentSIR(beta=ss.peryear(20), name='sir'),
-    demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
+    demographics  = [ss.LegacyPregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     connectors    = ssl.mnch.fetal_infection(),
     interventions = ssl.mnch.treat_pregnant(disease='sir', start_year=2005),
     custom        = ssl.mnch.FetalHealth(),

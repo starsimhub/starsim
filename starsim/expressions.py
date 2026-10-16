@@ -5,7 +5,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Expr', 'par']
+__all__ = ['Expr', 'par', 'mother']
 
 
 #%% Helpers
@@ -317,6 +317,91 @@ class Clock(Expr):
         return f'{inner}.{self.kind}'
 
 
+class Mother(Expr):
+    """
+    `ss.mother(x)`: a condition or expression evaluated on each unborn agent's mother, and 0 for everyone else
+
+    Args:
+        x (Cond/State/Expr): what to evaluate on the mother, e.g. `syph.Pv | syph.S2`, or `preg.P.time`
+    """
+    def __init__(self, x):
+        if isinstance(x, Mother):
+            errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
+            raise ValueError(errormsg)
+        self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
+        return
+
+    def to_str(self, parent=False):
+        return f'mother({self.x})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+def mother(x):
+    """
+    A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born
+
+    Usable in rates, `p=`, `where=`, `ss.on()`, and modifier conditions. Agents only for now.
+
+    Args:
+        x (Cond/State/Expr): e.g. `syph.Pv | syph.S2`, `hiv.rel_trans`, or `preg.P.time`
+
+    Examples:
+        ```python
+        mtct = S >> C @ beta_m2c * ss.mother(Pv | Ph | S2 | EL | LL)
+        fetal_eff = ss.where(ss.mother(preg.P.time) > ss.weeks(27), 0.75, 0.98)
+        ```
+    """
+    return Mother(x)
+
+
+class Since(Expr):
+    """
+    Time since a module last recorded an event for each agent (e.g. `preg.since_birth`), in the sim's unit: inf if never
+
+    Unlike a clock of a state, it survives later moves: a miscarriage does not reset the time since the last live birth.
+    Agents only for now.
+
+    Args:
+        module (Module/str): the module that records the event
+        event (str): the event's name; the module keeps the time of it in `ti_<event>`
+    """
+    def __init__(self, module, event):
+        self.module = module
+        self.event = event
+        return
+
+    def to_str(self, parent=False):
+        return f'{ss.conditions.modname(self.module)}.since_{self.event}'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+def mothers_in(obj, seen=None):
+    """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` """
+    seen = set() if seen is None else seen
+    if id(obj) in seen:
+        return False
+    seen.add(id(obj))
+    if isinstance(obj, Mother):
+        return True
+    elif isinstance(obj, par):
+        return mothers_in(obj.value, seen) if isinstance(obj.value, (Expr, ss.conditions.Cond)) else False
+    elif isinstance(obj, Expr):
+        return any(mothers_in(leaf, seen) for leaf in obj.leaves if leaf is not obj) or any(mothers_in(arg, seen) for arg in getattr(obj, 'args', [])) or any(mothers_in(getattr(obj, key, None), seen) for key in ['a', 'b'])
+    elif isinstance(obj, ss.transitions.on):
+        return mothers_in(obj.x, seen)
+    elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
+        return any(mothers_in(arg, seen) for arg in obj.args)
+    elif isinstance(obj, (list, tuple)):
+        return any(mothers_in(item, seen) for item in obj)
+    elif isinstance(obj, dict):
+        return any(mothers_in(item, seen) for item in obj.values())
+    return False
+
+
 def rebind(expr, memo):
     """ The expression with the states and transitions it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; parameters are kept, not copied """
     if isinstance(expr, (ss.transitions.State, ss.transitions.Transition)):
@@ -484,6 +569,10 @@ def evaluate(expr, ctx):
         return ctx.flow(expr)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
+    elif isinstance(expr, Mother):
+        return ctx.mother(expr)
+    elif isinstance(expr, Since):
+        return ctx.since(expr)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
     raise TypeError(errormsg)
 

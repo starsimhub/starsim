@@ -1487,12 +1487,12 @@ class PrenatalNet(Network):
     """
     Prenatal transmission network
 
-    Although edges change over time, the edges are managed via ss.Pregnancy as pregnancies start and finish.
+    Although edges change over time, the edges are managed via ss.LegacyPregnancy as pregnancies start and finish.
     The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
     """
 
     def step(self):
-        # Adding/removing edges is managed by ss.Pregnancy
+        # Adding/removing edges is managed by ss.LegacyPregnancy
         pass
 
     def add_pairs(self, mother_uids=None, unborn_uids=None):
@@ -1571,7 +1571,7 @@ class BreastfeedingNet(PostnatalNet):
         # Connect the pregnancy module to this network; do this here rather than in init_post() since deliveries during the pregnancy burn-in call add_pairs()
         super().init_pre(sim)
         for mod in self.sim.modules:
-            if isinstance(mod, ss.Pregnancy):
+            if isinstance(mod, ss.LegacyPregnancy):
                 self.pregnancy = mod
                 break
         else:

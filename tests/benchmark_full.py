@@ -28,7 +28,7 @@ def make_run_sim():
     networks = [ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()]
 
     # Make the sim
-    sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=[sir, hiv])
+    sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.LegacyPregnancy(), diseases=[sir, hiv])
 
     # Run the sim
     sim.run()

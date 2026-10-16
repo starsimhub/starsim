@@ -32,7 +32,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(datadir/'nigeria_asfr.csv')
-        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1, burnin=False)  # 4/3
+        pregnancy = ss.LegacyPregnancy(fertility_rate=fertility_rates, rel_fertility=1, burnin=False)  # 4/3
         demographics += pregnancy
 
     death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
@@ -198,7 +198,7 @@ def test_pregnancy():
     sim = ss.Sim(
         n_agents=20e3, # Large enough that the <18 mother cohort has a robust sample (~85 babies) for the gestational-age assertions below
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'), burnin=True),
+            ss.LegacyPregnancy(fertility_rate=ss.time.freq(20, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.years(10),
@@ -277,7 +277,7 @@ def test_pregnancy_short_sim():
     sim = ss.Sim(
         n_agents=1e3,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(10, 'year'), burnin=False),
+            ss.LegacyPregnancy(fertility_rate=ss.time.freq(10, 'year'), burnin=False),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.days(250),
@@ -290,7 +290,7 @@ def test_pregnancy_short_sim():
     # Check that a number or a non-choice distribution works for dur_pregnancy, including with fertility data
     asfr = pd.read_csv(datadir/'nigeria_asfr.csv')
     for dur_preg in [39, ss.normal(ss.weeks(39), ss.weeks(1))]:
-        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
+        preg = ss.Sim(n_agents=500, demographics=ss.LegacyPregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
         assert 0.7 < preg.mean_dur_pregnancy < 0.8, 'Mean pregnancy should be roughly 39 weeks' # 39 weeks = 0.75 years
 
     sc.printgreen('✓ Short sim pregnancy finalize test passed')
@@ -309,7 +309,7 @@ def test_loss_classification():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=0.05), burnin=True),
+            ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=0.05), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.years(5),
@@ -347,7 +347,7 @@ def test_background_loss():
         sim = ss.Sim(
             n_agents=5_000,
             demographics=[
-                ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=p_loss), burnin=True),
+                ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=p_loss), burnin=True),
                 ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
             ],
             dur=ss.years(5),
@@ -381,7 +381,7 @@ def test_nnd():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         diseases=ssl.mnch.NeonatalSepsis(),
@@ -496,9 +496,9 @@ def test_birth_data_cols():
 
 @sc.timer()
 def test_declared_newborns():
-    """ Agents added by ss.Births and ss.Pregnancy (including the unborn) enter a declared disease, with a level of each dimension """
+    """ Agents added by ss.Births and ss.LegacyPregnancy (including the unborn) enter a declared disease, with a level of each dimension """
     sc.heading('Testing newborns in a declared disease')
-    for dem in [ss.Births(birth_rate=40), ss.Pregnancy(fertility_rate=40)]:
+    for dem in [ss.Births(birth_rate=40), ss.LegacyPregnancy(fertility_rate=40)]:
         sis = ss.Disease(infection=ss.transmission('S -> I', beta=2), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
         sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
         sim.run()

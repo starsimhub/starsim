@@ -31,7 +31,7 @@ def test_microsim(do_plot=False):
     sim = ss.Sim(
         people=ss.People(small),
         networks=[ss.MFNet(), ss.PrenatalNet()],
-        demographics=ss.Pregnancy(),
+        demographics=ss.LegacyPregnancy(),
         diseases=hiv,
         copy_inputs = False, # So we can reuse hiv
     )

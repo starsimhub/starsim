@@ -604,6 +604,32 @@ class Agents(Engine):
             raise KeyError(errormsg)
         return engine.clock_values(clock, self._uids)
 
+    def mother(self, expr):
+        """ `ss.mother(x)`: x evaluated on each unborn agent's mother (by UID), and 0 for everyone else """
+        ppl = self.sim.people
+        parent = ppl.parent.raw
+        unborn = (ppl.age.raw < 0) & (parent != ppl.parent.nan)
+        out = np.zeros(len(parent))
+        if unborn.any():
+            saved = getattr(self, '_uids', None), getattr(self, '_for_uids', False)
+            moms = ss.uids(parent[unborn])
+            x = expr.x
+            if isinstance(x, ss.conditions.Cond) or callable(x) and not isinstance(x, ss.expressions.Expr):
+                vals = self.selector.select(x)[moms]
+            else:
+                vals = np.broadcast_to(np.asarray(self.eval_for(x, moms), dtype=float), len(moms))
+            self._uids, self._for_uids = saved
+            out[unborn] = vals
+        return out
+
+    def since(self, expr):
+        """ The time since a module last recorded an event for each agent (by UID), in the sim's unit; inf if never """
+        name = ss.conditions.modname(expr.module)
+        mod = self.mod if name in [None, self.mod.name] else self.sim.get_declared(name)
+        start = mod[f'ti_{expr.event}'].raw
+        with np.errstate(invalid='ignore'):
+            return np.where(np.isnan(start), np.inf, (mod.ti - start)*self.dt)
+
     def clock_values(self, clock, uids):
         """ Time in some states (or the share of the dwell time elapsed), for some agents; NaN for those not in them """
         mod = self.mod
@@ -803,7 +829,21 @@ class Agents(Engine):
         seen = self._seen.get(tr.name, {})
         fresh = [b for b in engine.batches if id(b) not in seen]
         self._seen[tr.name] = {id(b):b for b in engine.batches} # Kept, so an id is not reused while it is remembered
-        return engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
+        uids = engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
+        return event.mothers(self.sim, uids) if isinstance(event, ss.conditions.Child) else uids
+
+    def fresh(self, key, tr):
+        """ The agents who went through a transition (or a recorded event) of this module since `key` last asked: for code that reacts to events once each """
+        seen = self._seen.get(key, {})
+        fresh = [b for b in self.batches if id(b) not in seen]
+        self._seen[key] = {id(b):b for b in self.batches}
+        return self.event_uids(tr, batches=fresh) if fresh else ss.uids()
+
+    def record_event(self, name, uids):
+        """ Record an event that is not a transition (e.g. a live birth, for the mother), so it can be read by ss.on() and conditions """
+        if len(uids):
+            self.record(ss.conditions.Named(self.mod, name), ss.uids(uids), -1, -1)
+        return
 
     @property
     def subscribers(self):
@@ -1001,14 +1041,15 @@ class Agents(Engine):
         The agents an event happened to, as UIDs: those who went through a transition (as `on=` sees them), or one of
         its branches (`to`), or who entered or left a set of states (given as names), from outside it
         """
-        if tr is not None and to is None and batches is None: # As on= sees them
+        if tr is not None and to is None and batches is None and tr in self.graph.transitions: # As on= sees them
             uids = self.events.get(tr)
             return ss.uids() if uids is None else ss.uids(uids).unique()
         out = []
         index = self.state_index
+        trs = tr if isinstance(tr, (tuple, list)) else (tr,) # Several events at once, e.g. preg.loss
         for b in (self.batches if batches is None else batches):
             if tr is not None:
-                if b.tr == tr and (to is None or b.dst == index[to]):
+                if b.tr in trs and (to is None or b.dst == index[to]):
                     out.append(b.uids)
                 continue
             inside = [index[name] for name in (enter if enter is not None else exit)]
