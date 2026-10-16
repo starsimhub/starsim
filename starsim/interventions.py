@@ -527,8 +527,8 @@ class Delivery(Intervention):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
-        if on is not None and (isinstance(on, (ss.State, ss.conditions.Cond, ss.Arr)) or not callable(on)) and not isinstance(on, ss.Transition):
-            errormsg = f'on= of a delivery is an event: a transition (e.g. on=sir.infection), or a function of the sim; for the people in a state or meeting a condition, use where= (e.g. where=sir.I, interval=1), not on={on}'
+        if on is not None and (isinstance(on, (ss.State, ss.conditions.Cond, ss.Arr)) or not callable(on)) and not isinstance(on, (ss.Transition, ss.conditions.Event)):
+            errormsg = f'on= of a delivery is an event: a transition (e.g. on=sir.infection), a branch or the entering or leaving of a state (sir.recovery.to(R), sir.I.enter), or a function of the sim; for the people in a state or meeting a condition, use where= (e.g. where=sir.I, interval=1), not on={on}'
             raise TypeError(errormsg)
         eligible = where
         own = {key:kwargs.pop(key) for key in self.product_keys if key in kwargs} # The product's own keywords, for a delivery that makes its own, e.g. ss.vaccinate(efficacy=0.9, ...)

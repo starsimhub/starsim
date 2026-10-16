@@ -42,6 +42,9 @@ class Agents(Engine):
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
         self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
+        self.batches = [] # Who entered a state, from where, and when, for the events of branches and of entering and leaving states: see event_uids()
+        self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
+        self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
         self._junctions = None # The states passed through at once: see junctions
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
@@ -202,7 +205,7 @@ class Agents(Engine):
 
     def force(self, uids, tr, dst, srcs=None):
         """ Move agents who are in a state a transition leaves from (or in `srcs`) to a state, counted in the transition's flow if there is one (as when a treatment cures) """
-        moved = self.move_states(uids, tr.src if srcs is None else srcs, dst)
+        moved = self.move_states(uids, tr.src if srcs is None else srcs, dst, tr=tr)
         if tr is None:
             return len(moved)
         self.flowcounts[tr.name] += self.n_of(moved)
@@ -211,18 +214,20 @@ class Agents(Engine):
         self.forced[tr.name] = ss.uids.concatenate([self.forced[tr.name], moved]) if tr.name in self.forced else moved
         return len(moved)
 
-    def move_states(self, uids, srcs, dst):
+    def move_states(self, uids, srcs, dst, tr=None):
         """ Move the agents who are in some states to a state: along a transition (see `force()`), or along none, as a one-off move; returns those moved """
         mod = self.mod
         moved = []
+        frm = []
         for state in srcs:
             if state.people:
                 inds = uids[mod[state.name][uids]]
                 mod[state.name][inds] = False
                 self.clear_exit(state.name, inds)
                 moved.append(inds)
+                frm.append(np.full(len(inds), self.state_index[state.name]))
         moved = ss.uids.concatenate(moved) if moved else ss.uids()
-        self.enter(dst, moved, mod.ti)
+        self.enter(dst, moved, mod.ti, tr=tr, srcs=np.concatenate(frm) if frm else -1)
         return moved
 
     @property
@@ -607,20 +612,22 @@ class Agents(Engine):
                 else:
                     self.sim.people.request_death(uids)
                 continue
+            frm = np.concatenate([np.full(len(u), self.state_index.get(s.name, -1)) for s,u in zip(srcs[name], uidlist)]) # The state each came from
             if len(tr.dst) == 1:
-                dsts = [(tr.dst[0], uids)]
+                dsts = [(tr.dst[0], uids, frm)]
             else:
                 self._uids = uids
                 ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
                 rvs = self.draw(f'dst_{name}', uids)
                 edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
-                dsts = [(dst, uids[(rvs >= edges[i]) & (rvs < edges[i+1])]) for i,dst in enumerate(tr.dst)]
-            for dst,inds in dsts:
+                masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(tr.dst))]
+                dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dst, masks)]
+            for dst,inds,came in dsts:
                 self.enter_dims(tr, srcs[name], uidlist, dst, inds)
                 for d,level in (self.moves(tr) or ()): # A change of level as well as of state
                     self.sim.people[self.sim.groups.strats[d].attr][inds] = level
                     self.sim.groups.groups_changed(inds)
-                self.enter(dst, inds, ti) # Once their levels are known, since dwell times can depend on them
+                self.enter(dst, inds, ti, tr=tr, srcs=came) # Once their levels are known, since dwell times can depend on them
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
                 if len(inds) and dst.name in self.scheduled:
@@ -741,7 +748,7 @@ class Agents(Engine):
             dist.jump()
         return dist.rvs(uids)
 
-    def enter(self, state, uids, ti):
+    def enter(self, state, uids, ti, tr=None, srcs=-1):
         """
         Put agents in a state, and schedule their exit from it, at the moment they enter (so `p=` is read then, and code after the step sees the exit)
 
@@ -757,9 +764,50 @@ class Agents(Engine):
         mod[f'ti_{name}'][uids] = ti
         if f'late_{name}' in mod.__dict__:
             mod[f'late_{name}'][uids] = ti == mod.ti and self._drawn_ti == mod.ti
+        self.record(tr, uids, srcs, self.state_index[name])
         if name in self.scheduled:
             self.schedule(state, uids)
         return
+
+    def start_phase(self, phase):
+        """ Where the engine is in a step (0 for its state changes, 2 for its transmission): what happened at this point in the last step is no longer news """
+        ti = self.mod.ti
+        self.batches = [b for b in self.batches if b.key[0] > ti - 1 or (b.key[0] == ti - 1 and b.key[1] > phase)]
+        self._phase = (ti, phase)
+        return
+
+    def record(self, tr, uids, srcs, dst):
+        """ Record who entered a state, from where (the index of the state each came from, or -1 for none), as an event: true from the moment of the move until the same point in the next step """
+        ti = self.mod.ti
+        phase = self._phase[1] if self._phase[0] == ti else -1 # Moved by another module before this one's step: see start_phase()
+        self.batches.append(sc.objdict(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase)))
+        return
+
+    def event_uids(self, tr=None, to=None, enter=None, exit=None):
+        """
+        The agents an event happened to, as UIDs: those who went through a transition (as `on=` sees them), or one of
+        its branches (`to`), or who entered or left a set of states (given as names), from outside it
+        """
+        if tr is not None and to is None:
+            uids = self.events.get(tr)
+            return ss.uids() if uids is None else ss.uids(uids).unique()
+        out = []
+        index = self.state_index
+        for b in self.batches:
+            if tr is not None:
+                if b.tr == tr and b.dst == index[to]:
+                    out.append(b.uids)
+                continue
+            inside = [index[name] for name in (enter if enter is not None else exit)]
+            src_in = np.isin(b.src, inside)
+            dst_in = np.bool_(b.dst in inside) # Not a Python bool, whose ~ is an integer
+            keep = (dst_in & ~src_in) if enter is not None else (src_in & ~dst_in)
+            if np.ndim(keep) == 0:
+                if keep:
+                    out.append(b.uids)
+            elif keep.any():
+                out.append(b.uids[keep])
+        return ss.uids.concatenate(out).unique() if out else ss.uids()
 
     def schedule(self, state, members):
         """
@@ -921,6 +969,7 @@ class Agents(Engine):
         ti = mod.ti
         dt = self.dt
         self._moved = []
+        self.start_phase(0)
         self.place_newcomers()
         for name,tr in graph.transitions.items(): # Whoever went through these last step is no longer news
             if not tr.contact:
@@ -1238,6 +1287,7 @@ class Agents(Engine):
         """ Contact-mediated transitions """
         mod = self.mod
         self._moved = []
+        self.start_phase(2)
         self.cache.clear() # The interventions have run since the step started
         for tr in self.graph.transmissions:
             self.events.pop(tr.name, None)
@@ -1267,7 +1317,7 @@ class Agents(Engine):
                     mod[frm][inds] = False
                     mod.engine.clear_exit(frm, inds)
                     mod.engine.clear_exit(to, inds)
-                    mod.engine.enter(graph.states[to], inds, ti)
+                    mod.engine.enter(graph.states[to], inds, ti, srcs=mod.engine.state_index[frm])
         return
 
     def step_register(self, ti):

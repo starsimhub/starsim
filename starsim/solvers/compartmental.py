@@ -535,14 +535,14 @@ class Compartmental(Engine):
         self.changed()
         return total
 
-    def event_frac(self, name):
-        """ The people who went through a transition in the last step, as a fraction of the state they are now in """
+    def event_frac(self, name, to=None):
+        """ The people who went through a transition in the last step (or one of its branches, `to`), as a fraction of the state they are now in """
         tr = self.graph.transitions[name]
         out = self.selector.nobody()
         flow = self.last_flows.get(name)
         if flow is not None:
             for dst,p in zip(tr.dst, self.branch_probs(tr)):
-                if dst.people:
+                if dst.people and to in [None, dst.name]:
                     n = self.count([dst], total=False)
                     out[self.selector.states.index(dst.name)] = np.clip(np.divide(flow*p, n, out=np.zeros(self.n_groups), where=n>0), 0, 1)
         return out

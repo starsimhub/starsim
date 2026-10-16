@@ -85,6 +85,16 @@ class State(Nameable, Expr):
         """ I @ rate: a transition into I, with no source yet """
         return Transition(dst=self) @ driver
 
+    @property
+    def enter(self):
+        """ The event of entering this state: a condition, `on=`, or `.uids` """
+        return ss.conditions.Event('enter', [self])
+
+    @property
+    def exit(self):
+        """ The event of leaving this state """
+        return ss.conditions.Event('exit', [self])
+
     def __or__(self, other): # As a condition: the people in either state, e.g. where=sir.I | sir.R (a set of sources is a sum: S + I >> D)
         return ss.conditions.as_cond(self) | other
 
@@ -282,6 +292,15 @@ class Transition(Nameable):
             ```
         """
         return ss.conditions.Cond('incidence', self, over, by) # The transition itself, since it may be named and given its module later
+
+    def to(self, dst):
+        """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids` """
+        return ss.conditions.Event('to', self, dst)
+
+    @property
+    def uids(self):
+        """ The agents who went through this transition, from the moment they moved until the same point in the next step """
+        return ss.conditions.Event('tr', self).uids
 
     def _set_src(self, src):
         self.src = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)

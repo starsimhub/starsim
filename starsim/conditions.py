@@ -12,14 +12,14 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond']
+__all__ = ['Cond', 'Event']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
     '&':operator.and_, '|':operator.or_, '+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv,
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
-leaves = ['people', 'state', 'dim', 'array', 'incidence']
+leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event']
 
 
 class Cond:
@@ -54,6 +54,7 @@ class Cond:
         if op == 'people': return f'people.{args[0]}'
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
+        elif op == 'event': return self.label
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
         elif op == '~':    return f'~{args[0]!r}'
         elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
@@ -70,6 +71,23 @@ class Cond:
     def __eq__(self, other): return Cond('==', self, other)
     def __ne__(self, other): return Cond('!=', self, other)
     def __and__(self, other): return Cond('&', self, other)
+    @property
+    def enter(self):
+        """ For a set of states (`A | B`): the event of entering it from outside it (moves within the set are not entering it) """
+        return self._set_event('enter')
+
+    @property
+    def exit(self):
+        """ For a set of states (`A | B`): the event of leaving it for a state outside it """
+        return self._set_event('exit')
+
+    def _set_event(self, kind):
+        states = set_states(self)
+        if states is None:
+            errormsg = f'.{kind} is for a set of states, e.g. (sir.I | sir.R).{kind}, not {self!r}'
+            raise TypeError(errormsg)
+        return Event(kind, states)
+
     def __or__(self, other):  return Cond('|', self, other)
     def __rand__(self, other): return Cond('&', other, self)
     def __ror__(self, other):  return Cond('|', other, self)
@@ -118,6 +136,82 @@ class Cond:
         if op in ['&', '|']:
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
+
+
+class Event(Cond):
+    """
+    Something that happens to people at a moment: going through a transition (`tr`), one branch of it
+    (`tr.to(B)`), or entering or leaving a state or a set of states (`X.enter`, `(A | B).exit`), where
+    entering a set means arriving from outside it
+
+    An event is a condition, true for the agents it happened to from the moment they moved until the
+    same point in the next step; it can be given to `on=`; and in a running sim, `.uids` are those agents.
+
+    Args:
+        kind (str): 'tr', 'to', 'enter', or 'exit'
+        obj (Transition/list): the transition; or the states, as `ss.State`s or (module, name) pairs
+        dst (State): for 'to', the destination
+    """
+    def __init__(self, kind, obj, dst=None):
+        if kind == 'to' and not any(dst is d or getattr(dst, 'name', dst) == d.name for d in (obj.dst or [])):
+            errormsg = f'{getattr(dst, "name", dst)} is not a destination of {obj.name} ({obj.arrow})'
+            raise ValueError(errormsg)
+        super().__init__('event', kind, obj, dst)
+        return
+
+    @property
+    def names(self):
+        """ For entering or leaving: the names of the states """
+        return [s.name if isinstance(s, ss.State) else s[1] for s in self.args[1]]
+
+    @property
+    def module(self):
+        kind, obj, dst = self.args
+        if kind in ['tr', 'to']:
+            return obj.module
+        mods = [s.module if isinstance(s, ss.State) else s[0] for s in obj]
+        return next((m for m in mods if m is not None), None)
+
+    @property
+    def label(self):
+        kind, obj, dst = self.args
+        mod = modname(self.module)
+        prefix = f'{mod}.' if mod else ''
+        if kind in ['tr', 'to']:
+            out = f'{prefix}{obj.name}'
+            return out if kind == 'tr' else f'{out}.to({getattr(dst, "name", dst)})'
+        names = self.names
+        return f'{prefix}{names[0] if len(names) == 1 else "(" + " | ".join(names) + ")"}.{kind}'
+
+    def spec(self):
+        """ What the engine is asked for: see `ss.solvers.Agents.event_uids()` """
+        kind, obj, dst = self.args
+        if kind == 'tr':
+            return dict(tr=obj.name)
+        elif kind == 'to':
+            return dict(tr=obj.name, to=getattr(dst, 'name', dst))
+        return {kind: self.names}
+
+    @property
+    def uids(self):
+        """ The agents the event happened to, in a running sim """
+        engine = getattr(self.module, 'engine', None)
+        if engine is None:
+            errormsg = f'{self.label} has no agents yet: .uids is for a module in a sim that has been initialized'
+            raise ValueError(errormsg)
+        if not isinstance(engine, ss.solvers.Agents):
+            raise ss.CapabilityError(f'{self.label}.uids is a list of agents, which exist only with solver="abm".')
+        return engine.event_uids(**self.spec())
+
+
+def set_states(cond):
+    """ The states a condition is a set of (`A | B`, or one state), as (module, name) pairs; None if it is anything else """
+    if cond.op == 'state':
+        return [(cond.args[0], cond.args[1])]
+    if cond.op == '|':
+        parts = [set_states(as_cond(arg)) for arg in cond.args]
+        return None if any(p is None for p in parts) else [s for p in parts for s in p]
+    return None
 
 
 def modname(mod):
@@ -174,7 +268,7 @@ def is_static(cond, sim):
         name = args[1]
         mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]
         return any(name in m.graph.states for m in mods) and not any(name in m.graph.transitions for m in mods)
-    elif op in ['array', 'incidence']:
+    elif op in ['array', 'incidence', 'event']:
         return False
     elif op == 'isin':
         return is_static(args[0], sim)
@@ -298,6 +392,8 @@ class Selector:
             return self.dim(args[0])
         elif op == 'incidence':
             return self.incidence(cond)
+        elif op == 'event':
+            return self.event_of(cond)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):
@@ -356,6 +452,19 @@ class Selector:
             out[engine.events.get(name, ss.uids())] = True
             return out
         return engine.event_frac(name)
+
+    def event_of(self, event):
+        """ The people an event (`tr.to(B)`, `X.enter`, `X.exit`) happened to """
+        mod = self.mod if event.module is None else self.module(modname(event.module))
+        engine = mod.engine
+        if self.abm:
+            out = np.zeros(self.shape, dtype=bool)
+            out[engine.event_uids(**event.spec())] = True
+            return out
+        spec = event.spec()
+        if 'tr' in spec:
+            return engine.event_frac(spec['tr'], to=spec.get('to'))
+        raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
 
     def dim_strat(self, name):
         """ The stratification of the sim with a given name, if there is one """
