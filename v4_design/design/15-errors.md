@@ -44,7 +44,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-60 names: 43 errors, 7 warnings, and 10 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+61 names: 44 errors, 7 warnings, and 10 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
@@ -84,6 +84,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `ClockOutsideDomain` | error | A clock (`X.time`, `(A | B).time`, `X.progress`) is read where it has no value: by a transition out of a state outside its states, or by a modifier whose `where=` is not inside them (at build; a `where=` that is a function is checked when it runs, where a NaN amount is an error) |
 | `NoScheduledDwell` | error | `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it |
 | `PeopleAndCounts` | error | A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` |
+| `InitWhereNobodyIs` | error | `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) |
 | `CapabilityError` | error | The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
 | `TimeNotKept` | error | A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times something reads: the engine (for scheduled exits and `after=`/`before=`), or code in the sim's modules (see `ss.Disease.times_read()`). Raised when code that was not found reads one of the others, e.g. a script after the run; names the array and says to set `ss.options.keep_times = True` |
 | `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start), so the message says to write a calendar year as a date (`'2030'`) |

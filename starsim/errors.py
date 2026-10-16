@@ -207,6 +207,9 @@ class NoScheduledDwell(CodedError):
 class PeopleAndCounts(CodedError):
     """ A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` """
 
+class InitWhereNobodyIs(CodedError):
+    """ `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) """
+
 class CapabilityError(CodedError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,

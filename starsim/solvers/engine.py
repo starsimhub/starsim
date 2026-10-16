@@ -848,6 +848,14 @@ class Engine:
                     size = self.total_pop*split
                     count = vals >= 1 # As for a single value: 1 or more is a number of people, and less a share
                     fracs[state.name] = np.where(count, np.divide(vals, size, out=np.zeros(sim.groups.n_groups), where=size>0), vals)
+                    lost = (vals > 0) & (size <= 0) # Given where the split puts nobody
+                    if np.any(lost):
+                        strats = sim.groups.strats
+                        cells = sorted({'(' + ', '.join(f'{strats[d].name}={strats[d].labels[ix[g]]}' for d,ix in zip(ds, index) if ix[g] < strats[d].n) + ')' for g in np.flatnonzero(lost)})
+                        msg = f'init= of "{state.name}" in "{self.mod.name}" is given at {sc.strjoin(cells[:3])}{" and more" if len(cells) > 3 else ""}, where the split puts nobody'
+                        if not np.any((vals > 0) & (size > 0)):
+                            raise ss.InitWhereNobodyIs(f'{msg}, so nobody would start in {state.name}. Give a split= that puts people there, or init= at levels that have people.')
+                        ss.note(f'{msg}; nobody starts in {state.name} there', sim=sim)
                 else:
                     share = np.divide(self.state_split[state.name], split, out=np.zeros(sim.groups.n_groups), where=split>0) # Its split over the other dimensions
                     counts[state.name] = given.sum()
