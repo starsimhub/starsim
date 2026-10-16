@@ -51,6 +51,40 @@ def test_people():
     return sims
 
 
+def test_priority():
+    sc.heading('Testing priority: tiers, a key highest first, and a per-agent key')
+    ppl = ss.People(1)
+    def make(priority=None, **kwargs):
+        sir = make_sir().stratify(risk=['low', 'high'], split=[0.8, 0.2]).stratify(age=[0, 15, 65])
+        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), priority=priority(sir) if priority else None)
+        return ss.Sim(sir, interventions=stock, **kwargs)
+    sims = run_both(make, stop=40, priority=lambda sir: [sir.risk == 'high']) # All of the high-risk first (10,000 people, 20 days)
+    for solver,sim in sims.items():
+        by = sim.results.stock.delivered.by('risk').values
+        assert np.allclose(by[:19, 1], 500) and np.allclose(by[:19, 0], 0), f'{solver}: {by[:21]}'
+        assert by[21:39, 0].sum() > 0.95*500*18
+    sims = run_both(make, stop=40, priority=lambda sir: ss.desc(ppl.age)) # Oldest first
+    for solver,sim in sims.items():
+        by = sim.results.stock.delivered.by('age').values
+        n_old = sim.results.sir.n_S.by('age').values[0, 2] + sim.results.sir.n_I.by('age').values[0, 2]
+        first = int(n_old//500) - 1
+        assert np.allclose(by[:first, 2], 500) and by[:first, :2].sum() == 0, f'{solver}: {by[:first+2]}'
+    check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
+
+    # A key per agent: under an explicit compartmental solver it is ignored with a note; with approx=False it is an error; left to choose, the model runs as agents
+    uids = lambda sir: lambda sim, uids: uids
+    keyed = make(priority=uids, solver='ode', total_pop=50_000, stop=10, **kw).run()
+    assert any('priority ignored' in note for note in keyed.notes)
+    with pytest.raises(ss.CapabilityError):
+        make(priority=uids, solver='ode', approx=False, total_pop=50_000, stop=10, **kw).run()
+    assert make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver == 'abm'
+    lowest = make(priority=uids, solver='abm', total_pop=50_000, n_agents=10_000, stop=3, **kw).run()
+    got = lowest.people.has_vaccine.raw[:10_000].astype(bool)
+    assert got[:300].all() and not got[300:].any() # 100 agents a day, lowest UID first
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
+    priority = test_priority()

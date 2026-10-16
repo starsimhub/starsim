@@ -452,7 +452,46 @@ class BaseVaccination(Intervention):
 
 #%% Deliveries for declared models: who gets a product, when, and how many
 
-delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace']
+delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'priority']
+
+
+class desc:
+    """
+    Highest first, as the `priority=` of a delivery: `priority=ss.desc(hiv.viral_load)`
+
+    Args:
+        key (Cond/Expr/func): what people are ordered by
+    """
+    def __init__(self, key):
+        self.key = key
+        return
+
+    def __repr__(self):
+        return f'desc({self.key!r})'
+
+
+def water_fill(amount, n, keys):
+    """
+    Take `n` people from cells holding `amount` each: whole cells in the order of their keys (lowest first, the first key before the second), and pro rata within a tie
+
+    Args:
+        amount (array): the people that can be taken from each cell
+        n (float): the number to take
+        keys (list): arrays of the same shape as `amount` (or that broadcast to it)
+    """
+    flat = np.asarray(amount, dtype=float).ravel()
+    out = np.zeros_like(flat)
+    some = np.flatnonzero(flat > 0)
+    if not len(some) or n <= 0:
+        return out.reshape(np.shape(amount))
+    K = np.stack([np.broadcast_to(k, np.shape(amount)).ravel()[some] for k in keys], axis=1)
+    _, inv = np.unique(K, axis=0, return_inverse=True) # Sorted, by the first key and then the next
+    inv = inv.ravel()
+    tot = np.bincount(inv, weights=flat[some])
+    before = np.cumsum(tot) - tot
+    frac = np.clip(n - before, 0, tot)/tot
+    out[some] = flat[some]*frac[inv]
+    return out.reshape(np.shape(amount))
 
 
 def movers(sim, modname, name):
@@ -502,8 +541,12 @@ class Delivery(Intervention):
             selects (or that a test sends to this follow-up), instead of to them; `where=` and `coverage=` then apply to the
             contacts. Agents only, since only networks know who someone's contacts are
         when (func): deliver only on the steps where this function of the sim returns True
-        deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
-            run); replaces `where`, `coverage`, and the rounds
+        deliver (func): a function of the sim returning who receives it this step (UIDs, a number of people, or a number per group
+            in a compartmental run); replaces `where`, `coverage`, and the rounds
+        priority (Cond/Expr/list/func/int): who is served first when not everyone can be (under `capacity=`): lowest first of an
+            expression (`hiv.cd4`), highest first with `ss.desc(...)`, tiers (a list of conditions: all of the first, then the
+            second), or a function of the sim (or of `(sim, uids)`) returning a key; ties are broken at random. A number is the
+            delivery's place among those sharing an `ss.Capacity` (lowest first)
         on_positive (Delivery/func/list): for a test: what happens to people who test positive: another delivery, a function of `(sim, uids)`, or a list of them
         on_negative (Delivery/func/list): likewise for people who test negative
         disease (str): the disease the product acts on (default: the only one; for a treatment that names its transitions, the disease of the first)
@@ -523,7 +566,7 @@ class Delivery(Intervention):
     product_keys = [] # The keywords of the product, with which the delivery makes its own
 
     def __init__(self, product=None, move=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, on=None, when=None, deliver=None, trace=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
+                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
@@ -587,6 +630,7 @@ class Delivery(Intervention):
         self.when = when
         self.deliver = deliver
         self.trace = trace
+        self.priority = priority
         self.on_positive = on_positive
         self.on_negative = on_negative
         if isinstance(disease, (list, tuple)):
@@ -724,8 +768,9 @@ class Delivery(Intervention):
                 out.append(f'{key}= of "{self.name}" is a function of (sim, uids)')
         if self.trace is not None:
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
-        for key,attr in [('where', 'eligible'), ('coverage', 'coverage'), ('on', 'on'), ('deliver', 'deliver')]:
+        for key,attr in [('where', 'eligible'), ('coverage', 'coverage'), ('on', 'on'), ('deliver', 'deliver'), ('priority', 'priority')]:
             func = getattr(self, attr)
+            func = func.key if isinstance(func, desc) else func
             if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist)) and ss.utils.n_args(func) >= 2:
                 out.append(f'{key}= of "{self.name}" takes uids')
         return out
@@ -775,7 +820,7 @@ class Delivery(Intervention):
         if self.routine and (sc.isnumber(cap) or (isinstance(cap, ss.transitions.timeseries) and all(sc.isnumber(v) for v in cap.values))): # A count per round or per step is clear; for routine delivery, which has neither, a number needs a unit of time
             errormsg = f'The capacity= of "{self.name}" is a bare number, but routine delivery has no rounds for it to be a number per round: give it as a rate, e.g. capacity=ss.perday({cap if sc.isnumber(cap) else "..."}) or ss.peryear(...)'
             raise ValueError(errormsg)
-        reasons = self.agent_reasons()
+        reasons = [r for r in self.agent_reasons() if not (r.startswith('priority=') and sim.pars.approx is not False)] # A priority per agent is ignored, with a note: see key()
         if sim.solver != 'abm' and reasons:
             raise ss.CapabilityError(f'"{self.name}" cannot run with solver="{sim.solver}": {reasons[0]}.\n     Run with solver="abm", or leave the solver as "auto".')
         if self.trace is not None:
@@ -907,6 +952,7 @@ class Delivery(Intervention):
         for cond in [self.on, self.eligible]:
             selector.select(cond)
         selector.per_person(1.0 if self.coverage is None else self.coverage)
+        self.key(strict=True)
         if self.deliver is not None:
             self.delivered_by_function()
         return
@@ -1059,6 +1105,8 @@ class Delivery(Intervention):
         """ Who the deliver= function says receives the product: UIDs, or a number of people per group """
         selector = self.selector
         out = self.deliver(self.sim)
+        if np.ndim(out) == 0 and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)): # A number of people: chosen by priority=
+            return self.take(self.default_eligible(), float(out))
         if selector.abm or isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
             return selector.to_selection(out, 'deliver=')
         n = self.eng.n_people(total=False)
@@ -1238,25 +1286,114 @@ class Delivery(Intervention):
         return self.round_span.get(self.sim.ti, self.dt_sim) if self.in_rounds else self.dt_sim
 
     def cap(self, sel, chosen):
-        """ Cap the number chosen at the capacity, choosing at random; those not reached have not been offered it """
-        selector = self.selector
+        """ Cap the number chosen at the capacity, in the order of `priority=`; those not reached have not been offered it """
         cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
         if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
             cap = self.convert(cap)*self.span
-        n = self.n_agents(chosen) if selector.abm else self.count(chosen)
-        if selector.abm:
-            cap = cap/self.sim._current_scale + self.carry # In agents
-            k = int(cap)
-            self.carry = cap - k if n >= k else 0.0
-            if n > k:
-                uids = self.uids(chosen)
-                dropped = uids[np.argsort(self.rng_cap.rvs(uids), kind='stable')[k:]]
-                chosen[dropped] = False
-                sel[dropped] = False
-        elif n > cap:
-            chosen = chosen*(cap/n)
-            sel = sel*(cap/n)
-        return sel, chosen
+        served = self.take(chosen, cap, carry=True)
+        if self.selector.abm:
+            return sel & ~(chosen & ~served), served
+        return sel - (chosen - served), served
+
+    def take(self, cands, n, carry=False):
+        """
+        Choose `n` people (a number of people, not agents) from the candidates, in the order of `priority=`: as agents,
+        sorted by the key with ties broken at random; as compartments, whole cells in key order and pro rata within a tie
+
+        Args:
+            cands (array): the candidates, as a selection
+            n (float): the number of people
+            carry (bool): as agents, keep the part of an agent left over for the next step (for a capacity)
+        """
+        selector = self.selector
+        if not selector.abm:
+            N = self.eng.state_counts()
+            amount = cands*N
+            if amount.sum() <= n:
+                return cands
+            key = self.key()
+            if key is None:
+                return cands*(n/amount.sum())
+            served = water_fill(amount, n, [key])
+            return np.clip(np.divide(served, N, out=np.zeros_like(N), where=N>0), 0, 1)
+        uids = self.uids(cands)
+        k = n/self.sim._current_scale # In agents
+        if carry:
+            k += self.carry
+            self.carry = k - int(k) if len(uids) >= int(k) else 0.0
+            k = int(k)
+        else:
+            k = int(round(k))
+        if len(uids) <= k:
+            return cands
+        key = self.key()
+        rand = self.tiebreak(uids)
+        order = np.argsort(rand, kind='stable') if key is None else np.lexsort((rand, key[uids]))
+        out = selector.nobody()
+        out[uids[order[:k]]] = True
+        return out
+
+    def tiebreak(self, uids):
+        """ A random number per agent, the same for every choice of the step (from the delivery's own stream, so scenarios stay paired) """
+        ti = self.sim.ti
+        if getattr(self, '_ti_tiebreak', None) != ti:
+            auids = self.sim.people.auids
+            self._tiebreak = np.full(len(self.sim.people.uid.raw), 0.5)
+            self._tiebreak[auids] = self.rng_cap.rvs(auids)
+            self._ti_tiebreak = ti
+        return self._tiebreak[uids]
+
+    def key(self, strict=False):
+        """
+        The priority of each agent, or of each state and group (lowest first), or None for a random order
+
+        Args:
+            strict (bool): in a compartmental run, raise `ss.CapabilityError` for a key that is per agent, rather than ignoring it with a note
+        """
+        pr = self.priority
+        if pr is None or sc.isnumber(pr):
+            return None
+        selector = self.selector
+        try:
+            if isinstance(pr, list): # Tiers: the first condition, then the next, then everyone else
+                key = len(pr)
+                for i,cond in reversed(list(enumerate(pr))):
+                    key = np.where(selector.select(cond) > 0, i, key)
+            elif isinstance(pr, desc):
+                key = -self.key_value(pr.key)
+            else:
+                key = self.key_value(pr)
+        except ss.CapabilityError:
+            if selector.abm or strict or self.sim.pars.approx is False:
+                raise
+            ss.note(f'priority ignored: the priority of "{self.name}" ({pr}) is per agent, so it chooses pro rata', sim=self.sim)
+            return None
+        return np.broadcast_to(np.asarray(key, dtype=float), selector.shape)
+
+    def key_value(self, val):
+        """ The value of a priority key, per agent or per state and group """
+        selector = self.selector
+        sim = self.sim
+        if isinstance(val, (ss.State, ss.Transition, ss.Arr)):
+            val = ss.conditions.as_cond(val)
+        if isinstance(val, ss.conditions.Cond):
+            out = val.eval(selector)
+        elif isinstance(val, ss.expressions.Expr):
+            out = selector.expr(val)
+        elif callable(val) and ss.utils.n_args(val) >= 2:
+            if not selector.abm:
+                raise ss.CapabilityError(f'the priority of "{self.name}" is a function of (sim, uids), which exist only per agent.')
+            auids = sim.people.auids
+            out = np.zeros(selector.shape)
+            out[auids] = val(sim, auids)
+        else:
+            out = selector.per_person(val)
+        out = np.asarray(out, dtype=float)
+        if selector.abm and out.ndim == 1 and len(out) == len(sim.people) and len(out) != selector.shape[0]: # One per active agent
+            full = np.zeros(selector.shape)
+            full[sim.people.auids] = out
+            out = full
+        return out
 
     def give(self, chosen, capped=False):
         """ Deliver the product to the people chosen """

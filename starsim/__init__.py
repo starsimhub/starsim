@@ -117,7 +117,7 @@ t('interventions')
 from .interventions import (
     Intervention, RoutineDelivery, CampaignDelivery,
     BaseTest, BaseScreening, BaseTriage, BaseTreatment, treat_num, BaseVaccination,
-    Delivery, vaccinate, treat, screen,
+    Delivery, vaccinate, treat, screen, desc,
 )
 
 t('analyzers')
