@@ -143,7 +143,9 @@ In a discrete-time run this MUST be implemented as a single multinomial draw per
 
 Details:
 
-- Transitions out of one state that carry `p=` are a split decided on entry to the state, not a competition ([03-states-and-transitions.md](03-states-and-transitions.md) §Branching); the split is one draw as well.
+- Separate transitions out of one state that carry `p=` are a split decided on entry to the state, not a competition, and one transition with several destinations splits when it is taken ([03-states-and-transitions.md](03-states-and-transitions.md) §Branching); the split is one draw as well.
+- As agents, exits are scheduled at entry. Moves with no wait (a split with no dwell time, or a dwell time that rounds to no steps) happen in the step that caused them: the moves cascade until nobody moves (a cycle raises `ss.TriggerLoop`). Compartments pass such moves straight through, so this is what makes agents agree with them.
+- A dwell time competing with a rate: someone who enters a state during a step, after its rates were drawn, has the rates drawn for them in the step their dwell time ends too, so the rate acts for as long as the dwell time says.
 - As agents, a state with both spontaneous exits and a contact-mediated exit resolves the spontaneous ones jointly first, and transmission then acts on whoever is still in the state (both in row 9). This is an ordering effect of size O(dt); the compartmental solvers draw them together (the chain-binomial solver draws the number leaving each compartment once, then shares it between the exits).
 - Hazards from *different* modules acting on the same people (background mortality from a demographics module, disease mortality from a disease) are not pooled; they run in module order. Because deaths are deferred (next section), neither prevents the other from being recorded. The exception is diseases whose states are crossed in a compartmental run ([07-effects.md](07-effects.md)): they are one model, whose rates are all worked out from the people at the start of the step.
 

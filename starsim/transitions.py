@@ -86,6 +86,16 @@ class State(Nameable, Expr):
         return Transition(dst=self) @ driver
 
     @property
+    def time(self):
+        """ Time since this person last entered the state, in the sim's unit (NaN outside it) """
+        return ss.expressions.Clock([self])
+
+    @property
+    def progress(self):
+        """ The share of the scheduled dwell time in this state that has elapsed, from 0 to 1 (NaN outside it) """
+        return ss.expressions.Clock([self], kind='progress')
+
+    @property
     def enter(self):
         """ The event of entering this state: a condition, `on=`, or `.uids` """
         return ss.conditions.Event('enter', [self])

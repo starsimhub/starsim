@@ -198,6 +198,12 @@ class OverlappingSources(CodedError):
 class TriggerLoop(CodedError):
     """ Moves with no wait (branches nobody waits in) lead back to a state they started from, so people passed through at once would never settle; names the loop """
 
+class ClockOutsideDomain(CodedError):
+    """ A clock (`X.time`, `(A | B).time`, `X.progress`) is read where it has no value: by a transition out of a state outside its states, or by a modifier whose `where=` is not inside them (at build; a `where=` that is a function is checked when it runs, where a NaN amount is an error) """
+
+class NoScheduledDwell(CodedError):
+    """ `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it """
+
 class CapabilityError(CodedError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,

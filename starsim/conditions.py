@@ -72,6 +72,15 @@ class Cond:
     def __ne__(self, other): return Cond('!=', self, other)
     def __and__(self, other): return Cond('&', self, other)
     @property
+    def time(self):
+        """ For a set of states (`A | B`): the time since entering it from outside it, in the sim's unit (moves within the set do not reset it; NaN outside it) """
+        states = set_states(self)
+        if states is None:
+            errormsg = f'.time is for a set of states, e.g. (sir.I | sir.R).time, not {self!r}'
+            raise TypeError(errormsg)
+        return ss.expressions.Clock(states)
+
+    @property
     def enter(self):
         """ For a set of states (`A | B`): the event of entering it from outside it (moves within the set are not entering it) """
         return self._set_event('enter')
@@ -214,6 +223,36 @@ def set_states(cond):
     return None
 
 
+def bounding_states(cond):
+    """ The states a condition selects people from, as names (a superset of who it selects), or None if it can select anyone """
+    if isinstance(cond, ss.State):
+        cond = as_cond(cond)
+    if not isinstance(cond, Cond):
+        return None
+    op, args = cond.op, cond.args
+    if op == 'state':
+        return {args[1]}
+    a, b = [bounding_states(arg) for arg in args] if op in ['&', '|'] else (None, None)
+    if op == '|':
+        return None if a is None or b is None else a | b
+    elif op == '&':
+        return a if b is None else b if a is None else a & b
+    return None
+
+
+def check_clocks(amount, where, what):
+    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.ClockOutsideDomain`) """
+    for clock in ss.expressions.clocks_in(amount):
+        names = set(clock.names)
+        if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
+            continue
+        inside = bounding_states(where)
+        if inside is None or not inside <= names:
+            raise ss.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
+                                        f'     Add where={clock.to_str().rsplit(".", 1)[0]} (or a condition inside it).')
+    return
+
+
 def modname(mod):
     """ The name of a module that a condition refers to: kept as the module until it is needed, since a module can be named after the condition is written """
     return mod if (mod is None or isinstance(mod, str)) else mod.name
@@ -278,6 +317,8 @@ def is_static(cond, sim):
 def evaluate(obj, ctx):
     if isinstance(obj, Cond):
         return obj.eval(ctx)
+    elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.State): # E.g. a clock compared with a duration
+        return ctx.expr(obj)
     elif callable(obj) and not isinstance(obj, (ss.Arr, ss.Dist)): # A function of the sim, combined with a condition
         return ctx.select(obj)
     return obj
@@ -543,8 +584,15 @@ class Selector:
                 out = cond(sim)
         else:
             cond = as_cond(cond)
-            out = cond.eval(self) if isinstance(cond, Cond) else cond
+            out = cond.eval(self) if isinstance(cond, Cond) else self.expr(cond) if isinstance(cond, ss.expressions.Expr) else cond
         return self.to_selection(out, cond)
+
+    def expr(self, expr):
+        """ An expression of the model (a clock, a count, a parameter): one value per agent, or per group """
+        engine = self.mod.engine
+        if self.abm:
+            return engine.eval_for(expr, ss.uids(np.arange(self.shape[0])))
+        return engine.eval(expr)
 
     def to_selection(self, out, cond=None):
         """ Convert what a condition returned (a boolean array, UIDs, or a lazy condition) to a selection """
@@ -588,7 +636,7 @@ class Selector:
         """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
         sim = self.sim
         if isinstance(val, ss.transitions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
-            val = self.mod.engine.eval(val)
+            val = self.expr(val) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
             ds, grid = val.grid(sim)
             return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]

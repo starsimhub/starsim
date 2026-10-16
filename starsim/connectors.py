@@ -280,6 +280,7 @@ class modify(Connector):
             raise ValueError(errormsg)
         self.target_module, self.target_kind = modname, kind
         sim.modifiers[(modname, kind, name)].append(self)
+        ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
         for time in self.times or [self.start]: # Each must be within the sim
             if time is not None:
                 to_ti(sim, time, name=f'the {"time" if self.times else "start"} of "{self.name}"')
@@ -352,6 +353,8 @@ class modify(Connector):
         """ Apply the modifier to a value, for the people it applies to """
         amount = self.current(engine)
         mask = None if self.where is None else engine.selector.select(self.where)
+        if np.ndim(amount) and np.isnan(amount).any() and np.isnan(amount[mask > 0] if mask is not None else amount).any(): # A clock read where it has no value: see ss.conditions.check_clocks()
+            raise ss.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: it reads a clock outside the states it is kept for. Give it a where= inside them.')
         if mask is not None and self.hold is not None:
             mask = self.held_mask(mask, engine)
         if mask is None:

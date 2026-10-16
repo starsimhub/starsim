@@ -28,6 +28,14 @@ def make_engine(module, sim):
     return Compartmental(module, sim)
 
 
+def clocks_of(mod):
+    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, amounts, or conditions read """
+    graph = getattr(mod, 'graph', None)
+    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None)] for tr in graph.transitions.values()] if graph is not None else []
+    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
+    return ss.expressions.clocks_in(objs)
+
+
 def choose_solver(sim):
     """
     Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
@@ -317,6 +325,8 @@ def init_capabilities(sim, modules):
         reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no trying
         for reason in reasons:
             add(f'module: {mod.name}', 'no', reason, auto=reason)
+        for clock in clocks_of(mod)[:1]: # Kept per agent for now
+            add(f'module: {mod.name}', 'no', f'{clock} is a clock', auto=f'{clock} is a clock, which is kept per agent for now', fatal=True)
         if approx is False and isinstance(mod, ss.Delivery) and mod.holds and mod.product.staged: # Kept as levels of time since delivery otherwise: see ss.Held.init_stages()
             add(f'module: {mod.name}', 'approx', 'levels of time since delivery', auto=f'the protection of "{mod.product.name}" fades by a function of time, and approx=False')
         if graph is None:

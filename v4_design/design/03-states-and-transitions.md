@@ -375,6 +375,21 @@ Exits are scheduled when a person enters a state: as agents, the branch is drawn
 
 A junction (a zero-duration pseudo-compartment that only splits its inflow) is not needed and is not part of the language.
 
+## Events and clocks
+
+**Events** are what happens to someone at a moment: a transition (`infection`), one branch of it (`outcome.to(D)`), and entering or leaving a state or a set of states (`I.enter`, `(E | I).exit`). Entering a set means arriving from outside it, by a transition, an inflow, or placement; a move within the set is not entering it. An event is a condition, true for the people it happened to from the moment they moved until the same point in the next step (a move made by an intervention is news from the next step), so it can be used in `where=`, `eligible=`, and `on=`; in a running sim, `event.uids` are those people. As compartments, a transition and a branch are events (a fraction of the state they arrived in); entering or leaving a state is not yet (`ss.CapabilityError`).
+
+**Clocks** are elapsed time, as expressions:
+
+<!-- fragment -->
+```python
+EL.time                  # time since this person last entered EL
+(EL | LL).time           # since they entered the set from outside it: moving from EL to LL does not reset it
+falling.progress         # the share of the scheduled dwell time in falling that has elapsed, from 0 to 1
+```
+
+A clock is a duration in the sim's unit (`EL.time / ss.years(1)` is a number of years), and works in `rate=`, `p=`, modifier amounts, and conditions (`where=`, `eligible=`): `ss.modify(syph.rel_trans, multiply=0.5**(latent.time/ss.years(1)), where=latent)`. In the `p=` of a transition out of `X`, taken when people leave, `X.time` is the dwell just completed. A clock is NaN for anyone outside its states, and its use is checked when the model is built: a transition that reads a clock must leave from its states, and a modifier whose amount reads one must have a `where=` inside them (`ss.ClockOutsideDomain`; a `where=` that is a function is checked when it runs). `.progress` needs a dwell time scheduled on entry, so a state with only rates out of it raises `ss.NoScheduledDwell`. A clock of a set has to be made before the sim, which keeps the time each person entered the set. As compartments (levels of elapsed time) clocks are not built yet: `solver='auto'` runs a model that reads a clock as agents, and a compartmental solver raises `ss.CapabilityError`.
+
 ## Many-to-one
 
 <!-- fragment -->

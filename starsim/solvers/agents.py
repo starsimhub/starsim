@@ -55,7 +55,9 @@ class Agents(Engine):
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
         read = mod.times_read(self.sim) # The times of entering a state that code in the sim reads (None for all); the engine reads those of the states it schedules exits from, or whose exits have after= or before=
-        unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
+        clocked = {name for names in ss.expressions.Clock.sets for name in names} # The states a clock reads (from this module or another), whose times of entering are kept
+        clocked |= {name for m in list(self.sim.declared) + list(self.sim.pars.connectors.values()) + list(self.sim.pars.interventions.values()) for clock in ss.solvers.choose.clocks_of(m) for name in clock.names}
+        unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name)]
@@ -68,6 +70,14 @@ class Agents(Engine):
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
                 if graph.exits[name].hazards: # See enter()
                     arrs.append(ss.BoolArr(f'late_{name}', label=f'Entered {name} after its competing rates were drawn in the step'))
+        self.sets = sc.objdict() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
+        people = [state.name for state in graph.people_states]
+        for names in ss.expressions.Clock.sets:
+            if all(name in people for name in names):
+                key = tuple(sorted(set(names), key=people.index))
+                if key not in self.sets:
+                    self.sets[key] = f'ti_{"_or_".join(key)}'
+                    arrs.append(ss.arrays.StepArr(self.sets[key], label=f'Time of entering {" | ".join(key)} from outside it'))
         if any(getattr(strat, 'immunity', None) is not None for strat in list(graph.strats) + list(self.sim.groups.strats)):
             arrs.append(ss.IntArr('strains_had', default=0, label='Strains each person has had, as bits')) # For immunity= between strains: see protection()
         self.spread = dict() # A parameter that is a distribution across people: each agent's own value, drawn when they are made
@@ -555,6 +565,52 @@ class Agents(Engine):
             out = np.asarray(out)[uids]
         return out
 
+    def clock(self, clock):
+        """ The value of a clock for the agents being evaluated, from the engine of the module its states belong to """
+        name = ss.conditions.modname(clock.module)
+        engine = self if name in [None, self.mod.name] else next((m.engine for m in self.sim.declared if m.name == name), None)
+        if engine is None:
+            errormsg = f'{clock} is a clock of the module "{name}", which is not in the sim'
+            raise KeyError(errormsg)
+        return engine.clock_values(clock, self._uids)
+
+    def clock_values(self, clock, uids):
+        """ Time in some states (or the share of the dwell time elapsed), for some agents; NaN for those not in them """
+        mod = self.mod
+        names = clock.names
+        inside = np.zeros(len(uids), dtype=bool)
+        for name in names:
+            inside |= mod[name].raw[uids]
+        leaving = getattr(self, '_leaving', None)
+        if leaving is not None: # Being split as they leave: still in the state they left
+            src = np.full(len(mod.rel_sus.raw), -1)
+            src[leaving[0]] = leaving[1]
+            inside |= np.isin(src[uids], [self.state_index[name] for name in names])
+        if len(set(names)) == 1:
+            arr = mod[f'ti_{names[0]}']
+        else:
+            key = tuple(sorted(set(names), key=list(self.graph.states.keys()).index))
+            if key not in self.sets:
+                errormsg = f'{clock} was not known when the sim was built, so the time of entering the set was not kept; make it before the sim'
+                raise ValueError(errormsg)
+            arr = mod[self.sets[key]]
+        if isinstance(arr, ss.arrays.Unkept):
+            errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or set ss.options.keep_times = True'
+            raise ValueError(errormsg)
+        start = np.asarray(arr[uids], dtype=float)
+        ti = mod.ti
+        if clock.kind == 'time':
+            out = np.maximum(ti - start, 0)*self.dt # In the sim's unit; someone who entered at the end of this step (by transmission) has had none of it
+        else:
+            name = names[0]
+            exits = self.graph.exits[name]
+            if not (exits.branches or exits.remainder or exits.timed):
+                raise ss.NoScheduledDwell(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
+            end = np.asarray(mod[f'ti_exit_{name}'][uids], dtype=float) # The step the exit is due in
+            with np.errstate(divide='ignore', invalid='ignore'):
+                out = np.clip(np.where(end > start, (ti - start)/(end - start), 1.0), 0, 1)
+        return np.where(inside, out, np.nan)
+
     #%% Moving agents
 
     def clear_exit(self, name, uids):
@@ -617,7 +673,9 @@ class Agents(Engine):
                 dsts = [(tr.dst[0], uids, frm)]
             else:
                 self._uids = uids
+                self._leaving = (uids, frm) # So the time in the state they are leaving is the dwell just completed: see clock_values()
                 ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
+                self._leaving = None
                 rvs = self.draw(f'dst_{name}', uids)
                 edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
                 masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(tr.dst))]
@@ -657,6 +715,11 @@ class Agents(Engine):
     def settle_start(self):
         """ Once every module has its people (see `ss.Sim.init()`): those placed in a state nobody waits in move on at once, as they would during a step; these moves are not counted as flows """
         mod = self.mod
+        for key,arr in self.sets.items(): # Those placed in a set entered it when they were placed
+            for name in key:
+                uids = self.members(self.graph.states[name])
+                uids = uids[np.isnan(np.asarray(mod[arr][uids], dtype=float))]
+                mod[arr][uids] = mod[f'ti_{name}'][uids]
         moved = False
         self._moved = []
         for state in self.graph.people_states:
@@ -762,6 +825,10 @@ class Agents(Engine):
         name = state.name
         mod[name][uids] = True
         mod[f'ti_{name}'][uids] = ti
+        for key,arr in self.sets.items(): # Entering a set from outside it starts its clock
+            if name in key:
+                outside = ~np.isin(srcs, [self.state_index[k] for k in key])
+                mod[arr][uids[np.broadcast_to(outside, len(uids))]] = ti
         if f'late_{name}' in mod.__dict__:
             mod[f'late_{name}'][uids] = ti == mod.ti and self._drawn_ti == mod.ti
         self.record(tr, uids, srcs, self.state_index[name])
@@ -1584,7 +1651,7 @@ class Agents(Engine):
             spread = any(id(leaf) in self.spread for leaf in tr.rate.leaves if isinstance(leaf, ss.par)) # As does a distribution across people
             mods = [m for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal for m in self.sim.modifiers.get((self.mod.name, 'par', leaf.name), [])]
             per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.transitions.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
-            self.by_groups[tr.name] = not spread and not per_agent and not any(ss.utils.n_args(func) >= 2 for func in funcs) # A function of the agents can give each a rate of their own
+            self.by_groups[tr.name] = not spread and not per_agent and not any(ss.utils.n_args(func) >= 2 for func in funcs) and not ss.expressions.clocks_in(tr.rate) # A function of the agents, or a clock, can give each a rate of their own
         return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0
 
     def infect_groups(self, tr, src):

@@ -615,6 +615,16 @@ class Graph(Presentation):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr.check_dimensions()
+            for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
+                if clock.module not in [None, self.module] or not all(n in self.states for n in clock.names):
+                    continue # Another module's clock: checked when it runs
+                outside = [src.name for src in tr.src or [] if src.name not in clock.names]
+                if outside:
+                    raise ss.ClockOutsideDomain(f'"{name}" reads {clock}, which has a value only for people in {sc.strjoin(clock.names)}, but moves people from {sc.strjoin(outside)}.')
+                if clock.kind == 'progress':
+                    ex = self.exits[clock.names[0]]
+                    if not (ex.branches or ex.remainder or ex.timed):
+                        raise ss.NoScheduledDwell(f'"{name}" reads {clock}, but {clock.names[0]} has only rates out of it, so no dwell time is scheduled when people enter it.')
             if tr.p is not None and len(tr.dst) > 1:
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dst) == 2: # With two destinations, a single value is the first one's probability

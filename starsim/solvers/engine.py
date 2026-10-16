@@ -652,6 +652,10 @@ class Engine:
         raise ss.CapabilityError(f'the function "{name}" cannot run with solver="{self.sim.solver}".\n'
                                  f'     It takes uids, which exist only per agent. Run with solver="abm".')
 
+    def clock(self, clock):
+        raise ss.CapabilityError(f'{clock} cannot run with solver="{self.sim.solver}" yet: a clock is kept per agent, and its compartmental form (levels of elapsed time) is not built yet.\n'
+                                 f'     Run with solver="abm".')
+
     def frac(self, states):
         return self.count(states)/self.n_people()
 
