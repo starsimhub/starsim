@@ -186,6 +186,7 @@ class Sim(ss.Base):
                 return
             if parent is not None:
                 mod.triggered = True
+                mod.parent = parent
                 if mod._default_name:
                     mod.name = mod.label = f'{parent.name}_{suffix}'
                     mod._default_name = False

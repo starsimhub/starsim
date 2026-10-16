@@ -739,8 +739,9 @@ class Delivery(Intervention):
         self.on_negative = on_negative
         self.then = then
         if isinstance(disease, (list, tuple)):
-            errormsg = f'disease= of a delivery is one disease, not {len(disease)}: a product acts on one disease, so make one product for each, and deliver each with its own disease='
+            errormsg = f'disease= of a delivery is one disease, not {len(disease)}: key the efficacy of a vaccine or a drug by disease instead (efficacy={{hpv16: 0.9, hpv18: 0.5}}), or make one product for each, and deliver each with its own disease='
             raise TypeError(errormsg)
+        self.parent = None # The delivery this is a follow-up of, if it is one
         self.disease = disease
         self.triggered = False # Whether this is the follow-up of another delivery, so has no schedule of its own
         self.started = False # For routine delivery by age: whether the people already past the age have been left out (see skip_past())
@@ -770,9 +771,13 @@ class Delivery(Intervention):
 
     @property
     def disease(self):
-        """ The disease whose engine evaluates the conditions: as given, or the first that the product names """
-        if self._disease is None and isinstance(self.product, ss.Treatment) and self.product.moves is not None:
-            return next(iter(self.product.diseases), None)
+        """ The disease whose engine evaluates the conditions: as given, the first that the product names, or that of the delivery it follows """
+        if self._disease is None:
+            named = getattr(self.product, 'diseases', None)
+            if named:
+                return named[0]
+            if self.parent is not None:
+                return self.parent.disease
         return self._disease
 
     @disease.setter
@@ -930,6 +935,8 @@ class Delivery(Intervention):
             owners = [mod.name for mod in sim.declared if any(strat.name in self.move for strat in mod.graph.strats)]
             if len(owners) == 1:
                 self.disease = owners[0]
+        if self.disease is None and getattr(self.product, 'holds', False): # A product whose efficacy is keyed by diseases given by name
+            self.disease = next((name for name in self.product.disease_effects(sim) if name is not None), None)
         if self.disease is None:
             if len(declared) != 1:
                 raise ss.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}. Use disease=.')

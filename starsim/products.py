@@ -283,6 +283,30 @@ class Held(Product):
         return dict(eff) if isinstance(eff, dict) else {self.default_key:eff}
 
     @property
+    def diseases(self):
+        """ The names of the diseases the efficacy is keyed by, where they are given as modules (by name, they are known only in a sim: see `disease_effects()`) """
+        eff = self.efficacy
+        return [k.name for k in eff if isinstance(k, ss.Module)] if isinstance(eff, dict) else []
+
+    def disease_effects(self, sim):
+        """
+        The efficacy against each thing, for each disease it acts on, as {disease name: {key: efficacy}}
+
+        The efficacy is keyed by disease (`{hpv16: 0.95, 'hpv18': dict(dysplasia=0.5)}`, each a number or a dict as
+        for one disease), or is for the delivery's disease.
+        """
+        eff = self.efficacy
+        names = [mod.name for mod in sim.declared]
+        keyed = [isinstance(k, ss.Module) or k in names for k in eff] if isinstance(eff, dict) else []
+        if not any(keyed):
+            return {self.disease:self.effects}
+        if not all(keyed):
+            others = [k for k,ok in zip(eff, keyed) if not ok]
+            raise ss.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
+                                   f'Give the efficacy against each thing within each disease, e.g. {{hpv16: dict(acquisition=0.9)}}.')
+        return {ss.conditions.modname(k):(dict(v) if isinstance(v, dict) else {self.default_key:v}) for k,v in eff.items()}
+
+    @property
     def tabulated(self):
         """ In a compartmental run, a product has no step of its own (its deliveries move people between levels of holding it), so it does not stop a whole run in the kernels """
         return self.sim.solver != 'abm'
@@ -342,25 +366,26 @@ class Held(Product):
             return
         if self.staged and sim.solver != 'abm':
             self.init_stages(sim)
-        dis = sim.get_declared(self.disease)
-        graph = dis.graph
-        deaths = [name for name,tr in graph.transitions.items() if tr.outflow and tr.people]
-        for key,eff in self.effects.items():
-            if key == 'acquisition':
-                targets = [('rel_sus', None)]
-            elif key == 'transmission':
-                targets = [('rel_trans', None)]
-            elif key == 'mortality' and deaths:
-                targets = [('transition', name) for name in deaths]
-            elif key in graph.transitions or graph.destination(key) is not None: # A transition, or one destination of a transition with several ('progression.C')
-                targets = [('transition', key)]
-            else:
-                options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
-                raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
-            for kind,name in targets:
-                if kind == 'transition':
-                    kind = graph.modifier_kind(name)
-                sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
+        for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
+            dis = sim.get_declared(disname)
+            graph = dis.graph
+            deaths = [name for name,tr in graph.transitions.items() if tr.outflow and tr.people]
+            for key,eff in effects.items():
+                if key == 'acquisition':
+                    targets = [('rel_sus', None)]
+                elif key == 'transmission':
+                    targets = [('rel_trans', None)]
+                elif key == 'mortality' and deaths:
+                    targets = [('transition', name) for name in deaths]
+                elif key in graph.transitions or graph.destination(key) is not None: # A transition, or one destination of a transition with several ('progression.C')
+                    targets = [('transition', key)]
+                else:
+                    options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
+                    raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                for kind,name in targets:
+                    if kind == 'transition':
+                        kind = graph.modifier_kind(name)
+                    sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
         return
 
     def step_waning(self):
@@ -380,7 +405,7 @@ class Held(Product):
         return
 
     def describe(self):
-        eff = sc.strjoin([f'{key} {val}' for key,val in self.effects.items()])
+        eff = sc.strjoin([f'{ss.conditions.modname(key)} {val}' for key,val in self.effects.items()])
         waning = '' if self.waning is None else f'; protection lost after a mean of {self.waning!r}' if self.loses else '; fades by a function of time since delivery'
         return f'{self.name}: {type(self).__name__.lower()} with efficacy against {eff}{waning}'
 
@@ -524,7 +549,9 @@ class Treatment(Held):
 
     @property
     def diseases(self):
-        """ The names of the diseases whose transitions the treatment names """
+        """ The names of the diseases whose transitions the treatment names (or, for one that changes rates, that its efficacy is keyed by) """
+        if self.holds:
+            return super().diseases
         return list(dict.fromkeys(name for tr,_ in self.edge_specs() if (name := self.edge_disease(tr)) is not None))
 
     def edge_refs(self):
