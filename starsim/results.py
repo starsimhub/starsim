@@ -11,6 +11,27 @@ import matplotlib.pyplot as plt
 
 
 
+# Numbers are people (proposal 02 rule 1.2; pending a decision, so kept to this switch and the two functions below):
+# as agents, the results of declared modules and deliveries are scaled when written, so they are people when read
+# during a run, and capacities, targets, and counts given to deliveries are people. False scales results at the end, as before
+people_now = True
+
+
+def people_scale(sim):
+    """ What a declared result is multiplied by when written: the people each agent stands for, or 1 """
+    return sim._current_scale if people_now and sim.solver == 'abm' else 1.0
+
+
+def in_people(*results):
+    """ Mark results as written in people, so they are not scaled again at the end """
+    for res in results:
+        if res.scale and people_now:
+            res.in_people = True
+            if res.values is not None and res.values.dtype.kind in 'iu': # A count times a scale that need not be whole
+                res.init_values(dtype=float, force=True)
+    return
+
+
 class Result(ss.BaseArr):
     """
     Array-like container for holding sim results.
@@ -424,6 +445,7 @@ class Result(ss.BaseArr):
         strata = getattr(self, 'strata', None)
         if strata is None:
             return
+        vals = vals*getattr(self, 'write_scale', 1.0) # In people, as agents: see people_scale()
         if rows is None:
             strata[ti] = vals
         elif flow:
@@ -539,6 +561,8 @@ class Result(ss.BaseArr):
 
     def apply_scale(self, scale):
         """ Multiply the values by the population scale: a number, or an array with one entry per timestep """
+        if getattr(self, 'in_people', False): # Written in people already: see people_scale()
+            return self
         scale = np.asarray(scale)
         if getattr(self, 'strata', None) is not None: # The values by group too
             self.strata = (self.strata.T*scale).T

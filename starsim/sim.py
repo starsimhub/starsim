@@ -1541,6 +1541,11 @@ class Sim(ss.Base):
 
     @property
     def current_scale(self):
+        """ Kept for Starsim 3 modules: declared models and deliveries count in people (see `ss.results.people_scale()`), so need no scale """
+        return self._current_scale
+
+    @property
+    def _current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
         if not self.pars.rescale:
             return self.pars.pop_scale

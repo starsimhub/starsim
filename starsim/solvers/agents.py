@@ -243,7 +243,7 @@ class Agents(Engine):
     @property
     def scale(self):
         """ The number of people each agent stands for """
-        return self.sim.current_scale
+        return self.sim._current_scale
 
     def init_post(self):
         """ Sample the agents into the states """

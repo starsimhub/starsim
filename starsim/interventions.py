@@ -849,6 +849,7 @@ class Delivery(Intervention):
                 results += list(parts.values())
                 self.by_edge[key] = parts
         self.define_results(*results)
+        ss.results.in_people(*results)
         for key,parts in self.by_edge.items():
             self.results[key].by_edge = parts
         self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the share of everyone eligible who received it
@@ -879,7 +880,7 @@ class Delivery(Intervention):
         if getattr(res, 'strata', None) is not None and n:
             if self.selector.abm:
                 uids = self.uids(sel)
-                res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight
+                res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight*ss.results.people_scale(self.sim)
             else:
                 res.strata[self.row(ti)] += (sel*self.eng.state_counts()).sum(axis=0)*weight
         return n
@@ -888,8 +889,9 @@ class Delivery(Intervention):
         """ Add people to a result (and to its part for one disease and transition): agents by UID, or people by group """
         ti = self.sim.ti
         if uids is not None:
-            n = float(len(uids))
-            groups = np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups) if self.sim.groups.n_groups > 1 and n else None
+            scale = ss.results.people_scale(self.sim)
+            n = float(len(uids))*scale
+            groups = np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*scale if self.sim.groups.n_groups > 1 and n else None
         else:
             n = float(groups.sum())
         for res in [self.results[key], self.by_edge.get(key, {}).get(part)]:
@@ -916,10 +918,14 @@ class Delivery(Intervention):
         return auids[sel[auids]]
 
     def count(self, sel):
-        """ The number of people (or agents) selected """
+        """ The number of people selected, as results count them (see `ss.results.people_scale()`) """
         if self.selector.abm:
-            return float(np.count_nonzero(sel[self.sim.people.auids]))
+            return self.n_agents(sel)*ss.results.people_scale(self.sim)
         return float((sel*self.eng.state_counts()).sum())
+
+    def n_agents(self, sel):
+        """ As agents, the number of agents selected """
+        return float(np.count_nonzero(sel[self.sim.people.auids]))
 
     def shift(self, sel, changes):
         """ Move the selected people to other levels of some dimensions """
@@ -1237,9 +1243,9 @@ class Delivery(Intervention):
         cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
         if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
             cap = self.convert(cap)*self.span
-        n = self.count(chosen)
+        n = self.n_agents(chosen) if selector.abm else self.count(chosen)
         if selector.abm:
-            cap = cap/self.sim.current_scale + self.carry # In agents
+            cap = cap/self.sim._current_scale + self.carry # In agents
             k = int(cap)
             self.carry = cap - k if n >= k else 0.0
             if n > k:

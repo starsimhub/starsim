@@ -976,6 +976,7 @@ class Engine:
             if isinstance(dur, ss.Dist) and not isinstance(dur, ss.expon): # A transfer is a rate, so its people leave at a constant rate whatever the distribution
                 ss.note(f'the transfer "{name}" moves people at a constant rate, one over the mean of its dur= ({type(dur).__name__}), so the time before it is exponential, not that distribution', sim=self.sim)
         mod.define_results(*results)
+        ss.results.in_people(*[r for r in mod.results.values() if isinstance(r, ss.Result)]) # Scaled when written: see update_results()
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()
         ng = self.sim.groups.n_groups
@@ -1156,6 +1157,10 @@ class Engine:
         graph = self.graph
         res = mod.results
         ti = mod.ti
+        scale = ss.results.people_scale(self.sim) # As agents, counts of people are written in people
+        people = [r for r in res.values() if getattr(r, 'in_people', False)]
+        for r in people: # The values by group, as they are kept
+            r.write_scale = scale
         if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
             for key in [f'n_{name}' for name in self.stocks] + list(self.flowcounts):
                 if res[key].values.dtype.kind in 'iu':
@@ -1194,6 +1199,9 @@ class Engine:
                         res[name].strata[row], res[name].denom[row] = num, den
                     else:
                         res[name].store_group(ti, ss.transitions.evaluate(expr, ctx_g), self.rows)
+        if scale != 1:
+            for r in people: # The values written this step
+                r[ti] = r[ti]*scale
         return
 
     def register_sets(self):
