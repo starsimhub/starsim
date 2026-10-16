@@ -692,6 +692,46 @@ def test_short_names():
     return sim
 
 
+def test_whole_run():
+    sc.heading('Testing deliveries in a whole run in the kernels')
+    def make(**kwargs):
+        sir = make_sir().stratify(age=[0, 15, 65]).stratify(protected=[False, True], split=[1, 0], adjust={'infection': [1.0, 0.5]})
+        routine = ss.Vaccine(efficacy=0.9, waning=ss.days(60))
+        offer = ss.vaccinate(routine, eligible=sir.S, coverage=ss.by(age=[0.6, 0.3, 0.0]), start=10) # Each person offered it once
+        campaign = ss.Vaccine(efficacy=0.7)
+        rounds = ss.vaccinate(campaign, coverage=0.5, years=[20, 40])
+        rollout = ss.transfer(protected=True, coverage=0.1, years=[30]) # Along a stratification
+        return ss.Sim(sir, interventions=[offer, rounds, rollout], stop=100, **kw, **kwargs)
+    whole = make(solver='ode').init()
+    assert whole.kernel_only(), whole.kernel_reason()
+    whole.run()
+    stepped = make(solver='ode').init()
+    stepped.kernel_only = lambda: False # As the loop takes it, one step at a time
+    stepped.run()
+    for mod,key in [('sir', 'n_S'), ('sir', 'n_I'), ('offer', 'delivered'), ('offer', 'eligible'), ('rounds', 'coverage'), ('rollout', 'delivered')]:
+        a, b = whole.results[mod][key], stepped.results[mod][key]
+        assert np.allclose(a.values, b.values, rtol=1e-10, atol=1e-8), f'{mod}.{key} differs'
+        if getattr(b, 'strata', None) is not None:
+            assert np.allclose(a.strata, b.strata, rtol=1e-10, atol=1e-8)
+
+    # Many runs in one call: the same as each run on its own, deliveries included
+    msim = make(solver='binomial').run(n_runs=4)
+    single = make(solver='binomial', rand_seed=3).run()
+    assert np.array_equal(msim.results.offer.delivered.values[2], single.results.offer.delivered.values)
+    assert np.array_equal(msim.results.sir.n_I.values[2], single.results.sir.n_I.values)
+
+    # And in JAX, with gradients
+    if ss.gradients.available():
+        jax = make(solver='ode', integrator='jax').run()
+        assert np.allclose(jax.results.sir.n_I.values, whole.results.sir.n_I.values, rtol=1e-10)
+        assert np.allclose(jax.results.offer.delivered.values, whole.results.offer.delivered.values, rtol=1e-10)
+        grad = make(solver='ode').gradient('n_I', pars='beta').beta.sir.n_I
+        h = 1e-5
+        up, down = [make(solver='ode').new(pars=dict(beta=0.3 + d)).run().results.sir.n_I.values for d in [h, -h]]
+        assert np.allclose(grad, (up - down)/(2*h), rtol=1e-4, atol=1e-3*np.abs(grad).max())
+    return whole
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -714,3 +754,4 @@ if __name__ == '__main__':
     nets   = test_network_contacts()
     writes = test_effective_and_writes()
     short  = test_short_names()
+    whole  = test_whole_run()

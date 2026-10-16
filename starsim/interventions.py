@@ -945,21 +945,7 @@ class Delivery(Intervention):
         """ Offer the product to some people: those eligible among them, thinned by coverage and capped by capacity """
         selector = self.selector
         abm = selector.abm
-        if self.trace is not None: # Their contacts instead
-            uids = self.uids(sel)
-            contacts = [net.find_contacts(uids) for net in self.trace_nets]
-            sel = selector.to_selection(ss.uids(np.unique(np.concatenate(contacts))))
-        sel = sel*(selector.select(self.eligible) if self.eligible is not None else self.default_eligible())
-        if self.holds: # Not to people who already hold it
-            sel = sel*(selector.dim(self.product.dim) == 0)
-        for d,level in self.changes.items(): # Or who are already there
-            sel = sel*(selector.dim(self.sim.strats[d].name) != level)
-        for d,level in self.sources.items():
-            sel = sel*(selector.dim(self.sim.strats[d].name) == level)
-        if self.remembers:
-            sel = sel*(selector.dim(self.offered) == 0)
-        if abm:
-            sel = sel & selector.to_selection(self.sim.people.auids)
+        sel = self.offer(sel)
         self.tally('eligible', sel)
 
         # Coverage
@@ -979,6 +965,93 @@ class Delivery(Intervention):
             chosen = self.mark_offered(sel, chosen)
         self.give(chosen, capped=True)
         return
+
+    def offer(self, sel):
+        """ Those of some people who are eligible: not holding the product already, not yet offered it (for routine delivery), and so on """
+        selector = self.selector
+        abm = selector.abm
+        if self.trace is not None: # Their contacts instead
+            uids = self.uids(sel)
+            contacts = [net.find_contacts(uids) for net in self.trace_nets]
+            sel = selector.to_selection(ss.uids(np.unique(np.concatenate(contacts))))
+        sel = sel*(selector.select(self.eligible) if self.eligible is not None else self.default_eligible())
+        if self.holds: # Not to people who already hold it
+            sel = sel*(selector.dim(self.product.dim) == 0)
+        for d,level in self.changes.items(): # Or who are already there
+            sel = sel*(selector.dim(self.sim.strats[d].name) != level)
+        for d,level in self.sources.items():
+            sel = sel*(selector.dim(self.sim.strats[d].name) == level)
+        if self.remembers:
+            sel = sel*(selector.dim(self.offered) == 0)
+        if abm:
+            sel = sel & selector.to_selection(self.sim.people.auids)
+        return sel
+
+    #%% In a whole run in the kernels
+
+    @property
+    def tabulated(self):
+        """
+        Whether the kernels can take this delivery in a whole run (see `ss.kernels.apply_shifts()`): in a compartmental run of one disease, a
+        product that people hold or a transfer, given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
+        with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups
+        """
+        sim = self.sim
+        if sim.solver == 'abm' or len(sim.declared) != 1 or not getattr(self.eng, 'use_kernels', False) or self.eng.cross is not None:
+            return False
+        product = self.product
+        moves = product is None or (product.holds and not self.staged(sim))
+        scheduled = self.routine or (self.in_rounds and not self.triggered)
+        static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
+        return moves and scheduled and static and self.capacity is None and self.when is None and not self.followups
+
+    def shifts(self):
+        """
+        This delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the share of the people in each state and group
+        who are eligible, and of those, who are reached; and the group that each group's people move to if reached, and if not
+        """
+        sim = self.sim
+        eng = self.eng
+        selector = self.selector
+        npts = sim.t.npts
+        due = np.zeros(npts, dtype=np.bool_)
+        for ti in range(npts):
+            due[ti] = self.ti_start <= ti < self.ti_stop and (self.round_tis is None or ti in self.round_tis)
+        sel = self.offer(self.default_eligible() if self.eligible is None else selector.select(self.eligible))
+        cov = np.broadcast_to(np.clip(selector.per_person(1.0 if self.coverage is None else self.coverage), 0, 1), selector.shape)
+        changes = dict(self.changes) if self.product is None else {sim.dim_index(self.product.dim):1}
+        offered = {sim.dim_index(self.offered):1} if self.remembers else {}
+        to = eng.targets(changes | offered)
+        rest = eng.targets(offered) if offered else np.arange(eng.n_groups)
+        return due, np.broadcast_to(sel, selector.shape), cov, to, rest
+
+    def store_shifts(self, tally):
+        """ The results of a whole run, from the number reached and eligible in each group at each time point (`tally`, time points by 2 by groups) """
+        res = self.results
+        delivered, eligible = tally[:, 0], tally[:, 1]
+        for key,vals in [('delivered', delivered), ('eligible', eligible)] + ([('cost', delivered*self.product.cost)] if 'cost' in res else []):
+            res[key][:] = vals.sum(axis=1)
+            if getattr(res[key], 'strata', None) is not None:
+                res[key].strata[:] = vals
+        res.coverage[:] = np.divide(res.delivered.values, res.eligible.values, out=np.zeros(len(res.coverage)), where=res.eligible.values>0)
+        if getattr(res.coverage, 'strata', None) is not None:
+            res.coverage.strata[:] = np.divide(delivered, eligible, out=np.zeros_like(delivered), where=eligible>0)
+        return
+
+    def many_shifts(self, tally):
+        """ The results of many runs, as `store_shifts()` but with runs first (runs by time points by 2 by groups, or by one group, the total): each series as runs by time points, and (as `out.groups`) by group too, if kept """
+        delivered, eligible = tally[:, :, 0], tally[:, :, 1]
+        out = sc.objdict(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
+        if 'cost' in self.results:
+            out.cost = out.delivered*self.product.cost
+        out.coverage = np.divide(out.delivered, out.eligible, out=np.zeros_like(out.delivered), where=out.eligible>0)
+        out.groups = sc.objdict()
+        if tally.shape[-1] == self.sim.n_groups and self.sim.n_groups > 1:
+            out.groups.delivered, out.groups.eligible = delivered, eligible
+            out.groups.coverage = np.divide(delivered, eligible, out=np.zeros_like(delivered), where=eligible>0)
+            if 'cost' in self.results:
+                out.groups.cost = delivered*self.product.cost
+        return out
 
     def cap(self, sel, chosen):
         """ Cap the number chosen at the capacity, choosing at random; those not reached have not been offered it """

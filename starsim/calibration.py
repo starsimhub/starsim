@@ -1592,7 +1592,7 @@ class ParticleFilter:
         done = 0
         for k,row in enumerate(order):
             if last[k] > done:
-                ss.kernels.advance(ys, prog, dt, done, last[k], solver, n_sub, *tables, engine.register, state_of, stocks, flows)
+                ss.kernels.advance(ys, prog, dt, done, last[k], solver, n_sub, *tables, engine.register, engine.shifts, state_of, stocks, flows)
                 done = last[k]
             out = None
             obs = np.zeros(n)

@@ -1147,6 +1147,8 @@ def restart_runs(sims, n_runs, pars=None):
                 if p is not None:
                     sim.restart(pars=p)
                 outs += [(mod.name, mod.engine.run_many(seed + np.arange(n_runs))) for mod in sim.declared]
+        for modname,out in list(outs):
+            outs += list(out.pop('deliveries', {}).items()) # The results of the deliveries the kernels took, as those of modules of their own
         for modname,out in outs:
             for key,vals in out.pop('groups').items():
                 groups[modname, key].append(vals)
@@ -1155,7 +1157,7 @@ def restart_runs(sims, n_runs, pars=None):
         sim.restart(pars=sets[-1], rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
     nested = sc.objdict()
     for (modname,key),vals in values.items():
-        res = runners[0].results[modname][key]
+        res = next(sim.results[modname][key] for sim in runners if modname in sim.results) # A delivery may be in some of the sims only
         vals = np.concatenate(vals)
         if len(vals) == len(labels): # A result that every sim has
             strata = groups.get((modname, key))

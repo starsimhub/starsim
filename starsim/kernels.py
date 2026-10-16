@@ -15,7 +15,7 @@ import collections
 import numpy as np
 import numba as nb
 
-__all__ = ['Program', 'Register', 'opcodes']
+__all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS = range(21)
@@ -101,6 +101,17 @@ register_fields = [
 ]
 
 Register = collections.namedtuple('Register', register_fields)
+
+# The deliveries of a whole run (see ss.Delivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
+shift_fields = [
+    'due',  # Whether each delivery happens at each time point (deliveries by time points)
+    'sel',  # The share of the people in each compartment and group who are eligible (deliveries by compartments by groups)
+    'cov',  # The share of those who are reached
+    'to',   # The group that each group's people go to if they are reached (deliveries by groups)
+    'rest', # The group they go to if they are eligible but not reached (their own, unless the delivery records who has been offered it)
+]
+
+Shifts = collections.namedtuple('Shifts', shift_fields)
 
 jit = nb.jit(nopython=True, cache=True, error_model='numpy')
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
@@ -1042,6 +1053,46 @@ def apply_events(y, r, ti, whole):
 solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, sde=5)
 
 @jit
+def apply_shifts(y, sh, ti, whole, tally):
+    """
+    Apply the deliveries that happen at time point ti, at the start of the step from it, in order
+
+    Args:
+        y (array): the compartments, by group; changed in place
+        sh (Shifts): the deliveries
+        ti (int): the time point
+        whole (bool): whether the compartments hold whole people, so the people reached are drawn
+        tally (array): the number reached and the number eligible, for each delivery and group (deliveries by 2 by groups); added to
+    """
+    nc, ng = y.shape
+    for k in range(len(sh.to)):
+        if not sh.due[k, ti]:
+            continue
+        for c in range(nc):
+            for g in range(ng):
+                e = sh.sel[k, c, g]
+                n = y[c, g]
+                if e <= 0 or n <= 0:
+                    continue
+                p = sh.cov[k, c, g]
+                tally[k, 0, sh.rest[k, g]] += n*e*p # The expected number, as a compartmental run counts them, in the group of those offered it (see ss.Delivery.mark_offered())
+                tally[k, 1, g] += n*e
+                if whole:
+                    a = binomial(n, e*p)
+                    b = binomial(n - a, e*(1 - p)/(1 - e*p)) if e*p < 1 else 0.0
+                else:
+                    a, b = n*e*p, n*e*(1 - p)
+                to, rest = sh.to[k, g], sh.rest[k, g]
+                if a > 0 and to != g:
+                    y[c, g] -= a
+                    y[c, to] += a
+                if b > 0 and rest != g:
+                    y[c, g] -= b
+                    y[c, rest] += b
+    return
+
+
+@jit
 def set_step(p, ti, fixed, mult, consts, rel_trans):
     """ Set the parts of the program that can change over time to their values at a step (each has one entry per step, or a single entry) """
     if ti < len(fixed):     p.fixed[:] = fixed[ti]
@@ -1052,7 +1103,7 @@ def set_step(p, ti, fixed, mult, consts, rel_trans):
 
 
 @jit
-def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg, per_step=1):
+def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg, sh, tally, per_step=1):
     """
     Take every step of a run
 
@@ -1067,6 +1118,8 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg
         fixed, mult, consts, rel_trans (arrays): the values of these parts of the program at each step, or a single
             entry if they are the same throughout
         reg (Register): the events of a movement register, applied at the end of the step they are dated in (those of the start are already in y)
+        sh (Shifts): the deliveries, applied at the start of the step from the time point they happen at
+        tally (array): filled in with the number each delivery reached and found eligible, by group (time points by deliveries by 2 by groups)
         per_step (int): 3 if the tables have the values at the start, middle, and end of each step (for the ODE), and otherwise 1
 
     Returns the compartments at the end, the compartments at each time point (the start, then the end of each
@@ -1083,6 +1136,8 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg
     tables = (fixed, mult, consts, rel_trans)
     stocks[0] = y
     for ti in range(1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
+        if len(sh.to):
+            apply_shifts(y, sh, ti-1, whole, tally[ti-1])
         set_step(p, (ti-1)*per_step, fixed, mult, consts, rel_trans)
         step(y, p, w, dt, n_sub, solver, flows[ti], tables, (ti-1)*per_step if per_step == 3 else -1)
         if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
@@ -1094,7 +1149,7 @@ def run(y, p, dt, npts, solver, n_sub, seed, fixed, mult, consts, rel_trans, reg
 
 
 @jit
-def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_trans, reg, state_of, n_states, by_group, per_step=1):
+def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_trans, reg, sh, tally, state_of, n_states, by_group, per_step=1):
     """
     Take every step of many runs that differ only in their seed
 
@@ -1103,6 +1158,7 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
         state_of (array): the state that each compartment is part of
         n_states (int): the number of states
         by_group (bool): whether to keep the values of each group, or only their totals
+        tally (array): filled in with the number each delivery reached and found eligible, as runs by time points by deliveries by 2 by groups (or one)
         (the others are as for `run()`)
 
     Returns the number in each state at each time point, and the total of each transition and mover
@@ -1119,6 +1175,7 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
     whole = solver >= 2 and solver != 5
     now = np.empty((nflows, ng))
     tables = (fixed, mult, consts, rel_trans)
+    now_sh = np.zeros((len(sh.to), 2, ng))
     for r in range(len(seeds)):
         np.random.seed(seeds[r])
         y[:] = y0
@@ -1126,6 +1183,13 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
             for g in range(ng):
                 stocks[r, 0, state_of[c], g if by_group else 0] += y[c, g]
         for ti in range(1, npts):
+            if len(sh.to):
+                now_sh[:] = 0
+                apply_shifts(y, sh, ti-1, whole, now_sh)
+                for k in range(len(sh.to)):
+                    for g in range(ng):
+                        tally[r, ti-1, k, 0, g if by_group else 0] += now_sh[k, 0, g]
+                        tally[r, ti-1, k, 1, g if by_group else 0] += now_sh[k, 1, g]
             set_step(p, (ti-1)*per_step, fixed, mult, consts, rel_trans)
             step(y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step if per_step == 3 else -1)
             if len(reg.src):
@@ -1142,7 +1206,7 @@ def run_many(y0, p, dt, npts, solver, n_sub, seeds, fixed, mult, consts, rel_tra
 
 
 @jit
-def advance(ys, p, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, state_of, stocks, flows):
+def advance(ys, p, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows):
     """
     Take steps start+1 to end of many runs (the particles of a particle filter), each from its own compartments
 
@@ -1161,9 +1225,12 @@ def advance(ys, p, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans
     whole = solver >= 2 and solver != 5
     now = np.empty((nflows, ng))
     tables = (fixed, mult, consts, rel_trans)
+    tally = np.zeros((len(sh.to), 2, ng)) # Not kept
     for r in range(len(ys)):
         y = ys[r]
         for ti in range(start + 1, end + 1):
+            if len(sh.to):
+                apply_shifts(y, sh, ti-1, whole, tally)
             set_step(p, ti-1, fixed, mult, consts, rel_trans)
             step(y, p, w, dt, n_sub, solver, now, tables, -1)
             if len(reg.src):

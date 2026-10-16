@@ -332,6 +332,16 @@ class Run:
 
         return step
 
+    @staticmethod
+    def deliver(y, X, ti):
+        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another """
+        for k in range(X['sh_due'].shape[0]):
+            reached = y*X['sh_sel'][k]*X['sh_due'][k, ti]
+            a = reached*X['sh_cov'][k]
+            b = reached - a
+            y = y - reached + a @ X['sh_to'][k] + b @ X['sh_rest'][k]
+        return y
+
     def function(self, clamp=False):
         """
         The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed
@@ -345,6 +355,7 @@ class Run:
         def run(X):
             step = self.stepper(X, clamp)
             def body(y, ti):
+                y = self.deliver(y, X, ti)
                 y_end, flows, n = step(y, ti)
                 return y_end, (y_end, flows, n)
             y_end, (stocks, flows, n) = jx.lax.scan(body, X['y'], jnp.arange(self.npts - 1)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
@@ -457,6 +468,9 @@ def capture(engine):
     X = {name:np.array(getattr(program, name), dtype=float) for name in diff_fields}
     X.update({name:np.array(table, dtype=float) for name,table in zip(table_fields, tables)})
     X['y'] = np.array(y, dtype=float)
+    sh = engine.shifts # The deliveries, with where each group's people go as matrices
+    onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
+    X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest))
     return program, (dt, npts, solver, n_sub, engine.per_step()), X
 
 
@@ -694,7 +708,7 @@ def find_pars(sim, names=None):
                 if not any(p is q for q in out.values()): # A parameter shared by several modules is counted once
                     same = [m.graph.pars[name] for m in sim.declared if name in m.graph.pars]
                     out[name if all(q is same[0] for q in same) else f'{mod.name}.{name}'] = p
-    missing = [name for name in sc.tolist(names) if name not in out and not any(key.endswith(f'.{name}') for key in out)] if names is not None else []
+    missing = [name for name in sc.tolist(names) if not any(name == key or key.endswith(f'.{name}') or name.endswith(f'.{key}') for key in out)] if names is not None else [] # By name, or 'module.name'
     if missing or not out:
         options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars]
         what = f'no parameter named {sc.strjoin(missing)}' if missing else 'no parameter with bounds'

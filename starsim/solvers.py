@@ -2540,7 +2540,7 @@ class Compartmental(Engine):
         consts    = table([self.value(par) for par in self.prog_pars])
         rel_trans = table([state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures])
         series = {id(par):self.cache[id(par)] for par in self.time_pars}
-        if any(key[0] == mod.name for key,mods in sim.modifiers.items() if mods): # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
+        if any(key[0] == mod.name and not getattr(m, 'constant', False) for key,mods in sim.modifiers.items() for m in mods): # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
             rows = []
             for ti in range(npts):
                 for frac in ([0, 0.5, 1] if per_step == 3 else [0]):
@@ -2584,13 +2584,32 @@ class Compartmental(Engine):
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
         if self.register is None:
             self.init_register()
+        self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables()
+
+    def init_shifts(self):
+        """ The deliveries that the kernels take in a whole run (see `ss.Delivery.tabulated`), as arrays: see `ss.kernels.Shifts` """
+        sim = self.sim
+        nc, ng, npts = len(self.comps), self.n_groups, self.mod.t.npts
+        self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Delivery) and mod.dis is self.mod and mod.tabulated]
+        K = len(self.deliveries)
+        due = np.zeros((K, npts), dtype=np.bool_)
+        sel, cov = np.zeros((K, nc, ng)), np.zeros((K, nc, ng))
+        to, rest = np.zeros((K, ng), dtype=np.int64), np.zeros((K, ng), dtype=np.int64)
+        for k,mod in enumerate(self.deliveries):
+            due[k], sel_k, cov_k, to[k], rest[k] = mod.shifts()
+            for s,name in enumerate(self.selector.states):
+                for comp in self.state_comps[name]:
+                    sel[k, comp], cov[k, comp] = sel_k[s], cov_k[s]
+        self.shifts = ss.kernels.Shifts(due=due, sel=sel, cov=cov, to=to, rest=rest)
+        return self.shifts
 
     def run_all(self, use_jax=False):
         """ Take every step of the run in one call to the kernels (or to JAX: see `ss.gradients`), and fill in the results from what comes back """
         mod = self.mod
         graph = self.graph
         res = mod.results
+        tally = None
         if self.given is not None: # The run has been taken already, by ss.gradients
             out, self.given = self.given, None
         elif self.cross is not None: # Together with the other diseases in the crossing
@@ -2600,8 +2619,13 @@ class Compartmental(Engine):
         else:
             args, tables = self.run_args()
             seed = int(self.rng.integers(2**31))
-            out = ss.kernels.run(*args, seed, *tables, self.register, self.per_step())
+            tally = np.zeros((self.mod.t.npts, len(self.deliveries), 2, self.n_groups))
+            out = ss.kernels.run(*args, seed, *tables, self.register, self.shifts, tally, self.per_step())
+            for k,mod in enumerate(self.deliveries):
+                mod.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
+        if (use_jax or tally is None) and getattr(self, 'deliveries', None): # A run taken in JAX: the deliveries' results, from the compartments at each time point they happened at
+            self.store_replayed(stocks)
         self.check_short(short)
         self.sim.t.ti = mod.t.ti = mod.t.npts
 
@@ -2639,6 +2663,17 @@ class Compartmental(Engine):
         self.cache.clear()
         return
 
+    def store_replayed(self, stocks):
+        """ The results of the deliveries of a run taken in JAX, worked out again from the compartments at each time point they happened at (exact, since the run is an ODE) """
+        sh = self.shifts
+        tally = np.zeros((self.mod.t.npts, len(self.deliveries), 2, self.n_groups))
+        for ti in np.flatnonzero(sh.due.any(axis=0)):
+            if ti < len(stocks) - 1: # No step follows the last time point
+                ss.kernels.apply_shifts(np.array(stocks[ti]), sh, ti, False, tally[ti])
+        for k,mod in enumerate(self.deliveries):
+            mod.store_shifts(tally[:, k])
+        return
+
     def run_many(self, seeds):
         """
         Take many runs that differ only in their seed, in one call to the kernels
@@ -2663,8 +2698,11 @@ class Compartmental(Engine):
         state_of = np.array([states.index(comp.state.name) for comp in self.comps])
         n_flows = self.program.n_trans + len(self.program.mov_mat)
         by_group = self.sim.strats != [] and len(seeds)*self.mod.t.npts*(len(states) + n_flows)*self.n_groups*8 <= self.max_bytes
-        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, state_of, len(states), by_group, self.per_step())
-        return self.collect(stocks, flows)
+        tally = np.zeros((len(seeds), self.mod.t.npts, len(self.deliveries), 2, self.n_groups if by_group else 1))
+        stocks, flows = ss.kernels.run_many(*args, np.array(own), *tables, self.register, self.shifts, tally, state_of, len(states), by_group, self.per_step())
+        out = self.collect(stocks, flows)
+        out.deliveries = sc.objdict({mod.name:mod.many_shifts(tally[:, :, k]) for k,mod in enumerate(self.deliveries)})
+        return out
 
     def collect(self, stocks, flows, expected=False):
         """

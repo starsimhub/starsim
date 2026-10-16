@@ -238,6 +238,18 @@ class Effect:
         self.name = product.name
         return
 
+    @property
+    def tabulated(self):
+        """ Whether the engines can work out the effect for every step before a run (see `ss.Compartmental.tables()`): unless the efficacy is a function of the sim """
+        eff = self.efficacy
+        return not callable(eff) or isinstance(eff, (ss.by, ss.Dist))
+
+    @property
+    def constant(self):
+        """ Whether the effect is the same at every step (so the tables need not be worked out step by step): a number for each group """
+        eff = self.efficacy
+        return sc.isnumber(eff) or (isinstance(eff, ss.by) and not any(isinstance(v, ss.transitions.TimeValue) for v in eff.items))
+
     def apply(self, value, engine):
         product = self.product
         selector = engine.selector
@@ -291,6 +303,11 @@ class Held(Product):
         """ The efficacy against each thing, as a dict """
         eff = self.efficacy
         return dict(eff) if isinstance(eff, dict) else {self.default_key:eff}
+
+    @property
+    def tabulated(self):
+        """ In a compartmental run, a product has no step of its own (its deliveries move people between levels of holding it), so it does not stop a whole run in the kernels """
+        return self.sim.solver != 'abm'
 
     @property
     def loses(self):
