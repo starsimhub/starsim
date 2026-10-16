@@ -15,6 +15,7 @@ from .atomica import load_atomica
 from .flepimop import load_flepimop
 from .odin import load_odin
 from .sbml import load_sbml
+from .siminf import load_siminf
 from .summer2 import load_summer2
 
 __all__ = ['Source', 'build', 'formats', 'sniff', 'load']
@@ -25,6 +26,7 @@ formats = dict(
     flepimop = load_flepimop,
     odin     = load_odin,
     sbml     = load_sbml,
+    siminf   = load_siminf,
     summer2  = load_summer2,
 )
 
@@ -56,6 +58,8 @@ def sniff(source):
     elif ext == '.r':
         if re.search(r'^\s*(deriv|update|initial)\s*\(', text, re.M) and 'mparse(' not in text:
             return 'odin'
+        elif 'mparse(' in text or (re.search(r'\b(SIR|SIS|SEIR|SISe3?)\s*\(', text) and 'tspan' in text): # SimInf's own models need tspan
+            return 'siminf'
     elif ext in ['.xml', '.sbml'] and '<sbml' in text:
         return 'sbml'
     elif ext == '.json' and re.search(r'"format"\s*:\s*"summer2"', text): # As written by dump_summer2.py

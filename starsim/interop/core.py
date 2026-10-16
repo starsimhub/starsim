@@ -49,12 +49,12 @@ class Source:
         self.states[name] = sc.objdict(init=init, people=people, label=label)
         return
 
-    def add_par(self, name, value, doc=None):
-        """ A parameter: a number in the sim's unit """
-        self.pars[name] = sc.objdict(value=value, doc=doc)
+    def add_par(self, name, value, doc=None, bounds=None, prior=None):
+        """ A parameter: a number in the sim's unit, maybe with bounds and a prior (`ss.Dist`) for calibration """
+        self.pars[name] = sc.objdict(value=value, doc=doc, bounds=bounds, prior=prior)
         return
 
-    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None):
+    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None):
         """
         A flow between states
 
@@ -66,11 +66,12 @@ class Source:
             dur (any): a dwell time instead of a rate, as a duration or a distribution of durations
             name (str): the name in the source, if it has one
             label (str): a description
+            p (list): for a branch (dst a list of states), the probability of each destination, as expressions of parameters (None for the rest)
         """
-        self.flows.append(sc.objdict(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label))
+        self.flows.append(sc.objdict(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p))
         return
 
-    def add_outcome(self, name, source, p=None, delay=None, duration=None, every=None, doc=None):
+    def add_outcome(self, name, source, p=None, delay=None, duration=None, every=None, doc=None, likelihood=None):
         """
         A reported quantity: a share of a flow, or of another outcome, with a delay (see `ss.outcome`)
 
@@ -82,8 +83,9 @@ class Source:
             duration (any): how long each stays in the outcome, if the number in it is wanted
             every (dur): a reporting period
             doc (str): a description of the share, for its parameter
+            likelihood (func): a function of the parameters (by name) that gives the likelihood, e.g. `lambda pars: ss.nbinom(n=pars.k)`
         """
-        self.outcomes[name] = sc.objdict(source=source, p=p, delay=delay, duration=duration, every=every, doc=doc)
+        self.outcomes[name] = sc.objdict(source=source, p=p, delay=delay, duration=duration, every=every, doc=doc, likelihood=likelihood)
         return
 
     def stratify(self, **kwargs):
@@ -285,7 +287,7 @@ def disease(source):
     states = sc.objdict()
     for name,s in source.states.items():
         states[name] = ss.State(name=name, people=None if s.people else False, label=s.label)
-    pars = sc.objdict({name:ss.par(p.value, doc=p.doc, name=name) for name,p in source.pars.items()})
+    pars = sc.objdict({name:ss.par(p.value, doc=p.doc, bounds=p.get('bounds'), prior=p.get('prior'), name=name) for name,p in source.pars.items()})
     taken = set(states) | set(pars)
     parse = ss.spec.Parser({**states, **pars})
 
@@ -293,8 +295,10 @@ def disease(source):
     named = sc.objdict()
     lines = []
     for flow in source.flows:
-        arrow = f'{flow.src or ""} -> {flow.dst or ""}'.strip()
-        endpoints = [ss.null if flow.src is None else states[flow.src], ss.null if flow.dst is None else states[flow.dst]]
+        branch = isinstance(flow.dst, list)
+        arrow = f'{flow.src or ""} -> {"/".join(flow.dst) if branch else flow.dst or ""}'.strip()
+        endpoints = [ss.null if flow.src is None else states[flow.src], [states[d] for d in flow.dst] if branch else ss.null if flow.dst is None else states[flow.dst]]
+        p = None if flow.get('p') is None else [None if v is None else parse(str(v)) for v in flow.p]
         name = flow.name
         if name is None and flow.rate in source.exprs and flow.rate not in taken: # A rate given by a named expression names its transition
             name = flow.rate
@@ -311,7 +315,7 @@ def disease(source):
             lines.append(f'  {arrow:16s} a dwell time of {flow.dur}')
         else:
             text, how, rule = rates.classify(flow)
-            tr = ss.Transition(*endpoints, rate=parse(text), name=name, label=flow.label)
+            tr = ss.Transition(*endpoints, rate=parse(text), p=p, name=name, label=flow.label)
             if rule in (2, 3, 5):
                 tr.guessed['import'] = how[-1]
             lines.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
@@ -337,6 +341,8 @@ def disease(source):
         elif not whole:
             p = ss.par(p, doc=o.doc, name=f'p_{name}')
         kw = {k:o[k] for k in ['delay', 'duration', 'every'] if o[k] is not None}
+        if o.get('likelihood') is not None:
+            kw['likelihood'] = o.likelihood(pars)
         outcomes[name] = ss.outcome(base if whole else p*base, name=name, **kw)
         lines.append(f'  {name:16s} an outcome: {"" if whole else f"{p.name} × "}{" + ".join(sc.tolist(o.source))}' + ''.join(f', {k} {v}' for k,v in kw.items()))
     named.update(outcomes)
