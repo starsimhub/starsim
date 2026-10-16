@@ -45,6 +45,12 @@ class Agents(Engine):
         self.batches = [] # Who entered a state, from where, and when, for the events of branches and of entering and leaving states: see event_uids()
         self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
         self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
+        self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None] # Moved by ss.on(): see triggered()
+        self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
+        self._seen = dict() # The events each trigger on an event has seen already
+        self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
+        self._subscribers = None
+        self._started = False
         self._junctions = None # The states passed through at once: see junctions
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
@@ -222,6 +228,9 @@ class Agents(Engine):
         if self.sim.groups.n_groups > 1 and len(moved):
             self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(moved, dst), weights=self.weights(moved), minlength=self.sim.groups.n_groups)
         self.forced[tr.name] = ss.uids.concatenate([self.forced[tr.name], moved]) if tr.name in self.forced else moved
+        if self._started and (self.triggers or self.subscribers) and len(moved): # Onward at once, if a trigger holds for them now
+            self._moved = []
+            self.finish_moves(self.mod.ti)
         return len(moved)
 
     def move_states(self, uids, srcs, dst, tr=None):
@@ -701,7 +710,13 @@ class Agents(Engine):
                 which = mod[f'exit_{name}'].raw[now]
                 for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder) + exits.timed):
                     onward.append((tr, state, now[which == i]))
-        onward = [item for item in onward if len(item[2])]
+        trig = self.triggered() # A trigger moves people at once, ahead of an exit due now
+        if trig and onward:
+            moving = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+            for _,_,uids in trig:
+                moving[uids] = True
+            onward = [(tr, state, uids[~moving[uids]]) for tr,state,uids in onward]
+        onward = [item for item in trig + onward if len(item[2])]
         if onward:
             if depth > len(self.graph.people_states):
                 cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in onward}))
@@ -710,6 +725,77 @@ class Agents(Engine):
             for tr,state,uids in onward:
                 self.move(tr, state, uids)
             self.finish_moves(ti, depth + 1)
+        if depth == 0 and self._news:
+            self._news = False
+            self.notify(ti)
+        return
+
+    def triggered(self):
+        """ The agents that `ss.on()` moves now, as (transition, state, uids): those in its source for whom its condition holds, or to whom its event has happened since it last looked """
+        if not self.triggers or not self._started:
+            return []
+        mod = self.mod
+        out = []
+        taken = None
+        for tr in self.triggers:
+            srcs = [s for s in tr.src if s.people]
+            inside = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+            for s in srcs:
+                inside |= mod[s.name].raw
+            if tr.trigger.event:
+                mask = np.zeros(len(inside), dtype=bool)
+                mask[self.new_events(tr)] = True # Seen whether or not anyone is in the source, so an old event does not move people who enter later
+            elif inside.any():
+                mask = np.asarray(self.selector.select(tr.trigger.x), dtype=bool)
+            else:
+                continue
+            mask = mask & inside
+            if tr.where is not None and mask.any():
+                mask &= np.asarray(self.selector.select(tr.where), dtype=bool)
+            if taken is not None:
+                mask &= ~taken
+            if mask.any():
+                for s in srcs:
+                    out.append((tr, s, ss.uids(np.flatnonzero(mask & mod[s.name].raw))))
+                taken = mask if taken is None else taken | mask
+        return out
+
+    def new_events(self, tr):
+        """ The agents an event trigger's event has happened to since it last looked """
+        event = tr.trigger.x
+        name = ss.conditions.modname(event.module)
+        engine = self if name in [None, self.mod.name] else self.sim.get_declared(name).engine
+        spec = event.spec()
+        seen = self._seen.get(tr.name, {})
+        fresh = [b for b in engine.batches if id(b) not in seen]
+        self._seen[tr.name] = {id(b):b for b in engine.batches} # Kept, so an id is not reused while it is remembered
+        return engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
+
+    @property
+    def subscribers(self):
+        """ The engines with a trigger that reads this module's states or events """
+        if self._subscribers is None:
+            self._subscribers = [m.engine for m in self.sim.declared if m is not self.mod and isinstance(m.engine, Agents) and self.mod.name in m.engine.trigger_mods]
+        return self._subscribers
+
+    def notify(self, ti):
+        """ After people moved here: the triggers of other modules that react to this one are resolved now, in the same step """
+        sim = self.sim
+        if not self.subscribers:
+            return
+        depth = getattr(sim, '_trigger_depth', 0)
+        limit = sum(len(m.graph.people_states) for m in sim.declared) + 1
+        if depth > limit:
+            raise ss.TriggerLoop(f'triggers in {sc.strjoin(m.name for m in sim.declared)} kept moving people back and forth within a step (from "{self.mod.name}").\n'
+                                 f'     Change the conditions so they do not lead back.')
+        sim._trigger_depth = depth + 1
+        try:
+            for engine in self.subscribers:
+                if engine._started:
+                    engine._moved = []
+                    engine.finish_moves(ti)
+        finally:
+            sim._trigger_depth = depth
         return
 
     def settle_start(self):
@@ -722,6 +808,7 @@ class Agents(Engine):
                 mod[arr][uids] = mod[f'ti_{name}'][uids]
         moved = False
         self._moved = []
+        self._started = True
         for state in self.graph.people_states:
             if state.name not in self.junctions:
                 continue
@@ -734,6 +821,8 @@ class Agents(Engine):
             for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder)):
                 self.move(tr, state, uids[which == i])
             moved = True
+        if self.triggers: # Seeds a trigger holds for move on before the start
+            moved = moved or bool(self.triggered())
         if moved:
             self.finish_moves(mod.ti)
             for name in self.flowcounts:
@@ -848,21 +937,22 @@ class Agents(Engine):
         ti = self.mod.ti
         phase = self._phase[1] if self._phase[0] == ti else -1 # Moved by another module before this one's step: see start_phase()
         self.batches.append(sc.objdict(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase)))
+        self._news = True
         return
 
-    def event_uids(self, tr=None, to=None, enter=None, exit=None):
+    def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None):
         """
         The agents an event happened to, as UIDs: those who went through a transition (as `on=` sees them), or one of
         its branches (`to`), or who entered or left a set of states (given as names), from outside it
         """
-        if tr is not None and to is None:
+        if tr is not None and to is None and batches is None: # As on= sees them
             uids = self.events.get(tr)
             return ss.uids() if uids is None else ss.uids(uids).unique()
         out = []
         index = self.state_index
-        for b in self.batches:
+        for b in (self.batches if batches is None else batches):
             if tr is not None:
-                if b.tr == tr and b.dst == index[to]:
+                if b.tr == tr and (to is None or b.dst == index[to]):
                     out.append(b.uids)
                 continue
             inside = [index[name] for name in (enter if enter is not None else exit)]
@@ -1043,6 +1133,7 @@ class Agents(Engine):
                 self.events.pop(name, None)
         for name,uids in self.forced.items(): # Moved by an intervention in this step (before the disease's transitions): news from now on, whatever order the interventions run in
             self.events[name] = ss.uids.concatenate([self.events[name], uids]) if name in self.events else uids
+            self._news = True
         self.forced = dict()
         self.step_lifetables()
         sim = self.sim

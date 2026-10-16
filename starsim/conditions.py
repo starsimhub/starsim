@@ -247,6 +247,19 @@ def any_(items):
     return functools.reduce(operator.or_, items)
 
 
+def module_refs(cond):
+    """ The names of the modules whose states, arrays, or events a condition reads (not those of a function of the sim) """
+    out = set()
+    if isinstance(cond, Event):
+        out.add(modname(cond.module))
+    elif isinstance(cond, Cond) and cond.op in ['state', 'array']:
+        out.add(modname(cond.args[0]))
+    elif isinstance(cond, Cond) and cond.op not in leaves:
+        for arg in cond.args:
+            out |= module_refs(arg)
+    return out - {None}
+
+
 def bounding_states(cond):
     """ The states a condition selects people from, as names (a superset of who it selects), or None if it can select anyone """
     if isinstance(cond, ss.State):

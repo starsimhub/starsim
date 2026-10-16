@@ -36,6 +36,118 @@ def test_lazy():
     return sim
 
 
+@sc.timer()
+def test_bv_debut():
+    sc.heading('Port: BV debut as soon as women turn 15, with ss.on()')
+    adult_f = ss.People.female & (ss.People.age >= 15)
+    def make():
+        U, CST1, CST4 = ss.states('U CST1 CST4')
+        return ss.Disease(U, CST1, CST4,
+            debut = ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
+            onset = CST1 >> CST4 @ ss.peryear(0.2),
+            clear = CST4 >> CST1 @ ss.months(6),
+            name='bv')
+    checked = sc.objdict(n=0)
+    def check(sim): # After every module has stepped, nobody who qualifies is still waiting
+        bv, ppl = sim.diseases.bv, sim.people
+        u = bv.U.uids
+        assert not np.any(ppl.female[u] & (ppl.age[u] >= 15)), f'step {sim.ti}: women 15+ still in U'
+        checked.n += 1
+    demog = lambda: [ss.Births(birth_rate=20), ss.Deaths(death_rate=10)]
+    sim = ss.Sim(make(), analyzers=check, demographics=demog(), n_agents=5000, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run()
+    res = sim.results.bv
+    assert checked.n >= len(res.timevec) - 1 and res.debut[1:].sum() > 100
+    assert res.n_U[0] < 0.7*5000 # Those 15+ at the start debuted before it
+    assert 'as soon as it holds' in sim.diseases.bv.describe(output=True)
+    assert ss.Sim(make(), stratify=dict(sex=['female', 'male']), n_agents=100, start=2000, stop=2001, unit='year', **kw).init().solver == 'abm' # As agents for now
+
+    # A trigger has no rate to modify
+    bv = make()
+    with pytest.raises(ss.UnmodifiableTarget):
+        ss.Sim(bv, connectors=ss.modify(bv.debut, multiply=2), n_agents=100, **kw).init()
+    return sim
+
+
+@pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
+def test_bv_debut_ode():
+    """ As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step """
+    adult_f = ss.People.female & (ss.People.age >= 15)
+    U, CST1, CST4 = ss.states('U CST1 CST4')
+    bv = ss.Disease(U, CST1, CST4, debut=ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
+    strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
+    ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run()
+    r = ode.results.bv
+    waiting = r.n_U.select(sex='female', age='15-49')
+    assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
+    assert any('arrivals where it holds go straight' in note for note in ode.notes)
+    return ode
+
+
+@sc.timer()
+def test_on_event():
+    sc.heading('Testing ss.on() with an event: edge-triggered, in the same step, whatever the module order')
+    def make(order):
+        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+        S, F, G = ss.states('S F G')
+        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b') # Flagged when infected with a; level semantics would flag them again on return
+        mods = [a, b] if order else [b, a]
+        return ss.Sim(mods, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run()
+    for order in [True, False]:
+        sim = make(order)
+        res = sim.results
+        assert res.b.flag.sum() > 100
+        assert res.b.flag.sum() <= res.a.sa.sum() # Only those infected (and in S of b at the time)
+        assert np.isclose(res.b.flag[1:].sum(), res.a.sa[1:].sum(), rtol=0.25)
+    with pytest.raises(ss.CapabilityError): # Not yet as compartments
+        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
+        b = ss.Disease(flag=ss.progression('S -> F', on=a.sa), name='b')
+        ss.Sim([a, b], solver='ode', **kw).init()
+    return sim
+
+
+@sc.timer()
+def test_hpv_cancel():
+    sc.heading('Port: HPV, cancelling the other genotypes when one reaches cancer, with ss.on()')
+    names = ['hpv16', 'hpv18']
+    def make(g):
+        S, P, C, X, Z = ss.states('S P C X Z')
+        other = ss.any(ss.state(f'{o}.X') for o in names if o != g) # The siblings do not exist yet
+        return ss.Disease(S, P, C, X, Z,
+            infection = S >> P @ ss.peryear(0.3),
+            precin    = P >> C @ ss.years(2),
+            clear     = C >> S @ ss.years(4),
+            cancer    = C >> X @ ss.years(4),
+            cancelled = (S + P + C) >> Z @ ss.on(other), # Was rate=ss.peryear(1e3), where=other_cancer
+            name = g)
+    def check(sim):
+        d = sim.diseases
+        for g,o in [names, names[::-1]]:
+            assert not np.any(d[o].X.raw & (d[g].S.raw | d[g].P.raw | d[g].C.raw)), f'step {sim.ti}: {g} progresses beside {o} cancer'
+    for order in [names, names[::-1]]:
+        sim = ss.Sim([make(g) for g in order], analyzers=check, n_agents=5000, start=2000, stop=2020, unit='year', **kw).run()
+        res = sim.results
+        assert res.hpv16.cancelled.sum() > 50 and res.hpv18.cancelled.sum() > 50
+    return sim
+
+
+@pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
+def test_hpv_cancel_ode():
+    """ As compartments, tracked jointly; arrivals by the other's move are cancelled at the next loop time """
+    names = ['hpv16', 'hpv18']
+    def make(g):
+        S, P, C, X, Z = ss.states('S P C X Z')
+        other = ss.any(ss.state(f'{o}.X') for o in names if o != g)
+        return ss.Disease(S, P, C, X, Z, infection=S >> P @ ss.peryear(0.3), precin=P >> C @ ss.years(2), clear=C >> S @ ss.years(4),
+                          cancer=C >> X @ ss.years(4), cancelled=(S + P + C) >> Z @ ss.on(other), name=g)
+    sim = ss.Sim([make(g) for g in names], n_agents=5000, start=2000, stop=2020, unit='year', **kw).run()
+    ode = ss.Sim([make(g) for g in names], solver='ode', total_pop=5000, start=2000, stop=2020, unit='year', **kw).run()
+    assert ode.crossings and np.isclose(ode.results.hpv16.cancelled.sum(), sim.results.hpv16.cancelled.sum(), rtol=0.25)
+    return ode
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
+    test_bv_debut()
+    test_on_event()
+    test_hpv_cancel()

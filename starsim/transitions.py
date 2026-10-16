@@ -197,6 +197,51 @@ def parse_arrow(arrow):
     return src, dst
 
 
+class on:
+    """
+    A trigger, as the driver of a transition: people move as soon as a condition holds, or when an event happens to them
+
+    A condition (lazy, a state, or a function of the sim) is level-triggered: anyone in the source it holds for
+    moves, in the step it first holds, including on entry. An event (a transition, `tr.to(B)`, `X.enter`, `X.exit`)
+    is edge-triggered: the people it happened to move. Either way, in the same step as whatever caused it. As agents
+    only, for now.
+
+    Args:
+        x (Cond/Event/Transition/State/func): the condition or event
+
+    Examples:
+        ```python
+        debut = U >> CST1 @ ss.on(ss.People.female & (ss.People.age >= 15))
+        cancelled = (S + P + C) >> Z @ ss.on(ss.any(ss.state(f'{g}.X') for g in others))
+        ```
+    """
+    def __init__(self, x):
+        if isinstance(x, on):
+            x = x.x
+        elif isinstance(x, Transition):
+            x = ss.conditions.Event('tr', x)
+        elif isinstance(x, (State, ss.Arr)):
+            x = ss.conditions.as_cond(x)
+        elif not (isinstance(x, ss.conditions.Cond) or callable(x)):
+            errormsg = f'ss.on() takes a condition, an event, or a function of the sim, not {x} ({type(x).__name__})'
+            raise TypeError(errormsg)
+        self.x = x
+        return
+
+    @property
+    def event(self):
+        """ Whether it is an event (edge-triggered) rather than a condition (level-triggered) """
+        return isinstance(self.x, ss.conditions.Event)
+
+    def __repr__(self):
+        return f'ss.on({getattr(self.x, "__name__", self.x)})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+Trigger = on # So the class can be referred to where on= is an argument
+
+
 class Transition(Nameable):
     """
     A movement between states
@@ -235,9 +280,11 @@ class Transition(Nameable):
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None):
-        if rate is not None and dur is not None:
-            errormsg = 'A transition takes rate= or dur=, not both'
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None, on=None):
+        if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
+            rate, on = None, rate
+        if sum(x is not None for x in [rate, dur, on]) > 1:
+            errormsg = 'A transition takes one of rate=, dur=, or on='
             raise ValueError(errormsg)
         if stages is not None and rate is not None:
             errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
@@ -245,6 +292,7 @@ class Transition(Nameable):
         self.src = None
         self.dst = None
         self.p = None
+        self.trigger = None if on is None else Trigger(on)
         self.rate = None if rate is None else as_expr(rate)
         self.dur = None if dur is None else as_expr(dur)
         self.stages = stages
@@ -351,9 +399,13 @@ class Transition(Nameable):
 
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, anything else is a rate """
-        if self.rate is not None or self.dur is not None or self._pending is not None:
+        if self.rate is not None or self.dur is not None or self._pending is not None or self.trigger is not None:
             errormsg = f'The transition {self} already has what drives it, so cannot take a second "@ {driver}"'
             raise TypeError(errormsg)
+        if isinstance(driver, Trigger): # People move as soon as it holds, or when it happens
+            new = self._copy()
+            new.trigger = driver
+            return new
         value = driver.value if isinstance(driver, par) else driver
         if isinstance(value, ss.bernoulli):
             errormsg = f'"@ {value}" is a probability, not a rate or a duration; a share that goes one way is p=, e.g. ss.progression("I -> R | D", dur=10, p=[None, 0.1])'
@@ -453,7 +505,9 @@ class Transition(Nameable):
 
     @property
     def driver_str(self):
-        if self.dur is not None:
+        if self.trigger is not None:
+            return repr(self.trigger)
+        elif self.dur is not None:
             return f'dur = {value_str(self.dur.raw)}'
         elif self.rate is not None:
             return format_expr(self.rate)
@@ -489,7 +543,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None, on=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -504,12 +558,13 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         after (dur): a minimum stay in the source state first (see `ss.Transition`)
         before (dur): for a rate, the time in the source state after which it no longer applies (see `ss.Transition`)
         offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
+        on (Cond/Event/func): a trigger, the same as `rate=ss.on(...)` (see `ss.on`)
         acquisition (bool): whether it is an acquisition of the disease (see `ss.Transition`), e.g. `ss.progression('S -> V', rate=..., acquisition=False)` for a vaccination
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, after=after, before=before, offspring=offspring, acquisition=acquisition, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
 
 
 def birth(arrow=None, rate=None, name=None, label=None):

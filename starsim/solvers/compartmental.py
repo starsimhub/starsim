@@ -251,6 +251,8 @@ class Compartmental(Engine):
                 if len(staged) > 1:
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}"')
                 tracks.append(Bunch(tr=staged[0] if staged else None, p=None, immediate=False))
+            for tr in exits.triggered:
+                self.unsupported(tr, f'a trigger ({tr.trigger})')
 
             for j,track in enumerate(tracks):
                 tr = track.tr

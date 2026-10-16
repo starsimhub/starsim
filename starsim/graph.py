@@ -312,7 +312,7 @@ class Graph(Presentation):
 
             if tr.undriven: # Built before (the same transition in another module): its rate of 0 is set again in resolve_exits()
                 tr.rate = None
-            if tr.rate is None and tr.dur is None and tr.p is None and not tr.every_state:
+            if tr.rate is None and tr.dur is None and tr.p is None and tr.trigger is None and not tr.every_state:
                 if not tr.src:
                     raise ss.UndrivenTransition(f'the inflow "{name}" ({tr.arrow}) has no rate. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
                 tr.undriven = True
@@ -571,7 +571,7 @@ class Graph(Presentation):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
         self.exits = sc.objdict()
         for state in self.states.values():
-            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[])
+            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[])
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
@@ -583,6 +583,8 @@ class Graph(Presentation):
                 exits = self.exits[state.name]
                 if tr.contact:
                     exits.contact.append(tr)
+                elif tr.trigger is not None: # Moved as soon as its condition holds, or its event happens: see ss.on
+                    exits.triggered.append(tr)
                 elif tr.p is not None and len(tr.dst) <= 1: # One branch of several out of this state
                     exits.branches.append(tr)
                 elif tr.dur is not None:
@@ -638,6 +640,9 @@ class Graph(Presentation):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr.check_dimensions()
+            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1)):
+                raise ss.BadBranchSplit(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
+                                        f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
                 if clock.module not in [None, self.module] or not all(n in self.states for n in clock.names):
                     continue # Another module's clock: checked when it runs

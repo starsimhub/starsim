@@ -31,7 +31,7 @@ def make_engine(module, sim):
 def clocks_of(mod):
     """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, amounts, or conditions read """
     graph = getattr(mod, 'graph', None)
-    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None)] for tr in graph.transitions.values()] if graph is not None else []
+    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
     objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
     return ss.expressions.clocks_in(objs)
 
@@ -52,7 +52,7 @@ def choose_solver(sim):
         for name,tr in mod.graph.transitions.items():
             where = getattr(tr, 'where', None)
             key = f'where_{mod.name}_{name}'
-            if where is not None and key not in pars.connectors:
+            if where is not None and key not in pars.connectors and tr.trigger is None: # A trigger takes where= into its condition
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
                     others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
                 else: # A condition, a state, or an array
@@ -394,6 +394,8 @@ def init_capabilities(sim, modules):
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
                 else:
                     add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
+            if tr.trigger is not None:
+                add(f'transition: {name}', 'no', 'a trigger (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, which runs as agents for now', fatal=True)
             if getattr(tr, 'offspring', None) is not None:
                 add(f'transition: {name}', 'no', 'adds offspring for each person', auto=f'"{name}" has offspring (offspring=), which are added for each person who goes through it')
             if getattr(tr, 'lifetable', None) is not None and not aged:
