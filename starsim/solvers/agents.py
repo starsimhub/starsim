@@ -168,6 +168,12 @@ class Agents(Engine):
         for strat in self.sim.groups.strats: # For a dimension that only some states have: the level people take when they enter one of those states
             if strat.name in [own.name for own in graph.strats] and strat.states is not None:
                 add(f'enter_{strat.name}', ss.random())
+        for tr in graph.inflows: # Births driven by a flow: the number of children of each parent, and their sex (see step_per())
+            if getattr(tr, 'per', None) is not None and tr.people:
+                if isinstance(tr.n_born, ss.Dist):
+                    add(f'n_{tr.name}', sc.dcp(tr.n_born))
+                if tr.sex is not None:
+                    add(f'sex_{tr.name}', sc.dcp(tr.sex) if isinstance(tr.sex, ss.Dist) else ss.bernoulli(p=tr.sex))
         self.attr_dists = dict() # Each distribution an attribute is drawn from, and the key of its copy: see draw_attr()
         for a in self.attrs.values():
             if a.kind in ['drawn', 'trait']:
@@ -1256,6 +1262,69 @@ class Agents(Engine):
         uids = engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
         return event.mothers(self.sim, uids) if isinstance(event, ss.conditions.Child) else uids
 
+    def step_per(self, ti):
+        """ Births driven by a flow (`ss.birth(per=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once """
+        born = False
+        for tr in self.graph.inflows:
+            if getattr(tr, 'per', None) is None or not tr.people or ss.conditions.modname(tr.per.module) not in [None, self.mod.name]: # Another module's transition: that module makes the children, who are placed here by this inflow's state (see into())
+                continue
+            parents = self.fresh(('per', tr.name), tr.per.name)
+            if not len(parents):
+                continue
+            new = self.grow_children(tr, parents, ti)
+            self.flowcounts[tr.name] += self.n_of(new)
+            if len(new):
+                if self.sim.groups.n_groups > 1:
+                    self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(new), weights=self.weights(new), minlength=self.sim.groups.n_groups)
+                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(per=) of the same transition
+                    other = next((o for o in mod.graph.inflows if mod is not self.mod and getattr(o, 'per', None) is not None and o.per.name == tr.per.name and ss.conditions.modname(o.per.module) == self.mod.name), None)
+                    if other is not None:
+                        mod.engine.flowcounts[other.name] += self.n_of(new)
+                born = True
+        if born:
+            self.finish_moves(ti)
+        return
+
+    def n_children(self, tr, parents):
+        """ The number of children of each parent at a birth driven by a flow """
+        n = tr.n_born
+        if isinstance(n, ss.Dist):
+            n = self.dists[f'n_{tr.name}'].rvs(parents)
+        elif callable(n):
+            n = n(self.sim, parents)
+        return np.broadcast_to(np.asarray(n, dtype=int), len(parents))
+
+    def grow_children(self, tr, parents, ti):
+        """ Make the children of some parents, linked to them, in their parent's place, and in each declared module's state for them (see `into()`) """
+        sim = self.sim
+        people = sim.people
+        counts = self.n_children(tr, parents)
+        moms = np.repeat(np.asarray(parents), counts)
+        if not len(moms):
+            return ss.uids()
+        places = self.place_raw()[moms] if sim.mixing.space is not None else np.zeros(len(moms), dtype=int)
+        states = tuple(self.into(tr))
+        npl = np.bincount(places, minlength=1)
+        new = self.add_people([(place, states, int(k)) for place,k in enumerate(npl) if k], ti, f'born_{tr.name}')
+        order = np.concatenate([moms[places == place] for place,k in enumerate(npl) if k]) # In the order they were made: by place, then each parent's
+        people.parent[new] = order
+        if f'sex_{tr.name}' in self.dists:
+            people.female[new] = self.dists[f'sex_{tr.name}'].rvs(new)
+            sim.groups.groups_changed(new)
+        if not any(strat.kind == 'age' for strat in sim.groups.strats):
+            people.age[new] = 0
+        return new
+
+    def into(self, tr):
+        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(per=)` of the same transition """
+        out = [d.name for d in tr.dst]
+        per = (ss.conditions.modname(tr.per.module) or self.mod.name, tr.per.name)
+        for mod in self.sim.declared:
+            for other in mod.graph.inflows:
+                if getattr(other, 'per', None) is not None and (ss.conditions.modname(other.per.module) or mod.name, other.per.name) == per:
+                    out += [d.name for d in other.dst]
+        return list(dict.fromkeys(out))
+
     def fresh(self, key, tr):
         """ The agents who went through a transition (or a recorded event) of this module since `key` last asked: for code that reacts to events once each """
         seen = self._seen.get(key, {})
@@ -1729,6 +1798,7 @@ class Agents(Engine):
         self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
         self.finish_moves(ti)
         self._row = None
+        self.step_per(ti)
         self.step_births(dt)
         self.step_transfers(dt)
         return
@@ -1869,7 +1939,7 @@ class Agents(Engine):
         sim = self.sim
         d = sim.mixing.space
         for tr in self.graph.inflows:
-            if not tr.people:
+            if not tr.people or getattr(tr, 'per', None) is not None: # Driven by a flow: see step_per()
                 continue
             self._by_group = True
             adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
@@ -2030,6 +2100,7 @@ class Agents(Engine):
                     self.log_infections(uids)
                 self.move(tr, src, uids)
         self.finish_moves(mod.ti + 1)
+        self.step_per(mod.ti + 1)
         for a in self.attrs.values(): # Derived attributes as they are now, for code that reads them
             if a.kind == 'derived':
                 uids = self.sim.people.auids

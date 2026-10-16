@@ -17,7 +17,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
     Conception is one transition, so contraception, HIV, or LAM are modifiers of it
     (`ss.modify(preg.conception, multiply=...)`). A pregnancy ends in an abortion (at once, with `p_abortion`), a
     miscarriage or stillbirth (a hazard before or after `loss_threshold`), a maternal death (`antepartum`), or a
-    delivery at the end of a dwell of `dur_pregnancy`.
+    delivery at the end of a dwell of `dur_pregnancy`. Each delivery gives `embryos_per_pregnancy` children (`birth`):
+    as agents, new agents whose `parent` is the mother, placed in each declared module's state given by its own
+    `ss.birth(per=preg.delivery)` (or else its first state).
 
     Takes the parameters of the Starsim 3 module (see `ss.PregnancyPars`), with the same names and meanings,
     plus `p_abortion`; for the Starsim 3 class, see `ss.LegacyPregnancy`.
@@ -55,6 +57,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     stillbirth  = ss.Transition(P, NP, rate=loss_rate*(P.time >= loss_threshold))
     antepartum  = ss.Transition(P, ss.null, rate=maternal_rate)
     delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time is gestational age
+    birth       = ss.birth('-> NP', per=delivery, n=ss.PregnancyPars().embryos_per_pregnancy) # Children, linked to the mother (agents only, for now)
 
     def __init__(self, pars=None, metadata=None, **kwargs):
         v3 = ss.PregnancyPars()
@@ -76,6 +79,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
                 dp = ss.constant(dp.pars.a)
             graph['dur_pregnancy'] = dp
         self.pars.update(fertility=self.conception_rate, **graph)
+        birth = self.graph.transitions.birth
+        birth.n_born = self.pars.embryos_per_pregnancy
+        birth.sex = self.pars.sex_ratio
         self.metadata = sc.mergedicts(sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')), metadata)
         self.fertility_rate_data = None # Set in init_pre()
         self.mean_dur_pregnancy = None # In years; set in init_pre()

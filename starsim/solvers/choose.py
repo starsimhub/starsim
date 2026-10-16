@@ -506,6 +506,8 @@ def init_capabilities(sim, modules):
                 add(f'transition: {name}', 'no', 'a trigger (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, which runs as agents for now', fatal=True)
             if getattr(tr, 'offspring', None) is not None:
                 add(f'transition: {name}', 'no', 'adds offspring for each person', auto=f'"{name}" has offspring (offspring=), which are added for each person who goes through it')
+            if getattr(tr, 'per', None) is not None:
+                add(f'transition: {name}', 'no', 'births driven by a flow', auto=f'"{name}" is a birth driven by the flow of "{tr.per.name}" (ss.birth(per=)), which runs as agents for now', fatal=True)
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
         for strat in list(graph.strats) + list(sim.groups.strats):

@@ -369,6 +369,9 @@ class Transition(Nameable):
             errormsg = f'"{both[0]}" is given in both move= (a level to go to) and increment= (an amount to add); give one'
             raise ValueError(errormsg)
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
+        self.per = None # For ss.birth(per=): the transition whose flow drives the inflow, and the children each time
+        self.n_born = 1
+        self.sex = None
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.arrow_given = True # For ss.birth() and ss.immigration() in demographics=: whether the state people arrive in was given
@@ -668,9 +671,34 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
     return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
 
 
-def birth(arrow=None, rate=None, name=None, label=None):
+class Per:
+    """ The transition that drives a birth (`ss.birth(per=)`), kept by reference when its module is copied, since it may be another module's """
+    def __init__(self, tr):
+        self.tr = tr
+
+    @property
+    def name(self):
+        return self.tr.name
+
+    @property
+    def module(self):
+        return getattr(self.tr, 'module', None)
+
+    def __repr__(self):
+        return f'per({self.tr.name})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+def birth(arrow=None, rate=None, per=None, n=1, sex=None, name=None, label=None):
     """
-    An inflow of people at a crude (per-person) birth rate, e.g. `ss.birth('-> S', rate=ss.peryear(0.02))`
+    An inflow of people: at a crude (per-person) birth rate, e.g. `ss.birth('-> S', rate=ss.peryear(0.02))`; or driven by a
+    flow, e.g. `ss.birth('-> NP', per=preg.delivery, n=2)`, `n` children for each person who goes through the transition
+
+    With `per=`, as agents the children are made by the module that owns the transition, with `parent` set to the
+    person who went through it, and placed in each declared module's state given by its own `ss.birth(per=...)` of
+    the same transition, or else its first state. Agents only, for now.
 
     Births of the whole population go in `ss.Sim(demographics=[...])`, where they are declared once
     for every disease's people and run under every solver; births into one disease's state go in
@@ -679,6 +707,9 @@ def birth(arrow=None, rate=None, name=None, label=None):
     Args:
         arrow (str): the state people are born into, e.g. `'-> S'` (default: `S` in a disease; in `demographics=`, each disease's first state)
         rate (any): the birth rate per person per unit time
+        per (Transition): instead of a rate, the transition whose flow drives the births
+        n (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
+        sex (float/Dist): the chance a child is female (default: as for anyone added)
         name (str): the name of the transition
         label (str): a human-readable name
 
@@ -690,8 +721,14 @@ def birth(arrow=None, rate=None, name=None, label=None):
     given = arrow is not None
     arrow = arrow or '-> S'
     src, dst = parse_arrow(arrow if '>' in arrow else f'-> {arrow}')
+    if per is not None and rate is not None:
+        errormsg = 'ss.birth() takes either rate= (a crude birth rate) or per= (a transition that drives the births), not both'
+        raise ValueError(errormsg)
     out = Transition(null, dst, rate=rate, name=name, label=label)
-    out.per_capita = True
+    out.per_capita = per is None
+    out.per = None if per is None else Per(per)
+    out.n_born = n
+    out.sex = sex
     out.arrow_given = given
     return out
 

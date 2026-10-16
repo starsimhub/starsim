@@ -344,7 +344,7 @@ class Graph(Presentation):
 
             if tr.undriven: # Built before (the same transition in another module): its rate of 0 is set again in resolve_exits()
                 tr.rate = None
-            if tr.rate is None and tr.dur is None and tr.p is None and tr.trigger is None and not tr.every_state:
+            if tr.rate is None and tr.dur is None and tr.p is None and tr.trigger is None and getattr(tr, 'per', None) is None and not tr.every_state:
                 if not tr.src:
                     raise ss.UndrivenTransition(f'the inflow "{name}" ({tr.arrow}) has no rate. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
                 tr.undriven = True

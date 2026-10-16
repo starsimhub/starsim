@@ -56,7 +56,49 @@ def test_states_ode():
     return test_states(ode=True)
 
 
+@sc.timer()
+def test_births(ode=False):
+    sc.heading('Testing ss.birth(per=): children from deliveries, linked to the mother, twins, and placed in other modules')
+    def make():
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), embryos_per_pregnancy=ss.choice(a=[1, 2], p=[0.8, 0.2]))
+        S, I = ss.states('S I')
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), recovery=I >> S @ ss.years(1), born=ss.birth('-> I', per=preg.delivery), name='d')
+        return dict(demographics=preg, diseases=d)
+    abm = ss.Sim(**make(), n_agents=20_000, stratify=strat, **kw).run()
+    ra = abm.results
+    assert np.isclose(ra.pregnancy.birth.sum()/ra.pregnancy.delivery.sum(), 1.2, atol=0.05) # Twins
+    assert ra.d.born.sum() == ra.pregnancy.birth.sum() # Placed in I, as the other module's ss.birth(per=) says
+    if ode:
+        ode = ss.Sim(**make(), solver='ode', total_pop=20_000, stratify=strat, **kw).run()
+        ro = ode.results
+        for key in ['delivery', 'birth']:
+            assert np.isclose(ra.pregnancy[key].sum(), ro.pregnancy[key].sum(), rtol=0.1)
+        assert np.isclose(ro.d.born.sum(), ro.pregnancy.birth.sum()) # An inflow of the delivery flow, into the youngest groups
+        assert np.isclose(ro.pregnancy.n_NP[-1] + ro.pregnancy.n_P[-1], ro.d.n_S[-1] + ro.d.n_I[-1])
+        assert ro.pregnancy.n_NP.select(age='0-14').values[-1] > ro.pregnancy.n_NP.select(age='0-14').values[0]
+        return ode
+
+    # As agents: each child has the mother as parent, twins share a delivery, and newborns enter I
+    ppl = abm.people
+    kids = ppl.parent.notnan.uids
+    moms = ppl.parent[kids]
+    assert len(kids) == ra.pregnancy.birth.sum() and np.all(ppl.female[moms])
+    assert np.isclose(ppl.female[kids].mean(), 0.5, atol=0.03)
+    newest = kids[ppl.age[kids] < 0.1] # Born in the last step
+    assert len(newest) and abm.diseases.d.I[newest].mean() > 0.8
+
+    with pytest.raises(ValueError):
+        ss.birth('-> S', rate=ss.peryear(0.01), per=abm.diseases.d.infection)
+    return abm
+
+
+@pytest.mark.xfail(reason='Phase B, tasks B1 and B4: gestational age as a conveyor, and births driven by a flow, as compartments', strict=True)
+def test_births_ode():
+    return test_births(ode=True)
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
+    births = test_births()
     T.toc()

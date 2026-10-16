@@ -55,6 +55,9 @@ class Compartmental(Engine):
 
     def init_pre(self):
         for name,tr in self.graph.transitions.items():
+            if getattr(tr, 'per', None) is not None:
+                raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" is a birth driven by the flow of "{tr.per.name}" (ss.birth(per=)), which runs as agents for now, so it cannot run with solver="{self.sim.solver}".\n'
+                                         f'     Run with solver="abm", or leave the solver as "auto".')
             if getattr(tr, 'offspring', None) is not None:
                 raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" has offspring (offspring=), which are added for each person who goes through it, so it cannot run with solver="{self.sim.solver}".\n'
                                          f'     Run with solver="abm", or leave the solver as "auto".')

@@ -169,6 +169,8 @@ class Engine:
         coords = sim.groups.group_coords
         own = {strat.name:strat for strat in graph.strats}
         for tr in graph.inflows: # A birth rate for each level of a property of people would be births from the people at each level, which cannot be declared yet
+            if tr.rate is None: # Driven by a flow (ss.birth(per=))
+                continue
             dims = [dim for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) for dim in leaf.raw.dims]
             others = [dim for dim in dims if sim.groups.strats[sim.groups.dim_index(dim)].kind != 'space']
             if tr.per_capita and others:

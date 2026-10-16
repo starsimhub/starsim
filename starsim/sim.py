@@ -648,7 +648,8 @@ class Sim(ss.Base):
     @staticmethod
     def flows_of(mod):
         """ The transitions of a declared disease that are births, arrivals, or deaths of everyone, so are the population's """
-        return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people) or getattr(tr, 'every_state', False)]
+        placed = lambda tr: getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) not in [None, mod.name] # Another module's births (ss.birth(per=)), which only say where its children start
+        return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people and not placed(tr)) or getattr(tr, 'every_state', False)]
 
     def _init_flows(self):
         """
