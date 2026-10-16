@@ -1251,8 +1251,10 @@ class Engine:
             for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
                 parts = [expr.a, expr.b] if isinstance(expr, ss.transitions.BinOp) and expr.op == '/' else [expr]
                 plain = all(all(isinstance(leaf, (ss.State, ss.par, ss.transitions.Flow)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
+                if not plain: # E.g. a count (I.n), which is the total over every group, so the result is not by group
+                    continue
                 flags = [self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for part in parts for leaf in part.leaves if not isinstance(leaf, ss.par)]
-                if plain and flags and all(np.array_equal(f, flags[0]) for f in flags):
+                if flags and all(np.array_equal(f, flags[0]) for f in flags):
                     dims[name] = flags[0]
                     if len(parts) == 2:
                         self.ratios[name] = parts

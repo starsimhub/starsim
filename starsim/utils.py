@@ -648,21 +648,35 @@ def combine_rands(a, b):
 
 #%% Other helper functions
 
-def load(filename, **kwargs):
+def load(filename, format=None, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`
+    Alias to Sciris `sc.loadany()`, which also reads model specs and other frameworks' models
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
     this function. This can also be used to load other objects of known type
     (e.g. JSON), although this usage is discouraged.
 
+    A model spec (written by `sim.to_spec()`) is built into a sim (see `ss.from_spec()`),
+    and so is a model from another framework, given its format or one that can be told
+    from the file (see `ss.interop`).
+
     Args:
-        filename (str/path): the name of the file to load
-        kwargs (dict): passed to `sc.loadany()`
+        filename (str/path/any): the name of the file to load, or another framework's model object
+        format (str): the framework the model is from (e.g. 'emulsion'); see `ss.interop.formats`
+        kwargs (dict): passed to the importer, or to `sc.loadany()`
 
     Returns:
-        The loaded object; a model spec (written by `sim.to_spec()`) is built into a sim, see `ss.from_spec()`
+        The loaded object; a model spec or another framework's model is returned as an `ss.Sim`
+
+    **Examples**:
+
+        sim = ss.load('sim.json') # A model spec
+        sim = ss.load('compart_SIR.yaml', format='emulsion')
     """
+    if format is None:
+        format = ss.interop.sniff(filename)
+    if format is not None:
+        return ss.interop.load(filename, format=format, **kwargs)
     if str(filename).endswith('.json'):
         spec = sc.loadjson(filename)
         if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):

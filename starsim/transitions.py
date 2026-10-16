@@ -1566,6 +1566,8 @@ class Graph:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
                 add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in tr.p)}')
+            if tr.guessed.get('import'):
+                add('', f'imported as {tr.guessed["import"]}', 'guessed')
         return lines
 
     def edges(self):

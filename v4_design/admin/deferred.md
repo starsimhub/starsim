@@ -15,3 +15,13 @@ Work that has been looked at and set aside for now: worth doing, but not yet. Ea
 ## Features
 
 - **Triangles as a target statistic.** `ss.PartnerNet` and `ss.MFNet` target the number of partners people have at a time and mixing by a property (`match=`). Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, need the network fitted as a whole, not partner by partner.
+- **Gaps found while writing the importers and the import guides.** Each was worked around or listed as not translated; none is fixed yet:
+    - A branch into `ss.null` (`ss.Transition(I, [R, ss.null], p=...)`) is not allowed, and the error message itself crashes (`closest()` is given the `Null` object). A v3 SIR's `p_death` has to be two transitions with `p=`.
+    - `ss.PartnerNet` has no `acts=`, and there is no declared condition on a network (a person's degree, or being the partner of someone infected).
+    - A transition's current flow cannot be used in a rate (MEmilio's test-and-trace capacity).
+    - Deaths from a life table, and seeding a fixed number of people on a schedule, have no declared form.
+    - `ss.Mobility` cannot scale gravity to a mean share away with a cap for each place (LASER).
+    - The binomial solver substeps the whole model for one Erlang stage, so `substeps=1` is needed to match a source in discrete time.
+    - `ss.gamma`'s second positional argument is `loc`, which nothing warns about.
+    - `MultiResults` (from `sim.run(n_runs=)`) can be read by attribute (`msim.results.sir`), but `keys()` and `[name]` come back empty; and after `init()`, `sim.pars.diseases` is no longer the list of diseases.
+    - The network of an `ss.contacts()` is written in the model spec as the mixing pools it makes, not as its matrices, so neither `ss.load()` nor `ss.to_code()` can rebuild it from the spec (an importer gives `to_code()` the code instead).

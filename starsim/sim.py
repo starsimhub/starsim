@@ -1271,11 +1271,33 @@ class Sim(ss.Base):
         out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=self.unit,
                                 start=tstr(self.t.start), stop=tstr(self.t.stop), dt=float(self.t.dt.to(self.unit_base).value),
                                 total_pop=float(pars.total_pop), n_agents=int(pars.n_agents) if self.solver == 'abm' else None, rand_seed=pars.rand_seed)
+        if pars.substeps is not None: # Only when given, so that the hash of every other sim is as it was
+            out.config.substeps = pars.substeps
         out.meta = sc.objdict(library_version=ss.__version__, solver_chosen=self.solver, solver_reason=self.solver_reason, notes=list(self.notes))
         out = sc.jsonify(out)
         if filename is not None:
             return sc.savejson(filename, out, **kwargs)
         return out
+
+    def to_code(self, filename=None):
+        """
+        The sim as a Python file that builds it again, from its model spec (see `ss.to_code()`)
+
+        A sim imported from another framework (`ss.load(..., format=...)`) also says
+        where it came from, how each rate was read, and what was not translated.
+
+        Args:
+            filename (str): if provided, write the code to this file
+        """
+        header, footer, code = None, None, None
+        imp = getattr(self, 'imported', None)
+        if imp is not None:
+            code = imp.get('code')
+            source = sc.path(imp.file).name if imp.file else 'an object'
+            header = f'Imported from {imp.format} ({source}) by ss.load()\n\nHow each rate was read:\n' + '\n'.join(imp.choices)
+            if imp.incomplete:
+                footer = ['Not translated (W1601 ImportIncomplete):'] + [f'  {name}: {why}' for name,why in imp.incomplete]
+        return ss.to_code(self.to_spec(), filename=filename, header=header, footer=footer, code=code)
 
     def add_module(self, module, key=None):
         """

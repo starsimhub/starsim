@@ -146,7 +146,10 @@ t('loop')
 from .loop import Loop
 
 t('spec')
-from .spec import from_spec
+from .spec import from_spec, to_code, diff
+
+t('interop')
+from . import interop # Used by ss.load(..., format=...)
 
 t('gradients')
 from . import gradients # Used as ss.gradients; JAX is imported only when it is used
