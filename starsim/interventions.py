@@ -641,12 +641,39 @@ class Delivery(Intervention):
     def offered(self):
         return f'offered_{self.name}'
 
-    def dims(self):
-        """ The properties of people that this delivery needs, as stratifications where everyone starts False """
+    @property
+    def waits(self):
+        """ Whether the results of the test it delivers come after a delay """
+        return isinstance(self.product, ss.Test) and self.product.delay is not None
+
+    @property
+    def pending(self):
+        """ In a compartmental run: the property of people that says how long they have waited for a test result, and which result """
+        return f'pending_{self.name}'
+
+    def staged(self, sim):
+        """ Whether, in this sim, the delivery needs levels that people move up step by step: the time since a product whose protection fades was delivered, or since a test whose result is delayed """
+        if sim.solver in [None, 'abm']:
+            return False
+        return (self.holds and self.product.staged) or self.waits
+
+    def result_steps(self, sim):
+        """ The number of steps from a test to its result, as agents wait (see `test()`) """
+        dt = sim.pars.dt.to(sim.unit_base).value
+        return max(1, int(np.ceil(ss.solvers.convert(self.product.delay, sim.unit_base)/dt - 1e-9)))
+
+    def dims(self, sim=None):
+        """ The properties of people that this delivery needs, as stratifications where everyone starts at the first level """
         Strat = ss.transitions.Strat
+        staged = sim is not None and self.staged(sim)
         out = []
         if self.holds:
-            out.append(Strat(self.product.dim, [False, True], split=[1.0, 0.0]))
+            levels = self.product.stage_levels() if staged and self.product.staged else [False, True]
+            out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
+        if staged and self.waits: # Waiting for a result: one level for each step, for each result that has a follow-up
+            m = self.result_steps(sim)
+            levels = ['none'] + [f'positive {j+1}' for j in range(m)] + ([f'negative {j+1}' for j in range(m)] if self.on_negative is not None else [])
+            out.append(Strat(self.pending, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
         for dim,level in (self.move or {}).items():
             if isinstance(level, bool):
                 out.append(Strat(dim, [False, True], split=[1.0, 0.0]))
@@ -827,6 +854,11 @@ class Delivery(Intervention):
                     self.moved_groups = moved
         return
 
+    def same_people(self, sel, before):
+        """ In a compartmental run: a selection made from the people in each state and group as they were (`before`), as a fraction of them as they are now that some have moved """
+        after = self.eng.state_counts()
+        return np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
+
     def mark_offered(self, sel, chosen):
         """ Record that the selected people have been offered the product; returns those chosen, as they now are """
         d = self.sim.dim_index(self.offered)
@@ -857,6 +889,7 @@ class Delivery(Intervention):
         """ Deliver the product to whoever it is due to now: at the start of the step, before its flows (the loop runs it at that time: see `ss.solvers.interval()`) """
         if self.product is not None:
             self.product.step_waning()
+            self.step_stages()
         self.step_results()
         if self.triggered or not self.due():
             return
@@ -865,6 +898,26 @@ class Delivery(Intervention):
             self.give(self.delivered_by_function())
         else:
             self.receive(selector.everyone() if self.on is None else selector.select(self.on))
+        return
+
+    def move_up(self, dim, levels):
+        """ In a compartmental run: move everyone up one level of a dimension, for each of these levels (highest first, so nobody moves twice) """
+        selector = self.selector
+        d = self.sim.dim_index(dim)
+        everyone = selector.everyone()
+        for level in sorted(levels, reverse=True):
+            self.shift((selector.dim(dim) == level)*everyone, {d:level + 1})
+        return
+
+    def step_stages(self):
+        """ In a compartmental run: move the holders of a product whose protection fades up a level of time since delivery, every `stage_steps` steps; once per step, for all its deliveries """
+        product = self.product
+        sim = self.sim
+        if sim.solver == 'abm' or not (self.holds and product.staged) or getattr(product, '_ti_staged', None) == sim.ti:
+            return
+        product._ti_staged = sim.ti
+        if sim.ti > 0 and sim.ti % product.stage_steps == 0:
+            self.move_up(product.dim, range(1, product.n_stages)) # The last level is kept
         return
 
     def delivered_by_function(self):
@@ -1014,12 +1067,32 @@ class Delivery(Intervention):
         else:
             pos = chosen*(has*sens + (1 - has)*(1 - spec))
             neg = chosen - pos
+            if product.delay is not None: # They wait for the result: see step_results()
+                d = self.sim.dim_index(self.pending)
+                before = self.eng.state_counts()
+                self.shift(pos, {d:1})
+                if self.on_negative is not None:
+                    self.shift(self.same_people(neg, before), {d:self.result_steps(self.sim) + 1})
+                return
         self.report(pos, neg)
         return
 
     def step_results(self):
         """ Act on the test results that have become available """
-        if not isinstance(self.product, ss.Test) or self.product.delay is None:
+        if not self.waits:
+            return
+        if not self.selector.abm: # The people who have waited long enough are at the top level for their result
+            selector = self.selector
+            m = self.result_steps(self.sim)
+            negatives = self.on_negative is not None
+            level = selector.dim(self.pending)
+            everyone = selector.everyone()
+            pos = (level == m)*everyone
+            neg = (level == 2*m)*everyone if negatives else selector.nobody()
+            self.report(pos, neg)
+            level = selector.dim(self.pending) # Then they wait no more, and the others move up
+            self.shift(((level == m) | (level == 2*m))*everyone, {self.sim.dim_index(self.pending):0})
+            self.move_up(self.pending, list(range(1, m)) + (list(range(m + 1, 2*m)) if negatives else []))
             return
         due = (self.ti_result <= self.sim.ti).uids
         if len(due):
@@ -1031,7 +1104,10 @@ class Delivery(Intervention):
     def report(self, pos, neg):
         """ Count the diagnoses, and pass the people with each result to its follow-up """
         self.tally('diagnosed', pos)
+        before = None if self.selector.abm else self.eng.state_counts()
         for followup,sel in [(self.on_positive, pos), (self.on_negative, neg)]:
+            if before is not None and followup is not None: # After the other follow-up has moved some people (e.g. cured people into R)
+                sel = self.same_people(sel, before)
             if isinstance(followup, Delivery):
                 followup.receive(sel)
             elif followup is not None:
@@ -1054,7 +1130,7 @@ class Delivery(Intervention):
         """ A line saying what is delivered and how """
         what = 'transfer' if self.product is None else self.product.describe()
         how = 'follow-up' if self.triggered else 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else 'on an event' if self.on is not None else 'routine (each person is offered it once, when first eligible)'
-        dims = [strat.name for strat in self.dims()]
+        dims = [strat.name for strat in self.dims(getattr(self, 'sim', None))]
         added = f'; adds {sc.strjoin(dims)} as {"a property" if len(dims) == 1 else "properties"} of people' if dims else ''
         return f'{self.name}: {what}; delivery {how}{added}'
 

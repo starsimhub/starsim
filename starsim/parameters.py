@@ -295,6 +295,7 @@ class SimPars(Pars):
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default), 'euler', or a scipy.integrate.solve_ivp method such as 'RK45' or 'LSODA'
         self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over by more than a quarter in one), and the 'binomial' and 'sde' solvers (default: one for each stage of the dwell time with the most stages for 'binomial', and 1 for 'sde')
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
+        self.track_writes = False # Whether the arrays that modifiers act on record which module assigns them, for sim.what_modifies() (agents only)
 
         # Demographic parameters
         self.birth_rate = None
@@ -594,3 +595,34 @@ class SimPars(Pars):
                 out.append((modkey, mod))
 
         return out
+
+
+class Requires(sc.prettyobj):
+    """
+    One item of the data a module needs, for `sim.requires()`
+
+    This is metadata only: it says what to supply, and is never enforced.
+
+    Args:
+        name (str): the name of the item; a parameter or attribute of the module with this name supplies it
+        shape (str): its shape, e.g. 'age x age'
+        source (str): where the data usually come from
+        doc (str): a description
+        default (any): the value used if none is supplied
+
+    Examples:
+        ```python
+        class MyNetwork(ss.Network):
+            requires = [
+                ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
+                ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
+            ]
+        ```
+    """
+    def __init__(self, name, shape=None, source=None, doc=None, default=None):
+        self.name = name
+        self.shape = shape
+        self.source = source
+        self.doc = doc
+        self.default = default
+        return

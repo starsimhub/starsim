@@ -52,7 +52,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] EpiModel: HIV with a care cascade and PrEP over two dynamic networks, four scenarios (agrees within the noise of the runs; 62 lines against 405, 2.5 s against 54)
     - [x] LASER: measles in England and Wales (53 places within 100 km of Norwich, at their real sizes, for 10 years), with births, life-table deaths, seasonality, importations, and gravity coupling (agrees: 106,466 infections against 106,639; 131 s against 3.0 s)
     - [x] SimInf: SISe3 in 1,600 herds with an environmental pressure and 783,773 events, aging by the register's `to_states` (fully declared; agrees within and between herds, once counts were settled after the register's events, as SimInf updates `phi`, and `phi`'s rates were made those of SimInf's daily update; 12 s a run as Gillespie against 0.1 s)
-    - [x] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. migration as `immigration`/`emigration` parameters of `tbsim.TB` (with `ss.immigration()` and `ss.emigration()`). docs, tutorials, and examples ported. A second-line regimen (`second_line=`, its own state and transitions, cure of resistant strains, and relapse), started for people found resistant by a test for resistance in the care cascade (`tbsim.care(tb, dst=tbsim.DST(tb))`; as an ODE and as agents, 18 and 19 people on it on average); strain-aware TPT (`tbsim.TPT(tb=tb, drugs=['INH'])`, an efficacy by level of resistance: the share of the strains carried that its drugs act on); household contact tracing (`tbsim.contact_tracing(tb)`, as agents: the contacts of people starting treatment are tested, and treated or given TPT). Not ported: switching regimen during a course, clearing strains by TPT, and resistance acquired under TPT
+    - [x] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. migration as `immigration`/`emigration` parameters of `tbsim.TB` (with `ss.immigration()` and `ss.emigration()`). docs, tutorials, and examples ported. A second-line regimen (`second_line=`, its own state and transitions, cure of resistant strains, and relapse), started for people found resistant by a test for resistance in the care cascade (`tbsim.care(tb, dst=tbsim.DST(tb))`; as an ODE and as agents, 18 and 19 people on it on average); strain-aware TPT (`tbsim.TPT(tb=tb, drugs=['INH'])`, an efficacy by level of resistance: the share of the strains carried that its drugs act on); household contact tracing (`tbsim.contact_tracing(tb)`, as agents: the contacts of people starting treatment are tested, and treated or given TPT); switching to second line during a course after a test for resistance (`tbsim.monitoring(tb)`, through `switch_second_line`, with a treatment that moves people out of any state); TPT clearing the strains it acts on and resistance acquired under it (`tbsim.TB(tpt=...)`: transitions whose `where=` is holding a TPT product, so a sim without TPT has none of them; as rates while TPT is held, where the old tbsim had outcomes at the end of a course); as agents, testing for resistance only people treated within some time before (`tbsim.care(..., retreatment=ss.years(2))`, from each agent's time of starting treatment, which a compartmental model does not keep). The ODE and agents agree on all of these (e.g. 516 and 544 people switched; 2,262 and 2,210 resistance acquired under TPT)
 
 ## By section of the spec
 
@@ -70,7 +70,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] The unit rules for declared sims (`unit=`, typed `dt`, dates, typed values, timesteps)
 - [x] Typed durations and rates in expressions
 - [x] `W102 LargeStep`, for the solvers that take whole steps (including Euler with `substeps=` given, where outflows that would take more than everyone in a compartment are scaled down together, as Atomica does)
-- [ ] The other unit notes
+- [x] The other unit notes: `W103 UnitsDisagree`, naming the bare numbers the smallest unit was applied to (`W101` was the only other)
 
 ### 03 States and transitions
 
@@ -83,7 +83,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Functions as parameter values (the try-it rule)
 - [x] NumPy functions of counts and parameters in a rate (`np.minimum`, `np.maximum`, `np.clip`, `np.exp`, `np.log`, `np.sqrt`, `np.abs`, `np.sin`, `np.cos`), and comparisons (`Q.n < 20`, 1 or 0), declared, and run in the kernels
 - [x] `where=` on a transition (`ss.progression('J -> A', rate=..., where=ppl.age > 1)`): a modifier that sets its rate to 0 for everyone else, so it runs wherever a modifier with that condition does
-- [ ] `states=` on transmission
+- [x] `states=` on transmission: superseded, since the spec has none; which states infect is `source=`, and who can be infected is `where=`
 
 ### 04 Parameters
 
@@ -91,7 +91,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `pars=` by name on the sim
 - [x] `ss.timeseries` (constant, linear, cosine, spline) and `ss.seasonal`, in rates, durations, modifier amounts, coverage, and capacity
 - [x] A time series inside `ss.by` (or `ss.seasonal`), in the keyword and table forms; tabulated by group for the kernels
-- [ ] `requires=` and `sim.requires()`
+- [x] `requires` and `sim.requires()`: a module's list of `ss.Requires`, and for a declared model its parameters, as a table of what is given and what is missing, without initializing the sim (so it works when a missing value would stop it). Starsim 3's `self.requires = HIV` (another module) is shown as a required module
 
 ### 05 Dimensions
 
@@ -110,13 +110,13 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Strains carried together: levels such as `'A+B'` (each strain carried needs a level of its own); someone at such a level passes on each strain in proportion to its infectiousness (`adjust=dict(rel_trans=...)`), and infection with a strain someone does not carry adds it, or leaves them as they are if they carry it or there is no level for it (a transmission that leaves people in the same state is then not counted). In every solver, and in the kernels and JAX
 - [x] `move=` on a transition: a change of level in a dimension as well as of state, from one level (an arrow, which also limits the transition to people at that level) or from any
 - [x] `immunity=` between strains: people in a state that has a strain and is not otherwise infected (`R`) can be infected by each strain, as far as their past strains do not protect them. A compartmental run keeps only the last strain (noted); agents keep every strain they have had. Not yet over networks as agents
-- [ ] `where=` on `stratify()`
+- [ ] `where=` on `stratify()`: not done. Groups are a dense grid of levels, which the solvers, kernels, and fitting index by arithmetic in about 30 places, and the spec calls it provisional, with ragged results not settled; to decide
 - [x] As agents, a split is assigned exactly (rounded to whole agents) in a random order
 - [x] A register's `to_states` column moves the people chosen from each state to the matching one of another list (SimInf's shift matrix), under every solver
 - [x] Movement registers (`ss.Mobility(data=)`): people moved between places, added, and removed on given dates, under every solver
 - [ ] Named geographies (`ss.geo('Kenya')`)
 - [x] A contact matrix by age within each place, in a compartmental run, with commuting, visiting, or a moving force of infection
-- [ ] Networks that know about places, as agents (a contact matrix as agents mixes people across places)
+- [x] Networks that know about places, as agents: a contact matrix (`ss.contacts()`) and a mixing pool of everyone act within each place, from the agents' counts in each group, as in a compartmental run (`ss.Mixing.init_pools()`), and a random network (`ss.RandomNet`, `ss.RandomExactNet`) pairs people within their place; with commuting or visiting, each contact is in a place drawn from the share of time spent in each. Agents agree with the ODE to within 2% in each place, with and without commuting (the epidemic had reached every place as agents)
 
 ### 06 Routes
 
@@ -124,7 +124,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] A contact matrix for each of the model's own dimensions, multiplied together (`ss.contacts(age=..., location=...)`)
 - [x] A network described by target statistics (edges, concurrency, a cap on partners), and diagnostics of the network that was simulated (`ss.PartnerNet`, `net.check()`); partnerships ended by a partner dying are allowed for, as EpiModel's `d.rate` correction does, so the mean degree holds with births and deaths
 - [x] Networks given by name (`networks=dict(main=..., casual=...)`), and an `ss.PartnerNet` named from its variable
-- [ ] Other target statistics (mixing by attribute, triangles), and `n_contacts`/`concurrency` on `ss.MFNet`
+- [x] Other target statistics, and `n_contacts`/`concurrency` on `ss.MFNet`: `ss.PartnerNet(match=dict(risk=0.9))`, the share of partnerships between people at the same level of a property (EpiModel's nodematch; recovered to within 0.01), and `ss.MFNet(n_contacts=, concurrency=, max_contacts=)`, the same targets as `ss.PartnerNet` (shared in `ss.DegreeTargets`), between men and women, among people who take part after their debut; without `n_contacts`, `ss.MFNet` is unchanged. Triangles are not covered (they need an ERGM fit)
 - [x] Scheduled events that add, remove, or move individuals: one register, where a row with no `from` adds people and one with no `to` removes them. Each event happens at the start of the first step on or after its date, in the order of the table; people are chosen at random from the states it names (by default, everyone), and added to its states (by default, the first). In a compartmental run with several diseases, each draws its own people
 - [ ] Bundled populations and contact matrices (`ss.contacts('Kenya')`)
 - [x] Coupling between places that moves the force of infection, as LASER does (`ss.Mobility(kind='force')`)
@@ -141,11 +141,11 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Conditions on another disease's state, when both have a state of the same name
 - [x] `sim.what_modifies()`, for declared modifiers
 - [x] `W502 OverlappingSet`
-- [ ] Network parameters as targets (`school.pars.n_contacts`)
-- [ ] Base and effective values on arrays (`.base`), `track_writes=`
+- [x] Network parameters as targets: `ss.modify('school.pars.n_contacts', ...)`, as a path, since a network's `pars` hold plain values. In a compartmental run it scales the network's contact rate (or matrix), and the run is stepped from Python; as agents, each contact happens with that probability in a step (in a mixing pool, the hazard is scaled). With `where=`, for the people who would be infected. ODE and agents agree to within the difference of order `dt` (3.5% at a step of a day, 1.4% at a quarter)
+- [x] Base and effective values on arrays, `track_writes=`: as agents, `sir.rel_sus.effective` (an `ss.ModifiableArr`), since reading gives the base (see departures); `ss.Sim(track_writes=True)` makes `rel_sus` and `rel_trans` record which module assigned them, listed by `sim.what_modifies()`, at no cost when off
 - [x] A condition on another module's state in a compartmental run (on a declared disease's state; see 06)
 - [x] As agents, a multiplier on a transition whose dwell time has already been drawn: when it changes, what is left of each person's dwell time is rescaled by the change in the rate (a modifier that started during the run had no effect on the people already waiting)
-- [ ] A multiplier on a transition that is a `p=` branch
+- [x] A multiplier on a transition that is a `p=` branch: it multiplies the branch's probability, and the branches with no modifier share the rest in proportion (with every branch modified, or more than 1 in all, they are scaled to sum to 1, with `W503`). A product's efficacy against the transition, and `where=` on it, do the same (people excluded take the other branches; they stayed in the state). Under every solver, stepped from Python in a compartmental run
 - [x] Clipping of modified values to the quantity's range: a rate, duration, or multiplier made negative is 0, with `W503 ClippedToRange` once and a line in `what_modifies()` (a branch probability was already clipped to [0, 1])
 
 ### 08 Interventions
@@ -162,10 +162,10 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] Both kinds of solver: a product dimension in a compartmental run, per-agent records in an agent-based one
 - [x] Scenarios: `sims.diff('baseline')`
 - [x] Delivery results by stratum (`delivered`, `eligible`, `coverage`, `cost`, `diagnosed`), under every solver
-- [ ] Waning by a function of time in a compartmental run (stages)
-- [ ] A test delay in a compartmental run
+- [x] Waning by a function of time in a compartmental run: holding the product has 10 levels of time since delivery, which everyone moves up every few steps (exact when the protection settles within 9 steps; otherwise each level is several steps, with a note, and `approx=False` makes it agents). ODE and agents agree within 1.5%
+- [x] A test delay in a compartmental run: people wait for their result in levels of one step each (`pending_<delivery>`), as many as agents wait, and go to the follow-up when it comes; the same diagnoses as agents (25,051 and 24,773 with a follow-up for each result)
 - [x] Time series for `coverage=` and `capacity=` (`ss.timeseries`)
-- [ ] `ss.Vx`, `ss.Dx`, `ss.Tx` as aliases of the new products
+- [x] `ss.Vx`, `ss.Dx`, `ss.Tx` as aliases of the new products: called with keyword arguments and without those of Starsim 3's classes (`df=`, `diseases=`), they make an `ss.Vaccine`, `ss.Test`, or `ss.Treatment`; Starsim 3's classes are kept, for their own arguments and as base classes
 - [x] Contact tracing and partner notification: `trace=` on a delivery (`ss.screen(test, on=tb.diagnosis, trace='household')`) delivers to the contacts, in a network (or several), of the people `on=` selects or a test sends to it, with `eligible=` and `coverage=` applying to the contacts; agents only (`E804` otherwise). Ring vaccination of an SIR on a static network cuts infections from 48,800 to 570
 
 ### 09 Results
@@ -179,7 +179,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] A set of states as their sum (`Ih / (Ia | Is | Ih)`, `(Ia | Is).n`), and a sum of states as the sources of a transition (`(Ia + Is) >> R`)
 - [x] `select()` and `by()` chained (`res.n_I.select(age='0-4').by('sex')`); declared sums of states stratified, and ratios of two sums too (each keeps its numerator and denominator by group, adds each up over the groups selected, and then divides)
 - [x] A flow into a dimension that its source does not have is recorded at the level people arrive at (summer2's incidence by clinical status), under every solver
-- [ ] Flows in ratio results
+- [x] Flows in ratio results: a transition divided by something is its flow (`incidence = infection / S`), under every solver, by group, in a whole run, and in the model spec
 - [x] Extinction reporting: `msim.extinction()` (not yet in `msim.summarize()`)
 
 ### 10 to 12 Execution, random numbers, and solvers
@@ -234,7 +234,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `sim.to_spec()` and the model hash
 - [x] Coded errors and notes (`E204`, `E804`, `W1205`, ...)
 - [x] `W1201 SmallCounts` (an ODE or SDE that starts with fewer than 10 infected) and `W1202 ExtinctionPossible` (the number infected falls below one and rises again)
-- [ ] The notes `W1203` and `W1204` (`W102` says what `W1204` would)
+- [x] The notes `W1203` and `W1204`: not needed. Tau leaps are chosen so that no compartment loses more than 3% of its people in one, so rates cannot change quickly within a leap, and `W102` says what `W1204` would
 - [ ] Interop with other formats
 
 ## Departures from the spec
@@ -249,7 +249,10 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A product whose `waning=` is a duration is lost at an exponentially distributed time, under every solver, after which the person can receive it again. Only a function of time since delivery fades the efficacy while the person still holds the product.
 - A delivery never gives a product to someone who already holds it.
 - A bare number in `ss.change(at=...)` or `start=` is a year only if the sim has dates; otherwise it is a time in the sim's unit.
-- A modifier acts where the engine uses the quantity; reading `sir.rel_sus` from custom code gives the base value.
+- A modifier acts where the engine uses the quantity; reading `sir.rel_sus` from custom code gives the base value, and `sir.rel_sus.effective` the value with the modifiers applied (agents only). So `.base` is not needed.
+- In a compartmental run, a product whose protection fades by a function of time is held at levels of time since delivery (`stage 1`, ...), so `has_<product>` has more than two levels.
+- A network's parameter is the target of a modifier as a path (`'school.pars.n_contacts'`), since `school.pars.n_contacts` is a plain value.
+- `W1203` and `W1204` are not used: tau leaps adapt to the rates, and `W102` covers large steps.
 - A module written as code that works on groups as well as on agents says so with the class attribute `compartmental = True`; otherwise it makes the model agent-based.
 - The peak of `ss.seasonal` given as a month is the middle of that month. In a sim with no dates, time starts at the beginning of a year.
 - `ss.geo` takes the places directly (names, populations, and positions or distances); there are no named geographies.

@@ -267,6 +267,20 @@ class Count(Expr):
         return f'{inner}.{self.kind}'
 
 
+class Flow(Expr):
+    """ The number of people who made a transition in the step, in a result: e.g. `infection / S`, the per-capita incidence """
+    def __init__(self, tr):
+        self.tr = tr
+        return
+
+    @property
+    def name(self):
+        return self.tr.name
+
+    def to_str(self, parent=False):
+        return str(self.tr.name)
+
+
 binops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', power='**')
 comparisons = dict(less='<', less_equal='<=', greater='>', greater_equal='>=')
 
@@ -403,6 +417,8 @@ def evaluate(expr, ctx):
         return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.local_frac(expr.states)
     elif isinstance(expr, State):
         return ctx.exposure(expr)
+    elif isinstance(expr, Flow):
+        return ctx.flow(expr)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
     raise TypeError(errormsg)
 
@@ -718,7 +734,9 @@ class Transition:
         return self
 
     def _arith(self, op, other, reverse=False):
-        """ Arithmetic on a transition applies to its rate """
+        """ Arithmetic on a transition applies to its rate; but a finished transition divided by something is its flow, in a result (`infection / S`) """
+        if op == '/' and self.src is not None and not reverse:
+            return BinOp('/', Flow(self), Flow(other) if isinstance(other, Transition) else as_expr(other))
         if isinstance(other, (Transition, outcome, FlowSum)):
             if op == '+': # A sum of flows, e.g. for an outcome: 0.1*mild + 0.5*severe
                 return FlowSum([self]) + other
@@ -1865,6 +1883,13 @@ class Graph:
             for val in [oc.delay, oc.duration, oc.every]:
                 check(val)
         return out
+
+    def modifier_kind(self, name):
+        """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry), and otherwise its rate """
+        tr = self.transitions.get(name)
+        if tr is not None and tr.p is not None and len(tr.dst) <= 1 and not tr.contact:
+            return 'branch'
+        return 'transition'
 
     def all_pars(self):
         """ Every parameter in the graph, named or inline """

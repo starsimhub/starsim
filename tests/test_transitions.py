@@ -454,6 +454,23 @@ def test_describe():
     return sim
 
 
+def test_requires():
+    sc.heading('Testing requires and sim.requires()')
+    class Net(ss.RandomNet):
+        requires = [ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'), ss.Requires('n_contacts')]
+    beta = ss.par(0.3, source='Smith 2020')
+    dur = ss.par(None, name='dur') # Not yet known, so the sim cannot be initialized
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=dur), name='sir')
+    sim = ss.Sim(sir, networks=Net(name='net'), n_agents=1000, stop=10, **kw)
+    df = sim.requires(output=True)
+    print(df)
+    status = dict(zip(df.name, df.status))
+    assert status == dict(contact_matrix='missing', n_contacts='given', beta='given', dur='missing')
+    assert df.set_index('name').source.beta == 'Smith 2020'
+    sim.requires()
+    return df
+
+
 @sc.timer()
 def test_load():
     sc.heading('Testing ss.load() of a model spec')
@@ -979,6 +996,7 @@ if __name__ == '__main__':
     count = test_counts()
     birth = test_births()
     desc  = test_describe()
+    reqs  = test_requires()
     load  = test_load()
     strat = test_stratify()
     trans = test_transfer()

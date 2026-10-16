@@ -1,6 +1,8 @@
 """
 Define array-handling classes, including agent states
 """
+import os
+import sys
 import itertools
 import numbers
 import numpy as np
@@ -886,6 +888,53 @@ class FloatArr(Arr):
     """
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=np.nan, **kwargs) # Do not allow dtype or nan to be overwritten
+        return
+
+
+class ModifiableArr(FloatArr):
+    """
+    A float array that modifiers act on: a declared disease's `rel_sus` and `rel_trans`, as agents
+
+    Reading it gives the base values, which a modifier never changes; `.effective` gives
+    the values with the modifiers that are active now applied, which is what the model
+    uses. With `ss.Sim(track_writes=True)`, it records which module assigned it, for
+    `sim.what_modifies()`.
+    """
+    engine = None # The engine that applies the modifiers; set by it
+    writes = None # For each module seen assigning it: [values assigned, the last step, where]; None if not tracked
+
+    @property
+    def effective(self):
+        """ The values with the modifiers that are active now applied """
+        mult = 1.0 if self.engine is None else self.engine.mult_raw(self.name)
+        return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if self.writes is not None:
+            self.record(key)
+        return
+
+    def _math(self, op, other=None, inplace=False, reverse=False):
+        out = super()._math(op, other, inplace=inplace, reverse=reverse)
+        if inplace and self.writes is not None:
+            self.record(self.auids)
+        return out
+
+    def record(self, key):
+        """ Record the module whose code assigned the values """
+        frame = sys._getframe(2)
+        while frame is not None and not isinstance(frame.f_locals.get('self'), ss.Module):
+            frame = frame.f_back
+        if frame is None:
+            writer, where = 'code outside a module', ''
+        else:
+            writer = f'{type(frame.f_locals["self"]).__name__}.{frame.f_code.co_name}()'
+            where = f'{os.path.basename(frame.f_code.co_filename)}:{frame.f_lineno}'
+        n = np.size(self.raw[key])
+        entry = self.writes.setdefault(writer, [0, None, where])
+        entry[0] += n
+        entry[1] = None if self.engine is None else self.engine.sim.ti
         return
 
 

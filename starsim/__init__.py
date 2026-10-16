@@ -52,7 +52,7 @@ from .debugtools import (
 
 t('arrays')
 from .arrays import (
-    BaseArr, Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids,
+    BaseArr, Arr, FloatArr, ModifiableArr, IntArr, BoolArr, BoolState, IndexArr, uids,
 )
 
 t('distributions') # Slow import due to scipy.stats
@@ -78,7 +78,7 @@ t('timeline')
 from .timeline import Timeline
 
 t('parameters')
-from .parameters import Pars, SimPars
+from .parameters import Pars, SimPars, Requires
 
 t('people')
 from .people import People, Person

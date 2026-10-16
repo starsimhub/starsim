@@ -267,6 +267,7 @@ class Module(Base):
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
+    requires = None # The data the module needs, as a list of ss.Requires; metadata for sim.requires(), never enforced
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping

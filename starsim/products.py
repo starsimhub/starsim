@@ -1,6 +1,7 @@
 """
 Define products
 """
+import inspect
 import starsim as ss
 import sciris as sc
 import numpy as np
@@ -30,7 +31,13 @@ class Product(ss.Module):
 class Dx(Product):
     """
     Generic class for diagnostics
+
+    Called without `df=`, `ss.Dx(...)` is `ss.Test(...)`.
     """
+    def __new__(cls, *args, **kwargs):
+        if cls is Dx and kwargs and 'df' not in kwargs: # The short name for the new product (copies call this with no arguments)
+            return Test(**kwargs)
+        return super().__new__(cls)
 
     def __init__(self, df=None, hierarchy=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -94,9 +101,16 @@ class Tx(Product):
     """
     Treatment products change fundamental properties about People, including their prognoses and infectiousness.
 
+    Called without `df=`, `ss.Tx(...)` is `ss.Treatment(...)`.
+
     Args:
         df (DataFrame): treatment specification with columns 'disease', 'state', 'post_state', 'efficacy'
     """
+    def __new__(cls, *args, **kwargs):
+        if cls is Tx and kwargs and 'df' not in kwargs:
+            return Treatment(**kwargs)
+        return super().__new__(cls)
+
     def __init__(self, df=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
@@ -153,7 +167,14 @@ class Tx(Product):
 class Vx(Product):
     """
     Vaccine product; subclasses implement administer() to apply immunity.
+
+    Called without `diseases=`, `ss.Vx(...)` is `ss.Vaccine(...)`.
     """
+    def __new__(cls, *args, **kwargs):
+        if cls is Vx and kwargs and 'diseases' not in kwargs:
+            return Vaccine(**kwargs)
+        return super().__new__(cls)
+
     def __init__(self, diseases=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.diseases = sc.tolist(diseases)
@@ -220,11 +241,14 @@ class Effect:
     def apply(self, value, engine):
         product = self.product
         selector = engine.selector
-        holds = selector.dim(product.dim) == 1
+        level = selector.dim(product.dim)
+        holds = level > 0
         efficacy = selector.per_person(self.efficacy)
         if callable(product.waning) and selector.abm: # Scaled by how much protection is left, given the time since it was delivered
             elapsed = (product.sim.ti - product.ti_delivered.raw)*engine.dt
             efficacy = efficacy*np.where(holds, product.waning(np.where(holds, elapsed, 0.0)), 0.0)
+        elif callable(product.waning): # In a compartmental run, the level is the time since delivery: see init_stages()
+            efficacy = efficacy*product.stage_factors[level]
         return value*np.where(holds, 1 - efficacy, 1.0)
 
     def describe(self):
@@ -240,6 +264,7 @@ class Held(Product):
     """
     compartmental = True
     default_key = 'acquisition'
+    n_stages = 10 # In a compartmental run, the levels of time since delivery for a product whose protection fades by a function of it
 
     def __init__(self, efficacy=None, waning=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
@@ -273,9 +298,45 @@ class Held(Product):
         return self.waning is not None and not callable(self.waning)
 
     def agent_reasons(self):
-        if callable(self.waning):
-            return [f'the waning of "{self.name}" is a function of the time since delivery']
         return []
+
+    @property
+    def staged(self):
+        """ Whether holding the product has levels of time since delivery in a compartmental run, for protection that fades by a function of it """
+        return self.holds and callable(self.waning)
+
+    def stage_levels(self):
+        """ The levels of holding the product in a compartmental run: not holding it, then the levels of time since delivery """
+        return [False] + [f'stage {j+1}' for j in range(self.n_stages)]
+
+    def init_stages(self, sim):
+        """
+        For a compartmental run: how long people stay in each level of time since delivery, and the protection in each
+
+        The levels cover the time until the protection settles (to within 1% of its
+        largest value), or the whole sim; the last level is kept for good. Everyone moves
+        up a level every `stage_steps` steps: see `ss.Delivery.step_stages()`. With one
+        step to a level this is exact; with more, the time since delivery is that of the
+        middle of the level, and a note says so.
+        """
+        dt = sim.t.dt.to(sim.unit_base).value
+        n = self.n_stages
+        t = np.linspace(0, sim.t.npts*dt, 1001)
+        w = np.broadcast_to(np.asarray(self.waning(t), dtype=float), t.shape)
+        moving = np.flatnonzero(np.abs(w - w[-1]) > 0.01*max(np.abs(w).max(), 1e-12))
+        settled = t[min(moving[-1] + 1, len(t) - 1)] if len(moving) else 0.0
+        steps = max(1, int(np.ceil(settled/dt/(n - 1) - 1e-9))) # Steps in each level
+        start = np.arange(n)*steps # The steps since delivery at the start of each level
+        mids = np.append(start[:-1] + (steps - 1)/2, start[-1]) # The middle of each level, and the start of the last
+        if steps > 1:
+            mids[0] = (steps - 1)/4 # People delivered between the moves stay in the first level for less than a level, on average
+            if sim.pars.approx is False:
+                ss.error('E804', f'cannot run with solver="{sim.solver}" and approx=False: the protection of "{self.name}" fades by a function of time, which is kept as {n} levels of {steps} steps each. Run with solver="abm".')
+            elif sim.pars.approx is None:
+                ss.note(f'the protection of "{self.name}" fades by a function of the time since delivery, approximated by {n} levels of {steps} steps each', sim=sim)
+        self.stage_steps = steps
+        self.stage_factors = np.concatenate([[0.0], np.broadcast_to(np.asarray(self.waning(mids*dt), dtype=float), (n,))]) # The share of protection left, at each level
+        return
 
     def init_pre(self, sim):
         if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
@@ -284,6 +345,8 @@ class Held(Product):
         super().init_pre(sim)
         if not self.holds:
             return
+        if self.staged and sim.solver != 'abm':
+            self.init_stages(sim)
         dis = sim.get_declared(self.disease)
         graph = dis.graph
         deaths = [name for name,tr in graph.transitions.items() if tr.outflow and tr.people]
@@ -300,6 +363,8 @@ class Held(Product):
                 options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions)
                 ss.error('E505', f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}; did you mean {ss.transitions.closest(key, options)}?')
             for kind,name in targets:
+                if kind == 'transition':
+                    kind = graph.modifier_kind(name)
                 sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
         return
 
@@ -333,7 +398,7 @@ class Vaccine(Held):
         efficacy (float/dict): protection against acquisition; or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
         waning (dur/func): a duration, for protection that is lost after an exponentially distributed time with that mean;
-            or a function of the time since delivery returning the fraction of protection that remains (agents only)
+            or a function of the time since delivery returning the fraction of protection that remains (in a compartmental run, kept as levels of time since delivery)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the vaccine is assigned to
 
@@ -403,7 +468,7 @@ class Test(Product):
     Args:
         sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`), and the test then detects being in those states
         specificity (float): the probability that someone without it tests negative
-        delay (dur): the time from the test to the result (agents only)
+        delay (dur): the time from the test to the result (in a compartmental run, people wait in levels of one step each)
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to
@@ -430,9 +495,11 @@ class Test(Product):
         return
 
     def agent_reasons(self):
-        if self.delay is not None:
-            return [f'the test "{self.name}" has a delay']
-        return []
+        out = []
+        detects = self.detects
+        if callable(detects) and not isinstance(detects, ss.Cond) and len(inspect.signature(detects).parameters) >= 2:
+            out.append(f'what the test "{self.name}" detects is a function of uids')
+        return out
 
     def init_pre(self, sim):
         if not getattr(self, 'linked', False):

@@ -127,6 +127,8 @@ def parse_target(target):
         return target.module, 'par', target.name
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
+    elif isinstance(target, ss.ModifiableArr) and target.engine is not None: # The array itself, once the sim exists
+        return target.engine.mod, target.name, None
     elif isinstance(target, (ss.Transition, ss.transitions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
         return target.module, 'transition', target.name
     elif isinstance(target, str) and '.' in target:
@@ -187,7 +189,8 @@ class modify(Connector):
 
     Args:
         target (par/str): the quantity to change: a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
-            scales its rate), `sir.rel_sus` or `sir.rel_trans`, or the path of any of these as a string (`'sir.pars.beta'`)
+            scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, or the path of
+            any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as a path (`'school.pars.n_contacts'`)
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)` or a function of the sim
         add (float): add this to the quantity
         set (float): replace the quantity with this
@@ -237,16 +240,24 @@ class modify(Connector):
         super().init_pre(sim)
         modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
         mods = {mod.name:mod for mod in sim.declared}
+        nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
         kind, name = self.target_kind, self.target_name
         options = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + ['rel_sus', 'rel_trans']]
-        if modname in mods:
+        options += [f'{net}.pars.n_contacts' for net in nets]
+        found = False
+        if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
+            found = kind in [None, 'par'] and name == 'n_contacts'
+            kind = 'par'
+        elif modname in mods:
             graph = mods[modname].graph
             if kind is None:
                 kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'par'
             found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers))
-        if modname not in mods or not found:
+        if not found:
             ss.error('E504', f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}; did you mean {ss.transitions.closest(self.target, options)}?')
+        if kind == 'transition':
+            kind = graph.modifier_kind(name)
         self.target_module, self.target_kind = modname, kind
         sim.modifiers[(modname, kind, name)].append(self)
         return
@@ -292,7 +303,9 @@ class modify(Connector):
 
     def try_groups(self):
         """ Check that the modifier's condition and amount can be evaluated on groups """
-        engine = self.sim.get_declared(self.target_module).engine
+        sim = self.sim
+        mods = {mod.name:mod for mod in sim.declared}
+        engine = mods.get(self.target_module, sim.declared[0]).engine # A network's contacts are worked out by each disease
         self.apply(1.0, engine)
         return
 

@@ -455,6 +455,24 @@ def test_mixing():
     agents = make_places().new(n_agents=13_500).run()
     shares = [np.mean((agents.people.place[agents.people.age < 5] == 0)), np.mean((agents.people.place[agents.people.age >= 50] == 0))]
     assert np.allclose(shares, [0.75, 0.8], atol=0.05) # As agents, where people live depends on their age
+
+    # As agents, the contact matrix acts within each place too, with commuting between them
+    assert agents.results.sir.cum_infection.by('place').values[-1, 1] == 0
+    commute = ss.Mobility(matrix=[[0.9, 0.1], [0.1, 0.9]], kind='commute')
+    ode, abm = [make_places(commute).new(**pars).run().results.sir.cum_infection.by('place').values[-1] for pars in [{}, dict(n_agents=13_500)]]
+    assert np.allclose(abm, ode, rtol=0.05) and ode[1] > 1000
+
+    # So do a network and a mixing pool of everyone: as agents, contacts are within each place, or where people commute to
+    def make_net(net, mobility=None, **pars):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.03)), recovery=ss.progression('I -> R', dur=ss.days(10)), init=dict(I=ss.by(patch=[20, 0, 0])), name='sir')
+        sir.stratify(patch=['a', 'b', 'c'], kind='space', split=[0.5, 0.3, 0.2], mobility=mobility)
+        return ss.Sim(sir, networks=net, total_pop=30_000, unit='day', stop=120, **kw, **pars)
+    commute = ss.Mobility(matrix=[[0, 0.05, 0], [0.05, 0, 0.05], [0, 0.05, 0]], kind='commute')
+    for net in [ss.RandomNet(n_contacts=10, dur=0, name='net'), ss.MixingPool(n_contacts=10, name='net')]:
+        alone = make_net(net, n_agents=30_000).run().results.sir.cum_infection.by('patch').values[-1]
+        assert alone[0] > 10_000 and alone[1] == alone[2] == 0
+        ode, abm = [make_net(sc.dcp(net), commute, **pars).run().results.sir.cum_infection.by('patch').values[-1] for pars in [dict(solver='ode', approx=True), dict(n_agents=30_000)]]
+        assert np.allclose(abm, ode, rtol=0.05) and ode[2] > 1000
     return sims
 
 

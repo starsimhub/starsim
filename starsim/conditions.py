@@ -166,7 +166,11 @@ def is_static(cond, sim):
 
 
 def evaluate(obj, ctx):
-    return obj.eval(ctx) if isinstance(obj, Cond) else obj
+    if isinstance(obj, Cond):
+        return obj.eval(ctx)
+    elif callable(obj) and not isinstance(obj, (ss.Arr, ss.Dist)): # A function of the sim, combined with a condition
+        return ctx.select(obj)
+    return obj
 
 
 def as_bool(val):

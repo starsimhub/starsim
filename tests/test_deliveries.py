@@ -244,7 +244,7 @@ def test_treat():
         assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.07) # By default, the people who are infected at the time
     check_close(sims, lambda sim: sim.results.rounds.delivered.sum(), rtol=0.12) # As agents, about 9% fewer are infected (a difference of order dt)
 
-    # A treatment that changes rates, with protection that fades by a function of time (which needs agents)
+    # A treatment that changes rates, with protection that fades by a function of time (in a compartmental run, levels of time since delivery)
     def make_sird():
         return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), death=ss.death('I ->', rate=0.02), init_prev=0.01, name='sird')
     def rates(waning=None, **kwargs):
@@ -257,9 +257,11 @@ def test_treat():
     for sim in sims.values():
         assert sim.results.sird.death.sum() < 0.6*untreated.results.sird.death.sum()
     check_close(sims, lambda sim: sim.results.program.delivered.sum()/sim.results.sird.cum_infection[-1]) # Most of the people infected, whenever that was
-    fades = rates(waning=lambda t: np.exp(-t/5), stop=150, **kw).run()
-    assert fades.solver == 'abm'
-    assert fades.results.sird.death.sum() > 1.2*sims.abm.results.sird.death.sum()
+    fades = run_each(rates, waning=lambda t: np.exp(-t/5))
+    for solver,sim in fades.items():
+        assert sim.results.sird.death.sum() > 1.2*sims[solver].results.sird.death.sum()
+    check_close(fades, lambda sim: sim.results.sird.death.sum())
+    assert rates(waning=lambda t: np.exp(-t/5), approx=False, **kw).init().solver == 'abm' # The levels are an approximation
 
     with pytest.raises(ss.CodedError, match='E505'):
         ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(efficacy=0.5, transition='cure')), **kw).init()
@@ -302,22 +304,27 @@ def test_screen():
         assert np.isclose(res.symptomatic.diagnosed.sum(), 0.8*res.symptomatic.delivered.sum(), rtol=0.08) # As agents, a few have already recovered by the time they are tested
     check_close(sims, lambda sim: sim.results.sir.cum_infection[-1])
 
-    # A test with a delay needs agents; the follow-ups happen when the result arrives, and can be functions
-    negatives = []
-    def delay(**kwargs):
+    # A test with a delay: the follow-ups happen when the result arrives (in a compartmental run, people wait in levels of one step each)
+    def delay(on_negative=None, **kwargs):
         sis = make_sis()
-        test = ss.Test(sensitivity=0.9, delay=ss.days(3))
+        test = ss.Test(sensitivity=0.9, specificity=0.9, delay=ss.days(3))
         drug = ss.Treatment(efficacy=1.0)
-        slow = ss.screen(test, coverage=0.5, years=[40], on_positive=ss.treat(drug), on_negative=lambda sim, uids: negatives.append(len(uids)))
+        slow = ss.screen(test, coverage=0.5, years=[40], on_positive=ss.treat(drug), on_negative=on_negative)
         return ss.Sim(sis, interventions=slow, **kwargs)
-    sim = delay(stop=60, **kw).run()
-    res = sim.results
-    assert sim.solver == 'abm'
-    assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.diagnosed)) == [43]
-    assert np.isclose(res.slow_positive.delivered[43], res.slow.diagnosed[43])
-    assert negatives[0] > 0
+    sims = run_each(delay, stop=60, on_negative=ss.vaccinate(ss.Vaccine(efficacy=0.5)))
+    for sim in sims.values():
+        res = sim.results
+        assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.diagnosed)) == [43]
+        assert np.isclose(res.slow_positive.delivered[43], res.slow.diagnosed[43])
+        assert np.isclose(res.slow.diagnosed[43] + res.slow_negative.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other
+    check_close(sims, lambda sim: sim.results.slow.diagnosed.sum()) # As agents, the prevalence of an SIS model is about 6% lower at a step of a day
+
+    # A follow-up can be a function, which needs agents
+    negatives = []
+    sim = delay(stop=60, on_negative=lambda sim, uids: negatives.append(len(uids)), **kw).run()
+    assert sim.solver == 'abm' and negatives[0] > 0
     with pytest.raises(ss.CodedError, match='E804'):
-        delay(solver='ode', stop=60, **kw).run()
+        delay(solver='ode', stop=60, on_negative=lambda sim, uids: None, **kw).run()
     return sims
 
 
@@ -553,6 +560,18 @@ def test_sensitivity_by_state():
     return res
 
 
+def test_treat_any_transition():
+    sc.heading('Testing a treatment that moves people along a transition out of a state that is not infected')
+    for solver,pars in [('ode', {}), ('abm', dict(n_agents=10_000))]:
+        S, I, R, P = ss.states(4)
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), protect=ss.Transition(S, P, rate=ss.perday(0)), init=dict(I=0.01), name='sir')
+        shield = ss.treat(ss.Treatment(transition='protect'), eligible=sir.S, coverage=0.5, years=[ss.days(0)])
+        res = ss.Sim(sir, interventions=shield, stop=100, solver=solver, **kw, **pars).run().results
+        print(f'{solver}: {res.sir.protect.sum():.0f} protected')
+        assert np.isclose(res.sir.protect.sum(), 0.5*0.99*kw['total_pop'], rtol=0.05)
+    return res
+
+
 def test_trace():
     sc.heading('Testing contact tracing: delivery to the contacts of people something has happened to')
     pars = dict(stop=120, n_agents=5_000, solver='abm', rand_seed=1, **kw)
@@ -583,6 +602,96 @@ def test_trace():
     return sim
 
 
+def test_branch_modifiers():
+    sc.heading('Testing modifiers on a branch chosen with p=: they change its probability, and the other branches take the rest')
+    def make(solver, intv=None, where=None):
+        dis = ss.Disease(
+            infection = ss.transmission('S -> I', beta=0.3),
+            severe    = ss.progression('I -> H', p=0.2, dur=5, where=where),
+            mild      = ss.progression('I -> R', p=0.8, dur=10),
+            discharge = ss.progression('H -> R', dur=7),
+            init_prev = 0.01, name='dis',
+        )
+        intvs = intv(dis) if intv is not None else None
+        pars = dict(n_agents=20_000) if solver == 'abm' else {}
+        sim = ss.Sim(dis, interventions=intvs, solver=solver, stop=200, **kw, **pars)
+        if where is not None:
+            sim.stratify(age=[0, 50])
+        return sim.run().results.dis
+    share = lambda res: res.severe.sum()/(res.severe.sum() + res.mild.sum())
+    halve = lambda dis: ss.modify(dis.severe, multiply=0.5, name='halve')
+    vaccine = lambda dis: ss.vaccinate(ss.Vaccine(efficacy=dict(severe=0.75)), years=0, name='vx')
+    for solver in solvers:
+        base, halved, vx = make(solver), make(solver, halve), make(solver, vaccine)
+        print(f'{solver}: severe share {share(base):.3f}, {share(halved):.3f} halved, {share(vx):.3f} vaccinated')
+        assert np.isclose(share(base), 0.2, rtol=0.05)
+        assert np.isclose(share(halved), 0.1, rtol=0.05)
+        assert np.isclose(share(vx), 0.05, rtol=0.1)
+
+    # A branch for some people only: the others take the other branch
+    ppl = ss.People(1)
+    for solver in ['ode', 'abm']:
+        res = make(solver, where=ppl.age >= 50)
+        print(f'{solver}: severe share {share(res):.3f} with where=')
+        assert 0 < share(res) < 0.15
+    return res
+
+
+def test_network_contacts():
+    sc.heading('Testing modifiers on the contacts of a network')
+    def make(solver, intv=None, age=False):
+        sir = make_sir()
+        sir.pars.beta = 0.03
+        pars = dict(n_agents=20_000) if solver == 'abm' else {}
+        sim = ss.Sim(sir, networks=ss.MixingPool(n_contacts=10, name='school'), interventions=intv, solver=solver, stop=150, **kw, **pars)
+        if age:
+            sim.stratify(age=[0, 20])
+        return sim.run().results.sir.infection.sum()
+    halve = lambda: ss.modify('school.pars.n_contacts', multiply=0.5, start=20)
+    for solver in solvers:
+        base, halved, set5 = make(solver), make(solver, halve()), make(solver, ss.modify('school.pars.n_contacts', set=5, start=20))
+        young = make(solver, ss.modify('school.pars.n_contacts', multiply=0.5, start=20, where=ss.People(1).age < 20), age=True)
+        print(f'{solver}: {base:.0f} infections, {halved:.0f} with half the contacts from day 20, {young:.0f} if only for those under 20')
+        assert np.isclose(halved, set5)
+        assert halved < young < base
+        assert np.isclose(halved, 0.8*base, rtol=0.1) # Agents differ from the ODE by an amount of order dt
+
+    # Only a network's contacts can be targeted
+    with pytest.raises(ss.CodedError, match='E504'):
+        make('ode', ss.modify('school.pars.dur', multiply=0.5))
+    return halved
+
+
+def test_effective_and_writes():
+    sc.heading('Testing base and effective values, and tracking direct writes')
+    class Halve(ss.Intervention):
+        def step(self):
+            if self.ti == 10:
+                self.sim.diseases.sir.rel_sus[ss.uids(np.arange(100))] = 0.5
+    for track in [False, True]:
+        sir = make_sir()
+        protect = ss.modify(sir.rel_sus, multiply=0.4, where=sir.R, name='protect')
+        sim = ss.Sim(sir, interventions=[Halve(), protect], solver='abm', n_agents=2000, stop=40, track_writes=track, **kw).run()
+        arr = sim.diseases.sir.rel_sus
+        R = sim.diseases.sir.R.uids
+        assert np.allclose(arr.effective[R], 0.4*arr[R]) # The base is untouched by the modifier
+        text = sim.what_modifies(arr, output=True)
+        print(text)
+        assert ('Halve.step()' in text) == track and ('not tracked' in text) != track
+    return sim
+
+
+def test_short_names():
+    sc.heading('Testing ss.Vx, ss.Dx, and ss.Tx as short names of the new products')
+    vx, dx, tx = ss.Vx(efficacy=0.9), ss.Dx(sensitivity=0.9), ss.Tx(efficacy=0.9)
+    assert isinstance(vx, ss.Vaccine) and isinstance(dx, ss.Test) and isinstance(tx, ss.Treatment)
+    sir = make_sir()
+    intvs = [ss.vaccinate(vx, years=10, coverage=0.3), ss.screen(dx, on=sir.infection, on_positive=ss.treat(tx))]
+    sim = ss.Sim(sir, interventions=intvs, stop=100, **kw).run()
+    assert sim.results.vaccinate.delivered.sum() > 0 and sim.results.screen_positive.delivered.sum() > 0
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -599,4 +708,9 @@ if __name__ == '__main__':
     loop   = test_loop_order()
     newb   = test_newborns_and_events()
     held   = test_triggers()
+    anytr  = test_treat_any_transition()
     trace  = test_trace()
+    branch = test_branch_modifiers()
+    nets   = test_network_contacts()
+    writes = test_effective_and_writes()
+    short  = test_short_names()

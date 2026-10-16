@@ -6,6 +6,7 @@ import sys
 import inspect
 import itertools
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -203,6 +204,10 @@ class Sim(ss.Base):
                 products.append(intv.product)
         return products
 
+    def all_networks(self):
+        """ The networks, by name, including those that a compartmental run replaces with contact rates (which are not run themselves) """
+        return {net.name:net for net in list(self.networks.values()) + getattr(self, 'mixed', [])}
+
     @property
     def modules(self):
         """
@@ -356,6 +361,7 @@ class Sim(ss.Base):
                 pars.pop_scale = pars.total_pop/pars.n_agents
             if 'use_aging' not in self.given and any(tr.people for mod in self.declared for tr in mod.graph.inflows): # Births in a declared model are demographics too, so agents age
                 pars.use_aging = True
+            self.mixing.init_pools()
         else:
             for mod in modules:
                 if getattr(mod, 'graph', None) is None and not isinstance(mod, ss.Route) and not getattr(mod, 'compartmental', False):
@@ -367,6 +373,9 @@ class Sim(ss.Base):
                 self.integrator = 'rk4'
             pars.pop_scale = 1.0
             pars.people_results = False
+            if any(mod.staged(self) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)): # Levels that the deliveries need now the solver is known: see ss.Delivery.dims()
+                self.init_strats()
+                self.mixing = solvers.Mixing(self)
 
             self.init_crossings()
             self.mixing.init(approx=pars.approx)
@@ -379,6 +388,10 @@ class Sim(ss.Base):
             print(f'solver: {solver} ({reason})')
             if self.unit_source:
                 ss.note(f"unit='{self.unit}' (from {self.unit_source})", code='W101', sim=self)
+            if self.units_disagree:
+                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in self.declared for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw)]
+                if bare:
+                    ss.note(f"the typed values have different units ({sc.strjoin(self.units_disagree)}), so the smallest, '{self.unit}', was used for the bare numbers {sc.strjoin(bare)}; set unit= to choose", code='W103', sim=self)
             for mod in self.declared:
                 for key,why in mod.graph.guessed.items():
                     if key.endswith('.people'):
@@ -487,15 +500,30 @@ class Sim(ss.Base):
             self.init()
         mod, kind, name = ss.connectors.parse_target(target)
         modname = mod if isinstance(mod, str) else mod.name
-        graph = self.get_declared(modname).graph
-        if kind is None:
-            kind = 'transition' if name in graph.transitions else 'par'
+        if modname in self.all_networks(): # The contacts of a network
+            kind = 'par'
+        else:
+            graph = self.get_declared(modname).graph
+            if kind is None:
+                kind = 'transition' if name in graph.transitions else 'par'
+            if kind == 'transition':
+                kind = graph.modifier_kind(name)
         path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'
         mods = self.modifiers.get((modname, kind, name), [])
         lines = [path, '  modifiers' if mods else '  modifiers: none']
         lines += [f'    {mod.describe()}' for mod in mods]
         if path in self.clipped:
             lines.append('  clipped: the modifiers made it negative during the run, so it was set to 0 where it was')
+        arr = getattr(self.get_declared(modname), kind, None) if kind in ['rel_sus', 'rel_trans'] else None
+        if isinstance(arr, ss.ModifiableArr): # Assigned directly by code, rather than modified
+            if arr.writes is None:
+                lines.append('  direct writes: not tracked (run with track_writes=True)')
+            elif not arr.writes:
+                lines.append('  direct writes: none observed')
+            else:
+                lines.append('  direct writes observed')
+                for writer,(n,ti,where) in arr.writes.items():
+                    lines.append(f'    {writer:<24s} assigned {n:,} values (last at step {ti})   [{where}]')
         text = '\n'.join(lines)
         if output:
             return text
@@ -547,7 +575,7 @@ class Sim(ss.Base):
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         for mod in self.pars.interventions.values(): # Properties of people that the interventions need, e.g. holding a product
             if hasattr(mod, 'dims'):
-                for strat in mod.dims():
+                for strat in mod.dims(self):
                     strat.owner = mod.name # Part of the scenario, not of the model
                     strats.setdefault(strat.name, strat)
                 self.dim_moves += [move for move in mod.dim_moves() if move.dim not in [m.dim for m in self.dim_moves]]
@@ -823,6 +851,8 @@ class Sim(ss.Base):
             graph = getattr(mod, 'graph', None)
             if hasattr(mod, 'agent_reasons'):
                 reasons += mod.agent_reasons()
+            if self.pars.approx is False and isinstance(mod, ss.Delivery) and mod.holds and mod.product.staged: # Kept as levels of time since delivery otherwise: see ss.Held.init_stages()
+                reasons.append(f'the protection of "{mod.product.name}" fades by a function of time, and approx=False')
             if graph is None:
                 if isinstance(mod, ss.Network):
                     reasons.append(f'{type(mod).__name__} is an individual-level network')
@@ -878,6 +908,7 @@ class Sim(ss.Base):
         pars = self.pars
         time = ss.time
         unit = source = None
+        self.units_disagree = None # The units of the typed values, if they differ and nothing else gave the unit
         def base(obj):
             return type(obj).base.removesuffix('s')
         def is_dur(obj):
@@ -906,7 +937,7 @@ class Sim(ss.Base):
                 unit = sorted(set(units), key=order.index)[0]
                 source = 'the typed values in the model'
                 if len(set(units)) > 1:
-                    source += f', which have different units ({sc.strjoin(sorted(set(units), key=order.index))}); the smallest is used for bare numbers. Set unit= to choose'
+                    self.units_disagree = sorted(set(units), key=order.index)
         self.unit = unit
         self.unit_source = source
         self.unit_base = unit or 'day'
@@ -1045,6 +1076,55 @@ class Sim(ss.Base):
         lines += ['', f'auto would choose: {choice}']
         text = '\n'.join(lines)
         return text if output else print(text)
+
+    def requires(self, output=False):
+        """
+        Print the data the modules in the sim require, and which items are still missing
+
+        Each module's `requires` list (of `ss.Requires`) is shown; for a declared model, the
+        list is its parameters. An item is given if the module has a parameter or attribute
+        of that name that is not None, and otherwise uses its default or is missing.
+
+        Args:
+            output (bool): if True, return a dataframe rather than printing the table
+        """
+        if self.initialized:
+            modules = list(self.modules)
+        else: # Without initializing, since a missing item can stop the sim from initializing
+            pars = sc.dcp(self.pars)
+            pars.validate()
+            modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
+        rows = []
+        for mod in modules:
+            graph = getattr(mod, 'graph', None)
+            if graph is not None: # A declared model requires its parameters
+                for p in graph.all_pars():
+                    if p.literal:
+                        continue
+                    raw = p.raw
+                    shape = ' x '.join(raw.dims) if isinstance(raw, ss.by) else ''
+                    status = 'missing' if raw is None else 'given'
+                    rows.append(dict(module=mod.name, name=p.name, shape=shape, source=p.source or '', status=status, doc=p.doc or ''))
+            for req in sc.tolist(mod.requires):
+                if isinstance(req, ss.Requires):
+                    pars = getattr(mod, 'pars', {})
+                    val = pars[req.name] if req.name in pars else getattr(mod, req.name, None)
+                    status = 'given' if val is not None else 'default' if req.default is not None else 'missing'
+                    rows.append(dict(module=mod.name, name=req.name, shape=req.shape or '', source=req.source or '', status=status, doc=req.doc or ''))
+                else: # Another module, by class or name, as in Starsim 3
+                    name = req if isinstance(req, str) else req.__name__
+                    found = any(m.name == req or type(m) is req for m in modules)
+                    rows.append(dict(module=mod.name, name=name, shape='module', source='', status='given' if found else 'missing', doc=''))
+        df = pd.DataFrame(rows, columns=['module', 'name', 'shape', 'source', 'status', 'doc'])
+        if output:
+            return df
+        if not len(df):
+            print('The modules in this sim list no data that they require')
+            return
+        n_missing = (df.status == 'missing').sum()
+        print(df.to_string(index=False))
+        print(f'\n{n_missing} of {len(df)} item{"s" if len(df) != 1 else ""} missing' if n_missing else f'\nNothing is missing ({len(df)} item{"s" if len(df) != 1 else ""})')
+        return
 
     def R0(self):
         """

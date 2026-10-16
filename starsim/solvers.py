@@ -58,6 +58,7 @@ class Mixing:
     def __init__(self, sim):
         self.sim = sim
         self.terms = [sc.objdict(kind='homogeneous', contacts=1.0, name=None)]
+        self.pool_terms = sc.objdict() # As agents: the contact matrices of mixing pools, within each place (see init_pools())
         self.dependence = 'frequency'
         self.init_space()
         return
@@ -148,7 +149,7 @@ class Mixing:
             elif isinstance(net, ss.Network):
                 n_contacts = net.pars.get('n_contacts')
                 kind = type(net).__name__
-                if n_contacts is None or not isinstance(net, (ss.RandomNet, ss.StaticNet, ss.PartnerNet)):
+                if n_contacts is None or not isinstance(net, (ss.RandomExactNet, ss.StaticNet, ss.PartnerNet)):
                     ss.error('E804', f'cannot run with solver="{sim.solver}": {kind} has no compartmental approximation yet. Run with solver="abm".')
                 contacts = self.mean(n_contacts)
                 what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim.unit or "step"}'
@@ -229,32 +230,63 @@ class Mixing:
             matrix = np.kron(matrix, mat)
         return sc.objdict(kind='matrix', cells=cells, matrix=matrix*beta, name=net.name, dim=names.index(list(net.dims)[0]))
 
-    def exposure(self, infectious, n):
+    def exposure(self, infectious, n, mults=None):
         """
         Exposure of each group to an infectious state: contacts per unit time, times the chance that a contact is infectious
 
         Args:
             infectious (array): the (infectiousness-weighted) number in the state, in each group
             n (array): the number of people in each group
+            mults (list): a multiplier on the contacts of each term (a number, or one for each group), from the modifiers of its network
         """
         out = 0.0
-        for term in self.terms:
-            if term.kind == 'homogeneous' and self.space is not None: # People mix within their own place
-                n_places = self.sim.strats[self.space].n
-                out = out + term.contacts*self.by_place(self.places, infectious, n, n_places)[self.places]
-            elif term.kind == 'homogeneous':
-                total = n.sum()
-                out = out + (term.contacts*infectious.sum()/total if total else 0.0)
-            else:
-                levels = term.cells if 'cells' in term else self.sim.group_coords[:, term.dim]
-                size = term.matrix.shape[0]
-                num = np.bincount(levels, weights=infectious, minlength=size)
-                den = np.bincount(levels, weights=n, minlength=size)
-                if term.get('pre') is not None: # Who is present in each place
-                    num, den = num @ term.pre, den @ term.pre
-                prev = np.divide(num, den, out=np.zeros(size), where=den>0)
-                out = out + (term.matrix @ prev)[levels]
+        for t,term in enumerate(self.terms):
+            mult = 1.0 if mults is None else mults[t]
+            out = out + mult*self.term_exposure(term, infectious, n)
         return out
+
+    def term_exposure(self, term, infectious, n):
+        """ Exposure of each group through one term of the mixing: see `exposure()` """
+        if term.kind == 'homogeneous' and self.space is not None: # People mix within their own place
+            n_places = self.sim.strats[self.space].n
+            return term.contacts*self.by_place(self.places, infectious, n, n_places)[self.places]
+        elif term.kind == 'homogeneous':
+            total = n.sum()
+            return term.contacts*infectious.sum()/total if total else 0.0
+        levels = term.cells if 'cells' in term else self.sim.group_coords[:, term.dim]
+        size = term.matrix.shape[0]
+        num = np.bincount(levels, weights=infectious, minlength=size)
+        den = np.bincount(levels, weights=n, minlength=size)
+        if term.get('pre') is not None: # Who is present in each place
+            num, den = num @ term.pre, den @ term.pre
+        prev = np.divide(num, den, out=np.zeros(size), where=den>0)
+        return (term.matrix @ prev)[levels]
+
+    def init_pools(self):
+        """
+        As agents, in a model with places: make the contact matrices of mixing pools act within each place
+
+        A mixing pool's hazard is worked out from the share of each group that is infectious,
+        so the contact matrix is used as in a compartmental run, from the agents' counts in
+        each group (see `ss.Agents.infect()`), with any movement between places.
+        """
+        sim = self.sim
+        self.pool_terms = sc.objdict()
+        if self.space is None:
+            return
+        pools = [net for net in sim.pars.networks.values() if isinstance(net, ss.MixingPools) or (isinstance(net, ss.MixingPool) and net.pars.src is None and net.pars.dst is None)]
+        for net in pools:
+            beta = net.pars.get('beta', 1.0)
+            if isinstance(net, ss.MixingPool): # A pool of everyone: within each place
+                self.pool_terms[net.name] = sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts)*beta, name=net.name)
+            else:
+                self.pool_terms[net.name] = self.dim_matrices(net, beta) if getattr(net, 'dims', None) else self.age_matrix(net, beta)
+        if any(term.kind == 'matrix' for term in self.pool_terms.values()):
+            self.init_space() # A contact matrix can add an age stratification, which changes the groups
+            for term in self.pool_terms.values():
+                if term.kind == 'matrix':
+                    self.within_places(term)
+        return
 
 
 class CountState:
@@ -819,6 +851,73 @@ class Engine:
         out = self.reduce(ss.connectors.combine(mods, value, self), what=p.name)
         return self.clip(out, f'{self.mod.name}.pars.{p.name}') if p.slot in ['rate', 'dur'] else out
 
+    @property
+    def net_mods(self):
+        """ The modifiers of the contacts of networks """
+        if getattr(self, '_net_mods', None) is None:
+            nets = self.sim.all_networks()
+            self._net_mods = [m for (modname,kind,name),mods in self.sim.modifiers.items() if modname in nets and name == 'n_contacts' for m in mods]
+        return self._net_mods
+
+    def contact_mult(self, name):
+        """ The multiplier on the contacts of a network from the modifiers of its `n_contacts` (e.g. `ss.modify('school.pars.n_contacts', multiply=0.2)`): 1 if it has none """
+        mods = self.sim.modifiers.get((name, 'par', 'n_contacts')) if name is not None else None
+        if not mods:
+            return 1.0
+        key = ('contacts', name, None)
+        if key not in self.cache:
+            val = self.sim.all_networks()[name].pars.n_contacts
+            base = Mixing.mean(val) if np.ndim(val) == 0 else 1.0 # A matrix of contacts can only be scaled
+            base = base if base > 0 else 1.0
+            value = self.reduce(ss.connectors.combine(mods, base, self), what=f'{name}.pars.n_contacts')
+            self.cache[key] = self.clip(value, f'{name}.pars.n_contacts')/base
+        return self.cache[key]
+
+    def branch_mult(self, tr, uids=None):
+        """ The multiplier on a branch's probability from its modifiers (for some agents, if `uids` are given), or None if it has none """
+        if tr is None or not self.sim.modifiers.get((self.mod.name, 'branch', tr.name)):
+            return None
+        out = self.mult_raw('branch', tr.name)
+        if uids is not None and np.ndim(out):
+            out = out[uids]
+        return out
+
+    def branch_shares(self, trs, ps, mults):
+        """
+        The probability of each branch out of a state, with their modifiers
+
+        A modifier on a branch multiplies its probability, and the branches with none share
+        what is left in proportion to their own; if every branch is modified (or the modified
+        ones come to more than 1), they are scaled to sum to 1.
+
+        Args:
+            trs (list): the transitions
+            ps (list): the probability of each, or None for the one that takes the rest
+            mults (list): the multiplier of each, or None for those with no modifiers
+        """
+        rest = 1.0 - sum(p for p in ps if p is not None)
+        ps = [rest if p is None else p for p in ps]
+        if all(m is None for m in mults):
+            return ps
+        new = [None if m is None else np.maximum(p*m, 0) for p,m in zip(ps, mults)]
+        taken = sum(p for p in new if p is not None)
+        others = sum(p for p,m in zip(ps, mults) if m is None)
+        if np.any(np.asarray(taken) > 1 + 1e-12):
+            path = f'{self.mod.name}.{sc.strjoin([tr.name for tr,m in zip(trs, mults) if m is not None])}'
+            if path not in self.sim.clipped:
+                self.sim.clipped.add(path)
+                ss.note(f'the modifiers of {path} made the probabilities of the branches come to more than 1, so they were scaled to sum to 1', code='W503', sim=self.sim)
+        denom = np.where(np.asarray(others) > 0, np.maximum(taken, 1.0), taken) # What the modified ones are divided by
+        left = 1.0 - np.minimum(taken, 1.0)
+        div = lambda a, b: np.divide(a, b, out=np.zeros(np.broadcast(a, b).shape), where=np.asarray(b) > 0)
+        out = []
+        for p,q in zip(ps, new):
+            if q is None:
+                out.append(div(p*left, others))
+            else:
+                out.append(div(q, denom))
+        return out
+
     def clip(self, value, path):
         """ A modified rate, duration, or multiplier that has gone below 0 (e.g. by add=) is 0; the first time, a note says so, and sim.what_modifies() reports it """
         if np.any(np.asarray(value) < 0):
@@ -1129,12 +1228,12 @@ class Engine:
             if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
                 dims['new_infections'] = np.ones(len(names), dtype=bool)
             self.ratios = sc.objdict() # The results that are a ratio of two sums of states, as (numerator, denominator)
-            for name,expr in graph.exprs.items(): # A sum of states that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
+            for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
                 parts = [expr.a, expr.b] if isinstance(expr, ss.transitions.BinOp) and expr.op == '/' else [expr]
-                plain = all(all(isinstance(leaf, (ss.State, ss.par)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
-                states = [leaf for part in parts for leaf in part.leaves if isinstance(leaf, ss.State)]
-                if plain and states and all(np.array_equal(self.applies[s.name], self.applies[states[0].name]) for s in states):
-                    dims[name] = self.applies[states[0].name]
+                plain = all(all(isinstance(leaf, (ss.State, ss.par, ss.transitions.Flow)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
+                flags = [self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for part in parts for leaf in part.leaves if not isinstance(leaf, ss.par)]
+                if plain and flags and all(np.array_equal(f, flags[0]) for f in flags):
+                    dims[name] = flags[0]
                     if len(parts) == 2:
                         self.ratios[name] = parts
             for name,info in self.outcomes.items(): # An outcome has the dimensions of what it is counted from (in order, since outcomes can chain)
@@ -1322,7 +1421,7 @@ class Engine:
             for name,expr in graph.exprs.items():
                 res[name][ti] = ss.transitions.evaluate(expr, ctx)
                 if getattr(res[name], 'strata', None) is not None: # By group
-                    ctx_g = StockCtx(self, self.stock_groups)
+                    ctx_g = StockCtx(self, self.stock_groups, self.flow_groups)
                     if name in self.ratios:
                         res[name].strata[ti], res[name].denom[ti] = [ss.transitions.evaluate(part, ctx_g) for part in self.ratios[name]]
                     else:
@@ -1402,17 +1501,23 @@ class Engine:
 
 class StockCtx:
     """
-    Evaluates result expressions (sums and ratios of states) from the counts after the step
+    Evaluates result expressions (sums and ratios of states, and of flows) from the counts after the step
 
     Args:
         engine (`ss.Engine`): the engine
         stocks (dict): the number in each state: one number for the current step (the default), or an array over the steps
+        flows (dict): the same for the flow along each transition
     """
-    def __init__(self, engine, stocks=None):
+    def __init__(self, engine, stocks=None, flows=None):
         self.engine = engine
         self.stocks = engine.stocks if stocks is None else stocks
+        self.flows = engine.flowcounts if flows is None else flows
         self.scale = engine.scale if isinstance(engine, Agents) else 1.0 # As agents, the stocks are numbers of agents
         return
+
+    def flow(self, flow):
+        """ The number of people who made a transition in the step """
+        return self.flows.get(flow.name, 0.0)*(self.scale if flow.tr.people else 1.0)
 
     def value(self, p):
         return self.engine.value(p)
@@ -1819,12 +1924,12 @@ class Compartmental(Engine):
         return moved
 
     def force(self, frac, tr, dst):
-        """ Move a fraction of the people in each infected state and group to a state, along a transition (as when a treatment cures) """
+        """ Move a fraction of the people in each state a transition leaves from, and each group, to a state, along the transition (as when a treatment cures) """
         if self.cross is not None:
             self.cross.claim(self)
         total = np.zeros(self.n_groups)
         entry = self.entry[dst.name][0]
-        for state in self.graph.infected:
+        for state in tr.src:
             if not state.people:
                 continue
             s = self.selector.states.index(state.name)
@@ -1870,7 +1975,9 @@ class Compartmental(Engine):
         infectious = self.count([state], total=False)*state.rel_trans*self.mult_raw('rel_trans', state=state)
         if self._strain is not None and self.applies[state.name][self.strain]: # Only the people who carry this strain
             infectious = infectious*self.strain_weights[self.sim.group_coords[:, self.strain], self._strain]
-        return self.sim.mixing.exposure(infectious, self.n_people(total=False))
+        mixing = self.sim.mixing
+        mults = [self.contact_mult(term.name) for term in mixing.terms] if self.net_mods else None
+        return mixing.exposure(infectious, self.n_people(total=False), mults)
 
     #%% Flows
 
@@ -1880,8 +1987,8 @@ class Compartmental(Engine):
         probs = sc.objdict()
         for name,tracks in self.tracks.items():
             ps = [None if tr.p is None else np.clip(self.eval(tr.p), 0, 1) for tr in tracks]
-            rest = 1.0 - sum(p for p in ps if p is not None)
-            probs[name] = [rest if p is None else p for p in ps]
+            mults = [self.branch_mult(tr.tr) for tr in tracks]
+            probs[name] = self.branch_shares([tr.tr for tr in tracks], ps, mults)
 
         def enter(name, weight, comps, credits, depth=0):
             if depth > 20:
@@ -2028,6 +2135,8 @@ class Compartmental(Engine):
         self.time_pars = [] # The parameters whose value changes over time
         self.series = dict() # Their values at each step: see tables()
         try:
+            if any(getattr(m, 'where', None) is not None for m in self.net_mods): # The kernels take one number of contacts for each network
+                raise NotImplementedError
             depth = 1
             for flow in self.flows:
                 if flow.dynamic:
@@ -2174,6 +2283,9 @@ class Compartmental(Engine):
             p.consts[i] = self.value(par)
         for i,(state,mask) in enumerate(self.prog_exposures):
             p.rel_trans[i] = state.rel_trans*self.mult_raw('rel_trans', state=state)*mask
+        if self.net_mods:
+            for t,term in enumerate(self.sim.mixing.terms):
+                p.contacts[t] = term.get('contacts', 1.0)*self.contact_mult(term.name)
         for i,matrix in enumerate(self._mover_rates):
             p.mov_mat[i] = matrix
         return p
@@ -2305,6 +2417,8 @@ class Compartmental(Engine):
         graph = self.graph
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
         if not self.use_kernels or (self.cross is not None and not self.cross.can_run_whole()) or solver not in ss.kernels.solvers or any(not getattr(m, 'tabulated', False) for mods in sim.modifiers.values() for m in mods):
+            return False
+        if self.net_mods or any(key[:2] == (mod.name, 'branch') for key,mods in sim.modifiers.items() if mods): # The contacts, and where arrivals go, are set once for a whole run
             return False
         if self.whole is None: # The rest cannot change, so is checked once
             plain = all(getattr(type(mod), name) is getattr(ss.Disease, name) for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'])
@@ -2452,7 +2566,7 @@ class Compartmental(Engine):
         derived = self.derived(n, new, outcomes=not grouped)
         stratified = [name for name in graph.exprs if getattr(res[name], 'strata', None) is not None]
         if stratified: # Sums and ratios of states by group
-            ctx = StockCtx(self, sc.objdict({name:stocks[:, self.state_comps[name]].sum(axis=1) for name in graph.states}))
+            ctx = StockCtx(self, sc.objdict({name:stocks[:, self.state_comps[name]].sum(axis=1) for name in graph.states}), sc.objdict({name:flows[:, ind] for name,ind in self.tr_index.items()}))
             for name in stratified:
                 if name in self.ratios:
                     res[name].strata[:], res[name].denom[:] = [ss.transitions.evaluate(part, ctx) for part in self.ratios[name]]
@@ -2564,7 +2678,7 @@ class Compartmental(Engine):
             infected = sum(n[s.name] for s in graph.infected)
             out.prevalence = np.divide(infected, people, out=np.zeros(np.shape(people)), where=people>0)
         if graph.exprs:
-            ctx = StockCtx(self, n)
+            ctx = StockCtx(self, n, new)
             for name,expr in graph.exprs.items():
                 out[name] = ss.transitions.evaluate(expr, ctx)
         return out
@@ -2912,8 +3026,8 @@ class Agents(Engine):
             mod.__dict__.pop(key, None)
         self.events = dict() # The agents who went through each transition this step
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
-        arrs = [ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-                ss.FloatArr('rel_trans', default=1.0, label='Relative transmission')]
+        arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility'),
+                ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission')]
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name),
@@ -2925,6 +3039,10 @@ class Agents(Engine):
         if any(getattr(strat, 'immunity', None) is not None for strat in list(graph.strats) + list(self.sim.strats)):
             arrs.append(ss.IntArr('strains_had', default=0, label='Strains each person has had, as bits')) # For immunity= between strains: see protection()
         mod.define_states(*arrs, overwrite=True) # Overwrite, since in the class form the declarations are class attributes
+        for key in ['rel_sus', 'rel_trans']: # So .effective can apply the modifiers, and writes are recorded if asked for
+            arr = mod[key]
+            arr.engine = self
+            arr.writes = {} if self.sim.pars.track_writes else None
         self.counts = sc.objdict()
         for state in graph.count_states:
             self.counts[state.name] = np.zeros(self.sim.n_groups) # One number per group; all but the first are zero unless the state has dimensions of its own
@@ -3022,10 +3140,10 @@ class Agents(Engine):
         return out if np.ndim(out) == 0 else out[uids]
 
     def force(self, uids, tr, dst):
-        """ Move agents who are in an infected state to a state, along a transition (as when a treatment cures) """
+        """ Move agents who are in a state a transition leaves from to a state, along the transition (as when a treatment cures) """
         mod = self.mod
         moved = []
-        for state in self.graph.infected:
+        for state in tr.src:
             if state.people:
                 inds = uids[mod[state.name][uids]]
                 mod[state.name][inds] = False
@@ -3271,8 +3389,8 @@ class Agents(Engine):
         branches = exits.branches + sc.tolist(exits.remainder)
         if branches: # Split on entry
             ps = [None if tr.p is None else np.broadcast_to(self.eval_for(tr.p[0], new), len(new)) for tr in branches]
-            rest = 1.0 - sum(p for p in ps if p is not None)
-            ps = [rest if p is None else p for p in ps]
+            mults = [self.branch_mult(tr, new) for tr in branches]
+            ps = self.branch_shares(branches, ps, mults)
             rvs = self.dists[f'branch_{name}'].rvs(new)
             edges = np.cumsum([np.zeros(len(new))] + ps, axis=0)
             for i,tr in enumerate(branches):
@@ -3706,6 +3824,7 @@ class Agents(Engine):
             ref = max([max(c) for c in coefs.values()] + [0])
             if ref <= 0:
                 continue
+            contacts = self.contact_mult(route.name) # The share of its contacts that happen, from the modifiers of its n_contacts
             for d in range(2):
                 weights = mod.rel_trans.raw*0
                 for state,c in coefs.items():
@@ -3720,6 +3839,10 @@ class Agents(Engine):
                     beta_per_dt = route.net_beta(disease_beta=beta, disease=mod)
                     if np.ndim(beta_per_dt) == 0:
                         beta_per_dt = np.full(len(p1), beta_per_dt, dtype=ss_float)
+                    if np.ndim(contacts): # For the people they would infect
+                        beta_per_dt = beta_per_dt*contacts[p2]
+                    elif contacts != 1:
+                        beta_per_dt = beta_per_dt*contacts
                     kernel = ss.Infection
                     inds = kernel._nb_can_transmit(p1, p2, rel_trans.raw, rel_sus.raw, beta_per_dt)
                     p1c, p2c = p1[inds], p2[inds]
@@ -3727,6 +3850,17 @@ class Agents(Engine):
                     srcs, trgs = kernel._nb_transmit(np.asarray(p1c), np.asarray(p2c), rel_trans.raw, rel_sus.raw, beta_per_dt[inds], rvs)
                     new_cases.append(trgs.view(ss.uids))
                     pairs.append((srcs, trgs))
+                elif isinstance(route, (ss.MixingPool, ss.MixingPools)) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.Mixing.init_pools()
+                    if d == 0:
+                        any_pools = True
+                        groups = sim.group_raw()
+                        auids = sim.people.auids
+                        n = np.bincount(groups[auids], minlength=sim.n_groups).astype(float)
+                        for i,strain in enumerate(strains):
+                            share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
+                            infectious = np.bincount(groups[auids], weights=(rel_trans.raw*share)[auids], minlength=sim.n_groups)
+                            expo = sim.mixing.term_exposure(sim.mixing.pool_terms[route.name], infectious, n)
+                            pool_hazard[i] += ref*expo[groups]*rel_sus.raw*contacts
                 elif isinstance(route, (ss.MixingPool, ss.MixingPools)): # Has no direction
                     if d == 0:
                         any_pools = True
@@ -3736,7 +3870,7 @@ class Agents(Engine):
                                 for i,strain in enumerate(strains):
                                     share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.src_uids], strain]
                                     trans = np.mean(rel_trans.raw[pool.src_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
-                                    pool_hazard[i][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*rel_sus.raw[dst]
+                                    pool_hazard[i][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*rel_sus.raw[dst]*(contacts[dst] if np.ndim(contacts) else contacts)
                 elif d == 0: # Any other route works out its own transmission
                     new_cases.append(ss.uids(route.compute_transmission(rel_sus, rel_trans, beta, disease=mod)))
         if self.strain is not None and pairs: # Each new case takes the strain of whoever infected them

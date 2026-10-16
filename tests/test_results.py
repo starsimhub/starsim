@@ -145,6 +145,24 @@ def test_declared_scale():
     return sim
 
 
+def test_flow_ratios():
+    sc.heading('Testing flows in results: the per-capita incidence, infection / S')
+    S, I, R = ss.states(3)
+    infection = S >> I @ 0.3 * I
+    sir = ss.Disease(infection, I >> R @ ss.days(10), incidence=infection / S, init=dict(I=0.01), name='sir')
+    for solver in ['ode', 'binomial', 'abm']:
+        for strat in [False, True]:
+            sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=small*10, solver=solver, verbose=0)
+            if strat:
+                sim.stratify(age=[0, 50])
+            res = sim.run().results.sir
+            assert np.allclose(res.incidence[1:], res.infection[1:]/res.n_S[1:])
+            if strat: # By group: the flow and the stock of the group
+                young = res.incidence.select(age='0-49')[1:]
+                assert np.allclose(young, res.infection.select(age='0-49')[1:]/res.n_S.select(age='0-49')[1:])
+    return sim
+
+
 # %% Run as a script
 def test_time_points():
     sc.heading('Testing results by time point: the start, then the end of each step')
@@ -180,6 +198,7 @@ if __name__ == '__main__':
     sim2 = test_2d_results()
     sim3 = test_nested_results()
     sim4 = test_declared_scale()
+    sim4b = test_flow_ratios()
     sim5 = test_time_points()
 
     sc.toc(T)

@@ -573,6 +573,33 @@ def test_partners():
     return sim
 
 
+def test_partner_targets():
+    sc.heading('Testing other targets: partnerships within a level, and targets on ss.MFNet')
+
+    # Most partnerships between people at the same level of risk
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.0), name='sir')
+    sir.stratify(risk=['low', 'high'], split=[0.8, 0.2])
+    for share in [None, 0.9]:
+        net = ss.PartnerNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
+        sim = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run()
+        net = sim.networks.net
+        level = sim.level_raw(sim.dim_index('risk'))
+        within = np.mean(level[net.edges.p1] == level[net.edges.p2])
+        assert np.isclose(net.results.mean_degree[150:].mean(), 0.7, rtol=0.05)
+        assert np.isclose(within, 0.68, atol=0.03) if share is None else np.isclose(within, share, atol=0.02) # By chance, 0.8² + 0.2²
+    assert 'match' in net.check(n_runs=2, output=True).index
+
+    # A target number of partners at a time between men and women, with concurrency
+    duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))
+    mf = ss.MFNet(n_contacts=ss.poisson(0.7), concurrency=0.1, duration=duration, name='mf')
+    sim = ss.Sim(diseases=ss.SIS(), networks=mf, n_agents=5000, start=2000, stop=2030, dt=ss.months(1), verbose=0).run()
+    res = sim.networks.mf.results
+    assert np.isclose(res.mean_degree[60:].mean(), 0.7, rtol=0.03) and np.isclose(res.concurrency[60:].mean(), 0.1, rtol=0.1)
+    with pytest.raises(ValueError, match='n_contacts'):
+        ss.Sim(diseases=ss.SIS(), networks=ss.MFNet(concurrency=0.1), n_agents=500, verbose=0).init()
+    return sim
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -599,5 +626,6 @@ if __name__ == '__main__':
     clus = test_cluster()
     hyb  = test_hybrid()
     part = test_partners()
+    targ = test_partner_targets()
 
     T.toc()
