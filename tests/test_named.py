@@ -80,8 +80,45 @@ def test_geo():
     return sim
 
 
+@sc.timer()
+def test_people():
+    sc.heading('Testing populations by name')
+    ppl = ss.people('Kenya', year=2025)
+    ages, female, male, _ = ss.named.population('Kenya', year=2020)
+    later = ss.named.population('Kenya', year=2030)
+    assert np.isclose(ppl.named.total, 0.5*(female + male).sum() + 0.5*(later[1] + later[2]).sum()) # Between the decadal values, interpolated
+
+    # The size and the age split of a compartmental model, with no agents
+    stratify = dict(age=[0, 5, 18, 65])
+    ode = ss.Sim(make_sir(), people=ss.people('Kenya', year=2024), stratify=stratify, unit='day', stop=60, **kw).run()
+    total = ss.people('Kenya', year=2024).named.total
+    assert ode.solver == 'ode' and ode.pars.total_pop == total
+    n = ode.results.sir
+    initial = n.n_S.strata[:, 0] + n.n_I.strata[:, 0] + n.n_R.strata[:, 0]
+    _, female, male, _ = ss.named.population('Kenya', year=2024)
+    assert np.isclose(initial[0], (female + male)[0]) # The 0-4 group, which is one WPP age group
+
+    # As agents, the same ages and the share who are female
+    abm = ss.Sim(make_sir(), people=ss.people('Kenya', year=2024, n_agents=20_000), stratify=stratify, unit='day', stop=60, **kw).run()
+    assert abm.solver == 'abm' and abm.pars.pop_scale == total/20_000
+    share = np.histogram(abm.people.age.values, [0, 5, 18, 65, 200])[0]/20_000
+    assert np.allclose(share, abm.strats[0].split, atol=0.01)
+    assert abs(abm.people.female.mean() - female.sum()/(female + male).sum()) < 0.01
+
+    # The year the sim starts, if it has dates; and the spec says where the people came from
+    sim = ss.Sim(make_sir(), people=ss.people('Kenya'), start='1990-01-01', stop='1990-03-01', unit='day', **kw)
+    sim.init()
+    assert sim.to_spec()['config']['people']['year'] == 1990
+    assert sim.hash() == ss.from_spec(sim.to_spec()).hash()
+    assert "people=ss.people('Kenya', year=1990" in sim.to_code()
+    with pytest.raises(ss.CodedError, match='E605'):
+        ss.people('Kenyaa')
+    return ode, abm
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_contacts()
     test_geo()
+    test_people()
     T.toc()

@@ -1673,6 +1673,31 @@ class Graph:
 
     def equations(self, engine=None):
         """ The ODE system, with symbolic parameter names; see `ss.Disease.equations()` """
+        names, flows = self.flow_terms(engine)
+        terms = {i:[] for i in range(len(names))}
+        for flow in flows:
+            if flow.src is not None:
+                terms[flow.src].append(('-', flow.term))
+            for ind,term in flow.dst:
+                terms[ind].append(('+', term))
+
+        lines = []
+        width = max(len(name) for name in names)
+        for ind,items in terms.items():
+            rhs = ''
+            for i,(sign,term) in enumerate(items):
+                rhs += (f'{"-" if sign == "-" else " "}{term}' if i == 0 else f' {sign} {term}')
+            lines.append(f'd{names[ind]}/dt{" "*(width-len(names[ind]))} = {rhs or " 0"}')
+        return lines
+
+    def flow_terms(self, engine=None):
+        """
+        Each flow of the compartmental form, with symbolic parameter names, for `equations()` and for exports
+
+        Returns the name of each compartment (a state, or its stages as `I_1`, `I_2`, ...),
+        and for each flow its transition, the compartment it leaves (or None), the flow
+        out of it, and the compartments it enters, each with its share of the flow (none for an outflow)
+        """
         mod = self.module
         if engine is None or not hasattr(engine, 'flows'): # Not in a compartmental sim, so lay the model out with a stand-in
             mock = sc.objdict(unit_base='day', solver='ode', n_groups=1, pars=sc.objdict(rand_seed=0, total_pop=1, approx=True), unit=None, crossings=[])
@@ -1697,7 +1722,7 @@ class Graph:
                     out.append((track.first, w))
             return out
 
-        terms = {i:[] for i in range(len(engine.comps))}
+        out = []
         for flow in engine.flows:
             tr = flow.tr
             src = None if flow.src is None else comp_name(flow.src)
@@ -1718,26 +1743,20 @@ class Graph:
             else:
                 rate = format_expr(tr.rate)
                 term = f'({rate}) * {src}' if isinstance(tr.rate, BinOp) and tr.rate.op in '+-' else f'{rate} * {src}'
-            if flow.src is not None:
-                terms[flow.src].append(('-', term))
+            dsts = []
             if flow.to is not None:
-                terms[flow.to].append(('+', term))
+                dsts.append((flow.to, term))
             else:
                 ps = tr.p if (tr.p is not None and len(tr.dst) > 1) else [None]*len(tr.dst)
                 for dst,p in zip(tr.dst, ps):
                     given = [format_expr(q) for q in ps if q is not None]
                     w = '' if len(tr.dst) == 1 else (f'{format_expr(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ')
                     for ind,weight in entry(dst.name, w):
-                        terms[ind].append(('+', f'{weight}{term}'))
+                        dsts.append((ind, f'{weight}{term}'))
+            out.append(sc.objdict(tr=tr, src=flow.src, term=term, dst=dsts))
 
-        lines = []
-        width = max(len(comp_name(i)) for i in terms)
-        for ind,items in terms.items():
-            rhs = ''
-            for i,(sign,term) in enumerate(items):
-                rhs += (f'{"-" if sign == "-" else " "}{term}' if i == 0 else f' {sign} {term}')
-            lines.append(f'd{comp_name(ind)}/dt{" "*(width-len(comp_name(ind)))} = {rhs or " 0"}')
-        return lines
+        names = [comp_name(i) for i in range(len(engine.comps))]
+        return names, out
 
     def to_json(self, sim=None):
         """ The model spec of one module: its states, parameters, and transitions as plain data; see `ss.Disease.to_json()` """
@@ -2806,6 +2825,8 @@ class Strat:
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
         named = dict(geo=self.geo.ref) if self.geo is not None and self.geo.ref is not None else {} # Where a named geography came from; only when there is one, so that the hash of every other model is as it was
+        if getattr(self, 'split_from', None): # A split taken from a named population (ss.people)
+            named['split_from'] = self.split_from
         return dict(**named, name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
                     mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 

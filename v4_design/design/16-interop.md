@@ -14,10 +14,10 @@ An importer reads another framework's model and produces a model spec ([14-model
 
 ```
 EpiModel ─┐                                      ┌─▶ SBML
-summer2  ─┤                                      ├─▶ Petri net
-epipack  ─┼─▶ importer ─▶ model spec ─▶ exporter ┼─▶ odin
-epydemix ─┤                                      ├─▶ a diagram (Mermaid, Graphviz)
-SBML     ─┘                                      └─▶ a data-entry form
+summer2  ─┤                                      ├─▶ odin
+epipack  ─┼─▶ importer ─▶ model spec ─▶ exporter ┼─▶ a diagram (Mermaid, Graphviz)
+epydemix ─┤                                      └─▶ a data-entry form
+SBML     ─┘
 ```
 
 ## Import
@@ -77,7 +77,6 @@ The two worth doing first are **Starsim v3**, because existing users need it to 
 ```python
 sim.to_json('sim.json')                              # the model spec: complete, and loads back
 ss.save('model.xml', sim, format='sbml')
-ss.save('model.json', sim, format='petrinet')
 ss.save('model.R', sim, format='odin')
 ss.save('model.md', sim, format='mermaid')
 ```
@@ -93,6 +92,8 @@ changed: lognormal dwell time on 'recovery' written as 11 Erlang stages
 ```
 
 An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported ([14-model-spec.md](14-model-spec.md#functions)).
+
+Petri nets are not exported. SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. `ss.interop.export(sim, format)` returns the text without writing a file.
 
 The diagram is produced by `sir.diagram()`. A generated data-entry form (Atomica's databook, `sim.requires(to='form.csv')` in [04-parameters.md](04-parameters.md#requirements)) is deferred from v1.
 

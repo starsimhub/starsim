@@ -131,6 +131,18 @@ def names(node):
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
+def free(node):
+    """ The names in an expression that are not inside a function call (a state inside one is a count, not exposure) """
+    if isinstance(node, ast.Call):
+        return set()
+    elif isinstance(node, ast.Name):
+        return {node.id}
+    out = set()
+    for child in ast.iter_child_nodes(node):
+        out |= free(child)
+    return out
+
+
 def terms(node):
     """ An expression that is a sum, as its terms """
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
@@ -178,10 +190,10 @@ class Rates:
         return all(isinstance(p, ast.Name) for p in parts) and sorted(p.id for p in parts) == sorted(self.people)
 
     def is_people(self, node):
-        """ A linear combination of the numbers in states of people, with coefficients of parameters, e.g. I or (I + 0.5*A) """
+        """ A linear combination of the numbers in states of people, with coefficients of parameters (or functions of counts), e.g. I or (I + 0.5*A) """
         for term in terms(node):
             num, den = factors(term)
-            stateful = [f for f in num + den if names(f) & set(self.source.states)]
+            stateful = [f for f in num + den if free(f) & set(self.source.states)]
             if len(stateful) != 1 or not any(f is stateful[0] for f in num):
                 return False
             f = stateful[0]
@@ -213,6 +225,17 @@ class Rates:
         if self.is_total(node) and not (isinstance(node, ast.Name) and node.id == total):
             return everyone()
         return visit(node)
+
+    def counts_in_calls(self, node):
+        """ The expression with every state inside a function call written as its number (I.n), e.g. a capacity in a coefficient """
+        if isinstance(node, ast.Call):
+            return self.counts_of(node)
+        for field,val in ast.iter_fields(node):
+            if isinstance(val, ast.AST):
+                setattr(node, field, self.counts_in_calls(val))
+            elif isinstance(val, list):
+                setattr(node, field, [self.counts_in_calls(v) if isinstance(v, ast.AST) else v for v in val])
+        return node
 
     def bare_of(self, node):
         """ For a result: states of people as they are (in a result, a state is its number, by group), states that are not people as counts (W.n), and the total as the sum of the states of people """
@@ -263,12 +286,16 @@ class Rates:
 
         # 2. Another state divided by the total is exposure to that state
         num, den = factors(node)
-        stateful_num = [f for f in num if names(f) & set(self.source.states)]
-        stateful_den = [f for f in den if names(f) & (set(self.source.states) | {total})]
+        stateful_num = [f for f in num if free(f) & set(self.source.states)]
+        stateful_den = [f for f in den if free(f) & (set(self.source.states) | {total})]
         if len(stateful_num) == 1 and len(stateful_den) == 1 and self.is_total(stateful_den[0]) and self.is_people(stateful_num[0]):
             den = [f for f in den if f is not stateful_den[0]]
             how.append(f'exposure to {ast.unparse(stateful_num[0])} (divided by the total: frequency-dependent)')
-            return ast.unparse(product(num, den)), how, 2
+            text = ast.unparse(product(num, den))
+            counted = ast.unparse(self.counts_in_calls(product(num, den)))
+            if counted != text: # e.g. a risk that rises with the number infected, past a capacity
+                how.append('with the states inside functions as counts')
+            return counted, how, 2
 
         # 3. Another state with no division by the total is mass action between the numbers
         if stateful_num and not stateful_den and all(self.is_people(f) for f in stateful_num):

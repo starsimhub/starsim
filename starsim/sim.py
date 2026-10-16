@@ -323,6 +323,7 @@ class Sim(ss.Base):
         self.crossings = [] # Diseases whose states are tracked jointly in a compartmental run: see init_crossings()
         self.cross_strats = []
         self.set_par_values()
+        self.init_named_people()
         self.init_strats()
         self.mixing = solvers.Mixing(self)
         if not self.declared:
@@ -356,7 +357,7 @@ class Sim(ss.Base):
 
         # The population
         if solver == 'abm':
-            if 'n_agents' not in self.given and 'people' not in self.given and 'total_pop' in self.given:
+            if 'n_agents' not in self.given and ('people' not in self.given or self.named_unsized) and 'total_pop' in self.given:
                 pars.n_agents = int(min(pars.total_pop, pars.n_agents))
                 pars.pop_scale = pars.total_pop/pars.n_agents
             if 'use_aging' not in self.given and any(tr.people for mod in self.declared for tr in mod.graph.inflows): # Births in a declared model are demographics too, so agents age
@@ -587,6 +588,14 @@ class Sim(ss.Base):
                 ss.error('E305', f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
+        named = getattr(self, 'named_people', None)
+        for strat in self.strats: # Age groups with no split of their own take that of a named population
+            if named is not None and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('split') == 'ages uniform from 0 to 100':
+                ends = np.append(named.ages, named.ages[-1] + 5)
+                below = np.interp(np.append(strat.edges, np.inf), ends, np.append(0, np.cumsum(named.counts))) # People younger than each edge, with ages uniform within each 5-year group
+                strat.split = np.diff(below)/named.total
+                strat.split_from = 'people'
+                strat.guessed.pop('split')
         self.group_shape = tuple(strat.n for strat in self.strats)
         self.group_mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:] # How far apart adjacent levels of each dimension are, in groups
         self.n_groups = int(np.prod(self.group_shape)) if self.strats else 1
@@ -925,12 +934,37 @@ class Sim(ss.Base):
         self.groups_changed()
         return
 
+    def init_named_people(self):
+        """ A named population (`ss.people('Kenya')`): looked up for the year the sim starts, at the sim's number of agents, and the population size taken from it """
+        pars = self.pars
+        named = getattr(pars.people, 'named', None)
+        self.named_people = None
+        self.named_unsized = False # A named population with no number of agents of its own does not make the model agent-based
+        if named is None:
+            return
+        year = named.year
+        if year is None and pars.start is not None and not (sc.isnumber(pars.start) and pars.start < 1800): # The year the sim starts, if it has dates
+            try:
+                year = ss.date(pars.start).year
+            except Exception:
+                year = None
+        n_agents = sc.ifelse(named.n_agents, int(pars.n_agents))
+        ppl = ss.people(named.place, year=year, n_agents=n_agents, revision=named.revision)
+        ppl.named.update(year=named.year, n_agents=named.n_agents) # As given, so the sim can be rebuilt
+        pars.people = ppl
+        self.named_people = ppl.named
+        self.named_unsized = named.n_agents is None
+        if 'total_pop' not in self.given:
+            pars.total_pop = ppl.named.total
+            pars.pop_scale = pars.total_pop/pars.n_agents
+        return
+
     def agent_reasons(self, modules):
         """ The reasons, if any, that the model has to run as agents """
         reasons = []
         if 'n_agents' in self.given:
             reasons.append('n_agents was given')
-        if 'people' in self.given:
+        if 'people' in self.given and not self.named_unsized:
             reasons.append('people were given')
         for mod in modules:
             graph = getattr(mod, 'graph', None)
@@ -1057,7 +1091,8 @@ class Sim(ss.Base):
                 line = f'{line:60s} [{guess}]'
             lines.append(line.rstrip())
             return
-        popguess = '' if ('total_pop' in self.given or 'n_agents' in self.given) else ' [guessed]'
+        named = getattr(self, 'named_people', None)
+        popguess = '' if ('total_pop' in self.given or 'n_agents' in self.given or named is not None) else ' [guessed]'
         t = self.t
         lines.append(f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {unit}s {t.start} to {t.stop}' if self.unit is None or not t.is_absolute else
                      f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {t.start} to {t.stop}')
@@ -1067,6 +1102,9 @@ class Sim(ss.Base):
             if self.solver == 'abm':
                 scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
                 add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in self.given else 'guessed')
+            if named is not None: # Where a named population came from
+                ref = named.ref
+                add('people', f"{named.place}, {ref['year']}, from starsim_data {ref['version']} ({ref.get('study', '?')} {ref.get('revision', '')})".rstrip(), None if named.year is not None else 'guessed: the year the sim starts' if self.t.is_absolute else 'guessed: the year of the revision')
             if self.unit is None:
                 add('unit', 'none: time is in timesteps', 'nothing in the model has a unit')
             else:
@@ -1081,6 +1119,7 @@ class Sim(ss.Base):
                         ref = strat.geo.ref
                         text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
                 elif strat.kind == 'age':
+                    text += f'; split as the population of {named.place}' if getattr(strat, 'split_from', None) == 'people' else ''
                     text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if self.unit is None else '; people age between the groups'
                 add('dimension', text, f'guessed: {"; ".join(strat.guessed.values())}' if strat.guessed else None)
             for crossing in self.crossings:
@@ -1281,6 +1320,8 @@ class Sim(ss.Base):
             out.config.substeps = pars.substeps
         if 'use_aging' in self.given: # Likewise; e.g. an age stratification without aging
             out.config.use_aging = bool(pars.use_aging)
+        if getattr(self, 'named_people', None) is not None: # Where a named population came from
+            out.config.people = dict(self.named_people.ref, total=self.named_people.total)
         out.meta = sc.objdict(library_version=ss.__version__, solver_chosen=self.solver, solver_reason=self.solver_reason, notes=list(self.notes))
         out = sc.jsonify(out)
         if filename is not None:
@@ -1470,6 +1511,8 @@ class Sim(ss.Base):
         """
         # Handle inputs
         people = self.pars.pop('people')
+        if self.named_people is not None and self.solver != 'abm': # A compartmental run takes the size and age split of a named population, not its agents
+            people = None
         n_agents = self.pars.n_agents
         verbose = sc.ifelse(verbose, self.pars.verbose)
         if verbose > 0 and self.solver == 'abm':

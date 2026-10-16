@@ -1,7 +1,7 @@
 """
 Named data: places and contact matrices looked up by name
 
-`ss.geo('Kenya', level=1)` and `ss.contacts('Kenya')` read their data from
+`ss.people('Kenya')`, `ss.geo('Kenya', level=1)`, and `ss.contacts('Kenya')` read their data from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
 record of where it came from (`ref`), which is written into the model spec, so the
@@ -11,7 +11,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['provider', 'geography', 'contact_matrix']
+__all__ = ['provider', 'geography', 'population', 'contact_matrix']
 
 layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the contact matrices
 
@@ -112,6 +112,41 @@ def geography(place, level=1, year=None, places=None):
     out = dict(names=names, pop=df.population.values.astype(float), lat=df.lat.values.astype(float), lon=df.lon.values.astype(float),
                area=df.area_km2.values.astype(float), codes=list(df.pcode), adjacency=adjacency, ref=info)
     return out
+
+
+def population(place, year=None, revision=None):
+    """
+    The population of a named place by age and sex, for `ss.people('Kenya', year=2024)`
+
+    The UN World Population Prospects give it every ten years (1950 to 2100); a year in
+    between is interpolated linearly, group by group.
+
+    Args:
+        place (str): a country, by name or code
+        year (int): the year (default: the year of the WPP revision, e.g. 2024)
+        revision (str): the WPP revision (default: the latest bundled)
+
+    Returns:
+        The lower edge of each 5-year age group (the last is 100+), the number of women and of men in each, and `ref`
+    """
+    ssd = provider()
+    try:
+        df = ssd.load(place, which='population', revision=revision)
+    except KeyError as E:
+        unknown(place, E)
+    rev = df.attrs.get('provenance', {}).get('revision')
+    year = sc.ifelse(year, int(rev) if rev else 2024)
+    years = np.array(sorted(set(df.Time)))
+    if not years[0] <= year <= years[-1]:
+        errormsg = f'year={year} is outside the years of the UN World Population Prospects ({years[0]} to {years[-1]})'
+        raise ValueError(errormsg)
+    ages = np.array(sorted(set(df.AgeGrp)), dtype=float)
+    counts = {}
+    for sex in ['Female', 'Male']:
+        table = df[df.Sex == sex].pivot(index='Time', columns='AgeGrp', values='Value').loc[years, ages.astype(int)].values
+        counts[sex] = np.array([np.interp(year, years, table[:,i]) for i in range(len(ages))])
+    info = ref(ssd, df, place=place, year=int(year), location=df.attrs.get('location'), revision=rev)
+    return ages, counts['Female'], counts['Male'], info
 
 
 def contact_matrix(place, source='prem2021', layer='all'):

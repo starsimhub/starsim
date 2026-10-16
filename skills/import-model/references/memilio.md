@@ -4,6 +4,30 @@
 
 MEmilio is a C++ library with Python bindings (`memilio.simulation`) for compartmental and agent-based models, mostly of COVID-19. The ODE models are fixed in C++ (`osecir`: the SECIR/SECIHURD model with states `Susceptible`, `Exposed`, `InfectedNoSymptoms`, `InfectedNoSymptomsConfirmed`, `InfectedSymptoms`, `InfectedSymptomsConfirmed`, `InfectedSevere`, `InfectedCritical`, `Recovered`, `Dead`), so a model is a Python script that sets parameters on `Model(n_age_groups)`: times in each state (`TimeExposed`, `TimeInfectedNoSymptoms`, ...), probabilities of each branch (`RecoveredPerInfectedNoSymptoms`, `SeverePerInfectedSymptoms`, `CriticalPerSevere`, `DeathsPerCritical`), `TransmissionProbabilityOnContact`, `RelativeTransmissionNoSymptoms`, the risks of infection from symptomatic people and `TestAndTraceCapacity`, `Seasonality` with `StartDay`, `ICUCapacity`, populations by age group and state, a `ContactMatrix` with `Damping`s, then `simulate(t0, tmax, dt, model)` (an adaptive Runge-Kutta). The equations are in MEmilio's source (`cpp/models/ode_secir/model.h`), not in the script, so read them there.
 
+## Getting the model out
+
+The ODE models `osir`, `oseir`, `oseirdb`, and `osecir` import mechanically. The model is built in MEmilio's own environment and written to JSON by `starsim/interop/dump_memilio.py`, which needs only MEmilio's Python bindings. It runs the script as it is and records the first model the script simulates (with `simulate()`, `simulate_flows()`, or a `Simulation` that is advanced):
+
+```bash
+python dump_memilio.py ode_secir_simple.py model.json          # a script that runs a simulation
+python dump_memilio.py my_model.py:run_simulation model.json   # a function in a script
+```
+
+```python
+sim = ss.load('model.json', format='memilio') # A sim, with how each rate was read in sim.imported
+```
+
+The importer writes each model's equations as MEmilio's C++ has them (`cpp/models/ode_*/model.h`), with the parameters, populations, and contacts from the file. It translates, exactly:
+
+- parameters by age group, as `ss.by(..., dims=['age'])` where they differ, and age groups as labels (`'0'`, `'1'`, ...) with `ss.contacts(age=...)`, the matrix at the start summed over MEmilio's matrices;
+- dampings as a factor on the force of infection (`contacts`, an `ss.timeseries` with `mode='cosine'`), from the matrix MEmilio uses at the start and either side of each damping, so the levels and types of the dampings are already combined;
+- seasonality (`season`, an `ss.seasonal` with the peak from `StartDay`);
+- test and trace (`risk`) and ICU capacity (`critical_share`), as functions of the total counts, along MEmilio's half cosine;
+- deaths as outflows (`death`, and `severe_death` with `DeathsPerSevere` or an ICU capacity), since MEmilio leaves the dead out of the total; MEmilio's `Dead` is `cum_death` (plus `cum_severe_death`, plus any who start dead);
+- the `...Confirmed` states only if they start with people in them (nothing flows into them).
+
+It lists (`W1601`): a parameter that differs by age group where it belongs to the infectious person's group (`RelativeTransmissionNoSymptoms`, `RiskOfInfectionFromSymptomatic`) or is summed over the groups (`RecoveredPerInfectedNoSymptoms` and `TimeInfectedNoSymptoms` in test and trace), for which the mean is used; a damping that cuts some contacts more than others (the mean share is used); dynamic NPIs, dampings drawn for a parameter study, and school holidays. Other models (`osecirvvs`, `omseirs4`, the metapopulation, IDE, LCT, SDE, and agent-based models) are written by hand, as below.
+
 ## Mapping
 
 | MEmilio | Starsim v4 | Fit |
@@ -31,6 +55,7 @@ MEmilio is a C++ library with Python bindings (`memilio.simulation`) for compart
 - **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `mode='cosine'` matches.
 - **Seasonality's day 0.** MEmilio's day 0 is `StartDay` of a 365-day year; with no dates, `ss.seasonal` starts at the beginning of a year, so the peak is `-StartDay/365`.
 - **Age groups are labels.** Name them as MEmilio numbers them (`'0'`, `'1'`, `'2'`); Starsim treats strings as labels and does not age anyone.
+- **A damping within a step.** The import runs in steps of a day; a value that varies in time is taken at the start, middle, and end of each step, so MEmilio's one-day smoothing of a damping is approximated within the step, and `substeps=` does not help. With `dt=0.1`, the import agrees with a tightly integrated MEmilio run to 1e-7 of the population; with steps of a day, to about 2e-4.
 - **The reference is interpolated.** MEmilio's adaptive solver returns uneven time points; `interpolate_simulation_result()` gives whole days, with an error of about a person in 10,000. That is the floor for agreement.
 
 ## Worked example

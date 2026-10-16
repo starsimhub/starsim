@@ -26,6 +26,7 @@ class People:
         n_agents (int): the initial number of agents in the model
         age_data (dataframe): a dataframe of years and population sizes, if available
         extra_states (list): non-default states to initialize
+        p_female (float): the share of agents who are female
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
 
     Examples:
@@ -34,7 +35,7 @@ class People:
         ```
     """
 
-    def __init__(self, n_agents, age_data=None, extra_states=None, mock=False):
+    def __init__(self, n_agents, age_data=None, extra_states=None, p_female=0.5, mock=False):
         """ Initialize """
 
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
@@ -46,6 +47,7 @@ class People:
         self.version = ss.__version__  # Store version info
         self.initialized = False
         self.n_agents_init = n_agents
+        self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
 
         # Handle the four fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, AUIDs for tracking alive agents, and agents' parents
@@ -66,7 +68,7 @@ class People:
         states = [
             ss.BoolState('alive', default=True),  # Time index for death
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
-            ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
@@ -718,6 +720,38 @@ class People:
         for key in self.states.keys():
             person[key] = self.states[key][ind]
         return person
+
+
+def people(place, year=None, n_agents=None, revision=None):
+    """
+    A named population: the size, age structure, and sex ratio of a country
+
+    The data are the UN World Population Prospects, bundled with `starsim_data`. The
+    sim takes its population size (`total_pop`) from them, unless it is given one, and
+    the split of an age stratification that is not given one, so a compartmental model
+    can use a named population as well as agents can. Where the population came from is
+    written in the model spec, so `ss.from_spec()` and `sim.to_code()` look it up again.
+
+    Args:
+        place (str): a country, by name or code ('Kenya', 'KE', 'KEN')
+        year (int): the year (default: the year the sim starts, if it has dates; otherwise the year of the WPP revision, e.g. 2024); years between the decadal values are interpolated
+        n_agents (int): the number of agents (default: the sim's); giving it makes the model agent-based, as `ss.People(n_agents)` does
+        revision (str): the WPP revision (default: the latest bundled)
+
+    Returns:
+        An `ss.People`, with `ppl.named` saying where it came from
+
+    **Examples**:
+
+        sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
+        ss.people('NG').named.total # The population of Nigeria in 2024
+    """
+    ages, female, male, ref = ss.named.population(place, year=year, revision=revision)
+    total = female + male
+    age_data = np.column_stack([np.append(ages, ages[-1] + 5), np.append(total, 0)]) # The last group is 100 and over
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=age_data, p_female=female.sum()/total.sum())
+    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
+    return ppl
 
 
 class Person(sc.objdict):

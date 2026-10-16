@@ -187,6 +187,8 @@ sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Ke
 
 `ss.people`, `ss.contacts`, and `ss.geo` are lowercase because they are loaders: each looks up named data and returns the ordinary object. `ss.People(n_agents=10_000)` remains the class.
 
+A named population gives the sim its size and the split of an age stratification that does not have one of its own, so it serves a compartmental model as well as agents; it makes the model agent-based only if it is given `n_agents=`. Without `year=`, it is the population in the year the sim starts, if the sim has dates, and otherwise in the year of the data's revision.
+
 **Bundled and pulled.** The data comes from [`starsim_data`](https://github.com/starsimhub/starsim_data) (`import starsim_data as ssd`), which does some of each:
 
 - **Bundled**: what is small and common. UN World Population Prospects population, birth, death, and migration rates for every country; the Prem (2021) age contact matrices by setting (`all`, `home`, `work`, `school`, `community`), for 177 countries; and the first two administrative levels of every country, with their populations, centroids, areas, and borders. Reading it (`ssd.load('kenya', which='prem2017', kind='home')`) never touches the network, so it works offline and is reproducible from a pinned version.

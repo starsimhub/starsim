@@ -16,12 +16,14 @@ from .epimodel import load_epimodel
 from .epydemix import load_epydemix
 from .atomica import load_atomica
 from .flepimop import load_flepimop
+from .memilio import load_memilio
 from .odin import load_odin
 from .sbml import load_sbml
 from .siminf import load_siminf
 from .summer2 import load_summer2
+from .export import exporters, export
 
-__all__ = ['Source', 'build', 'formats', 'sniff', 'load']
+__all__ = ['Source', 'build', 'formats', 'sniff', 'load', 'exporters', 'export']
 
 formats = dict(
     atomica  = load_atomica,
@@ -30,6 +32,7 @@ formats = dict(
     epimodel = load_epimodel,
     epydemix = load_epydemix,
     flepimop = load_flepimop,
+    memilio  = load_memilio,
     odin     = load_odin,
     sbml     = load_sbml,
     siminf   = load_siminf,
@@ -76,8 +79,8 @@ def sniff(source):
             return 'siminf'
     elif ext in ['.xml', '.sbml'] and '<sbml' in text:
         return 'sbml'
-    elif ext == '.json': # As written by dump_summer2.py, dump_epydemix.py, dump_epimodel.R, or dump_pycamdl.py, or camdlc's JSON form
-        match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|pycamdl)"', text)
+    elif ext == '.json': # As written by dump_summer2.py, dump_epydemix.py, dump_epimodel.R, dump_memilio.py, or dump_pycamdl.py, or camdlc's JSON form
+        match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|memilio|pycamdl)"', text)
         if match:
             return 'camdl' if match.group(1) == 'pycamdl' else match.group(1)
         elif '"ir_version"' in text and '"model"' in text:

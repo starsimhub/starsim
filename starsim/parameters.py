@@ -354,7 +354,10 @@ class SimPars(Pars):
 
     def validate_agents(self):
         """ Check that n_agents is supplied and convert to an integer """
-        if self.people is not None:
+        named = getattr(self.people, 'named', None)
+        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see sim.init_named_people()
+            self.n_agents = int(self.n_agents)
+        elif self.people is not None:
             len_people = len(self.people)
             if (len_people != self.n_agents) and not self.is_default('n_agents'):
                 errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'

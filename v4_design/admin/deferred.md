@@ -31,3 +31,15 @@ Work that has been looked at and set aside for now: worth doing, but not yet. Ea
     - EpiModel lets people recover in the step they are infected, and counts after that, so its prevalence is 3 to 6% lower for the same epidemic; Starsim has no option for that order within a step.
     - An initial number below 1 is read as a fraction of the population, which a model with a fractional count (camdl's test models) cannot say otherwise.
     - Priors and likelihoods are not in the model spec, so `to_code()` lists them for adding by hand.
+    - In a compartmental run, a value that varies in time is taken at the start, middle, and end of each step, not at each substep, so a change within one step (MEmilio's one-day smoothing of a damping) is approximated, and `substeps=` does not help; a smaller `dt` does.
+    - A count over the groups weighted by a parameter that differs between them (MEmilio's test-and-trace load, the sum over age groups of `(1 - mu)/T × INS`) cannot be written; `.n` is an unweighted total, so the importer uses the mean of the parameter.
+    - A parameter of the infectious person's group (MEmilio's `RelativeTransmissionNoSymptoms` and `RiskOfInfectionFromSymptomatic` by age) can be given only as `rel_trans` for all infectious states together; a different one for each infectious state has no declared form.
+- **Exporting a stratification as separate species.** SBML and odin exports sum each stratification into one group (listed as `W1401`). Writing each group as its own species (or an odin array) needs the mixing between groups, `adjust=` by group, and aging and other transfers written out from the engine's groups. It waits for someone who needs a stratified model in another tool.
+- **Hosting the fetched contact matrices as release assets.** `starsim_data` fetches `prem2017.h5` and `mistry2021.h5` from GitHub at commit `56cb6a5` (`data/fetched.json`), each checked by sha256, so they stay reachable only while that commit is in the repository's history; a force-push or rewrite that drops it would break `fetch()` for both. Attaching the two files to a GitHub release and pointing the manifest at its URLs would take a two-line change. Deferred by Cliff (2026-10-16): the commit is on `main`, and nothing rewrites it.
+
+## Won't do
+
+Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.
+
+- **Export to Petri nets.** A Petri net carries only the states and transitions (places and transitions), less than the Mermaid diagram does with its rates, and no importer reads one back to check the round trip. Decided by Cliff (2026-10-16).
+- **Export beyond Mermaid, SBML, and odin.** The model spec (`sim.to_spec()`) and `sim.to_code()` are the complete forms of a model; exporting it to the other frameworks' formats would be lossy for each and needs a writer and a round-trip test per format, for little use. Decided by Cliff (2026-10-16); SBML and odin are kept only where they are little work, since their importers check the round trip.

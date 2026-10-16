@@ -97,14 +97,15 @@ def mathml(el, lambdas=None):
     raise ValueError(f'the MathML element "{t}"')
 
 
-def load_sbml(filename, unit='day', stop=None, solver='ode', verbose=None, **kwargs):
+def load_sbml(filename, unit=None, stop=None, solver='ode', verbose=None, **kwargs):
     """
     Read an SBML model (an XML file) into a sim
 
     Species become states, parameters (global, and those local to a reaction)
     parameters, and reactions transitions, with the kinetic law as the rate in
     total, classified by the rules in 16-interop.md. SBML's time units are rarely
-    given, so the numbers are taken to be in `unit`.
+    given, so the numbers are taken to be in `unit`: by default, the model's
+    `timeUnits` if it is a day, week, month, or year (as Starsim's export writes), else a day.
 
     Args:
         filename (str): the SBML file
@@ -122,6 +123,8 @@ def load_sbml(filename, unit='day', stop=None, solver='ode', verbose=None, **kwa
     if model is None:
         errormsg = f'"{filename}" is not an SBML file: it has no <model>'
         raise ValueError(errormsg)
+    if unit is None:
+        unit = model.get('timeUnits') if model.get('timeUnits') in ['day', 'week', 'month', 'year'] else 'day'
     name = model.get('id') or model.get('name') or sc.path(filename).stem
     if not name.isidentifier():
         name = sc.path(filename).stem
@@ -162,10 +165,11 @@ def load_sbml(filename, unit='day', stop=None, solver='ode', verbose=None, **kwa
         species.append(sid)
 
     # Parameters, and initial assignments that are numbers
+    ruled = {rule.get('variable') for rules in children(model, 'listOfRules') for rule in rules}
     for p in children(child(model, 'listOfParameters'), 'parameter'):
         if p.get('value') is not None:
             src.add_par(p.get('id'), float(p.get('value')), doc=p.get('name'))
-        else:
+        elif p.get('id') not in ruled: # A parameter given by a rule has no value of its own
             src.skip(f'parameter {p.get("id")}', 'has no value')
     for c,size in sizes.items():
         src.add_par(c, size, doc='the size of an SBML compartment')

@@ -185,6 +185,7 @@ def named_args(ref, keys):
 
 geo_keys = ['level', 'year', 'places']
 contacts_keys = ['source', 'layer']
+people_keys = ['year', 'revision']
 
 
 def strat_kwargs(strat):
@@ -198,6 +199,8 @@ def strat_kwargs(strat):
     if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
         levels = ss.geo(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
     out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
+    if strat.get('split_from'): # Taken from the named population again
+        out.pop('split')
     if strat['states'] is not None:
         out['states'] = strat['states']
     if strat.get('where') is not None:
@@ -253,6 +256,11 @@ def from_spec(spec):
         start = None
     kwargs = dict(solver=cfg['solver'], integrator=cfg['integrator'], approx=cfg['approx'], unit=cfg['unit'], start=start, stop=stop,
                   dt=cfg['dt'], total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'], substeps=cfg.get('substeps'), use_aging=cfg.get('use_aging'))
+    if cfg.get('people'): # A named population, looked up again
+        ref = cfg['people']
+        kwargs['people'] = ss.people(ref['place'], **named_args(ref, people_keys))
+        if np.isclose(kwargs['total_pop'], ref['total']):
+            kwargs.pop('total_pop')
     if networks:
         kwargs['networks'] = networks
     sim = ss.Sim(modules, **{k:v for k,v in kwargs.items() if v is not None})
@@ -485,12 +493,14 @@ def contacts_code(net):
 def movable(strat, left):
     """ The arguments to stratify(), with the movement between places written as ss.Mobility() where it is a matrix """
     mob = strat['mobility']
-    plain = {k:v for k,v in strat.items() if k != 'geo'}
+    plain = {k:v for k,v in strat.items() if k not in ['geo', 'split_from']}
     out = strat_kwargs({**plain, 'mobility':None})
     if strat.get('geo'): # A named geography as the call that looks it up, with its own split
         ref = strat['geo']
         out[strat['name']] = Code(f"ss.geo({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
         out.pop('split')
+    if strat.get('split_from'):
+        out.pop('split', None)
     if mob is None:
         return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
@@ -576,6 +586,11 @@ def to_code(spec, filename=None, header=None, footer=None, code=None):
     else:
         kwargs.update(start=start, stop=stop)
     kwargs.update(dt=cfg['dt'] if cfg['dt'] != 1 else None, total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'] if cfg['rand_seed'] != 1 else None, substeps=cfg.get('substeps'), use_aging=cfg.get('use_aging'))
+    if cfg.get('people'): # A named population as the call that looks it up
+        ref = cfg['people']
+        kwargs['people'] = Code(f"ss.people({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, people_keys).items())})")
+        if np.isclose(kwargs['total_pop'], ref['total']):
+            kwargs['total_pop'] = None
     kwargs.update({k:Code(v) for k,v in extra.items()})
     for key in ['total_pop', 'n_agents', 'dt']:
         if sc.isnumber(kwargs[key]) and float(kwargs[key]).is_integer():

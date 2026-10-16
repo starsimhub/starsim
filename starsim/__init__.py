@@ -81,7 +81,7 @@ t('parameters')
 from .parameters import Pars, SimPars, Requires
 
 t('people')
-from .people import People, Person
+from .people import People, Person, people
 
 t('modules')
 from .modules import (

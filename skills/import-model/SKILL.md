@@ -43,7 +43,7 @@ A model is imported in two passes. The mechanical pass (`ss.load(..., format=...
 | EpiModel | `format='epimodel'` (a JSON dump from `dump_epimodel.R`; built-in models and networks, custom modules listed with their R source) | `references/epimodel.md` |
 | epydemix | `format='epydemix'` (a JSON dump from `dump_epydemix.py`, or a live model) | `references/epydemix.md` |
 | LASER, laser-measles | by hand | `references/laser.md` |
-| MEmilio | by hand | `references/memilio.md` |
+| MEmilio | `format='memilio'` (a JSON dump from `dump_memilio.py`; the ODE models `osir`, `oseir`, `oseirdb`, and `osecir`); the other models (`osecirvvs`, IDE, LCT, SDE, agent-based) by hand | `references/memilio.md` |
 | camdl | `format='camdl'` (a `.camdl` file, camdlc's JSON, or a pycamdl model) | `references/camdl.md` |
 | Starsim v3 | runs unchanged; declared transitions by hand | `references/starsim3.md` |
 

@@ -685,18 +685,30 @@ def load(filename, format=None, **kwargs):
     return sc.loadany(filename, **kwargs)
 
 
-def save(filename, obj, **kwargs):
+def save(filename, obj, format=None, **kwargs):
     """
-    Alias to Sciris `sc.save()`
+    Alias to Sciris `sc.save()`, which also writes a sim in another framework's format
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
 
+    With `format`, a sim is exported instead (see `ss.interop.export()`), and what
+    the format cannot carry is listed as `W1401 LossyExport`.
+
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to `sc.save()`
+        format (str): the format to export a sim to: 'mermaid', 'sbml', or 'odin'
+        kwargs (dict): passed to `sc.save()`, or to `ss.interop.export()`
+
+    **Examples**:
+
+        ss.save('sir.xml', sim, format='sbml')
+        ss.save('sir.md', sim, format='mermaid')
     """
+    if format is not None:
+        ss.interop.export(obj, format, filename=filename, **kwargs)
+        return sc.path(filename)
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 
