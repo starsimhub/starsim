@@ -475,7 +475,7 @@ class Delivery(Intervention):
         interval (dur): deliver in rounds this far apart, between `start` and `stop`
         where (Cond/func): who can receive it: a condition (e.g. `ss.People.age < 5`), or a function of the sim
         coverage (float): the fraction of eligible people reached; also `ss.by(...)`, or a function of the sim returning a probability per person
-        capacity (float): the number that can be delivered: a number per round (or per step, for delivery on events or by a function), or a rate (e.g. `ss.peryear(50_000)`), which routine delivery needs
+        capacity (float): the number that can be delivered: a number per round (or per step, for delivery on events or by a function), or a rate (e.g. `ss.peryear(50_000)`), which routine delivery needs; a rate in rounds gives what accrues between them
         on (Transition/func): deliver to the people something has just happened to: a transition (e.g. `on=sir.infection`), or a function of the sim returning them; for the people in a state, use `where=` (e.g. `where=sir.I, interval=1`)
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that `on=`
             selects (or that a test sends to this follow-up), instead of to them; `where=` and `coverage=` then apply to the
@@ -754,6 +754,10 @@ class Delivery(Intervention):
                 every = max(1, int(round(self.convert(self.interval)/self.dt_sim)))
                 tis += list(range(self.ti_start, min(self.ti_stop, npts), every))
             self.round_tis = set(tis)
+            tis = sorted(self.round_tis)
+            gaps = np.diff(tis)
+            gaps = np.append(gaps[:1], gaps) if len(gaps) else [1] # The first round covers as long as the next gap
+            self.round_span = {ti:gap*self.dt_sim for ti,gap in zip(tis, gaps)} # The time each round stands for, which a capacity per unit time is scaled by
         if getattr(self.product, 'cure', None) is not None:
             self.cure_tr, self.cure_dst, self.cure_srcs = self.product.recovery(self.dis)
         if self.move_states is not None:
@@ -1148,8 +1152,8 @@ class Delivery(Intervention):
         """ Cap the number chosen at the capacity, choosing at random; those not reached have not been offered it """
         selector = self.selector
         cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
-        if isinstance(cap, ss.TimePar): # A rate: per unit time; otherwise a number per round, or per step
-            cap = self.convert(cap)*self.dt_sim
+        if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
+            cap = self.convert(cap)*(self.round_span.get(self.sim.ti, self.dt_sim) if self.in_rounds else self.dt_sim)
         n = self.count(chosen)
         if selector.abm:
             cap = cap/self.sim.current_scale + self.carry # In agents
