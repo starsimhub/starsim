@@ -84,7 +84,42 @@ def test_priority():
     return sims
 
 
+def make_sis(name='sis', beta=0.25):
+    S, I = ss.states(2)
+    return ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ ss.days(20), cure=I >> S, init_prev=0.01, name=name)
+
+
+def test_queue():
+    sc.heading('Testing queues: dropped, waiting up to a limit, and leaving when no longer eligible')
+    def make(queue=None, **kwargs):
+        sis = make_sis()
+        clinic = ss.treat(ss.Treatment(moves=sis.cure), on=sis.infection, where=sis.I, capacity=ss.perday(20), queue=queue)
+        return ss.Sim(sis, interventions=clinic, **kwargs)
+    out = sc.objdict()
+    for label,queue in dict(none=None, days=ss.days(5), true=True).items():
+        sims = run_both(make, stop=150, queue=queue)
+        for solver,sim in sims.items():
+            r = sim.results.clinic
+            n = sc.objdict({k:r[k].sum() for k in ['eligible', 'delivered', 'dropped'] + (['left'] if queue is not None else [])})
+            print(f'{queue} {solver}: {n}, waiting at the end {r.waiting[-2] if queue is not None else 0:.0f}')
+            assert np.all(r.delivered <= 20*1.0001) and r.delivered.max() > 19.9
+            if queue is None:
+                assert np.isclose(n.eligible, n.delivered + n.dropped)
+            else:
+                assert np.isclose(n.eligible, n.delivered + n.dropped + n.left + r.waiting[-2], rtol=1e-6) # Everyone who arrived is accounted for
+                assert n.left > 0 and r.waiting.max() > 0
+                assert r.wait.max() <= (5 if queue is not True else 150)
+                if label == 'days':
+                    assert np.allclose(r.wait[20:100], 5) # First come, first served: the oldest, who have waited the longest allowed
+            out[f'{label}_{solver}'] = n
+        check_close(sims, lambda sim: sim.results.clinic.dropped.sum() + 1, rtol=0.1)
+    for solver in ['ode', 'abm']:
+        assert out[f'true_{solver}'].dropped == 0 and out[f'days_{solver}'].dropped < 0.8*out[f'none_{solver}'].dropped
+    return out
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
     priority = test_priority()
+    queue = test_queue()

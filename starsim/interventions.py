@@ -452,7 +452,7 @@ class BaseVaccination(Intervention):
 
 #%% Deliveries for declared models: who gets a product, when, and how many
 
-delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'priority']
+delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'priority', 'queue']
 
 
 class desc:
@@ -547,6 +547,9 @@ class Delivery(Intervention):
             expression (`hiv.cd4`), highest first with `ss.desc(...)`, tiers (a list of conditions: all of the first, then the
             second), or a function of the sim (or of `(sim, uids)`) returning a key; ties are broken at random. A number is the
             delivery's place among those sharing an `ss.Capacity` (lowest first)
+        queue (bool/dur): what happens to people over capacity: None or False, they are dropped (the result `dropped`); True, they
+            wait until served; a duration, they wait at most that long. They are served by priority, then longest waiting first,
+            and leave the queue if they stop being eligible (`left`). In a compartmental run, the levels of `waiting_<delivery>`
         on_positive (Delivery/func/list): for a test: what happens to people who test positive: another delivery, a function of `(sim, uids)`, or a list of them
         on_negative (Delivery/func/list): likewise for people who test negative
         disease (str): the disease the product acts on (default: the only one; for a treatment that names its transitions, the disease of the first)
@@ -563,10 +566,11 @@ class Delivery(Intervention):
     """
     compartmental = True
     kind = None # The kind of product this delivers
+    max_levels = 50 # In a compartmental run, the most levels of a staged dimension (time waiting) before the last is kept for those who have waited longer
     product_keys = [] # The keywords of the product, with which the delivery makes its own
 
     def __init__(self, product=None, move=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
+                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, queue=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
@@ -631,6 +635,7 @@ class Delivery(Intervention):
         self.deliver = deliver
         self.trace = trace
         self.priority = priority
+        self.queue = None if queue is False else queue
         self.on_positive = on_positive
         self.on_negative = on_negative
         if isinstance(disease, (list, tuple)):
@@ -641,6 +646,8 @@ class Delivery(Intervention):
         self.started = False # For routine delivery by age: whether the people already past the age have been left out (see skip_past())
         self.carry = 0.0 # The part of the capacity not yet used, when it is less than one agent per step
         self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.BoolArr('result', label='Test result'))
+        if self.queue is not None:
+            self.define_states(ss.FloatArr('ti_queued', label='Time joined the queue'))
         self.rng_cov = ss.random()
         self.rng_cap = ss.random()
         self.rng_test = ss.random()
@@ -728,7 +735,7 @@ class Delivery(Intervention):
         """ Whether, in this sim, the delivery needs levels that people move up step by step: the time since a product whose protection fades was delivered, or since a test whose result is delayed """
         if sim.solver in [None, 'abm']:
             return False
-        return (self.holds and self.product.staged) or self.waits
+        return (self.holds and self.product.staged) or self.waits or self.queue is not None
 
     def result_steps(self, sim):
         """ The number of steps from a test to its result, as agents wait (see `test()`) """
@@ -747,12 +754,20 @@ class Delivery(Intervention):
             m = self.result_steps(sim)
             levels = ['none'] + [f'positive {j+1}' for j in range(m)] + [f'negative {j+1}' for j in range(m)]
             out.append(Strat(self.pending, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
+        if staged and self.queue is not None:
+            out.append(self.stage_dim(self.waiting, self.wait_levels(sim)[0], 'waited'))
         for dim,level in (self.move or {}).items():
             if isinstance(level, bool):
                 out.append(Strat(dim, [False, True], split=[1.0, 0.0]))
         if self.remembers:
             out.append(Strat(self.offered, [False, True], split=[1.0, 0.0]))
         return out
+
+    @staticmethod
+    def stage_dim(name, n, label):
+        """ A staged dimension: level 0, then levels 1..n that people move up one step at a time; everyone starts at 0 """
+        levels = ['none'] + [f'{label} {j}' for j in range(1, n + 1)]
+        return ss.transitions.Strat(name, levels, split=[1.0] + [0.0]*n)
 
     def dim_moves(self):
         """ Movement along those properties that happens by itself: losing the protection of a product """
@@ -882,6 +897,14 @@ class Delivery(Intervention):
             results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', summarize_by='sum')]
         if isinstance(self.product, ss.Test):
             results += [ss.Result('diagnosed', dtype=float, scale=abm, label='Number diagnosed', summarize_by='sum')]
+        if self.capacity is not None or self.queue is not None:
+            results += [ss.Result('dropped', dtype=float, scale=abm, label='Number over capacity, not served', summarize_by='sum')]
+        if self.queue is not None:
+            results += [
+                ss.Result('waiting', dtype=float, scale=abm, label='Number waiting'),
+                ss.Result('wait', dtype=float, scale=False, label='Mean time waited, of those served', auto_plot=False),
+                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue', summarize_by='sum', auto_plot=False),
+            ]
         self.by_edge = dict() # For a treatment that moves people along several transitions: the results for each, as {key: {(disease, transition): result}}
         if self.edges:
             labels = dict(cured='Number cured', failed='Number treated who were not cured', overtreated='Number treated who had nothing to cure')
@@ -1038,6 +1061,8 @@ class Delivery(Intervention):
             self.step_stages()
         self.step_results()
         if self.triggered or not self.due():
+            if self.queue is not None and getattr(self, '_ti_served', None) != self.sim.ti: # Those waiting are served even if nobody new arrives
+                self.receive(self.selector.nobody())
             return
         if self.routine and self.by_age and not self.started:
             self.skip_past()
@@ -1152,9 +1177,8 @@ class Delivery(Intervention):
         else:
             chosen = sel*np.clip(cov, 0, 1)
 
-        # Capacity
-        if self.capacity is not None:
-            sel, chosen = self.cap(sel, chosen)
+        # Capacity, and the queue
+        sel, chosen = self.serve(sel, chosen)
         if self.remembers:
             chosen = self.mark_offered(sel, chosen)
         self.give(chosen, capped=True)
@@ -1168,7 +1192,19 @@ class Delivery(Intervention):
             uids = self.uids(sel)
             contacts = [net.find_contacts(uids) for net in self.trace_nets]
             sel = selector.to_selection(ss.uids(np.unique(np.concatenate(contacts))))
-        sel = sel*(selector.select(self.eligible) if self.eligible is not None else self.default_eligible())
+        sel = sel*self.eligible_now()
+        if self.remembers:
+            sel = sel*(selector.dim(self.offered) == 0)
+        if self.waits: # Not to people still waiting for the result of an earlier test
+            sel = sel & np.isnan(self.ti_result.raw) if abm else sel*(selector.dim(self.pending) == 0)
+        if self.queue is not None: # Not those already waiting
+            sel = sel*(np.isnan(self.ti_queued.raw[:len(sel)]) if abm else (selector.dim(self.waiting) == 0))
+        return sel
+
+    def eligible_now(self):
+        """ Who can receive it now: eligible, in the state a move is from, not holding it already, and not at the level a transfer moves them to """
+        selector = self.selector
+        sel = selector.select(self.eligible) if self.eligible is not None else self.default_eligible()
         if self.move_states is not None: # Only the people in the state they move from
             sel = sel*selector.in_states([self.move_states[0]])
         if self.holds: # Not to people who already hold it
@@ -1177,11 +1213,7 @@ class Delivery(Intervention):
             sel = sel*(selector.dim(self.sim.groups.strats[d].name) != level)
         for d,level in self.sources.items():
             sel = sel*(selector.dim(self.sim.groups.strats[d].name) == level)
-        if self.remembers:
-            sel = sel*(selector.dim(self.offered) == 0)
-        if self.waits: # Not to people still waiting for the result of an earlier test
-            sel = sel & np.isnan(self.ti_result.raw) if abm else sel*(selector.dim(self.pending) == 0)
-        if abm:
+        if selector.abm:
             sel = sel & selector.to_selection(self.sim.people.auids)
         return sel
 
@@ -1202,7 +1234,7 @@ class Delivery(Intervention):
         scheduled = self.routine or (self.in_rounds and not self.triggered)
         static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
         past = self.routine and self.by_age # The people past the age are left out on the first step: see skip_past()
-        return moves and scheduled and static and self.capacity is None and self.when is None and not self.followups and not past
+        return moves and scheduled and static and self.capacity is None and self.queue is None and self.when is None and not self.followups and not past
 
     def shifts(self):
         """
@@ -1285,17 +1317,162 @@ class Delivery(Intervention):
         """ The time this delivery stands for now: the step, or the round """
         return self.round_span.get(self.sim.ti, self.dt_sim) if self.in_rounds else self.dt_sim
 
-    def cap(self, sel, chosen):
-        """ Cap the number chosen at the capacity, in the order of `priority=`; those not reached have not been offered it """
-        cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
-        if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
-            cap = self.convert(cap)*self.span
-        served = self.take(chosen, cap, carry=True)
-        if self.selector.abm:
-            return sel & ~(chosen & ~served), served
-        return sel - (chosen - served), served
+    def serve(self, sel, chosen):
+        """ Who is served now, of those chosen (and those waiting, with `queue=`), within what is left of the capacity; returns those offered and those served """
+        self._ti_served = self.sim.ti
+        if self.queue is not None:
+            return self.serve_queue(sel, chosen)
+        if self.capacity is None:
+            return sel, chosen
+        served = self.take(chosen, self.limit(), carry=True)
+        self.use(served)
+        dropped = chosen & ~served if self.selector.abm else chosen - served
+        self.tally('dropped', dropped)
+        return (sel & ~dropped if self.selector.abm else sel - dropped), served
 
-    def take(self, cands, n, carry=False):
+    def limit(self):
+        """ The most people that can be served now: what is left of the capacity this step """
+        if self.capacity is None:
+            return np.inf
+        cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
+        if isinstance(cap, ss.TimePar) or not self.in_rounds: # A rate: per unit time, over the step or the round
+            cap = self.convert(cap)*self.span
+        used = self._used[1] if getattr(self, '_used', (None,))[0] == self.sim.ti else 0.0
+        return max(cap - used, 0.0)
+
+    def use(self, served):
+        """ Record the people served, against the capacity of the step """
+        ti = self.sim.ti
+        used = self._used[1] if getattr(self, '_used', (None,))[0] == ti else 0.0
+        n = self.n_agents(served)*self.sim._current_scale if self.selector.abm else self.count(served)
+        self._used = (ti, used + n)
+        return n
+
+    #%% Queues: people over capacity wait, up to queue= (agents: ti_queued; compartments: levels of waiting_<delivery>)
+
+    @property
+    def waiting(self):
+        return f'waiting_{self.name}'
+
+    def max_wait(self, sim):
+        """ The most steps anyone waits (inf for queue=True); in a compartmental run, the levels of waiting, and whether the last is kept """
+        dt = sim.pars.dt.to(sim.unit_base).value
+        if self.queue is True:
+            return np.inf
+        return max(1, int(round(ss.solvers.convert(self.queue, sim.unit_base)/dt)))
+
+    def wait_levels(self, sim):
+        """ In a compartmental run: the levels of waiting_<delivery>, one per step waited, and whether the last is absorbing (queue=True) """
+        K = self.max_wait(sim)
+        absorbing = not np.isfinite(K)
+        if absorbing:
+            K = self.max_levels
+            ss.note(f'the queue of "{self.name}" has no limit, so in a compartmental run it is kept as {K} levels of one step each, the last for those who have waited longer (first come, first served only within {K} steps)', sim=sim)
+        return K, absorbing
+
+    def serve_queue(self, sel, chosen):
+        """ Serve those waiting and those just chosen, by priority and then by how long they have waited; the rest wait, until queue= """
+        if not self.selector.abm:
+            return self.serve_queue_groups(sel, chosen)
+        selector = self.selector
+        sim = self.sim
+        ti = sim.ti
+        q = self.ti_queued.raw
+        alive = selector.to_selection(sim.people.auids)
+        waiting = ~np.isnan(q[:len(alive)])
+        left = waiting & ~(self.eligible_now() & alive) # Cured, aged out, or died
+        q[np.flatnonzero(left)] = np.nan
+        self.add('left', ss.uids(np.flatnonzero(left & alive)))
+        if (n_dead := np.count_nonzero(left & ~alive)):
+            self.results.left[ti] += n_dead*ss.results.people_scale(sim)
+        waiting &= ~left
+        cands = chosen | waiting
+        wait = np.where(waiting, ti - q[:len(alive)], 0.0)
+        served = self.take(cands, self.limit(), carry=True, wait=wait)
+        self.use(served)
+        unserved = cands & ~served
+        q[np.flatnonzero(unserved & ~waiting)] = ti # Joining the queue
+        dropped = unserved & waiting & (wait >= self.max_wait(sim))
+        q[np.flatnonzero(dropped)] = np.nan
+        self.tally('dropped', dropped)
+        was = served & waiting
+        q[np.flatnonzero(was)] = np.nan
+        n = np.count_nonzero(served)
+        self.results.wait[ti] = wait[was].sum()/n*self.dt_sim if n else 0.0
+        self.results.waiting[ti] = np.count_nonzero(~np.isnan(q[sim.people.auids]))*ss.results.people_scale(sim)
+        return sel, served
+
+    def serve_queue_groups(self, sel, chosen):
+        """
+        In a compartmental run: those waiting are at levels of waiting_<delivery> (the steps they have waited), crossed with
+        everything else, so they keep progressing. Those no longer eligible go back to level 0 (left); the rest are served
+        with the people just chosen, by priority and then from the highest level down; the unserved move up a level, and
+        those past the last are dropped
+        """
+        selector = self.selector
+        sim = self.sim
+        ti = sim.ti
+        d = sim.groups.dim_index(self.waiting)
+        K, absorbing = self.wait_levels(sim)
+        lev = np.broadcast_to(selector.dim(self.waiting), selector.shape)
+        N = self.eng.state_counts()
+        A = chosen*N*(lev == 0) # Just chosen
+        offer = sel*N*(lev == 0)
+        W = N*(lev > 0)
+        left = W*(1 - self.eligible_now())
+        if left.sum():
+            self.relocate(left, {d:0})
+            self.add('left', groups=left.sum(axis=0))
+        W = W - left
+        cands = A + W
+        n = self.limit()
+        key = self.key()
+        served = cands if cands.sum() <= n else water_fill(cands, n, ([key] if key is not None else []) + [-lev])
+        self.use_amount(served.sum())
+        A_srv, W_srv = served*(lev == 0), served*(lev > 0)
+        S = A_srv
+        dropped = 0.0
+        for w in range(K, 0, -1): # From the top down, so nobody moves twice
+            at = lev == w
+            srv, uns = W_srv*at, (W - W_srv)*at
+            if srv.sum():
+                S = S + self.relocate(srv, {d:0})
+            if uns.sum():
+                if w < K:
+                    self.relocate(uns, {d:w + 1})
+                elif not absorbing:
+                    self.relocate(uns, {d:0})
+                    dropped = dropped + uns
+        A_uns = A - A_srv
+        if A_uns.sum():
+            offer = offer - A_uns + self.relocate(A_uns, {d:1}) # Joining the queue: offered, and waiting
+        if np.sum(dropped):
+            self.add('dropped', groups=np.sum(dropped, axis=0))
+        n = served.sum()
+        self.results.wait[ti] = (W_srv*lev).sum()/n*self.dt_sim if n else 0.0
+        after = self.eng.state_counts()
+        lev = np.broadcast_to(selector.dim(self.waiting), selector.shape)
+        self.results.waiting[ti] = (after*(lev > 0)).sum()
+        frac = lambda x: np.clip(np.divide(x, after, out=np.zeros_like(after), where=after>0), 0, 1)
+        return frac(offer), frac(S)
+
+    def use_amount(self, n):
+        ti = self.sim.ti
+        used = self._used[1] if getattr(self, '_used', (None,))[0] == ti else 0.0
+        self._used = (ti, used + n)
+        return
+
+    def relocate(self, amount, changes):
+        """ In a compartmental run: move some people (by state and group) to other levels; returns where they are now """
+        eng = self.eng
+        N = eng.state_counts()
+        target = eng.targets(changes)
+        self.shift(np.clip(np.divide(amount, N, out=np.zeros_like(N), where=N>0), 0, 1), changes)
+        out = np.zeros_like(N)
+        np.add.at(out, (slice(None), target), amount)
+        return out
+
+    def take(self, cands, n, carry=False, wait=None):
         """
         Choose `n` people (a number of people, not agents) from the candidates, in the order of `priority=`: as agents,
         sorted by the key with ties broken at random; as compartments, whole cells in key order and pro rata within a tie
@@ -1304,6 +1481,7 @@ class Delivery(Intervention):
             cands (array): the candidates, as a selection
             n (float): the number of people
             carry (bool): as agents, keep the part of an agent left over for the next step (for a capacity)
+            wait (array): as agents, the steps each has waited: longest first, after the priority
         """
         selector = self.selector
         if not selector.abm:
@@ -1328,7 +1506,8 @@ class Delivery(Intervention):
             return cands
         key = self.key()
         rand = self.tiebreak(uids)
-        order = np.argsort(rand, kind='stable') if key is None else np.lexsort((rand, key[uids]))
+        keys = [rand] + ([] if wait is None else [-wait[uids]]) + ([] if key is None else [key[uids]])
+        order = np.lexsort(keys)
         out = selector.nobody()
         out[uids[order[:k]]] = True
         return out
@@ -1403,8 +1582,8 @@ class Delivery(Intervention):
         product = self.product
         res = self.results
         ti = self.sim.ti
-        if self.capacity is not None and not capped:
-            chosen = self.cap(chosen.copy(), chosen)[1]
+        if (self.capacity is not None or self.queue is not None) and not capped:
+            chosen = self.serve(chosen.copy(), chosen)[1]
         n = self.tally('delivered', chosen)
         if 'cost' in res:
             self.tally('cost', chosen, product.cost)
