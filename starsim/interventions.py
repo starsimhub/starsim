@@ -3,7 +3,6 @@ Define interventions, which are used to modify the state of the sim during run.
 
 Interventions typically include things like testing, treatment, and vaccination.
 """
-import inspect
 import starsim as ss
 import sciris as sc
 import numpy as np
@@ -687,7 +686,7 @@ class Delivery(Intervention):
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
         for key,attr in [('where', 'eligible'), ('coverage', 'coverage'), ('on', 'on'), ('deliver', 'deliver')]:
             func = getattr(self, attr)
-            if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist)) and len(inspect.signature(func).parameters) >= 2:
+            if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist)) and ss.utils.n_args(func) >= 2:
                 out.append(f'{key}= of "{self.name}" takes uids')
         return out
 

@@ -7,7 +7,6 @@ is lazy: an expression that is evaluated each time it is needed during a run, on
 agents in an agent-based run and on groups in a compartmental one. A function of
 the sim does the same job, for anything the operators cannot say.
 """
-import inspect
 import operator
 import numpy as np
 import sciris as sc
@@ -423,7 +422,7 @@ class Selector:
         if cond is None:
             return self.everyone()
         if callable(cond) and not isinstance(cond, Cond):
-            nargs = len(inspect.signature(cond).parameters)
+            nargs = ss.utils.n_args(cond)
             if nargs >= 2:
                 if not self.abm:
                     raise ss.CapabilityError(f'the function "{getattr(cond, "__name__", "function")}" cannot run with solver="{sim.solver}".\n'

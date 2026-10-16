@@ -1303,6 +1303,16 @@ def test_functions():
     assert sim2.solver == 'abm' and 'clearance' in sim2.solver_reason
     assert 'no (takes uids)' in sim2.solvers(output=True)
 
+    # Arguments with defaults do not count: this is a function of the sim
+    def recover(sim, factor=2):
+        return 0.1*factor
+    d3 = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', rate=recover), init_prev=0.01, name='d3')
+    sim4 = ss.Sim(d3, stop=100, unit='day', **kw).run()
+    assert sim4.solver == 'ode'
+    eligible = lambda sim, years=5: sim.diseases.d3.I # Likewise for a condition
+    sim5 = ss.Sim(d3.copy(), interventions=ss.treat(ss.Treatment(cure=1.0), where=eligible, coverage=0.5, name='tx'), stop=20, unit='day', n_agents=1000, **kw).run()
+    assert sim5.results.tx.delivered.sum() > 0
+
     # A sexual network, with a transmission probability for each direction
     hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.08, 0.04])), init_prev=0.05, name='hiv')
     sim3 = ss.Sim(hiv, networks=ss.MFNet(), start=2000, stop=2020, **kw).run()

@@ -245,6 +245,13 @@ def getframe(depth=1):
         return None
 
 
+def n_args(func):
+    """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
+    import inspect
+    kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
+    return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
+
+
 def short_hash(obj, n=6):
     """ A short hash of a JSON-compatible object, e.g. for telling model specs apart """
     string = json.dumps(sc.jsonify(obj), sort_keys=True)

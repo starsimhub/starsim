@@ -2,7 +2,6 @@
 The base of the engines that run a declared model (`Engine`), and what they share
 """
 import zlib
-import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -633,7 +632,7 @@ class Engine:
         """ The number of arguments a user function takes, worked out once for each function """
         known = self.arities.get(id(func))
         if known is None or known[0] is not func:
-            known = self.arities[id(func)] = (func, len(inspect.signature(func).parameters))
+            known = self.arities[id(func)] = (func, ss.utils.n_args(func))
         return known[1]
 
     def call(self, func, p=None):

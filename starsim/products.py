@@ -1,7 +1,6 @@
 """
 Define products
 """
-import inspect
 import starsim as ss
 import sciris as sc
 import numpy as np
@@ -560,7 +559,7 @@ class Test(Product):
     def agent_reasons(self):
         out = []
         detects = self.detects
-        if callable(detects) and not isinstance(detects, ss.conditions.Cond) and len(inspect.signature(detects).parameters) >= 2:
+        if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.n_args(detects) >= 2:
             out.append(f'what the test "{self.name}" detects is a function of uids')
         return out
 

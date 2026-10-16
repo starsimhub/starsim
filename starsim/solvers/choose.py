@@ -1,7 +1,6 @@
 """
 Choosing the solver: which engine runs a declared model, and why (`choose_solver()`)
 """
-import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -353,7 +352,7 @@ def init_capabilities(sim, modules):
             raw = p.raw
             if callable(raw) and not isinstance(raw, ss.Dist):
                 name = getattr(raw, '__name__', 'function')
-                if len(inspect.signature(raw).parameters) >= 2:
+                if ss.utils.n_args(raw) >= 2:
                     add(f'function: {name}', 'no', 'takes uids', auto=f'the function "{name}" takes uids')
                 elif not isinstance(raw, timed):
                     add(f'function: {name}', '?', 'tried on groups', probe=(mod.name, i))

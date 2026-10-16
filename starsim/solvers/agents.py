@@ -1,7 +1,6 @@
 """
 The agent engine: a declared model run as agents (`abm`)
 """
-import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -1448,7 +1447,7 @@ class Agents(Engine):
             spread = any(id(leaf) in self.spread for leaf in tr.rate.leaves if isinstance(leaf, ss.par)) # As does a distribution across people
             mods = [m for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal for m in self.sim.modifiers.get((self.mod.name, 'par', leaf.name), [])]
             per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.transitions.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
-            self.by_groups[tr.name] = not spread and not per_agent and not any(len(inspect.signature(func).parameters) >= 2 for func in funcs) # A function of the agents can give each a rate of their own
+            self.by_groups[tr.name] = not spread and not per_agent and not any(ss.utils.n_args(func) >= 2 for func in funcs) # A function of the agents can give each a rate of their own
         return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0
 
     def infect_groups(self, tr, src):
