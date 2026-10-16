@@ -223,10 +223,11 @@ def test_result_exprs():
     S, I, R = ss.states(3)
     plain = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), n_ir=I + R, init=dict(I=0.01), name='sir')
     for solver in ['ode', 'abm']:
-        for sir in [SIR(init=dict(I=0.01), name='sir'), plain]:
+        for sir in [SIR(n_kw=SIR.I + SIR.R, init=dict(I=0.01), name='sir'), plain]: # A result passed to an instance can use the class's states
             res = ss.Sim(sir, unit='day', stop=30, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
             if 'prev' in res:
                 assert np.allclose(res.prev, res.n_I/(res.n_S + res.n_I + res.n_R)) and np.allclose(res.n_ever, res.n_I + res.n_R)
+                assert np.allclose(res.n_kw, res.n_ever) # Scaled, as the instance's states are
             else:
                 assert np.allclose(res.n_ir, res.n_I + res.n_R)
     return res

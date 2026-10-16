@@ -316,6 +316,24 @@ class Clock(Expr):
         return f'{inner}.{self.kind}'
 
 
+def rebind(expr, memo):
+    """ The expression with the states and transitions it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; parameters are kept, not copied """
+    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition)):
+        return memo.get(id(expr), expr)
+    if not isinstance(expr, (BinOp, Func, Count, Flow, Clock)):
+        return expr
+    new = sc.cp(expr)
+    if isinstance(expr, BinOp):
+        new.a, new.b = rebind(expr.a, memo), rebind(expr.b, memo)
+    elif isinstance(expr, Func):
+        new.args = [rebind(arg, memo) for arg in expr.args]
+    elif isinstance(expr, Flow):
+        new.tr = rebind(expr.tr, memo)
+    else:
+        new.states = [s if isinstance(s, tuple) else rebind(s, memo) for s in expr.states]
+    return new
+
+
 def clocks_in(obj, out=None, seen=None):
     """ The clocks an expression, a condition, or a list or dict of them reads """
     out = [] if out is None else out

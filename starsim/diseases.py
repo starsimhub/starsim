@@ -178,7 +178,9 @@ class Disease(ss.Module):
         first = kwargs.pop('first') if isinstance(kwargs.get('first'), str) else None # A state named "first" can still be declared by keyword
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        members = sc.dcp(members) # Copy class members (together, so they still refer to each other) so instances do not share them
+        memo = {}
+        members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them
+        kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
         members = sc.mergedicts(members, kwargs)
