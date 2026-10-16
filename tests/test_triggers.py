@@ -247,6 +247,36 @@ def test_ct_by_sex():
     return sims
 
 
+@sc.timer()
+def test_with_conveyor(solvers=('abm',)):
+    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), and a clock in a crossing made by a trigger')
+    size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+    for solver in solvers: # Those who stay at the end of a fixed dwell are not in the flow
+        LL, T, Sp = ss.states('LL T Sp')
+        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, init=dict(LL=10_000), name='syph') # Everyone (1 or more is people)
+        res = ss.Sim(d, solver=solver, start=2000, stop=2004, unit='year', **size(solver), **kw).run().results.syph
+        assert res.n_T[1] == 0 and np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T}'
+        assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.n_T[-1]} in T'
+    if 'ode' not in solvers:
+        return
+
+    def make(clock):
+        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
+        E, I, Z = ss.states('E I Z')
+        latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
+        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), init=dict(E=10_000), name='b')] # The trigger tracks a and b jointly
+    for clock in [False, True]:
+        out = [ss.Sim(make(clock), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
+        for key in ['n_I', 'n_Z']:
+            assert np.allclose(out[0][key], out[1][key], atol=300), f'clock={clock}, {key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
+    return
+
+
+@pytest.mark.xfail(reason='Phase B, tasks B1 and B2: the conveyor with ss.stay, clocks and triggers as compartments', strict=True)
+def test_with_conveyor_ode():
+    return test_with_conveyor(solvers=('abm', 'ode'))
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
@@ -255,3 +285,4 @@ if __name__ == '__main__':
     test_hpv_cancel()
     test_syphilis_stay()
     test_ct_by_sex()
+    test_with_conveyor()
