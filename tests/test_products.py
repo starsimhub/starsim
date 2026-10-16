@@ -18,13 +18,14 @@ def make_geno(name, beta=1.2):
 
 
 def make_hpv(name, beta=1.5):
-    """ A genotype with a lesion: S -> I -> CIN, cleared to S, and excised (undriven) back to I """
-    S, I, CIN = ss.states('S I CIN')
+    """ A genotype with a lesion and cancer: S -> I -> CIN -> CA, cleared to S, and excised (undriven) back to I """
+    S, I, CIN, CA = ss.states('S I CIN CA')
     return ss.Disease(
         infection = ss.transmission('S -> I', beta=ss.peryear(beta), source=I + CIN),
         clearance = I >> S @ ss.years(1),
         dysplasia = I >> CIN @ ss.years(2),
         regress   = CIN >> S @ ss.years(3),
+        invasion  = CIN >> CA @ ss.years(5),
         excised   = CIN >> I,
         init_prev=0.1, name=name,
     )
@@ -69,7 +70,7 @@ def test_vaccine_diseases():
 
 def test_test_diseases():
     sc.heading('Testing a test keyed by states of several diseases: independent detection, or the highest sensitivity')
-    s16, s18 = [0, 0.6, 0.9], [0, 0.5, 0.8] # By S, I, CIN
+    s16, s18 = [0, 0.6, 0.9, 0], [0, 0.5, 0.8, 0] # By S, I, CIN, CA
     seen = sc.objdict()
     def make(combine='worst', **kwargs):
         g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
@@ -77,7 +78,7 @@ def test_test_diseases():
         def look(sim): # As agents: the expected positives, from each agent's states when tested
             if sim.solver == 'abm':
                 d, u = sim.diseases, sim.people.auids
-                p16, p18 = [np.select([d[g].I.raw[u], d[g].CIN.raw[u]], s[1:], 0) for g,s in [('hpv16', s16), ('hpv18', s18)]]
+                p16, p18 = [np.select([d[g].I.raw[u], d[g].CIN.raw[u]], s[1:3], 0) for g,s in [('hpv16', s16), ('hpv18', s18)]]
                 pos = 1 - (1 - p16)*(1 - p18) if combine == 'worst' else np.maximum(p16, p18)
                 seen[combine] = np.where((p16 == 0) & (p18 == 0), 0.05, pos).sum()
             return True
@@ -89,12 +90,12 @@ def test_test_diseases():
             return seen[combine]
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
-        n = {g:np.array([r[g][f'n_{x}'][k] for x in ['S', 'I', 'CIN']]) for g in ['hpv16', 'hpv18']}
+        n = {g:np.array([r[g][f'n_{x}'][k] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']}
         N = n['hpv16'].sum()
         p = 0.0
-        for x in range(3):
-            for y in range(3):
-                pos = 0.05 if x == y == 0 else 1 - (1 - s16[x])*(1 - s18[y]) if combine == 'worst' else max(s16[x], s18[y])
+        for x in range(4):
+            for y in range(4):
+                pos = 0.05 if x in [0, 3] and y in [0, 3] else 1 - (1 - s16[x])*(1 - s18[y]) if combine == 'worst' else max(s16[x], s18[y])
                 p += n['hpv16'][x]/N*n['hpv18'][y]/N*pos
         return p*N
     for combine in ['worst', 'max']:
@@ -102,15 +103,85 @@ def test_test_diseases():
         for solver,sim in sims.items():
             exp, got = expected(sim, combine), sim.results.prog.diagnosed.sum()
             assert np.isclose(got, exp, rtol=1e-5 if solver == 'ode' else 0.03), f'{solver} {combine}: {got:.1f} vs {exp:.1f}' # v4's joint stepping moves the marginals by about 1e-6
-        assert any('tracked jointly: 3 × 3 = 9 joint states per group' in note for note in sims.ode.notes)
+        assert any('tracked jointly: 4 × 4 = 16 joint states per group' in note for note in sims.ode.notes)
         if combine == 'worst':
             worst = sims.ode.results.prog.diagnosed.sum()
     assert sims.ode.results.prog.diagnosed.sum() < worst
 
     g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
     bad = ss.screen(ss.Test(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
-    with pytest.raises(ss.UnknownEffect, match='"hpv18.X", but "hpv18" has no state "X"; its states are S, I, CIN'):
+    with pytest.raises(ss.UnknownEffect, match='"hpv18.X", but "hpv18" has no state "X"; its states are S, I, CIN, CA'):
         ss.Sim([g16, g18], interventions=bad, solver='abm', **kw).run()
+    return sims
+
+
+def test_outcomes():
+    sc.heading('Testing a test with several results: colposcopy, the worst over genotypes, a follow-up for some results, and a delay for one')
+    table = dict(lsil=dict(I=0.15, CIN=0.2), hsil=dict(CIN=0.7, CA=0.1), cancer=dict(CA=0.85)) # P(result | state), the same for each genotype
+    seen = sc.objdict()
+    def make(delay=None, **kwargs):
+        genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
+        outcomes = dict(normal=None) | {res:{g[x]:p for g in genos for x,p in probs.items()} for res,probs in table.items()}
+        colpo = ss.Test(outcomes=outcomes, combine='worst', delay=delay)
+        excise = ss.Treatment(moves={g.excised: 0.9 for g in genos}) # Across genotypes, with no fan-out
+        def look(sim): # As agents: each result expected, from each agent's states when tested
+            if sim.solver == 'abm':
+                u = sim.people.auids
+                tails = 1.0
+                for g in genos:
+                    d = sim.diseases[g.name]
+                    p = np.array([[sum(table[r].get(x, 0) for r in list(table)[k:]) for k in range(3)] for x in ['S', 'I', 'CIN', 'CA']])
+                    state = np.select([d[x].raw[u] for x in ['S', 'I', 'CIN', 'CA']], [0, 1, 2, 3])
+                    tails = tails*(1 - p[state])
+                tails = np.column_stack([np.ones(len(u)), 1 - tails, np.zeros(len(u))])
+                seen.expected = (tails[:, :-1] - tails[:, 1:]).sum(axis=0)
+            return True
+        prog = ss.screen(colpo, at=[2005], when=look, on_result=dict(hsil=ss.treat(excise), cancer=ss.screen(ss.Test(name='biopsy'))))
+        return ss.Sim(genos, interventions=prog, **kwargs)
+    def expected(sim):
+        """ As an ODE: from the marginals of independent genotypes, P(worst ≥ k) = 1 − ∏(1 − P_g(≥ k)) """
+        if sim.solver == 'abm':
+            return seen.expected
+        r = sim.results
+        k = int(np.flatnonzero(r.prog.delivered)[0])
+        p = np.array([[sum(table[res].get(x, 0) for res in list(table)[j:]) for j in range(3)] for x in ['S', 'I', 'CIN', 'CA']])
+        miss = 1.0
+        for g in ['hpv16', 'hpv18']:
+            n = np.array([r[g][f'n_{x}'][k] for x in ['S', 'I', 'CIN', 'CA']])
+            N = n.sum()
+            miss = miss*(1 - n/N @ p)
+        tails = np.concatenate([[1], 1 - miss, [0]])
+        return (tails[:-1] - tails[1:])*N
+    sims = run_both(make)
+    for solver,sim in sims.items():
+        r = sim.results
+        k = int(np.flatnonzero(r.prog.delivered)[0])
+        got = r.prog.outcome.by('result').values[k]
+        assert np.allclose(got, expected(sim), rtol=1e-6 if solver == 'ode' else 0.08), f'{solver}: {got} vs {expected(sim)}' # As agents, about 3% sampling noise for the smallest result (seeds 1-6)
+        assert np.isclose(got.sum(), r.prog.delivered[k]) and np.isclose(got[1:].sum(), r.prog.diagnosed[k])
+        assert np.isclose(r.prog.outcome.select(result='hsil')[k], got[2])
+        assert np.isclose(r.prog_hsil.delivered[k], got[2]) and np.isclose(r.prog_cancer.delivered[k], got[3]) # on_result=
+        cured, failed = r.prog_hsil.cured.sum(), r.prog_hsil.failed.sum()
+        assert np.isclose(cured, 0.9*(cured + failed), rtol=1e-6 if solver == 'ode' else 0.05) and r.prog_hsil.overtreated.sum() > 0 # Some with HSIL from cancer
+    check_close(sims, lambda sim: sim.results.prog.diagnosed.sum(), rtol=0.25) # At 3-month steps, agents have about 20% fewer people in CIN than the ODE (v4's own agents too)
+
+    sims = run_both(make, delay=dict(hsil=ss.months(3))) # A delay for one result: its follow-up a step later
+    for solver,sim in sims.items():
+        r = sim.results
+        k = int(np.flatnonzero(r.prog.delivered)[0])
+        assert list(np.flatnonzero(r.prog_hsil.delivered)) == [k + 1] and list(np.flatnonzero(r.prog_cancer.delivered)) == [k], solver
+        assert np.isclose(r.prog_hsil.delivered[k + 1], r.prog.outcome.select(result='hsil')[k], rtol=0.02 if solver == 'ode' else 0.05)
+    assert [s.labels for s in sims.ode.groups.strats if s.name == 'pending_prog'] == [['none', 'hsil 1']]
+
+    # on_positive= is every result but the first; on_result= names have to be results; probabilities above 1 are an error
+    g = make_hpv('hpv')
+    colpo = ss.Test(outcomes=dict(normal=None, abnormal={g.CIN: 0.9}, cancer={g.CA: 0.9}))
+    sim = ss.Sim(g, interventions=ss.screen(colpo, at=[2005], on_positive=ss.screen(ss.Test(name='biopsy'), name='refer')), solver='ode', **kw).run()
+    assert np.isclose(sim.results.refer.delivered.sum(), sim.results.screen.diagnosed.sum())
+    with pytest.raises(ValueError, match='not a result'):
+        ss.Sim(make_hpv('hpv'), interventions=ss.screen(colpo, on_result=dict(hsil=ss.treat(ss.Treatment()))), solver='abm', **kw).init()
+    with pytest.raises(ValueError, match='sum to at most 1'):
+        ss.Sim(g, interventions=ss.screen(ss.Test(outcomes=dict(a=None, b={g.CIN: 0.6}, c={g.CIN: 0.6}))), solver='abm', **kw).init().run()
     return sims
 
 
@@ -118,3 +189,4 @@ if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
     test = test_test_diseases()
+    outcomes = test_outcomes()

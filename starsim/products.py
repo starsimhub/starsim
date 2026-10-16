@@ -682,12 +682,20 @@ class Test(Product):
     """
     A diagnostic test: what `ss.screen()` delivers
 
+    A test gives each person one of its results: by default 'negative' or 'positive', from `sensitivity` and
+    `specificity`; or those of `outcomes=`, the probability of each result given the state a person is in.
+
     Args:
         sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`),
             and the test then detects being in those states. The states can be of several diseases (`{hpv16.I: 0.9, hpv18.CIN: 0.95}`, or `'hpv18.CIN'`)
         specificity (float): the probability that someone without it tests negative
-        combine (str): for someone in states of several diseases, 'worst' (each detected independently, so positive with probability 1 − ∏(1 − sensitivity)) or 'max' (the highest sensitivity)
-        delay (dur): the time from the test to the result (in a compartmental run, people wait in levels of one step each)
+        outcomes (dict): instead of sensitivity and specificity, the results, each with its probability for people in each state (a dict
+            by state, of any disease, as for `sensitivity`; `None` as a key is people in none of the states; a number is for those with
+            what `detects=` says); the first is `None`, and takes the rest. `sensitivity`/`specificity` are `outcomes=dict(negative=None, positive=...)`
+        combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the last-listed of them is theirs; for
+            positive and negative, each disease is detected independently, so positive with probability 1 − ∏(1 − sensitivity)), or 'max'
+            (the highest probability of each result or a later one, so for positive and negative, the highest sensitivity)
+        delay (dur/dict): the time from the test to the result (in a compartmental run, people wait in levels of one step each); a dict gives one for each result
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to
@@ -697,22 +705,32 @@ class Test(Product):
         pcr = ss.Test(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
         xpert = ss.Test(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
         hpv_dna = ss.Test(sensitivity={hpv16.I: 0.9, hpv16.CIN: 0.95, hpv18.I: 0.9}, specificity=0.97) # Across diseases
+        colpo = ss.Test(outcomes=dict(normal=None, lsil={g.I: 0.15 for g in genos}, hsil={g.CIN: 0.7 for g in genos})) # Several results
         ```
     """
     compartmental = True
     holds = False
     waning = None
     doses = None
-    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'combine', 'cost']
+    spec_keys = ['sensitivity', 'specificity', 'outcomes', 'combine', 'delay', 'detects', 'cost']
     __test__ = False # So pytest does not collect it
 
-    def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, combine='worst', cost=None, name=None, label=None, **kwargs):
+    def __init__(self, sensitivity=1.0, specificity=1.0, outcomes=None, combine='worst', delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
         if combine not in ['worst', 'max']:
             errormsg = f'combine= is "worst" or "max", not {combine!r}'
             raise ValueError(errormsg)
+        if outcomes is not None:
+            names = list(outcomes)
+            if len(names) < 2 or outcomes[names[0]] is not None or any(v is None for v in list(outcomes.values())[1:]):
+                errormsg = f'outcomes= is a dict of the results, with the probability of each for people in each state; the first is None, and takes the rest, e.g. dict(normal=None, abnormal={{hpv.CIN: 0.8}}), not {outcomes}'
+                raise ValueError(errormsg)
+            if sensitivity != 1.0 or specificity != 1.0:
+                errormsg = 'sensitivity= and specificity= are another way of giving outcomes=: give one or the other'
+                raise ValueError(errormsg)
         self.sensitivity = sensitivity
         self.specificity = specificity
+        self.outcomes = outcomes
         self.combine = combine
         self.delay = delay
         self.detects = None if detects is None else ss.conditions.as_cond(detects)
@@ -720,6 +738,19 @@ class Test(Product):
         self.disease = None
         self.define_states(ss.FloatArr('ti_last', label='Time last received'), ss.FloatArr('n_recv', default=0, label='Number of times received'))
         return
+
+    @property
+    def result_names(self):
+        """ The names of its results, the first being the one that is not a diagnosis """
+        return ['negative', 'positive'] if self.outcomes is None else list(self.outcomes)
+
+    def tables(self):
+        """ The probability of each result but the first, as {key: value}: a key is a state, None (people in none of the states), or 'detects' (people with what `detects=` says) """
+        if self.outcomes is not None:
+            return [dict(v) if isinstance(v, dict) else {'detects':v} for v in list(self.outcomes.values())[1:]]
+        sens = self.sensitivity
+        rest = {None:1 - self.specificity} if sc.isnumber(self.specificity) else {None:self.specificity} # A specificity that is not a number is worked out when it is used: see tails()
+        return [(dict(sens) if isinstance(sens, dict) else {'detects':sens}) | rest]
 
     def agent_reasons(self):
         out = []
@@ -745,6 +776,10 @@ class Test(Product):
         mod, _, name = key.rpartition('.')
         return mod or None, name
 
+    def state_keys(self):
+        """ The states it is keyed by, as given """
+        return list(dict.fromkeys(key for table in self.tables() for key in table if key not in [None, 'detects']))
+
     @property
     def diseases(self):
         """ The names of the diseases whose states it is keyed by """
@@ -752,40 +787,79 @@ class Test(Product):
 
     def refs(self):
         """ The states of named diseases it is keyed by, as (disease, state), for tracking diseases jointly (see `ss.solvers.Crossing`) """
-        sens = self.sensitivity
-        return [ref for key in sens if (ref := self.key_ref(key))[0] is not None] if isinstance(sens, dict) else []
+        return [ref for key in self.state_keys() if (ref := self.key_ref(key))[0] is not None]
 
-    def by_disease(self, sim, home):
-        """ The states it detects, by disease: {disease: [(state, sensitivity)]}; a state with no disease is one of `home` """
-        out = {}
-        for key,val in self.sensitivity.items():
-            name, state = self.key_ref(key)
-            name = name or home
-            states = sim.get_declared(name).graph.states
-            if state not in states:
-                raise ss.UnknownEffect(f'the test "{self.name}" has a sensitivity for "{name}.{state}", but "{name}" has no state "{state}"; its states are {sc.strjoin(states.keys())}.')
-            out.setdefault(name, []).append((state, val))
-        return out
+    def layout(self, sim, home):
+        """
+        The probability of each result but the first, as rows that each hold for some people: grouped by disease, whose
+        states are exclusive, as {disease: [(state, [values])]} (and 'detects': [(None, [values])]); and the values for
+        people in none of them. A state with no disease is one of `home`
+        """
+        tables = self.tables()
+        groups = {}
+        for key in self.state_keys() + ['detects']*any('detects' in t for t in tables):
+            if key == 'detects':
+                name, state = 'detects', None
+            else:
+                name, state = self.key_ref(key)
+                name = name or home
+                states = sim.get_declared(name).graph.states
+                if state not in states:
+                    raise ss.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.outcomes is None else "result"} for "{name}.{state}", but "{name}" has no state "{state}"; its states are {sc.strjoin(states.keys())}.')
+            vals = [t.get(key, 0.0) for t in tables]
+            if all(sc.isnumber(v) for v in vals) and (sum(vals) > 1 + 1e-9 or min(vals) < 0):
+                errormsg = f'The results of the test "{self.name}" for {name if state is None else name + "." + state} have probabilities {vals}, which have to be between 0 and 1 and sum to at most 1'
+                raise ValueError(errormsg)
+            groups.setdefault(name, []).append((state, vals))
+        rest = [t.get(None, 0.0) for t in tables]
+        return groups, rest
 
-    def detection(self, selector, home):
+    def tails(self, selector, home):
         """
-        Who is in a state the test detects, and the probability that each tests positive: per disease, the sensitivity
-        of the state they are in, combined over diseases as independent detections (`combine='worst'`) or the highest
+        The probability that each person's result is each one or a later one, for each but the first (so for a
+        positive and a negative result, the probability of a positive one). For each disease, from the state they
+        are in; combined over diseases as the worst result (P(worst ≥ k) = 1 − ∏(1 − P_d(≥ k))) or the highest
         """
-        none, miss, top = 1.0, 1.0, 0.0
-        for name,rows in self.by_disease(selector.sim, home).items():
-            inside, sens = 0.0, 0.0
-            for state,val in rows:
-                sel = selector.select(ss.conditions.Cond('state', name, state))*1.0
+        sim = selector.sim
+        groups, rest = self.layout(sim, home)
+        worst = self.combine == 'worst'
+        none = 1.0
+        combined = [1.0 if worst else 0.0]*len(rest)
+        for name,rows in groups.items():
+            inside = 0.0
+            tail = [0.0]*len(rest)
+            for state,vals in rows:
+                if name != 'detects':
+                    sel = selector.select(ss.conditions.Cond('state', name, state))
+                elif self.detects is not None:
+                    sel = selector.select(self.detects)
+                else:
+                    sel = selector.in_states([s.name for s in sim.get_declared(home).graph.infected if s.people])*selector.everyone()
+                sel = sel*1.0
                 inside = inside + sel
-                sens = sens + sel*selector.per_person(val)
+                vals = [selector.per_person(v) for v in vals]
+                for k in range(len(rest)):
+                    tail[k] = tail[k] + sel*sum(vals[k:])
             none = none*(1 - inside)
-            miss = miss*(1 - sens)
-            top = np.maximum(top, sens)
-        return 1 - none, (1 - miss if self.combine == 'worst' else top)
+            combined = [c*(1 - t) if worst else np.maximum(c, t) for c,t in zip(combined, tail)]
+        rest = [1 - selector.per_person(self.specificity) if v is self.specificity else selector.per_person(v) for v in rest]
+        return [(1 - c if worst else c) + none*sum(rest[k:]) for k,c in enumerate(combined)]
+
+    def delays(self):
+        """ The delay of each result (None for none) """
+        names = self.result_names
+        if isinstance(self.delay, dict):
+            unknown = [k for k in self.delay if k not in names]
+            if unknown:
+                errormsg = f'The test "{self.name}" has a delay for {sc.strjoin(unknown)}, which is not one of its results ({sc.strjoin(names)})'
+                raise ValueError(errormsg)
+            return [self.delay.get(k) for k in names]
+        return [self.delay]*len(names)
 
     def describe(self):
         label = lambda key: '.'.join(n for n in self.key_ref(key) if n)
-        detects = sc.strjoin(label(k) for k in self.sensitivity) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         delay = '' if self.delay is None else f', result after {self.delay!r}'
+        if self.outcomes is not None:
+            return f'{self.name}: test with results {sc.strjoin(self.result_names)}, by {sc.strjoin(label(k) for k in self.state_keys()) or "what it detects"}{delay}'
+        detects = sc.strjoin(label(k) for k in self.sensitivity) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         return f'{self.name}: test for {detects} (sensitivity {self.sensitivity}, specificity {self.specificity}{delay})'

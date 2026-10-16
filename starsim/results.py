@@ -216,7 +216,7 @@ class Result(ss.BaseArr):
             res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             ```
         """
-        pick = {key:dims.pop(key) for key in ['disease', 'edge'] if key in dims}
+        pick = {key:dims.pop(key) for key in self.part_dims if key in dims}
         if pick:
             out = self._select_parts(pick)
             return out.select(run=run, **dims) if (dims or run is not None) else out
@@ -393,8 +393,8 @@ class Result(ss.BaseArr):
 
         For a result across runs, returns a dict of results across runs instead, one per level.
         """
-        if dim in ['disease', 'edge']:
-            i = ['disease', 'edge'].index(dim)
+        if dim in self.part_dims:
+            i = self.part_dims.index(dim)
             levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
             values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
             return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
@@ -460,6 +460,16 @@ class Result(ss.BaseArr):
         group_ti = getattr(self, 'group_ti', None)
         return self.timevec if group_ti is None or self.timevec is None else self.timevec[group_ti]
 
+    @property
+    def part_dims(self):
+        """ The dimensions of the parts of a result: (disease, transition) for a treatment, (result,) for the outcomes of a test """
+        return self.__dict__.get('_part_dims', ['disease', 'edge'])
+
+    @part_dims.setter
+    def part_dims(self, value):
+        self._part_dims = value
+        return
+
     def _parts(self, dim):
         """ The results of a treatment for each (disease, transition) it acts on: see `ss.Delivery` """
         parts = getattr(self, 'by_edge', None)
@@ -471,7 +481,7 @@ class Result(ss.BaseArr):
     def _select_parts(self, pick):
         """ The sum of the parts for some diseases and transitions """
         parts = self._parts(sc.strjoin(pick.keys()))
-        keep = [res for key,res in parts.items() if all(key[i] in sc.tolist(pick[dim]) for i,dim in enumerate(['disease', 'edge']) if dim in pick)]
+        keep = [res for key,res in parts.items() if all(key[i] in sc.tolist(pick[dim]) for i,dim in enumerate(self.part_dims) if dim in pick)]
         if not keep:
             errormsg = f'The result "{self.name}" has no part with {pick}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in parts)}'
             raise KeyError(errormsg)
