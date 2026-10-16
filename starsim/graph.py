@@ -309,7 +309,7 @@ class Graph(Presentation):
                 tr.rate = as_expr(beta) * source
                 tr._pending = None
 
-            if tr.rate is None and tr.dur is None and tr.p is None:
+            if tr.rate is None and tr.dur is None and tr.p is None and not tr.src and not tr.every_state: # Otherwise it can be the remainder of branches with p=: see resolve_exits()
                 raise ss.UndrivenTransition(f'the transition "{name}" ({tr.arrow}) has no rate, no duration, and no p=. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
 
             # Derive the kind from the rate
@@ -558,7 +558,7 @@ class Graph(Presentation):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
         self.exits = sc.objdict()
         for state in self.states.values():
-            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[])
+            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[])
         self.inflows = []
         for tr in self.transitions.values():
             if tr.inflow:
@@ -571,20 +571,30 @@ class Graph(Presentation):
                     exits.branches.append(tr)
                 elif tr.dur is not None:
                     exits.timed.append(tr)
+                elif tr.rate is None: # Immediate: a split between several destinations, or what the branches leave over
+                    exits.rest.append(tr)
                 else:
                     exits.hazards.append(tr)
 
-        # A single timed transition with no p= takes whatever the branches leave over
+        # A single timed transition with no p= (or one with no rate or duration) takes whatever the branches leave over
         for name,exits in self.exits.items():
             exits.remainder = None
+            rest = exits.pop('rest')
+            for tr in rest:
+                if tr.p is None and not exits.branches:
+                    raise ss.UndrivenTransition(f'the transition "{tr.name}" ({tr.arrow}) has no rate, no duration, and no p=. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
+            if len(rest) > 1:
+                raise ss.BadBranchSplit(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
+            elif rest:
+                exits.remainder = rest[0]
             if exits.branches:
                 ps = [tr.p[0] for tr in exits.branches]
                 const = all(isinstance(p, par) and sc.isnumber(p.raw) for p in ps)
                 total = sum(p.raw for p in ps) if const else None
-                if not const and len(exits.timed) == 1: # A share that is worked out as the sim runs (e.g. a function): the timed exit with no p= takes the rest, then
+                if not const and exits.remainder is None and len(exits.timed) == 1: # A share that is worked out as the sim runs (e.g. a function): the timed exit with no p= takes the rest, then
                     exits.remainder = exits.timed.pop()
                     exits.remainder.guessed['p'] = f'1 - {" - ".join(tr.name for tr in exits.branches)}'
-                elif const and not np.isclose(total, 1):
+                elif const and not np.isclose(total, 1) and not (exits.remainder is not None and total < 1):
                     if total < 1 and len(exits.timed) == 1:
                         exits.remainder = exits.timed.pop()
                         exits.remainder.guessed['p'] = f'{1 - total:n}'

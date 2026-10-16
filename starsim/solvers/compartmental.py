@@ -245,7 +245,7 @@ class Compartmental(Engine):
                 if staged:
                     self.unsupported(staged[0], f'a non-exponential dwell time out of "{name}" alongside branches with p=')
                 for tr in branches:
-                    p = tr.p[0] if tr.p is not None else None
+                    p = tr.p[0] if tr.p is not None and len(tr.dst) <= 1 else None # A split between several destinations takes what the branches leave over
                     tracks.append(Bunch(tr=tr, p=p, immediate=tr.rate is None and tr.dur is None)) # With neither, nobody waits in the branch
             else:
                 if len(staged) > 1:

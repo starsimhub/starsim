@@ -1658,6 +1658,30 @@ def test_level_change_dwell():
         out[solver] = ss.Sim(d, unit='day', dt=0.25, stop=20, total_pop=20_000, n_agents=20_000, solver=solver, verbose=0).run().results.d.n_I[-1]/20_000
     assert np.isclose(out['abm'], out['ode'], atol=0.03)
     return
+@sc.timer()
+def test_branches():
+    """ Immediate branches, and a branch that takes the remainder """
+    sc.heading('Testing immediate branches and remainders')
+    def make(which):
+        rest = dict(rec=ss.progression('P -> R', dur=5), rec2=ss.progression('A -> R', dur=5))
+        if which == 'split': # Several destinations, with p= and no rate or duration: immediate
+            trs = dict(split=ss.progression('E -> P | A', p=0.3))
+        elif which == 'remainder': # One branch with no p=, rate, or duration gets the remainder, immediately
+            trs = dict(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A'))
+        else: # The same, with p=None and a duration
+            trs = dict(sev=ss.progression('E -> P', p=0.3, dur=2), mild=ss.progression('E -> A', p=None, dur=2))
+        return ss.Disease(infection=ss.transmission('S -> E', beta=0.5, source=['P', 'A']), **trs, **rest, init_prev=0.01, name='d')
+    for which in ['split', 'remainder', 'timed']:
+        for solver in ['ode', 'abm']:
+            size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+            sim = ss.Sim(make(which), solver=solver, unit='day', stop=60, **size, **kw).run()
+            res = sim.results.d
+            share = res.rec[1:].sum()/(res.rec[1:].sum() + res.rec2[1:].sum())
+            assert np.isclose(share, 0.3, atol=0.05), f'{which} ({solver}): {share:.2f} went to P, not 0.3'
+    with pytest.raises(ss.BadBranchSplit): # Only one can take the remainder
+        ss.Disease(sev=ss.progression('E -> P', p=0.3), a=ss.progression('E -> A'), b=ss.progression('E -> R'))
+    return sim
+
 
 if __name__ == '__main__':
     do_plot = True
@@ -1688,3 +1712,4 @@ if __name__ == '__main__':
     disc  = test_disconnected_groups()
     junc  = test_junction()
     level = test_level_change_dwell()
+    branch = test_branches()
