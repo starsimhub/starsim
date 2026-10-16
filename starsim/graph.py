@@ -309,8 +309,12 @@ class Graph(Presentation):
                 tr.rate = as_expr(beta) * source
                 tr._pending = None
 
-            if tr.rate is None and tr.dur is None and tr.p is None and not tr.src and not tr.every_state: # Otherwise it can be the remainder of branches with p=: see resolve_exits()
-                raise ss.UndrivenTransition(f'the transition "{name}" ({tr.arrow}) has no rate, no duration, and no p=. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
+            if tr.undriven: # Built before (the same transition in another module): its rate of 0 is set again in resolve_exits()
+                tr.rate = None
+            if tr.rate is None and tr.dur is None and tr.p is None and not tr.every_state:
+                if not tr.src:
+                    raise ss.UndrivenTransition(f'the inflow "{name}" ({tr.arrow}) has no rate. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
+                tr.undriven = True
 
             # Derive the kind from the rate
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
@@ -561,6 +565,9 @@ class Graph(Presentation):
             self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[])
         self.inflows = []
         for tr in self.transitions.values():
+            if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
+                tr.rate = par(0.0, literal=True)
+                tr.const, tr.terms = linear(tr.rate)
             if tr.inflow:
                 self.inflows.append(tr)
             for state in tr.src:
@@ -576,13 +583,10 @@ class Graph(Presentation):
                 else:
                     exits.hazards.append(tr)
 
-        # A single timed transition with no p= (or one with no rate or duration) takes whatever the branches leave over
+        # A single timed transition with no p= (or an immediate split) takes whatever the branches leave over; one with no driver and no p= is undriven, not the remainder
         for name,exits in self.exits.items():
             exits.remainder = None
             rest = exits.pop('rest')
-            for tr in rest:
-                if tr.p is None and not exits.branches:
-                    raise ss.UndrivenTransition(f'the transition "{tr.name}" ({tr.arrow}) has no rate, no duration, and no p=. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
             if len(rest) > 1:
                 raise ss.BadBranchSplit(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
             elif rest:
@@ -599,7 +603,10 @@ class Graph(Presentation):
                         exits.remainder = exits.timed.pop()
                         exits.remainder.guessed['p'] = f'{1 - total:n}'
                     else:
-                        why = f' {sc.strjoin(tr.name for tr in exits.hazards)} {"has" if len(exits.hazards) == 1 else "have"} a rate and no p=, so {"it competes" if len(exits.hazards) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and exits.hazards and not exits.timed else ''
+                        undriven = [tr.name for tr in exits.hazards if tr.undriven]
+                        driven = [tr for tr in exits.hazards if not tr.undriven]
+                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. "{name} -> A | B" with p=[{total:n}, None].' if undriven else ''
+                        why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
                                                 f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).{why}')
         return

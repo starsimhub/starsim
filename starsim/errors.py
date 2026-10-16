@@ -246,6 +246,9 @@ class StageStopped(StarsimWarning):
 class NotConverged(StarsimWarning):
     """ The chains of a posterior disagree (R-hat above 1.01), or some draws diverged """
 
+class UndrivenUnused(StarsimWarning):
+    """ A transition with no rate, duration, or `p=` (undriven) is named by no product, delivery, or `on=` in the sim, so only custom code can move people along it """
+
 class LossyExport(StarsimWarning):
     """ An export to another format, or to code, left something out or changed it. Lists each item """
 

@@ -257,6 +257,7 @@ class Transition(Nameable):
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.arrow_given = True # For ss.birth() and ss.immigration() in demographics=: whether the state people arrive in was given
+        self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
         self.guessed = sc.objdict() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)

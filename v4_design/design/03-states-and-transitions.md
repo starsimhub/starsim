@@ -236,7 +236,7 @@ Arithmetic on a finished transition is about its flow, never its rate: `0.5 * in
 
 **A bare number after `@` is a rate**, because "at" reads as "at rate". It is never a duration: `I >> R @ 10` meaning "after 10 days" is how some people think, but `@ 0.1` and `@ 10` cannot both be guessed safely from their size. A duration after `@` is typed (`ss.days(10)`); a bare-number duration uses the keyword form, `ss.progression('I -> R', dur=10)`.
 
-A transition that reaches build time with nothing driving it and no `p=` raises `UndrivenTransition`.
+A transition between states with nothing driving it and no `p=` (`I >> S`, `ss.Transition(I, S)`, `ss.progression('I -> S')`) is **undriven**: only a product (`ss.Treatment(moves=)`), a delivery, or custom code moves people along it. It is not the remainder of `p=` branches out of its source. `ss.UndrivenUnused` is warned at `sim.init()` if nothing in the sim names it. `@ 0` is still a rate of 0. An inflow with nothing driving it raises `ss.UndrivenTransition`.
 
 ## Rates that mention states
 

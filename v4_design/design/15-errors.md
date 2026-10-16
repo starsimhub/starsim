@@ -44,7 +44,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-54 names: 38 errors, 6 warnings, and 10 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+55 names: 38 errors, 7 warnings, and 10 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
@@ -90,6 +90,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `AtBound` | warning | A best-fit value is at or near one of its bounds |
 | `StageStopped` | warning | A stage of a staged fit did not converge; the sequence stops and the last completed fit is returned |
 | `NotConverged` | warning | The chains of a posterior disagree (R-hat above 1.01), or some draws diverged |
+| `UndrivenUnused` | warning | A transition with no rate, duration, or `p=` (undriven) is named by no product, delivery, or `on=` in the sim, so only custom code can move people along it |
 | `LossyExport` | warning | An export to another format, or to code, left something out or changed it. Lists each item |
 | `ImportIncomplete` | warning | An import could not translate something in the source. Lists each item by name, says what to ask an AI assistant with the `import-model` skill to finish it, and warns again when the sim is first run |
 | `UnitInferred` | note | The sim's unit was not given with `unit=` and was taken from `dt`, from `start` and `stop`, or from the typed values. Says which unit and where it came from (`unit='day' (from start and stop dates)`). Not said when nothing has a unit: time is then in timesteps and nothing was inferred |

@@ -316,6 +316,7 @@ class Sim(ss.Base):
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self._init_modules_pre()
+        ss.interventions.check_undriven(self)
 
         # Final initializations -- this is "post"
         if self.pars.rescale:

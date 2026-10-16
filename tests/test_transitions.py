@@ -184,8 +184,8 @@ def test_names():
         ss.Disease(step=ss.progression('I -> R', dur=3))
     with pytest.raises(ss.ReservedName): # A method of ss.Disease, not of every module
         ss.Disease(describe=ss.progression('I -> R', dur=3))
-    with pytest.raises(ss.UndrivenTransition):
-        ss.Disease(recovery=ss.Transition('I', 'R'))
+    with pytest.raises(ss.UndrivenTransition): # An inflow needs a rate; a transition between states with none is undriven
+        ss.Disease(recovery=ss.progression('I -> R', dur=3), births=ss.Transition(ss.null, 'S'))
     with pytest.raises(ss.BadBranchSplit):
         ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
     with pytest.raises(ss.BadBranchSplit): # A branch out of the model is a transition of its own
@@ -1682,12 +1682,10 @@ def test_branches():
         rest = dict(rec=ss.progression('P -> R', dur=5), rec2=ss.progression('A -> R', dur=5))
         if which == 'split': # Several destinations, with p= and no rate or duration: immediate
             trs = dict(split=ss.progression('E -> P | A', p=0.3))
-        elif which == 'remainder': # One branch with no p=, rate, or duration gets the remainder, immediately
-            trs = dict(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A'))
-        else: # The same, with p=None and a duration
+        else: # One branch with p=None and a duration gets the remainder (with no duration either, it would be undriven)
             trs = dict(sev=ss.progression('E -> P', p=0.3, dur=2), mild=ss.progression('E -> A', p=None, dur=2))
         return ss.Disease(infection=ss.transmission('S -> E', beta=0.5, source=['P', 'A']), **trs, **rest, init_prev=0.01, name='d')
-    for which in ['split', 'remainder', 'timed']:
+    for which in ['split', 'timed']:
         for solver in ['ode', 'abm']:
             size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
             sim = ss.Sim(make(which), solver=solver, unit='day', stop=60, **size, **kw).run()
@@ -1695,7 +1693,9 @@ def test_branches():
             share = res.rec[1:].sum()/(res.rec[1:].sum() + res.rec2[1:].sum())
             assert np.isclose(share, 0.3, atol=0.05), f'{which} ({solver}): {share:.2f} went to P, not 0.3'
     with pytest.raises(ss.BadBranchSplit): # Only one can take the remainder
-        ss.Disease(sev=ss.progression('E -> P', p=0.3), a=ss.progression('E -> A'), b=ss.progression('E -> R'))
+        ss.Disease(sev=ss.progression('E -> P', p=0.3), a=ss.progression('E -> A', dur=2), b=ss.progression('E -> R', dur=2))
+    with pytest.raises(ss.BadBranchSplit, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
+        ss.Disease(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A'))
     return sim
 
 

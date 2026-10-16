@@ -453,6 +453,28 @@ class BaseVaccination(Intervention):
 #%% Deliveries for declared models: who gets a product, when, and how many
 
 delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace']
+
+
+def movers(sim, modname, name):
+    """ The names of the products and deliveries that name a transition: those that move people along it, and those triggered by it (`on=`) """
+    out = []
+    for intv in sim.interventions.values():
+        if not isinstance(intv, Delivery):
+            continue
+        if (modname, name) in intv.moved_edges():
+            out.append(intv.product.name)
+        elif (modname, name) in ss.conditions.state_refs(intv):
+            out.append(intv.name)
+    return list(dict.fromkeys(out))
+
+
+def check_undriven(sim):
+    """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.UndrivenUnused`) """
+    for mod in sim.declared:
+        for name,tr in mod.graph.transitions.items():
+            if tr.undriven and not movers(sim, mod.name, name):
+                ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.UndrivenUnused)
+    return
 renamed_keys = dict(years='at', dates='at', eligible='where') # Starsim 4 prereleases and Starsim 3, which are an error that names the new keyword
 
 
@@ -593,6 +615,11 @@ class Delivery(Intervention):
     @property
     def followups(self):
         return [intv for intv in sc.tolist(self.on_positive) + sc.tolist(self.on_negative) if isinstance(intv, Delivery)]
+
+    def moved_edges(self):
+        """ The transitions the product moves people along, as (disease, transition) names, once initialized """
+        tr = getattr(self, 'cure_tr', None)
+        return [] if tr is None else [(self.disease, tr.name)]
 
     @property
     def in_rounds(self):
