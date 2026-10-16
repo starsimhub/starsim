@@ -274,6 +274,176 @@ def test_then():
     return sims
 
 
+# %% Acceptance tests: the worked examples of proposal 02, small
+
+def test_hiv_art():
+    sc.heading('Acceptance: HIV ART as a stock target, lowest CD4 first, with removal over the target (hiv/port.py art_deliver)')
+    def make(prioritize=True, **kwargs):
+        S, acute, cd4_hi, cd4_mid, cd4_lo, on_art, post_art = ss.states('S acute cd4_hi cd4_mid cd4_lo on_art post_art') # CD4 as states, so it runs both ways
+        hiv = ss.Disease(
+            infection  = S >> acute @ ss.permonth(0.08)*(5*acute + cd4_hi + cd4_mid + cd4_lo + post_art + 0.05*on_art),
+            latency    = acute >> cd4_hi @ ss.months(3),
+            decline    = cd4_hi >> cd4_mid @ ss.years(4),
+            falling    = cd4_mid >> cd4_lo @ ss.years(3),
+            aids_death = cd4_lo >> ss.null @ ss.years(2),
+            start_art  = (acute + cd4_hi + cd4_mid + cd4_lo + post_art) >> on_art, # Undriven: only the delivery moves people along it
+            dropout    = on_art >> post_art @ ss.years(5),
+            relapse    = post_art >> cd4_lo @ ss.years(1),
+            init=dict(cd4_hi=0.04, cd4_mid=0.03, cd4_lo=0.02), name='hiv',
+        )
+        n_art = ss.timeseries({2000: 0, 2005: 3000, 2010: 6000, 2012: 4000}, mode='linear') # People, from data
+        priority = [hiv.cd4_lo, hiv.post_art, hiv.cd4_mid, hiv.cd4_hi] if prioritize else None # Lowest CD4 first
+        art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), target=n_art, priority=priority, remove=hiv.dropout)
+        return ss.Sim(hiv, interventions=art_prog, start=2000, stop=2014, dt=ss.months(1), unit='year', **kwargs) # The bare numbers (the years) are years
+    kwa = dict(verbose=0)
+    sims = sc.objdict(ode=make(solver='ode', total_pop=100_000, **kwa).run(), abm=make(solver='abm', total_pop=100_000, n_agents=20_000, **kwa).run())
+    base = sc.objdict(ode=make(prioritize=False, solver='ode', total_pop=100_000, **kwa).run(), abm=make(prioritize=False, solver='abm', total_pop=100_000, n_agents=20_000, **kwa).run())
+    for solver,sim in sims.items():
+        r, res, res0 = sim.results.art_prog, sim.results.hiv, base[solver].results.hiv
+        assert np.allclose(r.n_end[1:-1], r.target[1:-1], atol=10.1), f'{solver}: {np.abs(r.n_end - r.target)[1:-1].max():.1f}' # Within two agents (as agents, a dwell on ART drawn shorter than a step ends at once)
+        assert r.removed[132:144].sum() > 0 and r.removed[:120].sum() == 0 # Over the target in 2011-2012 only
+        k = 30 # The lowest CD4 is treated first: fewer left in it than at random, and more in the highest
+        assert res0.n_cd4_lo[k] - res.n_cd4_lo[k] > 0.5*r.target[k] and res.n_cd4_hi[k] > res0.n_cd4_hi[k]
+        assert any('counts hiv.on_art' in note for note in sim.notes)
+    check_close(sims, lambda sim: sim.results.hiv.aids_death.sum(), rtol=0.15)
+    return sims
+
+
+def test_hpv_algorithm():
+    sc.heading('Acceptance: HPV screen, then a treatment visit with a capacity of 10 a week and a queue (hpvsim_interventions/port.py algo_a, one genotype)')
+    ppl = ss.People(1)
+    def make(**kwargs):
+        S, I, CIN, CA = ss.states('S I CIN CA')
+        hpv = ss.Disease(
+            infection = S >> I @ 0.6*(I + CIN),
+            clearance = I >> S @ ss.years(1.5),
+            dysplasia = I >> CIN @ ss.years(5),
+            regress   = CIN >> I @ ss.years(4),
+            invasion  = CIN >> CA @ ss.years(15),
+            excised   = CIN >> I, # Undriven: clears the lesion, not the infection
+            init=dict(I=0.1, CIN=0.03), name='hpv',
+        ).stratify(age=[0, 30, 50])
+        women = (ppl.age >= 30) & (ppl.age < 50)
+        hpv_dna = ss.Test(sensitivity=dict(I=0.9, CIN=0.95), specificity=0.97)
+        tx = lambda name, eff: ss.treat(ss.Treatment(moves={hpv.excised: eff}, name=name), name=name[:-3] + 'e')
+        tx_visit = ss.screen(ss.Test(sensitivity=0.9, specificity=0.9, detects=~hpv.CA), coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6),
+                             on_positive=tx('ablation', 0.85), on_negative=tx('excision', 0.95), name='tx_visit')
+        primary = ss.screen(hpv_dna, where=women, coverage=ss.probperyear(0.3), start=2020, repeat=ss.years(5), on_positive=tx_visit)
+        return ss.Sim(hpv, interventions=primary, start=2015, stop=2030, dt=ss.months(3), use_aging=False, **kwargs)
+    kwa = dict(verbose=0)
+    sims = sc.objdict(ode=make(solver='ode', total_pop=100_000, **kwa).run(), abm=make(solver='abm', total_pop=100_000, n_agents=20_000, **kwa).run())
+    for solver,sim in sims.items():
+        res = sim.results
+        q = res.tx_visit
+        n = sc.objdict({k:q[k].sum() for k in ['eligible', 'delivered', 'dropped', 'left']})
+        print(f'{solver}: {n}, waiting at the end {q.waiting[-2]:.0f}')
+        cap = 10*365.25/4/7 # 10 a week, about 13 weeks a quarter
+        full = q.waiting[25:-1] > 1 # Steps with people queueing, when the capacity is all used
+        assert np.all(q.delivered <= cap + 5.1) and full.sum() > 5 and np.isclose(q.delivered[25:-1][full].mean(), cap, rtol=0.02) # Within an agent, as agents
+        assert q.waiting.max() > 0 and n.dropped > 0 and q.wait.max() <= 6 + 1e-6, q.wait.max() # In the sim's unit, months
+        assert np.isclose(0.8*n.eligible, n.delivered + n.dropped + n.left + q.waiting[-2], rtol=1e-6 if solver == 'ode' else 0.05) # Of those who come (coverage 0.8; as agents, a few % low, the known coverage bias)
+        assert np.isclose(res.ablate.delivered.sum() + res.excise.delivered.sum(), n.delivered, rtol=0.01)
+        assert res.ablate.overtreated.sum() > 0 and res.ablate.cured.sum() > 0
+        women = res.primary.eligible[20] # Women 30-49, none screened yet at the start of 2020
+        assert res.primary.delivered[:-1].sum() < 2*women # Nobody is screened twice in 5 years, so at most twice in 2020-2030
+    check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.05)
+    check_close(sims, lambda sim: sim.results.tx_visit.dropped.sum(), rtol=0.2)
+    assert any('since' in s.name for s in sims.ode.strats) and any('waiting' in s.name for s in sims.ode.strats)
+    return sims
+
+
+def make_sti(name='ng', beta=0.015, init_prev=0.1):
+    """ A bacterial STI as in STIsim (stisim_bacterial/port.py), with treatment as an undriven transition """
+    S, E, A, P, Y, C = ss.states('S E A P Y C')
+    return ss.Disease(
+        infection = S >> E @ beta*(A + P + Y + C),
+        latency   = ss.progression('E -> P | A', p=0.4, dur=ss.days(5)),
+        onset     = P >> Y @ ss.days(10),
+        seek      = Y >> C @ ss.days(20),
+        clear_a   = A >> S @ ss.days(150),
+        clear_y   = (Y + C) >> S @ ss.days(200),
+        cure      = (E + A + P + Y + C) >> S,
+        init_prev=init_prev, name=name,
+    )
+
+
+def test_clinic():
+    sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial)')
+    def make(**kwargs):
+        ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
+        clinic = ss.Capacity(ss.perweek(250))
+        discharge = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})
+        syndromic = ss.treat(discharge, where=ng.C | ct.C, capacity=clinic, queue=ss.days(28), priority=1)
+        screening = ss.screen(ss.Test(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), capacity=clinic, priority=2, on_positive=ss.treat(discharge))
+        return ss.Sim([ng, ct], interventions=[syndromic, screening], dt=7, **kwargs)
+    sims = run_both(make, stop=364, pop=20_000, n_agents=20_000)
+    for solver,sim in sims.items():
+        res = sim.results
+        used = res.syndromic.delivered + res.screening.delivered
+        assert np.allclose(res.clinic.used, used) and np.all(used <= 250.01)
+        full = res.syndromic.delivered > 249.99
+        assert full.any() and np.all(res.screening.delivered[full] < 1e-9) # Screening only gets what symptomatic care leaves
+        assert res.screening.delivered.sum() > 0
+        r = res.syndromic
+        for dis in ['ng', 'ct']:
+            assert np.isclose(sum(r[k].select(disease=dis).sum() for k in ['cured', 'failed', 'overtreated']), r.delivered.sum())
+        assert r.overtreated.select(disease='ct').sum() > 0 and r.waiting.max() > 0
+    check_close(sims, lambda sim: sim.results.syndromic.delivered.sum(), rtol=0.15)
+    check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.25)
+    return sims
+
+
+def test_rescreen():
+    sc.heading('Acceptance: rescreening every 5 years at most, at 30% a year')
+    seen = sc.objdict()
+    def make(**kwargs):
+        sir = make_sir()
+        def log(sim, uids):
+            seen.setdefault(sim.ti, []).extend(uids.tolist())
+        primary = ss.screen(ss.Test(), coverage=ss.probperyear(0.3), repeat=ss.years(5))
+        if kwargs['solver'] == 'abm':
+            primary.then = log
+        return ss.Sim(sir, interventions=primary, start=2020, stop=2040, dt=ss.months(3), **kwargs)
+    kwa = dict(verbose=0)
+    sims = sc.objdict(ode=make(solver='ode', total_pop=10_000, **kwa).run(), abm=make(solver='abm', total_pop=10_000, n_agents=10_000, **kwa).run())
+    last = {}
+    for ti,uids in sorted(seen.items()): # As agents: nobody screened twice within 20 quarters
+        for uid in uids:
+            assert ti - last.get(uid, -100) >= 20
+            last[uid] = ti
+    for solver,sim in sims.items():
+        d, e = sim.results.primary.delivered, sim.results.primary.eligible
+        assert np.isclose(d[0], 10_000*(1 - 0.7**0.25), rtol=0.05)
+        assert np.isclose(e[19], 10_000 - d[:19].sum()) and np.isclose(e[20], 10_000 - d[1:20].sum()) # Those screened first are due again after exactly 5 years
+    check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.03)
+    assert [s.n for s in sims.ode.strats if s.name == 'since_primary'] == [22]
+    return sims
+
+
+def test_two_doses():
+    sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py)')
+    ppl = ss.People(1)
+    def make(**kwargs):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(1.5)), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])
+        vx = ss.Vaccine(efficacy=0.9, doses=[0.6, 1.0])
+        girls = (ppl.age >= 9) & (ppl.age < 15)
+        first = ss.vaccinate(vx, dose=1, where=girls, coverage=ss.probperyear(0.5), start=2020)
+        second = ss.vaccinate(vx, dose=2, where=vx.since >= ss.months(6), coverage=0.9)
+        return ss.Sim(sir, interventions=[first, second], start=2019, stop=2026, dt=ss.months(1), use_aging=False, **kwargs)
+    kwa = dict(verbose=0)
+    sims = sc.objdict(ode=make(solver='ode', total_pop=50_000, **kwa).run(), abm=make(solver='abm', total_pop=50_000, n_agents=25_000, **kwa).run())
+    for solver,sim in sims.items():
+        res = sim.results
+        d1, d2 = res.first.delivered, res.second.delivered
+        start = int(np.flatnonzero(d1)[0])
+        assert d2[:start + 6].sum() == 0 and d2[start + 6] > 0 # No second dose within 6 months of the first
+        assert np.isclose(d2[start + 6:].sum(), 0.9*d1[:-7].sum(), rtol=0.05)
+        assert np.isclose(res.first.delivered.by('age').values[:, [0, 2]].sum(), 0)
+    check_close(sims, lambda sim: sim.results.second.delivered.sum(), rtol=0.05)
+    check_close(sims, lambda sim: sim.results.sis.n_I[-2], rtol=0.1)
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
@@ -283,3 +453,8 @@ if __name__ == '__main__':
     target = test_target()
     memory = test_memory()
     then = test_then()
+    hiv = test_hiv_art()
+    hpv = test_hpv_algorithm()
+    clinic = test_clinic()
+    rescreen = test_rescreen()
+    doses = test_two_doses()

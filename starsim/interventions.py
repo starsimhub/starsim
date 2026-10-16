@@ -1347,7 +1347,7 @@ class Delivery(Intervention):
             if self.queue is not None and getattr(self, '_ti_served', None) != self.sim.ti: # Those waiting are served even if nobody new arrives
                 self.receive(self.selector.nobody())
             return
-        if self.routine and self.by_age and not self.started:
+        if self.routine and self.by_age and not self.started and self.remembers: # Only if it keeps who was offered it (not a rate among those eligible)
             self.skip_past()
         if self.deliver is not None:
             self.give(self.delivered_by_function())
