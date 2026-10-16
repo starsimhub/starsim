@@ -45,8 +45,8 @@ def times(sim, mode='auto'):
         return np.array([t.years for t in tv], dtype=float)
 
 
-def results(sim, series=None, time='auto'):
-    """ The sim's results as long rows: one per time and series, named <module>.<result> """
+def results(sim, series=None, time='auto', runs=None):
+    """ The sim's results as long rows: one per time and series, named <module>.<result>; with runs (a MultiSim's results), one per run too """
     import starsim as ss
     t = times(sim, time)
     rows = []
@@ -57,23 +57,30 @@ def results(sim, series=None, time='auto'):
             name = f'{modname}.{key}'
             if not isinstance(r, ss.Result) or np.ndim(r.values) != 1 or (series and name not in series):
                 continue
-            rows += [dict(time=ti, series=name, value=float(v)) for ti,v in zip(t, r.values)]
+            if runs is None:
+                rows += [dict(time=ti, series=name, value=float(v)) for ti,v in zip(t, r.values)]
+            else: # Each run's values, as rows of an array
+                for i,vals in enumerate(getattr(getattr(runs, modname), key).values):
+                    rows += [dict(run=i, time=ti, series=name, value=float(v)) for ti,v in zip(t, vals)]
     return rows
 
 
-def run(filename, out, n_runs=1, seed=1, series=None, time='auto'):
-    """ Run a port n_runs times (with seeds seed, seed+1, ...) and write its results """
+def run(filename, out, n_runs=1, seed=1, series=None, time='auto', n_cpus=None):
+    """ Run a port n_runs times (with seeds seed, seed+1, ...), on at most n_cpus processes, and write its results """
     import starsim as ss
     sim = load_sim(filename)
     sim.pars.verbose = 0
     sim.pars.rand_seed = seed
-    if n_runs == 1:
-        sims = [sim.run()]
-    else:
-        sims = ss.parallel(sim, n_runs=n_runs, verbose=0).sims
     rows = []
-    for i,s in enumerate(sims):
-        rows += [dict(run=i, **row) for row in results(s, series, time)]
+    if n_runs == 1:
+        rows = [dict(run=0, **row) for row in results(sim.run(), series, time)]
+    else:
+        msim = ss.parallel(sim, n_runs=n_runs, n_cpus=n_cpus, verbose=0)
+        if len(msim.sims) < n_runs: # Restarted in this process: one sim, with every run in msim.results
+            rows = results(msim.sims[0], series, time, runs=msim.results)
+        else:
+            for i,s in enumerate(msim.sims):
+                rows += [dict(run=i, **row) for row in results(s, series, time)]
     df = pd.DataFrame(rows)
     df.to_csv(out, index=False)
     print(f'Wrote {len(df)} rows ({n_runs} run{"s" if n_runs > 1 else ""}, {df.series.nunique()} series) to {out}')
@@ -209,6 +216,7 @@ def main(argv=None):
     p.add_argument('out', help='the CSV to write')
     p.add_argument('--runs', type=int, default=1)
     p.add_argument('--seed', type=int, default=1)
+    p.add_argument('--cpus', type=int, help='the most processes to run on (default: every core)')
     p.add_argument('--series', nargs='*', help='the results to keep, e.g. sir.n_I (default: all)')
     p.add_argument('--time', default='auto', choices=['auto', 'index'], help="the time column: the sim's time, or the step")
     p = sub.add_parser('compare', help='Compare the original (first) with the port (second)')
@@ -221,7 +229,7 @@ def main(argv=None):
     p.add_argument('--plot', help='save a plot of each series to this file')
     args = parser.parse_args(argv)
     if args.cmd == 'run':
-        run(args.model, args.out, n_runs=args.runs, seed=args.seed, series=args.series, time=args.time)
+        run(args.model, args.out, n_runs=args.runs, seed=args.seed, series=args.series, time=args.time, n_cpus=args.cpus)
     else:
         df = compare(args.original, args.port, mapping=dict(m.split('=', 1) for m in args.map), rtol=args.rtol, alpha=args.alpha, shift=args.shift, plot=args.plot)
         return 0 if df.ok.all() else 1

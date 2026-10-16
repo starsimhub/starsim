@@ -40,11 +40,11 @@ A model is imported in two passes. The mechanical pass (`ss.load(..., format=...
 | flepiMoP | `format='flepimop'` (the config YAML) | `references/flepimop.md` |
 | summer2 | `format='summer2'` (a JSON dump of the model object) | `references/summer2.md` |
 | Atomica | `format='atomica'` (the framework and databook workbooks) | `references/atomica.md` |
-| EpiModel | by hand | `references/epimodel.md` |
-| epydemix | by hand | `references/epydemix.md` |
+| EpiModel | `format='epimodel'` (a JSON dump from `dump_epimodel.R`; built-in models and networks, custom modules listed with their R source) | `references/epimodel.md` |
+| epydemix | `format='epydemix'` (a JSON dump from `dump_epydemix.py`, or a live model) | `references/epydemix.md` |
 | LASER, laser-measles | by hand | `references/laser.md` |
 | MEmilio | by hand | `references/memilio.md` |
-| camdl | by hand | `references/camdl.md` |
+| camdl | `format='camdl'` (a `.camdl` file, camdlc's JSON, or a pycamdl model) | `references/camdl.md` |
 | Starsim v3 | runs unchanged; declared transitions by hand | `references/starsim3.md` |
 
 `ss.interop.formats` lists the importers this version has. For a framework with no importer, it can still help to fill in an `ss.interop.Source` (states, parameters, flows as written in the source) and call `ss.interop.build(source)`, which classifies the rates by the same rules and prints how it read each one.

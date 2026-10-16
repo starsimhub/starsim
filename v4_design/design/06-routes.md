@@ -279,7 +279,7 @@ sim = ss.Sim(sir, networks=[home, school, work, community], stratify=dict(age=[0
 Space is a dimension ([05-dimensions.md](05-dimensions.md#space)), and mobility is the optional movement between its levels. Without a mobility model, people mix within their own patch and patches do not affect each other.
 
 ```python
-kenya     = ss.geo('Kenya', level='county')
+kenya     = ss.geo('Kenya', level=1)
 sir.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))
 ```
 
@@ -321,12 +321,14 @@ Travelers in transit (in neither their home patch nor their destination) are out
 ## Geography
 
 ```python
-ss.geo('Kenya', level='county')
-ss.geo('USA', level='county', year=2020)
-ss.geo(shapefile='my_districts.shp', pop='pop.csv')
+ss.geo('Kenya', level=1)                       # its 47 counties, bundled
+ss.geo('Kenya', level=1, places=['Nairobi', 'Kiambu'])
+ss.geo(['Kenya', 'Uganda'], level=1)           # several countries, named 'Kenya:Busia' and so on
+ss.geo('USA', level=2, year=2015)              # US counties, populations for 2015: fetched
+ss.geo('districts.csv')                        # the user's own: name, pop, and lat and lon (or x and y)
 ```
 
-A geography supplies names, populations, centroids, distances, and adjacency. Sources are pluggable, and the source used is recorded in `describe()` and in the `pars` part of `sim.hash()`. Geographic data follows the same policy as the rest of the named data ([04-parameters.md](04-parameters.md#named-data)): what is small and common is bundled, the rest is fetched on demand and cached, each data set is adapted once with its provenance recorded, and nothing depends on another framework's data package. The bundled set MUST include non-US geographies from the first release.
+A geography supplies names, populations, centroids, distances, and which places share a border (`geo.adjacency`). Levels are numbers, as the boundary sources number them (0 the country, 1 its provinces, states, or counties, 2 the next), since what a level is called differs from country to country. Sources are pluggable, and the source used is recorded in `describe()` and in the `pars` part of `sim.hash()`. Geographic data follows the same policy as the rest of the named data ([04-parameters.md](04-parameters.md#named-data)): what is small and common is bundled, the rest is fetched on demand and cached, each data set is adapted once with its provenance recorded, and nothing depends on another framework's data package. The bundled set MUST include non-US geographies from the first release.
 
 ## Rejected
 

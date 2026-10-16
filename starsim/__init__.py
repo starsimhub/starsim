@@ -148,6 +148,9 @@ from .loop import Loop
 t('spec')
 from .spec import from_spec, to_code, diff
 
+t('named')
+from . import named # Places and contact matrices by name (ss.geo('Kenya'), ss.contacts('Kenya')); starsim_data is imported only when they are used
+
 t('interop')
 from . import interop # Used by ss.load(..., format=...)
 

@@ -2,41 +2,57 @@
 
 ## What the source is
 
-EpiModel is an R package. A model is an R script with three kinds: `dcm()` (a deterministic compartmental model, often a custom derivative function), `icm()` (a stochastic individual contact model), and `netsim()` (a stochastic network model, the main use). A network model is built in three steps: `netest()` fits a temporal ERGM from a `formation` formula (`~edges + concurrent + degrange(from = 4)`, `nodematch("risk")`) with `target.stats` and a dissolution model (`dissolution_coefs(~offset(edges), duration = 50, d.rate = ...)`); `netsim()` runs the epidemic with `param.net()` (`inf.prob`, `act.rate`, `rec.rate`, arrival and departure rates), `init.net()` (`i.num`), and `control.net()` (`type = "SIS"`, `nsteps`, `nsims`). Larger models replace or add modules (`infection.FUN`, `progress.FUN`, custom `*.FUN` functions in R that read and write node attributes with `get_attr()`/`set_attr()`), as in the EpiModel Gallery's HIV model.
+EpiModel is an R package. A model is an R script with three kinds: `dcm()` (a deterministic compartmental model, built in or a custom derivative function), `icm()` (a stochastic individual contact model), and `netsim()` (a stochastic network model, the main use). A network model is built in three steps: `netest()` fits a temporal ERGM from a `formation` formula (`~edges + concurrent + degrange(from = 4)`, `nodematch("risk")`) with `target.stats` and a dissolution model (`dissolution_coefs(~offset(edges), duration = 50, d.rate = ...)`); `netsim()` runs the epidemic with `param.net()` (`inf.prob`, `act.rate`, `rec.rate`, arrival and departure rates), `init.net()` (`i.num`), and `control.net()` (`type = "SIS"`, `nsteps`, `nsims`). Larger models replace or add modules (`infection.FUN`, `progress.FUN`, custom `*.FUN` functions in R that read and write node attributes with `get_attr()`/`set_attr()`), as in the EpiModel Gallery's HIV model, and run scenarios with `use_scenario()`.
+
+## Getting the model out
+
+The script is run in EpiModel's environment by `starsim/interop/dump_epimodel.R` (it needs only EpiModel and jsonlite), with `netest()`, `netdx()`, `netsim()`, `dcm()`, and `icm()` replaced by functions that record their arguments, so nothing is fitted or simulated and it takes about a second. Each call of `netsim()`, `dcm()`, or `icm()` is a run; statements that fail afterwards (plots of the results) are skipped. A saved `netsim()` result or `netest()` (`.rds`) works too.
+
+```bash
+Rscript dump_epimodel.R intro_sis.R model.json
+```
+
+Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscript='.../bin/Rscript')` to dump and load in one step. Choose a run with `run=` (a number, or a scenario's `.scenario.id`); the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
 
 ## Mapping
 
-| EpiModel | Starsim v4 | Fit |
+| EpiModel | Starsim | Mechanical |
 |---|---|---|
-| `type = "SIS"` / `"SIR"` with `inf.prob`, `act.rate` | `ss.transmission('S -> I', beta=ss.prob(1 - (1 - inf.prob)**act.rate))` | Exact (EpiModel works per partnership per step) |
-| `rec.rate` | `ss.progression('I -> S', rate=ss.prob(rec.rate))` | Exact: EpiModel's rates are probabilities per step |
-| `formation = ~edges + concurrent + degrange(from = k)`, `target.stats`, `duration` | `ss.PartnerNet(n_contacts=2*edges/n, concurrency=concurrent/n, max_contacts=k-1, dur=duration)` | Approximate: matches the degree targets, not an ERGM fit |
-| `nodematch("risk")` | `ss.PartnerNet(match=dict(risk=share_within))` | Approximate (EpiModel's nodematch, recovered to about 0.01) |
-| Triangles, other ERGM terms | Not available; note it as a finding | None |
-| `dissolution_coefs(d.rate = ...)` | Nothing: `ss.PartnerNet` measures departures and corrects for them | Exact in effect |
-| Several networks (main, casual) | `networks=dict(main=..., casual=...)`, `beta=dict(main=..., casual=...)` | Exact |
-| `a.rate` (arrivals), `ds.rate`/`di.rate` (departures) | `ss.birth('-> S', rate=...)`, `(S | I) >> ss.null @ ss.prob(...)` | Exact |
-| `i.num` | `init=dict(I=10)` | Exact (EpiModel draws stages at random; give expected numbers) |
-| A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care='undx -> dx', rate=...)` | Exact |
-| An attribute's effect on a rate (`rel_trans` on ART) | `adjust=dict(rel_trans=[...], aids=[...])` on the stratification, or `rel_trans=` on a state | Exact |
-| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(ss.Vaccine(...), coverage=..., eligible=...)`, `ss.treat(...)` | Exact for keyword delivery; a function for eligibility on the network (below) |
-| Scenarios (`param.net` variants) | `sim.new(pars=dict(...))`, `sim.new(interventions=...)`, `ss.parallel(**scenarios)` | Exact |
-| `dcm()` with a derivative function | Classify each term by the import rules (pair the outflow of one compartment with the inflow of another into a transition); write the declared form | Exact if the terms pair up |
+| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = 1 - (1 - inf.prob)^act.rate` per partnership per step; `rec.rate` to `S` or `R` | yes |
+| Probabilities per step | `ss.probperday(...)` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
+| `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
+| `i.num`, `r.num`; the network's size | `init=dict(S=..., I=..., R=...)`, `n_agents=n`, `solver='abm'` | yes |
+| `nsteps` | `stop=nsteps - 1` (EpiModel's time 1 is the start) | yes |
+| `edges`, `concurrent`, `degrange(from = k)` with target 0 | `ss.PartnerNet(n_contacts=2*edges/n, concurrency=concurrent/n, max_contacts=k - 1, dur=duration)` | yes (the same targets, not an ERGM fit; marked guessed) |
+| `nodematch("attr")` | `match=dict(attr=target/edges)`, and a stratification `attr` split as the attribute is on the network | yes (guessed) |
+| Several networks (`netsim(list(est_main, est_cas), ...)`) | One `ss.PartnerNet` each, `net1`, `net2`, ... | yes |
+| `dissolution_coefs(d.rate = ...)` | Nothing: `ss.PartnerNet` allows for partnerships ended by departures | yes |
+| `dcm()` with `type = "SI"`, `"SIS"`, `"SIR"` | The same states with rates, `inf_prob * act_rate * I` (frequency-dependent), `solver='ode'`, `dt` from `control.dcm(dt=)` | yes |
+| `icm()` with `type = "SI"`, `"SIS"`, `"SIR"` | The same, with `solver='binomial'`: acts between random pairs as a rate of infection (marked guessed) | yes |
+| Scenarios (several calls of `netsim()`, `use_scenario()`) | The chosen one as the sim; the others in `sim.imported.scenarios`, for `sim.new(pars=...)` | yes |
+| Other ERGM terms (`nodefactor`, `absdiff`, `gwesp`, `degree`, `offset(...)`, `nodematch(diff = TRUE)`) | Listed; triangles and the like have no counterpart, so note it as a finding | no |
+| Partnerships that last longer within a group (`~offset(edges) + offset(nodematch(...))`) | Listed; the first duration is used | no |
+| Two groups (parameters ending in `.g2`) | Listed: `stratify(group=[1, 2])` with rates by group, by hand | no |
+| A parameter by time since infection (`inf.prob` as a vector), `inter.eff`, `inter.start` | Listed; the first value is used | no |
+| A custom module (`infection.FUN = infect`, `type = NULL`) | Listed, with its R source in `sim.imported.modules` (and other functions in `sim.imported.functions`); a model of custom modules only imports its networks, with the parameters in `sim.imported.pars` | no |
+| A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care='undx -> dx', rate=...)` | no |
+| An attribute's effect on a rate (`rel_trans` on ART) | `adjust=dict(rel_trans=[...], aids=[...])` on the stratification, or `rel_trans=` on a state | no |
+| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(ss.Vaccine(...), coverage=..., eligible=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
+| `dcm()` with a custom derivative function (`new.mod`) | Listed with its source; pair the outflow of one compartment with the inflow of another into a transition, and classify each by the import rules | no |
 
 ## What needs care
 
-- **Everything is per step.** EpiModel's rates are probabilities per time step (often a week). Write them with `ss.prob` (alias it: `week = ss.prob`) and set `stop=` in steps; don't convert to rates per day.
+- **Order within a step.** EpiModel lets people recover in the step in which they are infected and counts after that, so its prevalence is about 5% lower for the same epidemic, and it grows a little more slowly (`icm()` SIS: 460 infected at equilibrium against 487; `netsim()` SIS: 227.5 against 234). Compare new infections a step, which agree (the introduction: 12.0 against 11.7 a step at equilibrium, and the statistical comparison passes; `icm()`: 24.1 against 24.7), or allow for it.
 - **Acts per partnership.** EpiModel's chance over a partnership in a step is `1 - (1 - inf.prob*m)^act.rate`, with `m` the infectiousness multiplier of the infected partner. Starsim multiplies `1 - (1 - inf.prob)^act.rate` by `rel_trans`; the difference is small (0.0374 against 0.0370 for an acute partner). `ss.PartnerNet` has no `acts=`.
-- **Order within a step.** EpiModel lets people recover in the step they are infected and counts after that, so its prevalence is about 5% lower for the same epidemic (SIS at equilibrium). Compare new infections a step, or allow for it.
-- **Bare numbers as durations of contacts are in years.** In a sim with no unit, give `dur=` in steps explicitly when it matters, or check the network's `net.check()` output.
 - **The network matches the targets better than EpiModel's own.** EpiModel's simulated network can undershoot its targets (casual mean degree 0.28 against 0.30), so agreement on the targets does not imply agreement on the network. Compare the simulated network's diagnostics (edges, mean degree, concurrency) as series too.
 - **Conditions on the network are a function.** Eligibility such as "two or more partners across both networks, or a partner with HIV" has no declared form; write an `eligible=` function that reads `net.edges.p1`/`p2` and mark it as a workaround.
 - **Stopping a product at a rate** is written as waning: `ss.Vaccine(efficacy=0.95, waning=-1/np.log(1 - p_stop))`, a mean duration of protection in steps.
 - **A care cascade is a dimension, not a disease.** EpiModel's separate attributes (stage, care state, ART history) become one disease with a `care` dimension on the infected states; "off ART after being on it" is a level of its own (`off`).
+- **Initial infections.** EpiModel draws who is infected (and, in custom models, their stage) at random; the import gives the expected numbers.
 
 ## Worked example
 
-`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction) and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP). The key part of the HIV translation:
+`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction), which `ss.load()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
 
 ```python
 week = ss.prob # EpiModel uses each rate as the probability of an event in a week (a step)

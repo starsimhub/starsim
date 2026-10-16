@@ -706,14 +706,8 @@ def event_register(ev, compartments, E, N):
 def build(src, u0, verbose=None, **kwargs):
     """ The sim, as core.build() makes it, with the initial numbers by node """
     verbose = sc.ifelse(verbose, ss.options.verbose)
+    src.declared = True # Every compartment is people, including one joined to the others only by events (aging)
     dis, lines = disease(src)
-    graph = dis.graph # Workaround: the core leaves people to be worked out, but a compartment joined to the others only by events (aging) is people too
-    people = [s for s in graph.states.values() if src.states[s.name].people and s.people is False]
-    for state in people:
-        state.people = True
-        graph.guessed.pop(f'states.{state.name}.people', None)
-    if people:
-        graph.resolve_people()
     if u0 is not None and len(u0) > 1: # Initial numbers by node (the rest in the first compartment)
         for c in u0.columns[1:]:
             if u0[c].any():

@@ -177,7 +177,7 @@ A reference to data is part of the model: not just a contact matrix, but which o
 ```python
 ss.people('Kenya', year=2024)                     # size, age structure, sex ratio; returns an ss.People
 ss.contacts('Kenya', source='prem2021')           # an age contact matrix; returns a set of ss.MixingPools
-ss.geo('Kenya', level='county')                   # names, populations, centroids, adjacency
+ss.geo('Kenya', level=1)                          # its counties: names, populations, centroids, borders
 ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to results by column name
 ```
 
@@ -189,15 +189,15 @@ sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Ke
 
 **Bundled and pulled.** The data comes from [`starsim_data`](https://github.com/starsimhub/starsim_data) (`import starsim_data as ssd`), which does some of each:
 
-- **Bundled**: what is small and common. UN World Population Prospects population, birth, death, and migration rates for every country, and the Prem (2017, 2021) and Mistry (2021) age contact matrices by setting (`all`, `home`, `work`, `school`, `community`). Reading it (`ssd.load('kenya', which='prem2017', kind='home')`) never touches the network, so it works offline and is reproducible from a pinned version.
-- **Pulled**: everything else, fetched on demand and cached locally (`ssd.fetch('kenya', which='deaths', years=(2000, 2025))`): annual resolution, life tables, other projection variants. The cache key includes the source and its version.
+- **Bundled**: what is small and common. UN World Population Prospects population, birth, death, and migration rates for every country; the Prem (2021) age contact matrices by setting (`all`, `home`, `work`, `school`, `community`), for 177 countries; and the first two administrative levels of every country, with their populations, centroids, areas, and borders. Reading it (`ssd.load('kenya', which='prem2017', kind='home')`) never touches the network, so it works offline and is reproducible from a pinned version.
+- **Pulled**: everything else, fetched on demand and cached locally (`ssd.fetch('kenya', which='deaths', years=(2000, 2025))`): annual resolution, life tables, other projection variants, the earlier Prem (2017) and the Mistry (2021, by single year of age) contact matrices (`ss.contacts('Japan', source='mistry2021')`), and finer administrative levels or other years of population (which need the geospatial extra). The cache key includes the source and its version.
 - **Versioned**: each UN revision is kept as a separate store, so a new release adds data and does not change what an existing model loads; `revision=` pins one.
 - **Provenance**: every data set records its source and license (`ssd.provenance('prem2017')`).
 
 The library does not depend on other frameworks' packages (LASER's migration module, `epydemix-data`, `socialmixr`) for generators or data. A data set is adapted once, with its provenance recorded, and then it is ours to keep working.
 
 - The resolved source, version, and (for pulled data) retrieval date are shown by `describe()` and contribute to the `pars` part of `sim.hash()`, so a re-run against changed upstream data can be detected.
-- Providers are pluggable, so a group can add its own sources. Geographies in particular are not in `starsim_data` today (it is national-level) and come from a provider or from the user's own files ([06-routes.md](06-routes.md#geography)).
+- Providers are pluggable, so a group can add its own sources, and a geography can always come from the user's own table instead ([06-routes.md](06-routes.md#geography)).
 - Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises `E605 UnknownLocation`, listing near matches and the providers searched.
 
 How data is matched to results is in [09-results.md](09-results.md).

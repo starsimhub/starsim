@@ -1128,7 +1128,7 @@ def restart_runs(sims, n_runs, pars=None):
         return None
     runners = []
     for sim in sims:
-        runner = sim.new().init()
+        runner = sim.new(rand_seed=sim.pars.rand_seed).init() # The seed as it is now, which may have been set since the sim was made
         runner.label = sim.label
         if not runner.kernel_only():
             return None
@@ -1203,7 +1203,8 @@ def parallel(*args, n_runs=None, pars=None, **kwargs):
             sims.append(sim)
     if pars is not None:
         n_runs = sc.ifelse(n_runs, 1)
-    if n_runs is not None and not kwargs: # Built once and restarted for each run, where the sims allow, which is many times faster
+    serial = {'verbose', 'n_cpus', 'parallel'} # Options of running in parallel, which don't matter to runs restarted in this process
+    if n_runs is not None and set(kwargs) <= serial: # Built once and restarted for each run, where the sims allow, which is many times faster
         msim = restart_runs(sims, n_runs, pars=pars)
         if msim is not None:
             return msim

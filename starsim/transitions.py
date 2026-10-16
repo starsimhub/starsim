@@ -2374,28 +2374,44 @@ class geo:
     """
     A geography: named places with populations and positions, used as the levels of a spatial stratification
 
+    A country's administrative units come from `starsim_data` by name (`ss.geo('Kenya', level=1)`):
+    their names, populations, centroids, areas, p-codes, and which share a border. The first
+    two levels of every country are bundled, so this needs no download.
+
     Args:
-        data (dataframe/str): a table (or the name of a file holding one) with a column `name`, and optionally `pop`, and `x` and `y` or `lat` and `lon`
+        data (dataframe/str/list): a country (or a list of them) by name or code, e.g. 'Kenya' or 'KE'; or a table (or the name of a file holding one) with a column `name`, and optionally `pop`, and `x` and `y` or `lat` and `lon`
+        level (int/str): for a country, the administrative level: 1 (the default) for its first-level units (counties, provinces, states), 2 for the next (fetched), 0 for the country itself
+        year (int): for a country, the year of the populations (default: those bundled, for 2020; another year is fetched)
+        places (list): for a country, only these units, by name, `dot_name` ('Kenya:Nairobi'), or p-code
         names (list): the name of each place (instead of `data`)
-        pop (list): the population of each place; sets the share of people who start in each
+        pop (list): the population of each place; sets the share of people who start in each (for a country, in place of the bundled ones)
         x (list): a position for each place, in any unit of distance
         y (list): the other coordinate
         lat (list): latitudes in degrees (instead of `x` and `y`); distances are then great-circle distances in km
         lon (list): longitudes in degrees
         distances (array): the distance between each pair of places (instead of positions)
+        adjacency (array): whether each pair of places shares a border
 
     Examples:
         ```python
+        kenya = ss.geo('Kenya', level=1) # Its 47 counties
         towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
         sir.stratify(patch=towns, mobility=ss.gravity(k=0.01))
         ```
     """
-    def __init__(self, data=None, names=None, pop=None, x=None, y=None, lat=None, lon=None, distances=None):
-        if isinstance(data, str):
-            if not data.endswith(('.csv', '.xlsx')):
-                errormsg = f'ss.geo("{data}") looks like the name of a place; named geographies are not available yet, so give a table of places (a dataframe or a file) or names= with their populations and positions'
-                raise NotImplementedError(errormsg)
+    def __init__(self, data=None, names=None, pop=None, x=None, y=None, lat=None, lon=None, distances=None, adjacency=None, level=1, year=None, places=None):
+        self.ref = None # Where a named geography came from, for the model spec
+        self.area = None
+        self.codes = None
+        named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx')) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
+        if named: # A country's administrative units, from starsim_data
+            found = ss.named.geography(data, level=level, year=year, places=places)
+            names, lat, lon, adjacency = [found[key] for key in ['names', 'lat', 'lon', 'adjacency']]
+            pop = found['pop'] if pop is None else pop # Populations given by hand win
+            self.area, self.codes, self.ref = found['area'], found['codes'], found['ref']
+            data = None
+        elif isinstance(data, str):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if data is not None:
             cols = {key:data[key].tolist() for key in ['name', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
@@ -2405,6 +2421,9 @@ class geo:
             raise ValueError(errormsg)
         self.names = list(names)
         self.pop = None if pop is None else np.array(pop, dtype=float)
+        self.lat = None if lat is None else np.array(lat, dtype=float)
+        self.lon = None if lon is None else np.array(lon, dtype=float)
+        self.adjacency = None if adjacency is None else np.array(adjacency, dtype=bool)
         self.distances = None
         if distances is not None:
             self.distances = np.array(distances, dtype=float)
@@ -2415,13 +2434,15 @@ class geo:
             lat, lon = np.radians(np.array(lat, dtype=float)), np.radians(np.array(lon, dtype=float))
             a = np.sin((lat[:, None] - lat[None, :])/2)**2 + np.cos(lat[:, None])*np.cos(lat[None, :])*np.sin((lon[:, None] - lon[None, :])/2)**2
             self.distances = 2*6371*np.arcsin(np.sqrt(a))
-        for key,val in dict(pop=self.pop, distances=self.distances).items():
+        for key,val in dict(pop=self.pop, distances=self.distances, adjacency=self.adjacency).items():
             if val is not None and len(val) != len(self.names):
                 errormsg = f'ss.geo() has {len(self.names)} places but {len(val)} entries in {key}'
                 raise ValueError(errormsg)
         return
 
     def __repr__(self):
+        if self.ref is not None:
+            return f"geo({self.ref['place']!r}, level={self.ref['level']}: {len(self)} places)"
         return f'geo({sc.strjoin(self.names)})'
 
     def __len__(self):
@@ -2784,7 +2805,8 @@ class Strat:
     def spec(self):
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
+        named = dict(geo=self.geo.ref) if self.geo is not None and self.geo.ref is not None else {} # Where a named geography came from; only when there is one, so that the hash of every other model is as it was
+        return dict(**named, name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
                     mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property

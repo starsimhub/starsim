@@ -1584,7 +1584,7 @@ class Compartmental(Engine):
         self.whole = None # Whether the kernels can take the whole run in one call: see kernel_only()
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
-        self.use_kernels = True # Whether to step with the kernels where the model allows (if False, everything is worked out in Python, which is slower but the same)
+        self.use_kernels = len(self.graph.transitions) > 0 # Whether to step with the kernels where the model allows (if False, everything is worked out in Python, which is slower but the same); a disease with no transitions has nothing to step
         self.cross = next((c for c in sim.crossings if module.name in c.names), None)
         self.seen = None # The change to the people in the crossing that this engine has
         return

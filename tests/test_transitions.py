@@ -505,7 +505,7 @@ def test_load():
     assert ss.transitions.format_expr(rate) == '1 - (1 - 0.5 * I.frac) ** 3 / (2 * W.n) - (I.n - W.n)'
 
     # What cannot be read yet is said, not dropped
-    with pytest.raises(NotImplementedError, match='networks'):
+    with pytest.raises(NotImplementedError, match='network'): # Only named contact matrices can be read back
         ss.from_spec(ss.Sim(make_sir(), networks='random', n_agents=100, **kw).to_spec())
     return sim2
 

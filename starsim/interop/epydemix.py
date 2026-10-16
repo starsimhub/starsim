@@ -108,7 +108,7 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     dt = run.get('dt', 1.0)
     start = sc.ifelse(start, run.get('start_date'), '2020-01-01')
     stop = sc.ifelse(stop, run.get('end_date'), '2020-12-31')
-    dates = np.arange(np.datetime64(start, 'D'), np.datetime64(stop, 'D') + 1) if dt == 1 else None # The day of each step
+    dates = np.arange(np.datetime64(start, 'D'), np.datetime64(stop, 'D') + np.timedelta64(1, 'D')) if dt == 1 else None # The day of each step
     edges = ages(groups)
     dim = 'age' if edges is not None else 'group'
 
@@ -167,13 +167,14 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
         if c in init and np.sum(init[c]) > np.sum(init.get(rest, 0)):
             rest = c
     if rest != comps[0]:
-        src.states.move_to_end(rest, last=False) if hasattr(src.states, 'move_to_end') else None
         src.states = sc.objdict({rest:src.states[rest], **{k:v for k,v in src.states.items() if k != rest}})
     src.states[rest].init = None
+    people = Nk # The number in each group
     if init:
-        counted = sum(np.sum(v) for v in init.values())
-        if not np.isclose(counted, Nk.sum()):
-            src.notes.append(f'the initial numbers add up to {counted:n}, not the population ({Nk.sum():n}); the {Nk.sum() - counted:n} left over start in {rest}')
+        counted = np.sum([np.array(v, dtype=float) for v in init.values()], axis=0)
+        if np.abs(counted - Nk).max() >= 0.5: # Whole people
+            people = counted
+            src.notes.append(f'population    the initial numbers add up to {counted.sum():n}, not the population ({Nk.sum():n}), which is the sim\'s population; epydemix divides by the {Nk.sum():n} in the force of infection')
     else:
         src.skip('initial conditions', 'no run was recorded, so the initial numbers are not known; give init=')
 
@@ -184,9 +185,9 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
         s, t, kind, params = tr['source'], tr['target'], tr['kind'], tr['params']
         if kind == 'mediated':
             rate, agent = params
-            flows.append((s, t, f'({rate}) * {agent} / N', None))
+            flows.append((s, t, f'({rate}) * {agent} / N', None, kind))
         elif kind == 'spontaneous':
-            flows.append((s, t, str(params), str(params)))
+            flows.append((s, t, str(params), str(params), kind))
         else:
             src.skip(f'transition {s} -> {t}', f'of a custom kind ("{kind}"), registered with register_transition_kind(), which is not translated')
             continue
@@ -197,7 +198,7 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     # Two spontaneous exits from a state at r*X and r*(1 - X) are a branch, as written by hand
     done = set()
     names = set()
-    for i,(s, t, rate, plain) in enumerate(flows):
+    for i,(s, t, rate, plain, kind) in enumerate(flows):
         if i in done:
             continue
         name = f'{s}_to_{t}'
@@ -206,7 +207,7 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
         names.add(name)
         if plain is not None:
             for j in range(i+1, len(flows)):
-                s2, t2, rate2, plain2 = flows[j]
+                s2, t2, rate2, plain2, _ = flows[j]
                 if j in done or s2 != s or plain2 is None or t2 == t:
                     continue
                 found = branch(plain, plain2)
@@ -240,13 +241,13 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     matrix = np.sum([np.array(m, dtype=float) for m in pop['contacts'].values()], axis=0) if pop['contacts'] else np.ones((n, n))
     if n > 1:
         levels = edges if edges is not None else list(groups)
-        src.stratify(**{dim:levels}, split=(Nk/Nk.sum()).tolist())
+        src.stratify(**{dim:levels}, split=(people/people.sum()).tolist())
         src.config.networks = ss.contacts(**{dim:matrix.tolist()})
-        src.code['networks'] = f'ss.contacts({dim}={np.round(matrix, 10).tolist()!r})'
+        src.code['networks'] = f'ss.contacts({dim}={matrix.tolist()!r})'
         src.notes.append(f'contacts      the {len(pop["contacts"])} settings of {pop["name"]} ({sc.strjoin(pop["contacts"].keys())}) added together')
 
     # Run settings: epydemix's end date is the last day it steps through, so the sim stops a day later
-    src.config.update(unit='day', dt=dt, start=start, stop=str(np.datetime64(stop, 'D') + 1), solver='binomial', substeps=1, total_pop=float(Nk.sum()))
+    src.config.update(unit='day', dt=dt, start=start, stop=str(np.datetime64(stop, 'D') + np.timedelta64(1, 'D')), solver='binomial', substeps=1, total_pop=float(people.sum()))
     if edges is not None:
         src.config.use_aging = False
     return build(src, verbose=verbose, **kwargs)

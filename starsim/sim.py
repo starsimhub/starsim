@@ -1077,6 +1077,9 @@ class Sim(ss.Base):
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
                     text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                    if strat.geo is not None and strat.geo.ref is not None: # Where a named geography came from
+                        ref = strat.geo.ref
+                        text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
                 elif strat.kind == 'age':
                     text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if self.unit is None else '; people age between the groups'
                 add('dimension', text, f'guessed: {"; ".join(strat.guessed.values())}' if strat.guessed else None)
@@ -1258,7 +1261,10 @@ class Sim(ss.Base):
         def modspec(mod):
             if getattr(mod, 'graph', None) is not None or isinstance(mod, (ss.modify, ss.Delivery)):
                 return mod.to_json()
-            return sc.jsonify(ss.Module.to_json(mod))
+            out = sc.jsonify(ss.Module.to_json(mod))
+            if getattr(mod, 'ref', None) is not None: # Named data, e.g. ss.contacts('Kenya'): where it came from
+                out['data'] = sc.jsonify(mod.ref)
+            return out
         def tstr(val):
             return float(val.value) if isinstance(val, ss.dur) else str(val)
         out = sc.objdict()
@@ -1268,11 +1274,13 @@ class Sim(ss.Base):
         out.stratify = [sc.dcp(strat.spec) for strat in getattr(self, 'sim_strats', [])] # Those of a module are in its own spec, and those of an intervention are part of the scenario
         out.modifiers = [modspec(mod) for mod in self.connectors()]
         out.interventions = [modspec(mod) for mod in self.interventions()]
-        out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=self.unit,
+        out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=self.unit or pars.unit, # A sim of no declared modules has only the unit it was given
                                 start=tstr(self.t.start), stop=tstr(self.t.stop), dt=float(self.t.dt.to(self.unit_base).value),
                                 total_pop=float(pars.total_pop), n_agents=int(pars.n_agents) if self.solver == 'abm' else None, rand_seed=pars.rand_seed)
         if pars.substeps is not None: # Only when given, so that the hash of every other sim is as it was
             out.config.substeps = pars.substeps
+        if 'use_aging' in self.given: # Likewise; e.g. an age stratification without aging
+            out.config.use_aging = bool(pars.use_aging)
         out.meta = sc.objdict(library_version=ss.__version__, solver_chosen=self.solver, solver_reason=self.solver_reason, notes=list(self.notes))
         out = sc.jsonify(out)
         if filename is not None:

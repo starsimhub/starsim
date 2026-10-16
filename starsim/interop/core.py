@@ -42,6 +42,7 @@ class Source:
         self.config = sc.objdict() # Arguments to ss.Sim
         self.choices = [] # How each flow was read, as printed
         self.incomplete = [] # What could not be translated, as (name, why)
+        self.declared = False # Whether the states of people are declared to be, rather than worked out by Starsim (as those connected by transitions to the first state)
         return
 
     def add_state(self, name, init=None, people=True, label=None):
@@ -286,7 +287,7 @@ def disease(source):
     rates = Rates(source)
     states = sc.objdict()
     for name,s in source.states.items():
-        states[name] = ss.State(name=name, people=None if s.people else False, label=s.label)
+        states[name] = ss.State(name=name, people=(True if source.declared else None) if s.people else False, label=s.label)
     pars = sc.objdict({name:ss.par(p.value, doc=p.doc, bounds=p.get('bounds'), prior=p.get('prior'), name=name) for name,p in source.pars.items()})
     taken = set(states) | set(pars)
     parse = ss.spec.Parser({**states, **pars})
@@ -406,8 +407,11 @@ def build(sources, verbose=None, **kwargs):
     incomplete = []
     cfg = sc.objdict()
     for source in sources:
-        dis, choices = disease(source)
-        diseases.append(dis)
+        if source.states:
+            dis, choices = disease(source)
+            diseases.append(dis)
+        else: # Nothing to declare (e.g. a model of modules written by hand), only its configuration
+            choices = [f'  {note}' for note in source.notes]
         source.choices = choices
         lines += [f'{source.name}:'] + choices if len(sources) > 1 else choices
         incomplete += source.incomplete
@@ -420,7 +424,7 @@ def build(sources, verbose=None, **kwargs):
     if quiet:
         cfg.setdefault('verbose', 0) # A quiet import is a quiet sim
     if 'total_pop' not in cfg:
-        cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources)
+        cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
     sim = ss.Sim(diseases=diseases, **cfg)
     first = sources[0]
     code = sc.objdict()

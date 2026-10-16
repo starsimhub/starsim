@@ -154,7 +154,7 @@ sir.stratify(age=[0, 15, 65])                  # bin edges: 0-14, 15-64, 65+
 sir.stratify(risk=['low', 'high'])             # labels
 sir.stratify(vaccinated=[False, True])         # a boolean property
 hiv.stratify(cd4=[0, 200, 350, 500])           # bin edges on a continuous property
-sir.stratify(patch=ss.geo('Kenya', level='county'))   # a named source
+sir.stratify(patch=ss.geo('Kenya', level=1))          # a named source: Kenya's 47 counties
 ```
 
 A list of numbers is bin edges when the property is continuous and labels otherwise; `kind=` settles any ambiguity. The last bin is open-ended. Levels can be referred to by label (`'15-64'`, `'500+'`) or by position.
@@ -181,7 +181,7 @@ In an agent-based run people simply get older, as in Starsim. In a compartmental
 Space is a dimension, not a separate kind of model. It is valid with or without movement between patches:
 
 ```python
-kenya = ss.geo('Kenya', level='county')
+kenya = ss.geo('Kenya', level=1)
 
 sir.stratify(patch=kenya)                                # patches; nobody moves
 sir.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))    # or: patches coupled by travel

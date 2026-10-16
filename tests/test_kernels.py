@@ -200,6 +200,9 @@ def test_restart():
             assert np.allclose(multi.values[7], one.results.sir[key].values), key
     assert set(msim.results.sir.keys()) == {key for key,res in one.results.sir.items() if isinstance(res, ss.Result)}
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.cum_infection.values[:, -1].mean() - 0.6) < 0.05
+    base.pars.rand_seed += 7 # A seed set after the sim was made is used, as is an option of running in parallel
+    later = ss.parallel(base, n_runs=2, verbose=0)
+    assert len(later.sims) == 1 and np.allclose(later.results.sir.n_I.values[0], msim.results.sir.n_I.values[7])
 
     # The exact solver runs place by place when places do not affect each other within a step, with the same results as event by event over all places
     def herds(local):

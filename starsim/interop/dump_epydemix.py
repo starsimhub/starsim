@@ -15,11 +15,16 @@ the last call to `simulate()` or `run_simulations()` with the model gives the ru
 settings: the dates, the step, the initial numbers in each compartment and age group,
 and any parameters passed to the run (such as `beta` in a calibration wrapper).
 """
+import os
 import sys
 import json
 import runpy
 import numbers
 import numpy as np
+
+if __name__ == '__main__': # Run from inside Starsim, this folder's epydemix.py (the importer) would hide epydemix itself
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path = [p for p in sys.path if os.path.abspath(p or '.') != here]
 
 __all__ = ['dump', 'model_dict', 'record']
 

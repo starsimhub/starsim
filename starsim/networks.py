@@ -2158,21 +2158,24 @@ class MixingPool(Route):
 
 
 
-def contacts(matrix=None, age=None, beta=1.0, name='contacts', **dims):
+def contacts(matrix=None, age=None, beta=1.0, name=None, source='prem2021', layer='all', **dims):
     """
     Mixing between groups from a contact matrix; returns `ss.MixingPools`
 
-    There are two forms. A matrix with the lower edge of each of its age groups
-    (`ss.contacts(matrix, age=[0, 15, 65])`) has its own age groups, which need not
-    be the model's. A matrix for each of one or more of the model's stratifications
-    (`ss.contacts(age=..., location=...)`) uses the model's own levels, and the
-    contacts between two groups are the product of the entries for each dimension.
+    There are three forms. A country's matrix by name (`ss.contacts('Kenya')`) comes
+    from `starsim_data`, by 5-year age group. A matrix with the lower edge of each of its
+    age groups (`ss.contacts(matrix, age=[0, 15, 65])`) has its own age groups, which
+    need not be the model's. A matrix for each of one or more of the model's
+    stratifications (`ss.contacts(age=..., location=...)`) uses the model's own levels,
+    and the contacts between two groups are the product of the entries for each dimension.
 
     Args:
-        matrix (array/str): `matrix[i,j]` is the number of contacts per unit time that one person in age group `i` has with people in age group `j`
+        matrix (array/str): a country, by name or code ('Kenya', 'KE'); or `matrix[i,j]`, the number of contacts per unit time that one person in age group `i` has with people in age group `j`
         age (list/array): the lower edge of each age group of `matrix`, e.g. `[0, 15, 65]`; or, with no `matrix`, the matrix for the model's own age groups
         beta (float): a multiplier on transmission through these contacts
-        name (str): the name of the mixing
+        name (str): the name of the mixing (default: 'contacts', or the layer, e.g. 'home')
+        source (str): for a country, the study: 'prem2021' (the default; bundled, 177 countries), 'prem2017' (152), or 'mistry2021' (36, by single year of age); the last two are downloaded on first use
+        layer (str): for a country, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'
         dims (dict): a matrix for each stratification, e.g. `location=[[0.8, 0.2], [0.2, 0.8]]`
 
     Examples:
@@ -2183,8 +2186,12 @@ def contacts(matrix=None, age=None, beta=1.0, name='contacts', **dims):
 
         sir.stratify(risk=['low', 'high'])
         mixing = ss.contacts(risk=[[2, 1], [1, 8]])
+
+        home, school = ss.contacts('Kenya', layer='home'), ss.contacts('Kenya', layer='school') # Contacts a day, by 5-year age group
+        sim = ss.Sim(sir, networks=[home, school], stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100)
         ```
     """
+    name = name or (layer if layer != 'all' else 'contacts')
     if matrix is None and (age is not None or dims): # A matrix for each of the model's own dimensions
         dims = sc.mergedicts(dict(age=age) if age is not None else {}, dims)
         dims = {dim:np.array(mat, dtype=float) for dim,mat in dims.items()}
@@ -2205,8 +2212,12 @@ def contacts(matrix=None, age=None, beta=1.0, name='contacts', **dims):
         out.dims = dims # So a compartmental run can use the matrices directly
         return out
     kwargs = dict(dims)
-    if isinstance(matrix, str) or matrix is None:
-        ss.error('E605', f'no contact matrix is bundled for "{matrix}" yet. Supply the matrix itself: ss.contacts(matrix, age=[...]).')
+    ref = None
+    if isinstance(matrix, str): # A country's matrix, from starsim_data
+        matrix, age, ref = ss.named.contact_matrix(matrix, source=source, layer=layer)
+    elif matrix is None:
+        errormsg = 'ss.contacts() needs a matrix: a country (ss.contacts("Kenya")), a matrix with its age groups (ss.contacts(matrix, age=[...])), or a matrix for each stratification (ss.contacts(age=...))'
+        raise ValueError(errormsg)
     matrix = np.array(matrix, dtype=float)
     if age is None or len(age) != matrix.shape[0] or matrix.shape[0] != matrix.shape[1]:
         errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, e.g. ss.contacts(matrix, age=[0, 15, 65]); got a matrix of shape {matrix.shape} and age={age}'
@@ -2219,4 +2230,6 @@ def contacts(matrix=None, age=None, beta=1.0, name='contacts', **dims):
     for i in range(n):
         for j in range(n):
             n_contacts[j, i] = ss.constant(matrix[i, j]) # ss.MixingPools is indexed [source, destination]; everyone in a group has the same number of contacts
-    return MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=n_contacts, beta=beta, **kwargs)
+    out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=n_contacts, beta=beta, **kwargs)
+    out.ref = ref # Where a named matrix came from, for the model spec
+    return out

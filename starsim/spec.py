@@ -178,6 +178,15 @@ def disease(spec):
     return dis
 
 
+def named_args(ref, keys):
+    """ The arguments that looked up named data, from where the spec says it came from """
+    return {k:ref[k] for k in keys if ref.get(k) is not None}
+
+
+geo_keys = ['level', 'year', 'places']
+contacts_keys = ['source', 'layer']
+
+
 def strat_kwargs(strat):
     """ The arguments to stratify() for one stratification in the spec """
     if strat['mobility'] is not None:
@@ -185,7 +194,10 @@ def strat_kwargs(strat):
     split = strat['split']
     if isinstance(split, str): # A split over several dimensions, written as by([[...]], dims=[...])
         split = joint_split(split)
-    out = {strat['name']:strat['levels'], 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
+    levels = strat['levels']
+    if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
+        levels = ss.geo(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
+    out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
     if strat['states'] is not None:
         out['states'] = strat['states']
     if strat.get('where') is not None:
@@ -226,7 +238,12 @@ def from_spec(spec):
     if not str(spec.get('schema', '')).startswith('lingua-franca/'):
         errormsg = 'This is not a model spec: it has no "schema" of "lingua-franca/..."'
         raise ValueError(errormsg)
-    for key in ['networks', 'modifiers', 'interventions']:
+    networks = []
+    for net in spec.get('networks') or []: # Only named contact matrices can be read back, since they are looked up again
+        if not net.get('data') or net['data'].get('layer') is None:
+            unknown(f'the network "{net.get("name", "?")}"')
+        networks.append(ss.contacts(net['data']['place'], name=net.get('name'), **named_args(net['data'], contacts_keys)))
+    for key in ['modifiers', 'interventions']:
         if spec.get(key):
             unknown(key)
     modules = [disease(mod) for mod in spec['modules']]
@@ -235,7 +252,9 @@ def from_spec(spec):
     if cfg['unit'] is not None and sc.isnumber(start) and sc.isnumber(stop) and not start: # No dates: durations in the sim's unit
         start = None
     kwargs = dict(solver=cfg['solver'], integrator=cfg['integrator'], approx=cfg['approx'], unit=cfg['unit'], start=start, stop=stop,
-                  dt=cfg['dt'], total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'], substeps=cfg.get('substeps'))
+                  dt=cfg['dt'], total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'], substeps=cfg.get('substeps'), use_aging=cfg.get('use_aging'))
+    if networks:
+        kwargs['networks'] = networks
     sim = ss.Sim(modules, **{k:v for k,v in kwargs.items() if v is not None})
     for strat in spec['stratify']:
         sim.stratify(**strat_kwargs(strat))
@@ -343,9 +362,17 @@ def disease_code(spec, lines, left):
         elif plain:
             add(f"{plain[0]} = ss.State('{plain[0]}')")
         plain.clear()
+    linked = {spec['states'][0]['name']} if spec['states'] else set() # The states Starsim takes to be people: those connected by transitions to the first
+    for i in range(len(spec['states'])):
+        for t in spec['transitions']:
+            ends = set(t['src'] or []) | set(t['dst'] or [])
+            if t['src'] and t['dst'] and ends & linked:
+                linked |= ends
     for s in spec['states']:
         guessed = f'states.{s["name"]}.people' in spec['guessed']
         extra = dict(people=False) if not s['people'] and not guessed else {}
+        if s['people'] and not guessed and s['name'] not in linked: # People that Starsim would not otherwise take to be
+            extra['people'] = True
         extra.update({k:s[k] for k in ['rel_sus', 'rel_trans'] if s[k] != 1.0})
         if s['label'] is not None:
             extra['label'] = s['label']
@@ -440,12 +467,32 @@ def disease_code(spec, lines, left):
     return var
 
 
+def contacts_code(net):
+    """ A named contact matrix as the call that looks it up (or None if the network is not one) """
+    ref = net.get('data')
+    if not ref or ref.get('layer') is None:
+        return None
+    args = named_args(ref, contacts_keys)
+    if args.get('source') == 'prem2021':
+        args.pop('source')
+    if args.get('layer') == 'all':
+        args.pop('layer')
+    if net.get('name') not in [None, ref.get('layer') if ref.get('layer') != 'all' else 'contacts']:
+        args['name'] = net['name']
+    return f"ss.contacts({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in args.items())})"
+
+
 def movable(strat, left):
     """ The arguments to stratify(), with the movement between places written as ss.Mobility() where it is a matrix """
     mob = strat['mobility']
+    plain = {k:v for k,v in strat.items() if k != 'geo'}
+    out = strat_kwargs({**plain, 'mobility':None})
+    if strat.get('geo'): # A named geography as the call that looks it up, with its own split
+        ref = strat['geo']
+        out[strat['name']] = Code(f"ss.geo({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
+        out.pop('split')
     if mob is None:
-        return strat_kwargs(strat)
-    out = strat_kwargs({**strat, 'mobility':None})
+        return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
         args = ', '.join(f'{k}={v!r}' for k,v in mob.items() if v is not None)
         out['mobility'] = Code(f'ss.Mobility({args})')
@@ -509,11 +556,11 @@ def to_code(spec, filename=None, header=None, footer=None, code=None):
             extra[simkey] = code.get(simkey, code.get(key))
             continue
         mods = spec.get(key) or []
-        written = [modify_code(m) for m in mods if m.get('type') == 'modify']
+        written = [modify_code(m) for m in mods if m.get('type') == 'modify'] + [contacts_code(m) for m in mods if contacts_code(m)]
         if written:
             extra[simkey] = '[' + ', '.join(written) + ']'
         for mod in mods:
-            if mod.get('type') != 'modify':
+            if mod.get('type') != 'modify' and not contacts_code(mod):
                 left.append(f'{key[:-1]} "{mod.get("name", "?")}" ({mod.get("type", "?")}): add it to ss.Sim({simkey}=...)')
     lines = []
     if header:
@@ -528,7 +575,7 @@ def to_code(spec, filename=None, header=None, footer=None, code=None):
         kwargs['stop'] = dict(type='dur', value=stop, unit=unit)
     else:
         kwargs.update(start=start, stop=stop)
-    kwargs.update(dt=cfg['dt'] if cfg['dt'] != 1 else None, total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'] if cfg['rand_seed'] != 1 else None, substeps=cfg.get('substeps'))
+    kwargs.update(dt=cfg['dt'] if cfg['dt'] != 1 else None, total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'] if cfg['rand_seed'] != 1 else None, substeps=cfg.get('substeps'), use_aging=cfg.get('use_aging'))
     kwargs.update({k:Code(v) for k,v in extra.items()})
     for key in ['total_pop', 'n_agents', 'dt']:
         if sc.isnumber(kwargs[key]) and float(kwargs[key]).is_integer():
