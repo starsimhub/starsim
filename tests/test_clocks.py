@@ -190,9 +190,25 @@ def test_bv_recurrence():
     return new
 
 
+@sc.timer()
+def test_entry_hazard():
+    sc.heading('As agents, people entering a state in the state-change row face half a step of its hazards then')
+    class BV(ss.Disease):
+        CST1, CST4, P = ss.states('CST1 CST4 P')
+        onset  = CST1 >> CST4 @ ss.permonth(0.05)
+        tx     = CST4 >> P @ ss.months(2) # A dwell time, which ends in the state-change row
+        recur  = ss.progression('P -> CST4', rate=ss.permonth(0.06)*np.exp(-P.time/ss.months(3))) # Largest on entry
+        settle = ss.progression('P -> CST1', dur=ss.months(6))
+    kw2 = dict(n_agents=50_000, start=2000, stop=2005, unit='year', **kw)
+    weekly, monthly = [ss.Sim(BV(name='bv'), dt=dt, **kw2).run().results.bv.recur.sum() for dt in [ss.weeks(1), ss.months(1)]]
+    assert np.isclose(weekly, monthly, rtol=0.03), f'weekly {weekly:n}, monthly {monthly:n}' # Without the hazard on entry, monthly steps were about 20% lower
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_events()
     test_clocks()
     test_syphilis_latent()
     test_bv_recurrence()
+    test_entry_hazard()

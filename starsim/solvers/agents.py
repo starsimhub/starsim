@@ -51,6 +51,7 @@ class Agents(Engine):
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
+        self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
         self._junctions = None # The states passed through at once: see junctions
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
@@ -75,7 +76,7 @@ class Agents(Engine):
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
                 if graph.exits[name].hazards: # See enter()
-                    arrs.append(ss.BoolArr(f'late_{name}', label=f'Entered {name} after its competing rates were drawn in the step'))
+                    arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The share of a step of the competing rates out of {name} missed in the step of entering it'))
         self.sets = sc.objdict() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
         people = [state.name for state in graph.people_states]
         for names in ss.expressions.Clock.sets:
@@ -120,6 +121,9 @@ class Agents(Engine):
         for name in self.lifetables:
             add(f'life_{name}', ss.random())
         self.competing = {state.name: [tr for tr in graph.exits[state.name].hazards if tr.name not in self.lifetables] for state in graph.people_states} # The rates drawn each step: a life table's deaths are drawn once for each person instead, see step_lifetables()
+        for name,competing in self.competing.items():
+            if competing:
+                add(f'entry_{name}', ss.random()) # The competing rates of the step people enter in: see finish_moves()
         self.listed = [state.name for state in graph.people_states if self.competing[state.name] or graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states whose agents step_state() goes through
         for name,tr in graph.transitions.items():
             add(f'dst_{name}', ss.random())
@@ -717,28 +721,38 @@ class Agents(Engine):
                 self.enter(dst, inds, ti, tr=tr, srcs=came) # Once their levels are known, since dwell times can depend on them
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
-                if len(inds) and dst.name in self.scheduled:
+                if len(inds) and (dst.name in self.scheduled or (self._row is not None and self.competing[dst.name])):
                     arrived[dst.name].append(inds)
         onward = [] # The same-step cascade: those whose exit is due already when they enter (a branch nobody waits in, or a dwell time that rounds to no steps) move on at once, as in the ODE, rather than being held for a step
+        row = self._row
+        staying = [] # Entered in the state-change row, into a state with competing rates
         for name,uidlist in arrived.items():
             state = self.graph.states[name]
             uids = ss.uids.concatenate(uidlist)
             uids = uids[mod[name].raw[uids]] # Those still there
-            now = uids[mod[f'ti_exit_{name}'].raw[uids] <= ti]
+            now = uids[mod[f'ti_exit_{name}'].raw[uids] <= ti] if name in self.scheduled else uids[:0]
             if len(now):
                 exits = self.graph.exits[name]
                 which = mod[f'exit_{name}'].raw[now]
                 for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder) + exits.timed):
                     onward.append((tr, state, now[which == i]))
+            if row is not None and self.competing[name]:
+                staying.append((state, uids[~np.isin(uids, now)] if len(now) else uids))
         trig = self.triggered() # A trigger moves people at once, ahead of an exit due now
-        if trig and onward:
+        moving = None
+        if trig and (onward or staying):
             moving = np.zeros(len(mod.rel_sus.raw), dtype=bool)
             for _,_,uids in trig:
                 moving[uids] = True
             onward = [(tr, state, uids[~moving[uids]]) for tr,state,uids in onward]
+        for state,uids in staying: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
+            hz = uids[~row[uids] & (True if moving is None else ~moving[uids])]
+            row[hz] = True
+            if len(hz):
+                self.draw_competing(state, hz, 0.5*self.dt, key=f'entry_{state.name}')
         onward = [item for item in trig + onward if len(item[2])]
-        if onward:
-            if depth > len(self.graph.people_states):
+        if onward or self._moved: # Or left by a competing rate on entry
+            if depth > (len(self.graph.people_states) + 1)*(1 if row is None else 2): # A rate drawn on entry, once a step each, can start one more chain of moves
                 cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in onward}))
                 raise ss.TriggerLoop(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n'
                                      f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
@@ -942,9 +956,12 @@ class Agents(Engine):
         """
         Put agents in a state, and schedule their exit from it, at the moment they enter (so `p=` is read then, and code after the step sees the exit)
 
-        An agent who enters during a step after the state's competing rates were drawn (by a
-        progression, or moved by an intervention) is marked `late_<state>`: they have a draw of
-        them to catch up on in the next step (see `step_state()`).
+        An agent who enters during a step after the state's competing rates were drawn is marked
+        `late_<state>` with the share of a step of them it missed: half, for a move in the
+        state-change row (which draws the other half then: see `finish_moves()`), and all of it for
+        a move by an intervention. The step their scheduled exit is due in draws that share for them
+        (see `step_state()`), which gives a rate competing with a dwell time the exposure the dwell
+        time says.
         """
         if not state.people or not len(uids):
             return
@@ -957,7 +974,8 @@ class Agents(Engine):
                 outside = ~np.isin(srcs, [self.state_index[k] for k in key])
                 mod[arr][uids[np.broadcast_to(outside, len(uids))]] = ti
         if f'late_{name}' in mod.__dict__:
-            mod[f'late_{name}'][uids] = ti == mod.ti and self._drawn_ti == mod.ti
+            late = ti == mod.ti and self._drawn_ti == mod.ti
+            mod[f'late_{name}'][uids] = 0.0 if not late else 0.5 if self._row is not None else 1.0
         self.record(tr, uids, srcs, self.state_index[name])
         if name in self.scheduled:
             self.schedule(state, uids)
@@ -1210,8 +1228,9 @@ class Agents(Engine):
             competing = self.competing[name]
             late = missed.get(name)
             flagged = None
-            if f'late_{name}' in mod.__dict__: # Those who entered after the draws of the step they entered in (see enter())
-                flagged = mod[f'late_{name}'].raw[uids].astype(bool)
+            if f'late_{name}' in mod.__dict__: # Those who entered after the draws of the step they entered in, and the share of a step they missed (see enter())
+                share = mod[f'late_{name}'].raw[uids]
+                flagged = share > 0
             if candidates: # Scheduled exits that are due
                 self.rescale_exits(state, uids)
                 due = mod[f'ti_exit_{name}'].raw[uids] <= ti # Everyone here has been scheduled, so none is .nan
@@ -1222,11 +1241,12 @@ class Agents(Engine):
                     drawn = ~due | late
                     left = np.zeros(len(uids), dtype=bool)
                     double = late & ~due if flagged is None else late & ~due & ~flagged
-                    left[np.flatnonzero(drawn)] = self.draw_competing(state, uids[drawn], np.where(double[drawn], 2*dt, dt))
+                    span = np.where(double, 2.0, 1.0) if flagged is None else np.where(double, 2.0, np.where(flagged & due, share, 1.0))
+                    left[np.flatnonzero(drawn)] = self.draw_competing(state, uids[drawn], span[drawn]*dt)
                     due &= ~left
                     competing = None
                 if flagged is not None and flagged.any():
-                    mod[f'late_{name}'][uids[flagged & due]] = False # Caught up; the others keep the flag until their exit is due
+                    mod[f'late_{name}'][uids[flagged & due]] = 0.0 # Caught up; the others keep the flag until their exit is due
                 for i,tr in enumerate(candidates):
                     self.move(tr, state, uids[due & (which == i)])
                 uids = uids[~due]
@@ -1234,18 +1254,20 @@ class Agents(Engine):
                 self.draw_competing(state, uids, dt)
         self._drawn_ti = ti
         self._members = None
+        self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
         self.finish_moves(ti)
+        self._row = None
         self.step_births(dt)
         self.step_transfers(dt)
         return
 
-    def draw_competing(self, state, uids, dt):
+    def draw_competing(self, state, uids, dt, key=None):
         """ The competing rates out of a state, in one draw per agent over a time `dt` (a number, or one for each agent): moves those who leave, and returns which they are """
         competing = self.competing[state.name]
         hazards = [np.broadcast_to(np.maximum(self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids), 0), len(uids))*self.stayed(tr, state, uids) for tr in competing]
         total = np.sum(hazards, axis=0)
         p_exit = -np.expm1(-total*dt)
-        rvs = self.dists[f'exit_{state.name}'].rvs(uids)
+        rvs = self.dists[f'exit_{state.name}'].rvs(uids) if key is None else self.draw(key, uids) # Drawn on entry as well, so perhaps more than once a step
         leaving = rvs < p_exit
         edges = np.cumsum([np.zeros(len(uids))] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(len(uids)), where=total>0)
         for i,tr in enumerate(competing):

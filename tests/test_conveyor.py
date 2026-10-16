@@ -163,13 +163,14 @@ def test_bv_clock():
     abm = ss.Sim(cohort(), n_agents=10_000, **kw2).run().results.bv
     assert np.allclose(abm.n_P, expected, rtol=0.03)
 
-    # The full model: as agents, at weekly steps (at monthly steps, agents miss the hazard in the step people arrive in, which here is the largest)
+    # The full model: as agents, at weekly and monthly steps (people who arrive in P at the start of a step face its hazard, the largest, for that step)
     kw2 = dict(start=2000, stop=2005, unit='year', **kw)
     ode = ss.Sim(make(), solver='ode', total_pop=50_000, dt=ss.weeks(1), **kw2).run().results.bv
     monthly = ss.Sim(make(), solver='ode', total_pop=50_000, dt=ss.months(1), **kw2).run().results.bv
-    abm = ss.Sim(make(), n_agents=50_000, dt=ss.weeks(1), **kw2).run().results.bv
     assert np.isclose(ode.recur.sum(), monthly.recur.sum(), rtol=0.03)
-    assert np.isclose(ode.recur.sum(), abm.recur.sum(), rtol=0.1), f'ODE {ode.recur.sum():n}, agents {abm.recur.sum():n}'
+    for dt,ref in [(ss.weeks(1), ode), (ss.months(1), monthly)]:
+        abm = ss.Sim(make(), n_agents=50_000, dt=dt, **kw2).run().results.bv
+        assert np.isclose(ref.recur.sum(), abm.recur.sum(), rtol=0.03), f'{dt}: ODE {ref.recur.sum():n}, agents {abm.recur.sum():n}'
     for solver in ['tau', 'gillespie']:
         res = ss.Sim(make(), solver=solver, total_pop=20_000, dt=ss.months(1), **kw2).run().results.bv
         assert np.isclose(res.recur.sum()*2.5, monthly.recur.sum(), rtol=0.1), solver
