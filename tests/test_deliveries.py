@@ -291,6 +291,14 @@ def test_vaccinate():
     for sim in sims.values():
         delivered = sim.results.rounds.delivered
         assert list(np.flatnonzero(delivered)) == [0, 10, 20] and np.allclose(delivered[[0, 10, 20]], 1000)
+
+    # A typed probability as coverage: over the interval between rounds
+    def typed_cov(**kwargs):
+        rounds = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=ss.probperyear(0.5), interval=ss.days(91))
+        return ss.Sim(make_sir(), interventions=rounds, **kwargs)
+    sims = run_each(typed_cov, stop=100)
+    for sim in sims.values():
+        assert np.isclose(sim.results.rounds.coverage[0], 1 - 0.5**(91/365), rtol=0.05)
     return sims
 
 
