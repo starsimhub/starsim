@@ -530,6 +530,16 @@ def test_counts():
         S, I, W = ss.states(3)
         ss.Disease(infection = S >> I @ 0.5 * W, shedding = ss.null >> W @ 10 * I.n)
 
+    # An inflow split between states makes all of them people, if one is (FPsim review: primary infertility, reached only from births)
+    S, X = ss.states('S X')
+    d = ss.Disease(S, X, births=ss.null >> (0.9*S + 0.1*X) @ ss.peryear(100), name='d')
+    assert X.people
+    assert np.isclose(ss.Sim(d, n_agents=1000, stop=5, **kw).run().results.d.n_X[-1], 50, atol=25)
+    with pytest.raises(ss.PeopleAndCounts, match='people=True'): # Unless it is declared not to be
+        S, X = ss.states('S X')
+        X.people = False
+        ss.Disease(S, X, births=ss.null >> (0.9*S + 0.1*X) @ ss.peryear(100))
+
     # A count that is not people is a real number under every solver: a reservoir shed into by a few infected keeps them infected, as in SimInf's SISe
     def pressure():
         S, I = ss.states(2)

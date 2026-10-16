@@ -374,6 +374,9 @@ class Graph(Presentation):
                 for b in (tr.dst or []) + kid:
                     links[id(a)].add(id(b))
                     links[id(b)].add(id(a))
+            if not tr.src: # An inflow split between several states: its destinations are connected too
+                for a in tr.dst or []:
+                    links[id(a)].update(id(b) for b in tr.dst if b is not a)
 
         # Start from the anchor, and from everything declared to be people
         lookup = {id(s):s for s in states}
@@ -409,7 +412,12 @@ class Graph(Presentation):
                                              f'       rate = {tr.rate}\n'
                                              f'     A bare state means contact with people in that state, and there is no contact with a count.\n'
                                              f'     Write {state.name}.n for the number itself. If {state.name} is people, declare it with ss.State(people=True).')
-            tr.people = all(s.people for s in (tr.src or []) + (tr.dst or []))
+            ends = (tr.src or []) + (tr.dst or [])
+            tr.people = all(s.people for s in ends)
+            if not tr.people and any(s.people for s in ends):
+                counts = [s.name for s in ends if not s.people]
+                raise ss.PeopleAndCounts(f'"{name}" moves between people ({sc.strjoin(s.name for s in ends if s.people)}) and counts ({sc.strjoin(counts)}). '
+                                         f'If {sc.strjoin(counts)} {"is" if len(counts) == 1 else "are"} people, declare it with ss.State(people=True).')
         return
 
     def resolve_rest(self):

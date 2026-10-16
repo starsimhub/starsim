@@ -204,6 +204,9 @@ class ClockOutsideDomain(CodedError):
 class NoScheduledDwell(CodedError):
     """ `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it """
 
+class PeopleAndCounts(CodedError):
+    """ A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` """
+
 class CapabilityError(CodedError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,

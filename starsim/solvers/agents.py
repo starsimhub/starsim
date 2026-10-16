@@ -1224,11 +1224,17 @@ class Agents(Engine):
             self._by_group = True
             adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
             amount = np.maximum(self.eval(tr.rate)*adjust*dt*self.inflow_split(tr), 0)/self.scale # Agents, by group
+            ps = [np.broadcast_to(p, sim.groups.n_groups) for p in self.branch_probs(tr)] # An inflow split between several states, e.g. ss.null >> (0.9*S + 0.1*X)
             self._by_group = False
             amount = np.broadcast_to(amount, sim.groups.n_groups)
             places = sim.groups.group_coords[:, d] if d is not None else np.zeros(sim.groups.n_groups, dtype=int)
-            born = self.rng.poisson(np.bincount(places, weights=amount)) # By place; the other levels are drawn as people are born into them
-            enter = [(place, (tr.dst[0].name,), k) for place,k in enumerate(born) if k]
+            expected = np.bincount(places, weights=amount)
+            born = self.rng.poisson(expected) # By place; the other levels are drawn as people are born into them
+            enter = []
+            for place,k in enumerate(born):
+                if k:
+                    split = [np.bincount(places, weights=amount*p)[place]/expected[place] for p in ps]
+                    enter += [(place, (dst.name,), n) for dst,n in zip(tr.dst, self.rng.multinomial(k, split) if len(ps) > 1 else [k]) if n]
             new = self.add_people(enter, self.mod.ti, f'born_{tr.name}', newborn=not tr.migration)
             if not tr.migration and not any(strat.kind == 'age' for strat in sim.groups.strats):
                 sim.people.age[new] = 0
