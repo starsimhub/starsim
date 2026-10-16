@@ -108,7 +108,7 @@ class Disease(ss.Module):
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.expressions.func)
         if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
             self.init_graph(args, members, pars, kwargs, frame=ss.utils.getframe(1))
         else: # Nothing declared, so written as code: the subclass defines its parameters and states after calling this
@@ -171,7 +171,7 @@ class Disease(ss.Module):
     def init_graph(self, args, members, pars, kwargs, frame=None):
         """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer, ss.expressions.func)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
@@ -186,8 +186,8 @@ class Disease(ss.Module):
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, frame)
         self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, first=first, frame=frame)
-        for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
-            self.setattribute(name, obj) # e.g. sir.S, sir.infection
+        for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()) + list(self.graph.attrs.items()):
+            self.setattribute(name, obj) # e.g. sir.S, sir.infection, hiv.cd4
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
             tr.module = self
         for name,tf in self.graph.transfers.items(): # e.g. sir.vaccination, so it can be the target of ss.modify()

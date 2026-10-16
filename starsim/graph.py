@@ -59,6 +59,9 @@ class Graph(Presentation):
         self.exprs = sc.objdict() # Results that are sums or ratios of states
         self.updates = sc.objdict() # Counts set to a value each step (ss.update)
         self.funcs = sc.objdict() # Custom per-step behavior
+        self.attrs = sc.objdict() # Values for each person: see ss.attr
+        self.hooks = sc.objdict() # Functions called at events: see ss.func
+        self.derived = [] # Stratifications by a derived attribute, which add no groups: see stratify()
         self.guessed = sc.objdict()
         self.inferred = False # Whether the states were inferred from arrow strings
         self.strats = [] # Stratifications, filled by stratify()
@@ -71,6 +74,7 @@ class Graph(Presentation):
         self.resolve_transitions()
         self.expand_rows()
         self.resolve_people()
+        self.resolve_attrs()
         self.resolve_acquisition()
         self.resolve_pars(frame)
         self.set_keywords()
@@ -104,6 +108,16 @@ class Graph(Presentation):
         for name,obj in named:
             if isinstance(obj, FlowSum): # A sum or a share of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
+            if isinstance(obj, (ss.expressions.attr, ss.expressions.func)):
+                if name is not None:
+                    obj.name = name
+                elif obj.name is None or obj.name == '<lambda>':
+                    obj.name = find_name(obj, frame)
+                if obj.name is None:
+                    errormsg = f'Could not find a name for {obj}; pass it as a keyword, e.g. ss.Disease(..., cd4=ss.attr(...))'
+                    raise ValueError(errormsg)
+                self.add(self.attrs if isinstance(obj, ss.expressions.attr) else self.hooks, obj.name, obj)
+                continue
             if isinstance(obj, (Transition, outcome, par, State, update)):
                 if name is not None:
                     obj.name = name
@@ -131,6 +145,8 @@ class Graph(Presentation):
                 self.add(self.updates, obj.name, obj)
             elif isinstance(obj, par):
                 self._add_par(obj, name=obj.name)
+            elif isinstance(obj, Expr) and any(isinstance(leaf, ss.expressions.attr) for leaf in obj.leaves): # A helper of attributes, e.g. gain = cd4_potential - cd4_preart, used through the objects
+                continue
             elif isinstance(obj, Expr): # A sum or ratio of states is a result
                 name = name or find_name(obj, frame)
                 if name is None:
@@ -159,7 +175,7 @@ class Graph(Presentation):
             reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
         if name in reserved:
             raise ss.ReservedName(f'"{name}" cannot be used as the name of a state, transition, parameter, or result, since it is an attribute of every module. Please choose another name.')
-        for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.updates, self.funcs, self.transfers]:
+        for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.updates, self.funcs, self.transfers, self.attrs, self.hooks]:
             if name in other and other[name] is not obj:
                 raise ss.DuplicateDeclaration(f'two members of "{self.module.name}" are both named "{name}"; names must be unique within a module.')
         container[name] = obj
@@ -611,6 +627,8 @@ class Graph(Presentation):
         used += [(f'init of {state.name}', state.init) for state in self.states.values() if isinstance(state.init, Expr)] # So an initial count can be fitted
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] # And a parameter in the rate of a transfer
         used += [(name, upd.value) for name,upd in self.updates.items()] # And in the value of an update
+        used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
+        used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
         for name,expr in used:
             if expr is not None:
@@ -760,7 +778,61 @@ class Graph(Presentation):
             if bare:
                 raise ss.ExposureToCount(f'the value of the update "{name}" uses the bare state {bare[0]}, which means contact; write {bare[0]}.n for the number, or {bare[0]}.frac for the share')
             updated.add(state.name)
+        for name,a in self.attrs.items(): # Each case of a derived attribute reads clocks only of states it is for
+            for names,expr in (a.cases or []):
+                for clock in ss.expressions.clocks_in(expr):
+                    if not all(any(c is s for s in self.states.values()) for c in clock.states):
+                        continue
+                    outside = [n for n in names if n not in [c.name for c in clock.states]]
+                    if outside:
+                        raise ss.ClockOutsideDomain(f'the attribute "{name}" reads {clock} for people in {sc.strjoin(outside)}, but it has a value only for people in {sc.strjoin(c.name for c in clock.states)}.')
         self.check_dwell()
+        return
+
+    def resolve_attrs(self):
+        """ Resolve each attribute: another attribute given by name, the cases of a derived one by state (a state, a sum of states, or a | of them), and its events """
+        def names_of(key):
+            if isinstance(key, State):
+                states = [key]
+            elif isinstance(key, Expr): # A sum of states, e.g. latent + falling
+                states = [leaf for leaf in key.leaves if isinstance(leaf, State)]
+            elif isinstance(key, ss.conditions.Cond): # A | B
+                states = [s[1] for s in (ss.conditions.set_states(key) or [])]
+            else:
+                states = sc.tolist(key)
+            out = [s if isinstance(s, str) else s.name for s in states]
+            for name in out:
+                if name not in self.states:
+                    raise ss.UnknownState(f'an attribute of "{self.module.name}" names a state "{name}" that it does not have. Its states are {sc.strjoin(self.states.keys())}.')
+            return out
+        for name,a in self.attrs.items():
+            a.module = self.module
+            if isinstance(a.value, str):
+                if a.value not in self.attrs:
+                    errormsg = f'The attribute "{name}" of "{self.module.name}" records "{a.value}", which is not one of its attributes ({sc.strjoin(self.attrs.keys())})'
+                    raise ValueError(errormsg)
+                a.value = self.attrs[a.value]
+            if isinstance(a.value, dict):
+                if a.on is not None:
+                    errormsg = f'The attribute "{name}" is a dict by state, which is derived (worked out when it is read), so it takes no on='
+                    raise ValueError(errormsg)
+                a.cases = [(names_of(key), as_expr(val)) for key,val in a.value.items()]
+                seen = [n for names,expr in a.cases for n in names]
+                if len(seen) != len(set(seen)):
+                    errormsg = f'The attribute "{name}" gives more than one value for {sc.strjoin(sorted({n for n in seen if seen.count(n) > 1}))}'
+                    raise ValueError(errormsg)
+            elif a.kind in ['recorded', 'derived'] and not isinstance(a.value, ss.Dist):
+                a.value = as_expr(a.value)
+            a.events = [] if a.on is None else ss.expressions.events_in(a.on, self)
+        for name,hook in self.hooks.items():
+            hook.events = ss.expressions.events_in(hook.on, self)
+        for obj in list(self.attrs.values()) + list(self.hooks.values()):
+            for e in obj.events:
+                kind, target, dst = e.args
+                if kind in ['tr', 'to'] and target.name not in self.transitions:
+                    raise ss.UnknownTransition(f'"{obj.name}" of "{self.module.name}" is set on {e.label}, which is not one of its transitions ({sc.strjoin(self.transitions.keys())}).')
+                elif kind in ['enter', 'exit']:
+                    names_of([s[1] if isinstance(s, tuple) else s for s in target])
         return
 
     def check_dwell(self):
@@ -791,6 +863,26 @@ class Graph(Presentation):
 
     def stratify(self, frame=None, **kwargs):
         """ Stratify the graph by one or more dimensions; see `ss.Disease.stratify()` """
+        by_attr = [key for key in kwargs if key in self.attrs] # By a derived attribute: its level is worked out from the attribute, so it adds no groups
+        if by_attr:
+            others = [key for key in kwargs if key not in by_attr and key != 'states']
+            if others:
+                errormsg = f'A stratification by the attribute "{by_attr[0]}" is worked out from it, so takes only states=; give a value by level in a rate with ss.by({by_attr[0]}=[...]), not {sc.strjoin(others)}'
+                raise ValueError(errormsg)
+            states = kwargs.get('states')
+            if states is not None:
+                states = [leaf.name for leaf in states.leaves if isinstance(leaf, State)] if isinstance(states, Expr) and not isinstance(states, State) else [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
+            for name in by_attr:
+                a, levels = self.attrs[name], kwargs[name]
+                if a.kind != 'derived' or not all(sc.isnumber(v) for v in levels):
+                    errormsg = f'A stratification by the attribute "{name}" takes bin edges, and the attribute must be derived (worked out when it is read); "{name}" is {a.kind}'
+                    raise ValueError(errormsg)
+                if any(s.name == name for s in self.strats + self.derived):
+                    raise ss.DuplicateStructuralDimension(f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
+                strat = ss.dimensions.Strat(name, levels, kind='derived', states=states or [s.name for s in self.people_states])
+                strat.attr_of = a
+                self.derived.append(strat)
+            return self.module
         strats, transfers = ss.dimensions.parse_stratify(kwargs, graphs=[self])
         old = {s.name:s for s in self.strats}
         if strats and all(strat.name in old and strat.same_as(old[strat.name]) for strat in strats) and all(name in self.transfers for name in transfers):

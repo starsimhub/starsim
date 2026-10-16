@@ -388,6 +388,20 @@ class Dist:
         dist.rvs(10) # Return 10 normally distributed random numbers
         ```
     """
+    def _expr(self, op, other, reverse=False):
+        """ Arithmetic between distributions, or with an expression, is an expression of draws, e.g. `ss.uniform(0.5, 0.95)*ss.bernoulli(0.6)` in `ss.attr()` """
+        if not isinstance(other, (Dist, ss.expressions.Expr)) and not (sc.isnumber(other) and op != '*'):
+            return NotImplemented
+        a, b = (other, self) if reverse else (self, other)
+        return ss.expressions.BinOp(op, a, b)
+
+    def __mul__(self, other):      return self._expr('*', other)
+    def __rmul__(self, other):     return self._expr('*', other, reverse=True)
+    def __add__(self, other):      return self._expr('+', other)
+    def __radd__(self, other):     return self._expr('+', other, reverse=True)
+    def __sub__(self, other):      return self._expr('-', other)
+    def __rsub__(self, other):     return self._expr('-', other, reverse=True)
+
     valid_pars = None
     scaling = None # See "scale_types" above
     unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognorm_ex(); None means no check

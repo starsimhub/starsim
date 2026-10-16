@@ -221,6 +221,14 @@ class Event(Cond):
         super().__init__('event', kind, obj, dst)
         return
 
+    def __or__(self, other): # A transition joined to an event is the event of going through it, e.g. on=precin.to(S) | cin
+        return Cond('|', self, Event('tr', other) if isinstance(other, ss.Transition) else other)
+
+    def __ror__(self, other):
+        return Cond('|', Event('tr', other) if isinstance(other, ss.Transition) else other, self)
+
+    __hash__ = Cond.__hash__
+
     @property
     def names(self):
         """ For entering or leaving: the names of the states """

@@ -259,7 +259,7 @@ def choose_solver(sim):
     for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
         dims = [strat.name for strat in sim.groups.strats]
         for p in mod.graph.all_pars():
-            if isinstance(p.raw, ss.by):
+            if isinstance(p.raw, ss.by) and not set(p.raw.dims) & {strat.name for m in sim.declared for strat in m.graph.derived}: # Not by a derived attribute's levels, which add no groups
                 p.raw.check(sim, note=True)
     # The notes on what was chosen, kept in sim.notes whatever the verbosity
     if sim.unit_source:
@@ -409,6 +409,11 @@ def init_capabilities(sim, modules):
             add(f'module: {mod.name}', 'no', reason, auto=reason)
         for clock in clocks_of(mod)[:1]: # Kept per agent for now
             add(f'module: {mod.name}', 'no', f'{clock} is a clock', auto=f'{clock} is a clock, which is kept per agent for now', fatal=True)
+        graph = getattr(mod, 'graph', None)
+        for name in (graph.hooks if graph is not None else []): # Agents only (see ss.func)
+            add(f'hook: {mod.name}.{name}', 'no', 'a function of the agents an event happens to', auto=f'"{name}" is a function of the agents an event happens to (ss.func)', fatal=True)
+        if graph is not None and graph.attrs: # Agents only, for now (see ss.attr)
+            add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(graph.attrs.keys())}) have no compartmental form yet', fatal=True)
         if approx is False and isinstance(mod, ss.Delivery) and mod.holds and mod.product.staged: # Kept as levels of time since delivery otherwise: see ss.Held.init_stages()
             add(f'module: {mod.name}', 'approx', 'levels of time since delivery', auto=f'the protection of "{mod.product.name}" fades by a function of time, and approx=False')
         if isinstance(mod, ss.Strains):

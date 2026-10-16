@@ -440,6 +440,8 @@ class Engine:
 
     def value(self, p):
         """ The value of a parameter, as a number in the sim's unit """
+        if isinstance(p.raw, ss.expressions.Expr): # E.g. a dwell time given as an expression of attributes: for whoever it is worked out for, so not cached
+            return self.eval(p.raw)
         route = self._route is not None and (isinstance(p.raw, (dict, ss.peract)) or p.slot == 'rate') # A beta, worked out for one route
         key = (id(p), self._route[0]) if route else id(p)
         if key in self.cache:
@@ -663,7 +665,7 @@ class Engine:
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
                 for leaf in (expr.leaves if isinstance(expr, ss.transitions.Expr) else []):
                     raw = getattr(leaf, 'raw', None)
-                    if isinstance(raw, ss.by) and not (set(raw.dims) <= {'sex', 'female'} and not set(raw.dims) & {strat.name for strat in sim.groups.strats}): # By sex alone, as agents, is people.female
+                    if isinstance(raw, ss.by) and not raw.on_people(sim) and not set(raw.dims) & {strat.name for strat in self.graph.derived}: # Not read from each person, or by a derived attribute's levels, which have no groups
                         for d in raw.check(sim)[0]:
                             if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
                                 dim = sim.groups.strats[d].name
@@ -941,7 +943,7 @@ class Engine:
         for name,dw in self.dwells.items():
             if name in inflows:
                 continue
-            if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, ss.by)): # Not known until the sim runs, or not one number
+            if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
             if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
@@ -1261,7 +1263,45 @@ class Engine:
             n_rows = mod.t.npts if self.rows is None else len(self.group_ti)
             for res,flags in grouped:
                 res.init_groups(self.sim.groups.strats, [name for name,flag in zip(names, flags) if flag], (n_rows, ng), self.group_ti, ratio=res.name in self.ratios)
+        self.init_derived_results()
         return
+
+    def init_derived_results(self):
+        """
+        Results by a stratification of a derived attribute (e.g. `hiv.stratify(cd4=[0, 200, 500])`), which adds no
+        groups: the number in each of its states, and each flow out of them, by the level of the attribute (at the
+        source, for a flow), as well as by the sim's own groups
+        """
+        mod = self.mod
+        sim = self.sim
+        self.derived_res = sc.objdict() # The stratification of each result kept by one
+        self.stock_derived = sc.objdict()
+        self.flow_derived = sc.objdict()
+        self.derived_trs = sc.objdict() # The stratification each transition is recorded by
+        ng = sim.groups.n_groups
+        names = [s.name for s in sim.groups.strats]
+        for strat in self.graph.derived:
+            L = strat.n
+            ext = [sc.cp(s) for s in sim.groups.strats] + [sc.cp(strat)]
+            coords = np.column_stack([np.repeat(np.asarray(sim.groups.group_levels).reshape(ng, -1), L, axis=0), np.tile(np.arange(L), ng)])
+            for d,s in enumerate(ext):
+                s.sim_coords = coords
+                s.dim = d
+            keys = [f'n_{name}' for name in strat.states]
+            for name,tr in self.graph.transitions.items():
+                if tr.src and all(s.name in strat.states for s in tr.src) and name not in self.derived_trs:
+                    keys.append(name)
+                    self.derived_trs[name] = strat
+            for key in keys:
+                if key in self.derived_res:
+                    continue
+                self.derived_res[key] = strat
+                mod.results[key].init_groups(ext, names + [strat.name], (mod.t.npts, ng*L))
+        return
+
+    def derived_groups(self, strat, groups, levels):
+        """ The index of each (group, level) pair among the results by a derived stratification """
+        return np.asarray(groups)*strat.n + np.asarray(levels)
 
     def init_outcomes(self, results):
         """ Work out the sources and delay of each outcome, and the order to compute them in """
@@ -1398,6 +1438,8 @@ class Engine:
             self.flowcounts[name] = 0.0
         if hasattr(self, 'flow_groups'):
             self.flow_groups.clear()
+        if getattr(self, 'flow_derived', None):
+            self.flow_derived.clear()
         return
 
     def record_stocks(self):
@@ -1424,10 +1466,15 @@ class Engine:
         for name,val in self.flowcounts.items():
             res[name][ti] = val
         self.step_outcomes()
+        derived = getattr(self, 'derived_res', {})
         for name,val in self.stock_groups.items():
-            res[f'n_{name}'].store_group(ti, val, self.rows)
+            if f'n_{name}' not in derived:
+                res[f'n_{name}'].store_group(ti, val, self.rows)
         for name,val in self.flow_groups.items():
-            res[name].store_group(ti, val, self.rows, flow=True)
+            if name not in derived:
+                res[name].store_group(ti, val, self.rows, flow=True)
+        for key,strat in derived.items(): # By a derived stratification instead (whose results keep every time point)
+            res[key].store_group(ti, self.stock_derived.get(key[2:], 0.0) if key.startswith('n_') and key[2:] in self.graph.states else self.flow_derived.get(key, 0.0))
         if self.flow_groups and 'new_infections' in res and 'new_infections' not in graph.transitions:
             res.new_infections.store_group(ti, sum(self.flow_groups.get(tr.name, 0) for tr in graph.transmissions), self.rows, flow=True)
         if self.rows is not None: # The flows by group so far in this row, for the results worked out from them

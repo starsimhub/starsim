@@ -472,7 +472,7 @@ class Transition(Nameable):
         if isinstance(current, par) and current.module is not None and not isinstance(value, Expr): # Once the model is built, a new value is the parameter's value, e.g. sir.recovery.dur = ss.erlang(k=3, mean=10)
             current.value = value
         else:
-            self.__dict__['_dur'] = None if value is None else as_expr(value)
+            self.__dict__['_dur'] = None if value is None else value if isinstance(value, par) else par(value, literal=True) if isinstance(value, Expr) and any(isinstance(leaf, ss.expressions.attr) for leaf in value.leaves) else as_expr(value) # An expression of attributes is the mean, worked out for each person
         return
 
     def __matmul__(self, driver):
@@ -1142,7 +1142,7 @@ def class_members(cls):
     members = dict()
     for base in reversed(cls.__mro__):
         for key,val in base.__dict__.items():
-            if isinstance(val, (Expr, Transition, outcome, FlowSum)): # Including results that are sums or ratios of states
+            if isinstance(val, (Expr, Transition, outcome, FlowSum, ss.expressions.func)): # Including results that are sums or ratios of states, attributes, and hooks
                 members[key] = val
             elif key in members: # Rebound to something else in a subclass
                 del members[key]

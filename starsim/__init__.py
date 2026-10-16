@@ -132,7 +132,7 @@ from .conditions import clock, state, any_ as any, child # Conditions on a state
 from . import kernels
 
 t('transitions')
-from .expressions import par, mother
+from .expressions import par, mother, attr, func
 from .transitions import (
     State, states, null, stay, on,
     Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome, update,
