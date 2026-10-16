@@ -5,6 +5,7 @@ Test interventions on declared models: modifiers, conditions, products, and thei
 # %% Imports and settings
 import pytest
 import numpy as np
+import networkx as nx
 import sciris as sc
 import starsim as ss
 
@@ -552,6 +553,36 @@ def test_sensitivity_by_state():
     return res
 
 
+def test_trace():
+    sc.heading('Testing contact tracing: delivery to the contacts of people something has happened to')
+    pars = dict(stop=120, n_agents=5_000, solver='abm', rand_seed=1, **kw)
+    def run(ring):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.1), recovery=ss.progression('I -> R', dur=10), init_prev=0.002, name='sir')
+        net = ss.StaticNet(graph=nx.erdos_renyi_graph, p=8/5_000, seed=True, name='net')
+        vx = ss.Vaccine(efficacy=1.0)
+        intvs = ss.vaccinate(vx, on=sir.infection, trace='net', name='ring') if ring else None
+        return ss.Sim(sir, networks=net, interventions=intvs, **pars).run()
+    base = run(False)
+    sim = run(True)
+    infected = sim.results.sir.infection.sum()
+    print(f'Infected: {base.results.sir.infection.sum():.0f} without and {infected:.0f} with ring vaccination ({sim.results.ring.delivered.sum():.0f} vaccinated)')
+    assert infected < 0.5*base.results.sir.infection.sum()
+
+    # Everyone vaccinated is a contact of someone infected
+    sir = sim.diseases.sir
+    ever = (sir.I | sir.R).uids
+    vaccinated = ss.uids(np.isfinite(sim.interventions.ring.product.ti_delivered.raw).nonzero()[0])
+    assert len(vaccinated) and set(vaccinated) <= set(sim.networks.net.find_contacts(ever))
+
+    # Only agents keep contacts, and it needs to know whose
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+    with pytest.raises(ss.CodedError, match='E804'):
+        ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(), on=sir.infection, trace='net'), solver='ode', **kw).init()
+    with pytest.raises(ValueError, match='on='):
+        ss.Sim(sir, networks=ss.RandomNet(name='net'), interventions=ss.vaccinate(ss.Vaccine(), trace='net'), solver='abm', n_agents=1000, **kw).init()
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -568,3 +599,4 @@ if __name__ == '__main__':
     loop   = test_loop_order()
     newb   = test_newborns_and_events()
     held   = test_triggers()
+    trace  = test_trace()

@@ -584,7 +584,7 @@ class StaticNet(Network):
 
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
-        self.graph = graph
+        self.nx_graph = graph # Not self.graph, which is the graph of states and transitions of a declared model
         self.define_pars(seed=True, p=None, n_contacts=10)
         self.graph_kwargs = {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
         self.update_pars(pars, **kwargs)
@@ -594,9 +594,9 @@ class StaticNet(Network):
     def init_pre(self, sim):
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
-        if self.graph is None:
+        if self.nx_graph is None:
             import networkx as nx # Lazy import since slow
-            self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
+            self.nx_graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
         n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
         if self.pars.p is None: # Convert from n_contacts to probability
             self.pars.p = n_contacts/self.n_agents
@@ -606,33 +606,33 @@ class StaticNet(Network):
         super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
-        if callable(self.graph):
-            args = inspect.signature(self.graph).parameters
+        if callable(self.nx_graph):
+            args = inspect.signature(self.nx_graph).parameters
             kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
             try:
-                self.graph = self.graph(n=self.n_agents, **kw, **self.graph_kwargs)
+                self.nx_graph = self.nx_graph(n=self.n_agents, **kw, **self.graph_kwargs)
             except TypeError as e:
-                ss.warn(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.StaticNet() instead.")
+                ss.warn(f"{str(e)}: networkx {self.nx_graph.name} not supported. Try using ss.StaticNet() instead.")
                 raise e
         self.validate_pop(self.n_agents)
         self.get_edges()
         return
 
     def validate_pop(self, n_agents):
-        n_nodes = self.graph.number_of_nodes()
+        n_nodes = self.nx_graph.number_of_nodes()
         if n_nodes > n_agents:
             errmsg = (f"Please ensure the number of nodes in graph ({n_nodes}) is less than "
                       f"or equal to (<=) the agent population size ({n_agents}).")
             raise ValueError(errmsg)
 
-        if not self.graph.number_of_edges():
-            errmsg = f"The nx generator {self.graph.name} produced a graph with no edges"
+        if not self.nx_graph.number_of_edges():
+            errmsg = f"The nx generator {self.nx_graph.name} produced a graph with no edges"
             raise ValueError(errmsg)
 
     def get_edges(self):
         p1s = []
         p2s = []
-        for edge in self.graph.edges():
+        for edge in self.nx_graph.edges():
             p1, p2 = edge
             p1s.append(p1)
             p2s.append(p2)

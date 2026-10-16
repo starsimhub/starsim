@@ -39,7 +39,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] 16. A threshold-triggered intervention, with and without memory
     - [x] 17. TB with resistance as a strain
     - [x] 18. Two diseases with age stratified on the sim
-- [ ] Wave 3: one complex example from each framework, Ghana measles, and TB (all but TB done)
+- [x] Wave 3: one complex example from each framework, Ghana measles, and TB
     - [x] camdl: SEIR by age and patch, with contacts by age within each patch, aging, movement, and a vaccination (agrees as an ODE; as chain-binomial, the same peaks a day sooner at a step of a day)
     - [x] Ghana measles: stochastic SEIR in 260 districts with gravity mixing, seasonality, births with vaccination, deaths, importation, and reported cases (the `gm-port` rewrite; agrees, with no change to Starsim)
     - [x] MEmilio: the age-resolved ODE SECIR, with seasonality, a cosine-smoothed cut in contacts, and test-and-trace capacity (agrees within 1.5 people of 10,000, the error of the reference itself; everything declared)
@@ -52,7 +52,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
     - [x] EpiModel: HIV with a care cascade and PrEP over two dynamic networks, four scenarios (agrees within the noise of the runs; 62 lines against 405, 2.5 s against 54)
     - [x] LASER: measles in England and Wales (53 places within 100 km of Norwich, at their real sizes, for 10 years), with births, life-table deaths, seasonality, importations, and gravity coupling (agrees: 106,466 infections against 106,639; 131 s against 3.0 s)
     - [x] SimInf: SISe3 in 1,600 herds with an environmental pressure and 783,773 events, aging by the register's `to_states` (fully declared; agrees within and between herds, once counts were settled after the register's events, as SimInf updates `phi`, and `phi`'s rates were made those of SimInf's daily update; 12 s a run as Gillespie against 0.1 s)
-    - [ ] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. migration as `immigration`/`emigration` parameters of `tbsim.TB` (with `ss.immigration()` and `ss.emigration()`). docs, tutorials, and examples ported. Not yet: second-line regimens after a test for resistance, strain-aware TPT, household contact tracing
+    - [x] TB: tbsim (branch `v1.0.0`). Done: `tbsim.TB` declared (front-loading, relapse, waning protection), with the care cascade, BCG, TPT, and HIV and nutrition as v4 products, deliveries, and modifiers; drug resistance as a strain dimension of `tbsim.TB` (`drugs=`, any number of drugs, people carrying up to `max_strains` at once), with `tbsim.LSHTMResistant` (the reference structure, stratified the same way) matching `two_strain_ode` to 1e-4 in every compartment, and as agents close to the ODE. migration as `immigration`/`emigration` parameters of `tbsim.TB` (with `ss.immigration()` and `ss.emigration()`). docs, tutorials, and examples ported. A second-line regimen (`second_line=`, its own state and transitions, cure of resistant strains, and relapse), started for people found resistant by a test for resistance in the care cascade (`tbsim.care(tb, dst=tbsim.DST(tb))`; as an ODE and as agents, 18 and 19 people on it on average); strain-aware TPT (`tbsim.TPT(tb=tb, drugs=['INH'])`, an efficacy by level of resistance: the share of the strains carried that its drugs act on); household contact tracing (`tbsim.contact_tracing(tb)`, as agents: the contacts of people starting treatment are tested, and treated or given TPT). Not ported: switching regimen during a course, clearing strains by TPT, and resistance acquired under TPT
 
 ## By section of the spec
 
@@ -166,7 +166,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [ ] A test delay in a compartmental run
 - [x] Time series for `coverage=` and `capacity=` (`ss.timeseries`)
 - [ ] `ss.Vx`, `ss.Dx`, `ss.Tx` as aliases of the new products
-- [ ] Contact tracing and partner notification
+- [x] Contact tracing and partner notification: `trace=` on a delivery (`ss.screen(test, on=tb.diagnosis, trace='household')`) delivers to the contacts, in a network (or several), of the people `on=` selects or a test sends to it, with `eligible=` and `coverage=` applying to the contacts; agents only (`E804` otherwise). Ring vaccination of an SIR on a static network cuts infections from 48,800 to 570
 
 ### 09 Results
 
@@ -288,6 +288,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A plain `duration=` on an outcome is an exponential stay, while `delay=` is an exact shift.
 - As agents, TB (LSHTM) comes out 5–10% higher than the ODE with weekly steps, and 20–30% higher with monthly ones; this is the difference of order `dt` above, made larger by an epidemic that is near R = 1.
 - `rel_sus` and `rel_trans` on a state are numbers, not `ss.par`s, so they cannot be fitted; the TB models write them into the rates instead.
+- As agents, a delivery comes after the step's progressions (which a declared model takes in `step_state()`, before the interventions) and before its transmission, while in a compartmental run it comes before all of the step's flows. So a delivery as agents misses the people who progress in that step: TPT on the first step reached 7% fewer people with a latent infection that leaves at 3.9 per year with weekly steps.
 - Once JAX has run in a process (`sim.gradient()`, a gradient fit, or `integrator='jax'`), running sims in parallel by forking processes (`ss.parallel()` of agent-based sims, Optuna with several workers) can deadlock, as JAX warns. Spawning instead would be safe but takes about 1.5 s longer to start.
 - Gradients need a sim that the kernels run from start to finish (no interventions, modifiers with conditions, transfers, or movement register), and a rate that is a Python function of the sim has none (one written with NumPy functions of counts does).
 - The JAX run is compiled the first time it is used for a model (about 1 s), and again if a step needs more substeps than it has allowed for.

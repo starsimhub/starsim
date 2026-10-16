@@ -529,7 +529,7 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
 
 #%% Deliveries for declared models: who gets a product, when, and how many
 
-delivery_keys = ['start', 'stop', 'years', 'dates', 'interval', 'eligible', 'coverage', 'capacity', 'on', 'when', 'deliver']
+delivery_keys = ['start', 'stop', 'years', 'dates', 'interval', 'eligible', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace']
 
 
 class Delivery(Intervention):
@@ -551,6 +551,9 @@ class Delivery(Intervention):
         coverage (float): the fraction of eligible people reached; also `ss.by(...)`, or a function of the sim returning a probability per person
         capacity (float): the number that can be delivered: per round, or per unit time for routine delivery (e.g. `ss.peryear(50_000)`)
         on (Transition/Cond/func): deliver to the people something has just happened to, e.g. `on=sir.infection`
+        trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that `on=`
+            selects (or that a test sends to this follow-up), instead of to them; `eligible=` and `coverage=` then apply to the
+            contacts. Agents only, since only networks know who someone's contacts are
         when (func): deliver only on the steps where this function of the sim returns True
         deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
             run); replaces `eligible`, `coverage`, and the rounds
@@ -563,7 +566,7 @@ class Delivery(Intervention):
     kind = None # The kind of product this delivers
 
     def __init__(self, product=None, move=None, start=None, stop=None, years=None, dates=None, interval=None, eligible=None, coverage=None,
-                 capacity=None, on=None, when=None, deliver=None, on_positive=None, on_negative=None, disease=None, name=None, label=None, **kwargs):
+                 capacity=None, on=None, when=None, deliver=None, trace=None, on_positive=None, on_negative=None, disease=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
         if self.kind is not None and not isinstance(product, self.kind):
             errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__}, not {type(product).__name__}'
@@ -595,6 +598,7 @@ class Delivery(Intervention):
         self.on = None if on is None else ss.conditions.as_cond(on)
         self.when = when
         self.deliver = deliver
+        self.trace = trace
         self.on_positive = on_positive
         self.on_negative = on_negative
         self.disease = disease if disease is None or isinstance(disease, str) else disease.name
@@ -662,6 +666,8 @@ class Delivery(Intervention):
         for key in ['on_positive', 'on_negative']:
             if callable(getattr(self, key)) and not isinstance(getattr(self, key), Delivery):
                 out.append(f'{key}= of "{self.name}" is a function of (sim, uids)')
+        if self.trace is not None:
+            out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
         for key in ['eligible', 'coverage', 'on', 'deliver']:
             func = getattr(self, key)
             if callable(func) and not isinstance(func, (ss.Cond, ss.Dist)) and len(inspect.signature(func).parameters) >= 2:
@@ -701,6 +707,11 @@ class Delivery(Intervention):
         reasons = self.agent_reasons()
         if sim.solver != 'abm' and reasons:
             ss.error('E804', f'"{self.name}" cannot run with solver="{sim.solver}": {reasons[0]}.\n     Run with solver="abm", or leave the solver as "auto".')
+        if self.trace is not None:
+            if self.on is None and not self.triggered:
+                errormsg = f'"{self.name}" traces the contacts of people, so needs to know whose: give on= (e.g. on=tb.diagnosis), or make it the follow-up of a test'
+                raise ValueError(errormsg)
+            self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
         to_ti = ss.connectors.to_ti
         npts = sim.t.npts
         self.ti_start = 0 if self.start is None else to_ti(sim, self.start)
@@ -881,6 +892,10 @@ class Delivery(Intervention):
         """ Offer the product to some people: those eligible among them, thinned by coverage and capped by capacity """
         selector = self.selector
         abm = selector.abm
+        if self.trace is not None: # Their contacts instead
+            uids = self.uids(sel)
+            contacts = [net.find_contacts(uids) for net in self.trace_nets]
+            sel = selector.to_selection(ss.uids(np.unique(np.concatenate(contacts))))
         sel = sel*(selector.select(self.eligible) if self.eligible is not None else self.default_eligible())
         if self.holds: # Not to people who already hold it
             sel = sel*(selector.dim(self.product.dim) == 0)
