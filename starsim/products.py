@@ -554,7 +554,7 @@ class Treatment(Held):
             return super().diseases
         return list(dict.fromkeys(name for tr,_ in self.edge_specs() if (name := self.edge_disease(tr)) is not None))
 
-    def edge_refs(self):
+    def refs(self):
         """ The source states of the transitions it moves people along, as (disease, state), for tracking diseases jointly (see `ss.Crossing`) """
         out = []
         for tr,_ in self.edge_specs():
@@ -683,8 +683,10 @@ class Test(Product):
     A diagnostic test: what `ss.screen()` delivers
 
     Args:
-        sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`), and the test then detects being in those states
+        sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`),
+            and the test then detects being in those states. The states can be of several diseases (`{hpv16.I: 0.9, hpv18.CIN: 0.95}`, or `'hpv18.CIN'`)
         specificity (float): the probability that someone without it tests negative
+        combine (str): for someone in states of several diseases, 'worst' (each detected independently, so positive with probability 1 − ∏(1 − sensitivity)) or 'max' (the highest sensitivity)
         delay (dur): the time from the test to the result (in a compartmental run, people wait in levels of one step each)
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
@@ -694,19 +696,24 @@ class Test(Product):
         ```python
         pcr = ss.Test(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
         xpert = ss.Test(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
+        hpv_dna = ss.Test(sensitivity={hpv16.I: 0.9, hpv16.CIN: 0.95, hpv18.I: 0.9}, specificity=0.97) # Across diseases
         ```
     """
     compartmental = True
     holds = False
     waning = None
     doses = None
-    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
+    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'combine', 'cost']
     __test__ = False # So pytest does not collect it
 
-    def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
+    def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, combine='worst', cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
+        if combine not in ['worst', 'max']:
+            errormsg = f'combine= is "worst" or "max", not {combine!r}'
+            raise ValueError(errormsg)
         self.sensitivity = sensitivity
         self.specificity = specificity
+        self.combine = combine
         self.delay = delay
         self.detects = None if detects is None else ss.conditions.as_cond(detects)
         self.cost = cost
@@ -730,7 +737,55 @@ class Test(Product):
     def step_waning(self):
         return
 
+    @staticmethod
+    def key_ref(key):
+        """ A key of a dict by state, as (disease name, or None for the delivery's; state name) """
+        if isinstance(key, ss.State):
+            return ss.conditions.modname(key.module), key.name
+        mod, _, name = key.rpartition('.')
+        return mod or None, name
+
+    @property
+    def diseases(self):
+        """ The names of the diseases whose states it is keyed by """
+        return list(dict.fromkeys(mod for mod,_ in self.refs()))
+
+    def refs(self):
+        """ The states of named diseases it is keyed by, as (disease, state), for tracking diseases jointly (see `ss.solvers.Crossing`) """
+        sens = self.sensitivity
+        return [ref for key in sens if (ref := self.key_ref(key))[0] is not None] if isinstance(sens, dict) else []
+
+    def by_disease(self, sim, home):
+        """ The states it detects, by disease: {disease: [(state, sensitivity)]}; a state with no disease is one of `home` """
+        out = {}
+        for key,val in self.sensitivity.items():
+            name, state = self.key_ref(key)
+            name = name or home
+            states = sim.get_declared(name).graph.states
+            if state not in states:
+                raise ss.UnknownEffect(f'the test "{self.name}" has a sensitivity for "{name}.{state}", but "{name}" has no state "{state}"; its states are {sc.strjoin(states.keys())}.')
+            out.setdefault(name, []).append((state, val))
+        return out
+
+    def detection(self, selector, home):
+        """
+        Who is in a state the test detects, and the probability that each tests positive: per disease, the sensitivity
+        of the state they are in, combined over diseases as independent detections (`combine='worst'`) or the highest
+        """
+        none, miss, top = 1.0, 1.0, 0.0
+        for name,rows in self.by_disease(selector.sim, home).items():
+            inside, sens = 0.0, 0.0
+            for state,val in rows:
+                sel = selector.select(ss.conditions.Cond('state', name, state))*1.0
+                inside = inside + sel
+                sens = sens + sel*selector.per_person(val)
+            none = none*(1 - inside)
+            miss = miss*(1 - sens)
+            top = np.maximum(top, sens)
+        return 1 - none, (1 - miss if self.combine == 'worst' else top)
+
     def describe(self):
-        detects = sc.strjoin(self.sensitivity.keys()) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
+        label = lambda key: '.'.join(n for n in self.key_ref(key) if n)
+        detects = sc.strjoin(label(k) for k in self.sensitivity) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         delay = '' if self.delay is None else f', result after {self.delay!r}'
         return f'{self.name}: test for {detects} (sensitivity {self.sensitivity}, specificity {self.specificity}{delay})'

@@ -2222,15 +2222,8 @@ class Delivery(Intervention):
         """ Work out the result of each test, and either act on it or wait for it """
         selector = self.selector
         product = self.product
-        if isinstance(product.sensitivity, dict): # A sensitivity for each state, which are then what the test detects
-            states = self.dis.graph.states
-            has, sens = 0.0, 0.0
-            for name,val in product.sensitivity.items():
-                if name not in states:
-                    raise ss.UnknownEffect(f'the test "{product.name}" has a sensitivity for "{name}", which is not a state of "{self.dis.name}". Its states are {sc.strjoin(states.keys())}.')
-                inside = selector.in_states([name])*selector.everyone()
-                has = has + inside
-                sens = sens + inside*selector.per_person(val)
+        if isinstance(product.sensitivity, dict): # A sensitivity for each state (of any disease), which are then what the test detects
+            has, sens = product.detection(selector, self.dis.name)
         else:
             if product.detects is not None:
                 has = selector.select(product.detects)
@@ -2291,7 +2284,7 @@ class Delivery(Intervention):
                 if before is not None: # After the other follow-ups have moved some people (e.g. cured people into R)
                     sel = self.same_people(sel, before)
                 if isinstance(followup, Delivery):
-                    followup.receive(sel)
+                    followup.receive(sel if self.selector.abm or followup.dis is self.dis else self.carried(sel, followup))
                 else:
                     followup(self.sim, self.uids(sel))
         return

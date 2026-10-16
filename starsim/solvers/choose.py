@@ -305,6 +305,8 @@ def init_crossings(sim):
             strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
             sim.groups.cross_strats.append(strat)
         sim.crossings.append(ss.solvers.Crossing(sim, members))
+        sizes = [strat.n for strat in sim.groups.cross_strats[-len(members):]]
+        ss.note(f'the states of {" × ".join(members)} are tracked jointly: {" × ".join(map(str, sizes))} = {int(np.prod(sizes)):,} joint states per group', sim=sim)
     sim.groups.init()
     sim.mixing = ss.solvers.Mixing(sim)
     return

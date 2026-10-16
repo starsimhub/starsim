@@ -342,8 +342,8 @@ def state_refs(obj):
         for val in (vars(holder).values() if holder is not None else []):
             if isinstance(val, (Cond, ss.State)):
                 walk(as_cond(val))
-        if hasattr(holder, 'edge_refs'): # The sources of the transitions a treatment moves people along
-            out += holder.edge_refs()
+        if hasattr(holder, 'refs'): # The sources of the transitions a treatment moves people along, and the states a test is keyed by
+            out += holder.refs()
     return out
 
 

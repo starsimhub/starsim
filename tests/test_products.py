@@ -17,6 +17,19 @@ def make_geno(name, beta=1.2):
     return ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(beta)), clearance=I >> S @ ss.years(1), init_prev=0.1, name=name)
 
 
+def make_hpv(name, beta=1.5):
+    """ A genotype with a lesion: S -> I -> CIN, cleared to S, and excised (undriven) back to I """
+    S, I, CIN = ss.states('S I CIN')
+    return ss.Disease(
+        infection = ss.transmission('S -> I', beta=ss.peryear(beta), source=I + CIN),
+        clearance = I >> S @ ss.years(1),
+        dysplasia = I >> CIN @ ss.years(2),
+        regress   = CIN >> S @ ss.years(3),
+        excised   = CIN >> I,
+        init_prev=0.1, name=name,
+    )
+
+
 def run_both(make, pop=10_000, n_agents=10_000, **kwargs):
     return sc.objdict(ode=make(solver='ode', total_pop=pop, **kw, **kwargs).run(),
                       abm=make(solver='abm', total_pop=pop, n_agents=n_agents, **kw, **kwargs).run())
@@ -54,6 +67,54 @@ def test_vaccine_diseases():
     return sims
 
 
+def test_test_diseases():
+    sc.heading('Testing a test keyed by states of several diseases: independent detection, or the highest sensitivity')
+    s16, s18 = [0, 0.6, 0.9], [0, 0.5, 0.8] # By S, I, CIN
+    seen = sc.objdict()
+    def make(combine='worst', **kwargs):
+        g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
+        dna = ss.Test(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95, combine=combine)
+        def look(sim): # As agents: the expected positives, from each agent's states when tested
+            if sim.solver == 'abm':
+                d, u = sim.diseases, sim.people.auids
+                p16, p18 = [np.select([d[g].I.raw[u], d[g].CIN.raw[u]], s[1:], 0) for g,s in [('hpv16', s16), ('hpv18', s18)]]
+                pos = 1 - (1 - p16)*(1 - p18) if combine == 'worst' else np.maximum(p16, p18)
+                seen[combine] = np.where((p16 == 0) & (p18 == 0), 0.05, pos).sum()
+            return True
+        prog = ss.screen(dna, at=[2005], when=look)
+        return ss.Sim([g16, g18], interventions=prog, **kwargs)
+    def expected(sim, combine):
+        """ As an ODE: the diseases do not interact, so each person's states are independent, and the expected positives come from the marginals """
+        if sim.solver == 'abm':
+            return seen[combine]
+        r = sim.results
+        k = int(np.flatnonzero(r.prog.delivered)[0])
+        n = {g:np.array([r[g][f'n_{x}'][k] for x in ['S', 'I', 'CIN']]) for g in ['hpv16', 'hpv18']}
+        N = n['hpv16'].sum()
+        p = 0.0
+        for x in range(3):
+            for y in range(3):
+                pos = 0.05 if x == y == 0 else 1 - (1 - s16[x])*(1 - s18[y]) if combine == 'worst' else max(s16[x], s18[y])
+                p += n['hpv16'][x]/N*n['hpv18'][y]/N*pos
+        return p*N
+    for combine in ['worst', 'max']:
+        sims = run_both(make, combine=combine)
+        for solver,sim in sims.items():
+            exp, got = expected(sim, combine), sim.results.prog.diagnosed.sum()
+            assert np.isclose(got, exp, rtol=1e-5 if solver == 'ode' else 0.03), f'{solver} {combine}: {got:.1f} vs {exp:.1f}' # v4's joint stepping moves the marginals by about 1e-6
+        assert any('tracked jointly: 3 × 3 = 9 joint states per group' in note for note in sims.ode.notes)
+        if combine == 'worst':
+            worst = sims.ode.results.prog.diagnosed.sum()
+    assert sims.ode.results.prog.diagnosed.sum() < worst
+
+    g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
+    bad = ss.screen(ss.Test(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
+    with pytest.raises(ss.UnknownEffect, match='"hpv18.X", but "hpv18" has no state "X"; its states are S, I, CIN'):
+        ss.Sim([g16, g18], interventions=bad, solver='abm', **kw).run()
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
+    test = test_test_diseases()
