@@ -772,13 +772,14 @@ class Delivery(Intervention):
 
     @property
     def disease(self):
-        """ The disease whose engine evaluates the conditions: as given, the first that the product names, or that of the delivery it follows """
+        """ The disease whose engine evaluates the conditions: as given, the first that the product names, that of the delivery it follows, or the first its conditions name """
         if self._disease is None:
             named = getattr(self.product, 'diseases', None)
             if named:
                 return named[0]
             if self.parent is not None:
                 return self.parent.disease
+            return next((mod for mod,_ in ss.conditions.state_refs(self)), None)
         return self._disease
 
     @disease.setter

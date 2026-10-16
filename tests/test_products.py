@@ -185,8 +185,37 @@ def test_outcomes():
     return sims
 
 
+def test_any():
+    sc.heading('Testing ss.any() across diseases in detects= and eligible=, with the disease taken from the conditions')
+    seen = sc.objdict()
+    def make(**kwargs):
+        genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
+        any_cin, any_ca = ss.any(g.CIN for g in genos), ss.any(g.CA for g in genos)
+        def look(sim):
+            if sim.solver == 'abm':
+                d, u = sim.diseases, sim.people.auids
+                ca = d.hpv16.CA.raw[u] | d.hpv18.CA.raw[u]
+                seen.update(eligible=np.count_nonzero(~ca), found=0.9*np.count_nonzero((d.hpv16.CIN.raw[u] | d.hpv18.CIN.raw[u]) & ~ca))
+            return True
+        prog = ss.screen(ss.Test(sensitivity=0.9, detects=any_cin), where=~any_ca, at=[2005], when=look) # No disease=
+        return ss.Sim(genos, interventions=prog, **kwargs)
+    sims = run_both(make)
+    for solver,sim in sims.items():
+        r = sim.results
+        k = int(np.flatnonzero(r.prog.delivered)[0])
+        exp = seen
+        if solver == 'ode': # Independent genotypes: from the marginals
+            f = {x:[r[g][f'n_{x}'][k]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']}
+            no_ca = np.prod([1 - p for p in f['CA']])
+            exp = sc.objdict(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
+        assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.diagnosed[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver
+    assert any('tracked jointly' in note for note in sims.ode.notes)
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
     test = test_test_diseases()
     outcomes = test_outcomes()
+    any_ = test_any()
