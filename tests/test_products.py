@@ -213,9 +213,25 @@ def test_any():
     return sims
 
 
+def test_strain_efficacy():
+    sc.heading('Testing an efficacy by a strain that susceptibles do not carry: an error, pointing to efficacy by disease')
+    def make(eff, **kwargs):
+        S, I = ss.states('S I')
+        hpv = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(1.2)), clearance=I >> S @ ss.years(1), init_prev=0.1, name='hpv')
+        hpv.stratify(genotype=['hpv16', 'hpv18'], kind='strain') # In v4 a name only suggests a kind
+        return ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=eff), at=[2005]), **kwargs)
+    for solver in ['abm', 'ode']:
+        with pytest.raises(ss.InvalidAdjustment, match='"genotype", but people in S of "hpv" have no level of it.*efficacy=\\{hpv16: 0.95'):
+            make(ss.by(genotype=[0.95, 0.0]), solver=solver, **kw).init()
+    sim = make(dict(transmission=ss.by(genotype=[0.5, 0.0])), solver='abm', **kw).run() # Infectious people do carry a genotype
+    assert sim.results.vaccinate.delivered.sum() > 0
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
     test = test_test_diseases()
     outcomes = test_outcomes()
     any_ = test_any()
+    strain = test_strain_efficacy()

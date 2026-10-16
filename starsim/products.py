@@ -373,19 +373,35 @@ class Held(Product):
             for key,eff in effects.items():
                 if key == 'acquisition':
                     targets = [('rel_sus', None)]
+                    states = [s for tr in graph.transitions.values() if tr.contact for s in tr.src]
                 elif key == 'transmission':
                     targets = [('rel_trans', None)]
+                    states = graph.infectious
                 elif key == 'mortality' and deaths:
                     targets = [('transition', name) for name in deaths]
+                    states = [s for name in deaths for s in graph.transitions[name].src]
                 elif key in graph.transitions or graph.destination(key) is not None: # A transition, or one destination of a transition with several ('progression.C')
                     targets = [('transition', key)]
+                    states = (graph.transitions.get(key) or graph.destination(key)).src
                 else:
                     options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
                     raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                self.check_dims(eff, key, dis, states)
                 for kind,name in targets:
                     if kind == 'transition':
                         kind = graph.modifier_kind(name)
                     sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
+        return
+
+    def check_dims(self, eff, key, dis, states):
+        """ An efficacy by a dimension (`ss.by(genotype=...)`) that the people it acts on have no level of, such as a strain, which susceptibles do not carry, is an error """
+        if not isinstance(eff, ss.by):
+            return
+        for strat in dis.graph.strats:
+            missing = [s.name for s in states if s.people and s.name not in strat.states] if strat.states is not None and strat.name in eff.dims else []
+            if missing:
+                raise ss.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
+                                           f'For an efficacy against each genotype, make each a disease and key the efficacy by disease: ss.Vaccine(efficacy={{hpv16: 0.95, hpv18: 0.95}}).')
         return
 
     def step_waning(self):
