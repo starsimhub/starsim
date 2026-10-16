@@ -149,9 +149,53 @@ def test_capacity():
     return sims
 
 
+def make_tx(name='tx'):
+    """ Infection, and treatment as a state: started only by a delivery, and stopped at a rate """
+    S, I, T = ss.states('S I T')
+    return ss.Disease(infection=S >> I @ 0.002*(I + T), start=I >> T, dropout=T >> I @ ss.days(200), init=dict(I=0.4), name=name)
+
+
+def test_target():
+    sc.heading('Testing stock targets: the gap delivered each step, removal over it, by stratum, and as a share')
+    n_on = ss.timeseries({0: 0, 50: 8000, 100: 4000}, mode='linear') # People
+    def make(target=n_on, **kwargs):
+        tx = make_tx()
+        prog = ss.treat(ss.Treatment(moves=tx.start), target=target, remove=tx.dropout)
+        return ss.Sim(tx, interventions=prog, **kwargs)
+    sims = run_both(make, stop=150)
+    for solver,sim in sims.items():
+        r = sim.results.prog
+        assert np.allclose(r.n_end[1:149], r.target[1:149], atol=5.1), f'{solver}: {np.abs(r.n_end - r.target)[1:149].max()}' # Within an agent (5 people)
+        assert np.allclose(r.n_end[10:149], sim.results.tx.n_T[11:150], rtol=0.015) # The number on treatment at the start of each step, less those who stop during it (about 0.5%, give or take an agent of 5 people)
+        assert r.removed[50:100].sum() > 0 and r.removed[:50].sum() == 0 and r.shortfall.max() < 5.1
+        assert any('counts tx.T' in note for note in sim.notes)
+    check_close(sims, lambda sim: sim.results.prog.removed.sum(), rtol=0.15) # Agents vary by about 6% between runs
+
+    # By stratum, and a share of some people
+    def by_risk(**kwargs):
+        tx = make_tx().stratify(risk=['low', 'high'], split=[0.5, 0.5])
+        prog = ss.treat(ss.Treatment(moves=tx.start), target=ss.by(risk=[1000, 3000]))
+        return ss.Sim(tx, interventions=prog, **kwargs)
+    for solver,sim in run_both(by_risk, stop=30).items():
+        n_T = sim.results.tx.n_T.by('risk').values
+        assert np.allclose(n_T[2:29], [1000, 3000], rtol=0.02), f'{solver}: {n_T[2:5]}' # Less those who stopped in the step (about 0.5%), give or take an agent of 5 people
+    def shared(**kwargs):
+        sir = make_sir().stratify(age=[0, 15, 65])
+        adults = ss.People.age >= 15
+        vmmc = ss.vaccinate(ss.Vaccine(efficacy=0.6), target=ss.share(ss.timeseries({0: 0.2, 20: 0.6}, mode='linear'), among=adults), coverage=0.5)
+        return ss.Sim(sir, interventions=vmmc, **kwargs)
+    for solver,sim in run_both(shared, stop=30).items():
+        r = sim.results.vmmc
+        n_adults = sim.results.sir.n_S.by('age').values[0, 1:].sum() + sim.results.sir.n_I.by('age').values[0, 1:].sum()
+        assert np.isclose(r.n_end[25], 0.6*n_adults, rtol=0.02) and np.isclose(r.target[10], 0.4*n_adults, rtol=0.02)
+        assert np.isclose(r.delivered.by('age').values[:, 0].sum(), 0) # Only adults
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
     priority = test_priority()
     queue = test_queue()
     capacity = test_capacity()
+    target = test_target()

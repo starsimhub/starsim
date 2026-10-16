@@ -452,7 +452,7 @@ class BaseVaccination(Intervention):
 
 #%% Deliveries for declared models: who gets a product, when, and how many
 
-delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'priority', 'queue']
+delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'priority', 'queue', 'target', 'remove']
 
 
 class desc:
@@ -468,6 +468,25 @@ class desc:
 
     def __repr__(self):
         return f'desc({self.key!r})'
+
+
+class share:
+    """
+    A target that is a share of some people, as the `target=` of a delivery: `target=ss.share(0.8, among=men15_49)`
+
+    Only the people in `among` are counted against it, and only they are given it.
+
+    Args:
+        value (float/func): the share (a number, a time series, or a function of the sim; `ss.by(...)` for one per stratum)
+        among (Cond): the people it is a share of
+    """
+    def __init__(self, value, among=None):
+        self.value = value
+        self.among = None if among is None else ss.conditions.as_cond(among)
+        return
+
+    def __repr__(self):
+        return f'share({self.value!r}, among={self.among!r})'
 
 
 def water_fill(amount, n, keys):
@@ -550,6 +569,13 @@ class Delivery(Intervention):
         queue (bool/dur): what happens to people over capacity: None or False, they are dropped (the result `dropped`); True, they
             wait until served; a duration, they wait at most that long. They are served by priority, then longest waiting first,
             and leave the queue if they stop being eligible (`left`). In a compartmental run, the levels of `waiting_<delivery>`
+        target (float/func/ss.share/ss.by): a stock to keep: the number of people in the delivery's end state (the destinations of a
+            treatment's transitions, the holders of a product, or the level a transfer moves people to), given as people, a time
+            series, a function of the sim, `ss.share(x, among=cond)` (that share of the people in `among`), or `ss.by(...)`
+            (one target per stratum). Each step, the gap is delivered (in the order of `priority=`, after coverage, within capacity)
+        remove (Transition/bool): with `target=`, what happens to people over it: moved along this transition (highest priority
+            key first), or for a product people hold, True to take it from them; by default, nobody is removed
+        of (Cond): with `target=`, what is counted instead of the end state
         on_positive (Delivery/func/list): for a test: what happens to people who test positive: another delivery, a function of `(sim, uids)`, or a list of them
         on_negative (Delivery/func/list): likewise for people who test negative
         disease (str): the disease the product acts on (default: the only one; for a treatment that names its transitions, the disease of the first)
@@ -570,7 +596,7 @@ class Delivery(Intervention):
     product_keys = [] # The keywords of the product, with which the delivery makes its own
 
     def __init__(self, product=None, move=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, queue=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
+                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, queue=None, target=None, remove=None, of=None, on_positive=None, on_negative=None, disease=None, at_age=None, name=None, label=None, **kwargs):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
@@ -644,6 +670,12 @@ class Delivery(Intervention):
         self.trace = trace
         self.priority = priority
         self.queue = None if queue is False else queue
+        self.target = target
+        self.remove = remove
+        self.of = None if of is None else ss.conditions.as_cond(of)
+        if (remove is not None or of is not None) and target is None:
+            errormsg = 'remove= and of= are for a stock target: give target= too'
+            raise ValueError(errormsg)
         self.on_positive = on_positive
         self.on_negative = on_negative
         if isinstance(disease, (list, tuple)):
@@ -690,8 +722,8 @@ class Delivery(Intervention):
     def moved_edges(self):
         """ The transitions the product moves people along, as (disease, transition) names, once initialized """
         out = [(e.dis, e.tr.name) for e in getattr(self, 'edges', []) if e.tr is not None]
-        fail = getattr(self, 'fail_edge', None)
-        return out + ([(fail.dis, fail.tr.name)] if fail is not None else [])
+        out += [(e.dis, e.tr.name) for e in [getattr(self, 'fail_edge', None), getattr(self, 'remove_edge', None)] if e is not None]
+        return out
 
     @property
     def rank(self):
@@ -717,7 +749,7 @@ class Delivery(Intervention):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good """
         full = self.coverage is None and self.capacity is None and self.when is None
         lost = self.holds and self.product.loses # Once lost, they would be eligible again, and given it again at the next step
-        return self.routine and (self.by_age or not ((self.holds or self.move) and full and not lost))
+        return self.routine and self.target is None and (self.by_age or not ((self.holds or self.move) and full and not lost))
 
     @property
     def by_age(self):
@@ -837,6 +869,21 @@ class Delivery(Intervention):
                         f'     Make one product for each disease, e.g. vx_{self.disease} = ss.Vaccine(...), and deliver each with its own ss.vaccinate(..., disease=\'{self.disease}\').')
             raise ss.UnknownDisease(errormsg)
         self.edges, self.fail_edge = self.product.resolve(sim, self.disease) if isinstance(self.product, ss.Treatment) else ([], None) # What a treatment that cures moves people along
+        self.remove_edge = None
+        if self.remove is not None and self.remove is not True:
+            name = ss.Treatment.edge_disease(self.remove) or self.disease
+            graph = sim.get_declared(name).graph
+            trname = self.remove.rpartition('.')[2] if isinstance(self.remove, str) else self.remove.name
+            if trname not in graph.transitions:
+                raise ss.UnknownEffect(f'"{self.name}" has remove="{trname}", which "{name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+            tr = graph.transitions[trname]
+            self.remove_edge = sc.objdict(dis=name, tr=tr, dst=tr.dst[0])
+        if self.target is not None:
+            counts = self.of if self.of is not None else f'has_{self.product.name}' if self.holds else sc.strjoin(f'{e.dis}.{e.dst.name}' for e in self.edges) if self.edges else self.move
+            ss.note(f'the target of "{self.name}" counts {counts}', sim=sim)
+        if self.remove is True and not self.holds:
+            errormsg = f'remove=True takes away a product people hold, but "{self.name}" delivers one they do not; give the transition to remove people along'
+            raise ValueError(errormsg)
         super().init_pre(sim)
         self.started = False
         if self.triggered: # A follow-up runs when its parent's result arrives, so has no schedule of its own
@@ -912,6 +959,13 @@ class Delivery(Intervention):
             results += [ss.Result('diagnosed', dtype=float, scale=abm, label='Number diagnosed', summarize_by='sum')]
         if self.capacity is not None or self.queue is not None:
             results += [ss.Result('dropped', dtype=float, scale=abm, label='Number over capacity, not served', summarize_by='sum')]
+        if self.target is not None:
+            results += [
+                ss.Result('target', dtype=float, scale=abm, label='Target'),
+                ss.Result('n_end', dtype=float, scale=abm, label='Number counted against the target'),
+                ss.Result('removed', dtype=float, scale=abm, label='Number removed, over the target', summarize_by='sum', auto_plot=False),
+                ss.Result('shortfall', dtype=float, scale=abm, label='Shortfall from the target', auto_plot=False),
+            ]
         if self.queue is not None:
             results += [
                 ss.Result('waiting', dtype=float, scale=abm, label='Number waiting'),
@@ -1228,6 +1282,8 @@ class Delivery(Intervention):
         if self.remembers:
             chosen = self.mark_offered(sel, chosen)
         self.give(chosen, capped=True)
+        if self.target is not None:
+            self.record_target()
         return
 
     def offer(self, sel):
@@ -1280,7 +1336,7 @@ class Delivery(Intervention):
         scheduled = self.routine or (self.in_rounds and not self.triggered)
         static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
         past = self.routine and self.by_age # The people past the age are left out on the first step: see skip_past()
-        return moves and scheduled and static and self.capacity is None and self.queue is None and self.when is None and not self.followups and not past
+        return moves and scheduled and static and self.capacity is None and self.queue is None and self.target is None and self.when is None and not self.followups and not past
 
     def shifts(self):
         """
@@ -1368,13 +1424,121 @@ class Delivery(Intervention):
         self._ti_served = self.sim.ti
         if self.queue is not None:
             return self.serve_queue(sel, chosen)
-        if self.capacity is None:
+        if self.capacity is None and self.target is None:
             return sel, chosen
-        served = self.take(chosen, self.limit(), carry=True)
+        served = self.take_limited(chosen)
         self.use(served)
         dropped = chosen & ~served if self.selector.abm else chosen - served
-        self.tally('dropped', dropped)
+        if self.capacity is not None:
+            self.tally('dropped', dropped)
         return (sel & ~dropped if self.selector.abm else sel - dropped), served
+
+    def take_limited(self, cands, wait=None):
+        """ Choose who is served from the candidates: up to the target's gap in each stratum (removing people over it), within what is left of the capacity """
+        limit = self.limit()
+        if self.target is None:
+            return self.take(cands, limit, carry=True, wait=wait)
+        selector = self.selector
+        abm = selector.abm
+        among = self.among()
+        cands = cands*among
+        strata, targets = self.strata_targets()
+        end = self.end_now()*among
+        gaps = [t - self.people(end*m) for m,t in zip(strata, targets)]
+        want = [min(max(g, 0.0), self.people(cands*m)) for m,g in zip(strata, gaps)]
+        total = sum(want)
+        f = min(1.0, limit/total) if total else 0.0
+        served = selector.nobody()
+        for m,w in zip(strata, want):
+            if w*f > 0:
+                served = served | self.take(cands*m, w*f, wait=wait) if abm else served + self.take(cands*m, w*f, wait=wait)
+        if self.remove is not None: # Over the target: removed, highest key first
+            for m,g in zip(strata, gaps):
+                if g < 0:
+                    self.take_away(self.take(end*m*selector.everyone(), -g, reverse=True))
+        self._target = (self.sim.ti, sum(targets))
+        return served
+
+    def people(self, sel):
+        """ The number of people selected, whatever the results count in """
+        return self.n_agents(sel)*self.sim._current_scale if self.selector.abm else self.count(sel)
+
+    def among(self):
+        """ Who a target is a share of (`ss.share(among=)`), or everyone """
+        among = getattr(self.target, 'among', None)
+        return self.selector.everyone() if among is None else self.selector.select(among)
+
+    def end_now(self):
+        """ Who is counted against the target: `of=`, or those in the delivery's end state """
+        selector = self.selector
+        if self.of is not None:
+            return selector.select(self.of)
+        if self.holds:
+            return (selector.dim(self.product.dim) > 0)*selector.everyone()
+        if self.edges:
+            cond = None
+            for e in self.edges:
+                c = ss.conditions.Cond('state', e.dis, e.dst.name)
+                cond = c if cond is None else cond | c
+            return selector.select(cond)
+        if self.changes:
+            out = selector.everyone()
+            for d,level in self.changes.items():
+                out = out*(selector.dim(self.sim.groups.strats[d].name) == level)
+            return out
+        errormsg = f'"{self.name}" has a target, but nothing to count against it: give of='
+        raise ValueError(errormsg)
+
+    def strata_targets(self):
+        """ The strata a target is kept in (as selections), and the target in each, in people """
+        sim = self.sim
+        selector = self.selector
+        target = self.target
+        val = target.value if isinstance(target, share) else target
+        if isinstance(val, ss.by): # One target per stratum: the combinations of the levels of its dimensions
+            ds, grid = val.grid(sim, convert=lambda v: v(sim) if callable(v) else v)
+            levels = [np.broadcast_to(selector.dim(sim.groups.strats[d].name), selector.shape) for d in ds]
+            strata, targets = [], []
+            for index in np.ndindex(grid.shape):
+                m = np.logical_and.reduce([lv == i for lv,i in zip(levels, index)])
+                strata.append(m if selector.abm else m.astype(float))
+                targets.append(float(grid[index]))
+        else:
+            if isinstance(val, ss.par):
+                val = val.raw
+            val = float(val(sim) if callable(val) else val)
+            strata, targets = [selector.everyone()], [val]
+        if isinstance(target, share):
+            n = self.among()
+            targets = [t*self.people(n*m) for m,t in zip(strata, targets)]
+        return strata, targets
+
+    def take_away(self, sel):
+        """ Remove people over the target: along remove=, or (remove=True) taking the product from them """
+        sim = self.sim
+        if self.remove_edge is not None:
+            e = self.remove_edge
+            eng = sim.get_declared(e.dis).engine
+            if self.selector.abm:
+                eng.force(self.uids(sel), e.tr, e.dst)
+            else:
+                eng.force(sel, e.tr, e.dst)
+        else:
+            self.shift(sel, {sim.groups.dim_index(self.product.dim):0})
+        self.tally('removed', sel)
+        return
+
+    def record_target(self):
+        """ After delivery: the target, the number counted against it, and the shortfall """
+        ti = self.sim.ti
+        if getattr(self, '_target', (None,))[0] != ti:
+            self._target = (ti, sum(self.strata_targets()[1]))
+        w = ss.results.people_scale(self.sim)/self.sim._current_scale if self.selector.abm else 1.0 # Results are written in people, or in agents and scaled at the end
+        res = self.results
+        res.target[ti] = self._target[1]*w
+        res.n_end[ti] = self.people(self.end_now()*self.among())*w
+        res.shortfall[ti] = max(res.target[ti] - res.n_end[ti], 0.0)
+        return
 
     def limit(self):
         """ The most people that can be served now: what is left of the capacity this step """
@@ -1437,7 +1601,7 @@ class Delivery(Intervention):
         waiting &= ~left
         cands = chosen | waiting
         wait = np.where(waiting, ti - q[:len(alive)], 0.0)
-        served = self.take(cands, self.limit(), carry=True, wait=wait)
+        served = self.take_limited(cands, wait=wait)
         self.use(served)
         unserved = cands & ~served
         q[np.flatnonzero(unserved & ~waiting)] = ti # Joining the queue
@@ -1474,9 +1638,7 @@ class Delivery(Intervention):
             self.add('left', groups=left.sum(axis=0))
         W = W - left
         cands = A + W
-        n = self.limit()
-        key = self.key()
-        served = cands if cands.sum() <= n else water_fill(cands, n, ([key] if key is not None else []) + [-lev])
+        served = self.take_limited(np.divide(cands, N, out=np.zeros_like(N), where=N>0), wait=lev)*N
         self.use_amount(served.sum())
         A_srv, W_srv = served*(lev == 0), served*(lev > 0)
         S = A_srv
@@ -1523,7 +1685,7 @@ class Delivery(Intervention):
         np.add.at(out, (slice(None), target), amount)
         return out
 
-    def take(self, cands, n, carry=False, wait=None):
+    def take(self, cands, n, carry=False, wait=None, reverse=False):
         """
         Choose `n` people (a number of people, not agents) from the candidates, in the order of `priority=`: as agents,
         sorted by the key with ties broken at random; as compartments, whole cells in key order and pro rata within a tie
@@ -1532,18 +1694,22 @@ class Delivery(Intervention):
             cands (array): the candidates, as a selection
             n (float): the number of people
             carry (bool): as agents, keep the part of an agent left over for the next step (for a capacity)
-            wait (array): as agents, the steps each has waited: longest first, after the priority
+            wait (array): the steps each has waited (per agent, or the level of waiting of each group): longest first, after the priority
+            reverse (bool): highest key first (for removal)
         """
         selector = self.selector
+        key = self.key()
+        if key is not None and reverse:
+            key = -key
         if not selector.abm:
             N = self.eng.state_counts()
             amount = cands*N
             if amount.sum() <= n:
                 return cands
-            key = self.key()
-            if key is None:
+            keys = ([] if key is None else [key]) + ([] if wait is None else [-np.broadcast_to(wait, N.shape)])
+            if not keys:
                 return cands*(n/amount.sum())
-            served = water_fill(amount, n, [key])
+            served = water_fill(amount, n, keys)
             return np.clip(np.divide(served, N, out=np.zeros_like(N), where=N>0), 0, 1)
         uids = self.uids(cands)
         k = n/self.sim._current_scale # In agents
@@ -1555,7 +1721,6 @@ class Delivery(Intervention):
             k = int(round(k))
         if len(uids) <= k:
             return cands
-        key = self.key()
         rand = self.tiebreak(uids)
         keys = [rand] + ([] if wait is None else [-wait[uids]]) + ([] if key is None else [key[uids]])
         order = np.lexsort(keys)
