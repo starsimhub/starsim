@@ -125,7 +125,6 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 - **Marking a dimension as strain-like.** `strain`, `variant`, `genotype`, `serotype`, and `resistance` are recognized by name, with `kind='strain'` as the override. Is a list of names the right mechanism? The alternative is to put the kind on the value rather than beside it (`resistance=ss.strain(['DS', 'MDR'])`), which reads as a declaration and needs no list; bare lists would still work for the recognized names.
 - **Cross-immunity within a strain dimension** is an `immunity=` matrix on `stratify`. Between two diseases it is an `ss.modify`. If a second kind of within-dimension interaction turns up, the two should become one mechanism.
 - **Stratifying only some transitions**, not just some states. It may be a sign the model wanted two transitions.
-- **Ragged stratifications.** `where=dict(sex='female')` makes groups that exist for some people and not others (four age groups of women, one group of men). Selecting, plotting, and exporting such results (is the age of a man missing, or "all ages"?) needs working through on a real model before the keyword is promised.
 - **Should `ss.transfer` take the delivery keywords?** A campaign with coverage and years but no product can be written as a transfer or as `ss.vaccinate` with a minimal product. One should be the documented way.
 
 ### B7. Conditions and custom code

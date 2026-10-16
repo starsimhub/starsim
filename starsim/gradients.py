@@ -961,7 +961,7 @@ class Density:
                 keep = np.ones(sim.n_groups)
                 for dim,level in ss.data.levels(sim, dims).items():
                     d = sim.dim_index(dim)
-                    keep = keep*(sim.group_coords[:, d] == sim.strats[d].index(level))
+                    keep = keep*(sim.group_levels[:, d] == sim.strats[d].index(level))
             if not owners:
                 raise Unsupported(f'the data series "{col}", which is not a result of a declared disease')
             j = owners[0]

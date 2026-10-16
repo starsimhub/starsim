@@ -123,6 +123,7 @@ class Disease(ss.Module):
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`
             kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
             states (list): the states the dimension applies to (default: every state that is people; for a strain, every state reached only through infection)
+            where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
             mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.gravity()`, `ss.Mobility()`, or a matrix
             inplace (bool): if False, return a stratified copy and leave this disease unchanged
             kwargs (dict): the dimension and its levels (bin edges or labels), e.g. `age=[0, 15, 65]`;
@@ -132,6 +133,7 @@ class Disease(ss.Module):
             ```python
             sir.stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
             sir.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust={'infection': [1.0, 3.0]})
+            sir.stratify(parity=['0', '1-2', '3+'], where=dict(sex='female')) # Only women have a parity
             ```
         """
         if self.graph is None:

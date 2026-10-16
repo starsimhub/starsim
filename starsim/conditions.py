@@ -265,13 +265,18 @@ class Selector:
     def dim(self, name):
         """ The level of each agent or group in a stratification, as a position """
         sim = self.sim
+        d = sim.dim_index(name)
         if self.abm:
-            strat = sim.strats[sim.dim_index(name)]
+            strat = sim.strats[d]
             raw = sim.people[strat.attr].raw
             if strat.edges is not None:
-                return np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1)
-            return np.nan_to_num(raw).astype(int)
-        return sim.group_coords[:, sim.dim_index(name)][None, :]
+                out = np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1)
+            else:
+                out = np.nan_to_num(raw).astype(int)
+            if sim.group_fold is not None and not sim.group_inside[:, d].all(): # People outside the dimension's where= have no level of it
+                out = np.where(sim.group_inside[sim.group_raw(), d], out, -1)
+            return out
+        return sim.group_levels[:, d][None, :]
 
     def leaf(self, cond):
         sim = self.sim

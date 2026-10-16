@@ -71,6 +71,9 @@ fields = [
     # For the stochastic solvers: the flows in the order they are drawn, grouped by the compartment they leave
     'src_starts',
     'src_flows',
+    'src_chain',  # For the compartments of a dwell time in stages: the number of stages left (this one included), so the chain-binomial solver can move people through several in a step; 0 otherwise
+    'src_stage',  # Their flow to the next stage
+    'src_last',   # The flow out of the last stage
     # For the exact solver when places do not affect each other within a step: see gillespie_places()
     'local',      # Whether they do not
     'pl_starts',  # Where the groups in each place start and end
@@ -100,6 +103,7 @@ register_fields = [
 Register = collections.namedtuple('Register', register_fields)
 
 jit = nb.jit(nopython=True, cache=True, error_model='numpy')
+pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
 
 
 @jit
@@ -111,12 +115,13 @@ def workspace(y, p):
     rates     = np.empty(p.fixed.shape)         # The rate of each flow, by group
     exposures = np.empty((len(p.exp_set), ng))  # Exposure to each infectious state
     stack     = np.empty((p.depth, ng))         # For working out a rate
-    groups    = np.empty((6, ng))               # Scratch, by group
+    groups    = np.empty((7, ng))               # Scratch, by group
     cells     = np.empty((5, size))             # Scratch, by cell of a mixing term or by place
     dy        = np.empty((4, nc, ng))           # The stages of the integrator
     df        = np.empty((4, nflows, ng))
     yt        = np.empty((nc, ng))
-    return rates, exposures, stack, groups, cells, dy, df, yt
+    chain     = np.empty(max(p.src_chain.max(), 0) + 2) # Where people at a stage of a dwell time end up: see chain_probs()
+    return rates, exposures, stack, groups, cells, dy, df, yt, chain
 
 
 @jit
@@ -182,6 +187,94 @@ def split(n, a, b, weights, credit, out, comps, which, maps, scratch):
 
 
 @jit
+def chain_probs(r, h, dt, d, out):
+    """
+    Where people at a stage of a dwell time are at the end of a step, with d stages left (this one included)
+
+    Each stage is left at rate r, and the state by its other exits at rate h. The number of
+    stages passed in the step is Poisson, so out[m] (for m < d) is the chance of being m stages
+    on, out[d] of having left by the last stage, and out[d+1] of having left by another exit.
+    """
+    x = r*dt
+    xt = (r + h)*dt
+    stay = np.exp(-h*dt)
+    term = np.exp(-x)
+    term_t = np.exp(-xt)
+    cdf_t = 0.0
+    total = 0.0
+    for m in range(d):
+        out[m] = stay*term
+        total += out[m]
+        cdf_t += term_t
+        term *= x/(m + 1)
+        term_t *= xt/(m + 1)
+    out[d] = (r/(r + h))**d*max(1 - cdf_t, 0.0) if r + h > 0 else 0.0 # The last stage is reached before another exit, and within the step
+    out[d+1] = max(1 - total - out[d], 0.0)
+    return
+
+
+@jit
+def draw_chain(y, p, w, s, dt, new, flows):
+    """
+    For the chain-binomial solver: the people at a stage of a dwell time move through as many stages as they pass in the step (see `chain_probs()`)
+
+    Exact for the stages, where one stage a step (or a substep for each stage) is not; the
+    rates are held for the step, as for any other flow.
+    """
+    ng = y.shape[1]
+    rates, groups, probs = w[0], w[3], w[8]
+    total, left, n, ends = groups[3], groups[4], groups[5], groups[6]
+    a, b = p.src_starts[s], p.src_starts[s+1]
+    d = p.src_chain[s]
+    stage = p.src_stage[s]
+    src = p.src[stage]
+    for g in range(ng):
+        r = max(rates[stage, g], 0.0)
+        h = 0.0
+        for k in range(a, b):
+            f = p.src_flows[k]
+            if f != stage:
+                h += max(rates[f, g], 0.0)
+        chain_probs(r, h, dt, d, probs)
+        rest = y[src, g]
+        mass = 1.0
+        left[g] = binomial(rest, probs[d+1]) # Leave by another exit
+        rest -= left[g]
+        mass -= probs[d+1]
+        ends[g] = binomial(rest, probs[d]/mass) if mass > 0 else rest # Leave by the last stage
+        rest -= ends[g]
+        mass -= probs[d]
+        moved = left[g] + ends[g]
+        for m in range(1, d): # Move on some stages; the rest stay
+            k = binomial(rest, probs[m]/mass) if mass > 0 else 0.0
+            new[src+m, g] += k
+            rest -= k
+            mass -= probs[m]
+            moved += k
+        new[src, g] -= moved
+        total[g] = h
+    for k in range(a, b): # Another exit: as in draw()
+        f = p.src_flows[k]
+        if f == stage:
+            continue
+        for g in range(ng):
+            hazard = max(rates[f, g], 0.0)
+            n[g] = binomial(left[g], hazard/total[g]) if total[g] > 0 else 0.0
+            total[g] -= hazard
+            left[g] -= n[g]
+        if p.named[f]:
+            land(n, p.record[f], p.maps, flows[p.index[f]])
+        split(n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
+        split(n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+    f = p.src_last[s] # The last stage
+    if p.named[f]:
+        land(ends, p.record[f], p.maps, flows[p.index[f]])
+    split(ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
+    split(ends, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+    return
+
+
+@jit
 def draw(y, p, w, dt, flows, tau):
     """
     Draw whole numbers of events over a time dt, and add them to the flows
@@ -198,6 +291,9 @@ def draw(y, p, w, dt, flows, tau):
         a, b = p.src_starts[s], p.src_starts[s+1]
         src = p.src[p.src_flows[a]]
         if src >= 0 and p.det[p.src_flows[a]]: # A state that is not people: see settle()
+            continue
+        if not tau and p.src_chain[s] > 1:
+            draw_chain(y, p, w, s, dt, new, flows)
             continue
         if src >= 0 and not tau:
             for g in range(ng):
@@ -602,7 +698,7 @@ def step(y, p, w, dt, n_sub, solver, flows, tables, row):
         tables (tuple): the fixed, mult, consts, and rel_trans tables (see `run()`), with three rows per step
         row (int): the row of the start of this step, or -1 if the program holds for the whole step
     """
-    rates, exposures, stack, groups, cells, dy, df, yt = w
+    rates, exposures, stack, groups, cells, dy, df, yt, chain = w
     n, local_n, vals, infectious = groups[0], groups[1], groups[2], groups[3]
     num, den, num2, den2, prev = cells[0], cells[1], cells[2], cells[3], cells[4]
     nc, ng = y.shape
@@ -617,8 +713,13 @@ def step(y, p, w, dt, n_sub, solver, flows, tables, row):
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
-            if row >= 0 and solver < 2: # Values that vary in time, at the time of this stage
-                th = (sub + (0.0 if stage == 0 else (1.0 if stage == 3 else 0.5)))/max(n_sub, 1)
+            if row >= 0: # Values that vary in time, at the time of this stage; for the stochastic solvers, at the middle of each substep, or of each quarter of the step for those that take steps of their own length
+                if solver < 2:
+                    th = (sub + (0.0 if stage == 0 else (1.0 if stage == 3 else 0.5)))/max(n_sub, 1)
+                elif timed:
+                    th = (min(int((elapsed + 1e-12)*pieces/dt), pieces - 1) + 0.5)/pieces
+                else:
+                    th = (sub + 0.5)/max(n_sub, 1)
                 for k in range(4):
                     if len(tables[k]) > 1:
                         interp((p.fixed, p.mult, p.consts, p.rel_trans)[k], tables[k], row, th)
@@ -748,16 +849,17 @@ def step(y, p, w, dt, n_sub, solver, flows, tables, row):
                     for g in range(ng):
                         flows[f, g] = 0
             if solver >= 2: # The stochastic solvers take it from here
-                if solver == 4 and p.local: # The exact solver, place by place: the whole step at once
-                    gillespie_places(y, p, w, dt, flows)
-                    h = dt - elapsed
+                end = dt if row < 0 else min(int((elapsed + 1e-12)*pieces/dt) + 1, pieces)*dt/pieces # The end of the piece of the step that values which vary in time are held for; events are exact within it, since the rates are held
+                if solver == 4 and p.local: # The exact solver, place by place: the whole step (or piece) at once
+                    gillespie_places(y, p, w, end - elapsed, flows)
+                    h = end - elapsed
                 elif solver == 4: # The exact solver: up to the next event
-                    h = event(y, p, w, dt - elapsed, flows)
+                    h = event(y, p, w, end - elapsed, flows)
                 elif solver == 5:
                     diffuse(y, p, w, h, flows)
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
-                        h = min(dt - elapsed, 0.03/max(fastest, 1e-12))
+                        h = min(end - elapsed, 0.03/max(fastest, 1e-12))
                     draw(y, p, w, h, flows, solver == 3)
                 if solver != 5 and p.has_det and not (solver == 4 and p.local): # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, rates, h, flows)
@@ -824,7 +926,9 @@ def step(y, p, w, dt, n_sub, solver, flows, tables, row):
                     for g in range(ng):
                         yt[c, g] = y[c, g] + ahead*dy[stage, c, g]
 
-        if solver >= 2:
+        if solver < 0: # Only the rates of change: see derivs()
+            return
+        elif solver >= 2:
             pass
         elif stages == 1:
             for c in range(nc):
@@ -1086,6 +1190,23 @@ def step_at(y, p, w, dt, ti, solver, n_sub, flows, fixed, mult, consts, rel_tran
 
 
 @jit
+def derivs(y, p, w, tables, row, th):
+    """
+    For the `scipy` integrators: the rate of change of each compartment, and of the total of each transition and mover, by group
+
+    The same arithmetic as a step of the ODE (see `step()`), at a fraction th of the way through the step
+    for values that vary in time. Returns arrays in the workspace, which the next call overwrites.
+    """
+    if row >= 0:
+        for k in range(4):
+            if len(tables[k]) > 1:
+                interp((p.fixed, p.mult, p.consts, p.rel_trans)[k], tables[k], row, th)
+    dy, df = w[5], w[6]
+    step(y, p, w, 1.0, 1, -1, df[1], tables, -1)
+    return dy[0], df[0]
+
+
+@jit
 def one_step(y, p, dt, solver, n_sub, tables, row):
     """ Take one step, and return the compartments after it and the total of each transition and mover over it: see `run()` and `step()` """
     y = y.copy()
@@ -1140,6 +1261,30 @@ def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust
         probs[n] = prob
         n += susceptible[uid] & (prob > 0)
     return uids[:n], probs[:n]
+
+
+@jit
+def count_states(members, auids, groups, collapse, n_groups):
+    """
+    The number of agents in each of several states, by the group they are counted in (as `count_groups()`), in one pass over the agents for all of them
+
+    Args:
+        members (tuple): for each state, whether each agent (by UID) is in it
+        auids (array): the active agents
+        groups (array): the group of each agent (by UID), or an empty array if there is one group
+        collapse (array): for each state, the group that each group's members are counted in
+        n_groups (int): the number of groups
+    """
+    ns = len(members)
+    counts = np.zeros((4, ns, n_groups)) # Running counts taken in turn, as in count_groups()
+    whole = len(groups) == 0
+    for i in range(len(auids)):
+        uid = auids[i]
+        g = 0 if whole else groups[uid]
+        for s in range(ns):
+            if members[s][uid]:
+                counts[i & 3, s, collapse[s, g]] += 1
+    return counts.sum(axis=0)
 
 
 @jit

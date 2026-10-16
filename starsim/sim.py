@@ -264,7 +264,7 @@ class Sim(ss.Base):
         elif self.solver != 'abm' and self.strats: # One row per group: age is the middle of the group
             for d,strat in enumerate(self.strats):
                 if strat.kind == 'age':
-                    self.people.age[self.people.auids] = strat.mids[self.group_coords[:, d]]
+                    self.people.age[self.people.auids] = self.group_vals(d, strat.mids, outside=strat.mids @ strat.split)
         self.init_modules_post() # Initialize the module values
         for crossing in self.crossings: # Once every disease in it has its initial conditions
             crossing.init()
@@ -549,7 +549,7 @@ class Sim(ss.Base):
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         for call in sc.tolist(self.pars.stratify):
             call = dict(call)
-            opts = {key:call.pop(key, None) for key in ['split', 'adjust', 'kind', 'mobility']}
+            opts = {key:call.pop(key, None) for key in ['split', 'adjust', 'kind', 'where', 'mobility']}
             for name,levels in call.items():
                 strat = trans.Strat(name, levels, **opts)
                 if name in strats:
@@ -628,16 +628,97 @@ class Sim(ss.Base):
                 split_all = np.bincount(self.group_coords[:, d], weights=weights*strat.shares(self.group_coords), minlength=strat.n)
                 strat.split = split_all/split_all.sum()
                 strat.guessed.pop('split', None)
-        self.group_split = split
-        self.birth_split = births
+        self.init_ragged()
+        self.group_split = self.fold(split)
+        self.birth_split = self.fold(births)
         for strat in self.strats:
-            strat.sim_coords = self.group_coords # So a result can look up which group is which
+            strat.sim_coords = self.group_levels # So a result can look up which group is which
         for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
             if strat.kind != 'age':
                 setattr(self, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
         if self.strats and 'use_aging' not in self.given and any(strat.kind == 'age' for strat in self.strats): # People age between age groups, unless told not to (by default, use_aging is turned off earlier when there are no demographics)
             self.pars.use_aging = True
         return
+
+    def init_ragged(self):
+        """
+        For a dimension with `where=` (e.g. age groups for women only): which groups have a level of it
+
+        The groups stay a grid, with a level of every dimension. People in a group outside a
+        dimension's `where=` have no level of it, so they are all counted at its first level
+        (the "fold" of their group), as people in a state that a dimension does not apply to are;
+        the groups at its other levels stay empty.
+        """
+        coords = self.group_coords.copy()
+        inside = np.ones(coords.shape, dtype=bool) # Whether each group (rows) has a level of each dimension (columns)
+        pending = [d for d,strat in enumerate(self.strats) if getattr(strat, 'where', None)]
+        names = [strat.name for strat in self.strats]
+        for d in pending:
+            for dim in self.strats[d].where:
+                if dim not in names:
+                    ss.error('E1102', f'"{self.strats[d].name}" is stratified where {dim} is given, but the model is not stratified by "{dim}". Add e.g. sim.stratify({dim}=[...]).')
+                if dim == self.strats[d].name:
+                    errormsg = f'The where= of "{dim}" refers to "{dim}" itself'
+                    raise ValueError(errormsg)
+        while pending: # A dimension whose where= refers to another with a where= is worked out after it
+            ready = [d for d in pending if not any(names.index(dim) in pending for dim in self.strats[d].where)]
+            if not ready:
+                errormsg = f'The where= of {sc.strjoin(names[d] for d in pending)} refer to each other'
+                raise ValueError(errormsg)
+            for d in ready:
+                strat = self.strats[d]
+                mask = np.ones(self.n_groups, dtype=bool)
+                for dim,levels in strat.where.items():
+                    dd = names.index(dim)
+                    inds = [self.strats[dd].index(level) for level in sc.tolist(levels)]
+                    mask &= np.isin(coords[:, dd], inds) & inside[:, dd]
+                inside[:, d] = mask
+                coords[~mask, d] = 0
+                pending.remove(d)
+        ragged = not inside.all()
+        self.group_inside = inside
+        self.group_fold = np.ravel_multi_index(coords.T, self.group_shape) if ragged else None # The group that each group's people are counted in
+        self.group_levels = np.where(inside, self.group_coords, -1) if ragged else self.group_coords # The level of each group in each dimension, or -1 for none
+        return
+
+    def fold(self, vals):
+        """ Move values for each group (e.g. a split) to the groups their people are counted in: see `init_ragged()` """
+        if self.group_fold is None:
+            return vals
+        return np.bincount(self.group_fold, weights=np.broadcast_to(vals, (self.n_groups,)), minlength=self.n_groups)
+
+    def fold_matrix(self, matrix):
+        """ The same, for a matrix from each group (rows) to each group (columns) """
+        if self.group_fold is None or matrix is None:
+            return matrix
+        out = np.zeros_like(matrix)
+        np.add.at(out.T, self.group_fold, matrix.T)
+        return out
+
+    def group_vals(self, d, vals, outside=1.0):
+        """ A value for each level of a dimension (by position), as a value for each group; a group with no level of it gets `outside` """
+        out = vals[self.group_coords[:, d]]
+        if self.group_fold is not None:
+            out = np.where(self.group_inside[:, d], out, outside)
+        return out
+
+    def grid_index(self, ds, grid, count=False):
+        """
+        Index a grid of values over some dimensions (by position) by group: returns the grid and the index, so `grid[index]` is the value for each group
+
+        A group with no level of a dimension (outside its `where=`) takes the mean over its
+        levels, weighted by the split; or, for a number of people at each level, none.
+        """
+        index = []
+        for i,d in enumerate(ds):
+            levels = self.group_coords[:, d]
+            if self.group_fold is not None and not self.group_inside[:, d].all():
+                strat = self.strats[d]
+                extra = np.zeros_like(np.take(grid, [0], axis=i)) if count else np.average(grid, axis=i, weights=strat.split, keepdims=True)
+                grid = np.concatenate([grid, extra], axis=i)
+                levels = np.where(self.group_inside[:, d], levels, strat.n)
+            index.append(levels)
+        return grid, tuple(index)
 
     def init_crossings(self):
         """
@@ -747,7 +828,7 @@ class Sim(ss.Base):
         if isinstance(dirty, list) and not binned and kept is not None and '' in kept and len(kept['']) == n: # Only some agents have changed, and we know which: work out their groups alone
             uids = np.unique(np.concatenate(dirty))
             levels = []
-            out = kept[''].copy()
+            out = kept[''] # Changed in place: the groups are only ever used straight away, so nothing holds the old ones
             for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
                 raw = self.people[strat.attr].raw
                 old_raw, old_level = kept[strat.name]
@@ -755,15 +836,15 @@ class Sim(ss.Base):
                     self._group_dirty = False
                     return self.group_raw()
                 if len(uids):
-                    level = old_level.copy()
-                    level[uids] = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw[uids])
+                    before = old_level[uids]
+                    after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw[uids])
+                    old_level[uids] = after
                     old_raw[uids] = raw[uids]
-                    out[uids] += (level[uids] - old_level[uids])*int(mult)
-                    kept[strat.name] = (old_raw, level)
+                    out[uids] += (after - before)*int(mult)
                 levels.append(kept[strat.name][1])
             kept[''] = out
-            self._group_cache = (self.ti, out, levels)
-            return out
+            self._group_cache = (self.ti, self.folded(out), levels)
+            return self._group_cache[1]
         people = self.people
         kept = getattr(self, '_level_cache', None) # The values each level was worked out from: most properties change rarely, and checking is much cheaper than working the levels out again
         if kept is None:
@@ -786,7 +867,7 @@ class Sim(ss.Base):
                 idx = np.flatnonzero(old[0] != raw) # Usually few: those born, or who moved, since it was last worked out
                 if len(idx):
                     before = old[1][idx]
-                    levels_new = old[1].copy() # A copy, since the old one may be held by whoever asked for it
+                    levels_new = old[1] # In place, as above
                     levels_new[idx] = level_of(strat, raw[idx])
                     old[0][idx] = raw[idx]
                     old = kept[strat.name] = (old[0], levels_new)
@@ -798,12 +879,16 @@ class Sim(ss.Base):
                 out += level*int(mult)
             kept[''] = out
         elif updates:
-            out = kept[''].copy()
+            out = kept['']
             for idx,before,after,mult in updates:
                 out[idx] += (after - before)*mult
             kept[''] = out
-        self._group_cache = (self.ti, kept[''], levels)
-        return kept['']
+        self._group_cache = (self.ti, self.folded(kept['']), levels)
+        return self._group_cache[1]
+
+    def folded(self, groups):
+        """ The groups that agents are counted in: see `init_ragged()` """
+        return groups if self.group_fold is None else self.group_fold[groups]
 
     def level_raw(self, d):
         """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID """
@@ -988,6 +1073,7 @@ class Sim(ss.Base):
                 add('unit', self.unit, f'from {self.unit_source}' if self.unit_source else None)
             for strat in self.strats: # Each dimension: its levels, the states it applies to, and what it generates
                 text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
+                text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
                     text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'

@@ -198,6 +198,7 @@ class Mixing:
             sim.init_strats()
             ss.note(f'stratified by the age groups of "{net.name}" ({sc.strjoin(sim.strats[-1].labels)}), since no age groups were given', sim=sim)
         d = [strat.kind for strat in sim.strats].index('age')
+        self.check_ragged(d, net)
         strat = sim.strats[d]
         levels = np.column_stack([strat.edges, np.append(strat.edges[1:], max(top, strat.edges[-1] + 10))])
 
@@ -214,6 +215,25 @@ class Mixing:
             ss.note(f'contact matrix "{net.name}" aggregated from {len(bands)} age groups to the model\'s {strat.n} ({sc.strjoin(strat.labels)})', code='W404', sim=sim)
         return sc.objdict(kind='matrix', dim=d, matrix=matrix*beta, name=net.name)
 
+    def check_ragged(self, d, net):
+        """ Contacts by a dimension need everyone who transmits or is infected to have a level of it """
+        sim = self.sim
+        strat = sim.strats[d]
+        if not sim.group_inside[:, d].all():
+            where = ', '.join(f'{k}={sc.strjoin(sc.tolist(v))}' for k,v in strat.where.items())
+            ss.error('E307', f'the contacts "{net.name}" are given by "{strat.name}", but only people where {where} have a level of it, so there is no level for the others to mix as.\n'
+                             f'     Fix: leave out where=, or use contacts that do not depend on "{strat.name}".')
+        for mod in sim.declared:
+            own = [s for s in mod.graph.strats if s.name == strat.name and s.states is not None]
+            if not own:
+                continue
+            mixing = [s.name for tr in mod.graph.transmissions for s in tr.src] + [s.name for s in mod.graph.infectious]
+            missing = [name for name in dict.fromkeys(mixing) if name not in own[0].states]
+            if missing:
+                ss.error('E307', f'the contacts "{net.name}" are given by "{strat.name}", but "{mod.name}" is stratified by it in {sc.strjoin(own[0].states)} only, so there is no level of it for the people in {sc.strjoin(missing)} to mix as.\n'
+                                 f'     Fix: leave out states= to stratify every state, or use contacts that do not depend on "{strat.name}".')
+        return
+
     def dim_matrices(self, net, beta):
         """ A contact matrix for each of one or more of the model's dimensions: the contacts between two groups are the product of the entries """
         sim = self.sim
@@ -226,6 +246,7 @@ class Mixing:
             strat = sim.strats[names.index(dim)]
             if len(mat) != strat.n:
                 ss.error('E603', f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+            self.check_ragged(names.index(dim), net)
             cells = cells*strat.n + sim.group_coords[:, names.index(dim)]
             matrix = np.kron(matrix, mat)
         return sc.objdict(kind='matrix', cells=cells, matrix=matrix*beta, name=net.name, dim=names.index(list(net.dims)[0]))
@@ -616,11 +637,11 @@ class Engine:
                 product = np.prod([sim.strats[d].split[coords[:, d]] for d in ds], axis=0)
                 split = split*np.divide(grid[tuple(coords[:, d] for d in ds)], product, out=np.zeros(sim.n_groups), where=product>0)
             self.applies[state.name] = np.array(flags, dtype=bool)
-            self.state_split[state.name] = split
-            self.inflow_splits[state.name] = inflow
+            self.state_split[state.name] = sim.fold(split) # People in a group with no level of a dimension (outside its where=) are counted at its first level
+            self.inflow_splits[state.name] = sim.fold(inflow)
             self.inflow_factors[state.name] = factors
-            self.inflow_local[state.name] = local
-            self.collapse[state.name] = collapse
+            self.inflow_local[state.name] = sim.fold(local)
+            self.collapse[state.name] = sim.folded(collapse)
         strains = [d for d,strat in enumerate(sim.strats) if strat.kind == 'strain' and strat.name in own]
         if len(strains) > 1:
             errormsg = f'"{self.mod.name}" has more than one strain dimension ({sc.strjoin(sim.strats[d].name for d in strains)}); a person carries one strain of a disease at a time, so combine them into one'
@@ -700,6 +721,7 @@ class Engine:
                         cond = strat.shares(pairs.reshape(ng*ng, -1)).reshape(ng, ng)
                         split = np.broadcast_to(strat.split[coords[:, d]], (ng, ng))
                         out = out*np.divide(cond, split, out=np.zeros((ng, ng)), where=split>0) # The kron above entered each level in proportion to the split overall
+                out = self.sim.fold_matrix(out)
             self.maps[key] = out
         return self.maps[key]
 
@@ -712,7 +734,7 @@ class Engine:
         if given: # A rate given for each level of some dimensions is the inflow at that level, so is shared out over the other dimensions only
             dims = {self.sim.dim_index(dim) for by in given for dim in by.dims}
             factors = self.inflow_factors[name]
-            return np.prod([np.ones(len(factor)) if d in dims and self.applies[name][d] else factor for d,factor in enumerate(factors)], axis=0) if factors else self.inflow_splits[name]
+            return self.sim.fold(np.prod([np.ones(len(factor)) if d in dims and self.applies[name][d] else factor for d,factor in enumerate(factors)], axis=0)) if factors else self.inflow_splits[name]
         return self.inflow_splits[name]
 
     def init_immunity(self):
@@ -949,7 +971,7 @@ class Engine:
         out = 1.0
         for d,vals in self.rel_adjust[kind]:
             if state is None or self.applies[state.name][d]:
-                out = out*vals[self.sim.group_coords[:, d]]
+                out = out*self.sim.group_vals(d, vals)
         return out
 
     def by_group(self, by):
@@ -979,7 +1001,7 @@ class Engine:
                         self.strain_adjust[name] = vals
                     else:
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
-                        self.adjust[name] = current*vals[sim.group_coords[:, d]]
+                        self.adjust[name] = current*sim.group_vals(d, vals)
         self.init_strain_weights()
         return
 
@@ -1059,15 +1081,13 @@ class Engine:
     def note_steps(self):
         """ In a run that takes whole steps, say which transitions are fast compared with the timestep """
         sim = self.sim
+        if sim.solver in ['gillespie', 'tau'] and self.smooth:
+            ss.note(f'solver="{sim.solver}" holds values that vary in time for a quarter of a step at a time, at their middle; a shorter step follows them more closely', sim=sim)
         euler = sim.solver == 'ode' and sim.integrator == 'euler' and sim.pars.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
         if sim.solver not in ['abm', 'binomial'] and not euler:
             return
         dt = self.dt/(sim.pars.substeps if euler else 1)
         unit = sim.unit or 'step'
-        if sim.solver == 'binomial' and sim.pars.substeps is None and self.substeps() > 1:
-            staged = max([name for name,dw in self.dwells.items() if dw.staged], key=lambda name: self.dwells[name].k)
-            ss.note(f'solver="binomial" takes {self.substeps()} substeps a step, so that people can move through the {self.dwells[staged].k} stages of "{staged}" (at most one a substep); '
-                    f'substeps=1 takes whole steps, as most chain-binomial models do', code='W102', sim=sim)
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
         for name,dw in self.dwells.items():
             if name in inflows:
@@ -1075,7 +1095,7 @@ class Engine:
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, ss.by)): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
-            if np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver takes a substep for each stage (see substeps()), and agents draw the whole dwell time, so it is the mean that matters
+            if np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 ss.note(f'{name} has rate × dt = {x:.2g} ({1/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {min(x, 1) if euler else -np.expm1(-x):.2g} of people leave in a step{" (Euler scales outflows that would take more than everyone down together)" if euler and x > 1 else ""}; sim.check_dt() shows how much a smaller step changes the results', code='W102', sim=sim)
         return
@@ -1122,8 +1142,8 @@ class Engine:
                 init = float(self.eval(init))
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
                 sim = self.sim
-                ds, grid = init.grid(sim)
-                index = tuple(sim.group_coords[:, d] for d in ds)
+                ds, given = init.grid(sim)
+                grid, index = sim.grid_index(ds, given, count=init.is_count() or np.any(given > 1)) # A group with no level of a dimension gets the mean fraction, or no one of a number
                 cells = np.ravel_multi_index(index, grid.shape) # The combination of levels each group is in
                 split = np.bincount(cells, weights=sim.group_split, minlength=grid.size)[cells] # The share of people at that combination
                 if state.people:
@@ -1134,8 +1154,8 @@ class Engine:
                     fracs[state.name] = np.where(count, np.divide(vals, size, out=np.zeros(sim.n_groups), where=size>0), vals)
                 else:
                     share = np.divide(self.state_split[state.name], split, out=np.zeros(sim.n_groups), where=split>0) # Its split over the other dimensions
-                    counts[state.name] = grid.sum()
-                    self.state_split[state.name] = share*grid[index]/max(grid.sum(), 1e-300)
+                    counts[state.name] = given.sum()
+                    self.state_split[state.name] = share*grid[index]/max(given.sum(), 1e-300)
                 continue
             if not state.people:
                 counts[state.name] = float(init)
@@ -1634,6 +1654,10 @@ class Compartmental(Engine):
                     matrix[g, g + (move.dst - move.src)*int(mults[d])] = 1/self.convert(move.dur)
             comps = [ind for state in graph.people_states if self.applies[state.name][d] for ind in self.state_comps[state.name]]
             self.movers.append(sc.objdict(name=None, comps=comps, matrix=matrix, transfer=None))
+        if sim.group_fold is not None: # Moving into a group with no level of a dimension is moving to its first level, so people outside a dimension's where= do not move along it
+            for mover in self.movers:
+                mover.matrix = sim.fold_matrix(mover.matrix)
+                np.fill_diagonal(mover.matrix, 0)
         return
 
     @property
@@ -1712,6 +1736,7 @@ class Compartmental(Engine):
         self.tracks = sc.objdict() # For each state: the tracks an arrival is split between
         self.flows = []
         self.tr_index = {name:i for i,name in enumerate(graph.transitions)}
+        self._target_key = None # So that update_targets() works out where the new flows go
 
         def add_comp(state, track, stage):
             self.comps.append(Bunch(state=state, track=track, stage=stage))
@@ -1780,6 +1805,12 @@ class Compartmental(Engine):
         self.by_src = sc.ddict(list) # The flows out of each compartment, for the stochastic solvers
         for flow in self.flows:
             self.by_src[flow.src].append(flow)
+        stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None}
+        self.chains = dict() # For the chain-binomial solver: for each compartment of a dwell time in stages, the number of stages left, its flow to the next, and the flow out of the last (see ss.kernels.draw_chain())
+        for c,flow in stage_flows.items():
+            d = flow.stages - self.comps[c].stage
+            if d > 1 and self.comps[c].state.people:
+                self.chains[c] = (d, flow, stage_flows[c + d - 1])
         return
 
     def unsupported(self, tr, what):
@@ -1898,7 +1929,7 @@ class Compartmental(Engine):
         out = np.arange(self.n_groups)
         for d,level in changes.items():
             out = out + (level - sim.group_coords[:, d])*int(sim.group_mults[d])
-        return out
+        return sim.folded(out)
 
     def shift(self, frac, changes):
         """
@@ -1982,13 +2013,18 @@ class Compartmental(Engine):
     #%% Flows
 
     def update_targets(self):
-        """ Work out where each flow's arrivals go; done once per step, since branch probabilities can change """
-        self.entry = sc.objdict() # For each state: [(compartment, weight)] and [(transition index, weight)]
+        """ Work out where each flow's arrivals go; done once per step, since branch probabilities can change (and only worked out again if they have) """
         probs = sc.objdict()
         for name,tracks in self.tracks.items():
             ps = [None if tr.p is None else np.clip(self.eval(tr.p), 0, 1) for tr in tracks]
             mults = [self.branch_mult(tr.tr) for tr in tracks]
             probs[name] = self.branch_shares([tr.tr for tr in tracks], ps, mults)
+        key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and len(tr.dst) > 1 for p in self.branch_probs(tr)]
+        last = getattr(self, '_target_key', None)
+        if last is not None and len(last) == len(key) and all(np.array_equal(a, b) for a,b in zip(last, key)):
+            return
+        self._target_key = key
+        self.entry = sc.objdict() # For each state: [(compartment, weight)] and [(transition index, weight)]
 
         def enter(name, weight, comps, credits, depth=0):
             if depth > 20:
@@ -2228,6 +2264,9 @@ class Compartmental(Engine):
             mov_mat    = np.zeros((len(self.movers), ng, ng)),
             src_starts = ends(list(self.by_src.values())),
             src_flows  = flat([[order[id(flow)] for flow in flows] for flows in self.by_src.values()]),
+            src_chain  = np.array([self.chains[src][0] if src in self.chains else 0 for src in self.by_src], dtype=int),
+            src_stage  = np.array([order[id(self.chains[src][1])] if src in self.chains else -1 for src in self.by_src], dtype=int),
+            src_last   = np.array([order[id(self.chains[src][2])] if src in self.chains else -1 for src in self.by_src], dtype=int),
             local      = False, # Set in pack_targets()
             pl_starts  = ends(place_groups),
             pl_groups  = flat(place_groups),
@@ -2297,6 +2336,20 @@ class Compartmental(Engine):
             raws = [p.raw for p in self.graph.all_pars()]
             self._smooth = any(isinstance(raw, (ss.transitions.TimeValue, ss.by)) and not self.held(raw) for raw in raws)
         return self._smooth
+
+    def step_tables(self, dt, smooth=True):
+        """ For a step in the kernels: the program at the start, middle, and end of the step if a value varies smoothly in time, and the row to start at (or none, and -1, if the program holds for the whole step) """
+        if not (smooth and self.smooth):
+            self.refresh_program()
+            return no_tables, -1
+        p = self.program
+        rows = []
+        for frac in [0, 0.5, 1]:
+            self.at_time(frac*dt)
+            self.refresh_program()
+            rows.append([p.fixed.copy(), p.mult.copy(), p.consts.copy(), p.rel_trans.copy()])
+        self.at_time(0)
+        return tuple(np.array([r[k] for r in rows]) for k in range(4)), 0
 
     def at_time(self, t):
         """ Take values that vary in time at a time t (in the sim's unit) into the step """
@@ -2507,9 +2560,9 @@ class Compartmental(Engine):
         return [np.ascontiguousarray(table) for table in [fixed, mult, consts, rel_trans]]
 
     def per_step(self):
-        """ The rows of the tables for each step: 3 (the start, middle, and end) for an RK4 run with a value that varies smoothly in time, and otherwise 1 """
+        """ The rows of the tables for each step: 3 (the start, middle, and end) for a run with a value that varies smoothly in time (except by Euler's method, which holds it for the step), and otherwise 1 """
         sim = self.sim
-        if sim.solver == 'ode' and sim.integrator == 'rk4' and any(not self.held(par.raw) for par in self.time_pars):
+        if (sim.solver != 'ode' or sim.integrator == 'rk4') and any(not self.held(par.raw) for par in self.time_pars):
             return 3
         return 1
 
@@ -2739,14 +2792,13 @@ class Compartmental(Engine):
         """
         The number of substeps to take in each timestep (0 to let the solver choose)
 
-        The chain-binomial solver moves people at most one stage in a step, so a dwell
-        time in k stages takes k substeps: it is then as accurate as one with a single stage.
-        (Fewer, in proportion to the rate of each stage, is not enough: with two substeps a
-        stage, each stage lasts about a quarter longer than it should.)
+        The chain-binomial solver takes whole steps, as most chain-binomial models do: it
+        moves people through as many stages of a dwell time as they pass in a step (see
+        `ss.kernels.draw_chain()`).
         """
         n_sub = self.sim.pars.substeps
         if n_sub is None and self.sim.solver == 'binomial':
-            n_sub = max([dw.k for dw in self.dwells.values() if dw.staged] + [1])
+            n_sub = 1
         return n_sub or 0
 
     def step_state(self):
@@ -2816,18 +2868,7 @@ class Compartmental(Engine):
         y0 = np.concatenate([self.y.ravel(), np.zeros(nt*ng)])
         method = self.sim.integrator
         if self.program and method in ['rk4', 'euler']:
-            if self.smooth and method == 'rk4': # The program at the start, middle, and end of the step
-                p = self.program
-                rows = []
-                for frac in [0, 0.5, 1]:
-                    self.at_time(frac*dt)
-                    self.refresh_program()
-                    rows.append([p.fixed.copy(), p.mult.copy(), p.consts.copy(), p.rel_trans.copy()])
-                self.at_time(0)
-                tables, row = tuple(np.array([r[k] for r in rows]) for k in range(4)), 0
-            else:
-                tables, row = no_tables, -1
-                self.refresh_program()
+            tables, row = self.step_tables(dt, smooth=method == 'rk4')
             self.y, flows = ss.kernels.one_step(self.y, self.program, dt, ss.kernels.solvers[method], self.sim.pars.substeps or 0, tables, row)
             return flows
         elif method in ['rk4', 'euler']:
@@ -2851,7 +2892,14 @@ class Compartmental(Engine):
                     y = y + h/6*(k1 + 2*k2 + 2*k3 + k4)
         else:
             import scipy.integrate as spi
-            sol = spi.solve_ivp(self.derivs, (0, dt), y0, method=method, rtol=1e-6, atol=1e-6*max(1.0, self.total_pop)*1e-3)
+            rhs = self.derivs
+            if self.program: # The right-hand side in the kernels
+                tables, row = self.step_tables(dt)
+                w = ss.kernels.workspace(self.y, self.program)
+                def rhs(t, yf):
+                    dy, df = ss.kernels.derivs(np.ascontiguousarray(yf[:nc*ng].reshape(nc, ng)), self.program, w, tables, row, t/dt)
+                    return np.concatenate([dy.ravel(), df.ravel()])
+            sol = spi.solve_ivp(rhs, (0, dt), y0, method=method, rtol=1e-6, atol=1e-6*max(1.0, self.total_pop)*1e-3)
             y = sol.y[:, -1]
         self.at_time(0)
         self.y = np.maximum(y[:nc*ng].reshape(nc, ng), 0)
@@ -2883,15 +2931,16 @@ class Compartmental(Engine):
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         n_sub = self.substeps()
         if self.program:
-            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['binomial'], n_sub, no_tables, -1)
+            self.y, flows = ss.kernels.one_step(self.y, self.program, dt, ss.kernels.solvers['binomial'], n_sub, *self.step_tables(dt))
             return flows
-        if n_sub > 1: # As a number of shorter steps
-            return sum(self.step_binomial_once(dt/n_sub) for i in range(n_sub))
-        return self.step_binomial_once(dt)
+        n_sub = max(n_sub, 1)
+        return sum(self.step_binomial_once(dt/n_sub, (i + 0.5)*dt/n_sub) for i in range(n_sub)) # Values that vary in time at the middle of each substep, as in the kernels
 
-    def step_binomial_once(self, dt):
+    def step_binomial_once(self, dt, t=0):
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
+        self.at_time(t)
         rates = dict(zip(map(id, self.flows), self.rates()))
+        self.at_time(0)
         y = self.y.copy()
         flows = np.zeros((nt, ng))
         for src,srcflows in self.by_src.items():
@@ -2903,6 +2952,30 @@ class Compartmental(Engine):
             hazards = np.array([np.broadcast_to(rates[id(flow)], ng) for flow in srcflows], dtype=float)
             hazards = np.maximum(hazards, 0)
             total = hazards.sum(axis=0)
+            if src in self.chains: # Through as many stages as they pass in the step: see ss.kernels.draw_chain()
+                d, stage, last = self.chains[src]
+                i = [id(flow) for flow in srcflows].index(id(stage))
+                srcflows = [flow for j,flow in enumerate(srcflows) if j != i] + [last]
+                ends = np.zeros(ng)
+                left = np.zeros(ng)
+                probs = np.empty(d + 2)
+                for g in range(ng):
+                    ss.kernels.chain_probs(hazards[i, g], total[g] - hazards[i, g], dt, d, probs)
+                    counts = self.rng.multinomial(int(self.y[src, g]), probs/probs.sum())
+                    left[g], ends[g] = counts[d+1], counts[d]
+                    for m in range(1, d):
+                        y[src + m, g] += counts[m]
+                    y[src, g] -= counts[1:].sum()
+                hazards = np.delete(hazards, i, axis=0)
+                total = hazards.sum(axis=0)
+                for flow,hazard in zip(srcflows[:-1], hazards):
+                    p = np.divide(hazard, total, out=np.zeros(ng), where=total>0)
+                    n = self.rng.binomial(left.astype(int), np.clip(p, 0, 1)).astype(float)
+                    left = left - n
+                    total = total - hazard
+                    self.draw_targets(flow, n, y, flows)
+                self.draw_targets(last, ends, y, flows)
+                continue
             p_exit = -np.expm1(-total*dt)
             left = self.rng.binomial(self.y[src].astype(int), p_exit).astype(float) # Everyone who leaves
             y[src] -= left
@@ -2919,14 +2992,15 @@ class Compartmental(Engine):
         """ Tau-leaping: Poisson numbers of events over leaps short enough that rates change little """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         if self.program:
-            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['tau'], 0, no_tables, -1)
+            self.y, flows = ss.kernels.one_step(self.y, self.program, dt, ss.kernels.solvers['tau'], 0, *self.step_tables(dt))
             return flows
         flows = np.zeros((nt, ng))
         t = 0.0
         while t < dt - 1e-12:
+            end = self.piece(t, dt)
             rates = self.rates()
             maxrate = max([np.max(rate) for flow,rate in zip(self.flows, rates) if flow.src is not None] + [1e-12])
-            tau = min(dt - t, eps/maxrate)
+            tau = min(end - t, eps/maxrate)
             y = self.y.copy()
             for flow,rate in zip(self.flows, rates):
                 if flow.src is None:
@@ -2938,29 +3012,31 @@ class Compartmental(Engine):
                 self.draw_targets(flow, n, y, flows)
             self.y = y
             t += tau
+        self.at_time(0)
         return flows
 
     def step_gillespie(self, dt):
         """ The exact stochastic simulation algorithm (direct method), one event at a time """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         if self.program:
-            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['gillespie'], 0, no_tables, -1)
+            self.y, flows = ss.kernels.one_step(self.y, self.program, dt, ss.kernels.solvers['gillespie'], 0, *self.step_tables(dt))
             return flows
         flows = np.zeros((nt, ng))
         t = 0.0
         nf = len(self.flows)
-        while True:
+        while t < dt - 1e-12:
+            end = self.piece(t, dt)
             rates = self.rates()
             props = np.zeros((nf, ng))
             for i,(flow,rate) in enumerate(zip(self.flows, rates)):
                 props[i] = rate*self.y[flow.src] if flow.src is not None else rate*self.inflow_split(flow.tr)
             props = np.maximum(props, 0)
             total = props.sum()
-            if total <= 0:
-                break
-            t += self.rng.exponential(1/total)
-            if t > dt:
-                break
+            wait = self.rng.exponential(1/total) if total > 0 else np.inf
+            if t + wait > end: # No event before the values that vary in time change
+                t = end
+                continue
+            t += wait
             ind = np.searchsorted(np.cumsum(props.ravel()), self.rng.random()*total, side='right')
             i, g = divmod(min(ind, nf*ng - 1), ng)
             flow = self.flows[i]
@@ -2969,24 +3045,36 @@ class Compartmental(Engine):
             if flow.src is not None:
                 self.y[flow.src, g] -= 1
             self.draw_targets(flow, n, self.y, flows)
+        self.at_time(0)
         return flows
+
+    def piece(self, t, dt):
+        """ For tau-leaping and the exact solver: take values that vary in time at the middle of the quarter of the step that t is in, and return its end (or the whole step, if nothing varies), as the kernels do """
+        if not self.smooth:
+            return dt
+        n = ss.kernels.pieces
+        piece = min(int((t + 1e-12)*n/dt), n - 1)
+        self.at_time((piece + 0.5)*dt/n)
+        return (piece + 1)*dt/n
 
     def step_sde(self, dt):
         """ The diffusion approximation (Euler-Maruyama): each flow gets Gaussian noise with its Poisson variance """
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         n_sub = self.substeps()
         if self.program:
-            self.y, flows = ss.kernels.one_step(self.y, self.refresh_program(), dt, ss.kernels.solvers['sde'], n_sub, no_tables, -1)
+            self.y, flows = ss.kernels.one_step(self.y, self.program, dt, ss.kernels.solvers['sde'], n_sub, *self.step_tables(dt))
             return flows
-        if n_sub > 1: # As a number of shorter steps
-            return sum(self.step_sde_once(dt/n_sub) for i in range(n_sub))
-        return self.step_sde_once(dt)
+        n_sub = max(n_sub, 1)
+        return sum(self.step_sde_once(dt/n_sub, (i + 0.5)*dt/n_sub) for i in range(n_sub)) # Values that vary in time at the middle of each substep, as in the kernels
 
-    def step_sde_once(self, dt):
+    def step_sde_once(self, dt, t=0):
         nc, ng, nt = self.n_comps, self.n_groups, self.n_trans
         y = self.y.copy()
         flows = np.zeros((nt, ng))
-        for flow,rate in zip(self.flows, self.rates()):
+        self.at_time(t)
+        rates = self.rates()
+        self.at_time(0)
+        for flow,rate in zip(self.flows, rates):
             mean = np.maximum((rate*self.y[flow.src] if flow.src is not None else rate*self.inflow_split(flow.tr))*dt, 0)
             amount = np.maximum(mean + np.sqrt(mean)*self.rng.standard_normal(ng), 0)
             if flow.src is not None:
@@ -3130,7 +3218,7 @@ class Agents(Engine):
                 for s in self.graph.people_states:
                     if self.applies[s.name][d]:
                         inside |= self.mod[s.name].raw
-                out = out*np.where(inside, vals[self.sim.level_raw(d)], 1.0)
+                out = out*np.where(inside, self.sim.group_vals(d, vals)[self.sim.group_raw()], 1.0)
             self.cache[key] = out
         return self.cache[key]
 
@@ -3205,6 +3293,31 @@ class Agents(Engine):
             self.stock_groups[state.name] = self.counts[state.name].copy()
         return self.counts[state.name].sum()
 
+    def count_states(self, states, groups=None, n=None):
+        """ The number of agents in each of some states of people, by the group they are counted in (or by `groups`, an array by UID with `n` values), in one pass over the agents """
+        sim = self.sim
+        if groups is None:
+            groups = sim.group_raw() if sim.n_groups > 1 else np.zeros(0, dtype=np.int64)
+            collapse = np.array([self.collapse[state.name] for state in states])
+            n = sim.n_groups
+        else:
+            collapse = np.tile(np.arange(n), (len(states), 1))
+        members = tuple(self.mod[state.name].raw for state in states)
+        return ss.kernels.count_states(members, sim.people.auids.view(np.ndarray), groups, collapse, n)
+
+    def record_stocks(self):
+        """ As for the other engines (see `Engine.record_stocks()`), with every state of people counted in one pass over the agents """
+        people = self.graph.people_states
+        counts = dict(zip([state.name for state in people], self.count_states(people))) if people else {}
+        for state in self.graph.states.values():
+            if state.name in counts:
+                if self.sim.n_groups > 1:
+                    self.stock_groups[state.name] = counts[state.name]
+                self.stocks[state.name] = float(counts[state.name].sum())
+            else:
+                self.stocks[state.name] = self.stock(state)
+        return
+
     def count(self, states, total=True):
         out = 0.0
         members = getattr(self, '_members', None)
@@ -3258,10 +3371,13 @@ class Agents(Engine):
         places = self.place_raw()
         out = np.zeros(n_places)
         members = getattr(self, '_members', None)
+        people = [state for state in states if state.people]
+        if members is None and people: # Every state at once
+            out += self.count_states(people, places, n_places).sum(axis=0)*self.scale
         for state in states:
-            if state.people:
-                out += np.bincount(places[members[state.name] if members is not None else self.members(state)], minlength=n_places)*self.scale
-            else:
+            if state.people and members is not None:
+                out += np.bincount(places[members[state.name]], minlength=n_places)*self.scale
+            elif not state.people:
                 out += np.bincount(mixing.places, weights=self.counts[state.name], minlength=n_places)
         return out[mixing.places] if self._by_group else out[places]
 

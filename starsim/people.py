@@ -7,6 +7,7 @@ import sciris as sc
 import starsim as ss
 from pathlib import Path
 import matplotlib.pyplot as plt
+import numba as nb
 
 
 
@@ -536,8 +537,8 @@ class People:
             for network in self.sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
 
-            # Calculate the indices to keep
-            self.auids = self.auids[np.isin(self.auids, np.unique(uids), assume_unique=True, invert=True, kind='sort')]
+            # Keep the others, in order
+            self.auids = self.alive.true()
 
         return
 
@@ -546,11 +547,9 @@ class People:
         ti = self.sim.ti
         res = self.sim.results
         for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
-            res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
-        auids = self.auids # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step())
-        gone = ~self.alive.raw[auids]
-        res.new_deaths[ti] = np.count_nonzero(gone & (self.ti_dead.raw[auids] <= ti)) # Whenever in the step it was requested
-        res.new_emigrants[ti] = np.count_nonzero(gone & (self.ti_removed.raw[auids] <= ti))
+            res[f'n_{state.name}'][ti] = getattr(self, state.name).count()
+        # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
+        res.new_deaths[ti], res.new_emigrants[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
@@ -904,3 +903,16 @@ class Filter(sc.prettyobj):
         filtered.is_filtered = True
 
         return filtered
+
+
+@nb.jit(cache=True)
+def count_gone(auids, alive, ti_dead, ti_removed, ti):
+    """ The number of active agents who are no longer alive, because they died or left by step ti, in one pass """
+    deaths = 0
+    removed = 0
+    for k in range(auids.shape[0]):
+        uid = auids[k]
+        if not alive[uid]:
+            deaths += ti_dead[uid] <= ti
+            removed += ti_removed[uid] <= ti
+    return deaths, removed

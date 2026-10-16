@@ -130,8 +130,44 @@ def test_stages():
         sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
         peaks[solver] = np.mean([np.argmax(sim.results.seir.n_I) for sim in sims])
         print(f'{solver:8s} infectious peak on day {peaks[solver]:n}')
-    assert max(peaks.values()) - min(peaks.values()) < 6 # The chain-binomial solver takes a substep for each stage; with whole steps the latent period would be 25 days, not 7, and the peak weeks later
+    assert max(peaks.values()) - min(peaks.values()) < 6 # The chain-binomial solver moves people through as many stages as they pass in a step; one stage a step would make the latent period 25 days, not 7, and the peak weeks later
+
+    # Through the stages in whole steps, with another way out: the same as the ODE, by the kernels and in Python
+    def cohort(solver, kernels=True):
+        sim = ss.Sim(ss.Disease(onset=ss.progression('E -> I', dur=ss.normal(7, 1)), death=ss.progression('E -> D', dur=20), init=dict(E=1.0), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw).init()
+        sim.diseases.d.engine.use_kernels = kernels
+        return sim.run().results.d
+    ode = cohort('ode')
+    for res in [cohort('binomial'), cohort('binomial', kernels=False)]:
+        assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
     return peaks
+
+
+@sc.timer()
+def test_seasonal_steps():
+    sc.heading('Testing that the stochastic solvers follow a value that varies within a step')
+    def make(solver, dt, seed=0):
+        sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25)), recovery=ss.progression('I -> S', dur=ss.days(10)), init_prev=0.05, name='sis')
+        return ss.Sim(sis, solver=solver, dt=dt, stop=ss.years(2), total_pop=5000, rand_seed=seed, **kw).run().results.sis.infection.sum()
+    ode = make('ode', ss.days(1))
+    out = sc.objdict()
+    for solver in ['gillespie', 'tau']: # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections
+        out[solver] = np.mean([make(solver, ss.days(91), seed) for seed in range(3)])
+        assert np.isclose(out[solver], ode, rtol=0.02), f'{solver}: {out[solver]:n} infections, against {ode:n} for the ODE'
+    return out
+
+
+@sc.timer()
+def test_scipy():
+    sc.heading('Testing the scipy integrators with the right-hand side in the kernels')
+    make, pars = models.seir
+    out = sc.objdict()
+    for kernels in [True, False]:
+        sim = ss.Sim(make(), integrator='LSODA', **pars, **kw).init()
+        sim.diseases.seir.engine.use_kernels = kernels
+        out[str(kernels)] = sim.run().results.seir
+    assert np.allclose(out['True'].n_I, out['False'].n_I, rtol=1e-6) and np.allclose(out['True'].infection, out['False'].infection, rtol=1e-6)
+    return out
 
 
 @sc.timer()
@@ -206,6 +242,8 @@ if __name__ == '__main__':
     sims = test_ode()
     finals = test_stochastic()
     peaks = test_stages()
+    seasonal = test_seasonal_steps()
+    scipy = test_scipy()
     msim = test_restart()
 
     T.toc()

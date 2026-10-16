@@ -218,7 +218,7 @@ ss.MFNet(
 
 - **Partnerships and acts are separate numbers** with separate data sources (number of partners, partnership duration, acts per unit time), and sexual networks keep them separate. That is what gives a per-act transmission probability its meaning.
 - **`n_contacts` takes a distribution.** "0.7 partners" on its own is ambiguous: one partner 70% of the time (`ss.bernoulli(0.7)`) and a Poisson number of partners with mean 0.7 (`ss.poisson(0.7)`) are different networks. A bare number is read as the mean of a Poisson, and `describe()` says so. `n_contacts` is the name Starsim's other networks already use, and it takes a distribution there too.
-- **`n_contacts` and `concurrency` are additions to Starsim's `ss.MFNet`**, which today takes `duration`, `acts`, `participation`, and `debut`. Both are proposals; `net.check()` reports whether a generated network recovers them.
+- **`n_contacts`, `concurrency`, and `max_contacts` are targets**, as for `ss.PartnerNet` (below): partnerships form between men and women so that the number each person has at a time settles at the target distribution, and anyone left without a partner of the other sex waits for one. Without them, `ss.MFNet` forms partnerships from `participation` and `debut`, as in Starsim v3. `net.check()` reports whether a generated network recovers the targets.
 
 `net.check()` simulates the network alone and reports, for each target statistic it was given, the target, the realized mean, and the spread across replicates (`W402 TargetStatsNotRecovered` if a target is missed). Running it is recommended before trusting results from a fitted network.
 
@@ -228,7 +228,7 @@ A one-mode network of partnerships is described the same way, by `ss.PartnerNet`
 ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)   # 175 partnerships among 500, 110 people with two or more, nobody with four or more
 ```
 
-The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target; other structure an ERGM can target (mixing by attribute, triangles) is not covered.
+The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target. Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`), and `net.check()` reports the share realized. Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
 
 ## Frequency and density dependence
 

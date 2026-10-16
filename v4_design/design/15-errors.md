@@ -77,7 +77,7 @@ Every code cited anywhere in this folder is listed here: 54 codes, of which 34 a
 | `E302` | `BadSplit` | error | `split=` has the wrong number of entries. (A split that does not sum to 1 is normalized, and `describe()` says so) |
 | `E305` | `DuplicateStructuralDimension` | error | A model or sim is stratified by a dimension it already has. `stratify` works in place, so this is what a notebook cell that is run twice will hit, and the message says so. (Stratifying a disease by a people property the sim already has, with the same levels, only adds the adjustments and is not an error) |
 | `E306` | `InvalidAdjustment` | error | A negative multiplier in `adjust=`. (A multiplier that pushes a probability above 1 is clipped, with a note) |
-| `E307` | `PartialStratificationMixing` | error | A state that a dimension does not apply to is the origin or the source of a transmission, so there is no coordinate for those people to mix as |
+| `E307` | `PartialStratificationMixing` | error | Contacts are given by a dimension that some of the people who mix do not have: a state the dimension does not apply to (`states=`) is the origin or the source of a transmission, or the dimension has `where=`. There is no coordinate for those people to mix as |
 | `E308` | `InconsistentDimension` | error | Two modules in one sim are stratified by the same people property (age, sex, place) with different groups. Names both modules and their groups, and suggests stratifying the sim: `sim.stratify(age=[...])` |
 | `W309` | `LargeStateSpace` | warning | The stratified model has more than about 10,000 compartments. Names the dimensions and sizes and notes that an agent-based run does not grow this way |
 

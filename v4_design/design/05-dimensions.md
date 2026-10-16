@@ -110,9 +110,17 @@ sir.stratify(age=[15, 25, 35, 50], where=dict(sex='female'))   # age groups for 
 
 - **`states=`** restricts which states are split. It takes state objects or their names.
 - **People entering a state with the dimension** from one without it (an infection entering `I`, above) take a level in proportion to `split`. A split that depends on another dimension is an `ss.by` over both, read as the share in each level for each level of the other: `sir.stratify(clinical=['mild', 'severe'], states=[I], split=ss.by([[0.9, 0.1], [0.7, 0.3], [0.2, 0.8]], dims=['age', 'clinical']))` makes the old more often severe, as summer2's `source_strata` do. Each row is normalized, so the other dimension's own split is unchanged. An `adjust` on a transition out of states that have no level of the dimension raises `E306`, since there is no level to apply it in.
-- **`where=`** restricts which existing groups are split, as a dict of dimension and level (or list of levels). The result is a ragged model: four age groups of women and one group of men. Selecting an age group then selects women only.
+- **`where=`** restricts which existing groups are split, as a dict of dimension and level (or list of levels). The result is a ragged model: four age groups of women and one group of men. The dimension can be one the sim is stratified by, or another `where=` dimension (`parity` where `age` is `'25-34'` or `'35-49'`, so women of those ages only).
 
-In an agent-based run neither keyword changes much, since every agent has an age and a sex regardless; they decide the number of compartments in a compartmental run. How ragged results are plotted and exported is not settled ([19-open-questions.md](19-open-questions.md)), and `where=` is provisional until it has been tried on a real model.
+People outside `where=` have no level of the dimension. Everything that refers to a level follows from that:
+
+- **Results.** Selecting a level selects the people who have one: `res.n_I.select(age='15-24')` is women aged 15 to 24, and `res.n_I.by('age')` has a column for each age group of women, summing to the women and not to everyone. Men are in the totals and in `select(sex='male')`, and in no column of a result split by age: their age is missing, not "all ages".
+- **Conditions.** `sir.age == '15-24'` is false for men, so `eligible=sir.age == '15-24'` reaches women only, and `~(sir.age == '15-24')` includes every man.
+- **Adjustments and movement.** `adjust=` applies to the people with a level; for the others the multiplier is 1. People outside `where=` do not move between its levels (by aging or by a transfer), and someone who moves into a group outside it (a woman aging out of the `where=` of `parity`) leaves its levels.
+- **Values by level.** A value given for each level (`init=dict(I=ss.by(age=[...]))`, or a parameter by age) gives the people with no level the mean over the levels, weighted by the split; a number of people at each level gives them none.
+- **Mixing.** A contact matrix by the dimension has no level for the others to mix as, which is `E307 PartialStratificationMixing` (below).
+
+In an agent-based run neither keyword changes the model, since every agent has an age and a sex regardless; they decide the number of compartments in a compartmental run. The groups there are still a grid of every combination of levels: the people outside `where=` are all counted at the first level, and the groups at the other levels stay empty.
 
 ### States that are not people
 
@@ -293,7 +301,7 @@ A mixing matrix is matched to the dimension whose levels it describes (here `age
 
 With no mixing given, people mix homogeneously across the levels of every dimension except space, where the default is to mix within the patch ([06-routes.md](06-routes.md)).
 
-Every state that is people is stratified by default, so the following cannot arise unless the stratification was narrowed with `states=`. States that a dimension does not apply to take no part in mixing over it. If such a state is the origin or the source of a transmission, there is no coordinate for those people to mix as, and the build raises `E307 PartialStratificationMixing` naming the state:
+Every state that is people is stratified by default, so the following cannot arise unless the stratification was narrowed with `states=` or `where=`. States that a dimension does not apply to take no part in mixing over it. If such a state is the origin or the source of a transmission, there is no coordinate for those people to mix as, and the build raises `E307 PartialStratificationMixing` naming the state. The same holds for people outside a dimension's `where=` (men, for age groups of women), so a contact matrix by a dimension with `where=` is `E307` too:
 
 ```text
 >>> sir.stratify(age=[0, 15, 65], states=[S, I])

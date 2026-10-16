@@ -1516,7 +1516,7 @@ class ParticleFilter:
                 keep = np.ones(sim.n_groups)
                 for dim,level in data.levels(sim, dims).items():
                     d = sim.dim_index(dim)
-                    keep = keep*(sim.group_coords[:, d] == sim.strats[d].index(level))
+                    keep = keep*(sim.group_levels[:, d] == sim.strats[d].index(level))
             W, expected, rows = lined[col]
             spans = [(np.flatnonzero(w).min(initial=0), np.flatnonzero(w).max(initial=0) + 1) for w in W] # The steps that each data point is worked out from
             self.series.append(sc.objdict(col=col, j=j, name=res.name, read=self.reader(engine, res.name), keep=keep, W=W, spans=spans, expected=expected, rows=rows,

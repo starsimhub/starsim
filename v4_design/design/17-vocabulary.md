@@ -80,9 +80,9 @@ All Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
-| `ss.RandomNet` `ss.MFNet` `ss.StaticNet` | Individual-level networks (Starsim's; its other networks are available too). `ss.MFNet` gains two keywords, `n_contacts` and `concurrency` |
+| `ss.RandomNet` `ss.MFNet` `ss.StaticNet` | Individual-level networks (Starsim's; its other networks are available too). `ss.MFNet` gains three keywords, `n_contacts`, `concurrency`, and `max_contacts` |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
-| **`ss.PartnerNet`** | Partnerships that form and dissolve, described by targets for the number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`) and their duration |
+| **`ss.PartnerNet`** | Partnerships that form and dissolve, described by targets for the number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`), the share of partnerships within a level of a property (`match=`), and their duration |
 | **`ss.contacts`** | A named contact matrix as mixing pools: `ss.contacts('Kenya')` |
 | **`ss.geo`** | A named geography: names, populations, centroids, distances |
 | **`ss.Mobility`** | Movement between patches from a matrix, a data file, or a movement model |
@@ -173,7 +173,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.data` | `aliases` `ignore_extra` |
 | `ss.Requires` | `shape` `source` |
 | `ss.MixingPool` | `n_contacts` `dependence` `n_ref` |
-| `ss.MFNet` | `n_contacts` `concurrency`, added to Starsim's `duration` `acts` `participation` `debut` |
+| `ss.MFNet` | `n_contacts` `concurrency` `max_contacts`, added to Starsim's `duration` `acts` `participation` `debut` |
 | `ss.Mobility` | `matrix` `data` `kind` `away` |
 | `sim.calibrate` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed` |
 | `ss.compare_models` | `data` `holdout` `folds` |

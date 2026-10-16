@@ -32,7 +32,7 @@ codes = dict(
     E101='IncompatibleTypes', E102='WrongDimension', E201='ReservedName', E204='UnknownState', E205='BadBranchSplit',
     E206='DuplicateDeclaration', E208='NonlinearExposure', E209='UndrivenTransition', E210='UnnamedState',
     E211='ExposureToCount', E301='UnknownTransition', E302='BadSplit', E305='DuplicateStructuralDimension',
-    E306='InvalidAdjustment', E308='InconsistentDimension', E402='NoGeography', E403='RouteMismatch', E504='UnmodifiableTarget', E505='UnknownEffect', E506='UnknownDisease',
+    E306='InvalidAdjustment', E307='PartialStratificationMixing', E308='InconsistentDimension', E402='NoGeography', E403='RouteMismatch', E504='UnmodifiableTarget', E505='UnknownEffect', E506='UnknownDisease',
     E602='UnknownParameter', E603='ShapeError', E604='UnvaluedParameter', E606='OutOfBounds', E702='UnknownOutcomeSource',
     E703='OutcomeCycle', E704='DataMisaligned', E705='UnknownDataColumn', E804='CapabilityError', E1003='RunAfterFinish',
     E1102='MissingDimension', E1301='NothingToFit', E1302='NoData', E1303='NoPosterior',
@@ -1793,9 +1793,6 @@ class Graph:
 
     def stratify(self, split=None, adjust=None, states=None, where=None, kind=None, mobility=None, immunity=None, frame=None, **kwargs):
         """ Stratify the graph by one or more dimensions; see `ss.Disease.stratify()` """
-        if where is not None:
-            errormsg = 'stratify(where=...) is not implemented yet: a dimension applies to every group'
-            raise NotImplementedError(errormsg)
         if states is not None:
             states = [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
             for name in states:
@@ -1803,8 +1800,8 @@ class Graph:
                     error('E204', f'states= names a state "{name}" that "{self.module.name}" does not have. Its states are {sc.strjoin(self.states.keys())}; did you mean {closest(name, self.states.keys())}?')
         dims = {k:v for k,v in kwargs.items() if not isinstance(v, Transfer)}
         transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
-        if len(dims) > 1 and (split is not None or adjust is not None or states is not None or mobility is not None or immunity is not None):
-            errormsg = 'When using split=, adjust=, states=, or mobility=, give one dimension per call to stratify(), so it is clear which one they belong to'
+        if len(dims) > 1 and (split is not None or adjust is not None or states is not None or where is not None or mobility is not None or immunity is not None):
+            errormsg = 'When using split=, adjust=, states=, where=, or mobility=, give one dimension per call to stratify(), so it is clear which one they belong to'
             raise ValueError(errormsg)
         for key in (adjust or {}):
             if key not in self.transitions and key not in ['rel_trans', 'rel_sus']:
@@ -1812,7 +1809,7 @@ class Graph:
         for name,levels in dims.items():
             if any(s.name == name for s in self.strats):
                 error('E305', f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
-            strat = Strat(name, levels, split=split, adjust=adjust, kind=kind, states=states, mobility=mobility, immunity=immunity)
+            strat = Strat(name, levels, split=split, adjust=adjust, kind=kind, states=states, where=where, mobility=mobility, immunity=immunity)
             if strat.kind == 'strain' and states is None: # A strain belongs to an infection, so the states people can be in without ever being infected have none
                 strat.states = [s.name for s in self.people_states if s.name not in self.uninfected]
                 strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(self.uninfected)})'
@@ -2183,7 +2180,8 @@ class by:
     def per_group(self, sim, convert=None, year=None):
         """ The value for each group of the sim """
         ds, grid = self.grid(sim, convert, year)
-        return grid[tuple(sim.group_coords[:, d] for d in ds)]
+        grid, index = sim.grid_index(ds, grid)
+        return grid[index]
 
     def is_count(self):
         """ Whether the values are whole numbers (so that a 1 is one person rather than everyone) """
@@ -2638,14 +2636,22 @@ class Strat:
         adjust (dict): multipliers on named transitions, one per level
         kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
         states (list): the names of the states it applies to (default: every state that is people)
+        where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
         mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
         immunity (array): for a strain, the protection that past infection with each strain (rows) gives against each strain (columns); 1 is complete
     """
-    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, mobility=None, immunity=None):
+    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None, immunity=None):
         self.name = name
         self.geo = levels if isinstance(levels, geo) else None
         self.kind = kind or ('space' if self.geo is not None else kinds.get(name, 'plain'))
         self.states = states
+        if where is not None and not isinstance(where, dict):
+            errormsg = f'where= takes a dict of a dimension and its level (or levels), e.g. dict(sex="female"), not {type(where).__name__}'
+            raise TypeError(errormsg)
+        if where and self.kind in ['space', 'strain']:
+            errormsg = f'where= is for a property of people such as age or risk, but "{name}" is of kind "{self.kind}"; a {"place" if self.kind == "space" else "strain"} is one that everyone (or every infection) has'
+            raise ValueError(errormsg)
+        self.where = dict(where) if where else None
         self.guessed = sc.objdict()
         if self.geo is not None:
             levels = self.geo.names
@@ -2776,7 +2782,7 @@ class Strat:
     def spec(self):
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states,
+        return dict(name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
                     mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property

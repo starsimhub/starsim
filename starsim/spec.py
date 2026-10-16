@@ -186,6 +186,8 @@ def strat_kwargs(strat):
     out = {strat['name']:strat['levels'], 'split':strat['split'], 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
     if strat['states'] is not None:
         out['states'] = strat['states']
+    if strat.get('where') is not None:
+        out['where'] = strat['where']
     return out
 
 

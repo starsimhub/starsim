@@ -51,6 +51,26 @@ def nb_true(auids, vals, want):
         m += (vals[k] != 0) == want
     return out[:m]
 
+@nb.jit(cache=True)
+def nb_true_raw(auids, raw, want):
+    """ As `nb_true()`, reading each agent's value from the full array, so the values of the active agents are not gathered first """
+    n = auids.shape[0]
+    out = np.empty(n, dtype=auids.dtype)
+    m = 0
+    for k in range(n):
+        uid = auids[k]
+        out[m] = uid
+        m += (raw[uid] != 0) == want
+    return out[:m]
+
+@nb.jit(cache=True)
+def nb_count(auids, raw):
+    """ The number of active agents whose value is truthy (as `np.count_nonzero()`), without gathering the values first """
+    m = 0
+    for k in range(auids.shape[0]):
+        m += raw[auids[k]] != 0
+    return m
+
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
@@ -639,6 +659,9 @@ class Arr(BaseArr):
 
     def count(self, axis=None):
         """ Count the number of nonzero (truthy) values among active agents (for 2D arrays, use `axis=0` to count each column) """
+        auids = self.auids
+        if axis is None and self.raw.ndim == 1 and auids.size >= numba_indexing and len(self.raw) != auids.size:
+            return int(nb_count(auids.view(np.ndarray), self.raw))
         return np.count_nonzero(self.values, axis=axis)
 
     @property
@@ -831,20 +854,18 @@ class Arr(BaseArr):
     def true(self):
         """ Efficiently convert truthy values to UIDs """
         if self.ndim > 1: self._uids_error()
-        vals = self.values
         auids = self.auids
-        if vals.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
-            return uids(nb_true(auids.view(np.ndarray), vals, True))
-        return auids[vals.astype(bool)]
+        if auids.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
+            return uids(nb_true_raw(auids.view(np.ndarray), self.raw, True))
+        return auids[self.values.astype(bool)]
 
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
         if self.ndim > 1: self._uids_error()
-        vals = self.values
         auids = self.auids
-        if vals.size >= numba_indexing:
-            return uids(nb_true(auids.view(np.ndarray), vals, False))
-        return auids[~vals.astype(bool)]
+        if auids.size >= numba_indexing:
+            return uids(nb_true_raw(auids.view(np.ndarray), self.raw, False))
+        return auids[~self.values.astype(bool)]
 
     def _uids_error(self):
         errormsg = f'Cannot convert 2D array "{self.name}" to UIDs; use e.g. arr.col(v).uids instead'

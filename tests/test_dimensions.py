@@ -476,6 +476,46 @@ def test_mixing():
     return sims
 
 
+@sc.timer()
+def test_ragged():
+    sc.heading('Testing a dimension for some groups only: age groups for women')
+    def make():
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.2), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(age=[0.004, 0.002, 0.001, 0.0])), name='sir')
+        sir.stratify(sex=['female', 'male'])
+        sir.stratify(age=[15, 25, 35, 50], where=dict(sex='female'), adjust=dict(recovery=[2, 1, 1, 0.5]))
+        return sir
+    sims = sc.objdict({solver:run(make(), solver, unit='day', stop=150, total_pop=100_000) for solver in solvers})
+    ode = sims.ode
+    assert np.all(ode.group_levels[ode.group_coords[:, 0] == 1, 1] == -1) # Men have no age group
+    res = ode.results.sir
+    start = at_start(ss.Sim(make(), unit='day', stop=150, total_pop=100_000, **kw)).sir
+    assert np.isclose(start.n_I.select(sex='male')[0], 50_000*(0.004*10 + 0.002*10 + 0.001*15)/85, rtol=0.01) # A value for each age group is, for men, the mean over them, weighted by the split
+    assert np.allclose(res.n_R.by('age').values.sum(axis=1), res.n_R.select(sex='female').values) # Selecting an age group selects women only
+    for solver in ['binomial', 'abm']:
+        other = sims[solver].results.sir
+        assert np.allclose(other.n_R.by('sex')[-1], res.n_R.by('sex')[-1], rtol=0.05), f'Expected {solver} to match the ODE'
+        assert np.allclose(other.n_R.by('age')[-1], res.n_R.by('age')[-1], rtol=0.1), f'Expected {solver} to match the ODE'
+
+    # A condition on the dimension leaves out the people who have no level of it
+    for solver in ['ode', 'abm']:
+        sir = make()
+        sim = run(sir, solver, unit='day', stop=150, total_pop=100_000, interventions=ss.modify(sir.rel_sus, multiply=0, where=sir.age == '15-24'))
+        r = sim.results.sir
+        assert r.cum_infection.select(age='15-24')[-1] == 0 and r.cum_infection.select(sex='male')[-1] > 10_000
+
+    # A dimension within a ragged one, set on the sim; contacts by a ragged dimension have no level for the others to mix as
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.2), recovery=ss.progression('I -> R', dur=10), init=dict(I=0.001), name='sir')
+    sim = ss.Sim(sir, stratify=[dict(sex=['female', 'male']), dict(age=[15, 25, 35, 50], where=dict(sex='female')), dict(parity=['0', '1+'], split=[0.4, 0.6], where=dict(age=['25-34', '35-49']))], total_pop=10_000, unit='day', stop=50, **kw).run()
+    assert (sim.group_levels[:, 2] >= 0).sum() == 4 and np.isclose(sim.results.sir.n_S.by('parity').values[0].sum(), 5_000*25/85, rtol=0.01) # Women aged 25 to 49
+    with pytest.raises(ss.CodedError, match='E307'):
+        ss.Sim(make(), networks=ss.contacts([[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]], age=[15, 25, 35, 50]), **kw).init()
+    with pytest.raises(ss.CodedError, match='E307'): # So do contacts by a dimension that the infectious state does not have
+        ss.Sim(sir.copy().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], age=[0, 15]), **kw).init()
+    with pytest.raises(ss.CodedError, match='E1102'):
+        ss.Sim(sir.copy().stratify(age=[0, 15], where=dict(sex='female')), **kw).init()
+    return sims
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -483,3 +523,4 @@ if __name__ == '__main__':
     carriage = test_carriage()
     space   = test_space()
     register = test_register()
+    ragged  = test_ragged()
