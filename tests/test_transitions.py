@@ -193,6 +193,15 @@ def test_names():
         ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=10)
     with pytest.raises(ss.BadBranchSplit): # The same as a weighted destination (it was a raw TypeError)
         I >> (0.9*R + 0.1*ss.null) @ 0.1
+    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # Below 1, an error that suggests ss.stay (pending a decision: ss.transitions.rest_stay)
+        ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
+    ss.transitions.rest_stay = True
+    try: # When it is decided that the rest stay
+        assert 'states.I.stay' in ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3)).graph.guessed
+        d = ss.Disease(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A')) # With no p= at all, a transition is undriven, not the remainder: the rest stay
+        assert d.graph.transitions.mild.undriven and d.graph.exits.E.stay == pytest.approx(0.7)
+    finally:
+        ss.transitions.rest_stay = False
     with pytest.raises(ss.NonlinearExposure):
         S, I = ss.states(2)
         ss.Disease(infection = S >> I @ 0.1 * I * I)

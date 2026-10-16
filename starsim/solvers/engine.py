@@ -939,11 +939,11 @@ class Engine:
 
     def branch_probs(self, tr):
         """ The probability of each destination of a transition (1 if there is only one) """
-        if len(tr.dst) <= 1:
+        if not tr.split:
             return [1.0]*len(tr.dst)
         ps = [None if p is None else self.eval(p) for p in tr.p]
-        rest = 1.0 - sum(p for p in ps if p is not None)
-        return self.dest_shares(tr, [rest if p is None else p for p in ps])
+        rest = 1.0 - sum(p for p in ps if p is not None) - (0.0 if tr.p_stay is None else self.eval(tr.p_stay))
+        return self.dest_shares(tr, [rest if p is None else p for p in ps]) # With ss.stay, what they leave over stays
 
     def eval(self, expr):
         return ss.transitions.evaluate(expr, self)

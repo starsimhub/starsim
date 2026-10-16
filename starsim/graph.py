@@ -571,7 +571,7 @@ class Graph(Presentation):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
         self.exits = sc.objdict()
         for state in self.states.values():
-            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[])
+            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[], stay=0)
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
@@ -585,7 +585,7 @@ class Graph(Presentation):
                     exits.contact.append(tr)
                 elif tr.trigger is not None: # Moved as soon as its condition holds, or its event happens: see ss.on
                     exits.triggered.append(tr)
-                elif tr.p is not None and len(tr.dst) <= 1: # One branch of several out of this state
+                elif tr.p is not None and not tr.split: # One branch of several out of this state
                     exits.branches.append(tr)
                 elif tr.dur is not None:
                     exits.timed.append(tr)
@@ -610,17 +610,25 @@ class Graph(Presentation):
                     exits.remainder = exits.timed.pop()
                     exits.remainder.guessed['p'] = f'1 - {" - ".join(tr.name for tr in exits.branches)}'
                 elif const and (bad := self.bad_splits(exits)):
-                    if all(t < 1 for _,t in bad) and len(exits.timed) == 1:
+                    below = all(t < 1 for _,t in bad)
+                    if below and len(exits.timed) == 1:
                         exits.remainder = exits.timed.pop()
                         exits.remainder.guessed['p'] = f'{1 - bad[0][1]:n}'
+                    elif below and ss.transitions.rest_stay and not exits.timed and exits.remainder is None and len(bad) == 1 and len(bad[0][0]) == len(exits.branches): # The rest stay (pending a decision: see ss.transitions.rest_stay)
+                        exits.stay = 1 - bad[0][1]
+                        self.guessed[f'states.{name}.stay'] = f'the other {exits.stay:.0%} stay'
                     else:
                         group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
                         driven = [tr for tr in exits.hazards if not tr.undriven]
                         why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. "{name} -> A | B" with p=[{total:n}, None].' if undriven else ''
                         why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
+                        why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
                                                 f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in group])}).{why}')
+        for name,exits in self.exits.items():
+            outs = exits.branches + exits.timed + exits.hazards + exits.triggered + sc.tolist(exits.remainder)
+            exits.held = bool(exits.stay) or any(tr.stays for tr in outs) # Whether some people stay with no exit of their own: see ss.solvers.Compartmental.build_layout()
         return
 
     @staticmethod
@@ -653,18 +661,22 @@ class Graph(Presentation):
                     ex = self.exits[clock.names[0]]
                     if not (ex.branches or ex.remainder or ex.timed):
                         raise ss.NoScheduledDwell(f'"{name}" reads {clock}, but {clock.names[0]} has only rates out of it, so no dwell time is scheduled when people enter it.')
-            if tr.p is not None and len(tr.dst) > 1:
+            if tr.stays and not tr.dst:
+                raise ss.BadBranchSplit(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
+            if tr.p is not None and tr.split:
                 ps = tr.p
-                if len(ps) == 1 and len(tr.dst) == 2: # With two destinations, a single value is the first one's probability
+                if len(ps) == 1 and len(tr.dst) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
                 if len(ps) != len(tr.dst):
-                    raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but {len(ps)} branch probabilities.')
-                given = [p for p in ps if p is not None]
+                    raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst) + tr.stays} destinations but {len(ps) + (tr.p_stay is not None)} branch probabilities.')
+                given = [p for p in ps + [tr.p_stay] if p is not None]
+                if tr.stays and len(given) < len(ps):
+                    raise ss.BadBranchSplit(f'"{name}" leaves the rest to both ss.stay and another destination; give one of them a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)
-                    if (len(given) == len(ps) and not np.isclose(total, 1)) or total > 1 + 1e-9:
+                    if (len(given) == len(ps) + tr.stays and not np.isclose(total, 1)) or total > 1 + 1e-9:
                         raise ss.BadBranchSplit(f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
-            elif tr.p is None and len(tr.dst) > 1:
+            elif tr.p is None and tr.split:
                 raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
         updated = set()
         for name,upd in self.updates.items(): # A count with one value, set by one update and nothing else
@@ -805,7 +817,7 @@ class Graph(Presentation):
     def modifier_kind(self, name):
         """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry) or one destination of a transition with several (`'recovery.R'`), and otherwise its rate """
         tr = self.transitions.get(name)
-        if tr is not None and tr.p is not None and len(tr.dst) <= 1 and not tr.contact:
+        if tr is not None and tr.p is not None and not tr.split and not tr.contact:
             return 'branch'
         if self.destination(name) is not None:
             return 'branch'

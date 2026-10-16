@@ -134,7 +134,7 @@ from . import kernels
 t('transitions')
 from .expressions import par
 from .transitions import (
-    State, states, null, on,
+    State, states, null, stay, on,
     Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome, update,
 )
 

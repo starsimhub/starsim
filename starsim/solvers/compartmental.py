@@ -215,13 +215,15 @@ class Compartmental(Engine):
 
         def add_flow(tr, src, kind, named=True, to=None, stages=None):
             for strain in (self.strain_levels() if kind == 'contact' else [None]): # A transmission is one flow for each strain it can come from
-                self.flows.append(Bunch(tr=tr, src=src, kind=kind, named=named, to=to, stages=stages, index=self.tr_index[tr.name], strain=strain, record=None, routes=False,
+                self.flows.append(Bunch(tr=tr, src=src, kind=kind, named=named and not tr.stays, to=to, stages=stages, index=self.tr_index[tr.name], strain=strain, record=None, routes=False,
                                         state=None if src is None else self.comps[src].state, rel_sus=1.0 if src is None else self.comps[src].state.rel_sus))
             return
 
-        def add_exits(ind, state, exits, competing, stays, slot=None):
-            """ The exits that act on a compartment: in a slot of a conveyor (see ss.kernels.convey()), or past it (slot=None), given how long people there have stayed """
+        def add_exits(ind, state, exits, competing, stays, slot=None, stayed=False):
+            """ The exits that act on a compartment: in a slot of a conveyor (see ss.kernels.convey()), or past it (slot=None), given how long people there have stayed (and not one they took ss.stay out of) """
             for other in competing:
+                if stayed and other.stays:
+                    continue
                 first, stop = stays.get(other.name, (0, None))
                 if (stop is None and slot is None) or (slot is not None and first <= slot and (stop is None or slot < stop)):
                     add_flow(other, ind, 'hazard')
@@ -245,12 +247,14 @@ class Compartmental(Engine):
                 if staged:
                     self.unsupported(staged[0], f'a non-exponential dwell time out of "{name}" alongside branches with p=')
                 for tr in branches:
-                    p = tr.p[0] if tr.p is not None and len(tr.dst) <= 1 else None # A split between several destinations takes what the branches leave over
+                    p = tr.p[0] if tr.p is not None and not tr.split else None # A split between several destinations takes what the branches leave over
                     tracks.append(Bunch(tr=tr, p=p, immediate=tr.rate is None and tr.dur is None)) # With neither, nobody waits in the branch
             else:
                 if len(staged) > 1:
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}"')
                 tracks.append(Bunch(tr=staged[0] if staged else None, p=None, immediate=False))
+            if exits.held: # People who stay, with no exit of their own: the rest of the branches (p=None), or those who took ss.stay (p=0, entered only from the split)
+                tracks.append(Bunch(tr=None, p=None if exits.stay else ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
             for tr in exits.triggered:
                 self.unsupported(tr, f'a trigger ({tr.trigger})')
 
@@ -278,7 +282,7 @@ class Compartmental(Engine):
                     elif tr is not None:
                         last = i == k-1
                         add_flow(tr, ind, 'stage', named=last, to=None if last else inds[i+1], stages=k)
-                    add_exits(ind, state, exits, competing, stays)
+                    add_exits(ind, state, exits, competing, stays, stayed=getattr(track, 'stay', False))
             self.tracks[name] = tracks
 
         for tr in graph.inflows:
@@ -567,6 +571,10 @@ class Compartmental(Engine):
 
     #%% Flows
 
+    def stay_comp(self, name):
+        """ The compartment of a state for people who stay in it with no exit of their own """
+        return next(track.first for track in self.tracks[name] if getattr(track, 'stay', False))
+
     def update_targets(self):
         """ Work out where each flow's arrivals go; done once per step, since branch probabilities can change (and only worked out again if they have) """
         probs = sc.objdict()
@@ -574,7 +582,7 @@ class Compartmental(Engine):
             ps = [None if tr.p is None else np.clip(self.eval(tr.p), 0, 1) for tr in tracks]
             mults = [self.branch_mult(tr.tr) for tr in tracks]
             probs[name] = self.branch_shares([tr.tr for tr in tracks], ps, mults)
-        key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and len(tr.dst) > 1 for p in self.branch_probs(tr)]
+        key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and tr.split for p in self.branch_probs(tr)]
         last = getattr(self, '_target_key', None)
         if last is not None and len(last) == len(key) and all(np.array_equal(a, b) for a,b in zip(last, key)):
             return
@@ -588,9 +596,12 @@ class Compartmental(Engine):
                                      f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
-                    credits.append((self.tr_index[track.tr.name], weight*p))
-                    for dst,dp in zip(track.tr.dst, self.branch_probs(track.tr)):
+                    dps = self.branch_probs(track.tr)
+                    credits.append((self.tr_index[track.tr.name], weight*p*(sum(dps) if track.tr.stays else 1)))
+                    for dst,dp in zip(track.tr.dst, dps):
                         enter(dst.name, weight*p*dp, comps, credits, path + (name,))
+                    if track.tr.stays: # Those who took ss.stay
+                        comps.append((self.stay_comp(name), weight*p*(1 - sum(dps))))
                 else:
                     comps.append((track.first, weight*p))
             return
@@ -606,10 +617,15 @@ class Compartmental(Engine):
             else:
                 flow.targets, flow.credits = [], []
                 src = None if flow.src is None else flow.state.name
-                for dst,p in zip(flow.tr.dst, self.branch_probs(flow.tr)):
+                ps = self.branch_probs(flow.tr)
+                for dst,p in zip(flow.tr.dst, ps):
                     comps, credits = self.entry[dst.name]
                     flow.targets += [(ind, w*p, self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr))) for ind,w in comps] # (compartment, share, where in it)
                     flow.credits += [(ind, w*p) for ind,w in credits]
+                if flow.tr.stays and src is not None: # Those who took ss.stay go to the state's compartment with no exit of its own, and are not in the flow
+                    flow.targets.append((self.stay_comp(src), 1 - sum(ps), None))
+                    if flow.kind != 'stage' or flow.to is None:
+                        flow.credits.append((flow.index, sum(ps)))
                 if flow.strain is not None:
                     flow.record = self.dim_map(src, src, flow.strain, record=True)
                 elif self.enters(flow.tr, flow.state): # Recorded at the level people arrive at, e.g. E -> I where only I has a clinical status

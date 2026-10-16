@@ -183,6 +183,19 @@ class Null:
 null = Null()
 
 
+class Stay:
+    """ A destination that cancels the move: in a split, the people who take it stay where they are, and never take this transition again in this stay """
+    def __repr__(self):
+        return 'ss.stay'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+stay = Stay()
+
+rest_stay = False # Pending a decision (03 Q1): whether branch probabilities out of a state that sum below 1 leave the rest in the state, guessed and printed (True), or are an error that suggests ss.stay (False)
+
+
 #%% Transitions
 
 def parse_arrow(arrow):
@@ -328,6 +341,9 @@ class Transition(Nameable):
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.arrow_given = True # For ss.birth() and ss.immigration() in demographics=: whether the state people arrive in was given
         self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
+        self.stays = False # Whether ss.stay is one of the destinations, kept out of dst: what the other branches leave over stays (see split)
+        self.p_stay = None # Its probability, if given (otherwise the rest)
+        self._stay_at = None
         self.guessed = sc.objdict() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)
@@ -335,6 +351,8 @@ class Transition(Nameable):
             self._set_dst(dst)
         if p is not None:
             self.p = [None if v is None else as_expr(v) for v in sc.tolist(p)]
+            if self._stay_at is not None and len(self.p) == len(self.dst) + 1:
+                self.p_stay = self.p.pop(self._stay_at)
         self.check_dimensions()
         return
 
@@ -362,6 +380,11 @@ class Transition(Nameable):
         """ The agents who went through this transition, from the moment they moved until the same point in the next step """
         return ss.conditions.Event('tr', self).uids
 
+    @property
+    def split(self):
+        """ Whether it splits between several destinations when it is taken (ss.stay counts as one) """
+        return self.dst is not None and (len(self.dst) > 1 or self.stays)
+
     def _set_src(self, src):
         self.src = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
         return self
@@ -378,6 +401,10 @@ class Transition(Nameable):
             self.p = list(terms.values())
         else:
             self.dst = sc.tolist(dst)
+            if any(d is stay for d in self.dst): # Kept out of the destinations, so they are all states
+                self._stay_at = next(i for i,d in enumerate(self.dst) if d is stay)
+                self.dst = [d for d in self.dst if d is not stay]
+                self.stays = True
             if len(self.dst) > 1 and any(d is null for d in self.dst):
                 raise ss.BadBranchSplit('ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
                                         'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')

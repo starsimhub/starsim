@@ -678,7 +678,7 @@ class Agents(Engine):
                     self.sim.people.request_death(uids)
                 continue
             frm = np.concatenate([np.full(len(u), self.state_index.get(s.name, -1)) for s,u in zip(srcs[name], uidlist)]) # The state each came from
-            if len(tr.dst) == 1:
+            if not tr.split:
                 dsts = [(tr.dst[0], uids, frm)]
             else:
                 self._uids = uids
@@ -689,6 +689,9 @@ class Agents(Engine):
                 edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
                 masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(tr.dst))]
                 dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dst, masks)]
+                if tr.stays: # What the others leave over stays: the move is cancelled
+                    left = rvs >= edges[-1]
+                    self.stay(tr, uids[left], frm[left])
             for dst,inds,came in dsts:
                 self.enter_dims(tr, srcs[name], uidlist, dst, inds)
                 for d,level in (self.moves(tr) or ()): # A change of level as well as of state
@@ -874,6 +877,24 @@ class Agents(Engine):
             sim.people.parent[new] = parents
         return new
 
+    def stay(self, tr, uids, src_idx):
+        """ People who took ss.stay in a split: back in the state they left, with no new dwell time and no exit scheduled, so `X.time` keeps running; not counted in the flow """
+        if not len(uids):
+            return
+        mod = self.mod
+        names = list(self.state_index.keys())
+        for i in np.unique(src_idx):
+            inds = uids[src_idx == i]
+            state = self.graph.states[names[i]]
+            mod[state.name][inds] = True
+            if state.name in self.scheduled:
+                mod[f'ti_exit_{state.name}'][inds] = np.inf
+                mod[f'exit_{state.name}'][inds] = -2 # Stays: never scheduled again (see schedule())
+            if self.sim.groups.n_groups > 1 and tr.name in self.flow_groups:
+                self.flow_groups[tr.name] = self.flow_groups[tr.name] - np.bincount(self.groups(inds, state), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
+        self.flowcounts[tr.name] -= self.n_of(uids)
+        return
+
     def enter_dims(self, tr, srcs, uidlist, dst, uids):
         """ People who enter a state with a dimension that the state they left did not have take a level of it, in proportion to its split """
         sim = self.sim
@@ -890,7 +911,7 @@ class Agents(Engine):
 
     def branch_probs_for(self, tr, uids):
         ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
-        rest = 1.0 - sum(p for p in ps if p is not None)
+        rest = 1.0 - sum(p for p in ps if p is not None) - (0.0 if tr.p_stay is None else self.eval_for(tr.p_stay, uids))
         return self.dest_shares(tr, [rest if p is None else p for p in ps], uids)
 
     def draw(self, key, uids):
@@ -1001,7 +1022,7 @@ class Agents(Engine):
 
         branches = exits.branches + sc.tolist(exits.remainder)
         if branches: # Split on entry
-            ps = [None if tr.p is None or len(tr.dst) > 1 else np.broadcast_to(self.eval_for(tr.p[0], new), len(new)) for tr in branches] # A split between several destinations takes what the branches leave over
+            ps = [None if tr.p is None or tr.split else np.broadcast_to(self.eval_for(tr.p[0], new), len(new)) for tr in branches] # A split between several destinations takes what the branches leave over
             mults = [self.branch_mult(tr, new) for tr in branches]
             ps = [np.broadcast_to(p, len(new)) for p in self.branch_shares(branches, ps, mults)]
             rvs = self.draw(f'branch_{name}', new)
@@ -1013,6 +1034,10 @@ class Agents(Engine):
                 else: # Nobody waits in this branch, beyond a minimum stay
                     best[chosen] = self.after_of(tr) or -np.inf
                 which[chosen] = i
+        if branches and exits.stay: # The rest stay: no exit scheduled
+            rest = which < 0
+            best[rest] = np.inf
+            which[rest] = -2
         for i,tr in enumerate(exits.timed, start=len(branches)): # Competing dwell times: the earliest wins
             dur = self.sample_dwell(tr, new) + self.after_of(tr)
             earlier = (dur < best) | (which < 0) # A dwell that does not end until its rate changes (e.g. outside a where=) is still this exit's, so it can be rescaled

@@ -145,9 +145,57 @@ def test_hpv_cancel_ode():
     return ode
 
 
+@sc.timer()
+def test_syphilis_stay():
+    sc.heading('Port: syphilis tertiary, with the rest staying, and ss.stay')
+    def make(form):
+        LL, T, Sp = ss.states('LL T Sp')
+        dur = ss.normal(ss.years(2), ss.years(0.2))
+        if form == 'implicit': # Was a fake stay_LL = ss.Transition(LL, T, p=0.65, rate=ss.peryear(0))
+            tertiary = ss.Transition(LL, T, p=0.35, dur=dur)
+        else:
+            tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
+        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
+    out = sc.objdict()
+    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to (pending a decision: ss.transitions.rest_stay)
+        make('implicit')
+    for form in ['implicit', 'explicit']:
+        for solver in ['abm', 'ode']:
+            size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+            ss.transitions.rest_stay = form == 'implicit'
+            try:
+                sim = ss.Sim(make(form), solver=solver, start=2000, stop=2006, unit='year', **size, **kw).run()
+            finally:
+                ss.transitions.rest_stay = False
+            res = sim.results.syph
+            assert np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{form} ({solver}): {res.n_T[-1]/1e4:.3f} in T'
+            assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6) # Staying is not a flow
+            out[f'{form}_{solver}'] = sim
+    desc = out.implicit_abm.diseases.syph.describe(output=True)
+    assert 'the other 65% stay' in desc and '[guessed]' in desc
+    assert 'states.LL.stay' not in out.explicit_abm.diseases.syph.graph.guessed
+    s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time keeps running
+    u = s.LL.uids
+    assert np.all(s.ti_LL[u] == 0) and np.all(np.isinf(s.ti_exit_LL[u]))
+
+    # The remainder of branches whose p= is not a constant
+    def branches(p):
+        I, H, R = ss.states('I H R')
+        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), name='d') # Everyone starts in I
+    for solver in ['abm', 'ode']:
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.n_H[-1] for p in [0.3, lambda sim: 0.3]]
+        assert np.isclose(ns[1]/1e4, 0.3, atol=0.02) and np.isclose(ns[0], ns[1], rtol=0.05), f'{solver}: {ns}'
+    with pytest.raises(ss.BadBranchSplit):
+        S, A = ss.states('S A')
+        ss.Disease(S, A, x=ss.Transition(S, ss.stay, p=0.5))
+    return out
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
     test_bv_debut()
     test_on_event()
     test_hpv_cancel()
+    test_syphilis_stay()

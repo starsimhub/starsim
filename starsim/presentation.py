@@ -109,7 +109,8 @@ class Presentation:
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
-                add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in tr.p)}')
+                stays = [] if not tr.stays else ['stay: ' + ('the rest' if tr.p_stay is None else format_expr(tr.p_stay, values=True))]
+                add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in tr.p] + stays)}')
             elif 'p' in tr.guessed:
                 add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
             for key,what in [('after', 'not before'), ('before', 'only before')]: # A minimum stay, or a limit
@@ -117,6 +118,9 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
+        for name,exits in self.exits.items():
+            if exits.stay:
+                add(name, f'the other {exits.stay:.0%} stay', 'guessed')
         for name,upd in self.updates.items():
             add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", unit=unit, mul="×")}, set at the end of each step')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle
