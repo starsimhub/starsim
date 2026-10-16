@@ -118,8 +118,40 @@ def test_queue():
     return out
 
 
+def test_capacity():
+    sc.heading('Testing a capacity shared by deliveries: by their priority, then pro rata')
+    def make(ranks=(1, 2), **kwargs):
+        sis = make_sis()
+        clinic = ss.Capacity(ss.perday(300))
+        drug = ss.Treatment(moves=sis.cure)
+        symptomatic = ss.treat(drug, where=sis.I, capacity=clinic, priority=ranks[0])
+        screening = ss.screen(ss.Test(sensitivity=0.9), coverage=0.1, interval=1, capacity=clinic, priority=ranks[1], on_positive=ss.treat(drug))
+        return ss.Sim(sis, interventions=[symptomatic, screening], **kwargs)
+    sims = run_both(make, stop=60)
+    for solver,sim in sims.items():
+        res = sim.results
+        used = res.symptomatic.delivered + res.screening.delivered
+        assert np.allclose(res.clinic.used, used) and np.allclose(res.clinic.available[:-1], 300)
+        assert np.allclose(res.clinic.unused[:-1], 300 - used[:-1])
+        full = res.symptomatic.delivered[:-1] > 299.99 # Symptomatic first: screening gets what is left
+        assert full[0] and np.all(res.screening.delivered[:-1][full] < 1e-9)
+        assert np.allclose(used[:-1], 300) and not full.all() # The rest of the clinic's time is spent on screening
+        assert res.screening.delivered.sum() > 1000
+    check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.15)
+
+    # Equal priorities: shared pro rata, by what each would serve
+    for solver,sim in run_both(make, stop=10, ranks=(0, 0)).items():
+        res = sim.results
+        n_I = res.sis.n_I[0]
+        share = res.symptomatic.delivered[0]/(res.symptomatic.delivered[0] + res.screening.delivered[0])
+        expected = n_I/(n_I + 0.1*50_000)
+        assert np.isclose(share, expected, rtol=0.1), f'{solver}: {share:.3f} vs {expected:.3f}'
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     people = test_people()
     priority = test_priority()
     queue = test_queue()
+    capacity = test_capacity()

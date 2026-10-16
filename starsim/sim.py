@@ -189,6 +189,9 @@ class Sim(ss.Base):
                 if mod._default_name:
                     mod.name = mod.label = f'{parent.name}_{suffix}'
                     mod._default_name = False
+            cap = getattr(mod, 'capacity', None)
+            if isinstance(cap, ss.Capacity) and not any(cap is other for other in out): # A shared capacity runs just before the first delivery that uses it
+                out.append(cap)
             out.append(mod)
             if isinstance(mod, ss.Delivery):
                 for key in ['positive', 'negative']:

@@ -605,6 +605,14 @@ class Delivery(Intervention):
                     product.name = product.label = pname
                     product._default_name = False
                 frame = frame.f_back
+        frame = ss.utils.getframe(1)
+        for depth in range(2): # So is a shared capacity
+            if isinstance(capacity, Capacity) and capacity._default_name and frame is not None:
+                cname = ss.transitions.find_name(capacity, frame)
+                if cname is not None:
+                    capacity.name = capacity.label = cname
+                    capacity._default_name = False
+                frame = frame.f_back
         self.product = product
         self.name_product()
         self.move = move # For a transfer: the level people move to, by dimension
@@ -684,6 +692,11 @@ class Delivery(Intervention):
         out = [(e.dis, e.tr.name) for e in getattr(self, 'edges', []) if e.tr is not None]
         fail = getattr(self, 'fail_edge', None)
         return out + ([(fail.dis, fail.tr.name)] if fail is not None else [])
+
+    @property
+    def rank(self):
+        """ Its place among the deliveries that share an `ss.Capacity`: a number given as `priority=` (lowest first), else 0 """
+        return self.priority if sc.isnumber(self.priority) else 0
 
     @property
     def in_rounds(self):
@@ -1054,24 +1067,49 @@ class Delivery(Intervention):
             return False
         return self.when is None or bool(self.when(sim))
 
-    def step(self):
-        """ Deliver the product to whoever it is due to now: at the time of the start of the step (as for all code in a step: see `ss.Loop`), before the disease's transitions in it, under every solver """
+    def prepare(self):
+        """ What happens at the start of each step before anyone is offered anything: protection lost, levels moved up, test results that have come; once a step """
+        if getattr(self, '_ti_prepared', None) == self.sim.ti:
+            return
+        self._ti_prepared = self.sim.ti
         if self.product is not None:
             self.product.step_waning()
             self.step_stages()
         self.step_results()
+        return
+
+    def step(self):
+        """ Deliver the product to whoever it is due to now: at the time of the start of the step (as for all code in a step: see `ss.Loop`), before the disease's transitions in it, under every solver """
+        self.prepare()
+        if getattr(self, '_ti_joint', None) == self.sim.ti: # Already delivered by its ss.Capacity, jointly with the others that share it
+            return
         if self.triggered or not self.due():
             if self.queue is not None and getattr(self, '_ti_served', None) != self.sim.ti: # Those waiting are served even if nobody new arrives
                 self.receive(self.selector.nobody())
             return
         if self.routine and self.by_age and not self.started:
             self.skip_past()
-        selector = self.selector
         if self.deliver is not None:
             self.give(self.delivered_by_function())
         else:
-            self.receive(selector.everyone() if self.on is None else selector.select(self.on))
+            self.receive(self.arrivals())
         return
+
+    def arrivals(self):
+        """ Who is offered it now, before eligibility: everyone, or those something has just happened to (`on=`) """
+        selector = self.selector
+        return selector.everyone() if self.on is None else selector.select(self.on)
+
+    def demand(self, chosen):
+        """ The people who would be served now if there were no limit: those chosen, and those waiting """
+        abm = self.selector.abm
+        n = self.n_agents(chosen)*self.sim._current_scale if abm else self.count(chosen)
+        if self.queue is not None:
+            if abm:
+                n += np.count_nonzero(~np.isnan(self.ti_queued.raw[self.sim.people.auids]))*self.sim._current_scale
+            else:
+                n += (self.eng.state_counts()*(self.selector.dim(self.waiting) > 0)).sum()
+        return n
 
     def skip_past(self):
         """
@@ -1162,6 +1200,11 @@ class Delivery(Intervention):
 
     def receive(self, sel):
         """ Offer the product to some people: those eligible among them, thinned by coverage and capped by capacity """
+        self.finish(*self.choose(sel))
+        return
+
+    def choose(self, sel):
+        """ Of some people, those who are eligible, and those chosen by coverage; returns both """
         selector = self.selector
         abm = selector.abm
         sel = self.offer(sel)
@@ -1177,7 +1220,10 @@ class Delivery(Intervention):
         else:
             chosen = sel*np.clip(cov, 0, 1)
 
-        # Capacity, and the queue
+        return sel, chosen
+
+    def finish(self, sel, chosen):
+        """ Serve those chosen within the capacity (and the queue), record who was offered it, and give it """
         sel, chosen = self.serve(sel, chosen)
         if self.remembers:
             chosen = self.mark_offered(sel, chosen)
@@ -1334,6 +1380,9 @@ class Delivery(Intervention):
         """ The most people that can be served now: what is left of the capacity this step """
         if self.capacity is None:
             return np.inf
+        if isinstance(self.capacity, Capacity): # Shared: what is left of it, and of this delivery's share
+            allot = self._allot[1] if getattr(self, '_allot', (None,))[0] == self.sim.ti else np.inf
+            return min(self.capacity.remaining(), allot)
         cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
         if isinstance(cap, ss.TimePar) or not self.in_rounds: # A rate: per unit time, over the step or the round
             cap = self.convert(cap)*self.span
@@ -1345,7 +1394,7 @@ class Delivery(Intervention):
         ti = self.sim.ti
         used = self._used[1] if getattr(self, '_used', (None,))[0] == ti else 0.0
         n = self.n_agents(served)*self.sim._current_scale if self.selector.abm else self.count(served)
-        self._used = (ti, used + n)
+        self.use_amount(n)
         return n
 
     #%% Queues: people over capacity wait, up to queue= (agents: ti_queued; compartments: levels of waiting_<delivery>)
@@ -1460,6 +1509,8 @@ class Delivery(Intervention):
         ti = self.sim.ti
         used = self._used[1] if getattr(self, '_used', (None,))[0] == ti else 0.0
         self._used = (ti, used + n)
+        if isinstance(self.capacity, Capacity):
+            self.capacity.use(n)
         return
 
     def relocate(self, amount, changes):
@@ -1884,6 +1935,103 @@ def spec_value(val):
     elif isinstance(val, dict):
         return {k:spec_value(v) for k,v in val.items()}
     return ss.presentation.quantity_json(val, None, None)
+
+
+class Capacity(Intervention):
+    """
+    A capacity shared by several deliveries, e.g. one clinic for symptomatic treatment and for screening
+
+    The deliveries that share it and run on their own are resolved jointly, at the loop position of the first of them:
+    each says how many it would serve (those chosen now, and those waiting), the capacity is shared out in the order of
+    their `priority=` (a number, lowest first; pro rata between equals), and within each delivery by its own order; only
+    then does anyone receive anything. A follow-up that comes later in the step draws on what is left.
+
+    Args:
+        amount (float/rate/func): people per step, a rate (e.g. `ss.perweek(100)`), or a function of the sim or a time series of either
+        name (str): the name; if not given, taken from the variable it is assigned to
+
+    Results (in people): `available`, `used`, and `unused`.
+
+    Examples:
+        ```python
+        clinic = ss.Capacity(ss.perweek(100))
+        symptomatic = ss.treat(kit, where=ng.C, capacity=clinic, queue=ss.months(1), priority=1)
+        screening = ss.screen(naat, coverage=0.1, capacity=clinic, priority=2, on_positive=ss.treat(kit))
+        ```
+    """
+    compartmental = True
+
+    def __init__(self, amount, name=None, label=None, **kwargs):
+        super().__init__(name=name, label=label, **kwargs)
+        self.amount = amount
+        self.avail = 0.0
+        self.used = 0.0
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        self.deliveries = [d for d in sim.interventions.values() if isinstance(d, Delivery) and d.capacity is self]
+        return
+
+    def init_results(self):
+        super().init_results()
+        abm = self.sim.solver == 'abm'
+        results = [ss.Result(key, dtype=float, scale=abm, label=label, summarize_by='sum') for key,label in
+                   dict(available='Capacity available', used='Capacity used', unused='Capacity not used').items()]
+        self.define_results(*results)
+        ss.results.in_people(*results)
+        return
+
+    def amount_now(self):
+        """ The people that can be served in this step """
+        val = self.amount(self.sim) if callable(self.amount) else self.amount
+        if isinstance(val, ss.TimePar):
+            val = ss.solvers.convert(val, self.sim.unit_base)*self.t.dt.to(self.sim.unit_base).value
+        return float(val)
+
+    def remaining(self):
+        return max(self.avail - self.used, 0.0)
+
+    def use(self, n):
+        self.used += n
+        self.results.used[self.sim.ti] += n
+        return
+
+    def step(self):
+        """ Offer, then share out, then deliver, for every delivery that shares it and runs now on its own """
+        sim = self.sim
+        ti = sim.ti
+        self.avail = self.amount_now()
+        self.used = 0.0
+        self.results.available[ti] = self.avail
+        jobs = []
+        for d in self.deliveries: # Selections are made for all of them before anyone moves
+            d.prepare()
+            if d.triggered or not d.due():
+                continue
+            if d.deliver is not None:
+                chosen = d.delivered_by_function()
+                sel = chosen.copy()
+            else:
+                sel, chosen = d.choose(d.arrivals())
+            jobs.append((d, sel, chosen, d.demand(chosen)))
+        for rank in sorted(set(job[0].rank for job in jobs)):
+            group = [job for job in jobs if job[0].rank == rank]
+            left = self.remaining()
+            total = sum(job[3] for job in group)
+            for d,sel,chosen,demand in group:
+                d._allot = (ti, left*demand/total if total > left else np.inf)
+                d._ti_joint = ti
+                d.finish(sel, chosen)
+        return
+
+    def update_results(self):
+        super().update_results()
+        ti = self.sim.ti - 1
+        if ti >= 0:
+            res = self.results
+            res.unused[ti] = res.available[ti] - res.used[ti]
+        return
 
 
 class vaccinate(Delivery):
