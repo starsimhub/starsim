@@ -110,6 +110,7 @@ class Strat:
             if immunity.shape != (self.n, self.n):
                 raise ss.ShapeError(f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
             self.immunity = immunity
+        self.split_given = split is not None and not isinstance(split, ss.by) # Kept when a split over several dimensions includes this one
         self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
         self.cond = None # For a dimension of some states only, a split given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
         if isinstance(split, by):
@@ -487,14 +488,30 @@ class Groups:
         births = np.ones(self.n_groups)
         for d,strat in enumerate(self.strats):
             strat.dim = d
-        joints = [strat.joint for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
+        joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
             errormsg = 'Only one split= can cover several dimensions at once'
             raise ValueError(errormsg)
         self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
         if joints:
-            ds, grid = joints[0].grid(sim)
-            grid = grid/grid.sum()
+            owner = joints[0]
+            ds, grid = owner.joint.grid(sim)
+            if owner.dim not in ds:
+                errormsg = f'The split of "{owner.name}" is given over {sc.strjoin(owner.joint.dims)}, which does not include "{owner.name}"'
+                raise ValueError(errormsg)
+            axis = ds.index(owner.dim)
+            totals = grid.sum(axis=axis, keepdims=True) # The table's totals over the other dimensions
+            tot = totals/totals.sum()
+            given = [i for i,d in enumerate(ds) if d != owner.dim and self.strats[d].split_given]
+            for i in given: # The share in each level of this dimension given the others: another dimension keeps its own split if one was given, and otherwise takes the table's totals
+                shape = [1]*len(ds)
+                shape[i] = -1
+                within = tot.sum(axis=tuple(j for j in range(len(ds)) if j != i), keepdims=True) # The table's share at each level of this one
+                tot = np.divide(tot, within, out=np.full(tot.shape, 1/tot.shape[i]), where=within>0)*self.strats[ds[i]].split.reshape(shape)
+            if given and not np.allclose(totals, totals.flat[0]) and not np.allclose(tot, totals/totals.sum()):
+                ss.note(f'the split of "{owner.name}" over {sc.strjoin(owner.joint.dims)} is read as the share in each level of "{owner.name}" within each level of the others; '
+                        f'the split given for {sc.strjoin(self.strats[ds[i]].name for i in given)} is kept, and the totals of the table are not used for it', sim=sim)
+            grid = np.divide(grid, totals, out=np.full(grid.shape, 1/owner.n), where=totals>0)*tot
             for i,d in enumerate(ds): # Each dimension's own split is the total over the others
                 self.strats[d].split = grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
                 self.strats[d].guessed.pop('split', None)

@@ -543,6 +543,15 @@ def test_mixing():
     shares = [np.mean((agents.people.place[agents.people.age < 5] == 0)), np.mean((agents.people.place[agents.people.age >= 50] == 0))]
     assert np.allclose(shares, [0.75, 0.8], atol=0.05) # As agents, where people live depends on their age
 
+    # A split over two dimensions is the share in each level given the other, whose own split, if given, is kept (FPsim review: it was replaced by the table's totals)
+    for solver in ['ode', 'abm']:
+        d = ss.Disease(ss.State('A'), stay=ss.progression('A -> A', rate=0), name='d')
+        d.stratify(k=['x', 'y'], split=ss.by([[0.8, 0.2], [0.4, 0.6]], dims=['age', 'k']))
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        n_A = at_start(ss.Sim(d, solver=solver, stratify=dict(age=[0, 30], split=[0.9, 0.1]), stop=1, **size, **kw)).d.n_A
+        assert np.allclose(n_A.by('age').values[0], [9000, 1000], rtol=0.03)
+        assert np.allclose([n_A.select(age=a, k='y')[0] for a in ['0-29', '30+']], [1800, 600], rtol=0.1)
+
     # As agents, the contact matrix acts within each place too, with commuting between them
     assert agents.results.sir.infection.cum.by('place').values[-1, 1] == 0
     commute = ss.Mobility(matrix=[[0.9, 0.1], [0.1, 0.9]], kind='commute')
