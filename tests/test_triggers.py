@@ -192,6 +192,61 @@ def test_syphilis_stay():
     return out
 
 
+@sc.timer()
+def test_ct_by_sex():
+    sc.heading('Port: CT with sex-specific durations in one transition, Dists with ss.by')
+    ms = [[1, 0.5], [6, 1]] # Months: [mean, std] for women, then men
+    def make(form='pars'):
+        E, P, A, Y, S = ss.states('E P A Y S')
+        if form == 'pars': # A Dist whose parameters are values by group
+            onset = ss.lognorm_ex(mean=ss.by(sex=[ss.months(ms[0][0]), ss.months(ms[1][0])]), std=ss.by(sex=[ss.months(ms[0][1]), ss.months(ms[1][1])]))
+        else: # A value by group that is a Dist: the same
+            onset = ss.by(sex=[ss.lognorm_ex(ss.months(m), ss.months(sd)) for m,sd in ms])
+        p_symp = ss.by(sex=[0.2, 0.54])
+        return ss.Disease(E, P, A, Y, S,
+            latency = ss.Transition(E, [P, A], p=[p_symp, 1 - p_symp]), # Was one transition per sex, with p=by_sex(...) and sync_sex()
+            onset   = P >> Y @ onset,
+            clear_a = A >> S @ ss.months(6),
+            clear_y = Y >> S @ ss.months(3),
+            name='ct') # Everyone starts in E
+    kw2 = dict(start=2000, stop=2002, dt=ss.months(0.25), unit='year', **kw)
+    sims = sc.objdict()
+    for key,form,strat in [('nostrat', 'pars', None), ('pars', 'pars', dict(sex=['female', 'male'])), ('dists', 'dists', dict(sex=['female', 'male']))]:
+        sims[key] = ss.Sim(make(form), n_agents=10_000, stratify=strat, **kw2).run() # As agents, sex needs no stratification
+    ct, ppl = sims.nostrat.diseases.ct, sims.nostrat.people
+    for f,(mean,_) in zip([True, False], ms):
+        went = ppl.auids[~np.isnan(ct.ti_Y[ppl.auids])] # Everyone who went through P to Y
+        u = went[ppl.female[went] == f]
+        dwell = (ct.ti_Y[u] - ct.ti_P[u])*0.25
+        assert np.isclose(dwell.mean(), mean, rtol=0.15), f'female={f}: mean dwell {dwell.mean():.2f} months, not {mean}'
+    n_P = sims.nostrat.results.ct.n_P[0]
+    assert np.isclose(n_P, 10_000*(0.5*0.2 + 0.5*0.54), rtol=0.05)
+    assert np.array_equal(sims.pars.results.ct.n_P, sims.dists.results.ct.n_P) # The two forms are one distribution
+
+    # As compartments: each sex has its own Erlang stages (ragged), keeping its mean
+    ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=dict(sex=['female', 'male']), **kw2).run()
+    r, a = ode.results.ct, sims.pars.results.ct
+    for sex in ['female', 'male']:
+        assert np.allclose(r.n_P.select(sex=sex)[::4], a.n_P.select(sex=sex)[::4], atol=150), sex
+    assert any('4|36 Erlang stages' in note for note in ode.notes)
+    with pytest.raises(ss.MissingDimension):
+        ss.Sim(make(), solver='ode', **kw2).init()
+
+    # A Dist with a function as a parameter (FPsim: duration of use by age), and typed rates inside ss.by
+    def callable_dist(solver):
+        A, B = ss.states('A B')
+        d = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.lognorm_ex(mean=lambda self, sim, uids: np.full(len(uids), 0.5), std=0.1)), name='d') # Everyone starts in A
+        size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
+        return ss.Sim(d, solver=solver, **size, start=2000, stop=2002, dt=ss.months(1), unit='year', verbose=0).run()
+    assert callable_dist('abm').results.d.ab.sum() == 1000
+    with pytest.raises(ss.CapabilityError):
+        callable_dist('ode')
+    assert ss.permonth(ss.by(age=[1, 2])).values == [ss.permonth(1), ss.permonth(2)]
+    tab = ss.by(ss.permonth(np.ones((2, 2))), dims=['age', 'parity'])
+    assert tab.wrap is ss.permonth
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
@@ -199,3 +254,4 @@ if __name__ == '__main__':
     test_on_event()
     test_hpv_cancel()
     test_syphilis_stay()
+    test_ct_by_sex()

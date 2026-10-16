@@ -439,7 +439,7 @@ class Transition(Nameable):
             raise TypeError(errormsg)
         typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
         new = self._copy()
-        if isinstance(value, (ss.dur, ss.Dist)) or any(isinstance(v, ss.dur) for v in typed):
+        if isinstance(value, (ss.dur, ss.Dist)) or any(isinstance(v, (ss.dur, ss.Dist)) for v in typed): # Including ss.by(sex=[dist, dist])
             new.dur = as_expr(driver)
         else:
             new.rate = as_expr(driver)
@@ -938,12 +938,23 @@ def dwell_stats(dist, convert):
     return float(mean), float(std)
 
 
-def numeric_pars(dist, convert):
-    """ The parameters of a distribution as plain numbers in the sim's unit; shape parameters are left alone """
+def numeric_pars(dist, convert, per_agent=None):
+    """
+    The parameters of a distribution as plain numbers in the sim's unit; shape parameters are left alone
+
+    A function is called by the distribution, for the agents drawn for; a value for each group (`ss.by`) becomes
+    such a function, made by `per_agent`.
+    """
     shape_pars = ['a', 'c', 'n', 'p']
     pars = dict()
     for key,val in dist.pars.items():
-        if key in shape_pars and not isinstance(val, ss.TimePar):
+        if isinstance(val, by):
+            if per_agent is None:
+                errormsg = f'The parameter "{key}" of {dist} has a value for each group ({val}), so has no single value here'
+                raise ValueError(errormsg)
+            unit = dist.unit if key not in shape_pars else None
+            pars[key] = per_agent(val if unit is None else val.map(lambda v: unit(v) if sc.isnumber(v) else v))
+        elif key in shape_pars and not isinstance(val, ss.TimePar):
             pars[key] = val
         elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn
             pars[key] = converted_func(val, dist.unit, convert)
@@ -963,9 +974,26 @@ def converted_func(func, unit, convert):
     return wrapped
 
 
-def numeric_dist(dist, convert):
+def numeric_dist(dist, convert, per_agent=None):
     """ A copy of a distribution with its parameters as plain numbers in the sim's unit, so it samples durations in that unit """
-    return type(dist)(**numeric_pars(dist, convert))
+    return type(dist)(**numeric_pars(dist, convert, per_agent))
+
+
+def varying_pars(dist):
+    """ The parameters of a distribution that differ between people: values by group (`ss.by`), and functions """
+    return {key:val for key,val in dist.pars.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
+
+
+def by_dist(raw):
+    """ A value for each group that is a distribution (`ss.by(sex=[ss.lognorm_ex(...), ss.lognorm_ex(...)])`) as one distribution with values for each group as its parameters """
+    if not (isinstance(raw, by) and raw.items and all(isinstance(v, ss.Dist) for v in raw.items)):
+        return raw
+    dists = raw.items
+    if raw.dim is None or len({type(d) for d in dists}) > 1:
+        raise ss.CapabilityError(f'{raw} has distributions of {"several families" if raw.dim is not None else "several dimensions"}, which is not supported yet; give one family over one dimension, or its parameters as ss.by() values.')
+    unit = lambda d,v: d.unit(v) if (d.unit is not None and sc.isnumber(v)) else v
+    pars = {key:by(**{raw.dim:[unit(d, d.pars[key]) for d in dists]}) for key in dists[0].pars.keys()}
+    return type(dists[0])(**pars)
 
 
 def erlang_stages(mean, std, max_stages=50):

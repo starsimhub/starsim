@@ -607,8 +607,9 @@ class Engine:
             ends = tr.src or tr.dst or []
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
                 for leaf in (expr.leaves if isinstance(expr, ss.transitions.Expr) else []):
-                    if isinstance(getattr(leaf, 'raw', None), ss.by):
-                        for d in leaf.raw.check(sim)[0]:
+                    raw = getattr(leaf, 'raw', None)
+                    if isinstance(raw, ss.by) and not (set(raw.dims) <= {'sex', 'female'} and not set(raw.dims) & {strat.name for strat in sim.groups.strats}): # By sex alone, as agents, is people.female
+                        for d in raw.check(sim)[0]:
                             if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
                                 dim = sim.groups.strats[d].name
                                 raise ss.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
@@ -703,9 +704,11 @@ class Engine:
             p = tr.dur if tr.dur is not None else tr.rate if (isinstance(tr.rate, trans.par) and not tr.contact) else None
             if p is None:
                 continue
-            raw = p.raw
-            dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False)
-            if isinstance(raw, ss.Dist) and tr.dur is not None:
+            raw = trans.by_dist(p.raw) if tr.dur is not None else p.raw
+            dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None)
+            if isinstance(raw, ss.Dist) and tr.dur is not None and any(isinstance(v, ss.by) for v in trans.varying_pars(raw).values()): # Parameters by group
+                self.varying_dwell(name, tr, raw, dw, to_unit)
+            elif isinstance(raw, ss.Dist) and tr.dur is not None:
                 mean, std = trans.dwell_stats(raw, to_unit)
                 dw.family = type(raw).__name__
                 dw.mean, dw.std = mean, std
@@ -779,7 +782,7 @@ class Engine:
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, ss.by)): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
-            if np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
+            if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)
                 msg = f'{name} has rate × dt = {x:.2g} ({1/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {"almost everyone leaves" if share > 0.99 else f"{share:.2g} of people leave"} in a step'
@@ -789,6 +792,47 @@ class Engine:
                     fixes = 'a smaller dt, substeps=,' if sim.solver == 'binomial' else 'a smaller dt'
                     msg += f'. Taking whole steps, solver="{sim.solver}" can differ from the ODE by several times that in prevalence; use {fixes} or solver="gillespie"'
                 ss.note(f'{msg}; sim.check_dt() shows how much a smaller step changes the results', ss.LargeStep, sim=sim)
+        return
+
+    def varying_dwell(self, name, tr, raw, dw, to_unit):
+        """
+        A dwell time whose distribution has parameters with a value for each group (`ss.by`)
+
+        As agents, the parameters are looked up for each agent, and one draw is made. As compartments, each group gets
+        the Erlang stages that match its own mean and standard deviation (ragged stages); a function as well has no compartmental form.
+        """
+        trans = ss.transitions
+        dw.family = type(raw).__name__
+        dw.staged = True
+        if isinstance(self, ss.solvers.Agents):
+            dw.mean = dw.std = None
+            dw.dist = trans.numeric_dist(raw, to_unit, per_agent=self.agent_values)
+            return
+        funcs = [key for key,val in trans.varying_pars(raw).items() if not isinstance(val, ss.by)]
+        if funcs:
+            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its {dw.family} dwell time has a function as its parameter "{funcs[0]}". Run with solver="abm".')
+        dims = [strat.name for strat in self.sim.groups.strats]
+        for val in trans.varying_pars(raw).values():
+            for dim in val.dims:
+                if dim not in dims:
+                    raise ss.MissingDimension(f'the dwell time of "{name}" is given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}={["female", "male"] if dim in ["sex", "female"] else [...]}).')
+        dw.varying = True
+        grids = {key:val.per_group(self.sim, to_unit) for key,val in trans.varying_pars(raw).items()}
+        plain = {k:v for k,v in trans.numeric_pars(raw, to_unit, per_agent=lambda val: None).items() if k not in grids}
+        stats = [trans.dwell_stats(type(raw)(**{**plain, **{k:float(np.broadcast_to(g, (self.n_groups,))[i]) for k,g in grids.items()}}), lambda v: v) for i in range(self.n_groups)]
+        dw.mean, dw.std = [np.array(x) for x in zip(*stats)]
+        shape = raw.pars.get('a')
+        if tr.stages is not None:
+            dw.kg = np.full(self.n_groups, tr.stages)
+        elif dw.family == 'gamma' and 'a' not in grids and sc.isnumber(shape) and shape == int(shape):
+            dw.kg = np.full(self.n_groups, int(shape))
+        else:
+            dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
+            dw.exact = False
+            ss.note(f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
+        dw.k = int(dw.kg.max())
+        if np.all(dw.kg == dw.k):
+            dw.kg = None # Not ragged
         return
 
     def note_stages(self, name, dw):
@@ -816,7 +860,7 @@ class Engine:
     def dwell_mean(self, name):
         """ The current mean dwell time of a transition, in the sim's unit """
         dw = self.dwells[name]
-        if dw.dist is not None:
+        if dw.dist is not None or getattr(dw, 'varying', False):
             return dw.mean
         val = self.value(dw.par)
         return np.divide(1, val, out=np.full(np.shape(val), np.inf), where=np.asarray(val)!=0)[()] if dw.is_rate else val # A rate of 0 is a dwell that never ends

@@ -706,8 +706,9 @@ class Dist:
             self.slots = slots
 
         # Initialize the distribution and finalize
-        self.process_dist()
-        self.process_pars(call=False)
+        if not any(type(v).__name__ == 'by' for v in self.pars.values()): # A value for each group (ss.by) is resolved by the engine that uses the distribution: see ss.transitions.numeric_dist()
+            self.process_dist()
+            self.process_pars(call=False)
         self.ready = True
         none_dict = dict(trace=self.trace, sim=self.sim, slots=self.slots)
         none_dict = {k:v for k,v in none_dict.items() if v is None}

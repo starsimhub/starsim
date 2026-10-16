@@ -270,6 +270,8 @@ class Compartmental(Engine):
                 k = 0 if fixed else dwell.k if dwell is not None else 1
                 inds = [add_comp(state, j, i) for i in range(k)]
                 track.first = (slots + inds)[0]
+                kg = getattr(dwell, 'kg', None)
+                track.starts = None if (kg is None or slots) else (inds, k - kg) # Ragged: a group with fewer stages enters further along, so it passes through its own number
                 acting = slots if (fixed and self.sim.solver == 'ode') else slots[:-1] # The last slot is left by the people due to leave in the next step: in the ODE, over the step, with the other exits acting on them until they do (see ss.kernels.release_rates()); the stochastic solvers release them at a point in the step (see ss.kernels.convey()), which already keeps the delay's exits exact
                 for i,ind in enumerate(acting):
                     add_exits(ind, state, exits, competing, stays, slot=i)
@@ -602,6 +604,10 @@ class Compartmental(Engine):
                         enter(dst.name, weight*p*dp, comps, credits, path + (name,))
                     if track.tr.stays: # Those who took ss.stay
                         comps.append((self.stay_comp(name), weight*p*(1 - sum(dps))))
+                elif getattr(track, 'starts', None) is not None:
+                    inds, start = track.starts
+                    for j in np.unique(start):
+                        comps.append((inds[j], weight*p*(start == j)))
                 else:
                     comps.append((track.first, weight*p))
             return
@@ -648,7 +654,8 @@ class Compartmental(Engine):
         if flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.kernels.convey())
             return 1.0
         elif flow.expr is None:
-            return (flow.stages if flow.kind == 'stage' else 1)/self.dwell_mean(flow.tr.name)
+            kg = self.dwells[flow.tr.name].kg if flow.kind == 'stage' else None # Ragged stages: each group's own number
+            return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/self.dwell_mean(flow.tr.name)
         self._strain = flow.strain
         self._routes = flow.routes if flow.routes is not False else self.route_betas(flow)
         rate = self.eval(flow.expr)

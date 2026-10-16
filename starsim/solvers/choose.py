@@ -232,8 +232,9 @@ def choose_solver(sim):
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
 
     for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
+        dims = [strat.name for strat in sim.groups.strats]
         for p in mod.graph.all_pars():
-            if isinstance(p.raw, ss.by):
+            if isinstance(p.raw, ss.by) and not (set(p.raw.dims) <= {'sex', 'female'} and not set(p.raw.dims) & set(dims)): # By sex alone, as agents, is people.female, which needs no stratification
                 p.raw.check(sim)
     # The notes on what was chosen, kept in sim.notes whatever the verbosity
     if sim.unit_source:

@@ -543,8 +543,25 @@ class Agents(Engine):
 
     def by_group(self, by):
         """ A value for each level of a dimension becomes a value for each of the agents being evaluated (or for each group, when rates are being worked out by group) """
-        out = super().by_group(by)
-        return out if self._by_group else out[self.groups(self._uids)]
+        if not self._by_group:
+            return self.by_agent(by, self._uids)
+        return super().by_group(by)
+
+    def by_agent(self, by, uids):
+        """ A value for each level of a dimension, for some agents; sex needs no stratification, since it is people.female (the first level is women) """
+        sim = self.sim
+        if by.dim in ['sex', 'female'] and by.dim not in [strat.name for strat in sim.groups.strats]:
+            vals = [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(by.values)]
+            if len(vals) != 2:
+                raise ss.ShapeError(f'ss.by({by.dim}=...) has {len(vals)} values; sex has two levels, women and then men.')
+            return np.where(sim.people.female.raw[uids], vals[0], vals[1])
+        return np.asarray(super().by_group(by))[self.groups(uids)]
+
+    def agent_values(self, by):
+        """ A parameter of a distribution with a value for each group, as a function the distribution calls for the agents it draws for """
+        def values(sim, uids):
+            return self.by_agent(by, uids) if len(uids) else np.ones(0) # None, when the distribution is initialized
+        return values
 
     def value(self, p):
         if isinstance(p.raw, ss.by): # Depends on which agents are being evaluated, so is not cached
