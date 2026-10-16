@@ -483,8 +483,8 @@ class Delivery(Intervention):
         when (func): deliver only on the steps where this function of the sim returns True
         deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
             run); replaces `where`, `coverage`, and the rounds
-        on_positive (Delivery/func): for a test: what happens to people who test positive: another delivery, or a function of `(sim, uids)`
-        on_negative (Delivery/func): likewise for people who test negative
+        on_positive (Delivery/func/list): for a test: what happens to people who test positive: another delivery, a function of `(sim, uids)`, or a list of them
+        on_negative (Delivery/func/list): likewise for people who test negative
         disease (str): the disease the product acts on (default: the only one)
         name (str): the name; if not given, taken from the variable the delivery is assigned to
 
@@ -593,7 +593,7 @@ class Delivery(Intervention):
 
     @property
     def followups(self):
-        return [intv for intv in [self.on_positive, self.on_negative] if isinstance(intv, Delivery)]
+        return [intv for intv in sc.tolist(self.on_positive) + sc.tolist(self.on_negative) if isinstance(intv, Delivery)]
 
     @property
     def in_rounds(self):
@@ -681,7 +681,7 @@ class Delivery(Intervention):
         """ The reasons, if any, that this delivery needs agents """
         out = [] if self.product is None else self.product.agent_reasons()
         for key in ['on_positive', 'on_negative']:
-            if callable(getattr(self, key)) and not isinstance(getattr(self, key), Delivery):
+            if any(callable(f) and not isinstance(f, Delivery) for f in sc.tolist(getattr(self, key))):
                 out.append(f'{key}= of "{self.name}" is a function of (sim, uids)')
         if self.trace is not None:
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
@@ -1286,13 +1286,14 @@ class Delivery(Intervention):
         """ Count the diagnoses, and pass the people with each result to its follow-up """
         self.tally('diagnosed', pos)
         before = None if self.selector.abm else self.eng.state_counts()
-        for followup,sel in [(self.on_positive, pos), (self.on_negative, neg)]:
-            if before is not None and followup is not None: # After the other follow-up has moved some people (e.g. cured people into R)
-                sel = self.same_people(sel, before)
-            if isinstance(followup, Delivery):
-                followup.receive(sel)
-            elif followup is not None:
-                followup(self.sim, self.uids(sel))
+        for followups,sel in [(self.on_positive, pos), (self.on_negative, neg)]:
+            for followup in sc.tolist(followups):
+                if before is not None: # After the other follow-ups have moved some people (e.g. cured people into R)
+                    sel = self.same_people(sel, before)
+                if isinstance(followup, Delivery):
+                    followup.receive(sel)
+                else:
+                    followup(self.sim, self.uids(sel))
         return
 
     def update_results(self):
@@ -1339,7 +1340,7 @@ class Delivery(Intervention):
             val = getattr(self, dict(at='rounds', where='eligible').get(key, key))
             if val is None or (key == 'at' and not val):
                 continue
-            out[key] = spec_value(val)
+            out[key] = [spec_value(v) for v in val] if isinstance(val, list) and key.startswith('on_') else spec_value(val)
         return out
 
 

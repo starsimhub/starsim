@@ -446,6 +446,18 @@ def test_screen():
     assert sim.solver == 'abm' and negatives[0] > 0
     with pytest.raises(ss.CapabilityError):
         delay(solver='ode', stop=60, on_negative=lambda sim, uids: None, **kw).run()
+
+    # Several follow-ups of one result
+    def several(**kwargs):
+        sis = make_sis()
+        test = ss.Test(sensitivity=0.9, specificity=0.95)
+        screening = ss.screen(test, coverage=0.4, at=[30], on_positive=[ss.treat(ss.Treatment(cure=0.95)), ss.vaccinate(ss.Vaccine(efficacy=0.5))])
+        return ss.Sim(sis, interventions=screening, **kwargs)
+    sims = run_each(several, stop=40)
+    for sim in sims.values():
+        res = sim.results
+        assert np.isclose(res.screening_positive1.delivered[30], res.screening.diagnosed[30])
+        assert np.isclose(res.screening_positive2.delivered[30], res.screening.diagnosed[30], rtol=0.01)
     return sims
 
 

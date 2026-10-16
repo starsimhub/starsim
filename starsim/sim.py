@@ -192,9 +192,10 @@ class Sim(ss.Base):
             out.append(mod)
             if isinstance(mod, ss.Delivery):
                 for key in ['positive', 'negative']:
-                    child = getattr(mod, f'on_{key}')
-                    if isinstance(child, ss.Delivery):
-                        add(child, mod, key)
+                    children = sc.tolist(getattr(mod, f'on_{key}'))
+                    for i,child in enumerate(children):
+                        if isinstance(child, ss.Delivery):
+                            add(child, mod, key if len(children) == 1 else f'{key}{i+1}')
             return
         for mod in sc.tolist(interventions):
             add(mod)
