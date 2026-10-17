@@ -3,6 +3,8 @@ Define interventions, which are used to modify the state of the sim during run.
 
 Interventions typically include things like testing, treatment, and vaccination.
 """
+import sys
+import inspect
 import starsim as ss
 import sciris as sc
 import numpy as np
@@ -523,3 +525,742 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
     See base classes for a description of input arguments.
     """
     pass
+
+
+#%% Deliveries for declared models: who gets a product, when, and how many
+
+delivery_keys = ['start', 'stop', 'years', 'dates', 'interval', 'eligible', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace']
+
+
+class Delivery(Intervention):
+    """
+    Deliver a product, or move people along a stratification; see `ss.vaccinate()`, `ss.screen()`, `ss.treat()`, and `ss.transfer()`
+
+    With `years`, `dates`, or `interval`, delivery happens in rounds, and in each round
+    every eligible person is offered the product once. Otherwise delivery is routine:
+    each person is offered the product once, at the first step on which they are eligible.
+
+    Args:
+        product (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Test`, or `ss.Treatment`
+        start (date/float): when delivery starts (default: the start of the sim)
+        stop (date/float): when delivery stops (default: never)
+        years (list): deliver in rounds at these times (a campaign)
+        dates (list): the same as `years`
+        interval (dur): deliver in rounds this far apart, between `start` and `stop`
+        eligible (Cond/func): who can receive it: a condition (e.g. `ppl.age < 5`), or a function of the sim
+        coverage (float): the fraction of eligible people reached; also `ss.by(...)`, or a function of the sim returning a probability per person
+        capacity (float): the number that can be delivered: per round, or per unit time for routine delivery (e.g. `ss.peryear(50_000)`)
+        on (Transition/Cond/func): deliver to the people something has just happened to, e.g. `on=sir.infection`
+        trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that `on=`
+            selects (or that a test sends to this follow-up), instead of to them; `eligible=` and `coverage=` then apply to the
+            contacts. Agents only, since only networks know who someone's contacts are
+        when (func): deliver only on the steps where this function of the sim returns True
+        deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
+            run); replaces `eligible`, `coverage`, and the rounds
+        on_positive (Delivery/func): for a test: what happens to people who test positive: another delivery, or a function of `(sim, uids)`
+        on_negative (Delivery/func): likewise for people who test negative
+        disease (str): the disease the product acts on (default: the only one)
+        name (str): the name; if not given, taken from the variable the delivery is assigned to
+    """
+    compartmental = True
+    kind = None # The kind of product this delivers
+
+    def __init__(self, product=None, move=None, start=None, stop=None, years=None, dates=None, interval=None, eligible=None, coverage=None,
+                 capacity=None, on=None, when=None, deliver=None, trace=None, on_positive=None, on_negative=None, disease=None, name=None, label=None, **kwargs):
+        super().__init__(name=name, label=label, **kwargs)
+        if self.kind is not None and not isinstance(product, self.kind):
+            errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__}, not {type(product).__name__}'
+            raise TypeError(errormsg)
+        frame = sys._getframe(1)
+        for depth in range(2): # A product is named from the variable it is assigned to, where it can be found
+            if product is not None and product._default_name and frame is not None:
+                pname = ss.transitions.find_name(product, frame)
+                if pname is not None:
+                    product.name = product.label = pname
+                    product._default_name = False
+                frame = frame.f_back
+        self.product = product
+        self.move = move # For a transfer: the level people move to, by dimension
+        rounds = sc.mergelists(years, dates)
+        if deliver is not None and (eligible is not None or coverage is not None or rounds or interval is not None):
+            errormsg = 'deliver= says who receives the product on each step, so it replaces eligible=, coverage=, years=, dates=, and interval=; give one or the other'
+            raise ValueError(errormsg)
+        if (on_positive is not None or on_negative is not None) and not isinstance(product, ss.Test):
+            errormsg = 'on_positive= and on_negative= are for tests: use them with ss.screen()'
+            raise ValueError(errormsg)
+        self.start = start
+        self.stop = stop
+        self.rounds = rounds
+        self.interval = interval
+        self.eligible = None if eligible is None else ss.conditions.as_cond(eligible)
+        self.coverage = coverage
+        self.capacity = capacity
+        self.on = None if on is None else ss.conditions.as_cond(on)
+        self.when = when
+        self.deliver = deliver
+        self.trace = trace
+        self.on_positive = on_positive
+        self.on_negative = on_negative
+        self.disease = disease if disease is None or isinstance(disease, str) else disease.name
+        self.triggered = False # Whether this is the follow-up of another delivery, so has no schedule of its own
+        self.carry = 0.0 # The part of the capacity not yet used, when it is less than one agent per step
+        self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.BoolArr('result', label='Test result'))
+        self.rng_cov = ss.random()
+        self.rng_cap = ss.random()
+        self.rng_test = ss.random()
+        self.rng_eff = ss.random()
+        return
+
+    #%% What kind of delivery this is
+
+    @property
+    def followups(self):
+        return [intv for intv in [self.on_positive, self.on_negative] if isinstance(intv, Delivery)]
+
+    @property
+    def in_rounds(self):
+        return bool(self.rounds) or self.interval is not None
+
+    @property
+    def routine(self):
+        """ Whether each person is offered the product once, at the first step on which they are eligible """
+        return not (self.in_rounds or self.triggered or self.on is not None or self.deliver is not None)
+
+    @property
+    def holds(self):
+        """ Whether people hold what is delivered """
+        return self.product is not None and self.product.holds
+
+    @property
+    def remembers(self):
+        """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold """
+        full = self.coverage is None and self.capacity is None and self.when is None
+        return self.routine and not ((self.holds or self.move) and full)
+
+    @property
+    def offered(self):
+        return f'offered_{self.name}'
+
+    @property
+    def waits(self):
+        """ Whether the results of the test it delivers come after a delay """
+        return isinstance(self.product, ss.Test) and self.product.delay is not None
+
+    @property
+    def pending(self):
+        """ In a compartmental run: the property of people that says how long they have waited for a test result, and which result """
+        return f'pending_{self.name}'
+
+    def staged(self, sim):
+        """ Whether, in this sim, the delivery needs levels that people move up step by step: the time since a product whose protection fades was delivered, or since a test whose result is delayed """
+        if sim.solver in [None, 'abm']:
+            return False
+        return (self.holds and self.product.staged) or self.waits
+
+    def result_steps(self, sim):
+        """ The number of steps from a test to its result, as agents wait (see `test()`) """
+        dt = sim.pars.dt.to(sim.unit_base).value
+        return max(1, int(np.ceil(ss.solvers.convert(self.product.delay, sim.unit_base)/dt - 1e-9)))
+
+    def dims(self, sim=None):
+        """ The properties of people that this delivery needs, as stratifications where everyone starts at the first level """
+        Strat = ss.transitions.Strat
+        staged = sim is not None and self.staged(sim)
+        out = []
+        if self.holds:
+            levels = self.product.stage_levels() if staged and self.product.staged else [False, True]
+            out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
+        if staged and self.waits: # Waiting for a result: one level for each step, for each result that has a follow-up
+            m = self.result_steps(sim)
+            levels = ['none'] + [f'positive {j+1}' for j in range(m)] + ([f'negative {j+1}' for j in range(m)] if self.on_negative is not None else [])
+            out.append(Strat(self.pending, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
+        for dim,level in (self.move or {}).items():
+            if isinstance(level, bool):
+                out.append(Strat(dim, [False, True], split=[1.0, 0.0]))
+        if self.remembers:
+            out.append(Strat(self.offered, [False, True], split=[1.0, 0.0]))
+        return out
+
+    def dim_moves(self):
+        """ Movement along those properties that happens by itself: losing the protection of a product """
+        if self.holds and self.product.loses:
+            return [sc.objdict(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
+        return []
+
+    def agent_reasons(self):
+        """ The reasons, if any, that this delivery needs agents """
+        out = [] if self.product is None else self.product.agent_reasons()
+        for key in ['on_positive', 'on_negative']:
+            if callable(getattr(self, key)) and not isinstance(getattr(self, key), Delivery):
+                out.append(f'{key}= of "{self.name}" is a function of (sim, uids)')
+        if self.trace is not None:
+            out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
+        for key in ['eligible', 'coverage', 'on', 'deliver']:
+            func = getattr(self, key)
+            if callable(func) and not isinstance(func, (ss.Cond, ss.Dist)) and len(inspect.signature(func).parameters) >= 2:
+                out.append(f'{key}= of "{self.name}" takes uids')
+        return out
+
+    #%% Initialization
+
+    @property
+    def dis(self):
+        """ The disease the product acts on """
+        return self.sim.get_declared(self.disease)
+
+    @property
+    def eng(self):
+        return self.dis.engine
+
+    @property
+    def selector(self):
+        return self.eng.selector
+
+    def init_pre(self, sim):
+        declared = [mod.name for mod in sim.declared]
+        if self.disease is None and self.move: # Moving people along a dimension of one disease's states: that disease
+            owners = [mod.name for mod in sim.declared if any(strat.name in self.move for strat in mod.graph.strats)]
+            if len(owners) == 1:
+                self.disease = owners[0]
+        if self.disease is None:
+            if len(declared) != 1:
+                ss.error('E506', f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}. Use disease=.')
+            self.disease = declared[0]
+        elif self.disease not in declared:
+            ss.error('E506', f'"{self.name}" has disease="{self.disease}", which is not a declared disease in the sim; these are {sc.strjoin(declared)}.')
+        if self.product is not None and self.product.disease is None:
+            self.product.disease = self.disease
+        super().init_pre(sim)
+        reasons = self.agent_reasons()
+        if sim.solver != 'abm' and reasons:
+            ss.error('E804', f'"{self.name}" cannot run with solver="{sim.solver}": {reasons[0]}.\n     Run with solver="abm", or leave the solver as "auto".')
+        if self.trace is not None:
+            if self.on is None and not self.triggered:
+                errormsg = f'"{self.name}" traces the contacts of people, so needs to know whose: give on= (e.g. on=tb.diagnosis), or make it the follow-up of a test'
+                raise ValueError(errormsg)
+            self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
+        to_ti = ss.connectors.to_ti
+        npts = sim.t.npts
+        self.ti_start = 0 if self.start is None else to_ti(sim, self.start)
+        self.ti_stop = npts if self.stop is None else to_ti(sim, self.stop)
+        self.round_tis = None
+        if self.in_rounds:
+            tis = [to_ti(sim, time) for time in self.rounds]
+            if self.interval is not None:
+                every = max(1, int(round(self.convert(self.interval)/self.dt_sim)))
+                tis += list(range(self.ti_start, min(self.ti_stop, npts), every))
+            self.round_tis = set(tis)
+        if isinstance(self.product, ss.Treatment) and not self.product.holds:
+            self.cure_tr, self.cure_dst = self.product.recovery(self.dis)
+        self.changes = {} # For a transfer: the level in each dimension that people move to, and the one they move from (if given)
+        self.sources = {}
+        for dim,level in (self.move or {}).items():
+            d = sim.dim_index(dim)
+            strat = sim.strats[d]
+            if isinstance(level, str) and ('->' in level or '>>' in level):
+                src, dst = ss.transitions.parse_arrow(level)
+                self.sources[d] = strat.index(src[0])
+                level = dst[0]
+            self.changes[d] = strat.index(level)
+        return
+
+    def convert(self, val):
+        """ Convert a typed quantity to a plain number in the sim's unit """
+        return ss.solvers.convert(val, self.sim.unit_base)
+
+    @property
+    def dt_sim(self):
+        """ The timestep, in the sim's unit """
+        return self.t.dt.to(self.sim.unit_base).value
+
+    def init_results(self):
+        super().init_results()
+        abm = self.sim.solver == 'abm'
+        results = [
+            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', summarize_by='sum'),
+            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', auto_plot=False),
+            ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', auto_plot=False),
+        ]
+        if getattr(self.product, 'cost', None) is not None:
+            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', summarize_by='sum')]
+        if isinstance(self.product, ss.Test):
+            results += [ss.Result('diagnosed', dtype=float, scale=abm, label='Number diagnosed', summarize_by='sum')]
+        self.define_results(*results)
+        ng = self.sim.n_groups
+        if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()
+            for res in results:
+                res.strats = self.sim.strats
+                res.dims = [strat.name for strat in self.sim.strats]
+                res.strata = np.zeros((len(res), ng))
+        return
+
+    def tally(self, key, sel, weight=1.0):
+        """ Add the people selected to a result, in total and by group; returns the total """
+        res = self.results[key]
+        ti = self.sim.ti
+        n = self.count(sel)*weight
+        res[ti] += n
+        if getattr(res, 'strata', None) is not None and n:
+            if self.selector.abm:
+                uids = self.uids(sel)
+                res.strata[ti] += np.bincount(self.sim.group_raw()[uids], minlength=self.sim.n_groups)*weight
+            else:
+                res.strata[ti] += (sel*self.eng.state_counts()).sum(axis=0)*weight
+        return n
+
+    def try_groups(self):
+        """ Check that the conditions and functions of this delivery can be evaluated on groups """
+        selector = self.selector
+        for cond in [self.on, self.eligible]:
+            selector.select(cond)
+        selector.per_person(1.0 if self.coverage is None else self.coverage)
+        if self.deliver is not None:
+            self.delivered_by_function()
+        return
+
+    #%% Selections: a boolean per agent, or the fraction of each state and group
+
+    def uids(self, sel):
+        auids = self.sim.people.auids
+        return auids[sel[auids]]
+
+    def count(self, sel):
+        """ The number of people (or agents) selected """
+        if self.selector.abm:
+            return float(np.count_nonzero(sel[self.sim.people.auids]))
+        return float((sel*self.eng.state_counts()).sum())
+
+    def shift(self, sel, changes):
+        """ Move the selected people to other levels of some dimensions """
+        sim = self.sim
+        if not changes:
+            return
+        if self.selector.abm:
+            uids = self.uids(sel)
+            for d,level in changes.items():
+                sim.people[sim.strats[d].attr][uids] = level
+            sim.groups_changed(uids)
+        else:
+            for mod in sim.declared:
+                frac = sel
+                if mod is not self.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.Crossing
+                    continue
+                if mod is not self.dis: # Another disease has other states, so the selection cannot depend on the state
+                    if not np.all(sel == sel[0]):
+                        ss.error('E804', f'"{self.name}" selects people by their state in "{self.dis.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
+                    frac = np.broadcast_to(sel[0], mod.engine.selector.shape)
+                moved = mod.engine.shift(frac, changes)
+                if mod is self.dis:
+                    self.moved_groups = moved
+        return
+
+    def same_people(self, sel, before):
+        """ In a compartmental run: a selection made from the people in each state and group as they were (`before`), as a fraction of them as they are now that some have moved """
+        after = self.eng.state_counts()
+        return np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
+
+    def mark_offered(self, sel, chosen):
+        """ Record that the selected people have been offered the product; returns those chosen, as they now are """
+        d = self.sim.dim_index(self.offered)
+        if self.selector.abm:
+            self.shift(sel, {d:1})
+            return chosen
+        eng = self.eng
+        before = eng.state_counts()
+        target = eng.targets({d:1})
+        self.shift(sel, {d:1})
+        after = eng.state_counts()
+        moved = np.zeros_like(chosen)
+        np.add.at(moved, (slice(None), target), chosen*before) # The people chosen are now in another group, along with whoever was offered it before
+        return np.clip(np.divide(moved, after, out=np.zeros_like(moved), where=after>0), 0, 1)
+
+    #%% Stepping
+
+    def due(self):
+        sim = self.sim
+        ti = sim.ti
+        if ti < self.ti_start or ti >= self.ti_stop:
+            return False
+        if self.round_tis is not None and ti not in self.round_tis:
+            return False
+        return self.when is None or bool(self.when(sim))
+
+    def step(self):
+        """ Deliver the product to whoever it is due to now: at the start of the step, before its flows (the loop runs it at that time: see `ss.solvers.interval()`) """
+        if self.product is not None:
+            self.product.step_waning()
+            self.step_stages()
+        self.step_results()
+        if self.triggered or not self.due():
+            return
+        selector = self.selector
+        if self.deliver is not None:
+            self.give(self.delivered_by_function())
+        else:
+            self.receive(selector.everyone() if self.on is None else selector.select(self.on))
+        return
+
+    def move_up(self, dim, levels):
+        """ In a compartmental run: move everyone up one level of a dimension, for each of these levels (highest first, so nobody moves twice) """
+        selector = self.selector
+        d = self.sim.dim_index(dim)
+        everyone = selector.everyone()
+        for level in sorted(levels, reverse=True):
+            self.shift((selector.dim(dim) == level)*everyone, {d:level + 1})
+        return
+
+    def step_stages(self):
+        """ In a compartmental run: move the holders of a product whose protection fades up a level of time since delivery, every `stage_steps` steps; once per step, for all its deliveries """
+        product = self.product
+        sim = self.sim
+        if sim.solver == 'abm' or not (self.holds and product.staged) or getattr(product, '_ti_staged', None) == sim.ti:
+            return
+        product._ti_staged = sim.ti
+        if sim.ti > 0 and sim.ti % product.stage_steps == 0:
+            self.move_up(product.dim, range(1, product.n_stages)) # The last level is kept
+        return
+
+    def delivered_by_function(self):
+        """ Who the deliver= function says receives the product: UIDs, or a number of people per group """
+        selector = self.selector
+        out = self.deliver(self.sim)
+        if selector.abm or isinstance(out, (ss.uids, ss.Arr, ss.Cond)):
+            return selector.to_selection(out, 'deliver=')
+        n = self.eng.n_people(total=False)
+        out = np.asarray(out, dtype=float)
+        if out.shape != n.shape:
+            errormsg = f'In a compartmental run, the deliver= function of "{self.name}" has to return a number of people per group ({len(n)} values), not an array of shape {out.shape}'
+            raise ValueError(errormsg)
+        frac = np.clip(np.divide(out, n, out=np.zeros(len(n)), where=n>0), 0, 1)
+        return np.broadcast_to(frac[None, :], selector.shape).astype(float)
+
+    def default_eligible(self):
+        """ Who is eligible if nothing is said: for a treatment that cures and is not a follow-up, the people who are infected """
+        selector = self.selector
+        if isinstance(self.product, ss.Treatment) and not self.holds and not self.triggered and self.on is None:
+            return selector.in_states([s.name for s in self.dis.graph.infected if s.people])*selector.everyone()
+        return selector.everyone()
+
+    def receive(self, sel):
+        """ Offer the product to some people: those eligible among them, thinned by coverage and capped by capacity """
+        selector = self.selector
+        abm = selector.abm
+        sel = self.offer(sel)
+        self.tally('eligible', sel)
+
+        # Coverage
+        cov = selector.per_person(1.0 if self.coverage is None else self.coverage)
+        if abm:
+            uids = self.uids(sel)
+            p = cov if np.ndim(cov) == 0 else cov[uids]
+            chosen = selector.nobody()
+            chosen[uids[self.rng_cov.rvs(uids) < p] if not (np.ndim(p) == 0 and p >= 1) else uids] = True
+        else:
+            chosen = sel*np.clip(cov, 0, 1)
+
+        # Capacity
+        if self.capacity is not None:
+            sel, chosen = self.cap(sel, chosen)
+        if self.remembers:
+            chosen = self.mark_offered(sel, chosen)
+        self.give(chosen, capped=True)
+        return
+
+    def offer(self, sel):
+        """ Those of some people who are eligible: not holding the product already, not yet offered it (for routine delivery), and so on """
+        selector = self.selector
+        abm = selector.abm
+        if self.trace is not None: # Their contacts instead
+            uids = self.uids(sel)
+            contacts = [net.find_contacts(uids) for net in self.trace_nets]
+            sel = selector.to_selection(ss.uids(np.unique(np.concatenate(contacts))))
+        sel = sel*(selector.select(self.eligible) if self.eligible is not None else self.default_eligible())
+        if self.holds: # Not to people who already hold it
+            sel = sel*(selector.dim(self.product.dim) == 0)
+        for d,level in self.changes.items(): # Or who are already there
+            sel = sel*(selector.dim(self.sim.strats[d].name) != level)
+        for d,level in self.sources.items():
+            sel = sel*(selector.dim(self.sim.strats[d].name) == level)
+        if self.remembers:
+            sel = sel*(selector.dim(self.offered) == 0)
+        if abm:
+            sel = sel & selector.to_selection(self.sim.people.auids)
+        return sel
+
+    #%% In a whole run in the kernels
+
+    @property
+    def tabulated(self):
+        """
+        Whether the kernels can take this delivery in a whole run (see `ss.kernels.apply_shifts()`): in a compartmental run of one disease, a
+        product that people hold or a transfer, given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
+        with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups
+        """
+        sim = self.sim
+        if sim.solver == 'abm' or len(sim.declared) != 1 or not getattr(self.eng, 'use_kernels', False) or self.eng.cross is not None:
+            return False
+        product = self.product
+        moves = product is None or (product.holds and not self.staged(sim))
+        scheduled = self.routine or (self.in_rounds and not self.triggered)
+        static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
+        return moves and scheduled and static and self.capacity is None and self.when is None and not self.followups
+
+    def shifts(self):
+        """
+        This delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the share of the people in each state and group
+        who are eligible, and of those, who are reached; and the group that each group's people move to if reached, and if not
+        """
+        sim = self.sim
+        eng = self.eng
+        selector = self.selector
+        npts = sim.t.npts
+        due = np.zeros(npts, dtype=np.bool_)
+        for ti in range(npts):
+            due[ti] = self.ti_start <= ti < self.ti_stop and (self.round_tis is None or ti in self.round_tis)
+        sel = self.offer(self.default_eligible() if self.eligible is None else selector.select(self.eligible))
+        cov = np.broadcast_to(np.clip(selector.per_person(1.0 if self.coverage is None else self.coverage), 0, 1), selector.shape)
+        changes = dict(self.changes) if self.product is None else {sim.dim_index(self.product.dim):1}
+        offered = {sim.dim_index(self.offered):1} if self.remembers else {}
+        to = eng.targets(changes | offered)
+        rest = eng.targets(offered) if offered else np.arange(eng.n_groups)
+        return due, np.broadcast_to(sel, selector.shape), cov, to, rest
+
+    def store_shifts(self, tally):
+        """ The results of a whole run, from the number reached and eligible in each group at each time point (`tally`, time points by 2 by groups) """
+        res = self.results
+        delivered, eligible = tally[:, 0], tally[:, 1]
+        for key,vals in [('delivered', delivered), ('eligible', eligible)] + ([('cost', delivered*self.product.cost)] if 'cost' in res else []):
+            res[key][:] = vals.sum(axis=1)
+            if getattr(res[key], 'strata', None) is not None:
+                res[key].strata[:] = vals
+        res.coverage[:] = np.divide(res.delivered.values, res.eligible.values, out=np.zeros(len(res.coverage)), where=res.eligible.values>0)
+        if getattr(res.coverage, 'strata', None) is not None:
+            res.coverage.strata[:] = np.divide(delivered, eligible, out=np.zeros_like(delivered), where=eligible>0)
+        return
+
+    def many_shifts(self, tally):
+        """ The results of many runs, as `store_shifts()` but with runs first (runs by time points by 2 by groups, or by one group, the total): each series as runs by time points, and (as `out.groups`) by group too, if kept """
+        delivered, eligible = tally[:, :, 0], tally[:, :, 1]
+        out = sc.objdict(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
+        if 'cost' in self.results:
+            out.cost = out.delivered*self.product.cost
+        out.coverage = np.divide(out.delivered, out.eligible, out=np.zeros_like(out.delivered), where=out.eligible>0)
+        out.groups = sc.objdict()
+        if tally.shape[-1] == self.sim.n_groups and self.sim.n_groups > 1:
+            out.groups.delivered, out.groups.eligible = delivered, eligible
+            out.groups.coverage = np.divide(delivered, eligible, out=np.zeros_like(delivered), where=eligible>0)
+            if 'cost' in self.results:
+                out.groups.cost = delivered*self.product.cost
+        return out
+
+    def cap(self, sel, chosen):
+        """ Cap the number chosen at the capacity, choosing at random; those not reached have not been offered it """
+        selector = self.selector
+        cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
+        if isinstance(cap, ss.TimePar) or not self.in_rounds: # A rate: per unit time
+            cap = self.convert(cap)*self.dt_sim
+        n = self.count(chosen)
+        if selector.abm:
+            cap = cap/self.sim.current_scale + self.carry # In agents
+            k = int(cap)
+            self.carry = cap - k if n >= k else 0.0
+            if n > k:
+                uids = self.uids(chosen)
+                dropped = uids[np.argsort(self.rng_cap.rvs(uids), kind='stable')[k:]]
+                chosen[dropped] = False
+                sel[dropped] = False
+        elif n > cap:
+            chosen = chosen*(cap/n)
+            sel = sel*(cap/n)
+        return sel, chosen
+
+    def give(self, chosen, capped=False):
+        """ Deliver the product to the people chosen """
+        sim = self.sim
+        selector = self.selector
+        abm = selector.abm
+        product = self.product
+        res = self.results
+        ti = self.sim.ti
+        if self.capacity is not None and not capped:
+            chosen = self.cap(chosen.copy(), chosen)[1]
+        n = self.tally('delivered', chosen)
+        if 'cost' in res:
+            self.tally('cost', chosen, product.cost)
+        if not n:
+            return
+
+        if product is None: # A transfer
+            self.shift(chosen, self.changes)
+        elif product.holds:
+            self.shift(chosen, {sim.dim_index(product.dim):1})
+            if abm:
+                product.ti_delivered[self.uids(chosen)] = sim.ti
+        elif isinstance(product, ss.Treatment): # It cures with a probability
+            efficacy = selector.per_person(product.efficacy)
+            if abm:
+                uids = self.uids(chosen)
+                p = efficacy if np.ndim(efficacy) == 0 else efficacy[uids]
+                self.eng.force(uids[self.rng_eff.rvs(uids) < p], self.cure_tr, self.cure_dst)
+            else:
+                self.eng.force(chosen*efficacy, self.cure_tr, self.cure_dst)
+        elif isinstance(product, ss.Test):
+            self.test(chosen)
+        return
+
+    def test(self, chosen):
+        """ Work out the result of each test, and either act on it or wait for it """
+        selector = self.selector
+        product = self.product
+        if isinstance(product.sensitivity, dict): # A sensitivity for each state, which are then what the test detects
+            states = self.dis.graph.states
+            has, sens = 0.0, 0.0
+            for name,val in product.sensitivity.items():
+                if name not in states:
+                    ss.error('E505', f'the test "{product.name}" has a sensitivity for "{name}", which is not a state of "{self.dis.name}". Its states are {sc.strjoin(states.keys())}.')
+                inside = selector.in_states([name])*selector.everyone()
+                has = has + inside
+                sens = sens + inside*selector.per_person(val)
+        else:
+            if product.detects is not None:
+                has = selector.select(product.detects)
+            else:
+                has = selector.in_states([s.name for s in self.dis.graph.infected if s.people])*selector.everyone()
+            sens = selector.per_person(product.sensitivity)
+        spec = selector.per_person(product.specificity)
+        if selector.abm:
+            uids = self.uids(chosen)
+            p = np.where(has, sens, 1 - spec)[uids]
+            positive = self.rng_test.rvs(uids) < p
+            if product.delay is not None:
+                self.ti_result[uids] = self.sim.ti + self.convert(product.delay)/self.dt_sim
+                self.result[uids] = positive
+                return
+            pos, neg = selector.to_selection(uids[positive]), selector.to_selection(uids[~positive])
+        else:
+            pos = chosen*(has*sens + (1 - has)*(1 - spec))
+            neg = chosen - pos
+            if product.delay is not None: # They wait for the result: see step_results()
+                d = self.sim.dim_index(self.pending)
+                before = self.eng.state_counts()
+                self.shift(pos, {d:1})
+                if self.on_negative is not None:
+                    self.shift(self.same_people(neg, before), {d:self.result_steps(self.sim) + 1})
+                return
+        self.report(pos, neg)
+        return
+
+    def step_results(self):
+        """ Act on the test results that have become available """
+        if not self.waits:
+            return
+        if not self.selector.abm: # The people who have waited long enough are at the top level for their result
+            selector = self.selector
+            m = self.result_steps(self.sim)
+            negatives = self.on_negative is not None
+            level = selector.dim(self.pending)
+            everyone = selector.everyone()
+            pos = (level == m)*everyone
+            neg = (level == 2*m)*everyone if negatives else selector.nobody()
+            self.report(pos, neg)
+            level = selector.dim(self.pending) # Then they wait no more, and the others move up
+            self.shift(((level == m) | (level == 2*m))*everyone, {self.sim.dim_index(self.pending):0})
+            self.move_up(self.pending, list(range(1, m)) + (list(range(m + 1, 2*m)) if negatives else []))
+            return
+        due = (self.ti_result <= self.sim.ti).uids
+        if len(due):
+            positive = self.result[due]
+            self.ti_result[due] = np.nan
+            self.report(self.selector.to_selection(due[positive]), self.selector.to_selection(due[~positive]))
+        return
+
+    def report(self, pos, neg):
+        """ Count the diagnoses, and pass the people with each result to its follow-up """
+        self.tally('diagnosed', pos)
+        before = None if self.selector.abm else self.eng.state_counts()
+        for followup,sel in [(self.on_positive, pos), (self.on_negative, neg)]:
+            if before is not None and followup is not None: # After the other follow-up has moved some people (e.g. cured people into R)
+                sel = self.same_people(sel, before)
+            if isinstance(followup, Delivery):
+                followup.receive(sel)
+            elif followup is not None:
+                followup(self.sim, self.uids(sel))
+        return
+
+    def update_results(self):
+        """ The coverage of what was delivered in the step, at the time point it was delivered: the start of the step """
+        super().update_results()
+        res = self.results
+        ti = self.sim.ti - 1
+        if ti < 0:
+            return
+        res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0
+        if getattr(res.coverage, 'strata', None) is not None:
+            res.coverage.strata[ti] = np.divide(res.delivered.strata[ti], res.eligible.strata[ti], out=np.zeros(self.sim.n_groups), where=res.eligible.strata[ti]>0)
+        return
+
+    def describe(self):
+        """ A line saying what is delivered and how """
+        what = 'transfer' if self.product is None else self.product.describe()
+        how = 'follow-up' if self.triggered else 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else 'on an event' if self.on is not None else 'routine (each person is offered it once, when first eligible)'
+        dims = [strat.name for strat in self.dims(getattr(self, 'sim', None))]
+        added = f'; adds {sc.strjoin(dims)} as {"a property" if len(dims) == 1 else "properties"} of people' if dims else ''
+        return f'{self.name}: {what}; delivery {how}{added}'
+
+    def to_json(self):
+        out = super().to_json()
+        out.pop('pars', None)
+        out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=self.move, disease=self.disease)
+        for key in delivery_keys + ['on_positive', 'on_negative']:
+            val = getattr(self, 'rounds' if key in ['years', 'dates'] else key)
+            if key == 'dates' or val is None or (key == 'years' and not val):
+                continue
+            out[key] = val if sc.isnumber(val) else val.name if isinstance(val, Delivery) else str(getattr(val, '__name__', val))
+        return out
+
+
+class vaccinate(Delivery):
+    """
+    Deliver a vaccine; see `ss.Delivery` for the arguments
+
+    Examples:
+        ```python
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        vaccine = ss.Vaccine(efficacy=0.85)
+        campaign = ss.vaccinate(vaccine, coverage=0.7, years=[20, 40])
+        sim = ss.Sim(sir, interventions=campaign, stop=100).run()
+        ```
+    """
+    kind = ss.Vaccine
+
+
+class treat(Delivery):
+    """
+    Deliver a treatment; see `ss.Delivery` for the arguments
+
+    Examples:
+        ```python
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        drug = ss.Treatment(efficacy=0.95)
+        treatment = ss.treat(drug, coverage=0.5, interval=7)
+        sim = ss.Sim(sir, interventions=treatment, stop=100).run()
+        ```
+    """
+    kind = ss.Treatment
+
+
+class screen(Delivery):
+    """
+    Deliver a test, and act on the results; see `ss.Delivery` for the arguments
+
+    The number of positive results on each step is the result `diagnosed`.
+
+    Examples:
+        ```python
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        test = ss.Test(sensitivity=0.9, specificity=0.98)
+        screening = ss.screen(test, coverage=0.4, interval=7, on_positive=ss.treat(ss.Treatment(efficacy=0.95), coverage=0.8))
+        sim = ss.Sim(sir, interventions=screening, stop=100).run()
+        ```
+    """
+    kind = ss.Test

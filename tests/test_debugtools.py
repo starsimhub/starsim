@@ -42,7 +42,7 @@ def test_diagnostics_rvs():
 
     rvs = sim.diagnostics.rvs
     key = 'diseases_sis_trans_rng_dists_0' # Should be unique every time
-    hashes = [entry[key].hash for entry in rvs.values()]
+    hashes = [entry[key].hash for entry in rvs.values() if key in entry] # Not at the start, where there is no step
     assert len(hashes) and len(hashes) == len(set(hashes)) # Should be non-empty and unique
     return rvs
 

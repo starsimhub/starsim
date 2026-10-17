@@ -1,6 +1,8 @@
 """
 Define array-handling classes, including agent states
 """
+import os
+import sys
 import itertools
 import numbers
 import numpy as np
@@ -48,6 +50,26 @@ def nb_true(auids, vals, want):
         out[m] = auids[k] # Written every iteration (branchless); only kept if m advances
         m += (vals[k] != 0) == want
     return out[:m]
+
+@nb.jit(cache=True)
+def nb_true_raw(auids, raw, want):
+    """ As `nb_true()`, reading each agent's value from the full array, so the values of the active agents are not gathered first """
+    n = auids.shape[0]
+    out = np.empty(n, dtype=auids.dtype)
+    m = 0
+    for k in range(n):
+        uid = auids[k]
+        out[m] = uid
+        m += (raw[uid] != 0) == want
+    return out[:m]
+
+@nb.jit(cache=True)
+def nb_count(auids, raw):
+    """ The number of active agents whose value is truthy (as `np.count_nonzero()`), without gathering the values first """
+    m = 0
+    for k in range(auids.shape[0]):
+        m += raw[auids[k]] != 0
+    return m
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -428,6 +450,8 @@ class Arr(BaseArr):
         Returns:
             A BoolArr with the result of the operation.
         """
+        if not self.initialized and not inplace: # Before the sim exists, this builds a lazy condition instead: see ss.Cond
+            return ss.conditions.lazy(op, self, other)
         self_raw = self.raw # Always size N
         both_raw = True # Assume this by default
         if isinstance(other, Arr):
@@ -635,6 +659,9 @@ class Arr(BaseArr):
 
     def count(self, axis=None):
         """ Count the number of nonzero (truthy) values among active agents (for 2D arrays, use `axis=0` to count each column) """
+        auids = self.auids
+        if axis is None and self.raw.ndim == 1 and auids.size >= numba_indexing and len(self.raw) != auids.size:
+            return int(nb_count(auids.view(np.ndarray), self.raw))
         return np.count_nonzero(self.values, axis=axis)
 
     @property
@@ -827,20 +854,18 @@ class Arr(BaseArr):
     def true(self):
         """ Efficiently convert truthy values to UIDs """
         if self.ndim > 1: self._uids_error()
-        vals = self.values
         auids = self.auids
-        if vals.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
-            return uids(nb_true(auids.view(np.ndarray), vals, True))
-        return auids[vals.astype(bool)]
+        if auids.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
+            return uids(nb_true_raw(auids.view(np.ndarray), self.raw, True))
+        return auids[self.values.astype(bool)]
 
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
         if self.ndim > 1: self._uids_error()
-        vals = self.values
         auids = self.auids
-        if vals.size >= numba_indexing:
-            return uids(nb_true(auids.view(np.ndarray), vals, False))
-        return auids[~vals.astype(bool)]
+        if auids.size >= numba_indexing:
+            return uids(nb_true_raw(auids.view(np.ndarray), self.raw, False))
+        return auids[~self.values.astype(bool)]
 
     def _uids_error(self):
         errormsg = f'Cannot convert 2D array "{self.name}" to UIDs; use e.g. arr.col(v).uids instead'
@@ -884,6 +909,53 @@ class FloatArr(Arr):
     """
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=np.nan, **kwargs) # Do not allow dtype or nan to be overwritten
+        return
+
+
+class ModifiableArr(FloatArr):
+    """
+    A float array that modifiers act on: a declared disease's `rel_sus` and `rel_trans`, as agents
+
+    Reading it gives the base values, which a modifier never changes; `.effective` gives
+    the values with the modifiers that are active now applied, which is what the model
+    uses. With `ss.Sim(track_writes=True)`, it records which module assigned it, for
+    `sim.what_modifies()`.
+    """
+    engine = None # The engine that applies the modifiers; set by it
+    writes = None # For each module seen assigning it: [values assigned, the last step, where]; None if not tracked
+
+    @property
+    def effective(self):
+        """ The values with the modifiers that are active now applied """
+        mult = 1.0 if self.engine is None else self.engine.mult_raw(self.name)
+        return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if self.writes is not None:
+            self.record(key)
+        return
+
+    def _math(self, op, other=None, inplace=False, reverse=False):
+        out = super()._math(op, other, inplace=inplace, reverse=reverse)
+        if inplace and self.writes is not None:
+            self.record(self.auids)
+        return out
+
+    def record(self, key):
+        """ Record the module whose code assigned the values """
+        frame = sys._getframe(2)
+        while frame is not None and not isinstance(frame.f_locals.get('self'), ss.Module):
+            frame = frame.f_back
+        if frame is None:
+            writer, where = 'code outside a module', ''
+        else:
+            writer = f'{type(frame.f_locals["self"]).__name__}.{frame.f_code.co_name}()'
+            where = f'{os.path.basename(frame.f_code.co_filename)}:{frame.f_lineno}'
+        n = np.size(self.raw[key])
+        entry = self.writes.setdefault(writer, [0, None, where])
+        entry[0] += n
+        entry[1] = None if self.engine is None else self.engine.sim.ti
         return
 
 
@@ -957,6 +1029,8 @@ class BoolArr(Arr):
 
     def __invert__(self):
         """ Bitwise NOT """
+        if not self.initialized:
+            return ss.conditions.lazy('~', self)
         return self.asnew(~self.raw, cls=BoolArr, copy=False)
 
     # For BoolArr instances implement true in-place operators that reuse the memory from the underlying array

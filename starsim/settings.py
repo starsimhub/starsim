@@ -4,6 +4,7 @@ All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
 """
+import os
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -132,6 +133,9 @@ class Options(sc.objdict):
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
+
+        optdesc.jax_cache = 'The folder where JAX keeps what it compiles (e.g. for a posterior from NUTS), so that it need not compile it again in a later session; "" for none. Set before Starsim first uses JAX'
+        options.jax_cache = sc.parse_env('STARSIM_JAX_CACHE', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'), str)
 
         return optdesc, options
 

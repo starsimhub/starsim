@@ -343,7 +343,7 @@ class MultiSim:
         if not self._has_orig_sim(): # Don't overwrite the original if reducing again
             self.orig_base_sim = self.base_sim
         self.base_sim = reduced_sim
-        self.results = ss.Results('MultiSim').merge(rflat) # Create the dictionary and merge it
+        self.results = MultiResults('MultiSim', nested=getattr(self.results, 'nested', None)).merge(rflat) # Create the dictionary and merge it
         self.summary = reduced_sim.summary
         self.which = 'reduced'
 
@@ -517,6 +517,71 @@ class MultiSim:
             print(f'{timestr} for each sim:')
             print(df)
             return
+
+    def diff(self, baseline):
+        """
+        The difference of each scenario from a baseline, for every result they share, run by run
+
+        For sims run with `ss.parallel(baseline=sim1, vaccine=sim2)`. Returns a dict by
+        scenario, then module, then result; each entry has one row per run.
+
+        Args:
+            baseline (str): the label of the baseline scenario
+
+        Examples:
+            ```python
+            sims = ss.parallel(baseline=base, vaccine=vx, n_runs=10)
+            averted = -sims.diff('baseline').vaccine.sir.cum_infection.median()[-1]
+            ```
+        """
+        if not isinstance(self.results, MultiResults):
+            errormsg = 'msim.diff() is only available for sims with declared states and transitions, run with ss.parallel()'
+            raise ValueError(errormsg)
+        return self.results.diff(baseline)
+
+    def extinction(self, output=False):
+        """
+        How often each declared disease died out: the share of runs in which nobody was infected by the end, and the median time it happened
+
+        Reported for each scenario, if there are several. Runs that start with nobody infected are not counted as dying out.
+
+        Args:
+            output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
+
+        Examples:
+            ```python
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2))
+            msim = ss.Sim(sir, total_pop=200, solver='gillespie', unit='day', stop=100).run(n_runs=100)
+            msim.extinction() # e.g. "sir: died out in 41% of 100 runs (median time 6 days)"
+            ```
+        """
+        if not isinstance(self.results, MultiResults):
+            errormsg = 'msim.extinction() is only available for sims with declared states and transitions'
+            raise ValueError(errormsg)
+        base = self.base_sim if isinstance(self.base_sim, ss.Sim) else self.sims[0]
+        rows = []
+        for dis in getattr(base, 'declared', []):
+            infected = [s for s in dis.graph.infected if s.people]
+            if not infected or dis.name not in self.results.nested:
+                continue
+            res = self.results.nested[dis.name]
+            first = res[f'n_{infected[0].name}']
+            labels = first.labels if first.labels is not None and len(set(first.labels)) > 1 else [None]*len(first.values)
+            n = sum(res[f'n_{s.name}'].values for s in infected) # Runs by steps
+            for label in dict.fromkeys(labels):
+                runs = n[[i for i,lab in enumerate(labels) if lab == label]]
+                over = (runs[:, -1] <= 0) & (runs[:, 0] > 0)
+                times = [first.timevec[len(row) - np.argmax(row[::-1] > 0)] for row in runs[over]] if over.any() else [] # The step after the last with anyone infected
+                rows.append(dict(disease=dis.name, scenario=label, runs=len(runs), share=over.mean(), median_time=float(np.median(times)) if times else None))
+        df = sc.dataframe(rows)
+        if output:
+            return df
+        for row in rows:
+            scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
+            unit = f' {base.unit}s' if getattr(base, 'unit', None) else ''
+            when = f' (median time {row["median_time"]:n}{unit})' if row['median_time'] is not None else ''
+            print(f'{row["disease"]}{scenario}: died out in {row["share"]:.0%} of {row["runs"]} runs{when}')
+        return
 
     def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):
         """
@@ -863,17 +928,259 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
     return sims
 
 
-def parallel(*args, **kwargs):
+class MultiResult(sc.prettyobj):
+    """
+    One result across the runs of a MultiSim: the same result, with a run dimension
+
+    Args:
+        name (str): the name of the result
+        values (array): the values, with one row per run
+        timevec (array): the time points
+        labels (list): the label (scenario) of each run
+        label (str): a human-readable name
+    """
+    def __init__(self, name, values, timevec, labels=None, label=None, strata=None, like=None):
+        self.name = name
+        self.label = label or name
+        self.values = np.asarray(values)
+        self.timevec = timevec
+        self.labels = labels
+        self.strata = strata # For a stratified result: the value of each group, as runs by steps by groups
+        self.strats = getattr(like, 'strats', None) # The stratifications, and the dimensions this result has, from a result of one run
+        self.dims = getattr(like, 'dims', None)
+        return
+
+    def __len__(self):
+        return len(self.values)
+
+    def quantiles(self, q=(0.025, 0.5, 0.975)):
+        """ One series per quantile, over the runs """
+        return np.quantile(self.values, q, axis=0)
+
+    def mean(self):
+        return self.values.mean(axis=0)
+
+    def median(self):
+        return np.median(self.values, axis=0)
+
+    def select(self, run=None, scenario=None, **dims):
+        """
+        Select one run by position, the runs of one scenario by its label, or groups of a stratified result
+
+        Args:
+            run (int): the position of one run; returns its values
+            scenario (str): the label of a scenario; returns its runs
+            dims (dict): for a stratified result, the dimension and the level (or levels) to keep, summing over the rest, as for `ss.Result.select()`
+
+        Examples:
+            ```python
+            msim = sim.run(n_runs=100)
+            msim.results.sir.n_I.select(age='0-4').quantiles()
+            ```
+        """
+        if dims:
+            keep = self._keep(dims)
+            out = MultiResult(self.name, self.strata[:, :, keep].sum(axis=-1), self.timevec, labels=self.labels,
+                              label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})', strata=self.strata[:, :, keep], like=self)
+            if run is not None or scenario is not None:
+                return out.select(run=run, scenario=scenario)
+            return out
+        if run is not None:
+            return self.values[run]
+        keep = [i for i,label in enumerate(self.labels) if label == scenario]
+        if not keep:
+            errormsg = f'No runs are labelled "{scenario}"; the labels are {sorted(set(self.labels))}'
+            raise KeyError(errormsg)
+        return MultiResult(self.name, self.values[keep], self.timevec, labels=[self.labels[i] for i in keep], label=self.label)
+
+    def by(self, dim):
+        """ Split a stratified result by one dimension, summing over the rest: a dict of results, one per level """
+        strat = self._strat(dim)
+        return sc.objdict({str(label):self.select(**{dim:label}) for label in strat.labels})
+
+    def _strat(self, dim):
+        if self.strata is None:
+            errormsg = f'The result "{self.name}" is not kept by group across the runs, so there is nothing to select'
+            raise ValueError(errormsg)
+        names = self.dims or [strat.name for strat in self.strats]
+        if dim not in names:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
+            raise KeyError(errormsg)
+        return [strat for strat in self.strats if strat.name == dim][0]
+
+    def _keep(self, dims):
+        """ Which groups have the given levels """
+        coords = self.strats[0].sim_coords
+        names = [strat.name for strat in self.strats]
+        keep = np.ones(self.strata.shape[-1], dtype=bool)
+        for dim,levels in dims.items():
+            strat = self._strat(dim)
+            inds = [strat.index(level) for level in sc.tolist(levels)]
+            keep &= np.isin(coords[:, names.index(dim)], inds)
+        return keep
+
+    def diff(self, baseline):
+        """
+        The difference of each other scenario from the baseline, run by run (the runs are paired by position)
+
+        Args:
+            baseline (str): the label of the baseline scenario
+
+        Returns a dict of MultiResults, one per scenario other than the baseline.
+        """
+        base = self.select(scenario=baseline).values
+        out = sc.objdict()
+        for label in dict.fromkeys(self.labels):
+            if label != baseline:
+                other = self.select(scenario=label)
+                if other.values.shape != base.shape:
+                    errormsg = f'Cannot compare "{label}" with "{baseline}": they have {len(other.values)} and {len(base)} runs'
+                    raise ValueError(errormsg)
+                out[label] = MultiResult(self.name, other.values - base, self.timevec, labels=other.labels, label=f'{self.label}: difference from {baseline}')
+        return out
+
+    def plot(self, lines=False, ax=None, **kwargs):
+        """ Plot the median and a 95% interval, or every run if `lines=True` """
+        import matplotlib.pyplot as plt
+        ax = ax or plt.gca()
+        if lines:
+            ax.plot(self.timevec, self.values.T, alpha=0.3, **kwargs)
+        else:
+            low, mid, high = self.quantiles()
+            ax.fill_between(self.timevec, low, high, alpha=0.3)
+            ax.plot(self.timevec, mid, **kwargs)
+        ax.set_title(self.label)
+        return ax
+
+
+class MultiResults(ss.Results):
+    """ The reduced results of a MultiSim (as `ss.Results`), which also gives each result across the runs: `msim.results.sir.n_I` """
+    def __init__(self, *args, nested=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        object.__setattr__(self, 'nested', nested or {})
+        for name,modres in self.nested.items(): # Each module's results across the runs, as entries like those of sim.results
+            self[name] = modres
+        return
+
+    def diff(self, baseline):
+        """ The difference of every result from the baseline scenario: a dict by scenario, then module, then result """
+        out = sc.objdict()
+        for modname,modres in self.nested.items():
+            for key,res in modres.items():
+                if baseline in res.labels:
+                    for label,diff in res.diff(baseline).items():
+                        out.setdefault(label, sc.objdict()).setdefault(modname, sc.objdict())[key] = diff
+        return out
+
+    @staticmethod
+    def from_sims(sims):
+        """ Collect each result of each module across the sims, as one MultiResult with a run dimension """
+        nested = sc.objdict()
+        labels = [sim.label for sim in sims]
+        first = sims[0]
+        for mod in first.modules:
+            modres = sc.objdict()
+            for key,res in mod.results.items():
+                if isinstance(res, ss.Result) and np.ndim(res.values) == 1:
+                    found = [sim.results[mod.name][key] for sim in sims if mod.name in sim.results and key in sim.results[mod.name]]
+                    values = [np.asarray(r.values) for r in found]
+                    if len(values) == len(sims) and len({len(v) for v in values}) == 1:
+                        strata = [getattr(r, 'strata', None) for r in found]
+                        strata = np.stack(strata) if all(x is not None for x in strata) and len({x.shape for x in strata}) == 1 else None
+                        modres[key] = MultiResult(key, values, res.timevec, labels=labels, label=res.label, strata=strata, like=res)
+            if len(modres):
+                nested[mod.name] = modres
+        return MultiResults('MultiSim', nested=nested)
+
+
+def par_sets(pars):
+    """ A list of sets of parameter values, from a list of dicts or a dict of lists (one value per set) """
+    if pars is None:
+        return [None]
+    if isinstance(pars, dict):
+        lens = {len(sc.tolist(v)) for v in pars.values()}
+        if len(lens) != 1:
+            errormsg = f'Each parameter in pars= needs the same number of values, not {sc.strjoin(sorted(lens))}'
+            raise ValueError(errormsg)
+        n = lens.pop()
+        return [{key:sc.tolist(vals)[i] for key,vals in pars.items()} for i in range(n)]
+    return [dict(p) for p in pars]
+
+
+def restart_runs(sims, n_runs, pars=None):
+    """
+    Run each sim a number of times, each with its own seed, by building it once and restarting it
+
+    Only for sims that are nothing but compartments (see `ss.Sim.restart()`), where this
+    is many times faster than running copies. Returns None if any of the sims is not.
+    The MultiSim that comes back has the results of every run, and one sim for each
+    that was given, as it was after its last run.
+
+    With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times. A sim
+    run with `integrator='jax'` takes all of its runs in one call to JAX (see `ss.gradients`).
+    """
+    if not all(hasattr(sim, 'inputs') and not sim.initialized for sim in sims):
+        return None
+    runners = []
+    for sim in sims:
+        runner = sim.new(rand_seed=sim.pars.rand_seed).init() # The seed as it is now, which may have been set since the sim was made
+        runner.label = sim.label
+        if not runner.kernel_only():
+            return None
+        runners.append(runner)
+    sets = par_sets(pars)
+    labels = [sim.label for sim in runners for p in sets for i in range(n_runs)]
+    values = sc.ddict(list)
+    groups = sc.ddict(list)
+    for sim in runners:
+        seed = sim.pars.rand_seed
+        if pars is not None and sim.jax and ss.gradients.reason(sim) is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+            outs = list(ss.gradients.run_sets(sim, [p for p in sets for i in range(n_runs)]).items())
+        else:
+            outs = []
+            for p in sets: # All the runs of each module with each set of values are one call to the kernels
+                if p is not None:
+                    sim.restart(pars=p)
+                outs += [(mod.name, mod.engine.run_many(seed + np.arange(n_runs))) for mod in sim.declared]
+        for modname,out in list(outs):
+            outs += list(out.pop('deliveries', {}).items()) # The results of the deliveries the kernels took, as those of modules of their own
+        for modname,out in outs:
+            for key,vals in out.pop('groups').items():
+                groups[modname, key].append(vals)
+            for key,vals in out.items():
+                values[modname, key].append(vals)
+        sim.restart(pars=sets[-1], rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
+    nested = sc.objdict()
+    for (modname,key),vals in values.items():
+        res = next(sim.results[modname][key] for sim in runners if modname in sim.results) # A delivery may be in some of the sims only
+        vals = np.concatenate(vals)
+        if len(vals) == len(labels): # A result that every sim has
+            strata = groups.get((modname, key))
+            strata = np.concatenate(strata) if strata is not None else None
+            strata = strata if strata is not None and len(strata) == len(labels) else None
+            nested.setdefault(modname, sc.objdict())[key] = MultiResult(key, vals, res.timevec, labels=labels, label=res.label, strata=strata, like=res)
+    msim = MultiSim(sims=runners)
+    msim.results = MultiResults('MultiSim', nested=nested)
+    if pars is not None:
+        msim.run_pars = sc.dataframe([p for sim in runners for p in sets for i in range(n_runs)]) # The values of each run
+    return msim
+
+
+def parallel(*args, n_runs=None, pars=None, **kwargs):
     """
     A shortcut to `ss.MultiSim()`, allowing the quick running of multiple simulations
     at once.
 
     Args:
         args (list): The simulations to run
-        kwargs (dict): passed to multi_run()
+        n_runs (int): if provided, run each sim this many times, each with its own seed
+        pars (dict/list): sets of values of model parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), and `msim.run_pars` has the values of each run
+        kwargs (dict): sims passed as keywords are labelled with the keyword, e.g. `ss.parallel(baseline=s1, vaccine=s2)`;
+            everything else is passed to multi_run()
 
     Returns:
-        A run MultiSim object.
+        A run MultiSim object. For sims with declared states and transitions, each result
+        is also available across the runs, e.g. `msim.results.sir.n_I.quantiles([0.025, 0.5, 0.975])`.
 
     Examples:
         ```python
@@ -881,9 +1188,41 @@ def parallel(*args, **kwargs):
         s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')
         ss.parallel(s1, s2).plot()
         msim = ss.parallel([s1, s2], shrink=False)
+        msim = ss.parallel(s1, n_runs=10) # Ten runs of one sim
+        msim = ss.parallel(sim, pars=dict(beta=np.linspace(0.1, 0.5, 100))) # One run with each value of beta (for a sim with declared states and transitions)
         ```
     """
     sims = sc.mergelists(*args)
+    for key in list(kwargs.keys()): # Named sims
+        if isinstance(kwargs[key], ss.Sim):
+            sim = kwargs.pop(key)
+            sim.label = key
+            sims.append(sim)
+    if pars is not None:
+        n_runs = sc.ifelse(n_runs, 1)
+    serial = {'verbose', 'n_cpus', 'parallel'} # Options of running in parallel, which don't matter to runs restarted in this process
+    if n_runs is not None and set(kwargs) <= serial: # Built once and restarted for each run, where the sims allow, which is many times faster
+        msim = restart_runs(sims, n_runs, pars=pars)
+        if msim is not None:
+            return msim
+    if pars is not None: # Otherwise, a copy of each sim for each set of values
+        sets = par_sets(pars)
+        run_pars = sc.dataframe([p for sim in sims for p in sets for i in range(n_runs)])
+        sims = [sim.new(pars=p, label=sim.label) for sim in sims for p in sets]
+    if n_runs is not None:
+        replicates = []
+        for sim in sims:
+            for i in range(n_runs):
+                new = sim.copy() if sim.initialized or not hasattr(sim, 'inputs') else sim.new()
+                new.label = sim.label
+                new.pars.rand_seed = sim.pars.rand_seed + i
+                replicates.append(new)
+        sims = replicates
+        kwargs.setdefault('reseed', False) # The seeds have just been set
     msim = MultiSim(sims=sims, **kwargs)
     msim.run()
+    if pars is not None:
+        msim.run_pars = run_pars
+    if any(getattr(sim, 'declared', None) for sim in msim.sims):
+        msim.results = MultiResults.from_sims(msim.sims)
     return msim

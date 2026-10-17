@@ -35,6 +35,29 @@ class Pars(sc.objdict):
         return
 
     _locked = False # Whether new keys can be added; set by lock()
+    _bare = None # The parameters set to a bare number, with the unit it is read in: see bare_units()
+
+    def note_bare(self, key, old, new):
+        """ Note that a parameter with a unit (or a distribution of values with one) was set to a bare number, which keeps that unit """
+        typed = [old] if isinstance(old, ss.TimePar) else [v for v in old.pars.values() if isinstance(v, ss.TimePar)]
+        if typed and typed[0].base is not None and np.any(np.asarray(sc.tolist(new), dtype=float) != 0): # Zero is the same in any unit
+            object.__setattr__(self, '_bare', (self._bare or {}) | {key:typed[0].base})
+        return
+
+    def forget_bare(self, keys):
+        """ Forget the notes of `note_bare()` for these keys: given again, or a module's own defaults """
+        if self._bare:
+            object.__setattr__(self, '_bare', {k:v for k,v in self._bare.items() if k not in keys})
+        return
+
+    def bare_units(self, unit, label):
+        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.MFNet(duration=5) in a sim in days """
+        for key,base in (self._bare or {}).items():
+            if base != unit:
+                runs = f'runs in {unit}' if unit else 'counts time in timesteps'
+                ss.warn(f'{label}: {key} was given as a number with no unit, so it is read in {base} (the unit of its default), but the sim {runs}. '
+                        f'Give it a unit to say which is meant, e.g. ss.{base}(...)' + (f' or ss.{unit}(...).' if unit else '.'))
+        return
 
     def lock(self, locked=True):
         """
@@ -80,6 +103,7 @@ class Pars(sc.objdict):
             self.check_key_mismatch(pars)
 
         # Perform the update
+        self.forget_bare(pars) # Noted again below if still a bare number
         for key,new in pars.items():
             if key not in self.keys(): # It's a new parameter and create=True: update directly
                 super().__setitem__(key, new) # Skip the check for locked parameters
@@ -146,16 +170,22 @@ class Pars(sc.objdict):
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif sc.isnumber(new):
             old.value = new
+            self.note_bare(key, old, new)
 
         # It's array-like; set the value, but convert first to handle lists etc
         elif sc.checktype(new, 'arraylike'):
             old.value = sc.toarray(new)
+            self.note_bare(key, old, new)
 
         # It's a dict, e.g. beta for different networks, just set it directly and trust the user
         elif isinstance(new, dict):
             # for key,val in new.items(): # TODO: should we include validation like this?
             #     if sc.isnumber(val):
             #         new[key] = old.__class__(val)
+            self[key] = new
+
+        # It's a distribution, e.g. a duration that varies; replace it
+        elif isinstance(new, ss.Dist):
             self[key] = new
 
         # Give up
@@ -179,10 +209,14 @@ class Pars(sc.objdict):
         # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
         elif isinstance(new, (Number, ss.dur, ss.Rate)):
             old.set(new)
+            if isinstance(new, Number):
+                self.note_bare(key, old, new)
 
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
+            if all(isinstance(v, Number) for v in new):
+                self.note_bare(key, old, new)
 
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
@@ -284,6 +318,15 @@ class SimPars(Pars):
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
 
+        # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
+        self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
+        self.solver     = 'auto' # 'auto', 'ode', 'gillespie', 'tau', 'binomial', 'sde', 'abm', or 'stochastic'
+        self.approx     = None   # None prints a note for each approximation; True hides the note; False makes it an error
+        self.integrator = None   # The ODE integration scheme: 'rk4' (the default), 'euler', or a scipy.integrate.solve_ivp method such as 'RK45' or 'LSODA'
+        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over by more than a quarter in one), and the 'binomial' and 'sde' solvers (default: one for each stage of the dwell time with the most stages for 'binomial', and 1 for 'sde')
+        self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
+        self.track_writes = False # Whether the arrays that modifiers act on record which module assigns them, for sim.what_modifies() (agents only)
+
         # Demographic parameters
         self.birth_rate = None
         self.death_rate = None
@@ -341,7 +384,10 @@ class SimPars(Pars):
 
     def validate_agents(self):
         """ Check that n_agents is supplied and convert to an integer """
-        if self.people is not None:
+        named = getattr(self.people, 'named', None)
+        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see sim.init_named_people()
+            self.n_agents = int(self.n_agents)
+        elif self.people is not None:
             len_people = len(self.people)
             if (len_people != self.n_agents) and not self.is_default('n_agents'):
                 errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'
@@ -440,7 +486,8 @@ class SimPars(Pars):
         if name in names:
             if mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
-                ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
+                if not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
+                    ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
             else:
                 errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
                 raise ValueError(errormsg)
@@ -506,7 +553,17 @@ class SimPars(Pars):
             moddictvals = ssmoddict.values()
             expected_cls = modmap[modkey]
 
-            if isinstance(self[modkey], list):
+            given = self[modkey]
+            if isinstance(given, list) and len(given) == 1 and isinstance(given[0], dict): # A dict, wrapped in a list on the way in
+                given = given[0]
+            if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
+                modlist = []
+                for name,mod in given.items():
+                    if mod._default_name:
+                        mod.name = mod.label = name
+                        mod._default_name = False
+                    modlist.append(mod)
+            elif isinstance(self[modkey], list):
                 modlist = self[modkey]
             elif isinstance(self[modkey], ss.ndict):
                 # If it is an ndict, then assume the keys specify names the values represent modules
@@ -571,3 +628,34 @@ class SimPars(Pars):
                 out.append((modkey, mod))
 
         return out
+
+
+class Requires(sc.prettyobj):
+    """
+    One item of the data a module needs, for `sim.requires()`
+
+    This is metadata only: it says what to supply, and is never enforced.
+
+    Args:
+        name (str): the name of the item; a parameter or attribute of the module with this name supplies it
+        shape (str): its shape, e.g. 'age x age'
+        source (str): where the data usually come from
+        doc (str): a description
+        default (any): the value used if none is supplied
+
+    Examples:
+        ```python
+        class MyNetwork(ss.Network):
+            requires = [
+                ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
+                ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
+            ]
+        ```
+    """
+    def __init__(self, name, shape=None, source=None, doc=None, default=None):
+        self.name = name
+        self.shape = shape
+        self.source = source
+        self.doc = doc
+        self.default = default
+        return

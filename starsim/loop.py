@@ -58,6 +58,10 @@ class Loop:
         14. all modules:      finish_step()    # Do any final tidying
         15. people:           finish_step()    # Clean up dead agents
         16. sim:              finish_step()    # Increment the timestep
+
+    The step at time point ti goes from time point ti-1 to ti, and its results are recorded at ti.
+    At the first time point there is no step: only the start functions, the results (of the start),
+    the analyzers, and the modules' and sim's finish functions are called (see `_before_first_step()`).
     """
     def __init__(self, sim):
         self.sim = sim
@@ -65,7 +69,7 @@ class Loop:
         self.func_list = []
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
-        self.plan = None
+        self._plan = None # Made when it is first needed: see the plan property
         self.insertions = []
         self.index = 0 # The next function to execute
         self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
@@ -79,9 +83,20 @@ class Loop:
         """ Parse the sim into the integration plan """
         self.collect_funcs()
         self.collect_abs_tvecs()
-        self.make_plan()
+        self._plan = None
         self.initialized = True
         return
+
+    @property
+    def plan(self):
+        """ The list of `LoopEntry` events in execution order; made the first time it is needed, since a sim run by the kernels in one call never needs it """
+        if self._plan is None and self.initialized:
+            self.make_plan()
+        return self._plan
+
+    @plan.setter
+    def plan(self, value):
+        self._plan = value
 
     def __len__(self):
         if self.initialized:
@@ -188,8 +203,10 @@ class Loop:
                 self += mod.update_results
 
         # Apply analyzers
+        self.analyzer_names = set()
         for ana in sim.analyzers():
             self += ana.step
+            self.analyzer_names.add(ana.name)
 
         # Clean up dead agents, increment the time index, and perform other housekeeping tasks
         for mod in sim.modules:
@@ -254,6 +271,11 @@ class Loop:
             self.plan = self._make_plan_uniform()
         else:
             self.plan = self._make_plan_sorted()
+        self.plan = [entry for entry in self.plan if not self._before_first_step(entry)]
+        at_start = self._at_start_funcs()
+        for entry in self.plan:
+            if entry.label in at_start:
+                entry.func = at_start[entry.label]
 
         # Replay any user insertions tied to the current loop definition
         for insertion in self.insertions:
@@ -335,6 +357,43 @@ class Loop:
         self._warn_near_identical(times_num[order])
         return plan
 
+    def _at_start_funcs(self):
+        """
+        The step functions that run at the time of the start of the step (see `ss.solvers.interval()`): those of
+        declared models (with any code a subclass adds to them) and of deliveries, by label
+        """
+        def wrap(func, mod):
+            def at_start():
+                with ss.solvers.interval(mod):
+                    func()
+                return
+            return at_start
+        out = {}
+        for mod in self.sim.modules:
+            if isinstance(mod, ss.Disease) and mod.graph is not None:
+                names = ['step_state', 'step']
+            elif isinstance(mod, ss.Delivery):
+                names = ['step']
+            else:
+                continue
+            for name in names:
+                out[f'{mod.name}.{name}'] = wrap(getattr(mod, name), mod)
+        return out
+
+    def _before_first_step(self, entry):
+        """
+        Whether an entry is skipped because it is at the first time point: the step at time point ti goes from ti-1 to ti, so at the first there is no step, and only the results of the start are recorded
+
+        So a result at index ti is the state at time point ti (the start, at 0), and a flow at ti is the number during the step that ends there.
+        """
+        if entry.ti != 0:
+            return False
+        if entry.func_name in ['start_step', 'update_results'] or entry.label in ['sim.finish_step'] or entry.module in self.analyzer_names:
+            return False
+        if entry.func_name == 'finish_step' and entry.module not in ['sim', self.sim.people.__class__.__name__.lower()]: # A module's finish_step advances its own time
+            return False
+        return True
+
     @staticmethod
     def _warn_near_identical(sorted_times):
         """ Warn if any consecutive plan times are close but not identical (a floating-point issue) """
@@ -394,8 +453,9 @@ class Loop:
             until = ss.date(until)
 
         # Loop over every function in the integration loop, e.g. disease.step()
-        while self.index < len(self.plan):
-            entry = self.plan[self.index]
+        plan = self.plan
+        while self.index < len(plan):
+            entry = plan[self.index]
             if verbose:
                 now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting
                 print(f'Running t={now}, step={self.index}, {entry.label}()')
@@ -431,6 +491,29 @@ class Loop:
         matches = np.asarray(matches)
         if matches.dtype == bool:
             matches = sc.findinds(matches)
+
+        # A module is moved: its step() runs at the matching place, on each timestep where there is one
+        if isinstance(func, ss.Module):
+            step_label = f'{func.name}.step'
+            own = {repr(entry.time):entry for entry in self.plan if entry.label == step_label}
+            if not own:
+                errormsg = f'Cannot move "{func.name}" in the loop, since its step() is not in the plan; the labels are {sc.strjoin(metadata.label.unique())}'
+                raise ValueError(errormsg)
+            moved = {repr(self.plan[m].time) for m in matches} & set(own.keys())
+            matches = set(matches.tolist())
+            plan = []
+            for i,entry in enumerate(self.plan):
+                key = repr(entry.time)
+                if entry.label == step_label and key in moved:
+                    continue
+                elif i in matches and key in moved:
+                    plan += [own[key], entry] if before else [entry, own[key]]
+                else:
+                    plan.append(entry)
+            self.plan = plan
+            self.df = None
+            self.cpu_df = None
+            return
 
         # Perform the insertion in reverse order
         name = func.__name__
@@ -468,7 +551,7 @@ class Loop:
         Note: the loop must be initialized (`sim.init()`) before you can call this.
 
         Args:
-            func (func): the function to insert; must take a single argument, `sim`
+            func (func/Module): the function to insert, which must take a single argument, `sim`; or a module of the sim, whose `step()` is moved there
             label (str): the label (module.name) of the function to match; see `sim.loop.to_df().label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match

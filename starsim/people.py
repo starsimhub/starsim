@@ -7,6 +7,7 @@ import sciris as sc
 import starsim as ss
 from pathlib import Path
 import matplotlib.pyplot as plt
+import numba as nb
 
 
 
@@ -25,6 +26,7 @@ class People:
         n_agents (int): the initial number of agents in the model
         age_data (dataframe): a dataframe of years and population sizes, if available
         extra_states (list): non-default states to initialize
+        p_female (float): the share of agents who are female
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
 
     Examples:
@@ -33,7 +35,7 @@ class People:
         ```
     """
 
-    def __init__(self, n_agents, age_data=None, extra_states=None, mock=False):
+    def __init__(self, n_agents, age_data=None, extra_states=None, p_female=0.5, mock=False):
         """ Initialize """
 
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
@@ -45,6 +47,7 @@ class People:
         self.version = ss.__version__  # Store version info
         self.initialized = False
         self.n_agents_init = n_agents
+        self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
 
         # Handle the four fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, AUIDs for tracking alive agents, and agents' parents
@@ -65,7 +68,7 @@ class People:
         states = [
             ss.BoolState('alive', default=True),  # Time index for death
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
-            ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
@@ -102,6 +105,14 @@ class People:
             errormsg = f'Cannot add state {state} since already added'
             raise ValueError(errormsg)
         return
+
+    def __getattr__(self, attr):
+        """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
+        missing = self.__dict__.get('_no_groups', [])
+        if attr in missing:
+            ss.error('E804', f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
+                             f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
+        raise AttributeError(f'People object has no attribute "{attr}"')
 
     def __getitem__(self, key):
         """
@@ -221,6 +232,8 @@ class People:
         """
         if age_data is None:
             dist = ss.uniform(low=0, high=60, name='Age distribution')
+        elif isinstance(age_data, ss.Dist): # A distribution of ages, used as is
+            dist = age_data
         else:
             # Try loading from file
             if isinstance(age_data, str) or isinstance(age_data, Path):
@@ -236,6 +249,9 @@ class People:
             elif isinstance(age_data, pd.DataFrame):
                 age_bins = age_data['age'].values
                 age_props = age_data['value'].values
+            else:
+                errormsg = f'age_data must be a file, an array, a Series, a dataframe, or an ss.Dist, not {type(age_data)}'
+                raise TypeError(errormsg)
 
             # Convert to a histogram
             dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
@@ -448,7 +464,7 @@ class People:
     def update_post(self):
         """ Final updates at the very end of the timestep """
         sim = self.sim
-        if sim.pars.use_aging:
+        if sim.pars.use_aging and sim.solver == 'abm': # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
             self.age[self.alive.uids] += sim.t.dt_year
         return
 
@@ -523,8 +539,8 @@ class People:
             for network in self.sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
 
-            # Calculate the indices to keep
-            self.auids = self.auids[np.isin(self.auids, np.unique(uids), assume_unique=True, invert=True, kind='sort')]
+            # Keep the others, in order
+            self.auids = self.alive.true()
 
         return
 
@@ -533,9 +549,9 @@ class People:
         ti = self.sim.ti
         res = self.sim.results
         for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
-            res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
-        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-        res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
+            res[f'n_{state.name}'][ti] = getattr(self, state.name).count()
+        # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
+        res.new_deaths[ti], res.new_emigrants[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
@@ -704,6 +720,38 @@ class People:
         for key in self.states.keys():
             person[key] = self.states[key][ind]
         return person
+
+
+def people(place, year=None, n_agents=None, revision=None):
+    """
+    A named population: the size, age structure, and sex ratio of a country
+
+    The data are the UN World Population Prospects, bundled with `starsim_data`. The
+    sim takes its population size (`total_pop`) from them, unless it is given one, and
+    the split of an age stratification that is not given one, so a compartmental model
+    can use a named population as well as agents can. Where the population came from is
+    written in the model spec, so `ss.from_spec()` and `sim.to_code()` look it up again.
+
+    Args:
+        place (str): a country, by name or code ('Kenya', 'KE', 'KEN')
+        year (int): the year (default: the year the sim starts, if it has dates; otherwise the year of the WPP revision, e.g. 2024); years between the decadal values are interpolated
+        n_agents (int): the number of agents (default: the sim's); giving it makes the model agent-based, as `ss.People(n_agents)` does
+        revision (str): the WPP revision (default: the latest bundled)
+
+    Returns:
+        An `ss.People`, with `ppl.named` saying where it came from
+
+    **Examples**:
+
+        sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
+        ss.people('NG').named.total # The population of Nigeria in 2024
+    """
+    ages, female, male, ref = ss.named.population(place, year=year, revision=revision)
+    total = female + male
+    age_data = np.column_stack([np.append(ages, ages[-1] + 5), np.append(total, 0)]) # The last group is 100 and over
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=age_data, p_female=female.sum()/total.sum())
+    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
+    return ppl
 
 
 class Person(sc.objdict):
@@ -889,3 +937,16 @@ class Filter(sc.prettyobj):
         filtered.is_filtered = True
 
         return filtered
+
+
+@nb.jit(cache=True)
+def count_gone(auids, alive, ti_dead, ti_removed, ti):
+    """ The number of active agents who are no longer alive, because they died or left by step ti, in one pass """
+    deaths = 0
+    removed = 0
+    for k in range(auids.shape[0]):
+        uid = auids[k]
+        if not alive[uid]:
+            deaths += ti_dead[uid] <= ti
+            removed += ti_removed[uid] <= ti
+    return deaths, removed

@@ -3,4 +3,13 @@
 set -euo pipefail # Fail fast if needed
 
 quarto render --cache-refresh
-quarto publish gh-pages --no-render --no-prompt --no-browser
+
+# Publish the site as a single commit with no history, replacing the gh-pages
+# branch, so old copies of the rendered figures don't accumulate in the repo
+export GIT_INDEX_FILE="$(git rev-parse --absolute-git-dir)/index-gh-pages" # Temporary index, so the real one is untouched
+rm -f "$GIT_INDEX_FILE"
+touch _site/.nojekyll # Tell GitHub Pages not to run Jekyll
+git --work-tree=_site add --all --force
+commit=$(git commit-tree "$(git write-tree)" -m "Built site for gh-pages")
+git push --force origin "$commit:refs/heads/gh-pages"
+rm -f "$GIT_INDEX_FILE"

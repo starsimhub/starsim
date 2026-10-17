@@ -27,7 +27,9 @@ TimePar  # All time parameters
         └── freqperyear
 """
 import numbers
+import calendar
 import collections
+import functools as ft
 import matplotlib
 import datetime as dt
 import dateutil.relativedelta as drd
@@ -66,7 +68,9 @@ class DateArray(np.ndarray):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
             if unit is None:
-                if isinstance(arr[0], (ss.date, ss.dur)):
+                if not len(arr): # Nothing to tell the unit from, e.g. a range of dates that ends before it starts
+                    unit = ss.date
+                elif isinstance(arr[0], (ss.date, ss.dur)):
                     unit = type(arr[0]) # Get the unit from the input
                 elif isinstance(arr[0], (str, np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
                     arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
@@ -185,6 +189,10 @@ class DateArray(np.ndarray):
             die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
         """
         day_round = sc.ifelse(day_round, not(self.subdaily))
+        if day_round and self.unit is ss.years and len(self) and not inplace: # All at once
+            years = self.to_float(to_numpy=True)
+            if np.all(years >= 1):
+                return ss.date.from_array(years)
         try:
             vals = [ss.date(x, day_round=day_round, allow_zero=False) for x in self]
         except Exception as e:
@@ -279,6 +287,8 @@ class date(pd.Timestamp):
             arg = args[0]
             if arg is None:
                 return pd.Timestamp(None)
+            elif type(arg) is date: # Dates are immutable, so need no copy
+                return arg
             elif isinstance(arg, pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
@@ -380,9 +390,11 @@ class date(pd.Timestamp):
         elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
-            if day_round:
-                date = sc.yeartodate(year)
-                timestamp = pd.Timestamp(date).round('D')
+            if day_round: # As sc.yeartodate(), but without converting to and from a datetime.date
+                full = int(year)
+                start = pd.Timestamp(year=full, month=1, day=1)
+                days = int(np.round((year - full)*(366 if calendar.isleap(full) else 365)))
+                timestamp = start + pd.Timedelta(days=days)
             else:
                 year_start = pd.Timestamp(year=int(year), month=1, day=1)
                 year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
@@ -568,6 +580,13 @@ class date(pd.Timestamp):
             date_type = cls
         kwargs = {}
         if date_type is ss.date:
+            years = np.asarray(array)
+            if day_round and years.ndim == 1 and years.dtype.kind in 'if' and np.all(years >= 1): # All at once, as from_year() does for each
+                full = years.astype(np.int64)
+                leap = (full % 4 == 0) & ((full % 100 != 0) | (full % 400 == 0))
+                days = np.round((years - full)*np.where(leap, 366, 365)).astype(np.int64)
+                stamps = (full - 1970).astype('datetime64[Y]').astype('datetime64[D]') + days
+                return DateArray([cls._reset_class(stamp) for stamp in pd.DatetimeIndex(stamps.astype('datetime64[us]'))])
             kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.datedur
         return DateArray(np.vectorize(date_type)(array, **kwargs))
 
@@ -625,11 +644,20 @@ class date(pd.Timestamp):
             if not isinstance(stop, date):
                 stop = date_type(stop, **kw)
 
+            atol = min(atol, step.years/2) # For sub-daily steps, it's only close if it's within half a step
+            compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
+            kwds = step.value.kwds
+            if not kwds.get('years') and not kwds.get('months'): # A step of fixed length, so the dates can be made all at once
+                delta = pd.Timedelta(**{k:v for k,v in kwds.items() if k in ['weeks', 'days', 'hours', 'minutes', 'seconds']})
+                first = start.to_pandas()
+                n = max(int((stop.to_pandas() - first)/delta) + 2, 0) # Up to two past the stop, which are then checked as below
+                tvec = [cls._reset_class(stamp) for stamp in pd.date_range(first, periods=n, freq=delta)]
+                while tvec and not compare(tvec[-1]):
+                    tvec.pop()
+                return DateArray(tvec)
+
             tvec = []
             t = start
-            atol = min(atol, step.years/2) # For sub-daily steps, it's only close if it's within half a step
-
-            compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
             while compare(t):
                 tvec.append(t)
                 t += step
@@ -773,6 +801,24 @@ class TimePar:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._set_factors()
+        cls._defer_ops()
+        return
+
+    @classmethod
+    def _defer_ops(cls):
+        """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n """
+        def defer(func):
+            def wrapper(self, other):
+                if getattr(other, '_is_expr', False):
+                    return NotImplemented
+                return func(self, other)
+            return ft.wraps(func)(wrapper)
+
+        for op in ['add', 'sub', 'mul', 'truediv']:
+            for name in [f'__{op}__', f'__r{op}__']:
+                func = cls.__dict__.get(name)
+                if func is not None:
+                    setattr(cls, name, defer(func))
         return
 
     @classmethod
@@ -1754,6 +1800,11 @@ class Rate(TimePar):
                 raise TypeError(f'Only rates can be subtracted from rates, not {other}')
         else:
             raise TypeError(f'Can only subtract rates of identical types (e.g., ss.per+ss.per, prob+prob), not {other}')
+
+    def __rsub__(self, other): # Only reached for something that is not a rate, e.g. 1 - ss.peryear(0.1), which is an error, as for subtracting it from a rate
+        if sc.isnumber(other) or isinstance(other, np.ndarray):
+            raise TypeError(f'A rate cannot be subtracted from {other}, since it has a unit of time. To use it as a number, convert it first, e.g. 1 - rate.to_prob(dt) for the chance of the event not happening in a step of length dt.')
+        return NotImplemented
 
     def __eq__(self, other):
         if self.unit is None:

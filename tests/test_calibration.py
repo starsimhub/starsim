@@ -332,6 +332,42 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     return sim, calib
 
 
+@sc.timer()
+def test_particle_mcmc():
+    sc.heading('Testing particle MCMC')
+    def make(beta=0.5, data=None):
+        beta = ss.par(beta, bounds=[0.1, 1], name='beta')
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta * I
+        cases = ss.outcome(0.5 * infection, delay=ss.days(3), likelihood=ss.poisson())
+        sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init=dict(I=0.002), name='sir')
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver='sde', total_pop=10_000, data=data, verbose=0, rand_seed=3)
+
+    truth = make().run().results.sir
+    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+
+    # The particle filter's estimate of the likelihood is highest at the value that made the data
+    sim = make(data=data).init()
+    filt = ss.ParticleFilter(sim)
+    est = {}
+    for beta in [0.4, 0.5, 0.6]:
+        sim.restart(pars=dict(beta=beta))
+        est[beta] = filt(n_particles=100, seed=1)
+    assert est[0.5] > max(est[0.4], est[0.6])
+
+    # Particle MCMC is the default for a stochastic compartmental sim whose data has a likelihood
+    fit = make(beta=0.3, data=data).calibrate(draws=150, warmup=150, chains=2, particles=50, parallel=False, rand_seed=1)
+    fit.summarize()
+    table = fit.table.set_index('par')
+    assert fit.method == 'pmcmc'
+    assert len(fit.samples) == 300 and len(fit.acceptance) == 2
+    assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
+    with pytest.raises(ss.CodedError, match='E1303'): # A posterior needs a likelihood
+        make(data=data).calibrate(method='pmcmc', gof='nae')
+    return fit
+
+
 #%% Run as a script
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -361,6 +397,7 @@ if __name__ == '__main__':
 
 
     do_plot = True
+    test_particle_mcmc()
     for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
         T = sc.timer()
         sim, calib = f(do_plot=do_plot)

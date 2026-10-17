@@ -2,6 +2,8 @@
 Numerical utilities and other helper functions
 """
 import re
+import json
+import hashlib
 import warnings
 import numpy as np
 import numba as nb
@@ -232,6 +234,41 @@ def warn(msg, category=None, verbose=None, die=None):
         raise ValueError(errormsg)
 
     return
+
+
+def short_hash(obj, n=6):
+    """ A short hash of a JSON-compatible object, e.g. for telling model specs apart """
+    string = json.dumps(sc.jsonify(obj), sort_keys=True)
+    return hashlib.sha256(string.encode()).hexdigest()[:n]
+
+
+def split_numbers(obj, unit=None, skip=None):
+    """
+    Split a JSON-compatible object into its structure (with every number replaced by a placeholder) and a list of its numbers
+
+    Used to hash a model's structure separately from its parameter values.
+
+    Args:
+        obj (dict): the object to split
+        unit (str): if provided, convert typed quantities to this unit, so e.g. 7 days and 1 week give the same number
+        skip (list): keys to leave out, e.g. labels
+    """
+    numbers = []
+    def walk(item):
+        if isinstance(item, dict):
+            if unit and item.get('type') in ['dur', 'per', 'prob', 'freq'] and item.get('unit'): # A typed quantity
+                factor = ss.time.get_dur_class(item['unit'])(1).to(unit).value
+                numbers.append(float(item['value']*factor if item['type'] == 'dur' else item['value']/factor))
+                return dict(type=item['type'], value='#')
+            return {key:walk(val) for key,val in item.items() if key not in sc.tolist(skip)}
+        elif isinstance(item, (list, tuple)):
+            return [walk(val) for val in item]
+        elif sc.isnumber(item) and not isinstance(item, bool):
+            numbers.append(float(item))
+            return '#'
+        return item
+    structure = walk(obj)
+    return structure, numbers
 
 
 @nb.jit(cache=True)
@@ -561,6 +598,8 @@ def validate_sim_data(data=None, die=None):
                         raise ValueError(errormsg)
                     data.set_index(timecol, inplace=True)
                     found = True
+            if len(data.index) and all(isinstance(v, str) for v in data.index): # Dates written as text, e.g. '2020-01-08', are dates, so they can be plotted against the sim's
+                data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
             success = True
 
         # Data loading failed
@@ -609,36 +648,67 @@ def combine_rands(a, b):
 
 #%% Other helper functions
 
-def load(filename, **kwargs):
+def load(filename, format=None, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`
+    Alias to Sciris `sc.loadany()`, which also reads model specs and other frameworks' models
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
     this function. This can also be used to load other objects of known type
     (e.g. JSON), although this usage is discouraged.
 
+    A model spec (written by `sim.to_spec()`) is built into a sim (see `ss.from_spec()`),
+    and so is a model from another framework, given its format or one that can be told
+    from the file (see `ss.interop`).
+
     Args:
-        filename (str/path): the name of the file to load
-        kwargs (dict): passed to `sc.loadany()`
+        filename (str/path/any): the name of the file to load, or another framework's model object
+        format (str): the framework the model is from (e.g. 'emulsion'); see `ss.interop.formats`
+        kwargs (dict): passed to the importer, or to `sc.loadany()`
 
     Returns:
-        The loaded object
+        The loaded object; a model spec or another framework's model is returned as an `ss.Sim`
+
+    **Examples**:
+
+        sim = ss.load('sim.json') # A model spec
+        sim = ss.load('compart_SIR.yaml', format='emulsion')
     """
+    if format is None:
+        format = ss.interop.sniff(filename)
+    if format is not None:
+        return ss.interop.load(filename, format=format, **kwargs)
+    if str(filename).endswith('.json'):
+        spec = sc.loadjson(filename)
+        if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
+            return ss.from_spec(spec)
+        return spec
     return sc.loadany(filename, **kwargs)
 
 
-def save(filename, obj, **kwargs):
+def save(filename, obj, format=None, **kwargs):
     """
-    Alias to Sciris `sc.save()`
+    Alias to Sciris `sc.save()`, which also writes a sim in another framework's format
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
 
+    With `format`, a sim is exported instead (see `ss.interop.export()`), and what
+    the format cannot carry is listed as `W1401 LossyExport`.
+
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to `sc.save()`
+        format (str): the format to export a sim to: 'mermaid', 'sbml', or 'odin'
+        kwargs (dict): passed to `sc.save()`, or to `ss.interop.export()`
+
+    **Examples**:
+
+        ss.save('sir.xml', sim, format='sbml')
+        ss.save('sir.md', sim, format='mermaid')
     """
+    if format is not None:
+        ss.interop.export(obj, format, filename=filename, **kwargs)
+        return sc.path(filename)
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 

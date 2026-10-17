@@ -624,6 +624,21 @@ def test_round():
     return steps
 
 
+@sc.timer()
+def test_shape_scale():
+    """ Test that gamma and Weibull take a shape and a scale, and gamma a mean and a standard deviation """
+    sc.heading('Testing shape, scale, and mean for gamma and Weibull')
+    assert ss.gamma(2, 3).pars.scale == 3 and ss.weibull(2, 5).pars.scale == 5 # The second number is the scale; loc is by keyword
+    with pytest.raises(TypeError):
+        ss.gamma(2, 0, 3)
+    vals = ss.gamma(mean=1800, std=400, strict=False).rvs(n)
+    assert np.isclose(vals.mean(), 1800, rtol=0.01) and np.isclose(vals.std(), 400, rtol=0.02)
+    assert isinstance(ss.gamma(mean=ss.days(10), std=ss.days(5)).pars.scale, ss.days)
+    with pytest.raises(ValueError, match='mean and std'):
+        ss.gamma(a=2, mean=10, std=5)
+    return vals
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -649,5 +664,6 @@ if __name__ == '__main__':
     o15 = test_dtype_consistency()
     o16 = test_choose_n()
     o17 = test_round()
+    o18 = test_shape_scale()
 
     T.toc()

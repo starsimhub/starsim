@@ -141,6 +141,106 @@ class Result(ss.BaseArr):
                 raise ValueError(errormsg)
         return self.values
 
+    def select(self, **dims):
+        """
+        Select groups of a stratified result by name: keeps the given levels of each dimension, and sums over the rest
+
+        Args:
+            dims (dict): the dimension and the level (or list of levels) to keep, by label or by position, e.g. `age=0` or `risk='high'`
+
+        Examples:
+            ```python
+            res = sim.results.sir
+            res.n_I.select(age=0) # The youngest age group
+            res.n_I.select(sex='female', risk='high')
+            ```
+        """
+        strats = self._check_strata()
+        coords = strats[0].sim_coords
+        keep = np.ones(self.strata.shape[1], dtype=bool)
+        for dim,levels in dims.items():
+            names = [strat.name for strat in strats]
+            self._check_dim(dim)
+            d = names.index(dim)
+            inds = [strats[d].index(level) for level in sc.tolist(levels)]
+            keep &= np.isin(coords[:, d], inds)
+        out = self._substrata(keep)
+        out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})'
+        return out
+
+    def by(self, dim):
+        """
+        Split a stratified result by one dimension, summing over the rest; returns a 2D result with one column per level
+
+        Args:
+            dim (str): the dimension, e.g. 'age'
+        """
+        strats = self._check_strata()
+        names = [strat.name for strat in strats]
+        self._check_dim(dim)
+        d = names.index(dim)
+        strat = strats[d]
+        coords = strat.sim_coords
+        values = np.column_stack([self.strata[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+        denom = getattr(self, 'denom', None)
+        if denom is not None: # A ratio: the numerator and denominator of each level, divided
+            den = np.column_stack([denom[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+            values = np.divide(values, den, out=np.zeros(values.shape), where=den!=0)
+        columns = [str(label) for label in strat.labels]
+        if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
+            columns = [f'{dim}_{col}' for col in columns]
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
+                     values=values, shape=values.shape[0], columns=columns, summarize_by=self.summarize_by)
+        return out
+
+    def _check_strata(self):
+        if getattr(self, 'strata', None) is None:
+            errormsg = f'The result "{self.name}" is not stratified, so there is nothing to select'
+            raise ValueError(errormsg)
+        return self.strats
+
+    def _check_dim(self, dim):
+        """ Check that the result has a dimension; a state has only the dimensions it was stratified by """
+        names = getattr(self, 'dims', None) or [strat.name for strat in self.strats]
+        if dim not in names:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
+            raise KeyError(errormsg)
+        return
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ Arithmetic on results; the values by group are kept only where they can be: for a sum or difference of stratified results, or one scaled by a number """
+        out = super().__array_ufunc__(ufunc, method, *inputs, **kwargs)
+        if isinstance(out, Result) and getattr(out, 'strata', None) is not None:
+            stratified = [x for x in inputs if isinstance(x, Result) and getattr(x, 'strata', None) is not None]
+            numbers = [x for x in inputs if np.ndim(x) == 0]
+            same = all(x.strata.shape == stratified[0].strata.shape for x in stratified)
+            linear = (ufunc in [np.add, np.subtract] and len(stratified) == len(inputs)) or (ufunc in [np.multiply, np.divide, np.true_divide, np.negative] and len(stratified) == 1 and len(numbers) == len(inputs) - 1 and (ufunc is not np.divide and ufunc is not np.true_divide or inputs[0] is stratified[0]))
+            strata = [x.strata if isinstance(x, Result) else x for x in inputs]
+            out.strata = getattr(ufunc, method)(*strata) if method == '__call__' and not kwargs and same and linear else None # Otherwise (e.g. a ratio of two results) the value of the whole is not the sum of the values by group
+            denoms = [x.denom for x in stratified if getattr(x, 'denom', None) is not None]
+            if denoms: # A ratio keeps its denominator only when scaled by a number
+                scaled = ufunc in [np.multiply, np.negative] or (ufunc in [np.divide, np.true_divide] and inputs[0] is stratified[0])
+                out.denom = denoms[0] if (out.strata is not None and len(stratified) == 1 and scaled) else None
+                if out.denom is None:
+                    out.strata = None
+        return out
+
+    def _substrata(self, keep):
+        """ A result made of some of the groups of this one """
+        strata = self.strata*keep # The groups left out are zero, so the result can be selected from or split again
+        denom = getattr(self, 'denom', None)
+        values = strata.sum(axis=1)
+        if denom is not None: # A ratio: the numerator and denominator are each added up over the groups, then divided
+            denom = denom*keep
+            values = np.divide(values, denom.sum(axis=1), out=np.zeros(len(values)), where=denom.sum(axis=1)!=0)
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
+                     values=values, shape=strata.shape[0], summarize_by=self.summarize_by)
+        out.strata = strata
+        out.denom = denom
+        out.strats = self.strats
+        out.dims = getattr(self, 'dims', None)
+        return out
+
     def col(self, col):
         """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result """
         i = self._col_index(col)
@@ -167,6 +267,8 @@ class Result(ss.BaseArr):
     def apply_scale(self, scale):
         """ Multiply the values by the population scale: a number, or an array with one entry per timestep """
         scale = np.asarray(scale)
+        if getattr(self, 'strata', None) is not None: # The values by group too
+            self.strata = (self.strata.T*scale).T
         if scale.ndim == 1 and self.values.ndim == 2: # Scale each row of a 2D result
             scale = scale[:, None]
         self.values = self.values*scale

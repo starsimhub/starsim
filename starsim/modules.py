@@ -267,6 +267,7 @@ class Module(Base):
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
+    requires = None # The data the module needs, as a list of ss.Requires; metadata for sim.requires(), never enforced
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -502,6 +503,7 @@ class Module(Base):
         """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
+            self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
         else: # Or overwrite
             self.pars = ss.Pars(**kwargs)
         return self.pars
@@ -699,6 +701,7 @@ class Module(Base):
             ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
+            self.check_bare_units(sim)
             if self.name in sim.pars:
                 sim.pars[self.name] = self.pars
             else: # Add a new key, which is allowed even if the sim's parameters are locked
@@ -709,6 +712,18 @@ class Module(Base):
             self.pre_initialized = True
         return
 
+    def check_bare_units(self, sim):
+        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.Pars.bare_units()`) """
+        if getattr(sim, 'declared', None): # In a declared model, bare numbers are in the sim's unit (None for timesteps)
+            unit = sim.unit and ss.time.normalize_unit(sim.unit)
+        else: # Otherwise in its timestep's, if it has one (not in a mock sim)
+            unit = getattr(sim.t.dt, 'base', None)
+            if unit is None:
+                return
+        if isinstance(self.pars, ss.Pars):
+            self.pars.bare_units(unit, label=self.name)
+        return
+
     @required()
     def link_timepars(self, force=False):
         """
@@ -717,7 +732,7 @@ class Module(Base):
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'])) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', [])), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt
