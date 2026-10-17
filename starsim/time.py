@@ -68,7 +68,9 @@ class DateArray(np.ndarray):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
             if unit is None:
-                if isinstance(arr[0], (ss.date, ss.dur)):
+                if not len(arr): # Nothing to tell the unit from, e.g. a range of dates that ends before it starts
+                    unit = ss.date
+                elif isinstance(arr[0], (ss.date, ss.dur)):
                     unit = type(arr[0]) # Get the unit from the input
                 elif isinstance(arr[0], (str, np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
                     arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
@@ -285,6 +287,8 @@ class date(pd.Timestamp):
             arg = args[0]
             if arg is None:
                 return pd.Timestamp(None)
+            elif type(arg) is date: # Dates are immutable, so need no copy
+                return arg
             elif isinstance(arg, pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
@@ -640,11 +644,20 @@ class date(pd.Timestamp):
             if not isinstance(stop, date):
                 stop = date_type(stop, **kw)
 
+            atol = min(atol, step.years/2) # For sub-daily steps, it's only close if it's within half a step
+            compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
+            kwds = step.value.kwds
+            if not kwds.get('years') and not kwds.get('months'): # A step of fixed length, so the dates can be made all at once
+                delta = pd.Timedelta(**{k:v for k,v in kwds.items() if k in ['weeks', 'days', 'hours', 'minutes', 'seconds']})
+                first = start.to_pandas()
+                n = max(int((stop.to_pandas() - first)/delta) + 2, 0) # Up to two past the stop, which are then checked as below
+                tvec = [cls._reset_class(stamp) for stamp in pd.date_range(first, periods=n, freq=delta)]
+                while tvec and not compare(tvec[-1]):
+                    tvec.pop()
+                return DateArray(tvec)
+
             tvec = []
             t = start
-            atol = min(atol, step.years/2) # For sub-daily steps, it's only close if it's within half a step
-
-            compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
             while compare(t):
                 tvec.append(t)
                 t += step
@@ -1787,6 +1800,11 @@ class Rate(TimePar):
                 raise TypeError(f'Only rates can be subtracted from rates, not {other}')
         else:
             raise TypeError(f'Can only subtract rates of identical types (e.g., ss.per+ss.per, prob+prob), not {other}')
+
+    def __rsub__(self, other): # Only reached for something that is not a rate, e.g. 1 - ss.peryear(0.1), which is an error, as for subtracting it from a rate
+        if sc.isnumber(other) or isinstance(other, np.ndarray):
+            raise TypeError(f'A rate cannot be subtracted from {other}, since it has a unit of time. To use it as a number, convert it first, e.g. 1 - rate.to_prob(dt) for the chance of the event not happening in a step of length dt.')
+        return NotImplemented
 
     def __eq__(self, other):
         if self.unit is None:

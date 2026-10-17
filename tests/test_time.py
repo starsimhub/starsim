@@ -170,6 +170,17 @@ def test_syntax():
 def test_datearray_operations():
     sc.heading('Test DateArray add/sub operations')
 
+    # A range of fixed steps is made at once, and is the same as stepping; one that ends before it starts is empty
+    days = ss.date.arange('2020-01-01', '2020-03-01', ss.days(7))
+    assert days[-1] == ss.date('2020-02-26') and np.all(np.diff([d.to_year() for d in days]) > 0)
+    assert all(days[i] + ss.datedur(ss.days(7)) == days[i+1] for i in range(len(days) - 1))
+    assert len(ss.date.arange('2020-03-01', '2020-01-01', ss.days(1))) == 0
+    assert len(ss.date.arange('2020-03-01', '2020-01-01', ss.months(1))) == 0
+
+    # A rate cannot be subtracted from a number
+    with pytest.raises(TypeError, match='cannot be subtracted'):
+        1 - ss.peryear(0.1)
+
     a = ss.DateArray([ss.date('2020-01-01'), ss.date('2021-01-01')])
     b = ss.DateArray([ss.years(1), ss.years(2)])
     c = ss.years([1, 2])

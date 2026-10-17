@@ -423,12 +423,13 @@ class Sim(ss.Base):
 
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
-            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`
+            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim
         """
         if not hasattr(self, 'inputs'):
             errormsg = 'sim.new() is only available for sims with declared states and transitions'
             raise ValueError(errormsg)
         inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
+        inputs = {key:val for key,val in inputs.items() if not (key in kwargs and val is None)} # As if it had not been given
         sim = Sim(inputs, data=sc.dcp(self.data))
         sim.par_values = sc.mergedicts(self.par_values, pars)
         return sim
@@ -1843,13 +1844,10 @@ class Sim(ss.Base):
             if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
                     mod.engine.run_all(use_jax=use_jax)
-                self.loop.index = len(self.loop.plan)
+                self.complete = True # Without making the loop's plan, which is not needed
             else:
                 self.loop.run(until, profile=profile)
-
-            # Check if the simulation is complete
-            if self.loop.index == len(self.loop.plan):
-                self.complete = True
+                self.complete = self.loop.index == len(self.loop.plan)
 
             # If simulation reached the end, finalize the results
             self.elapsed = self.timer.toc(output=True)

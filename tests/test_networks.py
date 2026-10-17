@@ -4,6 +4,7 @@ Test networks
 
 # %% Imports and settings
 import pytest
+import warnings
 import sciris as sc
 import numpy as np
 import starsim as ss
@@ -600,6 +601,19 @@ def test_partner_targets():
     return sim
 
 
+@sc.timer()
+def test_bare_units():
+    sc.heading('Testing the warning for a bare number in another unit than the sim')
+    sim = lambda net: ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05), dur_inf=ss.days(10)), networks=net, dt=ss.days(1), stop=ss.days(10), verbose=0)
+    with pytest.warns(RuntimeWarning, match='read in years'): # The default duration is in years, but the sim is in days
+        sim(ss.MFNet(duration=5)).init()
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        sim(ss.MFNet(duration=ss.days(5))).init() # A unit says which is meant
+        ss.Sim(n_agents=200, diseases='sis', networks=ss.MFNet(duration=5), verbose=0).init() # The same unit as the sim
+    return
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -627,5 +641,6 @@ if __name__ == '__main__':
     hyb  = test_hybrid()
     part = test_partners()
     targ = test_partner_targets()
+    bare = test_bare_units()
 
     T.toc()

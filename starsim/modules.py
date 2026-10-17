@@ -503,6 +503,7 @@ class Module(Base):
         """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
+            self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
         else: # Or overwrite
             self.pars = ss.Pars(**kwargs)
         return self.pars
@@ -700,6 +701,7 @@ class Module(Base):
             ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
+            self.check_bare_units(sim)
             if self.name in sim.pars:
                 sim.pars[self.name] = self.pars
             else: # Add a new key, which is allowed even if the sim's parameters are locked
@@ -708,6 +710,18 @@ class Module(Base):
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()
             self.pre_initialized = True
+        return
+
+    def check_bare_units(self, sim):
+        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.Pars.bare_units()`) """
+        if getattr(sim, 'declared', None): # In a declared model, bare numbers are in the sim's unit (None for timesteps)
+            unit = sim.unit and ss.time.normalize_unit(sim.unit)
+        else: # Otherwise in its timestep's, if it has one (not in a mock sim)
+            unit = getattr(sim.t.dt, 'base', None)
+            if unit is None:
+                return
+        if isinstance(self.pars, ss.Pars):
+            self.pars.bare_units(unit, label=self.name)
         return
 
     @required()

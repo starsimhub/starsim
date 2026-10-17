@@ -2522,10 +2522,11 @@ class Compartmental(Engine):
             if kept is None or kept[0] is not raw or kept[2] != per_step or kept[3] != inner:
                 vals = []
                 if per_step == 3:
-                    held = self.held(raw)
-                    for k,year in enumerate(times):
-                        year = times[k - k % 3] if held else year
-                        vals.append(raw.per_group(sim, self.convert, year=year) if isinstance(raw, ss.by) else self.convert(raw.at(year, sim)))
+                    years = times[np.arange(len(times)) // 3 * 3] if self.held(raw) else times # A held value is the one at the start of the step
+                    if isinstance(raw, ss.by):
+                        vals = [raw.per_group(sim, self.convert, year=year) for year in years]
+                    else:
+                        vals = raw.series(years, sim, self.convert)
                 else:
                     for ti in range(npts):
                         sim.t.ti = mod.t.ti = ti
@@ -2533,8 +2534,13 @@ class Compartmental(Engine):
                 kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(len(vals), -1), per_step, inner)
             self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
         sim.t.ti = mod.t.ti = 0
-        shape = (npts*per_step if self.time_pars else 1, self.n_groups)
-        table = lambda vals: np.array([np.broadcast_to(val, shape) for val in vals], dtype=float).reshape(len(vals), *shape).swapaxes(0, 1)
+        rows = npts*per_step if self.time_pars else 1
+
+        def table(vals):
+            """ The values by group, at each step if any of them varies in time (a series over the steps), and otherwise once """
+            shape = (rows if any(np.ndim(val) == 2 and len(val) > 1 for val in vals) else 1, self.n_groups)
+            return np.array([np.broadcast_to(val, shape) for val in vals], dtype=float).reshape(len(vals), *shape).swapaxes(0, 1)
+
         fixed     = table([0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows])
         mult      = table([self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows])
         consts    = table([self.value(par) for par in self.prog_pars])

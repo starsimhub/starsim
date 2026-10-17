@@ -708,6 +708,9 @@ class Transition:
             self.p = list(terms.values())
         else:
             self.dst = sc.tolist(dst)
+            if len(self.dst) > 1 and any(d is null for d in self.dst):
+                error('E205', 'ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
+                              'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')
         return self
 
     @property
@@ -2235,6 +2238,10 @@ class TimeValue:
     def __call__(self, sim):
         return self.at(sim.t.now('year'), sim)
 
+    def series(self, years, sim, convert):
+        """ The value at each of an array of years, converted to plain numbers by `convert` """
+        return np.array([convert(self.at(year, sim)) for year in years], dtype=float)
+
     @property
     def __name__(self): # So it can be named in messages like any other function of the sim
         return type(self).__name__
@@ -2305,22 +2312,47 @@ class timeseries(TimeValue):
 
     fields = ['values']
 
-    def at(self, year, sim):
+    def weights(self, year, sim):
+        """ For a year (or an array of them), the index of the value before it, and the weight of the value after it """
         years = self.years(sim)
-        vals = [const_value(v) for v in self.values]
         if self.period is not None: # Fold the time into one period from the first time
             period = self.period.years if isinstance(self.period, ss.dur) else float(self.period)
             year = years[0] + (year - years[0]) % period
-        i = int(np.clip(np.searchsorted(years, year + 1e-9, side='right') - 1, 0, len(vals) - 1))
-        if self.mode == 'constant' or year <= years[0] or i == len(vals) - 1:
+        i = np.clip(np.searchsorted(years, year + 1e-9, side='right') - 1, 0, len(years) - 1)
+        j = np.minimum(i + 1, len(years) - 1)
+        w = np.where(j > i, np.clip((year - years[i])/np.where(j > i, years[j] - years[i], 1), 0, 1), 0) # 0 before the first time and after the last
+        if self.mode == 'constant':
+            w = np.zeros_like(w)
+        elif self.mode == 'cosine':
+            w = (1 - np.cos(np.pi*w))/2
+        return year, i, j, w
+
+    def at(self, year, sim):
+        vals = [const_value(v) for v in self.values]
+        year, i, j, w = self.weights(year, sim)
+        i, j, w = int(i), int(j), float(w)
+        if w == 0: # At or outside the times given, or with mode 'constant'
             return vals[i]
-        elif self.mode in ['linear', 'cosine']:
-            w = (year - years[i])/(years[i+1] - years[i])
-            if self.mode == 'cosine':
-                w = (1 - np.cos(np.pi*w))/2
-            return vals[i]*(1 - w) + vals[i+1]*w
-        import scipy.interpolate as spi
-        return float(spi.CubicSpline(years, np.array(vals, dtype=float))(year))
+        elif self.mode == 'spline':
+            import scipy.interpolate as spi
+            typed = isinstance(vals[0], ss.TimePar)
+            if typed: # Interpolate the values in the units of the first, and give a value of that type
+                vals = [v.to(type(vals[0])) for v in vals]
+            value = float(spi.CubicSpline(self.years(sim), np.array([v.value if typed else v for v in vals], dtype=float))(year))
+            if typed:
+                out = sc.dcp(vals[0])
+                out.value = value
+                return out
+            return value
+        return vals[i]*(1 - w) + vals[j]*w
+
+    def series(self, years, sim, convert):
+        vals = [const_value(v) for v in self.values]
+        if self.mode == 'spline' or any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
+            return super().series(years, sim, convert)
+        vals = np.array([convert(v) for v in vals], dtype=float) # Converted once, rather than at each time
+        year, i, j, w = self.weights(np.asarray(years, dtype=float), sim)
+        return vals[i]*(1 - w) + vals[j]*w
 
     def __deepcopy__(self, memo): # The cached times belong to one sim
         new = object.__new__(type(self))
@@ -2378,8 +2410,18 @@ class seasonal(TimeValue):
 
     fields = ['mean', 'amplitude']
 
+    def factor(self, year):
+        """ The value relative to the mean, at a year or an array of them """
+        return np.maximum(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)))
+
     def at(self, year, sim=None):
-        return const_value(self.mean)*max(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)))
+        return const_value(self.mean)*float(self.factor(year))
+
+    def series(self, years, sim, convert):
+        mean = const_value(self.mean)
+        if isinstance(mean, ss.prob): # A probability is not converted in proportion to its value
+            return super().series(years, sim, convert)
+        return convert(mean)*self.factor(np.asarray(years, dtype=float)) # Converted once, rather than at each time
 
     def to_json(self):
         return dict(seasonal=dict(mean=quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak))

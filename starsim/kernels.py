@@ -676,6 +676,20 @@ def diffuse(y, p, w, dt, flows):
 
 
 @jit
+def mix(matrix, v, size, out, by_columns):
+    """ The product of the first `size` rows and columns of a mixing matrix with a vector (`v @ matrix` if `by_columns`, else `matrix @ v`), into out; by BLAS when the whole matrix is used, so is contiguous """
+    if size == matrix.shape[0]:
+        out[:size] = np.dot(v[:size], matrix) if by_columns else np.dot(matrix, v[:size])
+        return
+    for i in range(size):
+        acc = 0.0
+        for j in range(size):
+            acc += (matrix[j, i] if by_columns else matrix[i, j])*v[j]
+        out[i] = acc
+    return
+
+
+@jit
 def interp(out, table, row, th):
     """ A part of the program at a fraction th of the way through a step, from its values at the start, middle, and end (rows row to row+2 of its table) """
     a = (2*th - 1)*(th - 1) # Quadratic through the three points, so exact at each stage of a single RK4 step
@@ -767,22 +781,15 @@ def step(y, p, w, dt, n_sub, solver, flows, tables, row):
                             num[p.levels[t, g]] += infectious[g]
                             den[p.levels[t, g]] += n[g]
                         if p.use_pre[t]: # Move people to where they spend their time
-                            for j in range(size):
-                                num2[j] = 0
-                                den2[j] = 0
-                                for i in range(size):
-                                    num2[j] += num[i]*p.pre[t, i, j]
-                                    den2[j] += den[i]*p.pre[t, i, j]
+                            mix(p.pre[t], num, size, num2, True)
+                            mix(p.pre[t], den, size, den2, True)
                             for i in range(size):
                                 num[i] = num2[i]
                                 den[i] = den2[i]
                         for i in range(size):
                             prev[i] = num[i]/den[i] if den[i] > 0 else 0.0
                         if p.use_post[t]: # Mix between cells
-                            for i in range(size):
-                                num[i] = 0
-                                for j in range(size):
-                                    num[i] += p.post[t, i, j]*prev[j]
+                            mix(p.post[t], prev, size, num, False)
                             for i in range(size):
                                 prev[i] = num[i]
                         for g in range(ng):

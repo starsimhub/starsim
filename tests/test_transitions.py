@@ -155,6 +155,9 @@ def test_names():
         ss.Disease(recovery=ss.Transition('I', 'R'))
     with pytest.raises(ss.CodedError, match='E205'):
         ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
+    with pytest.raises(ss.CodedError, match='E205'): # A branch out of the model is a transition of its own
+        S, I, R = ss.states('S I R')
+        ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=10)
     with pytest.raises(ss.CodedError, match='E208'):
         S, I = ss.states(2)
         ss.Disease(infection = S >> I @ 0.1 * I * I)
@@ -254,7 +257,11 @@ def test_auto():
     sc.heading('Testing how the solver is chosen')
     sim = ss.Sim(make_sir(), stop=10, **kw).init()
     assert sim.solver == 'ode'
-    assert ss.Sim(make_sir(), stop=10, n_agents=1000, **kw).init().solver == 'abm'
+    agents = ss.Sim(make_sir(), stop=10, n_agents=1000, **kw)
+    assert agents.init().solver == 'abm'
+    assert agents.new(n_agents=None).init().solver == 'ode' # None goes back to the default
+    msim = ss.Sim(make_sir(), stop=10, solver='binomial', **kw).run(n_runs=2)
+    assert 'sir' in msim.results.keys() and msim.results['sir'] is msim.results.sir
     assert ss.Sim(make_sir(), networks='random', stop=10, **kw).init().solver == 'abm'
     assert ss.Sim(make_sir(), demographics=ss.Births(), start=2000, stop=2010, **kw).init().solver == 'abm'
 
@@ -929,6 +936,10 @@ def test_time_values():
     assert res.n_I[:40].max() > 2*res.n_I[-1] # Transmission falls below what is needed to sustain it
     with pytest.raises(ValueError):
         ss.Sim(make(ss.timeseries({50: 1.0, 0: 0.2})), stop=10, **kw).run()
+
+    # A spline over typed values is the same as over the numbers in the sim's unit
+    spline = lambda vals: ss.Sim(make(ss.timeseries(dict(zip(['2020-01-01', '2020-03-01', '2020-05-01'], vals)), mode='spline')), unit='day', **dates).run().results.sis.n_I
+    assert np.allclose(spline([ss.perday(0.3), ss.perweek(0.7), ss.perday(0.2)]), spline([0.3, 0.1, 0.2]))
 
     # A time series inside ss.by: the same as a function that gives the value for each group, run in the kernels or not
     def by_age(beta):

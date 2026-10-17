@@ -1058,14 +1058,9 @@ class MultiResults(ss.Results):
     def __init__(self, *args, nested=None, **kwargs):
         super().__init__(*args, **kwargs)
         object.__setattr__(self, 'nested', nested or {})
+        for name,modres in self.nested.items(): # Each module's results across the runs, as entries like those of sim.results
+            self[name] = modres
         return
-
-    def __getattribute__(self, attr):
-        if not attr.startswith('_'):
-            nested = object.__getattribute__(self, '__dict__').get('nested')
-            if nested and attr in nested:
-                return nested[attr]
-        return super().__getattribute__(attr)
 
     def diff(self, baseline):
         """ The difference of every result from the baseline scenario: a dict by scenario, then module, then result """

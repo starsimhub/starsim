@@ -60,7 +60,7 @@ Every code cited anywhere in this folder is listed here: 54 codes, of which 34 a
 |---|---|---|---|
 | `E201` | `ReservedName` | error | A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) |
 | `E204` | `UnknownState` | error | States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred |
-| `E205` | `BadBranchSplit` | error | Constant branch probabilities out of one state do not sum to 1 |
+| `E205` | `BadBranchSplit` | error | Constant branch probabilities out of one state do not sum to 1, or `ss.null` is one of several destinations (a branch out of the model is a transition of its own) |
 | `E206` | `DuplicateDeclaration` | error | Two members of a module are given the same explicit name, or a state is an endpoint of transitions in two modules |
 | `E208` | `NonlinearExposure` | error | A rate is not linear in its bare states (`I ** 2`, `I / (I + K)`, or a term containing two bare states). Says to use `I.n` if a literal count was meant |
 | `E209` | `UndrivenTransition` | error | A transition reaches build time with no rate, no duration, and no `p=` |

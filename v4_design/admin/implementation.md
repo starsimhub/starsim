@@ -291,9 +291,8 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - With `sim.run(n_runs=)` in one call to the kernel, only the states and transitions are kept by group (not outcomes or results given as expressions), and reported outcomes are drawn for all the runs at once, so differ (in the draw, not the distribution) from those of a single run with the same seed.
 - The kernels draw random numbers from Numba's generator, so a stochastic compartmental run gives different numbers (from the same distribution) with `engine.use_kernels = False`.
 - A typed quantity that is changed in place during a run (the number inside an `ss.perday`, say) is not seen, since a converted value is kept for as long as the parameter holds the same object; assigning a new value is.
-- A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`).
-- `sim.new(n_agents=None)` does not turn an agent-based sim into a compartmental one; the argument has to be left out.
-- A bare number as the duration of a network's contacts is in years, even in a sim that counts time in steps.
+- A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`); the error says to convert it first (`rate.to_prob(dt)`).
+- A bare number given for a parameter of a module written as code (`ss.MFNet(duration=5)`, `ss.SIS(dur_inf=10)`) keeps the unit of its default, as in Starsim 3, while one in a declared model is in the sim's unit. It warns when the two units differ (`duration` read in years in a sim in days).
 - With `stop=ss.weeks(12)` and no `unit=`, the sim runs in weeks even if every rate is per day.
 - As agents, a dwell time is sampled when someone enters a state, so an `adjust` on a duration does not follow a person who later moves to another level (through an `ss.transfer`, or by aging). A rate does.
 - A strain's initial share is the split of the dimension (equal by default), which applies to everyone who starts in an infected state.

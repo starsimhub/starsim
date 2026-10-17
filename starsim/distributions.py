@@ -903,7 +903,7 @@ class Dist:
                     ss.warn(msg)
             else:
                 msg += f'Since ss.{self.__class__.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
-                msg += 'Use e.g. ss.weibull(3, ss.years(5), ss.years(2)) instead of ss.weibull(3, 5, 2, unit=ss.years).'
+                msg += 'Use e.g. ss.weibull(3, ss.years(5), loc=ss.years(2)) instead of ss.weibull(3, 5, loc=2, unit=ss.years).'
                 raise ValueError(msg)
 
         # Ensure that unitless parameters really are unitless, and that parameters that share dimensions also share time units
@@ -1756,14 +1756,19 @@ class weibull(Dist):
 
     Args:
         c (float): the shape parameter, sometimes called k (default 1.0)
-        loc (float): the location parameter, which shifts the position of the distribution (default 0.0)
         scale (float): the scale parameter, sometimes called λ (default 1.0)
+        loc (float): the location parameter, which shifts the position of the distribution (default 0.0); by keyword only, so `ss.weibull(2, 5)` is a shape and a scale
+
+    Examples:
+        ```python
+        ss.weibull(c=1.4, scale=ss.days(8))
+        ```
     """
     scaling = scale_types.postdraw
     unitless_pars = ('c',)
-    unit_pars = ('loc', 'scale')
-    def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
+    unit_pars = ('scale', 'loc')
+    def __init__(self, c=1.0, scale=1.0, *, loc=0.0, **kwargs):
+        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, scale=scale, loc=loc, **kwargs)
         return
 
     def make_rvs(self):
@@ -1776,16 +1781,35 @@ class gamma(Dist):
     """
     Gamma distribution (specifically, scipy.stats.gamma)
 
+    Given by its shape and scale, or by its mean and standard deviation.
+
     Args:
         a (float): the shape parameter, sometimes called k (default 1.0)
-        loc (float): the location parameter, which shifts the position of the distribution (default 0.0)
         scale (float): the scale parameter, sometimes called θ (default 1.0)
+        loc (float): the location parameter, which shifts the position of the distribution (default 0.0); by keyword only, so `ss.gamma(2, 5)` is a shape and a scale
+        mean (float): the mean, instead of `a` and `scale` (with `std`)
+        std (float): the standard deviation, with `mean`
+
+    Examples:
+        ```python
+        ss.gamma(a=2, scale=ss.days(5)) # A mean of 10 days
+        ss.gamma(mean=ss.days(10), std=ss.days(7)) # About the same
+        ss.par(1800, prior=ss.gamma(mean=1800, std=400))
+        ```
     """
     scaling = scale_types.postdraw
     unitless_pars = ('a',)
-    unit_pars = ('loc', 'scale')
-    def __init__(self, a=1.0, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='gamma', dist=sps.gamma, a=a, loc=loc, scale=scale, **kwargs)
+    unit_pars = ('scale', 'loc')
+    def __init__(self, a=None, scale=None, *, loc=0.0, mean=None, std=None, **kwargs):
+        if mean is not None or std is not None:
+            if mean is None or std is None or a is not None or scale is not None:
+                errormsg = f'ss.gamma() is given by a and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(a=a, scale=scale, mean=mean, std=std).items() if v is not None])}'
+                raise ValueError(errormsg)
+            a = float((mean/std)**2) # A mean of a×scale and a variance of a×scale²
+            scale = mean/a
+        a = sc.ifelse(a, 1.0)
+        scale = sc.ifelse(scale, 1.0)
+        super().__init__(distname='gamma', dist=sps.gamma, a=a, scale=scale, loc=loc, **kwargs)
         return
 
     def make_rvs(self):

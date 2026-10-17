@@ -192,7 +192,7 @@ def test_odin_examples():
     ex = lfd / 'examples' / 'odin' / 'stochastic_sir_arrays'
     sim = load_odin(ex / 'original' / 'discrete_stochastic_sir_arrays.R', stop=100, **kw)
     assert 'n_runs=100' in sc.strjoin(sim.imported.choices)
-    res = getattr(sim.new(verbose=0).run(n_runs=500).results, sim.pars.diseases[0].name) # Note: MultiResults can be read by attribute, but not by key
+    res = sim.new(verbose=0).run(n_runs=500).results[sim.pars.diseases[0].name]
     ref = tools.read_results(ex)
     for state in 'SIR':
         vals = res[f'n_{state}'].values
