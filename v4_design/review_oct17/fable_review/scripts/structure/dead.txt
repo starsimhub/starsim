@@ -1,0 +1,25 @@
+=== Top-level defs with no reference outside their own body anywhere in repo+docs+vignettes ===
+   18  time.py:43  def approx_compare
+total unreferenced top-level lines: 18 in 1 defs
+
+=== Methods (non-dunder, non-hook, >=3 lines) whose name appears nowhere else ===
+   21  sim.py:2328  Sim.to_yaml
+   17  time.py:2553  DateConverter.axisinfo
+   12  time.py:2471  FloatYearLocator.set_axis
+    9  time.py:2572  DateConverter.default_units
+    9  networks.py:1287  RandomSafeNet.plot_matrix
+    9  arrays.py:801  Arr._to_values
+    9  arrays.py:791  Arr._to_raw
+    8  modules.py:836  Module.alias_state_dict
+    6  time.py:2523  FloatYearFormatter.format_ticks
+    6  time.py:689  date.from_json
+    6  people.py:457  People.scale_flows
+    5  time.py:1479  datedur.is_variable
+    5  sim.py:1622  Sim.reset_time_pars
+    4  parameters.py:255  Pars.dict_update
+    4  demographics.py:516  Pregnancy.dur_gestation_at_birth
+    3  results.py:654  Results.is_msim
+    3  demographics.py:532  Pregnancy.tri3_uids
+    3  demographics.py:522  Pregnancy.tri1_uids
+    3  demographics.py:506  Pregnancy.nulliparous
+total unreferenced method lines: 142 in 19 methods

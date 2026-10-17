@@ -1,0 +1,111 @@
+/home/cliffk/idm/ssv4/starsim/utils.py:976: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()
+/home/cliffk/idm/ssv4/starsim/time.py:2506: UserWarning: AutoDateLocator was unable to pick an appropriate interval for this date range. It may be necessary to add an interval value to the AutoDateLocator's intervald dictionary. Defaulting to 6.
+  vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
+An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+######## ingredients
+par(0.05, bounds=[0.01, 0.5]) days(10) <unnamed state> <unnamed state> <unnamed state>
+[ok 0.0s]
+
+######## disease
+Transition(infection: S -> I @ beta * I)
+Transition(recovery: I -> R @ dur = days(10))
+outcome(cases)
+disease(pars=[dur, beta]; states=None)
+[ok 0.0s]
+
+######## sim
+[ok 0.1s]
+
+######## describe
+  note: contact matrix "contacts" aggregated from 16 age groups to the model's 3 (0-14, 15-64, 65+)
+solver: ode (every part of the model has a compartmental form)
+  note: unit='day' (from start and stop dates)
+Sim: 1 module, 50,000,000 people, 2020.01.01 to 2021.01.01
+solver       ode                                             [guessed: every part of the model has a compartmental form]
+unit         day                                             [from start and stop dates]
+dimension    age (age): 0-14, 15-64, 65+; people age between the groups [guessed: ages uniform from 0 to 100]
+
+Disease 'disease': 3 states, 2 transitions
+states       S, I, R
+             I infectious                                    [guessed: source of 'infection']
+             init: init_prev = 0.01; the rest in S
+
+infection    S -> I   contact-mediated, source I
+             beta = 0.05 per day
+             rate = 0.05 × I                                 [exposure through the contact matrices]
+recovery     I -> R   spontaneous
+             dwell ~ exponential(mean = 10 days)             [guessed: scalar duration]
+
+mixing       contacts (MixingPools): contact matrix by age
+results      n_S, n_I, n_R, and one flow per transition; also new_infections, prevalence, cases
+note         contact matrix "contacts" aggregated from 16 age groups to the model's 3 (0-14, 15-64, 65+)
+note         unit='day' (from start and stop dates)
+schedule     every day: disease
+[ok 0.0s]
+
+######## run
+[ok 0.1s]
+
+######## plot
+[ok 1.0s]
+
+######## calibrate
+Searching on a log scale: beta
+Fitting by l-bfgs-b (gradients by automatic differentiation; override with method=)
+<starsim.calibration.Fit at 0x7022ab941fd0>
+[<class 'starsim.calibration.Fit'>, <class 'sciris.sc_printing.prettyobj'>]
+————————————————————————————————————————————————————————————————————————
+Methods:
+  plot()                  summarize()             to_df()                 
+————————————————————————————————————————————————————————————————————————
+     acceptance: None
+           band: None
+         before: Sim(n=3; 2020.01.01—2021.01.01; diseases=disease)
+    divergences: None
+        measure: 'goodness of fit'
+         method: 'l-bfgs-b'
+       mismatch: 32.23565680693855
+mismatch_before: 67.84870557897756
+           pars: #0. 'beta': 0.010000000000000004
+        samples: None
+            sim: Sim(n=3; 2020.01.01—2021.01.01; diseases=disease)
+          table:     par  initial  best   low  high
+                 0  beta     0.05  0.01  0.01   [...]
+         trials:         beta   mismatch
+                 0   0.050000  67.848706
+                 1   0.276768  68. [...]
+————————————————————————————————————————————————————————————————————————
+
+[ok 2.9s]
+
+######## scenarios
+/software/conda/envs/v4/lib/python3.13/site-packages/multiprocess/popen_fork.py:67: RuntimeWarning: os.fork() was called. os.fork() is incompatible with multithreaded code, and JAX is multithreaded, so this will likely lead to a deadlock.
+  self.pid = os.fork()
+  note: contact matrix "contacts" aggregated from 16 age groups to the model's 3 (0-14, 15-64, 65+)
+solver: ode (every part of the model has a compartmental form)
+  note: unit='day' (from start and stop dates)
+  File "/home/cliffk/idm/ssv4/starsim/run.py", line 836, in single_run
+    sim.run(**run_args)
+    ~~~~~~~^^^^^^^^^^^^
+  File "/home/cliffk/idm/ssv4/starsim/sim.py", line 1833, in run
+    raise AlreadyRunError(errormsg)
+starsim.sim.AlreadyRunError: Simulation is already complete
+Did you mean to copy the sim before running it?
+
+[FAIL 0.8s]
+
+######## msim (n_runs=3)
+  note: contact matrix "contacts" aggregated from 16 age groups to the model's 3 (0-14, 15-64, 65+)
+solver: tau (exact Gillespie would need about 1e+08 events)
+  note: unit='day' (from start and stop dates)
+  File "/tmp/claude-1000/-home-cliffk-idm-ssv4/b3102841-11e6-46bf-942c-f372bd4682c4/scratchpad/ux/s1_overview.py", line 81, in s9
+    msim.plot()
+    ~~~~~~~~~^^
+  File "/home/cliffk/idm/ssv4/starsim/run.py", line 659, in plot
+    leg = sc.movelegend(fig.axes[0], ax, **kw.legend)
+  File "/software/conda/envs/v4/lib/python3.13/site-packages/sciris/sc_plotting.py", line 1814, in movelegend
+    raise ValueError(errormsg)
+ValueError: No legend handles found in Axes(0.125,0.653529;0.227941x0.226471)
+[FAIL 13.2s]

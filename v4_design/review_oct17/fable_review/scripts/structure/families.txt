@@ -1,0 +1,17 @@
+[ok]  v3 ss.SIR as agents: 5.0
+[ok]  v3 ss.SIR with solver=ode: Sim(n=500; 2000—2002.0; networks=randomnet; diseases=sir)
+[ERR] v4 Disease.solvers(): AttributeError: Disease object has no attribute "solvers"
+[ok]  v4 Disease with v3 RandomNet: 135.0
+[ok]  v4 Disease with v3 MixingPool, ode: 159.89030407245104
+[ERR] v4 Disease with v3 Births/Deaths, ode: CodedError: E804 CapabilityError: cannot run with solver="ode": the module "births" (Births) only works on agents.
+     Run with solver="abm", or leave the solver as "auto".
+[ERR] v4 Disease with v3 seasonality connector, ode: CodedError: E804 CapabilityError: cannot run with solver="ode": the module "seasonality" (seasonality) only works on agents.
+     Run with solver="abm", or leave the solver as "auto".
+[ERR] v4 Disease with v3 routine_vx, ode: CodedError: E804 CapabilityError: cannot run with solver="ode": the module "routine_vx" (routine_vx) only works on agents.
+     Run with solver="abm", or leave the solver as "auto".
+[ERR] v4 Disease with v3 routine_vx, abm: ValueError: Years must be within simulation start and end dates.
+[ERR] v3 SIR with v4 vaccinate: CodedError: E506 UnknownDisease: "vaccinate" needs to know which disease it is for, and the sim has no declared diseases. Use disease=.
+[ERR] v3 SIR with v4 modify: CodedError: E504 UnmodifiableTarget: the target of the modifier "beta_multiply", sir.pars.beta, was not found. Quantities that can be modified: randomnet.pars.n_contacts; did you mean randomnet.pars.n_contacts?
+[ok]  ss.Vx() is ss.Vaccine: Vaccine
+[ERR] sim.calibrate on v3 SIR (no bounds): ValueError: sim.new() is only available for sims with declared states and transitions
+solver names: ['auto', 'stochastic', 'abm', 'ode', 'gillespie', 'tau', 'binomial', 'sde']

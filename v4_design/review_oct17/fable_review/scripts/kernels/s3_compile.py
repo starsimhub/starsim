@@ -1,0 +1,21 @@
+"""Measure first-use compile time of the kernels with an empty Numba cache (NUMBA_CACHE_DIR set by the caller)."""
+import os, time
+t0 = time.perf_counter()
+import starsim as ss
+t1 = time.perf_counter()
+print(f'import starsim: {t1-t0:.2f} s; NUMBA_CACHE_DIR={os.environ.get("NUMBA_CACHE_DIR")}')
+sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=8), init=dict(I=0.01), name='sir')
+sim = ss.Sim(sir, unit='day', stop=100, total_pop=10_000, verbose=0).init()
+t2 = time.perf_counter()
+sim.run()
+t3 = time.perf_counter()
+print(f'first ODE run (compile + run): {t3-t2:.2f} s')
+sim2 = ss.Sim(sir, unit='day', stop=100, total_pop=10_000, verbose=0, solver='binomial').init()
+t4 = time.perf_counter()
+sim2.run()
+t5 = time.perf_counter()
+print(f'first binomial run: {t5-t4:.2f} s')
+sim3 = ss.Sim(sir, unit='day', stop=100, total_pop=10_000, verbose=0).init()
+t6 = time.perf_counter()
+sim3.run()
+print(f'second ODE run: {time.perf_counter()-t6:.3f} s')

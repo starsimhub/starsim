@@ -1,0 +1,30 @@
+/home/cliffk/idm/ssv4/starsim/run.py:661: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+  fig.axes[-1].legend(**kw.legend)
+=== A. name inference: module vs function
+module-level name: sir_mod
+function-local name: sir_fn
+=== B. Sim repr n=
+Sim(n=1; 0—10; diseases=sir_mod)
+Sim(n=3; 0—10; diseases=sir_mod)
+=== C. msim.plot small
+MultiSim(n_sims: 1; base: Sim(n=1; 0—50; diseases=sir))
+[36mResults(MultiSim)[0m
+0. [32msir[0m: #0. 'n_S':            [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#1. 'n_I':            [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#2. 'n_R':            [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#3. 'infection':      [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#4. 'recovery':       [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#5. 'new_infections': [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#6. 'prevalence':     [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#7. 'cum_infection':  [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#8. 'cum_recovery':   [sc.prepr(): not shown, recursion exceeded (6>5)]
+    0.#9. 'cum_infections': [sc.prepr(): not shown, recursion exceeded (6>5)]
+plot ok
+=== C2. msim.plot abm
+plot ok
+=== D. reuse of run sim / fit.sim
+same FAIL AlreadyRunError Simulation is already complete
+copy FAIL AlreadyRunError Simulation is already complete
+sc.dcp FAIL AlreadyRunError Simulation is already complete
+=== E. reuse of disease object in two sims
+two sims same disease ok 653.9192344070832 653.9192344070832
