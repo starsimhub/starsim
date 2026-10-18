@@ -51,7 +51,7 @@ broken = lambda why: pytest.mark.xfail(reason=f'The Atomica importer (N13): {why
 
 @no_lib
 @pytest.mark.parametrize('demo', ['sir', 'hiv_dyn',
-    pytest.param('sir_vaccine', marks=broken('the timed vaccine duration (vac_dur) is a fixed dwell time, which a compartmental run approximates by 50 Erlang stages: vac 769.027 against 769.016 (1.4e-5)')),
+    'sir_vaccine', # The timed vaccine duration (vac_dur) is a fixed dwell time: a conveyor of whole steps, exact (it was 50 Erlang stages, 1.4e-5 off)
     pytest.param('tb', marks=broken('imports, but lists 81 untranslated parts (junctions (initj, ...), flow references ("life_expectancy*:ddis"), SRC_POP_AVG(), and the interactions), and without them the counts stop being numbers at time point 3')),
     'udt',
 ])

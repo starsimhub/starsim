@@ -757,8 +757,8 @@ class Delivery(Intervention):
         self.changes = {} # For a transfer: the level in each dimension that people move to, and the one they move from (if given)
         self.sources = {}
         for dim,level in (self.move or {}).items():
-            d = sim.dim_index(dim)
-            strat = sim.strats[d]
+            d = sim.groups.dim_index(dim)
+            strat = sim.groups.strats[d]
             if isinstance(level, str) and ('->' in level or '>>' in level):
                 src, dst = ss.transitions.parse_arrow(level)
                 self.sources[d] = strat.index(src[0])
@@ -788,14 +788,14 @@ class Delivery(Intervention):
         if isinstance(self.product, ss.Test):
             results += [ss.Result('diagnosed', dtype=float, scale=abm, label='Number diagnosed', summarize_by='sum')]
         self.define_results(*results)
-        ng = self.sim.n_groups
+        ng = self.sim.groups.n_groups
         self.rows = self.group_ti = None # As for a disease: see ss.Sim.group_rows()
         if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()
             grouped = [res for res in results if self.sim.kept(self, res.name)]
             self.rows, self.group_ti = self.sim.group_rows(self.sim.t.npts, len(grouped)*ng*8, ss.solvers.Engine.group_bytes, name=self.name)
             for res in grouped:
-                res.strats = self.sim.strats
-                res.dims = [strat.name for strat in self.sim.strats]
+                res.strats = self.sim.groups.strats
+                res.dims = [strat.name for strat in self.sim.groups.strats]
                 res.strata = np.zeros((len(res) if self.rows is None else len(self.group_ti), ng))
                 res.group_ti = self.group_ti
                 if res.name == 'coverage': # A ratio, so the delivered (strata) over the eligible (denom) of each group, which selecting several groups adds up before dividing
@@ -815,7 +815,7 @@ class Delivery(Intervention):
         if getattr(res, 'strata', None) is not None and n:
             if self.selector.abm:
                 uids = self.uids(sel)
-                res.strata[self.row(ti)] += np.bincount(self.sim.group_raw()[uids], minlength=self.sim.n_groups)*weight
+                res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight
             else:
                 res.strata[self.row(ti)] += (sel*self.eng.state_counts()).sum(axis=0)*weight
         return n
@@ -850,8 +850,8 @@ class Delivery(Intervention):
         if self.selector.abm:
             uids = self.uids(sel)
             for d,level in changes.items():
-                sim.people[sim.strats[d].attr][uids] = level
-            sim.groups_changed(uids)
+                sim.people[sim.groups.strats[d].attr][uids] = level
+            sim.groups.groups_changed(uids)
         else:
             for mod in sim.declared:
                 frac = sel
@@ -873,7 +873,7 @@ class Delivery(Intervention):
 
     def mark_offered(self, sel, chosen):
         """ Record that the selected people have been offered the product; returns those chosen, as they now are """
-        return self.follow(sel, chosen, {self.sim.dim_index(self.offered):1})
+        return self.follow(sel, chosen, {self.sim.groups.dim_index(self.offered):1})
 
     def follow(self, sel, chosen, changes):
         """ Move the selected people to other levels of some dimensions; returns those chosen among them, as they now are """
@@ -932,28 +932,28 @@ class Delivery(Intervention):
         now = selector.select(self.eligible)
         before = self.eligible_at(-self.t.dt_year) if selector.abm else now
         newborn = self.eligible_at(None)
-        self.shift(self.offer(now*before*(1 - newborn) if not selector.abm else now & before & ~newborn), {sim.dim_index(self.offered):1})
+        self.shift(self.offer(now*before*(1 - newborn) if not selector.abm else now & before & ~newborn), {sim.groups.dim_index(self.offered):1})
         return
 
     def eligible_at(self, shift):
         """ Who would be eligible with everyone's age shifted by some years, or (if None) with everyone newborn: see skip_past() """
         sim = self.sim
         age = sim.people.age
-        saved, levels = age.raw.copy(), sim.group_levels
+        saved, levels = age.raw.copy(), sim.groups.group_levels
         try:
             age.raw[:] = saved + shift if shift is not None else 0.0
-            if shift is None and 'age' in [strat.name for strat in sim.strats]: # In a compartmental run, the youngest age group
-                sim.group_levels = levels.copy()
-                sim.group_levels[:, sim.dim_index('age')] = np.where(levels[:, sim.dim_index('age')] >= 0, 0, -1)
+            if shift is None and 'age' in [strat.name for strat in sim.groups.strats]: # In a compartmental run, the youngest age group
+                sim.groups.group_levels = levels.copy()
+                sim.groups.group_levels[:, sim.groups.dim_index('age')] = np.where(levels[:, sim.groups.dim_index('age')] >= 0, 0, -1)
             return self.selector.select(self.eligible)
         finally:
             age.raw[:] = saved
-            sim.group_levels = levels
+            sim.groups.group_levels = levels
 
     def move_up(self, dim, levels):
         """ In a compartmental run: move everyone up one level of a dimension, for each of these levels (highest first, so nobody moves twice) """
         selector = self.selector
-        d = self.sim.dim_index(dim)
+        d = self.sim.groups.dim_index(dim)
         everyone = selector.everyone()
         for level in sorted(levels, reverse=True):
             self.shift((selector.dim(dim) == level)*everyone, {d:level + 1})
@@ -1030,9 +1030,9 @@ class Delivery(Intervention):
         if self.holds: # Not to people who already hold it
             sel = sel*(selector.dim(self.product.dim) == 0)
         for d,level in self.changes.items(): # Or who are already there
-            sel = sel*(selector.dim(self.sim.strats[d].name) != level)
+            sel = sel*(selector.dim(self.sim.groups.strats[d].name) != level)
         for d,level in self.sources.items():
-            sel = sel*(selector.dim(self.sim.strats[d].name) == level)
+            sel = sel*(selector.dim(self.sim.groups.strats[d].name) == level)
         if self.remembers:
             sel = sel*(selector.dim(self.offered) == 0)
         if self.waits: # Not to people still waiting for the result of an earlier test
@@ -1074,8 +1074,8 @@ class Delivery(Intervention):
             due[ti] = self.ti_start <= ti < self.ti_stop and (self.round_tis is None or ti in self.round_tis)
         sel = self.offer(self.default_eligible() if self.eligible is None else selector.select(self.eligible))
         cov = np.broadcast_to(np.clip(selector.per_person(1.0 if self.coverage is None else self.coverage), 0, 1), selector.shape)
-        changes = dict(self.changes) if self.product is None else {sim.dim_index(self.product.dim):1}
-        offered = {sim.dim_index(self.offered):1} if self.remembers else {}
+        changes = dict(self.changes) if self.product is None else {sim.groups.dim_index(self.product.dim):1}
+        offered = {sim.groups.dim_index(self.offered):1} if self.remembers else {}
         to = eng.targets(changes | offered)
         rest = eng.targets(offered) if offered else np.arange(eng.n_groups)
         return due, np.broadcast_to(sel, selector.shape), cov, to, rest
@@ -1126,7 +1126,7 @@ class Delivery(Intervention):
         out.group_ti = group_ti
         if tally_g is not None:
             delivered, eligible = tally_g[:, :, 0], tally_g[:, :, 1]
-        if delivered.shape[-1] == self.sim.n_groups and self.sim.n_groups > 1:
+        if delivered.shape[-1] == self.sim.groups.n_groups and self.sim.groups.n_groups > 1:
             out.groups.delivered, out.groups.eligible = delivered, eligible
             out.groups.coverage = np.divide(delivered, eligible, out=np.zeros_like(delivered), where=eligible>0)
             if 'cost' in self.results:
@@ -1191,9 +1191,9 @@ class Delivery(Intervention):
             if abm:
                 product.ti_delivered[self.uids(chosen)] = sim.ti
             if getattr(product, 'cure', None) is not None: # Those chosen as they are now, holding it, to cure them too
-                chosen = self.follow(chosen, chosen, {sim.dim_index(product.dim):1})
+                chosen = self.follow(chosen, chosen, {sim.groups.dim_index(product.dim):1})
             else:
-                self.shift(chosen, {sim.dim_index(product.dim):1})
+                self.shift(chosen, {sim.groups.dim_index(product.dim):1})
         if getattr(product, 'cure', None) is not None: # A treatment that cures with a probability
             cure = selector.per_person(product.cure)
             if abm:
@@ -1239,7 +1239,7 @@ class Delivery(Intervention):
             pos = chosen*(has*sens + (1 - has)*(1 - spec))
             neg = chosen - pos
             if product.delay is not None: # They wait for the result: see step_results()
-                d = self.sim.dim_index(self.pending)
+                d = self.sim.groups.dim_index(self.pending)
                 before = self.eng.state_counts()
                 self.shift(pos, {d:1})
                 self.shift(self.same_people(neg, before), {d:self.result_steps(self.sim) + 1})
@@ -1260,7 +1260,7 @@ class Delivery(Intervention):
             neg = (level == 2*m)*everyone
             self.report(pos, neg)
             level = selector.dim(self.pending) # Then they wait no more, and the others move up
-            self.shift(((level == m) | (level == 2*m))*everyone, {self.sim.dim_index(self.pending):0})
+            self.shift(((level == m) | (level == 2*m))*everyone, {self.sim.groups.dim_index(self.pending):0})
             self.move_up(self.pending, list(range(1, m)) + list(range(m + 1, 2*m)))
             return
         due = (self.ti_result <= self.sim.ti).uids

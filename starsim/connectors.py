@@ -86,7 +86,7 @@ def to_time(sim, val):
 
 def to_ti(sim, val, name='time', after=False):
     """
-    The first timestep at or after a time, which must be within the sim
+    The first timestep at or after a time, which must be within the sim and before its last time point (where no step starts)
 
     Args:
         sim (Sim): the sim
@@ -102,10 +102,10 @@ def to_ti(sim, val, name='time', after=False):
             hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start" + (f", so for the year {val:n} write it as a date, '{val:n}'" if ss.time.assume_cal_year(val) else '')
         when = f'{val}, which is {time}' if sc.isnumber(val) else f'{val}'
         raise ss.TimeOutsideSim(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
-    for ti,now in enumerate(tvec):
-        if now >= time:
-            return ti
-    return len(tvec) # After the end
+    ti = next((ti for ti,now in enumerate(tvec) if now >= time), len(tvec)) # len(tvec) if after the end
+    if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen
+        raise ss.TimeOutsideSim(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
+    return ti
 
 
 def to_steps(sim, dur):

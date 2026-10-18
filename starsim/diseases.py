@@ -30,7 +30,8 @@ class Disease(ss.Module):
     The same disease can be declared in a class body (the class form), which can also
     add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR` are written
     this way. A disease written as code instead, with `define_states()` and `step()`
-    and per-agent arrays, subclasses `ss.Infection`.
+    and per-agent arrays, subclasses `ss.CodedDisease` (Starsim 3's `ss.Disease`), or `ss.Infection`
+    if it is transmitted between agents.
 
     Args:
         args (list): transitions and outcomes, named from the variables they are assigned to
@@ -75,7 +76,8 @@ class Disease(ss.Module):
         members = ss.transitions.class_members(type(self))
         declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
         if not args and not members and not any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
-            raise ss.CapabilityError(f'"{type(self).__name__}" declares no states or transitions. A disease written as code (with define_states() and step()) subclasses ss.Infection;\n'
+            raise ss.CapabilityError(f'"{type(self).__name__}" declares no states or transitions. A disease written as code (with define_states() and step()) subclasses ss.CodedDisease\n'
+                             f'     (Starsim 3\'s ss.Disease), or ss.Infection if it is transmitted between agents;\n'
                              f'     a declared disease gives its transitions, e.g. ss.Disease(infection=ss.transmission("S -> I", beta=0.1), recovery=ss.progression("I -> R", dur=10)).')
         self.init_graph(args, members, pars, kwargs, frame=ss.utils.getframe(1))
         return
@@ -355,44 +357,41 @@ class Disease(ss.Module):
         return
 
 
-class Infection(Disease):
+class CodedDisease(Disease):
     """
-    Base class for diseases written as code
+    Base class for a disease written as code, with no states of its own
 
-    A disease written as code defines its own per-agent states (`define_states()`)
-    and how they change (`step_state()`, `step()`, `set_prognoses()`), as for any other
-    module, so it can hold anything an agent can have: a CD4 count, an immunity level
-    that wanes, a time since infection. It runs as agents. This class implements
-    network-based transmission with directional beta values, and defines the attributes
-    (`rel_sus`, `rel_trans`) that other modules act on; a disease that is not transmitted
-    (such as `ss.NCD`) defines no `beta` and its own `step()`.
+    A disease that its own code moves along, with no built-in infection states and no
+    transmission: it defines its states (`define_states()`), results (`init_results()`),
+    and what happens each step (`step_state()`, `step()`), as for any other module, and is
+    listed with the sim's diseases. It is Starsim 3's `ss.Disease`. For a disease
+    written as code that is transmitted between agents, subclass `ss.Infection`, which
+    adds the susceptible and infected states, `rel_sus` and `rel_trans`, and transmission
+    over networks; a disease that can be written as states and transitions is declared
+    instead, with `ss.Disease` (see `ss.SIR`).
 
-    A disease that can be written as states and transitions is declared instead, with
-    `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
-    and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
-    conditions such as `hiv.cd4 < 200`, and fitting the values in `pars`.
+    Args:
+        pars (dict): parameter values by name, as for `define_pars()`
+        kwargs (dict): merged with `pars`
+
+    **Example**:
+
+        class Anemia(ss.CodedDisease):
+            def __init__(self, **kwargs):
+                super().__init__()
+                self.define_pars(p_onset=ss.bernoulli(0.01))
+                self.update_pars(**kwargs)
+                self.define_states(ss.BoolState('anemic', label='Anemic'))
+
+            def step_state(self):
+                self.anemic[self.pars.p_onset.filter()] = True
     """
 
     def __init__(self, pars=None, **kwargs):
         ss.Module.__init__(self) # Written as code, so there is no graph of declared states to build (see ss.Disease)
         self.infection_log = None
         self.engine = None
-        self.define_states(
-            ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infected'),
-            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-            ss.FloatArr('ti_infected', label='Time of infection' ),
-            infectious = 'infected', # Only infectious agents transmit; by default, everyone infected is infectious
-        )
-
-        self.define_pars(
-            init_prev = None, # Replace None with a ss.bernoulli to seed infections
-        )
         self.update_pars(pars, **kwargs)
-
-        # Define random number generator for determining transmission
-        self.trans_rng = ss.multi_random('source', 'target')
         return
 
     @property
@@ -434,6 +433,106 @@ class Infection(Disease):
         ss.Module.init_pre(self, sim)
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
             self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
+        return
+
+    def init_post(self):
+        ss.Module.init_post(self)
+        return
+
+    def start_step(self):
+        ss.Module.start_step(self)
+        return
+
+    def step_state(self):
+        pass
+
+    def step_die(self, uids):
+        pass
+
+    def step(self):
+        pass
+
+    def set_prognoses(self, uids, sources=None):
+        """ Set prognoses upon acquiring the disease (by default, only adding to the log if there is an `ss.infection_log` analyzer) """
+        if self.infection_log:
+            self.infection_log.add_entries(uids, sources, self.now)
+        return
+
+    def make_naive(self, uids, skip_states=None):
+        """
+        Reset agents to the state of never having had the disease; used for dynamic rescaling (see `ss.Sim.rescale()`)
+
+        By default, this resets every state of the disease to its default value, except
+        `rel_sus` and `rel_trans`, which are often modified by other modules (e.g. vaccines).
+        Override this method if the disease needs something different.
+
+        Args:
+            uids (`ss.uids`): the agents to make naive
+            skip_states (list): names of states not to reset (default `['rel_sus', 'rel_trans']`)
+        """
+        if skip_states is None:
+            skip_states = ['rel_sus', 'rel_trans']
+        skip_states = sc.tolist(skip_states)
+        for state in self.state_list:
+            if state.name not in skip_states:
+                state.set(uids)
+        return
+
+    def update_results(self):
+        ss.Module.update_results(self)
+        return
+
+    def finalize_results(self):
+        ss.Module.finalize_results(self)
+        return
+
+    def shrink(self):
+        ss.Module.shrink(self)
+        return
+
+
+class Infection(CodedDisease):
+    """
+    Base class for diseases written as code
+
+    A disease written as code defines its own per-agent states (`define_states()`)
+    and how they change (`step_state()`, `step()`, `set_prognoses()`), as for any other
+    module, so it can hold anything an agent can have: a CD4 count, an immunity level
+    that wanes, a time since infection. It runs as agents. This class implements
+    network-based transmission with directional beta values, and defines the attributes
+    (`rel_sus`, `rel_trans`) that other modules act on; a disease that is not transmitted
+    (such as `ss.NCD`) defines no `beta` and its own `step()`.
+
+    A disease that can be written as states and transitions is declared instead, with
+    `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
+    and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
+    conditions such as `hiv.cd4 < 200`, and fitting the values in `pars`.
+    """
+
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.define_states(
+            ss.BoolState('susceptible', default=True, label='Susceptible'),
+            ss.BoolState('infected', label='Infected'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+            ss.FloatArr('ti_infected', label='Time of infection' ),
+            infectious = 'infected', # Only infectious agents transmit; by default, everyone infected is infectious
+        )
+
+        self.define_pars(
+            init_prev = None, # Replace None with a ss.bernoulli to seed infections
+        )
+        self.update_pars(pars, **kwargs)
+
+        # Define random number generator for determining transmission
+        self.trans_rng = ss.multi_random('source', 'target')
+        return
+
+    @ss.required()
+    def init_pre(self, sim):
+        """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()` """
+        super().init_pre(sim)
         if 'beta' in self.pars: # A disease that is not transmitted, such as ss.NCD, has no beta
             self.validate_beta()
         self.validate_init_prev()
@@ -446,6 +545,8 @@ class Infection(Disease):
         if sc.isnumber(p) and p > 1:
             errormsg = f'init_prev={p} is not a valid probability; to infect exactly {p} agents, use init_prev=ss.choose_n({p})'
             raise ValueError(errormsg)
+        if sc.isnumber(init_prev): # A share given where the class has no distribution to set it on (the base class's default is None)
+            self.pars.init_prev = ss.bernoulli(init_prev)
         return
 
     def init_post(self):
@@ -514,10 +615,6 @@ class Infection(Disease):
 
         return betamap
 
-    def start_step(self):
-        ss.Module.start_step(self)
-        return
-
     def step_state(self):
         """
         Carry out updates at the start of the timestep (prior to transmission);
@@ -546,26 +643,6 @@ class Infection(Disease):
     def not_naive(self):
         """ The agents who have ever been infected, for dynamic rescaling (see `ss.Sim.rescale()`) """
         return self.ti_infected.notnan.uids
-
-    def make_naive(self, uids, skip_states=None):
-        """
-        Reset agents to the state of never having had the disease; used for dynamic rescaling (see `ss.Sim.rescale()`)
-
-        By default, this resets every state of the disease to its default value, except
-        `rel_sus` and `rel_trans`, which are often modified by other modules (e.g. vaccines).
-        Override this method if the disease needs something different.
-
-        Args:
-            uids (`ss.uids`): the agents to make naive
-            skip_states (list): names of states not to reset (default `['rel_sus', 'rel_trans']`)
-        """
-        if skip_states is None:
-            skip_states = ['rel_sus', 'rel_trans']
-        skip_states = sc.tolist(skip_states)
-        for state in self.state_list:
-            if state.name not in skip_states:
-                state.set(uids)
-        return
 
     def set_prognoses(self, uids, sources=None):
         """
@@ -650,6 +727,8 @@ class Infection(Disease):
         `finalize_infections()`. A multi-strain disease can override this method to loop
         over strains, calling `infect_route()` with per-strain values.
         """
+        if 'beta' not in self.pars: # A disease that is not transmitted, such as ss.NCD, has no beta
+            return self.finalize_infections([], [], [])
         betamap = self.validate_beta()
 
         # Compute effective transmissibility and susceptibility directly on the raw
@@ -903,6 +982,10 @@ class Infection(Disease):
         ss.Module.finalize_results(self) # Called first to scale the results
         res = self.results
         res.cum_infections[:] = np.cumsum(res.new_infections[:]) # Computed after scaling, since the scale can vary over time (see ss.Sim.rescale())
+        ti_infected = getattr(self, 'ti_infected', None) # A subclass can remove it (define_states(reset=...))
+        if ti_infected is not None and not res.new_infections.values.any() and np.any(ti_infected.raw > 0): # People were infected during the run, but none were counted
+            ss.warn(f'"{self.name}": people were infected during the run, but new_infections is 0 at every time point. Infection.set_prognoses() counts them, '
+                    f'so an override of it ({type(self).__name__}.set_prognoses()) should call super().set_prognoses(uids, sources)')
         return
 
 

@@ -1,10 +1,12 @@
 """
 Test Starsim features not covered by other test files
 """
+import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
+from starsim.migrate import migrate_text
 import matplotlib.pyplot as plt
 
 sc.options.interactive = False # Assume not running interactively
@@ -104,6 +106,56 @@ def test_custom_imports():
     return o
 
 
+@sc.timer()
+def test_migrate():
+    """ Starsim 3 code rewritten by the migration script, and the warning about what it rewrites """
+    sc.heading('Testing the migration script')
+    old = '''
+import starsim as ss
+
+class Counter(ss.Module):
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('new_events', dtype=int, scale=False), ss.Result('seen', dtype=int, scale=False))
+
+    def step(self):
+        self.results.new_events[self.ti] += 5 # Starsim 3: the step's index
+
+    def update_results(self):
+        super().update_results()
+        self.results.seen[self.ti] = self.results.new_events[self.ti]
+'''
+    new, changes, todo = migrate_text(old)
+    assert 'new_events[self.ti + 1]' in new # A result written in step() goes at the end of the step
+
+    # Run both: the Starsim 3 code silently sees nothing, with a warning; the migrated code sees every event
+    for text, seen in [(old, 0), (new, 50)]:
+        scope = {}
+        exec(text, scope)
+        sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0)
+        if seen:
+            sim.run()
+        else:
+            with pytest.warns(RuntimeWarning, match='time index'):
+                sim.run()
+        assert sim.results.counter.seen.sum() == seen
+
+    # Renames, the network's name, a fractional verbose, and Starsim 3's coded bases
+    text, changes, todo = migrate_text("net = ss.MaternalNet(); key = 'maternal'; pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass", network_rename=True)
+    assert text == "net = ss.PrenatalNet(); key = 'prenatal'; pars = dict(verbose=1)\nclass MySIS(ssl.CodedSIS): pass\nclass MyNCD(ss.CodedDisease): pass"
+
+    # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
+    class Quiet(ssl.CodedSIS):
+        def set_prognoses(self, uids, sources=None):
+            self.susceptible[uids] = False
+            self.infected[uids] = True
+            self.ti_infected[uids] = self.ti
+            self.ti_recovered[uids] = self.ti + 5
+    with pytest.warns(RuntimeWarning, match='new_infections'):
+        ss.Sim(n_agents=200, diseases=Quiet(beta=ss.peryear(5)), networks='random', verbose=0).run()
+    return new
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -117,6 +169,7 @@ if __name__ == '__main__':
     sims1 = test_deepcopy()
     sims2 = test_deepcopy_until()
     mods  = test_custom_imports()
+    mig   = test_migrate()
 
     sc.toc(T)
     plt.show()

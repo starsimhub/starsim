@@ -571,8 +571,8 @@ class Loop:
             raise ValueError(errormsg)
 
         insertion = dict(func=func, label=label, match_fn=match_fn, before=before)
+        self._insert_into_plan(**insertion) # First, since making the plan (it is made when first needed) replays the insertions recorded
         self.insertions.append(insertion)
-        self._insert_into_plan(**insertion)
         return
 
     def to_df(self):

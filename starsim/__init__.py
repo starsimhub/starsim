@@ -40,7 +40,7 @@ sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
 t('utils')
 from .utils import (
     ndict, warn, find_contacts, standardize_netkey, parse_age_range, apply_age_range,
-    standardize_data, validate_sim_data, load, save, shrink, plot_args, show,
+    standardize_data, load, save, shrink, plot_args, show,
     return_fig,
 )
 
@@ -69,16 +69,22 @@ from .distributions import (
 
 t('time')
 from .time import (
-    DateArray, date, TimePar, dur, datedur, Rate, prob, per,
-    years, months, weeks, days,
+    TimePar, dur, Rate, prob, per, freq,
+    years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
-) # ss.prob(0.1, 'day') for a probability per unit time; ss.time.freq for a count per unit time, in modules written as code
+    probperday, probperweek, probpermonth, probperyear,
+    freqperday, freqperweek, freqpermonth, freqperyear,
+)
+
+t('dates')
+from .dates import DateArray, date, datedur
+from . import timeplot # Registers Starsim's dates and durations with Matplotlib
 
 t('timeline')
 from .timeline import Timeline
 
 t('parameters')
-from .parameters import Pars, SimPars, Requires, load_pars
+from .parameters import Pars, SimPars, Requires, load_pars, by, timeseries, seasonal
 
 t('people')
 from .people import People, Person, people
@@ -94,11 +100,11 @@ from .networks import (
     Network, DynamicNetwork, SexualNetwork,
     StaticNet, RandomNet, PartnerNet, MFNet,
     PrenatalNet, PostnatalNet, BreastfeedingNet,
-    AgeGroup, MixingPools, MixingPool, contacts,
+    AgeGroup, MixingPools, MixingPool, contacts, geo, gravity, Mobility,
 )
 
 t('results')
-from .results import Result, Results
+from .results import Result, Results, data, compare, validate_sim_data
 
 t('demographics')
 from .demographics import (
@@ -126,17 +132,20 @@ from . import conditions
 from . import kernels
 
 t('transitions')
+from .expressions import par
 from .transitions import (
-    par, State, states, null,
-    Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome,
-    by, timeseries, seasonal, geo, gravity, Mobility, transfer,
+    State, states, null,
+    Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome, update,
 )
+
+t('dimensions')
+from .dimensions import transfer # Also ss.dimensions.Strat, ss.dimensions.Groups
 
 t('solvers')
 from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.solvers.Agents
 
 t('diseases')
-from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
+from .diseases import Disease, CodedDisease, Infection, NCD, SIR, SEIR, SIS
 
 t('loop')
 from .loop import Loop
@@ -164,7 +173,7 @@ from .calibration import (
     Calibration, CalibComponent,
     linear_interp, linear_accum, step_containing,
     BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
-    data, compare, mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize,
+    mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize,
 )
 
 t('samples')
@@ -211,6 +220,52 @@ if debug:
     for key,val in zip(timing_keys, timing_vals):
         print(f'{key:15s} | Σ = {val:0.3f} s | Δ = {(val-lastval)*1000:0.1f} ms')
         lastval = val
+
+# Names that Starsim no longer exports, with what to write instead (see the migrate-starsim3 skill)
+_removed = {
+    'rate':               "ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time); ss.rate was deprecated in Starsim 3",
+    'time_prob':          "ss.probperyear(x); ss.time_prob was deprecated in Starsim 3",
+    'rate_prob':          "ss.peryear(x); ss.rate_prob was deprecated in Starsim 3",
+    'simple_vx':          "ss.Vaccine(efficacy=e)",
+    'routine_vx':         "ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1))",
+    'campaign_vx':        "ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, at=[y1, y2])",
+    'routine_screening':  "ss.screen(ss.Test(sensitivity=..., specificity=...), coverage=p, start=y, interval=ss.years(1))",
+    'campaign_screening': "ss.screen(ss.Test(sensitivity=..., specificity=...), coverage=p, at=[...])",
+    'routine_triage':     "a follow-up test: ss.screen(test1, ..., on_positive=ss.screen(test2, ...))",
+    'campaign_triage':    "a follow-up test: ss.screen(test1, ..., on_positive=ss.screen(test2, ...))",
+    'seasonality':        "ss.modify(flu.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), passed in connectors=",
+    'multi_run':          "ss.parallel(sim, n_runs=n) (or sim.run(n_runs=n)); its .sims are the list multi_run returned",
+    'MaternalNet':        "ss.PrenatalNet",
+    'RandomExactNet':     "ss.RandomNet(method='exact')",
+    'RandomSafeNet':      "ssl.RandomSafeNet (import starsim.library as ssl)",
+    'ClusterNet':         "ssl.ClusterNet (import starsim.library as ssl)",
+    'HybridNet':          "ssl.HybridNet (import starsim.library as ssl)",
+    'MSMNet':             "ssl.MSMNet (import starsim.library as ssl)",
+    'Route':              "ss.networks.Route (most code subclasses ss.Network)",
+    'InfectionLog':       "ss.diseases.InfectionLog",
+    'stratify':           "model.stratify(...)",
+    'Expr':               "ss.transitions.Expr",
+    'Graph':              "ss.transitions.Graph",
+    'Strat':              "ss.transitions.Strat",
+    'Transfer':           "ss.transitions.Transfer",
+    'Cond':               "ss.conditions.Cond",
+    'MultiResults':       "ss.run.MultiResults",
+    'Engine':             "ss.solvers.Engine",
+    'Compartmental':      "ss.solvers.Compartmental",
+    'Agents':             "ss.solvers.Agents",
+    'Crossing':           "ss.solvers.Crossing",
+    'Mixing':             "ss.solvers.Mixing",
+    'CountState':         "ss.solvers.CountState",
+    'make_engine':        "ss.solvers.make_engine",
+    'solver_names':       "ss.solvers.solver_names",
+}
+
+def __getattr__(name):
+    """ Say what a name that Starsim no longer exports has become """
+    if name in _removed:
+        errormsg = f'ss.{name} has been removed from Starsim. Instead, write: {_removed[name]}. (The migrate-starsim3 skill lists every change.)'
+        raise AttributeError(errormsg)
+    raise AttributeError(f"module 'starsim' has no attribute '{name}'")
 
 # Don't keep these in the module
 del t, sc, debug

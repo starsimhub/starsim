@@ -164,7 +164,7 @@ The `ssl.mnch` submodule contains examples of vertical transmission and birth ou
 mnch_pars = dict(start='2000', stop='2005', n_agents=2000, dt=ss.weeks(1))
 sim = ss.Sim(
     diseases      = ssl.mnch.CongenitalDisease(beta=ss.peryear(20), init_prev=0.2),
-    demographics  = [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()],
+    demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     networks      = [ss.PrenatalNet(), ss.RandomNet()],
     **mnch_pars,
 )
@@ -186,7 +186,7 @@ To use the framework in your own disease, define `birth_outcome_keys` and `birth
 ```{python}
 sim = ss.Sim(
     diseases     = ssl.mnch.NeonatalSepsis(),
-    demographics = [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()],
+    demographics = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     networks     = [ss.PrenatalNet(), ss.RandomNet()],
     **mnch_pars,
 )
@@ -205,7 +205,7 @@ The `fetal_infection` connector pulls those levers when a pregnant woman is infe
 ```{python}
 sim = ss.Sim(
     diseases      = ssl.CodedSIR(beta=ss.peryear(20), name='sir'),
-    demographics  = [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()],
+    demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     connectors    = ssl.mnch.fetal_infection(),
     interventions = ssl.mnch.treat_pregnant(disease='sir', start_year=2005),
     custom        = ssl.mnch.FetalHealth(),

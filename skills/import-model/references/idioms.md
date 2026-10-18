@@ -16,7 +16,7 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | An Erlang or gamma duration, or stages | `ss.progression('E -> I', dur=ss.erlang(k=3, mean=ss.days(10)))`, or `stages=3` on the transition |
 | A lognormal or other distribution | `dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3))` (agents sample it; compartments use Erlang stages, with a note) |
 | "As soon as", probability 1 at the next step | A very high rate (`ss.perday(1e9)`), or a branch with `p=` on the transition into the state if it happens on entry |
-| A delay that is exact (odin's `delay()`, a lag) | `ss.outcome(source, delay=ss.days(14))` for a reported quantity; for people, a fixed dwell (`ss.constant`) |
+| A delay that is exact (odin's `delay()`, a lag) | `ss.outcome(source, delay=ss.days(14))` for a reported quantity; for people, a fixed dwell (`ss.constant`), which every solver takes exactly, as a conveyor of whole steps |
 | Rates that change in time | `ss.timeseries({'2020-01-01': 1, '2020-04-01': 0.5})` as the value of a parameter, `ss.seasonal(mean=, amplitude=, peak=)`, or `ss.change(sir.pars.beta, at=[...], by=[...])` |
 | A calendar period (on/off) | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate (`rate * quarantine_period`); or `ss.modify(..., start=, stop=)` |
 
@@ -27,21 +27,9 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | A condition on another state machine or disease (`cond: is_A`, `escape: is_I`) | `where=` on the transition: `ss.Transition(NG, G, rate=..., where=lambda sim: sim.diseases.growth.A)` |
 | A condition on age, sex, or another property | `where=ppl.age >= 15` (with `ppl = ss.People(n)` in scope); for a compartmental run, a bin edge at 15 in the age stratification |
 | A capacity (fewer than K in a state) | A comparison of counts in the rate: `I >> Q @ 0.01 * (Q.n < K)` |
-| A minimum stay before the other ways out apply | A function of the time in the state (agents only): see below |
+| A minimum stay before the other ways out apply | `after=` on each way out (`ss.Transition(E, I, rate=0.3, after=ss.days(10))`); `before=` for a way out that applies only during the stay (EMULSION's escape) |
+| A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A count set each step: `peak = ss.State(people=False)` and `ss.update(peak, np.maximum(peak.n, I.frac))` |
 | Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], split=..., adjust={'infection': [...]})`; places with `ss.geo(...)` and `ss.Mobility(...)` |
-
-A minimum stay, as in EMULSION's `duration` on a state with other ways out:
-
-```python
-def stay(mod, state, dur, rate, after=True):
-    """ Workaround: a rate that applies only once an agent has been in the state for dur (or, with after=False, only until then) """
-    def func(sim, uids):
-        stayed = sim.ti - sim.diseases[mod][f'ti_{state}'][uids] >= round(dur/dt)
-        return (rate(sim, uids) if callable(rate) else rate)*(stayed == after)
-    return func
-
-onset = ss.Transition(E, I, rate=stay('health', 'E', 10, 0.3))
-```
 
 ## People coming and going
 

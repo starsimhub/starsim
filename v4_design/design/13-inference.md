@@ -168,7 +168,7 @@ The right fitting method follows from the model, so the library picks it and pri
 | Stochastic compartmental, run whole by the kernels | Optuna; a best fit | particle MCMC, a posterior |
 | Agent-based, or a stochastic run stepped from Python | Optuna; a best fit | Optuna; a best fit |
 
-The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `calibrate()`: `trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. For the SciPy methods, the search starts from the best of a spread of points over the bounds (`scan=`, 10 per parameter by default).
+The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `calibrate()`: `trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. For the SciPy methods, a search starts from each of the best three points (`restarts=3`) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
 
 The same model with no network, run as an ODE:
 
@@ -189,7 +189,7 @@ fit = sim.calibrate()
 ```text
 Searching on a log scale: init_prev, beta
 Fitting by l-bfgs-b (gradients by automatic differentiation; override with method=)
-Converged: CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH (114 evaluations)
+Converged: the best two of 3 searches, from points of the scan that are apart, ended within 0.1 of each other (1342, 1342, 1388; 287 evaluations)
 ```
 
 ```text
@@ -252,7 +252,7 @@ NUTS: 4 chains on 4 cores, each of 500 warm-up draws and then 2000 draws: compil
 Converged: R-hat at most 1.003 and effective sample size at least 2,146, with 0 divergent draws
 ```
 
-What "starts from the previous best fit" means depends on the stage that follows: an optimizer and NUTS start from it, particle MCMC starts its chains from the best of it and a spread of points over the bounds, and ABC-SMC draws its first generation from the prior, so for ABC-SMC an earlier stage changes nothing.
+What "starts from the previous best fit" means depends on the stage that follows: an optimizer and NUTS start from it (it is the best point of the scan, and the other searches or chains start from the next best points apart from it), particle MCMC starts its chains from the best of it and a spread of points over the bounds, and ABC-SMC draws its first generation from the prior, so for ABC-SMC an earlier stage changes nothing.
 
 **A stage that fails to converge stops the sequence.** Each method has its own convergence check ([Convergence reporting](#convergence-reporting)). If a stage does not pass it, the stages after it are not run, a warning says which stage stopped and why (`StageStopped`), and the fit returned is the last good one: the result of the last stage that did converge. So a poor starting point is never fed into an expensive sampler. If the first stage is the one that fails, its best attempt is returned, labeled as not converged.
 
@@ -286,7 +286,8 @@ Every fit says whether it converged: `fit.converged` is true or false, and `fit.
 
 | Method family | Reported |
 |---|---|
-| SciPy optimizers and `asd` | whether the method stopped by its own rule (its message), and the number of evaluations |
+| SciPy optimizers | whether the best two searches from the scan's points ended within 0.1 of each other (of the negative log-likelihood; 0.1% of a goodness of fit), with the value each ended at and the number of evaluations; a single search (`restarts=1`) reports SciPy's own rule, which is wrong in both directions often enough not to be relied on |
+| `asd` | whether the method stopped by its own rule (its message), and the number of evaluations |
 | NUTS | R-hat (rank-normalized) and bulk effective sample size of each parameter, and divergences; converged if R-hat is at most 1.01 with no divergent draws |
 | Particle MCMC | R-hat, effective sample size, and the share of proposals each chain accepted; converged if R-hat is at most 1.01 |
 | ABC-SMC | the final tolerance, the share of the last proposals accepted, and the effective sample size; converged if the tolerance has stopped shrinking (by less than 10% in the last generation) |

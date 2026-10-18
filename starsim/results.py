@@ -1,6 +1,8 @@
 """
 Result structures.
 """
+import os
+import functools
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -58,6 +60,15 @@ class Result(ss.BaseArr):
         ```
     """
     runs = None # For a result across the runs of a MultiSim: one row per run (see above)
+    _removed = { # Starsim 3 methods, with what to write instead
+        'annualize': "res.resample('year'), which sums a flow over each year and takes a stock at the year's end (res.resample('year', kind='ratio') averages it, as annualize() did)",
+    }
+
+    def __getattr__(self, attr):
+        """ Say what a removed method has become; otherwise, as `ss.BaseArr` """
+        if attr in Result._removed:
+            raise AttributeError(f'Result.{attr}() has been removed from Starsim. Instead, write: {Result._removed[attr]}. (The migrate-starsim3 skill lists every change.)')
+        return super().__getattr__(attr)
 
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
                  module=None, values=None, timevec=None, low=None, high=None, kind=None, summarize_by=None, columns=None, runs=None, **kwargs):
@@ -377,6 +388,38 @@ class Result(ss.BaseArr):
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
                      values=values, shape=values.shape[0], columns=columns, kind=self.kind)
         return out
+
+    def init_groups(self, strats, dims, shape, group_ti=None, ratio=False):
+        """
+        Keep the values of each group as well as the total, for a result of a stratified model (see `select()` and `by()`)
+
+        Args:
+            strats (list): the stratifications of the sim
+            dims (list): the names of those this result has
+            shape (tuple): the number of rows (one per time point, or one every few steps: see `ss.Sim.group_rows()`) and of groups
+            group_ti (array): the time point of each row, if there is not one per time point
+            ratio (bool): whether the result is a ratio, which keeps its denominator by group too, so that selecting groups adds up each before dividing
+        """
+        self.strats = strats
+        self.dims = dims
+        self.strata = np.zeros(shape)
+        self.group_ti = group_ti
+        if ratio:
+            self.denom = np.zeros(shape)
+        return
+
+    def store_group(self, ti, vals, rows=None, flow=False):
+        """ Keep the values by group at time point ti, if this result keeps them: in its row, where a flow is added up over the steps of the row (`rows` gives the row of each time point; see `ss.Sim.group_rows()`) """
+        strata = getattr(self, 'strata', None)
+        if strata is None:
+            return
+        if rows is None:
+            strata[ti] = vals
+        elif flow:
+            strata[rows[ti]] += vals
+        else:
+            strata[rows[ti]] = vals
+        return
 
     @property
     def group_timevec(self):
@@ -1059,22 +1102,417 @@ class Results(ss.ndict):
                             df[k] = thisdf
         return df
 
-    def plot(self, style='fancy', fig_kw=None, plot_kw=None):
-        """ Plot all the results """
-        # Prepare the inputs
-        fig_kw = sc.mergedicts(fig_kw)
-        plot_kw = sc.mergedicts(plot_kw)
-        results = list(self.all_results)
-        nrows,ncols = sc.getrowscols(len(results))
+    def walk(self):
+        """ Each result, as (module name, key, result), with the module None for the sim's own results """
+        for key,val in self.items():
+            if isinstance(val, Results):
+                for k,res in val.items():
+                    if isinstance(res, Result):
+                        yield key, k, res
+            elif isinstance(val, Result):
+                yield None, key, val
 
-        # Do the plotting
-        with sc.options.with_style(style):
-            fig = plt.figure(**fig_kw)
-            for i,res in enumerate(results):
-                ax = plt.subplot(nrows, ncols, i+1)
-                res.plot(ax=ax, **plot_kw)
-            sc.figlayout()
-        return ss.return_fig(fig)
+    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, show_module=None, n_ticks=None, annualize=False, **kwargs):
+        """
+        Plot the results, each in its own axes; see `sim.plot()` and `msim.plot()`
+
+        A result across runs is plotted as the median and a 95% interval of each scenario, or every run if `lines=True`.
+
+        Args:
+            key (str/list): the result (e.g. `'sir.n_I'`) or results to plot (by default, those plotted automatically); a module's name plots its results; if a list, plot exactly those
+            fig (Figure): if provided, plot into an existing figure
+            data (dict): data to plot with the results: the times and values for each result, by the result's module and name (see `sim.plot()`)
+            label (str): the label of the lines of a result of one run (e.g. the sim's)
+            title (str): the title of the figure
+            lines (bool): for a result across runs, plot every run instead of the median and interval
+            legend (bool): whether to label the scenarios, if there is more than one
+            show_skipped (bool): show even results that are not plotted by default
+            show_module (int): whether to show the module as well as the result name; if an int, show if the label is shorter than that (default 26); if -1, on a new line
+            n_ticks (tuple): the minimum and maximum number of x-axis ticks (default `(2,5)`)
+            annualize (bool): if True, resample the results to annual values first (each by its kind; see `ss.Result.resample()`)
+            kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()`
+        """
+        flat = match_result_keys(self, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
+        if annualize:
+            flat = sc.objdict({k: res.resample('year') if isinstance(res, Result) else res for k, res in flat.items()})
+        n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes
+        figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size with the number of columns
+        kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
+        data = data or {}
+        with ss.style(**kw.style):
+            if fig is None:
+                fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
+                if isinstance(axs, np.ndarray):
+                    axs = axs.flatten()
+            else:
+                axs = fig.axes
+            if not sc.isiterable(axs):
+                axs = [axs]
+            many = False
+            for ax,res in zip(axs, flat.values()):
+                if (res.module, res.name) in data: # Plot the data
+                    x, y = data[(res.module, res.name)]
+                    ax.scatter(x, y, **kw.data)
+                if res.runs is not None: # Across runs
+                    res.plot(ax=ax, lines=lines, plot_kw=kw.plot, fill_kw=kw.fill)
+                    many = many or len(res.scenarios()) > 1
+                elif res.columns is None:
+                    ax.plot(res.timevec, res.values, **kw.plot, label=label)
+                else: # One line per column for a 2D result
+                    labels = [f'{col} ({label})' if label else col for col in res.columns]
+                    ax.plot(res.timevec, res.values, **kw.plot, label=labels)
+                    ax.legend()
+                format_axes(ax, res, n_ticks, show_module)
+            if legend and many:
+                axs[0].legend(**kw.legend)
+        if title:
+            fig.suptitle(title, weight='bold')
+        sc.figlayout(fig=fig)
+        return ss.return_fig(fig, **kw.return_fig)
 
 
+def match_result_keys(results, key, show_skipped=False, flattened=False):
+    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
 
+    def normkey(key):
+        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
+        return key.replace('.','_').lower()
+
+    # Handle accessing subdicts
+    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
+        flat = results[key].flatten() # e.g. sim.results['sis']
+        key = None # We've already used the key, so reset it
+    else: # Main use case: flatten the dict, e.g. sim.plot()
+        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
+
+    # Configuration
+    flat_orig = flat # Copy reference before we modify in place
+    if not show_skipped: # Skip plots with auto_plot set to False
+        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
+            res = flat[k]
+            if isinstance(res, ss.Result) and not res.auto_plot:
+                flat.pop(k)
+
+    if key is not None:
+        if isinstance(key, str):
+            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
+                flat = {normkey(key):flat[normkey(key)]}
+            else:
+                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+                named = {k:v for k,v in flat.items() if k.endswith('_' + normkey(key))} # A result's own name, e.g. 'cpr' for 'contraception_cpr' rather than 'contraception_acpr'
+                if len(flat) > 1 and len(named) == 1:
+                    flat = named
+            if len(flat) != 1:
+                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+        else:
+            try:
+                flat = {k.lower():flat[normkey(k)] for k in key}
+            except sc.KeyNotFoundError as e:
+                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
+                raise sc.KeyNotFoundError(errormsg) from e
+
+    return flat
+
+
+def get_result_plot_label(res, show_module=None):
+    """ Helper function for getting the label to plot for a result; not for the user """
+    # Sanitize
+    if show_module is None:
+        show_module = 26 # Default maximum length
+    elif isinstance(show_module, bool):
+        if show_module is True:
+            show_module = 999
+        else:
+            show_module = 0
+    if not isinstance(show_module, int):
+        errormsg = f'"show_module" must be a bool or int, not {show_module}'
+        raise TypeError(errormsg)
+
+    # Decide how/if to show the module
+    if show_module == -1:
+        label = res.full_label.replace(':', '\n')
+    elif len(res.full_label) > show_module:
+        label = sc.ifelse(res.label, res.name)
+    else:
+        label = res.full_label
+
+    return label
+
+
+def format_axes(ax, res, n_ticks=None, show_module=None):
+    """ Standard formatting for axis results; not for the user """
+    if n_ticks is None:
+        n_ticks = (2,5)
+
+    # Set y axis -- commas
+    sc.commaticks(ax)
+
+    # Set the axes title
+    label = get_result_plot_label(res, show_module)
+    ax.set_title(label)
+    return
+
+
+#%% Data, and how the results are lined up with it
+
+class data:
+    """
+    Data to compare with a sim's results, matched by name: each column is named like the result it corresponds to
+
+    Args:
+        source (str/df): a file name or a dataframe, with a time column (`date`, `year`, `t`, or `time`) and one column per data series
+        aliases (dict): for headers that do not match: the result (or time-column) name, and the column that holds it
+        ignore_extra (bool): if True, drop columns that match no result instead of raising an error
+
+    Examples:
+        ```python
+        data = ss.data('kenya_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
+        sim = ss.Sim(sir, data=data, start='2020-01-01', stop='2020-12-31')
+        ```
+    """
+    def __init__(self, source, aliases=None, ignore_extra=False):
+        self.source = source
+        self.aliases = aliases or {}
+        self.ignore_extra = ignore_extra
+        return
+
+    def load(self, sim=None):
+        """ Load the data and rename the columns """
+        if isinstance(self.source, (str, os.PathLike)): # Separated by commas, tabs, or semicolons, whichever the file uses
+            df = sc.dataframe(pd.read_csv(self.source, sep=None, engine='python'))
+        else:
+            df = sc.dataframe(self.source)
+        for name,col in self.aliases.items():
+            if col not in df.columns:
+                errormsg = f'The alias {name}="{col}" names a column the data does not have; its columns are {list(df.columns)}'
+                raise KeyError(errormsg)
+            df = df.rename(columns={col:name})
+        if sim is not None and self.ignore_extra:
+            dims = [strat.name for strat in getattr(sim, 'strats', [])] # Columns that say which stratum a row is for
+            keep = [col for col in df.columns if col in self.time_cols or col in dims or match_column(sim, col) is not None]
+            df = df[keep]
+        return df
+
+    time_cols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year']
+
+
+def validate_sim_data(data=None, die=None):
+    """
+    Validate data intended to be compared to the sim outputs, e.g. for calibration
+
+    Args:
+        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
+        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
+
+    """
+    success = False
+    if data is not None:
+        # Try loading the data
+        try:
+            data = sc.dataframe(data) # Convert it to a dataframe
+            timecols = ss.data.time_cols # If a time column is supplied, use it as the index
+            found = False
+            for timecol in timecols:
+                if timecol in data.cols:
+                    if found:
+                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
+                        raise ValueError(errormsg)
+                    data.set_index(timecol, inplace=True)
+                    found = True
+            if len(data.index) and all(isinstance(v, str) for v in data.index): # Dates written as text, e.g. '2020-01-08', are dates, so they can be plotted against the sim's
+                data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
+            success = True
+
+        # Data loading failed
+        except Exception as E:
+            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
+            if die == False:
+                print(errormsg)
+            else:
+                raise ValueError(errormsg)
+
+    # Validation
+    if not success and die == True:
+        errormsg = f'Data "{data}" could not be converted and die == True'
+        raise ValueError(errormsg)
+
+    return data
+
+
+def widen_data(sim, df):
+    """
+    Data in long form, with columns that say which stratum each row is for (named after dimensions of the sim, e.g. `age`), as one column for each result and stratum, e.g. `cases[age=0-15]`
+
+    A level is given by its label (or its position).
+    """
+    dims = [strat.name for strat in getattr(sim, 'strats', []) if strat.name in df.columns]
+    if not dims:
+        return df
+    parts = []
+    for key,group in df.groupby(dims, sort=False):
+        tag = ', '.join(f'{dim}={level}' for dim,level in zip(dims, key if isinstance(key, tuple) else [key]))
+        parts.append(group.drop(columns=dims).rename(columns=lambda col: f'{col}[{tag}]'))
+    return sc.dataframe(pd.concat(parts, axis=1))
+
+
+def parse_column(col):
+    """ A column's result and stratum: "cases[age=0-15]" gives "cases" and {'age': '0-15'} """
+    name, _, rest = col.partition('[')
+    dims = {}
+    for item in rest.rstrip(']').split(', ') if rest else []:
+        dim, _, level = item.partition('=')
+        dims[dim] = level
+    return name, dims
+
+
+def column_levels(sim, dims):
+    """ The levels of a stratum as `ss.Result.select()` takes them: by label, or by position if no label matches """
+    out = {}
+    for dim,level in dims.items():
+        strat = sim.groups.strats[sim.groups.dim_index(dim)]
+        labels = [str(label) for label in strat.labels]
+        out[dim] = strat.labels[labels.index(level)] if level in labels else int(level)
+    return out
+
+
+def match_column(sim, col):
+    """ Find the result that a data column corresponds to: "cases", or "sir.cases" if the name is used by more than one module, or the sum over some groups, "cases[age=0-15]" """
+    col, dims = parse_column(col)
+    res = match_name(sim, col)
+    if res is not None and dims:
+        if getattr(res, 'strata', None) is None:
+            return None
+        res = res.select(**column_levels(sim, dims))
+    return res
+
+
+def match_name(sim, col):
+    """ The result a column corresponds to, by name; see `match_column()` """
+    modname, _, name = col.replace('_', '.', 1).rpartition('.') if '.' not in col and col.split('_')[0] in sim.results else col.rpartition('.')
+    matches = []
+    for mod in sim.modules:
+        if modname in ['', mod.name] and name in mod.results and isinstance(mod.results[name], ss.Result):
+            matches.append(mod.results[name])
+    if not matches and col in sim.results and isinstance(sim.results[col], ss.Result):
+        matches.append(sim.results[col])
+    if not matches and name == 'new_infections': # Starsim 3's name, for a declared disease with one transmission: its flow
+        for mod in getattr(sim, 'declared', []):
+            if modname in ['', mod.name] and len(mod.graph.transmissions) == 1:
+                matches.append(mod.results[mod.graph.transmissions[0].name])
+    return matches[0] if len(matches) == 1 else None
+
+
+def check_data(sim, df):
+    """ Check that every data column matches a result, and that the data overlaps the simulated period """
+    options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
+    for col in df.columns:
+        name, dims = parse_column(col)
+        base = match_name(sim, name)
+        if dims and base is not None:
+            for dim,level in dims.items():
+                strat = sim.groups.strats[sim.groups.dim_index(dim)]
+                if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
+                    raise ss.UnknownDataColumn(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
+            if getattr(base, 'strata', None) is None:
+                raise ss.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
+            elif getattr(base, 'group_ti', None) is not None:
+                raise ss.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
+                                           f'Give the data to the sim when it is made (ss.Sim(..., data=...)), or name fewer results to keep by group with results=[...].')
+        if match_column(sim, col) is None:
+            several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
+            if len(several) > 1: # The name of a result of more than one module
+                raise ss.UnknownDataColumn(f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.data(..., aliases=dict(...)).')
+            raise ss.UnknownDataColumn(f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
+                                       f"     Rename it with ss.data(..., aliases=dict(result='{col}')), or drop it with ss.data(..., ignore_extra=True).")
+    sim_t, data_t = data_times(sim, df)
+    if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared (ss.DataMisaligned); partly outside, the rest is left out of the comparison
+        eps = np.median(np.diff(sim_t))/2
+        outside = (data_t < sim_t.min() - eps) | (data_t > sim_t.max() + eps)
+        if outside.any() and not outside.all():
+            ss.note(f'{outside.sum()} of the {len(data_t)} times in the data are outside the simulated period ({sim.t.start} to {sim.t.stop}), so are not compared with the results', sim=sim)
+    return
+
+
+@functools.lru_cache(maxsize=64)
+def date_years(dates):
+    """ Dates as years, kept for the next call with the same dates (each evaluation of a fit compares with the same data) """
+    return np.array([ss.date(t).years for t in dates])
+
+
+def data_times(sim, df):
+    """ The times of the data, on the sim's own time axis (the result timevec as numbers) """
+    timevec = sim.t.timevec
+    index = df.index
+    dated = isinstance(index, pd.DatetimeIndex) or (len(index) and isinstance(index[0], ss.date))
+    if sim.t.is_absolute or (dated and len(timevec) and isinstance(timevec[0], ss.date)): # A sim that starts in a year has dates, although its time is not absolute
+        sim_t = np.asarray(sim.t.yearvec, dtype=float)
+        data_t = date_years(tuple(index)).copy()
+    else:
+        sim_t = np.asarray(timevec, dtype=float)
+        data_t = np.asarray(index, dtype=float)
+    return sim_t, data_t
+
+
+def alignment(sim, df):
+    """
+    How the results line up with the data, for `compare()` and `lineup()`: the times of the sim and of the data, which data times
+    are inside the simulated period, and for each data time, the steps whose flows are summed for it (those of the interval that ends at it)
+    """
+    sim_t, data_t = data_times(sim, df)
+    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
+    spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
+    starts = np.append(data_t[0] - spacing, data_t[:-1]) if len(data_t) else []
+    windows = [(sim_t > lo + eps) & (sim_t <= hi + eps) for lo,hi in zip(starts, data_t)]
+    return sim_t, data_t, inside, windows
+
+
+def compare(sim, df=None):
+    """
+    Line up a sim's results with its data
+
+    A flow (new infections, reported cases) is summed over the interval ending at
+    each data time; a stock or ratio (a count, a prevalence) is read at the data's time.
+
+    Returns a dict of `{column: (data values, model values)}`.
+    """
+    df = sim.data if df is None else df
+    sim_t, data_t, inside, windows = alignment(sim, df)
+    if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
+        raise ss.DataMisaligned(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+    out = sc.objdict()
+    for col in df.columns:
+        res = match_column(sim, col)
+        values = np.asarray(res.values, dtype=float)
+        expected = np.asarray(df[col], dtype=float)
+        if res.kind == 'flow': # A flow: sum over the interval ending at each data time
+            model = np.array([values[window].sum() for window in windows])
+        else:
+            model = np.interp(data_t, sim_t, values)
+        ok = inside & np.isfinite(expected)
+        out[col] = (expected[ok], model[ok])
+    return out
+
+
+def lineup(sim, df=None):
+    """
+    The matrix that lines up each result that has data with its data, as `compare()` does
+
+    Returns a dict of `{column: (W, data values, rows)}`, where the model's values at the data
+    (those that are inside the simulated period and not missing, which are at these rows of the
+    data) are W @ the result.
+    """
+    df = sim.data if df is None else df
+    sim_t, data_t, inside, windows = alignment(sim, df)
+    out = sc.objdict()
+    for col in df.columns:
+        res = match_column(sim, col)
+        expected = np.asarray(df[col], dtype=float)
+        ok = inside & np.isfinite(expected)
+        if res.kind == 'flow':
+            W = np.array(windows, dtype=float)
+        else:
+            W = np.array([np.interp(data_t, sim_t, row) for row in np.eye(len(sim_t))]).T
+        out[col] = (W[ok], expected[ok], np.flatnonzero(ok))
+    return out

@@ -7,14 +7,14 @@ These pages are for people who already model with another framework and want to 
 | Framework | Lines of model code | Time for one run | The switching demo's checks | Where Starsim is furthest behind today |
 |---|---|---|---|---|
 | [EpiModel](epimodel.qmd) | Fewer in both models | Faster in both | 2 of 3 pass | No ERGM terms beyond degree by group and one `match=` property; a stochastic fit by default keeps a lucky draw |
-| [SimInf](siminf.qmd) | **More** in both models | **Slower** in both | 2 of 4 pass | Speed on a national register; the particle filter's speed |
-| [odin](odin.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 2 of 4 pass | The particle filter's speed; a fixed delay is many Erlang stages |
+| [SimInf](siminf.qmd) | **More** in both models | **Slower** in both | 3 of 4 pass | Speed on a national register |
+| [odin](odin.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 3 of 4 pass | A fixed delay is many Erlang stages |
 | [epydemix](epydemix.qmd) | **More** in one of two | The same in one, slower in the other, under the limit | 4 of 5 pass | No subnational data (US states) |
 | [MEmilio](memilio.qmd) | Fewer in both | Faster | 4 of 4 pass | No German county data; no `osecirvvs` importer |
 | [flepiMoP](flepimop.qmd) | Fewer in both | Faster | 3 of 3 pass | No cluster batch jobs or R post-processing |
 | [summer2](summer2.qmd) | Fewer in both | Slower per run once summer2 has compiled, faster the first time; under the limit | 2 of 2 pass (1 not run) | No sigmoidal scale-up; a live model cannot be imported in the same process |
 | [Atomica](atomica.qmd) | Fewer in both | Slower per run, but under the limit | 5 of 7 pass | Two library workbooks fail to import; no spreadsheet interface |
-| [camdl](camdl.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 2 of 3 pass | No IF2; the particle filter's speed |
+| [camdl](camdl.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 3 of 3 pass | The interventions (SIAs) of an imported model are not translated |
 | [EMULSION](emulsion.qmd) | Fewer in both | Faster | 2 of 5 pass | Newborns by prototype, births between strata, and minimum stays as compartments |
 | [LASER](laser.qmd) | Fewer in both | **Slower** (the other model passes only with a tenth of the agents) | 0 of 3 pass | Speed and memory per agent at national scale |
 | [Ghana measles](ghana_measles.qmd) | Fewer | Borderline | 2 of 3 pass | A fitted share of contacts away; agents at full size |

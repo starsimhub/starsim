@@ -3,6 +3,7 @@ Test run, including ss.MultiSim and ss.parallel()
 """
 
 # %% Imports and settings
+import pytest
 import starsim as ss
 import sciris as sc
 import numpy as np
@@ -100,6 +101,12 @@ def test_multisim():
     assert np.array_equal(med.male, np.median(res.values[..., 1], axis=0))
     assert 'n_infected_male' in set(msim2.to_df().result)
     msim2.plot()
+
+    # Sims that have already run: their results across runs, without running them again
+    msim3 = ss.MultiSim(msim.sims)
+    assert np.array_equal(msim3.results.sis.n_I.values, msim.results.sis.n_I.values)
+    with pytest.raises(AttributeError): # Starsim 3's msim.reduce() is removed, with what to write instead
+        msim3.reduce()
 
     return msim
 

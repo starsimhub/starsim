@@ -150,6 +150,8 @@ def test_module_adding():
     demographics = [births, deaths]
     with pytest.raises(ValueError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
         ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.time.freq(10, 'year')).run()
+    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], people_results=False, verbose=0).run() # Without people's results (MA32)
+    assert sim.results.deaths.new.sum() > 0
     return demographics
 
 

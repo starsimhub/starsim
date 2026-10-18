@@ -123,8 +123,8 @@ ss.Transition(
     stages = None,      # number of sub-stages used to realize the dwell time (with dur, not rate)
     where  = None,      # who it applies to: a condition, as for ss.modify (see below)
     move   = None,      # a change of level in a dimension as well as of state (05-dimensions.md)
-    after  = None,      # a minimum stay in the source state before anyone leaves by it (agents only)
-    before = None,      # for a rate: it applies only until people have been in the source state this long (agents only)
+    after  = None,      # a minimum stay in the source state before anyone leaves by it
+    before = None,      # for a rate: it applies only until people have been in the source state this long
     offspring = None,   # each person who goes through it has newborns in this state: a state, or (state, number) (agents only)
     name   = None,
     label  = None,
@@ -133,7 +133,7 @@ ss.Transition(
 
 At most one of `rate` and `dur` is given, and `stages=` goes with `dur=`. `dur=ss.days(10)` and `rate=ss.perday(0.1)` say the same thing and produce the same model spec.
 
-`after=`, `before=`, and `offspring=` are for models that count time in a state or have litters, as EMULSION's minimum durations, escapes, and births do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`, `farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10))`). They need agents.
+`after=`, `before=`, and `offspring=` are for models that count time in a state or have litters, as EMULSION's minimum durations, escapes, and births do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`, `farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10))`). `offspring=` needs agents. A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay.
 
 **The kind of a transition is derived, not chosen.** If the rate mentions a bare state, the transition is *contact-mediated* and that state is the source of infection; otherwise it is *spontaneous*. `describe()` prints the kind of every transition.
 
@@ -300,6 +300,7 @@ How it is realized follows from the solver:
 |---|---|---|
 | exponential (scalar duration or a rate) | sample a time per agent when they enter the state, and schedule the move | one rate, `1 / mean` |
 | `ss.gamma` with an integer shape `k` | sample | `k` generated sub-stages at rate `k / mean`, exact |
+| `ss.constant`: a fixed delay | sample (every agent the same) | a conveyor of whole steps, exact at each step ([below](#a-fixed-delay)) |
 | any other distribution | sample | Erlang sub-stages matched to its mean and variance, with a one-line note |
 
 When the distribution has no exact compartmental form, a compartmental run uses Erlang stages matched to the mean and variance (`k = round((mean / std)²)`, at least 1) and says so in one line (`ss.StagesUnderAuto`: `note: recovery has a lognorm_ex dwell time, approximated by 11 Erlang stages (mean 10 days kept; std 3.02 instead of 3 days)`). This is the one approximation `solver='auto'` makes without being asked: a non-exponential dwell time does not by itself make a model agent-based. A user who wants the distribution sampled exactly asks for `solver='abm'`. `approx=True` hides the note. With `approx=False` nothing is approximated: `'auto'` runs the model as agents, where the dwell time is sampled directly, and an explicit compartmental solver raises `CapabilityError`. The approximation policy as a whole is in [12-backends.md](12-backends.md).
@@ -312,6 +313,12 @@ ss.Transition(I, R, dur=ss.days(10), stages=3)
 ```
 
 Generated sub-stages appear in `describe()` and are summed in results, so `n_I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` give the same model and the same results, but are written differently in the model spec (a gamma dwell time, or an exponential one with `stages: 3`), so their hashes differ.
+
+### A fixed delay
+
+`ss.constant` is a fixed delay, as odin's `delay()` and a reporting lag are: `onset = E >> I @ ss.constant(ss.days(14))`. As agents, everyone's exit is scheduled 14 days after they arrive, rounded to the nearest step. A compartmental run does not approximate it by stages (a fixed delay is the one dwell time whose Erlang stages never converge: 200 of them are stiff and still 1.6% off); it keeps a conveyor of whole steps instead. With a delay of `K` steps, the state has `K + 1` compartments, one for the people who arrived in each of the last `K` steps and one for those who arrived during this one; at the end of each step everyone moves along one, and those who have been there `K` steps leave in the next step. The chain-binomial solver lets them leave at its start, once the step's rates are worked out from the people as they were, as agents' scheduled exits come first; Gillespie and tau-leaping, at its middle; and the ODE, at a constant rate over it. So the number in each compartment at each time point is exact for a delay of whole steps, the ODE's release within a step is exact to second order, and the solvers agree with agents step for step. The other exits of the state (deaths, aging) act on everyone in it but those leaving. Nothing in a conveyor has a rate, so it is not stiff: odin's 14-day SEIR runs in 8 ms and agrees with odin's delay differential equation within 0.25% of the peak at a step of a day (0.06% at half a day).
+
+A delay that is not a whole number of steps is rounded to one, as agents round it, with a note (`ss.LargeStep`). The people who start in the state are taken to have just arrived, as agents are. `R0()` takes the conveyor as stages whose stays add up to its length. A minimum stay (`after=`) and a limit (`before=`) are conveyors of the same kind: a transition with `after=` acts on the people who have been in the state that many whole steps or more, and one with `before=`, on those who have been there fewer.
 
 ## Branching
 
@@ -448,7 +455,7 @@ sir = ss.Disease(infection, recovery, seeding=seed_cluster)
 
 The function is called with the sim, after the module's transitions, every step; there is nothing to wrap it in. To pass a function as a named *parameter* rather than as behavior, wrap it in `ss.par(fn)`.
 
-The other way is the class form: subclass `ss.Disease`, declare the states and transitions in the class body, and override `step()` ([01-objects.md](01-objects.md#the-class-form)). A disease written entirely as code, with per-agent arrays and no declared states, subclasses `ss.Infection`, as in Starsim 3, and runs as agents. Both are ordinary, supported ways to write a model. What they cost is the choice of solver: custom code runs as agents unless it happens to work on groups, by the same try-it rule, and `describe()` and `solvers()` say which.
+The other way is the class form: subclass `ss.Disease`, declare the states and transitions in the class body, and override `step()` ([01-objects.md](01-objects.md#the-class-form)). A disease written entirely as code, with per-agent arrays and no declared states, subclasses `ss.Infection` (or `ss.CodedDisease`, with no infection states of its own), as in Starsim 3, and runs as agents. Both are ordinary, supported ways to write a model. What they cost is the choice of solver: custom code runs as agents unless it happens to work on groups, by the same try-it rule, and `describe()` and `solvers()` say which.
 
 ## States that are not people
 
@@ -533,6 +540,24 @@ sim = ss.Sim(malaria, n_agents=5_000, unit='day', stop=3 * 365)
 ```
 
 Nobody can move from `Sh` into `Sv`, `Ev`, or `Iv`, so the mosquito states are counts. Here `n_agents=` makes the humans agents; the mosquitoes are three numbers. `Ih=0.01` is a fraction of the people and `Sv=50_000` is a count of mosquitoes. A seasonal mosquito population is `emergence = ss.null >> Sv @ ss.seasonal(mean=5_000, amplitude=0.8, peak='April')`. Several mosquito species are a stratification of the three vector states.
+
+### A count set each step
+
+What is not a flow (a lag, a running maximum, a switch that stays on) is `ss.update`, as odin's `update()` of a variable: each step, a count is set to a value worked out from the model at the start of the step, so every rate in the step sees its old value.
+
+```python
+S, I, R = ss.states(3)
+peak = ss.State(people=False)                  # the largest prevalence so far
+sir = ss.Disease(
+    infection = S >> I @ ss.perday(0.3) * I * np.exp(-5 * peak.n),   # people take care once they have seen a large epidemic
+    recovery  = I >> R @ ss.days(10),
+    track     = ss.update(peak, np.maximum(peak.n, I.frac)),
+    init      = dict(I=10),
+)
+sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=200)
+```
+
+The value is an expression of parameters, counts (`I.n`, `I.frac`, `I.total`), the count itself, and numbers, with functions of them, as a rate is, but not a bare state, which means contact (`ExposureToCount`). The count is an ordinary count with no transitions of its own (one that also had transitions, or a second update, is a `DuplicateDeclaration`): its result is `n_peak`, and it starts at its `init`, or 0. The compartmental solvers set it in the kernels, and agents at the end of the step. What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), and a total by week is a flow's result resampled (`res.infection.resample('week')`).
 
 ### How counts are advanced
 

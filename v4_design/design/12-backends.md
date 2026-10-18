@@ -35,7 +35,7 @@ The solver is set with `solver=`, given to `ss.Sim(...)`, or to `sim.run(...)` b
 
 `'auto'` chooses between the ODE and agents. It never picks a stochastic compartmental solver; a user who wants one asks for it by name ([The solvers](#the-solvers)).
 
-**The one approximation `'auto'` makes** is to represent a non-exponential dwell time by Erlang stages, and it says so:
+**The one approximation `'auto'` makes** is to represent a non-exponential dwell time by Erlang stages, and it says so (a fixed delay, `ss.constant`, is not approximated: it is a conveyor of whole steps, [below](#a-fixed-delay-and-a-minimum-stay)):
 
 ```python
 sir = ss.Disease(
@@ -67,7 +67,7 @@ A model runs as agents under `'auto'` if it contains any of these:
 
 Or the user asks: `solver='abm'` runs any model as agents, for example to study elimination with a simple model.
 
-Everything else has a compartmental form: homogeneous mixing, an `ss.MixingPool` of everyone and contact matrices, stratifications, exponential and Erlang dwell times (exactly) and other dwell times (by stages, with the note above), `ss.modify` with conditions on strata, interventions whose eligibility uses only strata, states that are not people (reservoirs, vectors), and functions that use only counts, parameters, time, and strata. A state that is not people never makes a model agent-based.
+Everything else has a compartmental form: homogeneous mixing, an `ss.MixingPool` of everyone and contact matrices, stratifications, exponential and Erlang dwell times (exactly), fixed delays and minimum stays (`ss.constant`, `after=`, `before=`: by a conveyor of whole steps), and other dwell times (by stages, with the note above), `ss.modify` with conditions on strata, interventions whose eligibility uses only strata, states that are not people (reservoirs, vectors), and functions that use only counts, parameters, time, and strata. A state that is not people never makes a model agent-based.
 
 The reasons are kept in one record, which `sim.solvers()`, `describe()`, and the `CapabilityError` all read.
 
@@ -143,7 +143,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 |---|---|---|---|
 | A random or static network (`ss.RandomNet`, `ss.StaticNet`) | compartmental, explicit | homogeneous mixing with the network's mean number of contacts (for a static network, the mean degree of its graph) | the contact rate and where it came from |
 | A network of partnerships (`ss.MFNet`, `ss.PartnerNet`) | compartmental, explicit | none yet: `CapabilityError` | |
-| A dwell time that is not exponential or Erlang | compartmental, explicit or `'auto'` | Erlang stages matching the mean and, as closely as possible, the standard deviation; `stages=k` sets the number directly | the number of stages, and the mean and standard deviation that result |
+| A dwell time that is not exponential, Erlang, or fixed (`ss.constant`) | compartmental, explicit or `'auto'` | Erlang stages matching the mean and, as closely as possible, the standard deviation; `stages=k` sets the number directly | the number of stages, and the mean and standard deviation that result |
 | A distribution on a per-person quantity that is not a dwell time (`beta`, `rel_sus`) | compartmental, explicit | its mean. To keep the variation, the user bins it into a dimension (`sir.stratify(rel_sus=[...])`), which is exact for the bins and needs no note | the mean used |
 | A continuous agent attribute used by the model (age, CD4 count) | compartmental, explicit | the bins of a stratification by it (a function then sees each group's midpoint); without one, `CapabilityError`, saying to stratify by it | |
 | A function in a `rate=`, `p=`, `where=`, or `when=` slot | compartmental | nothing: it is evaluated on groups instead of agents, if it can be ([Functions](#functions-try-it)) | only if it fails |
@@ -157,6 +157,19 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 How network rates are obtained: a random network gives its mean number of contacts (`n_contacts`, or the mean of its distribution), and a static network the mean degree of its graph, as a homogeneous contact rate, so that the per-contact `beta` keeps its meaning. This discards concurrency, clustering, and partnership persistence, and the one-line note is the reminder.
 
 How stages are chosen: `k = round(mean^2 / std^2)`, at least 1, with each stage exponential with mean `mean / k`. The mean is kept exactly, and the note prints the standard deviation that results next to the one asked for. A distribution more variable than an exponential gets one stage and a note that its extra variance is not represented. `ss.gamma` with an integer shape is already Erlang and is exact. The same expansion is used by every compartmental solver, stochastic ones included.
+
+### A fixed delay and a minimum stay
+
+A fixed delay (`ss.constant`, as odin's `delay()`) has no good Erlang form: its stages converge as one over their number, and their ODE becomes stiff (200 stages for odin's 14-day latent period took 1.9 s and were still 1.6% off). Every compartmental solver takes it as a conveyor of whole steps instead ([03-states-and-transitions.md](03-states-and-transitions.md#a-fixed-delay)): `K + 1` compartments for a delay of `K` steps, moved along one at the end of each step, with no rate between them. The people due to leave leave in the next step:
+
+| Solver | When the people due to leave a conveyor leave |
+|---|---|
+| `ode` | at a constant rate over the step, so the release of the people who arrived over a step `K` steps before is that of the delay differential equation, to second order (odin's SEIR within 0.25% at a step of a day, 0.06% at half a day, in 8 ms) |
+| `binomial` | at the start of the step, once the step's rates are worked out from the people as they were, as agents' scheduled exits come first; so it agrees with agents step for step |
+| `gillespie` (and its tau leaps) | at the middle of the step, the mean of the ODE's release |
+| `abm` | each at the start of the step their delay, rounded to the nearest step, ends in |
+
+The stock at each time point is the same in each: exact for a delay of whole steps. A delay that is not a whole number of steps is rounded to one, with a note. A minimum stay (`after=`) and a limit (`before=`) use the same conveyor, with each transition acting only on the people who have stayed long enough (or not too long); a stay on a transmission, or out of a state that splits on entry, has no compartmental form yet. The kernels, the particle filter, and the run in JAX all take conveyors; a model without one pays nothing for them.
 
 ### What has no approximation
 
@@ -241,7 +254,7 @@ A state that is not people (bacteria in water, mosquitoes; [03-states-and-transi
 | `gillespie` (and its tau leaps), `binomial` | A real-valued count, whose flows are their expected values over each step (or each event's interval, under `gillespie`), while people are drawn. This is SimInf's split between continuous-time events for animals and a deterministic environmental pressure, and it keeps the cost of a reservoir independent of its size |
 | `abm` | A count, never agents. People are agents and the reservoir stays a number, advanced over each step as an ODE (by RK4) with the people as they were at its start ([10-execution.md](10-execution.md#states-that-are-not-people)) |
 
-Rates that use the count are written with `.n` (`beta * W.n / (W.n + K)`, `shed * I.n`) and are used exactly as written under every solver: there is no contact rate and no network in them. Under `'auto'` a model with such states runs as an ODE unless something else makes it agent-based; adding `n_agents=` makes the people agents and leaves the count a count.
+Rates that use the count are written with `.n` (`beta * W.n / (W.n + K)`, `shed * I.n`) and are used exactly as written under every solver: there is no contact rate and no network in them. A count set each step by `ss.update` is worked out from the model at the start of the step and set at its end, in the kernels (and in JAX) for the compartmental solvers and after the transmissions for agents; the exact solver by place falls back to the exact solver, since an update can read every place. Under `'auto'` a model with such states runs as an ODE unless something else makes it agent-based; adding `n_agents=` makes the people agents and leaves the count a count.
 
 ## Compartmental specifics
 

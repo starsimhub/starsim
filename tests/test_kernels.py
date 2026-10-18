@@ -136,6 +136,25 @@ def test_stochastic():
     nb.set_num_threads(threads)
     for sim in [base.new().run(), base.new().run(profile=True)]:
         assert largest_diff(sim, one) == 0
+
+    # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
+    sim = ss.Sim([ss.SIR(), ss.SIS()], demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
+    for ti in range(5):
+        sim.run_one_step()
+    kn, cross = ss.kernels, sim.crossings[0]
+    p, places = cross.program, np.arange(cross.program.n_places)
+    out = sc.objdict()
+    for how in ['sparse', 'dense']:
+        times = []
+        for rep in range(3):
+            y, flows = cross.y.copy(), np.zeros((p.n_trans + p.n_movers, cross.y.shape[1]))
+            args = (y, p, kn.workspace(y, p), places, 0, len(places), 1.0, flows, np.uint64(rep))
+            T = sc.timer()
+            kn.sparse_events(*args, kn.sparse_maps(p, len(y))) if how == 'sparse' else kn.place_events(*args)
+            times.append(T.toc(output=True))
+        out[how] = (y, flows, min(times))
+    assert np.array_equal(out.sparse[0], out.dense[0]) and np.array_equal(out.sparse[1], out.dense[1]) # The same events
+    assert out.sparse[2] < out.dense[2]/3 # About 60 times faster here
     return sims
 
 

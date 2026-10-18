@@ -2,7 +2,7 @@
 Switching demo for the camdl seat: the polio model with SIAs over `patch=`, fitted by IF2.
 
 Passes when: peak 130,643 on day 145, as camdl's ODE; unit slips caught.
-Blocked today by: IF2, N28.
+Blocked today by: N28.
 The model is camdl's polio_spatial_5 (5 patches, gravity importation, three SIA rounds per patch); the 774-patch build (N28) is checked by the north-star script (phase 6), not here.
 """
 import pytest
@@ -82,7 +82,6 @@ def test_camdl_units():
     return slips
 
 
-@pytest.mark.xfail(reason='No IF2: sim.calibrate(method="if2") raises "ValueError: Unknown fitting method" (not built)', strict=False)
 def test_camdl_if2():
     sc.heading('Maximum likelihood by iterated filtering, as camdl fit run does')
     beta  = ss.par(ss.perday(0.3), bounds=[0.05, 1.0], prior=ss.lognorm_im(mean=-1.0, sigma=0.5))
@@ -94,8 +93,10 @@ def test_camdl_if2():
     data = pd.DataFrame(dict(time=7*np.arange(1, 13), cases=ref_cases))
     sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='binomial', data=data, verbose=0)
     fit = sim.calibrate(method='if2')
-    assert ref_beta[0] < fit.pars.beta < ref_beta[1], f'IF2 beta {fit.pars.beta:.3f}, outside camdl\'s PMMH interval {ref_beta}'
-    assert ref_gamma[0] < fit.pars.gamma < ref_gamma[1], f'IF2 gamma {fit.pars.gamma:.3f}, outside camdl\'s PMMH interval {ref_gamma}'
+    beta, gamma = fit.pars.beta.value, fit.pars.gamma.value # Per day
+    assert ref_beta[0] < beta < ref_beta[1], f'IF2 beta {beta:.3f}, outside camdl\'s PMMH interval {ref_beta}'
+    assert ref_gamma[0] < gamma < ref_gamma[1], f'IF2 gamma {gamma:.3f}, outside camdl\'s PMMH interval {ref_gamma}'
+    assert fit.converged, fit.why # The chains, from different starts, agree
     return fit
 
 

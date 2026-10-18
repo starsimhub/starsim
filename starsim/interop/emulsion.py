@@ -7,9 +7,9 @@ states and whose transitions are its transitions; rates (per individual) and
 probabilities (per time unit, as EMULSION reads them) are translated, and a state with
 a duration whose only way out has a probability of 1 becomes a fixed dwell time. What
 is listed as not translated (conditions, calendars, actions on crossing, offspring and
-productions, levels above the population, and variables of individuals); a minimum stay
-(a state's duration) becomes `after=` on the ways out of it, which needs agents
-is left for a person, or the import-model skill, to add.
+productions, levels above the population, and variables of individuals) is left for a
+person, or the import-model skill, to add; a minimum stay (a state's duration) becomes
+`after=` on the ways out of it.
 """
 import ast
 import math

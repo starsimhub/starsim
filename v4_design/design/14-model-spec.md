@@ -97,7 +97,7 @@ This is the spec of the model on the first page of [00-overview.md](00-overview.
 }
 ```
 
-The fields of each kind of object are always written, in the same order; a value that was not given and has no default is `null`, not left out. A fixed shape makes two specs easy to compare. (A few fields are written only when set, so that other specs are unchanged: `migration` on a transition, `where` on a modifier.)
+The fields of each kind of object are always written, in the same order; a value that was not given and has no default is `null`, not left out. A fixed shape makes two specs easy to compare. (A few fields are written only when set, so that other specs are unchanged: `migration`, `after`, and `before` on a transition, `updates` on a module (each with its `name`, the `state` it sets, and its `value` as an expression), `where` on a modifier.)
 
 The top-level parts:
 

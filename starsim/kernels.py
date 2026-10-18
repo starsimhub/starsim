@@ -21,6 +21,7 @@ __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS, TOTAL = range(22) # TOTAL is a count in the whole population, every place (I.total)
+CONVEY, ASSIGN = 22, 23 # Not in a rate: a conveyor (its flow, then its slots), and the compartment an update sets (see convey() and update_values()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -36,7 +37,7 @@ fields = [
     'mult',       # The multiplier on each flow whose rate does, by group
     # The rates that change within a step
     'depth',      # The largest stack any of them needs
-    'starts',     # Where each flow's operations start and end (the same, if it has none)
+    'starts',     # Where each flow's operations start and end (the same, if it has none); and after the flows', those of each conveyor and each update (see convey() and update_values())
     'ops',        # The operations
     'args',       # What each one acts on
     'consts',     # The parameter values, by group
@@ -124,6 +125,7 @@ pieces = 4 # The stochastic solvers that take steps of their own length hold val
 announced = False # Whether a cold cache has been checked for, so it is said only once
 golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a random stream: see uniform()
 per_chunk = 256 # The places with events that make it worth a thread for the exact solver by place: see gillespie_places()
+sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 
 
 def announce(verbose=True):
@@ -145,7 +147,7 @@ def workspace(y, p):
     rates     = np.empty(p.fixed.shape)         # The rate of each flow, by group
     exposures = np.empty((len(p.exp_set), ng))  # Exposure to each infectious state
     stack     = np.empty((p.depth, ng))         # For working out a rate
-    groups    = np.empty((7, ng))               # Scratch, by group
+    groups    = np.empty((7 + len(p.starts) - len(p.src) - 1, ng)) # Scratch, by group; and after it, the value of each update (see update_values())
     cells     = np.zeros((6, size))             # Scratch, by cell of a mixing term or by place; the last row is, for the exact solver by place, whether each place can have no event until something changes it (see gillespie_places()), kept here since another array to pass would slow every step
     dy        = np.empty((4, nc, ng))           # The stages of the integrator
     df        = np.empty((4, nflows, ng))
@@ -368,10 +370,19 @@ def draw(rng, y, p, w, dt, flows, tau):
                     n[g] = binomial(rng, left[g], hazard/total[g]) if total[g] > 0 else 0.0
                     total[g] -= hazard
                     left[g] -= n[g]
-            if p.named[f]:
+            if p.named[f] and p.record[f] < 0: # Counted in the group it happens in: as land() does, but written out (as is the one target below), since the calls cost more than the draws of a small model
+                for g in range(ng):
+                    flows[p.index[f], g] += n[g]
+            elif p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
-            split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+            t = p.tgt_starts[f]
+            if p.tgt_starts[f+1] == t + 1 and p.tgt_map[t] < 0 and p.tgt_w[t].min() >= 1 - 1e-12: # Everyone to one compartment, in the same group
+                for g in range(ng):
+                    new[p.tgt_comp[t], g] += n[g]
+            else:
+                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
+            if p.crd_starts[f+1] > p.crd_starts[f]:
+                split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
     for m in range(p.n_movers): # Movement between groups: as move() does, but written out, since a call here (once a leap) slows tau-leaping by a few percent
         for e in range(p.mov_starts[1, m], p.mov_starts[1, m+1]):
             if p.mov_rate[e] != 0:
@@ -562,11 +573,315 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
     return
 
 
+@jit
+def sparse_maps(p, nc):
+    """
+    For `sparse_events()`: the sets of compartments that each compartment is in, the exposures to each
+    set, the flows out of each compartment (in order), the inflows, which compartments hold people, and
+    whether any rate is a count in every place
+    """
+    n_sets = len(p.set_starts) - 1
+    cs_starts = np.zeros(nc + 1, dtype=np.int64)
+    for k in range(len(p.set_comps)):
+        cs_starts[p.set_comps[k] + 1] += 1
+    cs_starts = np.cumsum(cs_starts)
+    cs_sets = np.empty(len(p.set_comps), dtype=np.int64)
+    fill = cs_starts[:-1].copy()
+    for s in range(n_sets): # In order, so each compartment's sets are too
+        for k in range(p.set_starts[s], p.set_starts[s+1]):
+            c = p.set_comps[k]
+            cs_sets[fill[c]] = s
+            fill[c] += 1
+    se_starts = np.zeros(n_sets + 1, dtype=np.int64)
+    for e in range(len(p.exp_set)):
+        se_starts[p.exp_set[e] + 1] += 1
+    se_starts = np.cumsum(se_starts)
+    se_exps = np.empty(len(p.exp_set), dtype=np.int64)
+    fill = se_starts[:-1].copy()
+    for e in range(len(p.exp_set)):
+        se_exps[fill[p.exp_set[e]]] = e
+        fill[p.exp_set[e]] += 1
+    cf_starts = np.zeros(nc + 1, dtype=np.int64) # The flows that are events (see settle()), by the compartment they leave
+    n_in = 0
+    for f in range(len(p.src)):
+        if p.det[f]:
+            continue
+        if p.src[f] >= 0:
+            cf_starts[p.src[f] + 1] += 1
+        else:
+            n_in += 1
+    cf_starts = np.cumsum(cf_starts)
+    cf_flows = np.empty(cf_starts[-1], dtype=np.int64)
+    inflows = np.empty(n_in, dtype=np.int64)
+    fill = cf_starts[:-1].copy()
+    n_in = 0
+    for f in range(len(p.src)):
+        if p.det[f]:
+            continue
+        if p.src[f] >= 0:
+            cf_flows[fill[p.src[f]]] = f
+            fill[p.src[f]] += 1
+        else:
+            inflows[n_in] = f
+            n_in += 1
+    people = np.zeros(nc, dtype=np.int64)
+    for c in p.people:
+        people[c] = 1
+    has_total = False # A count in every place, which the kept rates cannot follow
+    for k in range(len(p.ops)):
+        has_total = has_total or p.ops[k] == TOTAL
+    return cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def add_key(keys, n, key):
+    """ Put a key into the first n of a sorted array, in order; returns the new number of keys """
+    m = n
+    while m > 0 and keys[m-1] > key:
+        keys[m] = keys[m-1]
+        m -= 1
+    keys[m] = key
+    return n + 1
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def drop_key(keys, n, key):
+    """ Take a key out of the first n of a sorted array; returns the new number of keys """
+    m = np.searchsorted(keys[:n], key)
+    for k in range(m, n - 1):
+        keys[k] = keys[k+1]
+    return n - 1
+
+
+@jit
+def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
+    """
+    The events of the places to step, as `place_events()`, for a large program (e.g. diseases tracked jointly,
+    whose compartments are the product of theirs), most of whose compartments are empty
+
+    Each place keeps the compartments that hold anyone, and the flows out of them, in order. After each
+    event, the counts and exposures are worked out from those compartments only, and only those flows
+    are taken (with the inflows), so the cost of an event grows with the compartments that hold anyone
+    rather than with all of them. A rate that is worked out from the counts and exposures is kept until
+    they change, which most events (a move to the next stage of a dwell time) do not. A flow out of an
+    empty compartment has no events, and the flows are taken in the same order, with the same arithmetic
+    and random numbers, so the events are the same as `place_events()` gives.
+    """
+    idle = w[4][5]
+    nc = y.shape[0]
+    nf = len(p.src)
+    src, inflow, pl_groups, starts, ops, args = p.src, p.inflow, p.pl_groups, p.starts, p.ops, p.args
+    cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total = maps
+    width = 1
+    for m in range(first, last):
+        width = max(width, p.pl_starts[active[m]+1] - p.pl_starts[active[m]])
+    gbits, cbits = 0, 0 # The bits of a key that hold the group in the place, and the compartment
+    while (1 << gbits) < width:
+        gbits += 1
+    while (1 << cbits) < nc:
+        cbits += 1
+    gmask, cmask = (1 << gbits) - 1, (1 << cbits) - 1
+    held = np.empty(nc*width, dtype=np.int64)          # The compartments that hold anyone in the place, as keys of (group, compartment), in order
+    keys = np.empty(nf*width, dtype=np.int64)          # The flows out of them and the inflows, as keys of (flow, group), in order
+    props = np.empty(nf*width)                         # The rate of each
+    kept = np.empty(nf << gbits)                       # By key, the rate of a flow worked out from the counts and exposures,
+    fresh = np.zeros(nf << gbits, dtype=np.bool_)      # and whether it is at their current values
+    counts = np.empty(len(p.set_starts) - 1)
+    num = np.empty(len(p.exp_set))
+    before = np.empty(len(counts) + len(num) + 1) # The counts, exposures, and people at the last event
+    stack = np.empty((p.depth, 1))
+    expo = np.empty(max(len(p.exp_set), 1))
+    for m in range(first, last):
+        i = active[m]
+        a, b = p.pl_starts[i], p.pl_starts[i+1]
+        ng = b - a
+        idle[i] = 0
+        n_held = 0
+        for j in range(ng):
+            g = pl_groups[a+j]
+            for c in range(nc):
+                if y[c, g] != 0:
+                    held[n_held] = (j << cbits) | c
+                    n_held += 1
+        n_keys = 0
+        for f in inflows:
+            for j in range(ng):
+                if inflow[f, pl_groups[a+j]] != 0:
+                    keys[n_keys] = (f << gbits) | j
+                    n_keys += 1
+        for h in range(n_held):
+            j = held[h] >> cbits
+            c = held[h] & cmask
+            for k in range(cf_starts[c], cf_starts[c+1]):
+                keys[n_keys] = (cf_flows[k] << gbits) | j
+                n_keys += 1
+        keys[:n_keys].sort()
+        t = 0.0
+        z = np.uint64(0)
+        begun = False
+        while True:
+            n = 0.0 # The counts and exposures, as place_rates() works them out, from the compartments that hold anyone
+            counts[:] = 0.0
+            num[:] = 0.0
+            for h in range(n_held):
+                j = held[h] >> cbits
+                c = held[h] & cmask
+                g = pl_groups[a+j]
+                v = y[c, g]
+                if people[c]:
+                    n += v
+                for k in range(cs_starts[c], cs_starts[c+1]):
+                    s = cs_sets[k]
+                    counts[s] += v
+                    for q in range(se_starts[s], se_starts[s+1]):
+                        e = se_exps[q]
+                        num[e] += v*p.rel_trans[e, g]
+            for e in range(len(p.exp_set)):
+                prev = num[e]/n if n > 0 else 0.0
+                expo[e] = 0.0
+                for tt in range(len(p.sizes)):
+                    expo[e] += p.contacts[0, tt, 0]*prev
+            same = begun and not has_total and n == before[-1] # Whether the rates kept still hold (the first event of a place works them out)
+            for k in range(len(counts)):
+                same = same and counts[k] == before[k]
+            for e in range(len(num)):
+                same = same and expo[e] == before[len(counts) + e]
+            before[:len(counts)] = counts
+            before[len(counts):-1] = expo[:len(num)]
+            before[-1] = n
+            begun = True
+            total = 0.0
+            for q in range(n_keys): # The rate of each flow, as place_rates() works it out
+                key = keys[q]
+                f = key >> gbits
+                g = pl_groups[a + (key & gmask)]
+                if starts[f] == starts[f+1]:
+                    rate = p.fixed[f, g]
+                elif same and fresh[key]:
+                    rate = kept[key]
+                else:
+                    rate = p.fixed[f, g]
+                    top = -1
+                    for k in range(starts[f], starts[f+1]):
+                        op = ops[k]
+                        arg = args[k]
+                        if op == CONST:
+                            top += 1
+                            stack[top, 0] = p.consts[arg, g]
+                        elif op == EXPOSURE:
+                            top += 1
+                            stack[top, 0] = expo[arg]
+                        elif op == TOTAL:
+                            top += 1
+                            v = 0.0
+                            for gg in range(y.shape[1]):
+                                for ii in range(p.set_starts[arg], p.set_starts[arg+1]):
+                                    v += y[p.set_comps[ii], gg]
+                            stack[top, 0] = v
+                        elif op == COUNT or op == FRAC:
+                            top += 1
+                            v = counts[arg]
+                            stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
+                        elif op >= EXP:
+                            x = stack[top, 0]
+                            if   op == EXP:  stack[top, 0] = np.exp(x)
+                            elif op == LOG:  stack[top, 0] = np.log(x)
+                            elif op == SQRT: stack[top, 0] = np.sqrt(x)
+                            elif op == ABS:  stack[top, 0] = abs(x)
+                            elif op == SIN:  stack[top, 0] = np.sin(x)
+                            else:            stack[top, 0] = np.cos(x)
+                        else:
+                            top -= 1
+                            x = stack[top, 0]
+                            u = stack[top+1, 0]
+                            if   op == ADD: stack[top, 0] = x + u
+                            elif op == SUB: stack[top, 0] = x - u
+                            elif op == MUL: stack[top, 0] = x * u
+                            elif op == DIV: stack[top, 0] = x / u if x != 0 else 0.0
+                            elif op == POW: stack[top, 0] = x ** u
+                            elif op == MIN: stack[top, 0] = min(x, u)
+                            elif op == MAX: stack[top, 0] = max(x, u)
+                            elif op == LT:  stack[top, 0] = 1.0 if x < u else 0.0
+                            elif op == LE:  stack[top, 0] = 1.0 if x <= u else 0.0
+                            elif op == GT:  stack[top, 0] = 1.0 if x > u else 0.0
+                            else:           stack[top, 0] = 1.0 if x >= u else 0.0
+                    if top >= 0:
+                        rate = stack[0, 0]*p.mult[f, g]
+                    kept[key] = rate
+                    fresh[key] = True
+                s = src[f]
+                props[q] = max(rate*(y[s, g] if s >= 0 else inflow[f, g]), 0.0)
+                total += props[q]
+            if total <= 0:
+                idle[i] = 1
+                break
+            if t == 0.0: # As in place_events()
+                z = splitmix(seed + splitmix(np.uint64(i + 1)*golden))
+            z += golden
+            t -= np.log(uniform(z))/total
+            if t > dt:
+                break
+            z += golden
+            target = uniform(z)*total
+            cum = 0.0
+            pick = -1
+            for q in range(n_keys):
+                if props[q] > 0:
+                    cum += props[q]
+                    pick = q
+                    if cum > target:
+                        break
+            which = keys[pick] >> gbits
+            j = keys[pick] & gmask
+            where = pl_groups[a+j]
+            s = src[which]
+            if s >= 0:
+                y[s, where] -= 1
+                if y[s, where] == 0: # Its compartment is now empty
+                    n_held = drop_key(held, n_held, (j << cbits) | s)
+                    for k in range(cf_starts[s], cf_starts[s+1]):
+                        n_keys = drop_key(keys, n_keys, (cf_flows[k] << gbits) | j)
+            if p.named[which]:
+                flows[p.index[which], where] += 1
+            ka, kb = p.tgt_starts[which], p.tgt_starts[which+1]
+            z += golden
+            u = uniform(z)
+            tot = 0.0
+            for k in range(ka, kb):
+                tot += p.tgt_w[k, where]
+            cum = 0.0
+            for k in range(ka, kb):
+                cum += p.tgt_w[k, where]
+                if u*tot < cum or k == kb - 1:
+                    c = p.tgt_comp[k]
+                    if y[c, where] == 0: # Its compartment now holds someone
+                        n_held = add_key(held, n_held, (j << cbits) | c)
+                        for kk in range(cf_starts[c], cf_starts[c+1]):
+                            n_keys = add_key(keys, n_keys, (cf_flows[kk] << gbits) | j)
+                            fresh[(cf_flows[kk] << gbits) | j] = False
+                    y[c, where] += 1
+                    break
+            z += golden
+            u = uniform(z)
+            cum = 0.0
+            for k in range(p.crd_starts[which], p.crd_starts[which+1]):
+                cum += p.crd_w[k, where]
+                if u < cum:
+                    flows[p.crd_index[k], where] += 1
+                    break
+    return
+
+
 @nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
-def threaded_places(y, p, w, active, n_active, chunks, dt, flows, seed):
+def threaded_places(y, p, w, active, n_active, chunks, dt, flows, seed, sparse):
     """ The places to step, in chunks on Numba's threads: see `gillespie_places()` """
-    for c in nb.prange(chunks):
-        place_events(y, p, w, active, c*n_active//chunks, (c + 1)*n_active//chunks, dt, flows, seed)
+    if sparse: # The maps are made here, since a tuple passed through object mode breaks Numba's compiler
+        maps = sparse_maps(p, y.shape[0])
+        for c in nb.prange(chunks):
+            sparse_events(y, p, w, active, c*n_active//chunks, (c + 1)*n_active//chunks, dt, flows, seed, maps)
+    else:
+        for c in nb.prange(chunks):
+            place_events(y, p, w, active, c*n_active//chunks, (c + 1)*n_active//chunks, dt, flows, seed)
     return
 
 
@@ -579,7 +894,8 @@ def gillespie_places(rng, y, p, w, dt, flows, fresh):
     out again, so the cost of an event does not grow with the number of places. A place where
     no event can happen (an SIR with nobody infected) is skipped until something changes it:
     the register's events (see `touch()`), the deliveries, movers, or rates that change over
-    time (`fresh`, which steps every place).
+    time (`fresh`, which steps every place). A large program (e.g. diseases tracked jointly) is
+    stepped by the compartments that hold anyone (see `sparse_events()`), with the same events.
 
     Each place draws from its own random numbers in each step, seeded by one number from the
     engine's generator, so that when many places have events, they are stepped on the threads
@@ -602,9 +918,12 @@ def gillespie_places(rng, y, p, w, dt, flows, fresh):
     if chunks:
         chunks = max(min(n_active//per_chunk, 64), 1) # Each chunk is a call that is passed the program, which costs as much as stepping a few places with nothing to do
     seed = np.uint64(rng.integers(0, 2**62))
+    sparse = len(p.src) > sparse_flows # A large program, most of whose compartments are empty: see sparse_events()
     if chunks > 1:
         with nb.objmode():
-            threaded_places(y, p, w, active, n_active, chunks, dt, flows, np.uint64(seed)) # As a NumPy number, which Python would make an int
+            threaded_places(y, p, w, active, n_active, chunks, dt, flows, np.uint64(seed), sparse) # As a NumPy number, which Python would make an int
+    elif sparse:
+        sparse_events(y, p, w, active, 0, n_active, dt, flows, seed, sparse_maps(p, y.shape[0]))
     else:
         place_events(y, p, w, active, 0, n_active, dt, flows, seed)
     return
@@ -719,13 +1038,13 @@ def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows, 
     return
 
 
-@nb.jit(nopython=True, cache=True, error_model='numpy', inline='always') # Inlined, since it is called for every flow and group at each event, and passing it the program each time costs more than the arithmetic
-def propensity(y, p, rates, f, g):
+@nb.jit(nopython=True, cache=True, error_model='numpy', inline='always') # Inlined, and given the program's src, det, and inflow rather than the program, since it is called for every flow and group at each event, and passing the program costs (even inlined) far more than the arithmetic
+def propensity(y, src, det, inflow, rates, f, g):
     """ The rate at which events of a flow happen in a group: per member of its source compartment, or in total for an inflow """
-    s = p.src[f]
-    if p.det[f]: # Not an event: see settle()
+    s = src[f]
+    if det[f]: # Not an event: see settle()
         return 0.0
-    return max(rates[f, g]*(y[s, g] if s >= 0 else p.inflow[f, g]), 0.0)
+    return max(rates[f, g]*(y[s, g] if s >= 0 else inflow[f, g]), 0.0)
 
 
 @jit
@@ -742,7 +1061,7 @@ def event(rng, y, p, w, dt, flows):
     total = 0.0
     for f in range(nf):
         for g in range(ng):
-            total += propensity(y, p, rates, f, g)
+            total += propensity(y, p.src, p.det, p.inflow, rates, f, g)
     if total <= 0:
         return dt
     wait = rng.exponential(1/total)
@@ -755,7 +1074,7 @@ def event(rng, y, p, w, dt, flows):
     which, where = -1, -1
     for f in range(nf):
         for g in range(ng):
-            rate = propensity(y, p, rates, f, g)
+            rate = propensity(y, p.src, p.det, p.inflow, rates, f, g)
             if rate > 0:
                 cum += rate
                 which, where = f, g
@@ -778,8 +1097,8 @@ def event(rng, y, p, w, dt, flows):
 
 @jit
 def mix(matrix, v, size, out):
-    """ The product of the first `size` rows and columns of a mixing matrix with a vector (`matrix @ v`), into out; by BLAS when the whole matrix is used, so is contiguous """
-    if size == matrix.shape[0]:
+    """ The product of the first `size` rows and columns of a mixing matrix with a vector (`matrix @ v`), into out; by BLAS when the whole matrix is used (so is contiguous) and is large enough that the call costs less than the loop """
+    if size == matrix.shape[0] and size > 16:
         out[:size] = np.dot(matrix, v[:size])
         return
     for i in range(size):
@@ -831,6 +1150,181 @@ def interp(out, table, row, th):
 
 
 @jit
+def convey(rng, y, p, w, flows, release):
+    """
+    The conveyors of fixed delays and minimum stays: release the people in the last slot of each, or move them all along one slot
+
+    A conveyor of K steps has K+1 slots. People arrive in slot 0 during a step, and at its
+    end (`release=False`) everyone moves along one slot, so at each time point slot j holds
+    the people who entered j steps ago, and the last those who have been there K steps.
+    These leave in the next step: the chain-binomial solver releases them at its start (once
+    the step's rates are worked out from the people as they were, as all its rates are), as
+    agents leave at the start of the step their dwell time ends in, and Gillespie and
+    tau-leaping at its middle (`release=True`); the ODE lets them leave at a constant rate
+    over the step (see `step()`), which is exact at each time point for a delay of whole steps.
+    The other exits of the state act on every slot but the last. A place with people in a
+    conveyor is stepped by the exact solver by place, since the people in it move.
+
+    Each conveyor is a set of operations after the flows' (see `Program.starts`), all CONVEY:
+    the first one's argument is the flow the last slot leaves by, and the others' are its
+    slots, in order. The flow is an inflow in the program, whose last target is the last slot,
+    with a share of -1: for the ODE, `step()` sets its inflow to the people due to leave over
+    the step, so the loops over flows move them; otherwise its inflow is 0.
+    """
+    ng = y.shape[1]
+    nf = len(p.src)
+    groups, idle = w[3], w[4][5]
+    n = groups[5]
+    for i in range(len(p.starts) - nf - 1):
+        a, b = p.starts[nf+i], p.starts[nf+i+1]
+        if p.ops[a] != CONVEY:
+            continue
+        if release:
+            last = p.args[b-1]
+            f = p.args[a]
+            for g in range(ng):
+                n[g] = y[last, g]
+                y[last, g] = 0
+                if n[g] > 0:
+                    idle[p.places[g]] = 0
+            if p.named[f]:
+                land(rng, n, p.record[f], p.maps, flows[p.index[f]])
+            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups) # Not the last target, which is the slot they leave
+            split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+        else:
+            for g in range(ng):
+                for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, by rounding, in the ODE)
+                    y[p.args[k], g] = y[p.args[k-1], g]
+                    if y[p.args[k], g] > 0:
+                        idle[p.places[g]] = 0
+                y[p.args[a+1], g] = 0
+    return
+
+
+@jit
+def update_values(y, p, stack, groups, cells):
+    """
+    The values that counts are set to at the end of a step (`ss.update()`), from the compartments at its start, into the rows of `groups` after the scratch
+
+    Worked out as the rates in `step()` are, for the operations an update can have (any but
+    exposure, which is contact): called once a step, and only if the program has conveyors or
+    updates. Each update is a set of operations after the flows' (see `Program.starts`), the
+    last of which is ASSIGN, whose argument is the compartment it sets.
+    """
+    ng = y.shape[1]
+    nf = len(p.src)
+    n, local_n, vals = groups[0], groups[1], groups[2]
+    num = cells[0]
+    for g in range(ng): # The people in each group, and in the same place as each group
+        n[g] = 0
+        for c in p.people:
+            n[g] += y[c, g]
+    for i in range(p.n_places):
+        num[i] = 0
+    for g in range(ng):
+        num[p.places[g]] += n[g]
+    for g in range(ng):
+        local_n[g] = num[p.places[g]]
+    for u in range(len(p.starts) - nf - 1):
+        a, b = p.starts[nf+u], p.starts[nf+u+1]
+        if p.ops[b-1] != ASSIGN:
+            continue
+        top = -1
+        for k in range(a, b-1):
+            op = p.ops[k]
+            arg = p.args[k]
+            if op == CONST:
+                top += 1
+                for g in range(ng):
+                    stack[top, g] = p.consts[arg, g]
+            elif op == TOTAL or op == COUNT or op == FRAC:
+                top += 1
+                for i in range(p.n_places):
+                    num[i] = 0
+                for g in range(ng):
+                    vals[g] = 0
+                    for i in range(p.set_starts[arg], p.set_starts[arg+1]):
+                        vals[g] += y[p.set_comps[i], g]
+                    num[p.places[g]] += vals[g]
+                total = 0.0
+                for i in range(p.n_places):
+                    total += num[i]
+                for g in range(ng):
+                    if op == TOTAL:
+                        stack[top, g] = total
+                    elif op == FRAC:
+                        stack[top, g] = num[p.places[g]]/local_n[g] if local_n[g] > 0 else 0.0
+                    else:
+                        stack[top, g] = num[p.places[g]]
+            elif op >= EXP:
+                for g in range(ng):
+                    x = stack[top, g]
+                    if   op == EXP:  stack[top, g] = np.exp(x)
+                    elif op == LOG:  stack[top, g] = np.log(x)
+                    elif op == SQRT: stack[top, g] = np.sqrt(x)
+                    elif op == ABS:  stack[top, g] = abs(x)
+                    elif op == SIN:  stack[top, g] = np.sin(x)
+                    else:            stack[top, g] = np.cos(x)
+            else:
+                top -= 1
+                for g in range(ng):
+                    x = stack[top, g]
+                    z = stack[top+1, g]
+                    if   op == ADD: stack[top, g] = x + z
+                    elif op == SUB: stack[top, g] = x - z
+                    elif op == MUL: stack[top, g] = x * z
+                    elif op == DIV: stack[top, g] = x / z if x != 0 else 0.0
+                    elif op == POW: stack[top, g] = x ** z
+                    elif op == MIN: stack[top, g] = min(x, z)
+                    elif op == MAX: stack[top, g] = max(x, z)
+                    elif op == LT:  stack[top, g] = 1.0 if x < z else 0.0
+                    elif op == LE:  stack[top, g] = 1.0 if x <= z else 0.0
+                    elif op == GT:  stack[top, g] = 1.0 if x > z else 0.0
+                    else:           stack[top, g] = 1.0 if x >= z else 0.0
+        for g in range(ng):
+            groups[7+u, g] = stack[0, g]
+    return
+
+
+@jit
+def step_start(y, p, w, dt, solver):
+    """
+    For `step()`, in a program with conveyors or updates: the values of the updates, from the compartments at the start of the step, and for the ODE, the people due to leave each conveyor over it
+
+    Returns whether a stochastic solver has people to release from a conveyor in the step. Kept
+    out of `step()` (as is `step_end()`), since code there, even if a model never runs it, slows
+    the steps of every model by a few percent.
+    """
+    nf = len(p.src)
+    ng = y.shape[1]
+    update_values(y, p, w[2], w[3], w[4])
+    pending = False
+    for i in range(len(p.starts) - nf - 1):
+        a, b = p.starts[nf+i], p.starts[nf+i+1]
+        if p.ops[a] == CONVEY:
+            pending = solver >= 2
+            if solver < 2: # For the ODE, they leave at a constant rate over the step, as the inflow of the conveyor's flow
+                for g in range(ng):
+                    p.inflow[p.args[a], g] = y[p.args[b-1], g]/dt
+    return pending
+
+
+@jit
+def step_end(rng, y, p, w, flows):
+    """ For `step()`, in a program with conveyors or updates: everyone in a conveyor moves along one slot, and the counts that are updated are set (see `step_start()`) """
+    nf = len(p.src)
+    ng = y.shape[1]
+    groups = w[3]
+    convey(rng, y, p, w, flows, False)
+    for i in range(len(p.starts) - nf - 1):
+        b = p.starts[nf+i+1]
+        if p.ops[b-1] == ASSIGN:
+            for g in range(ng):
+                y[p.args[b-1], g] = groups[7+i, g]
+    return
+
+
+@jit
 def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     """
     Take one timestep
@@ -865,6 +1359,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     elapsed = 0.0 # For these: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
+    extra = len(p.starts) - nf - 1 # Conveyors and updates, whose operations follow the flows'
+    pending = step_start(y, p, w, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
@@ -1026,6 +1522,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                         flows[f, g] = 0
             if solver >= 2: # The stochastic solvers take it from here
                 end = dt if row < 0 else min(int((elapsed + 1e-12)*pieces/dt) + 1, pieces)*dt/pieces # The end of the piece of the step that values which vary in time are held for; events are exact within it, since the rates are held
+                if pending and timed: # The people due to leave a conveyor leave at the middle of the step
+                    end = min(end, dt/2)
                 if by_place: # The exact solver, place by place: the whole step (or piece) at once
                     varying = row >= 0 or p.has_det # Rates that may have changed since the last step, in every place
                     for k in range(4):
@@ -1037,10 +1535,16 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
+                    elif pending: # The chain-binomial solver: they leave at the start of the step, once the rates are worked out from the people as they were (as agents' scheduled exits come first, but not in the counts the rates use)
+                        convey(rng, y, p, w, flows, True)
+                        pending = False
                     draw(rng, y, p, w, h, flows, solver == 3)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, rates, h, flows)
                 elapsed += h
+                if pending and timed and elapsed >= dt/2 - 1e-12:
+                    convey(rng, y, p, w, flows, True)
+                    pending = False
                 continue
 
             # The rate of change of each compartment, and the rate of each transition and mover
@@ -1128,6 +1632,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
             if p.mov_rate[e] != 0:
                 cells[5, p.places[p.mov_pair[0, e]]] = 0
                 cells[5, p.places[p.mov_pair[1, e]]] = 0
+    if extra:
+        step_end(rng, y, p, w, flows)
     for c in range(nc):
         for g in range(ng):
             if y[c, g] < 0:
@@ -1254,12 +1760,18 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
 
 
 @jit
-def set_step(p, ti, fixed, mult, consts, rel_trans):
-    """ Set the parts of the program that can change over time to their values at a step (each has one entry per step, or a single entry) """
-    if ti < len(fixed):     p.fixed[:] = fixed[ti]
-    if ti < len(mult):      p.mult[:] = mult[ti]
-    if ti < len(consts):    p.consts[:] = consts[ti]
-    if ti < len(rel_trans): p.rel_trans[:] = rel_trans[ti]
+def set_step(parts, ti, tables):
+    """
+    Set the parts of the program that can change over time to their values at a step
+
+    Args:
+        parts (tuple): the program's fixed, mult, consts, and rel_trans (not the program itself, since a call that is passed it costs more than a small step)
+        ti (int): the row of the tables
+        tables (tuple): the values of each, with one entry per step (or per row: see `run()`), or a single entry
+    """
+    for k in range(4):
+        if ti < len(tables[k]):
+            parts[k][:] = tables[k][ti]
     return
 
 
@@ -1304,7 +1816,7 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
             apply_shifts(rng, y, sh, ti-1, whole, tally[k-1])
             if sh.due[:, ti-1].any():
                 wake(w)
-        set_step(p, (k-1)*per_step, fixed, mult, consts, rel_trans)
+        set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
         step(rng, y, p, w, dt, n_sub, solver, flows[k], tables, (k-1)*per_step if per_step == 3 else -1)
         if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
             short += apply_events(rng, y, reg, ti, whole)
@@ -1362,7 +1874,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
                             if n_rows:
                                 tally_g[r, rows[ti-1], d, 0, g] += now_sh[d, 0, g]
                                 tally_g[r, rows[ti-1], d, 1, g] += now_sh[d, 1, g]
-                set_step(p, (k-1)*per_step, fixed, mult, consts, rel_trans)
+                set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
                 step(rng, y, p, w, dt, n_sub, solver, now, tables, (k-1)*per_step if per_step == 3 else -1)
                 if len(reg.src):
                     apply_events(rng, y, reg, ti, whole)
@@ -1387,14 +1899,22 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
     return
 
 
+inline_step = nb.jit(nopython=True, cache=True, error_model='numpy', inline='always')(step.py_func) # step(), compiled into advance() rather than called from it, since a call that is passed the program costs as much as a small step
+
+
 @jit
-def advance(rng, ys, p, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step=1):
+def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
     """
-    Take steps start+1 to end of many runs (the particles of a particle filter), each from its own compartments
+    Take steps start+1 to end of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers
 
     Args:
+        rngs (list): the random numbers of each run, as a typed list of generators
+        p (Program): the flows; the parts of it that vary in time are changed as it runs, so each thread needs its own (see `advance_threads()`)
         ys (array): the compartments of each run, by group; changed in place
+        first, last (int): the runs to take
         start, end (int): the time points to step from and to
+        fixed, mult, consts, rel_trans (arrays): as for `run()`, with a first axis for the runs: one entry if every run has the same values, or one for each run (as each particle of IF2 has its own parameter values)
+        row0 (int): the row of the tables that their first row is (those with more than one), if they do not start at the start of the run
         state_of (array): the state that each compartment is part of
         stocks, flows (arrays): filled in at time points start+1 to end, as `run_many()` returns them (by group, or the
             total in one group if they have only one)
@@ -1406,32 +1926,54 @@ def advance(rng, ys, p, dt, start, end, solver, n_sub, fixed, mult, consts, rel_
     w = workspace(ys[0], p)
     whole = solver >= 2
     now = np.empty((nflows, ng))
-    tables = (fixed, mult, consts, rel_trans)
     tally = np.zeros((len(sh.to), 2, ng)) # Not kept
-    for r in range(len(ys)):
-        y = ys[r]
+    parts = (p.fixed, p.mult, p.consts, p.rel_trans)
+    own = ys[first:last].copy() # Copies of its own of these runs and their values, since threads that share an array contend for the count of references to it
+    mine = [table[first:last].copy() if len(table) > 1 else table.copy() for table in (fixed, mult, consts, rel_trans)]
+    for r in range(first, last):
+        rng = rngs[r]
+        y = own[r - first]
+        tables = (mine[0][r - first if len(fixed) > 1 else 0], mine[1][r - first if len(mult) > 1 else 0], mine[2][r - first if len(consts) > 1 else 0], mine[3][r - first if len(rel_trans) > 1 else 0])
+        set_step(parts, 0, tables) # The values of this run, for those that are held for the whole run
         wake(w) # Each run steps every place first
         for ti in range(start + 1, end + 1):
             if len(sh.to):
                 apply_shifts(rng, y, sh, ti-1, whole, tally)
                 if sh.due[:, ti-1].any():
                     wake(w)
-            set_step(p, (ti-1)*per_step, fixed, mult, consts, rel_trans)
-            step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step if per_step == 3 else -1)
+            set_step(parts, (ti-1)*per_step - row0, tables)
+            inline_step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1)
             if len(reg.src):
                 apply_events(rng, y, reg, ti, whole)
                 if solver == 4 and p.local:
                     touch(reg, ti, p.places, w)
             if solver == 4 and p.local and p.has_det:
                 settle_places(y, p, dt, now)
-            stocks[r, ti] = 0
-            flows[r, ti] = 0
+            for s in range(stocks.shape[2]):
+                for g in range(stocks.shape[3]):
+                    stocks[r, ti, s, g] = 0
+            for f in range(nflows):
+                for g in range(flows.shape[3]):
+                    flows[r, ti, f, g] = 0
             for c in range(nc):
                 for g in range(ng):
                     stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
             for f in range(nflows):
                 for g in range(ng):
                     flows[r, ti, f, g if by_group else 0] += now[f, g]
+    ys[first:last] = own
+    return
+
+
+@nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
+def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
+    """ `advance()` for every run, with the runs shared between threads: one program for each thread (progs, a typed list of copies), since a step changes the parts of it that vary in time """
+    k = len(progs)
+    bounds = np.arange(k + 1)*len(ys)//k # The runs of each thread
+    threads = np.arange(k) # Indices as signed integers, which the typed list takes, since a prange index is unsigned
+    for i in nb.prange(k):
+        c = threads[i]
+        advance(rngs, progs[c], ys, bounds[c], bounds[c+1], dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step, row0)
     return
 
 

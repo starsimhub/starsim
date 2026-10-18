@@ -453,7 +453,7 @@ class People:
         self.add_active(new_uids)
         sim = getattr(self, 'sim', None)
         if getattr(sim, 'solver', None) == 'abm': # A dimension called sex is people.female
-            sim.set_sex(new_uids)
+            sim.groups.set_sex(new_uids)
         return new_uids
 
     def add_active(self, new_uids):

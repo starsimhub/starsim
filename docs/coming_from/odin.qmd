@@ -3,7 +3,7 @@ title: Coming from odin
 jupyter: python3
 ---
 
-This page is for people who write compartmental models in [odin](https://mrc-ide.github.io/odin)'s language in R: `deriv()` for an ODE, `update()` with `rbinom()` draws for a model in discrete time, arrays with `dim()` for age and place, and fits by particle MCMC with mcstate or monty. It shows an odin model next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet, including what fails. The particle filter's speed is where Starsim is furthest behind today.
+This page is for people who write compartmental models in [odin](https://mrc-ide.github.io/odin)'s language in R: `deriv()` for an ODE, `update()` with `rbinom()` draws for a model in discrete time, arrays with `dim()` for age and place, and fits by particle MCMC with mcstate or monty. It shows an odin model next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet, including what fails.
 
 ## The same model in both
 
@@ -92,7 +92,7 @@ msim = sim.run(n_runs=20)
 |---|---|
 | The age-structured SEIR (above) | Agree: over 1,000 runs, the mean of `I` peaks at 35,534 on day 166.75 against odin 1.2.7's 35,777 on day 166 (0.7%), and the mean final `R` is 533,016 against 532,176 (0.2%). The imported file gives a mean final `R` within 3% of odin's in 20 runs |
 | odin's stochastic SIR with arrays (100 replicates in an array) | Agree: the mean of 2,000 runs is within 4.6 people of 1,001 at every time. The 100 replicates are 100 runs, `sim.run(n_runs=100)` |
-| odin's age-structured SEIR with births, deaths, aging, waning, and a 14-day `delay()` | Agree to within the stages: `S`, `E`, `I`, and `R` within 1.4%, 2.1%, 1.6%, and 0.9% of their largest values, with the fixed delay written as 200 Erlang stages and a workaround for the delay's history; the youngest group differs by up to 15% in `E`, since odin's delay does not let the latent age |
+| odin's age-structured SEIR with births, deaths, aging, waning, and a 14-day `delay()` | Agree: with the delay written as a fixed dwell time (`E >> I @ ss.constant(ss.days(14))`), `S`, `E`, `I`, and `R` are within 0.24%, 0.37%, 0.25%, and 0.15% of their largest values at a step of a day (a quarter of that at half a day), and `I` peaks at 6.19 million on day 125, as in odin, with a workaround for the delay's history; the youngest group differs by more, since odin's delay does not let the latent age |
 
 ## Timings
 
@@ -101,7 +101,7 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 | Model | Lines: odin | Lines: Starsim | One run: odin | One run: Starsim | |
 |---|---|---|---|---|---|
 | The stochastic SIR with arrays (100 replicates) | 27 | 6 | 0.93 s as a command; the run itself 2 ms | 0.012 s for one run (0.057 s the first time in a new process); 100 runs in about 0.04 s | Pass |
-| The age-structured SEIR with a 14-day delay | 53 | 17 | 1.2 s as a command; the run itself 2 ms | 1.5 s (1.6 s the first time) | Pass, but the run is slow: the 200 Erlang stages make the ODE stiff |
+| The age-structured SEIR with a 14-day delay | 53 | 17 | 1.2 s as a command; the run itself 2 ms | the run itself 5 to 8 ms | Pass: the delay is a conveyor of 14 steps, which is not stiff (as 200 Erlang stages were, at 1.5 s a run) |
 | The age-structured SEIR above, 1,000 runs | 46 | 10 | 1.98 s on one thread, plus 0.85 s to compile | 11.2 s | |
 
 The last row was measured on 17 October 2026, on a machine shared with other jobs.
@@ -116,11 +116,11 @@ These are from Starsim's switching demo for odin users (`tests/switching/test_od
 | Write it by hand | **Works**: 10 lines against 46 |
 | Run it many times after `sim.init()` (as `gen$new()` then `$run()`) | **Works**: 20 distinct runs from `ss.parallel(sim, n_runs=20)` |
 | Fit by particle MCMC | **Works**: `sim.calibrate()` chooses particle MCMC for a stochastic model with a likelihood (`ss.outcome(..., likelihood=ss.nbinom(n=20))` and `data=`); on camdl's SIR its posterior matched camdl's PMMH to two decimals |
-| The speed of the particle filter | **Fails**: 7.1 µs per particle-step on one thread, against 1.35 µs for odin 1.2.7's forward run (the demo asks for within 3 times); particles are not yet run in parallel, so a fit with 1,000 particles of this model takes hours, not minutes |
+| The speed of the particle filter | **Works**: 2.9 µs per particle-step on one thread with 100 particles (3.6 µs with 1,000), against 1.35 µs for odin 1.2.7's forward run (the demo asks for within 3 times); the particles are shared between threads, each with random numbers of its own, so on eight threads it takes 0.8 µs (1.4 µs with 1,000), and the estimate does not depend on how many threads there are |
 | Fit the ODE by NUTS with gradients | **Works**: `solver='ode'`, and `sim.calibrate()` chooses NUTS with JAX gradients; `sim.log_density()` gives the log-density, with `.grad()` by reverse mode, for a sampler of your own |
 | A fitted parameter inside `ss.seasonal(mean=)` | **Works** |
-| A fixed delay (`delay()`) | **Not yet exact**: a fixed delay is many Erlang stages (above) |
-| Any difference equation (a running maximum, a state that is not a flow) | **Not yet** in the fast kernels: anything that is not a transition is Python in a `step()` |
+| A fixed delay (`delay()`) | **Works**: `ss.constant(ss.days(14))` is a conveyor of whole steps under every solver, exact at each step, and the ODE's release within a step is exact to second order (above) |
+| Any difference equation (a running maximum, a state that is not a flow) | **Works** for a count set each step from the model: `ss.update(peak, np.maximum(peak.n, I.frac))`, in the kernels (and in JAX); anything else is Python in a `step()` |
 | The same model as agents, `sim.new(solver='abm', n_agents=20_000)` | **Fails**: 10 initial infections among a million people are 0.2 of an agent at this scale, which rounds to none with no note, so there is no epidemic |
 | Build and run a model from R | **Works**: through reticulate, with arrow strings and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
 

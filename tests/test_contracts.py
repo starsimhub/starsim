@@ -229,6 +229,23 @@ def test_identities():
         share = res.n_D[-1]/(res.n_R[-1] + res.n_D[-1])
         atol = 1e-9 if solver == 'ode' else 0.01 # Exact for the ODE; for a stochastic run, many standard errors of the share
         assert np.isclose(share, 0.2, atol=atol), f'{solver}: a share of {share:n} left by D, not 0.2'
+
+    # A fixed delay is a conveyor: everyone who starts in E leaves exactly 10 days later, under every solver and as agents
+    E, I = ss.states(2)
+    for solver in ['ode', 'binomial', 'gillespie', 'abm']:
+        size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
+        cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), name='cohort')
+        n_E = ss.Sim(cohort, unit='day', stop=20, solver=solver, verbose=0, **size).run().results.cohort.n_E.values
+        assert n_E[10] == 1000 and n_E[11] == 0, f'{solver}: {n_E[10]:n} in E on day 10 and {n_E[11]:n} on day 11, not 1000 and 0'
+
+    # With a constant inflow as well, E holds the inflow over the delay: exactly in the ODE at every step, and on average in the stochastic solvers
+    flow = ss.Disease(arrival=ss.null >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), name='flow')
+    exact = np.r_[1000 + 100*np.arange(11), np.full(20, 1000)] # Those who started in E leave on day 10, and the arrivals of each day 10 days later
+    n_E = ss.Sim(flow, total_pop=1000, unit='day', stop=30, verbose=0).run().results.flow.n_E.values
+    assert np.allclose(n_E, exact, rtol=1e-9)
+    for solver in ['binomial', 'gillespie']:
+        runs = ss.Sim(flow, total_pop=1000, unit='day', stop=30, solver=solver, verbose=0).run(n_runs=20).results.flow.n_E.values
+        assert np.isclose(np.mean(runs, axis=0)[11:].mean(), 1000, rtol=0.03), f'{solver}: E holds {np.mean(runs, axis=0)[11:].mean():n} on average, not 1000'
     return
 
 

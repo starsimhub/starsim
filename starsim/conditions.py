@@ -155,7 +155,7 @@ def is_static(cond, sim):
     if not isinstance(cond, Cond):
         return True
     op, args = cond.op, cond.args
-    dims = [strat.name for strat in sim.strats]
+    dims = [strat.name for strat in sim.groups.strats]
     if op == 'dim':
         return True
     elif op == 'people':
@@ -235,7 +235,7 @@ class Selector:
     @property
     def shape(self):
         """ The shape of a selection: agents, or states by groups """
-        return (len(self.sim.people.uid.raw),) if self.abm else (max(len(self.states), 1), self.sim.n_groups)
+        return (len(self.sim.people.uid.raw),) if self.abm else (max(len(self.states), 1), self.sim.groups.n_groups)
 
     def everyone(self):
         return np.ones(self.shape, dtype=bool if self.abm else float)
@@ -267,23 +267,23 @@ class Selector:
     def dim(self, name):
         """ The level of each agent or group in a stratification, as a position """
         sim = self.sim
-        d = sim.dim_index(name)
+        d = sim.groups.dim_index(name)
         if self.abm:
-            strat = sim.strats[d]
+            strat = sim.groups.strats[d]
             raw = sim.people[strat.attr].raw
             if strat.edges is not None:
                 out = np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1)
             else:
                 out = np.nan_to_num(raw).astype(int)
-            if sim.group_fold is not None and not sim.group_inside[:, d].all(): # People outside the dimension's where= have no level of it
-                out = np.where(sim.group_inside[sim.group_raw(), d], out, -1)
+            if sim.groups.group_fold is not None and not sim.groups.group_inside[:, d].all(): # People outside the dimension's where= have no level of it
+                out = np.where(sim.groups.group_inside[sim.groups.group_raw(), d], out, -1)
             return out
-        return sim.group_levels[:, d][None, :]
+        return sim.groups.group_levels[:, d][None, :]
 
     def leaf(self, cond):
         sim = self.sim
         op, args = cond.op, cond.args
-        dims = [strat.name for strat in sim.strats]
+        dims = [strat.name for strat in sim.groups.strats]
         if op == 'dim':
             return self.dim(args[0])
         elif op == 'incidence':
@@ -293,7 +293,7 @@ class Selector:
             if name in dims and not self.is_binned(name):
                 return self.dim(name)
             arr = sim.people[name] # In a compartmental run this is one value per group, and stops with a message if people are not stratified by it
-            return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.n_groups]
+            return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.groups.n_groups]
         name = args[1]
         mod = self.module(modname(args[0]))
         if args[0] is None: # A state or transition given without its module: look in this module first, then the others
@@ -330,12 +330,12 @@ class Selector:
         steps = 1 if over is None else ss.connectors.to_steps(sim, over)
         flows = strata(name)[max(ti - steps + 1, 0):ti + 1].sum(axis=0)
         people = sum(strata(f'n_{key}')[ti] for key,state in mod.graph.states.items() if state.people)
-        level = np.zeros(len(flows), dtype=int) if by is None else np.maximum(sim.group_levels[:, sim.dim_index(by)], 0)
+        level = np.zeros(len(flows), dtype=int) if by is None else np.maximum(sim.groups.group_levels[:, sim.groups.dim_index(by)], 0)
         num = np.bincount(level, weights=flows)
         den = np.bincount(level, weights=people)
         share = np.divide(num, den, out=np.zeros(len(num)), where=den > 0)[level] # For each group
         if self.abm:
-            return share[sim.group_raw()] if len(share) > 1 else np.full(self.shape, share[0])
+            return share[sim.groups.group_raw()] if len(share) > 1 else np.full(self.shape, share[0])
         return share[None, :]
 
     def event(self, mod, name):
@@ -349,19 +349,19 @@ class Selector:
 
     def dim_strat(self, name):
         """ The stratification of the sim with a given name, if there is one """
-        return next((strat for strat in self.sim.strats if strat.name == name), None)
+        return next((strat for strat in self.sim.groups.strats if strat.name == name), None)
 
     def is_binned(self, name):
         sim = self.sim
-        return sim.strats[sim.dim_index(name)].edges is not None
+        return sim.groups.strats[sim.groups.dim_index(name)].edges is not None
 
     def level(self, cond, value):
         """ A label of a stratification (e.g. 'high', or True) becomes its position """
         if isinstance(cond, Cond) and cond.op in leaves and isinstance(value, (str, bool, np.bool_)):
             name = cond.args[-1]
-            dims = [strat.name for strat in self.sim.strats]
+            dims = [strat.name for strat in self.sim.groups.strats]
             if name in dims:
-                strat = self.sim.strats[dims.index(name)]
+                strat = self.sim.groups.strats[dims.index(name)]
                 if value in strat.labels:
                     return strat.labels.index(value)
         return value
@@ -374,7 +374,7 @@ class Selector:
         is_dim = isinstance(a, Cond) and a.op == 'dim'
         if not is_dim or not sc.isnumber(b) or isinstance(b, (bool, np.bool_)) or not self.is_binned(a.args[0]):
             return op, a, b
-        strat = self.sim.strats[self.sim.dim_index(a.args[0])]
+        strat = self.sim.groups.strats[self.sim.groups.dim_index(a.args[0])]
         edges = [int(e) if e == int(e) else e for e in strat.edges]
         if op in ['==', '!=']:
             errormsg = f'The condition {a} {op} {b:n} compares the bins of "{strat.name}" ({sc.strjoin(strat.labels)}) with a number; give a bin by its label, e.g. {strat.name} == "{strat.labels[0]}", or a range by its edges, e.g. {strat.name} < {edges[-1]}'
@@ -391,9 +391,9 @@ class Selector:
         if self.abm or not (isinstance(cond, Cond) and cond.op == 'people' and sc.isnumber(value)):
             return
         name = cond.args[0]
-        dims = [strat.name for strat in sim.strats]
+        dims = [strat.name for strat in sim.groups.strats]
         if name in dims and self.is_binned(name):
-            strat = sim.strats[dims.index(name)]
+            strat = sim.groups.strats[dims.index(name)]
             if value not in strat.edges and strat.edges[0] < value:
                 edges = sorted(set(strat.edges.tolist() + [value]))
                 edges = [int(e) if e == int(e) else e for e in edges]
@@ -455,11 +455,11 @@ class Selector:
         if isinstance(out, ss.uids):
             raise ss.CapabilityError(f'the condition {cond} returned UIDs, which exist only per agent. In a compartmental run it has to return a boolean per group; or run with solver="abm".')
         if isinstance(out, ss.Arr):
-            out = out.raw[:sim.n_groups]
+            out = out.raw[:sim.groups.n_groups]
         out = np.asarray(out)
         if out.ndim == 1:
-            if len(out) != sim.n_groups:
-                errormsg = f'The condition {cond} returned {len(out)} values; expected one per group ({sim.n_groups})'
+            if len(out) != sim.groups.n_groups:
+                errormsg = f'The condition {cond} returned {len(out)} values; expected one per group ({sim.groups.n_groups})'
                 raise ValueError(errormsg)
             out = out[None, :]
         out = out > 0 if out.dtype != bool and out.dtype.kind in 'iu' else out
@@ -472,13 +472,13 @@ class Selector:
             val = self.mod.engine.eval(val)
         if isinstance(val, ss.by):
             ds, grid = val.grid(sim)
-            return grid[tuple(self.dim(sim.strats[d].name) for d in ds)]
+            return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):
             val = val(sim)
         if isinstance(val, ss.TimePar) and convert is not None:
             val = convert(val)
         if isinstance(val, ss.Arr):
-            val = val.raw if self.abm else val.raw[:sim.n_groups]
+            val = val.raw if self.abm else val.raw[:sim.groups.n_groups]
         if np.ndim(val) == 0:
             return float(val)
         val = np.asarray(val, dtype=float)

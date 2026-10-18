@@ -277,6 +277,26 @@ def test_ncd():
     plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
     plt.xlabel('Year')
     plt.title('NCD')
+
+    # A disease written as code with no states of its own (Starsim 3's ss.Disease), and an infection with no beta
+    class Anemia(ss.CodedDisease):
+        def __init__(self, **kwargs):
+            super().__init__()
+            self.define_pars(p_onset=ss.bernoulli(0.1))
+            self.update_pars(**kwargs)
+            self.define_states(ss.BoolState('anemic'))
+
+        def step_state(self):
+            self.anemic[self.pars.p_onset.filter()] = True
+
+    class Background(ss.Infection): # No beta, so not transmitted
+        pass
+
+    sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
+    assert sim2.results.anemia.n_anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
+    assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
+    with pytest.raises(ss.CapabilityError): # A coded ss.Disease subclass is told to subclass ss.CodedDisease
+        type('Old', (ss.Disease,), {})()
     return sim
 
 

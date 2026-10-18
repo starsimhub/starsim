@@ -35,7 +35,7 @@ The names below are checked against the code: each one is exported by `starsim`,
 
 Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.Pregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.UnknownState`, `ss.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
-### States, transitions, parameters, results: 15
+### States, transitions, parameters, results: 16
 
 | Name | What it is |
 |---|---|
@@ -53,22 +53,24 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
+| **`ss.update`** | A count set each step to a value worked out from the model at the start of the step, for what is not a flow (a lag, a running maximum), as odin's `update()` |
 | **`ss.data`** | A data file or data frame with its columns matched to result names: `ss.data(df, aliases=..., ignore_extra=True)` |
 
 The operators `>>`, `@`, `|`, and arithmetic on states are part of this group and add no names. A custom per-step function needs no name of its own: a plain function is given as a keyword, or written in `step()`.
 
-### Time: 13
+### Time: 26
 
 All Starsim's.
 
 | Kind | Type | Constructors |
 |---|---|---|
-| Duration | `ss.dur` | `ss.days` `ss.weeks` `ss.months` `ss.years` `ss.datedur` |
+| Duration | `ss.dur` | `ss.days` `ss.weeks` `ss.months` `ss.years` `ss.datedur`, and one unit as `ss.day` `ss.week` `ss.month` `ss.year` |
 | Rate (hazard) | `ss.per` | `ss.perday` `ss.perweek` `ss.permonth` `ss.peryear` |
-| Probability per period | `ss.prob` | `ss.prob(0.1, 'day')` (or `'week'`, `'month'`, `'year'`) |
+| Probability per period | `ss.prob` | `ss.probperday` `ss.probperweek` `ss.probpermonth` `ss.probperyear` (or `ss.prob(0.1, 'day')`) |
+| Frequency (an expected count) | `ss.freq` | `ss.freqperday` `ss.freqperweek` `ss.freqpermonth` `ss.freqperyear` |
 | Calendar date | | `ss.date` |
 
-That is three types, nine constructors, and `ss.date`: two choices (which kind, which unit), not thirteen things to memorize, and a bare number works in every slot for anyone who does not want to use them. A count per unit time, for modules written as code, is `ss.time.freq(80, 'year')`.
+That is four types, each with a constructor per unit, and `ss.date`: two choices (which kind, which unit), and a bare number works in every slot for anyone who does not want to use them. In a declared transition a frequency gives the same result as a rate ([02-types.md](02-types.md#conversion)); the difference matters to modules written as code, which convert them to a step themselves.
 
 ### Distributions: 16
 
@@ -137,8 +139,8 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solver
 | Group | Names | Of which new |
 |---|---|---|
 | Sim and modules | 10 | 1 |
-| States, transitions, parameters, results | 15 | 15 |
-| Time | 13 | 0 |
+| States, transitions, parameters, results | 16 | 16 |
+| Time | 26 | 0 |
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
 | Mixing and space | 11 | 5 |
@@ -146,9 +148,9 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solver
 | Running, comparing, saving | 8 | 3 |
 | Optional metadata | 1 | 1 |
 | Types you get back or subclass | 6 | 1 |
-| **`ss.` names** | **91** | **40** |
+| **`ss.` names** | **105** | **41** |
 | Methods and attributes | 48 | 33 |
-| **Total** | **139** | **73** |
+| **Total** | **153** | **74** |
 
 <!-- counts end -->
 
@@ -166,9 +168,9 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.MultiSim`, `ss.parallel` | `n_runs` `pars` `priors`, and one keyword per scenario |
 | `ss.Disease` | `name` `dt` `init_prev` `init` `transitions` `results` `outcomes`, and one keyword per member |
 | `ss.State` | `name` `people` `init` `infectious` `rel_sus` `rel_trans` `label` |
-| `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `name` `label`; as agents, `after` `before` `offspring` |
+| `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `after` `before` `name` `label`; as agents, `offspring` |
 | `ss.transmission` | `beta` `source` `p` `where` |
-| `ss.progression` | `rate` `dur` `p` `stages` `where` `move`; as agents, `after` `before` `offspring` |
+| `ss.progression` | `rate` `dur` `p` `stages` `where` `move` `after` `before`; as agents, `offspring` |
 | `ss.birth`, `ss.immigration` | `rate` |
 | `ss.death`, `ss.emigration` | `rate` `dur`; `lifetable` (`ss.death`) |
 | `ss.transfer` | the stratification's name, `rate` `dur` `p` `states`, and the delivery keywords |
@@ -270,7 +272,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `dependence=` and `n_ref=` on `ss.MixingPool` | Never built; density dependence is a count in the rate | `beta * I.n` |
 | `.prev` on a state | The code's name is `.frac` | `.frac`, and `.n` or `.total` for counts |
 | `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.rel_sus.effective` for the value with modifiers applied |
-| `ss.probperday` to `ss.probperyear`, `ss.freqperday` to `ss.freqperyear`, and the instances `ss.day`, `ss.week`, `ss.month`, `ss.year` | One spelling for each kind of time value | `ss.prob(0.1, 'day')`; `ss.time.freq(80, 'year')` in modules written as code |
+| `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
 | `solver='tau'`, `'sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'`, which takes tau leaps when a run would take too many events; `'binomial'` |
 | `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.Fit` | `ss.Fit` (`ss.Calibration` remains for Starsim 3 code) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |

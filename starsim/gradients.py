@@ -16,6 +16,7 @@ and smooth, so this is accurate to about 1e-9 of the value.
 """
 import os
 import sys
+import itertools
 import importlib.util
 import numpy as np
 import sciris as sc
@@ -136,6 +137,16 @@ class Run:
         self.gather_crd = np.zeros((ncr, nf))
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
+        extra = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # The conveyors and updates, after the flows' operations (see ss.kernels.convey() and update_values())
+        conveyors = [(a, b) for a,b in extra if p.ops[a] == ss.kernels.CONVEY]
+        self.updates = [(a, b) for a,b in extra if p.ops[a] != ss.kernels.CONVEY] # The operations of each (the last sets its compartment)
+        self.up_comp = np.array([p.args[b-1] for a,b in self.updates], dtype=int)
+        self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
+        slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
+        self.cv_first = np.array([s[0] for s in slots], dtype=int)
+        self.cv_last = np.array([s[-1] for s in slots], dtype=int)
+        self.cv_prev = np.array([c for s in slots for c in s[:-1]], dtype=int)
+        self.cv_next = np.array([c for s in slots for c in s[1:]], dtype=int)
         self.comp_mats = {}
         return
 
@@ -188,41 +199,56 @@ class Run:
 
         rows = [fixed[f] for f in range(self.nf)]
         for f in self.dynamic: # The operations on a stack, as in the kernels
-            stack = []
-            for k in range(p.starts[f], p.starts[f+1]):
-                op, arg = p.ops[k], p.args[k]
-                kn = ss.kernels
-                if op == kn.CONST:
-                    stack.append(consts[arg])
-                elif op == kn.EXPOSURE:
-                    stack.append(exposures[arg])
-                elif op == kn.TOTAL: # In the whole population, every place
-                    stack.append(jnp.broadcast_to(ys[self.sets[arg]].sum(), (self.ng,)))
-                elif op in [kn.COUNT, kn.FRAC]:
-                    local = ys[self.sets[arg]].sum(axis=0)
-                    if not self.simple:
-                        local = self.place.T @ (self.place @ local)
-                    stack.append(local/local_n if op == kn.FRAC else local)
-                elif op >= kn.EXP:
-                    a = stack.pop()
-                    func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
-                    stack.append(func(a))
-                else:
-                    b = stack.pop()
-                    a = stack.pop()
-                    if   op == kn.ADD: stack.append(a + b)
-                    elif op == kn.SUB: stack.append(a - b)
-                    elif op == kn.MUL: stack.append(a * b)
-                    elif op == kn.DIV: stack.append(jnp.where(a == 0, 0.0, a/jnp.where(a == 0, 1.0, b))) # As in the kernels: nothing divided by anything is nothing
-                    elif op == kn.POW: stack.append(a ** b)
-                    elif op == kn.MIN: stack.append(jnp.minimum(a, b))
-                    elif op == kn.MAX: stack.append(jnp.maximum(a, b))
-                    elif op == kn.LT:  stack.append(jnp.where(a < b, 1.0, 0.0))
-                    elif op == kn.LE:  stack.append(jnp.where(a <= b, 1.0, 0.0))
-                    elif op == kn.GT:  stack.append(jnp.where(a > b, 1.0, 0.0))
-                    else:              stack.append(jnp.where(a >= b, 1.0, 0.0))
-            rows[f] = jnp.broadcast_to(stack[0], (self.ng,))*mult[f]
+            rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n), (self.ng,))*mult[f]
         return jnp.stack(rows)
+
+    def evaluate(self, ys, a, b, consts, exposures, local_n):
+        """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.kernels.step()` works out a rate) """
+        jnp = jax().numpy
+        p = self.p
+        kn = ss.kernels
+        stack = []
+        for k in range(a, b):
+            op, arg = p.ops[k], p.args[k]
+            if op == kn.CONST:
+                stack.append(consts[arg])
+            elif op == kn.EXPOSURE:
+                stack.append(exposures[arg])
+            elif op == kn.TOTAL: # In the whole population, every place
+                stack.append(jnp.broadcast_to(ys[self.sets[arg]].sum(), (self.ng,)))
+            elif op in [kn.COUNT, kn.FRAC]:
+                local = ys[self.sets[arg]].sum(axis=0)
+                if not self.simple:
+                    local = self.place.T @ (self.place @ local)
+                stack.append(local/local_n if op == kn.FRAC else local)
+            elif op >= kn.EXP:
+                x = stack.pop()
+                func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
+                stack.append(func(x))
+            else:
+                y = stack.pop()
+                x = stack.pop()
+                if   op == kn.ADD: stack.append(x + y)
+                elif op == kn.SUB: stack.append(x - y)
+                elif op == kn.MUL: stack.append(x * y)
+                elif op == kn.DIV: stack.append(jnp.where(x == 0, 0.0, x/jnp.where(x == 0, 1.0, y))) # As in the kernels: nothing divided by anything is nothing
+                elif op == kn.POW: stack.append(x ** y)
+                elif op == kn.MIN: stack.append(jnp.minimum(x, y))
+                elif op == kn.MAX: stack.append(jnp.maximum(x, y))
+                elif op == kn.LT:  stack.append(jnp.where(x < y, 1.0, 0.0))
+                elif op == kn.LE:  stack.append(jnp.where(x <= y, 1.0, 0.0))
+                elif op == kn.GT:  stack.append(jnp.where(x > y, 1.0, 0.0))
+                else:              stack.append(jnp.where(x >= y, 1.0, 0.0))
+        return stack[0]
+
+    def update_values(self, ys, consts):
+        """ The values that counts are set to at the end of a step (`ss.update()`), from the compartments at its start (as `ss.kernels.update_values()`) """
+        jnp = jax().numpy
+        p = self.p
+        n = ys[p.people].sum(axis=0)
+        local_n = n if self.simple else self.place.T @ (self.place @ n)
+        local_n = jnp.where(local_n > 0, local_n, jnp.inf) # A share of nobody is 0, as in the kernels
+        return jnp.stack([jnp.broadcast_to(self.evaluate(ys, a, b-1, consts, [], local_n), (self.ng,)) for a,b in self.updates])
 
     def share(self, v, block, X, by_columns):
         """ The time share between places times values by place and level (as `ss.kernels.share()`) """
@@ -309,15 +335,23 @@ class Run:
                 if clamp:
                     n = jnp.minimum(n, n_max)
             h = dt/n
+            due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
+            if len(self.updates): # Counts set to a value at the end of the step, worked out from the start
+                values = self.update_values(y, at(X['consts'], ti, 0.0))
+
+            Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt)) if len(self.cv_flow) else X # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1)
+
+            def derivs(ys, th):
+                return self.derivs(ys, self.rates(ys, vals(ti, th)), Xs, h)
 
             def sub(s, carry):
                 y, flows = carry
                 th = lambda frac: (s + frac)/n
-                dy1, df1 = self.derivs(y, self.rates(y, vals(ti, th(0.0))), X, h)
+                dy1, df1 = derivs(y, th(0.0))
                 if rk4:
-                    dy2, df2 = self.derivs(y + h/2*dy1, self.rates(y + h/2*dy1, vals(ti, th(0.5))), X, h)
-                    dy3, df3 = self.derivs(y + h/2*dy2, self.rates(y + h/2*dy2, vals(ti, th(0.5))), X, h)
-                    dy4, df4 = self.derivs(y + h*dy3, self.rates(y + h*dy3, vals(ti, th(1.0))), X, h)
+                    dy2, df2 = derivs(y + h/2*dy1, th(0.5))
+                    dy3, df3 = derivs(y + h/2*dy2, th(0.5))
+                    dy4, df4 = derivs(y + h*dy3, th(1.0))
                     new_y = y + h/6*(dy1 + 2*dy2 + 2*dy3 + dy4)
                     new_f = flows + h/6*(df1 + 2*df2 + 2*df3 + df4)
                 else:
@@ -340,6 +374,10 @@ class Run:
                     y, flows = sub(s, (y, flows))
                     return s + 1, y, flows
                 _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
+            if len(self.cv_flow): # Everyone in a conveyor moves along one slot
+                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
+            if len(self.updates):
+                y_end = y_end.at[self.up_comp].set(values)
             return jnp.maximum(y_end, 0.0), flows, n # The compartments after the step, as the kernels record them
 
         return step
@@ -610,7 +648,7 @@ def run_sets(sim, par_sets):
         stocks = np.einsum('rtcg,sc->rtsg', outs[j][1], member)
         flows = outs[j][2]
         npts = engine.mod.t.npts
-        if not (sim.strats != [] and len(par_sets)*npts*(stocks.shape[2] + flows.shape[2])*engine.n_groups*8 <= engine.max_bytes): # As in run_many()
+        if not (sim.groups.strats != [] and len(par_sets)*npts*(stocks.shape[2] + flows.shape[2])*engine.n_groups*8 <= engine.max_bytes): # As in run_many()
             stocks, flows = stocks.sum(axis=-1, keepdims=True), flows.sum(axis=-1, keepdims=True)
         runs = []
         for i,pars in enumerate(par_sets): # Results worked out from the values of the parameters in each run (an outcome can depend on them)
@@ -810,8 +848,9 @@ class Density:
         likelihood (dict): the likelihood of each data series, as for `ss.loglik()`
         weights (dict): a multiplier on each series' log-likelihood
         external (list): for each parameter, whether it belongs to a likelihood given at calibration time (rather than to the model)
+        bounds (tuple): the lowest and highest value of each parameter, over which a step is allowed as many substeps as the run needs (default: each parameter's `bounds`)
     """
-    def __init__(self, sim, fitted, x0, set_pars, likelihood=None, weights=None, external=None):
+    def __init__(self, sim, fitted, x0, set_pars, likelihood=None, weights=None, external=None, bounds=None):
         self.sim = sim
         self.fitted = list(fitted.values())
         self.names = list(fitted.keys())
@@ -820,6 +859,7 @@ class Density:
         self.likelihood = likelihood
         self.weights = weights or {}
         self.external = external or [False]*len(x0)
+        self.bounds = bounds
         self.mods = list(sim.declared)
         self.engines = [mod.engine for mod in self.mods]
         self.units = units(sim)
@@ -858,6 +898,24 @@ class Density:
             return val
         raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
 
+    def corners(self):
+        """ The points where the substeps a step needs are worked out: the corners of the bounds (or with more than 4 parameters, each parameter at each of its bounds, the others at their initial values) """
+        if self.bounds is not None:
+            lows, highs = [np.asarray(b, dtype=float) for b in self.bounds]
+        else:
+            bound = ss.calibration.bound_value
+            lims = [[bound(b, p.raw) for b in p.bounds] if p.bounds is not None else [x, x] for p,x in zip(self.fitted, self.x0)]
+            lows, highs = np.array(lims, dtype=float).T
+        if len(self.x0) <= 4:
+            return [np.array(corner) for corner in itertools.product(*zip(lows, highs))]
+        points = []
+        for i in range(len(self.x0)):
+            for lim in [lows, highs]:
+                x = self.x0.copy()
+                x[i] = lim[i]
+                points.append(x)
+        return points
+
     #%% The numbers in the run
 
     def capture(self, x):
@@ -871,6 +929,12 @@ class Density:
         self.programs = [c[0] for c in captured]
         self.hows = [c[1] for c in captured]
         self.X0 = [c[2] for c in captured]
+        keys = [Run.key(program, *how) for program,how in zip(self.programs, self.hows)]
+        corners = [] # The numbers at the corners of the bounds, where the run is laid out as at the start
+        for x in self.corners():
+            captured = self.capture(x)
+            if all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys)):
+                corners.append([c[2] for c in captured])
 
         # The run of each set of engines that are run together, with room to spare for the substeps
         self.runs = []
@@ -883,9 +947,11 @@ class Density:
                 cross = self.engines[unit[0]].cross
                 base = joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit])
                 args = tuple(self.X0[j] for j in unit)
-            if not base.n_sub: # The most a step needs at the start, with room to spare
-                out = call(base, 'run', args)
-                n_max = int(2**np.ceil(np.log2(max(2*np.asarray(out[3]).max(), 1)))) # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
+            if not base.n_sub: # The most a step needs at the start and at the corners of the bounds, with room to spare, so that a draw anywhere within them gets the substeps it needs
+                need = np.asarray(call(base, 'run', args)[3]).max() # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
+                for Xs in corners:
+                    need = max(need, np.asarray(call(base, 'run', Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit))[3]).max())
+                n_max = int(2**np.ceil(np.log2(max(2*need, 1))))
             else:
                 n_max = base.n_sub
             if len(unit) == 1:
@@ -900,7 +966,7 @@ class Density:
             self.consts.append({k:self.index[id(p)] for k,p in enumerate(engine.prog_pars) if id(p) in self.index})
             fixed = []
             for f,flow in enumerate(engine.flows):
-                if flow.dynamic:
+                if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.kernels.convey())
                     continue
                 dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
                 leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
@@ -914,7 +980,6 @@ class Density:
         # The rest, by how they change with each parameter
         h = 1e-4*np.where(self.x0 != 0, np.abs(self.x0), 1.0)
         self.slopes = [{} for engine in self.engines]
-        keys = [Run.key(program, *how) for program,how in zip(self.programs, self.hows)]
         for i in range(len(self.x0)):
             sides = []
             for sign in [1, -1]:
@@ -967,15 +1032,15 @@ class Density:
         self.member = [np.array([[comp.state.name == name for comp in engine.comps] for name in engine.graph.states], dtype=float) for engine in self.engines] # Which compartments each state is
         self.series = []
         for col in sim.data.columns:
-            base, dims = ss.data.parse(col)
-            res = ss.data.match_name(sim, base)
+            base, dims = ss.results.parse_column(col)
+            res = ss.results.match_name(sim, base)
             owners = [j for j,mod in enumerate(self.mods) if mod.results.get(res.name) is res] # By the result itself, since its module is a label
             keep = None
             if dims: # The groups of a stratum
-                keep = np.ones(sim.n_groups)
-                for dim,level in ss.data.levels(sim, dims).items():
-                    d = sim.dim_index(dim)
-                    keep = keep*(sim.group_levels[:, d] == sim.strats[d].index(level))
+                keep = np.ones(sim.groups.n_groups)
+                for dim,level in ss.results.column_levels(sim, dims).items():
+                    d = sim.groups.dim_index(dim)
+                    keep = keep*(sim.groups.group_levels[:, d] == sim.groups.strats[d].index(level))
             if not owners:
                 raise Unsupported(f'the data series "{col}", which is not a result of a declared disease')
             j = owners[0]
@@ -1043,63 +1108,11 @@ class Density:
         return out
 
     def loglik(self, dist, observed, model, x):
-        """ As `ss.calibration.logpdf()`, in JAX """
-        jnp = jax().numpy
-        stats = jax().scipy.stats
-        gammaln = jax().scipy.special.gammaln
+        """ As `ss.calibration.logpdf()`, in JAX, with the fitted parameters of the likelihood at their values in x """
         def par(val):
             i = self.index.get(id(val)) if isinstance(val, ss.par) else None
             return x[i] if i is not None else (val.raw if isinstance(val, ss.par) else val)
-        pars = {key:par(val) for key,val in dist.pars.items()}
-        mean = jnp.maximum(model, 1e-9)
-        if isinstance(dist, ss.poisson):
-            return observed*jnp.log(mean) - mean - gammaln(observed + 1)
-        elif isinstance(dist, ss.nbinom):
-            n = pars['n']
-            return gammaln(observed + n) - gammaln(n) - gammaln(observed + 1) + n*jnp.log(n/(n + mean)) + observed*jnp.log(mean/(n + mean))
-        elif isinstance(dist, ss.binom):
-            n = pars['n']
-            p = jnp.clip(model, 1e-12, 1 - 1e-12)
-            return gammaln(n + 1) - gammaln(observed + 1) - gammaln(n - observed + 1) + observed*jnp.log(p) + (n - observed)*jnp.log1p(-p)
-        elif isinstance(dist, ss.bernoulli):
-            p = jnp.clip(model, 1e-12, 1 - 1e-12)
-            return observed*jnp.log(p) + (1 - observed)*jnp.log1p(-p)
-        elif isinstance(dist, ss.normal):
-            return stats.norm.logpdf(observed, model, pars['scale'])
-        elif isinstance(dist, ss.lognorm_ex):
-            sigma2 = jnp.log1p(pars['std']**2/mean**2)
-            return stats.norm.logpdf(jnp.log(observed), jnp.log(mean) - sigma2/2, jnp.sqrt(sigma2)) - jnp.log(observed)
-        raise Unsupported(f'the likelihood {type(dist).__name__}')
-
-    def logprior(self, i, val):
-        """ As `ss.calibration.logprior()`, in JAX """
-        jnp = jax().numpy
-        stats = jax().scipy.stats
-        p = self.fitted[i]
-        prior = p.prior
-        low, high = p.bounds
-        if prior is None:
-            return -np.log(high - low)
-        elif isinstance(prior, ss.uniform):
-            return stats.uniform.logpdf(val, prior.pars.low, prior.pars.high - prior.pars.low)
-        frozen = sc.dcp(prior).init(force=True).dist
-        name = getattr(getattr(frozen, 'dist', None), 'name', None)
-        kw = dict(loc=0.0, scale=1.0) | frozen.kwds
-        args = frozen.args
-        if name == 'norm':
-            return stats.norm.logpdf(val, kw['loc'], kw['scale'])
-        elif name == 'lognorm':
-            s = args[0] if args else kw['s']
-            return stats.norm.logpdf(jnp.log(val - kw['loc']), jnp.log(kw['scale']), s) - jnp.log(val - kw['loc'])
-        elif name == 'gamma':
-            a = args[0] if args else kw['a']
-            return stats.gamma.logpdf(val, a, kw['loc'], kw['scale'])
-        elif name == 'beta':
-            a, b = args if args else (kw['a'], kw['b'])
-            return stats.beta.logpdf(val, a, b, kw['loc'], kw['scale'])
-        elif name == 'expon':
-            return stats.expon.logpdf(val, kw['loc'], kw['scale'])
-        raise Unsupported(f'the prior of "{self.names[i]}" ({type(prior).__name__})')
+        return ss.calibration.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in dist.pars.items()})
 
     #%% The whole of it
 
@@ -1142,7 +1155,7 @@ class Density:
             model = jax().numpy.asarray(s.W) @ results[s.col]
             total = total + s.weight*self.loglik(s.lik, s.expected, model, x).sum()
         for i in range(len(self.fitted)):
-            total = total + self.logprior(i, x[i])
+            total = total + ss.calibration.logprior(self.fitted[i], x[i], xp=jax().numpy)
         return total
 
 

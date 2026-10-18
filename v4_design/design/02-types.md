@@ -2,7 +2,7 @@
 
 Durations, rates, probabilities, and frequencies; how bare numbers get their units; and time in a sim.
 
-Justified by [best-practices/time-and-units.md](../best-practices/time-and-units.md). These are Starsim's types and names, with the duplicate names removed (`ss.probperday` to `ss.probperyear`, `ss.freqperday` to `ss.freqperyear`, and the one-unit instances `ss.day` to `ss.year`; see the migration guide). There are two additions: a bare number is accepted in every slot and typed by the slot it appears in, and a model in which nothing has a unit counts time in timesteps.
+Justified by [best-practices/time-and-units.md](../best-practices/time-and-units.md). These are Starsim's types and names, with Starsim's names kept: `ss.perday` to `ss.peryear`, `ss.probperday` to `ss.probperyear` (the same as `ss.prob(0.1, 'day')` to `ss.prob(0.1, 'year')`), `ss.freqperday` to `ss.freqperyear`, and the one-unit instances `ss.day` to `ss.year`. In a declared transition a `freq` and a `per` of the same value give the same result ([Conversion](#conversion)). There are two additions: a bare number is accepted in every slot and typed by the slot it appears in, and a model in which nothing has a unit counts time in timesteps.
 
 ## The types
 
@@ -10,12 +10,14 @@ Justified by [best-practices/time-and-units.md](../best-practices/time-and-units
 |---|---|---|---|
 | `ss.dur` | time | an elapsed duration | `ss.days`, `ss.weeks`, `ss.months`, `ss.years`, `ss.datedur` |
 | `ss.per` | time⁻¹ | a hazard: events per unit time, continuously | `ss.perday`, `ss.perweek`, `ss.permonth`, `ss.peryear` |
-| `ss.prob` | probability per period | the chance of an event within a period | `ss.prob(0.1, 'day')`, and `'week'`, `'month'`, `'year'` |
-| `ss.time.freq` | time⁻¹ | an expected number of events per unit time, for modules written as code (not at the top level) | `ss.time.freq(80, 'year')` |
+| `ss.prob` | probability per period | the chance of an event within a period | `ss.probperday`, `ss.probperweek`, `ss.probpermonth`, `ss.probperyear` (the same as `ss.prob(0.1, 'day')` and so on) |
+| `ss.freq` | time⁻¹ | an expected number of events per unit time | `ss.freqperday`, `ss.freqperweek`, `ss.freqpermonth`, `ss.freqperyear` |
 
-`ss.per`, `ss.prob`, and `ss.time.freq` share the base class `ss.Rate`; all four types share `ss.TimePar`. `ss.per` is the hazard type and keeps its Starsim name. A typed value needs its unit: `ss.dur(3)` and `ss.per(2)` with no unit raise (they were years in Starsim 3). In a declared model a rate gives the same result as a frequency, so `ss.time.freq` is only for modules written as code.
+`ss.per`, `ss.prob`, and `ss.freq` share the base class `ss.Rate`; all four types share `ss.TimePar`. `ss.per` is the hazard type and keeps its Starsim name. A typed value needs its unit: `ss.dur(3)` and `ss.per(2)` with no unit raise (they were years in Starsim 3).
 
-`ss.per` and `ss.time.freq` have the same dimension and are different types. A hazard is the parameter of an exponential clock and converts to a per-step probability by `1 − exp(−r·dt)`; a frequency is an expected count and converts by `f·dt`. Mixing them up is a common quiet error, so adding one to the other raises `IncompatibleTypes`, as Starsim does today.
+`ss.per` and `ss.freq` have the same dimension and are different types. A hazard is the parameter of an exponential clock and converts to a per-step probability by `1 − exp(−r·dt)`; a frequency is an expected count and converts by `f·dt`. Mixing them up is a common quiet error, so adding one to the other raises `IncompatibleTypes`, as Starsim does today.
+
+The difference is only in that conversion, which a module written as code asks for (`to_prob()` for a chance this step, `* dt` for a count this step). A declared transition never asks for it: its rate is always a hazard, which the solver turns into a step itself (the ODE integrates it; the stochastic solvers and agents use `1 − exp(−r·dt)`). So in a declared transition `ss.freqperday(0.1)` and `ss.perday(0.1)` give the same result, while `ss.probperday(0.1)` is the hazard that gives a 10% chance a day, `−ln(0.9) = 0.105` a day, and gives a different result (10 days of recovery from 1,000: 368 left at `perday(0.1)` or `freqperday(0.1)`, 349 at `probperday(0.1)`).
 
 `ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days.
 
@@ -29,7 +31,7 @@ Converting to a timestep is the type's job, not the user's. For a step of length
 |---|---|---|
 | `ss.per(r)` | `1 − exp(−r·dt)` | `r·dt` |
 | `ss.prob(p)` per period `T` | `1 − (1 − p)^(dt/T)` | |
-| `ss.time.freq(f)` | | `f·dt` |
+| `ss.freq(f)` | | `f·dt` |
 | `ss.dur(d)` | through the rate `1/d` | |
 
 A solver MUST NOT substitute `r·dt` for `1 − exp(−r·dt)`.
@@ -50,7 +52,7 @@ Starsim's rules, summarized:
 | `per` | `+` `−` | `per` | `per` | competing hazards add; units are converted |
 | `per` | `×` `÷` | number | `per` | |
 | `per` | `×` | `dur` | number | the probability of at least one event over the period, `1 − exp(−r·d)`: `ss.perday(0.1) * ss.days(3)` is 0.259 |
-| `freq` | `×` | `dur` | number | an expected count, `f·d`: `ss.time.freq(0.1, 'day') * ss.days(3)` is 0.3 |
+| `freq` | `×` | `dur` | number | an expected count, `f·d`: `ss.freqperday(0.1) * ss.days(3)` is 0.3 |
 | `prob` | `+` `−` | `prob` | `prob` | through the underlying rates, as competing hazards: `ss.prob(0.1, 'day') + ss.prob(0.1, 'day')` is 0.19 per day, the same as `2 * ss.prob(0.1, 'day')` |
 | `prob` | `×` `÷` | number | `prob` | scales the underlying rate |
 | `prob` | `×` | `dur` | number | the probability over the period |
@@ -198,5 +200,5 @@ Adding a type is a real cost to every user who has to learn it, so the set shoul
 ## Open questions
 
 - Whether `ss.prob` keeps its period in the model spec or is normalized to a per-step value at build time. The first is more faithful; the second is smaller.
-- **The rest of the type lattice.** Adding an `ss.per` to an `ss.time.freq` or `ss.prob` is an error (above). The rules for every other pair of types need writing down once rather than discovering per operator.
+- **The rest of the type lattice.** Adding an `ss.per` to an `ss.freq` or `ss.prob` is an error (above). The rules for every other pair of types need writing down once rather than discovering per operator.
 - **Can the Timeline be simpler?** Three views seem irreducible: the step index, time in the sim's own unit, and the calendar date. The other vectors (`yearvec`, `relvec`, `tvec`) could become conversions on request, `sim.t.to('year')`. Whether that is a real simplification needs trying in Starsim.

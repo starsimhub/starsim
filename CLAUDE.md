@@ -69,18 +69,35 @@ uv add starsim[dev]  # With dev dependencies
 - `analyzers.py`: Analyzers for custom results (e.g. `ss.infection_log`, `ss.dynamics_by_age`)
 - `arrays.py`: State management arrays for people/networks
 - `calibration.py`: Model calibration to data
-- `connectors.py`: Connectors between modules (e.g. `ss.seasonality`)
+- `conditions.py`: Conditions on states and people, for `where=` (`ss.conditions.Cond`)
+- `connectors.py`: Connectors between modules (e.g. `ss.modify`)
+- `dates.py`: Dates and calendar durations (`ss.date`, `ss.DateArray`, `ss.datedur`)
 - `debugtools.py`: Profiling, debugging, and mock objects for testing
+- `dimensions.py`: Stratifications (`ss.dimensions.Strat`, `ss.transfer`) and the groups they give (`sim.groups`, an `ss.dimensions.Groups`)
 - `distributions.py`: Statistical distributions and random number generation
+- `errors.py`: Errors, warnings, and notes, as classes (e.g. `ss.UnknownState`)
+- `expressions.py`: Expressions in rates and results (`ss.par`, `ss.transitions.Expr`), and how they are evaluated and printed
+- `gradients.py`: Gradients and log-densities in JAX (`sim.gradient()`, `sim.log_density()`)
+- `graph.py`: The graph of a declared module: its states, transitions, and parameters, completed with defaults and checked (`ss.transitions.Graph`)
+- `kernels.py`: The Numba kernels that run compartmental models
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
+- `named.py`: Places and contact matrices by name (`ss.people('Kenya')`, `ss.contacts('Kenya')`)
+- `networks.py`: Networks, mixing pools, and places and movement between them (`ss.geo`, `ss.Mobility`)
+- `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
+- `presentation.py`: How a declared model is shown: `describe()`, `diagram()`, `equations()`, and its model spec
 - `products.py`: Vaccine and treatment deployment
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `samples.py`: Storage for large-scale simulation results
 - `settings.py`: Global options (`ss.options`) and plotting style
-- `time.py`: Dates, durations, and rates (`ss.date`, `ss.dur`, `ss.peryear`, etc.)
+- `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
+- `spec.py`: The model spec, and models written as code (`ss.to_code()`, `ss.diff()`)
+- `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.)
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
+- `timeplot.py`: Plotting dates and durations with Matplotlib
+- `transitions.py`: States and transitions (`ss.State`, `ss.transmission()`, `ss.progression()`, ...); the names of the modules above that it builds on are also `ss.transitions.X`
 - `utils.py`: Helper functions
+- `interop/`: Importers and exporters for other modeling frameworks
 
 ### Library (`starsim/library/`)
 Example and reference modules that build on core Starsim but are not part of it, available via `import starsim.library as ssl` (e.g. `ssl.Cholera` or `ssl.diseases.Cholera`):

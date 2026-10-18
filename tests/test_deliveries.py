@@ -72,6 +72,8 @@ def test_change():
     assert np.allclose(bare.results.sir.n_S, res.n_S) # In a sim with dates, a number is days since the start (not the year 20, which was taken as the first day)
     with pytest.raises(ss.TimeOutsideSim): # A time outside the sim, such as the year 2030 written as a number of days
         ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=[2030], to=[0.09]), start='2020-01-01', stop='2020-04-30', verbose=0).init()
+    with pytest.raises(ss.TimeOutsideSim): # At the stop, where no step starts, so it would never apply
+        ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=['2020-04-30'], to=[0.09]), start='2020-01-01', stop='2020-04-30', verbose=0).init()
     with pytest.raises(ValueError):
         ss.change(sir.pars.beta, at=[20, 60], by=[0.3])
 

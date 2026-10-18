@@ -131,7 +131,7 @@ class Options(sc.objdict):
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
-        optdesc.threads = 'The number of threads that the passes over the agents of a large sim take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
+        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'

@@ -151,7 +151,7 @@ class SEIR(ss.Disease):
 
 Use the class form when there is behavior that is not a transition, or when the model is going into a library. A module that only has states, transitions, parameters, and results never needs to define a method.
 
-A disease written entirely as code (per-agent arrays from `define_states()`, updated in `step_state()` and `set_prognoses()`, as in Starsim 3) subclasses `ss.Infection`, not `ss.Disease`: whether a disease is declared is decided by its class, never by the types of its keywords. The verbs that act on arrays reach it (`ss.modify` of its `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`); those that need structure (`equations()`, `R0()`, the compartmental solvers) raise `ss.CapabilityError`.
+A disease written entirely as code (per-agent arrays from `define_states()`, updated in `step_state()` and `set_prognoses()`, as in Starsim 3) subclasses `ss.Infection` if it is transmitted between agents (it has the susceptible and infected states, `rel_sus`, `rel_trans`, and transmission over networks), or `ss.CodedDisease` (Starsim 3's `ss.Disease`, with no states of its own), not `ss.Disease`: whether a disease is declared is decided by its class, never by the types of its keywords. The verbs that act on arrays reach it (`ss.modify` of its `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`); those that need structure (`equations()`, `R0()`, the compartmental solvers) raise `ss.CapabilityError`.
 
 ### Library models
 

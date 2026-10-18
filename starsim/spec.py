@@ -311,7 +311,7 @@ def disease_code(spec, lines, left):
                 held = [p for p in spec['pars'] if p['value'] == d]
                 dur = held[0]['name'] if held else code_value(d)
         src, dst = endpoint(t['src']), endpoint(t['dst'])
-        simple = len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration')
+        simple = len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None
         if simple:
             members.append((t['name'], f'{src} >> {dst} @ {operand(rate if rate is not None else dur)}'))
         else:
@@ -325,6 +325,9 @@ def disease_code(spec, lines, left):
             for k in ['stages', 'label']:
                 if t[k] is not None:
                     args.append(f'{k}={t[k]!r}')
+            for k in ['after', 'before']:
+                if t.get(k) is not None:
+                    args.append(f'{k}={code_value(t[k])}')
             members.append((t['name'], f'ss.Transition({", ".join(args)})'))
         if t.get('migration'):
             unknown(f'the migration of {t["name"]}')
@@ -343,6 +346,9 @@ def disease_code(spec, lines, left):
                 left.append(f'the likelihood of {r["name"]} ({lik})')
             source = r['source']
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
+
+    for u in spec.get('updates', []): # Counts set each step
+        members.append((u['name'], f"ss.update({u['state']}, {code_expr(u['value'])})"))
 
     # Initial values
     inits = {s['name']:s['init'] for s in spec['states'] if s['init'] is not None and not isinstance(s['init'], str)}

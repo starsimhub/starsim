@@ -95,7 +95,7 @@ These are from Starsim's switching demo for SimInf users (`tests/switching/test_
 | A rate for each herd, written `ss.perday(ss.by(herd=b))` | **Fails**: raises a `TypeError` that says to put the unit inside, `ss.by(herd=[ss.perday(x) for x in b])`, which works |
 | A model with a continuous state per herd (SISe's `phi`) | **Works**: declared, with no C |
 | Fit by particle MCMC (`pmcmc()`) | **Works**: `sim.calibrate()` chooses particle MCMC for a stochastic model with a likelihood, runs four chains, and reports R-hat; on SimInf's `?pmcmc` example the 95% intervals (beta 0.123 to 0.186, gamma 0.066 to 0.089) cover the true values (0.16 and 0.077) |
-| The speed of the particle filter | **Works**: 0.6 ms per particle run, against 0.57 ms for SimInf (the demo asks for within 3 times) |
+| The speed of the particle filter | **Works**: 0.57 ms per particle run on one thread, the same as SimInf's 0.57 ms (the demo asks for within 3 times), and 0.23 ms on four threads |
 | Fit by ABC-SMC (`abc()`) | **Works**: `method='abc-smc'`, below |
 | Speed on a national register | **Works**: see the timings above |
 | Build and run a model from R | **Works**: through reticulate, with arrow strings and `name=` |

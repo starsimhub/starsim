@@ -7,6 +7,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
+from .expressions import as_expr, evaluate, Expr, par
 
 
 # Define classes to not descend into further -- based on sciris.sc_nested
@@ -730,3 +731,421 @@ def load_pars(filename):
         raise ValueError(errormsg)
     errormsg = f'The parameter file {path} should be a CSV, TOML, or JSON file, not "{suffix}"'
     raise ValueError(errormsg)
+
+
+#%% Values that vary by level or in time
+
+class by:
+    """
+    A value for each level of one or more stratifications
+
+    With several dimensions as keywords, the value of a group is the product of
+    its value in each. A table gives every combination directly: it has a column
+    for each stratification (holding the labels of its levels) and a column of values.
+
+    Args:
+        table (df/array): a dataframe (or a dict of columns) with a column per stratification and a column named `value`; or, with `dims`, an array with one axis per dimension
+        dims (list): the dimensions of the axes of an array given as `table`
+        kwargs (dict): each dimension, and one value per level
+
+    A value may itself vary in time (`ss.timeseries` or `ss.seasonal`), in the keyword and table forms.
+
+    Examples:
+        ```python
+        beta = ss.by(age=[0.08, 0.05, 0.03])
+        beta = ss.by(age=[0.08, 0.05, 0.03], sex=[1.0, 0.8]) # One per age group and sex: the product
+        init = ss.by(pd.DataFrame(age=['child', 'adult'], patch=['north', 'north'], value=[10, 5])) # Every other combination is 0
+        pop = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch']) # Ages by row, places by column
+        beta = ss.by(age=[ss.timeseries({2020: 0.08, 2021: 0.04}), 0.05, 0.03]) # Children's value changes in 2021
+        ```
+    """
+    def __init__(self, table=None, dims=None, **kwargs):
+        if (table is None) == (not kwargs):
+            errormsg = 'ss.by() takes a table, or one value per level for each dimension, e.g. ss.by(age=[0.1, 0.2, 0.3])'
+            raise ValueError(errormsg)
+        self.array = None
+        if dims is not None: # An array with one axis for each dimension
+            self.array = np.array(table, dtype=float)
+            if self.array.ndim != len(dims):
+                errormsg = f'ss.by() was given {len(dims)} dimensions ({sc.strjoin(dims)}), but an array with {self.array.ndim} axes'
+                raise ValueError(errormsg)
+            self.table = None
+            self.dims = list(dims)
+        elif table is not None:
+            table = sc.dataframe(table)
+            if 'value' not in table.columns:
+                errormsg = f'A table given to ss.by() needs a column named "value"; its columns are {list(table.columns)}'
+                raise KeyError(errormsg)
+            self.table = table
+            self.dims = [col for col in table.columns if col != 'value']
+        else:
+            self.table = None
+            self.dims = list(kwargs.keys())
+        self.given = kwargs
+        return
+
+
+    def to_json(self):
+        """ The value as it is written in the model spec """
+        if self.array is not None:
+            return dict(by=self.dims, array=self.array.tolist())
+        elif self.table is not None:
+            return dict(by=self.dims, table={col:ss.presentation.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
+        values = {dim:ss.presentation.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
+        return dict(by=self.dims, values=values[self.dims[0]]) if len(self.dims) == 1 else dict(by=self.dims, product=values)
+    def map(self, func):
+        """ A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product) """
+        if self.array is not None:
+            return by(func(self.array), dims=self.dims)
+        elif self.table is not None:
+            table = self.table.copy()
+            table['value'] = [func(v) for v in table['value']]
+            return by(table)
+        elif len(self.dims) == 1:
+            return by(**{self.dim:[func(v) for v in sc.tolist(self.values)]})
+        errormsg = f'Arithmetic on an ss.by() of several dimensions given as keywords ({sc.strjoin(self.dims)}) is not defined, since each group\'s value is a product; give it as a table or an array with dims= instead'
+        raise TypeError(errormsg)
+
+    def _op(self, other, func):
+        """ Arithmetic with a number, or level by level with another ss.by over the same one dimension; anything else (an expression) is left to the other side """
+        if sc.isnumber(other):
+            return self.map(lambda v: func(v, other))
+        elif isinstance(other, by) and self.dim is not None and other.dim == self.dim:
+            a, b = sc.tolist(self.values), sc.tolist(other.values)
+            if len(a) != len(b):
+                errormsg = f'Cannot combine an ss.by() of {len(a)} levels of "{self.dim}" with one of {len(b)}'
+                raise ValueError(errormsg)
+            return by(**{self.dim:[func(x, y) for x,y in zip(a, b)]})
+        return NotImplemented
+
+    def __mul__(self, other):      return self._op(other, lambda a,b: a*b)
+    def __rmul__(self, other):     return self._op(other, lambda a,b: b*a)
+    def __truediv__(self, other):  return self._op(other, lambda a,b: a/b)
+    def __rtruediv__(self, other): return self._op(other, lambda a,b: b/a)
+    def __add__(self, other):      return self._op(other, lambda a,b: a + b)
+    def __radd__(self, other):     return self._op(other, lambda a,b: b + a)
+    def __sub__(self, other):      return self._op(other, lambda a,b: a - b)
+    def __rsub__(self, other):     return self._op(other, lambda a,b: b - a)
+    def __pow__(self, other):      return self._op(other, lambda a,b: a**b)
+    def __neg__(self):             return self.map(lambda v: -v)
+
+    @property
+    def items(self):
+        """ Every value it holds """
+        if self.array is not None:
+            return list(self.array.flat)
+        if self.table is not None:
+            return list(self.table['value'])
+        return [v for vals in self.given.values() for v in sc.tolist(vals)]
+
+    @property
+    def varies(self):
+        """ Whether any of its values varies in time """
+        return any(isinstance(v, TimeValue) for v in self.items)
+
+    @property
+    def dim(self):
+        """ The dimension, if there is one """
+        return self.dims[0] if len(self.dims) == 1 else None
+
+    @property
+    def values(self):
+        """ The values, if there is one dimension """
+        if len(self.dims) != 1:
+            return None
+        elif self.array is not None: # ss.by([...], dims=['age'])
+            return self.array.tolist()
+        return self.given[self.dim] if self.given else None
+
+    def __repr__(self):
+        if self.array is not None:
+            return f'by({self.array.tolist()}, dims={self.dims})'
+        if self.table is not None:
+            return f'by(table of {len(self.table)} rows by {sc.strjoin(self.dims)})'
+        return f'by({", ".join(f"{k}={v}" for k,v in self.given.items())})'
+
+    def check(self, sim):
+        """ Check that there is a value for each level of each dimension (`ss.ShapeError`); returns the positions of the dimensions in the sim, and the dimensions """
+        ds = [sim.groups.dim_index(dim) for dim in self.dims]
+        strats = [sim.groups.strats[d] for d in ds]
+        if self.array is not None:
+            shape = tuple(strat.n for strat in strats)
+            if self.array.shape != shape:
+                raise ss.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
+        elif self.table is None:
+            for strat,(dim,vals) in zip(strats, self.given.items()):
+                if np.ndim(vals) != 0 and len(sc.toarray(vals)) != strat.n: # One value is for every level, e.g. ss.by(subpop=2.2)
+                    raise ss.ShapeError(f'ss.by({dim}=...) has {len(sc.toarray(vals))} values, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+        return ds, strats
+
+    def grid(self, sim, convert=None, year=None):
+        """
+        The value for every combination of the levels of its dimensions
+
+        Returns the positions of the dimensions in the sim, and an array with one axis for each.
+        A value that varies in time is taken at the sim's current time, or at `year` if given.
+        """
+        given = convert or (lambda v: v)
+        convert = lambda v: given((v(sim) if year is None else v.at(year, sim)) if isinstance(v, TimeValue) else v)
+        ds, strats = self.check(sim)
+        if self.array is not None:
+            return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if self.array.size else self.array.copy()
+        if self.table is None:
+            out = np.ones([strat.n for strat in strats])
+            for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
+                single = np.ndim(vals) == 0 # One value for every level, e.g. ss.by(subpop=2.2)
+                vals = np.array([convert(v) for v in sc.toarray(vals)], dtype=float)
+                if single:
+                    vals = np.full(strat.n, vals[0])
+                shape = [1]*len(strats)
+                shape[i] = strat.n
+                out = out*vals.reshape(shape)
+            return ds, out
+        out = np.zeros([strat.n for strat in strats])
+        for _,row in self.table.iterrows():
+            index = []
+            for strat in strats:
+                labels = [str(label) for label in strat.labels]
+                label = str(row[strat.name])
+                if label not in labels:
+                    raise ss.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                index.append(labels.index(label))
+            out[tuple(index)] += convert(row['value'])
+        return ds, out
+
+    def per_group(self, sim, convert=None, year=None):
+        """ The value for each group of the sim """
+        ds, grid = self.grid(sim, convert, year)
+        grid, index = sim.groups.grid_index(ds, grid)
+        return grid[index]
+
+    def is_count(self):
+        """ Whether the values are whole numbers (so that a 1 is one person rather than everyone) """
+        if self.array is not None:
+            return bool(np.all(self.array == np.round(self.array)))
+        return np.asarray(self.items).dtype.kind in 'iu'
+
+
+class Static:
+    """ What an expression of parameters alone is evaluated with, outside the engine: see `const_value()` """
+    @staticmethod
+    def value(p):
+        return p.raw
+
+
+def const_value(val):
+    """ The value of a number or of an expression of parameters (e.g. (1 + smin)/2), as it is now """
+    return evaluate(val, Static) if isinstance(val, Expr) else val
+
+
+class TimeValue:
+    """ Base class for values that vary in time: called with the sim, they return the value at the current time """
+    fields = [] # The attributes that can hold parameters
+    _is_expr = True # So a typed value defers to it, and ss.perday(0.1) * ss.timeseries(...) is an expression as the other order is
+
+    @property
+    def pars(self):
+        """ The parameters in its values, e.g. smin in ss.seasonal(mean=(1 + smin)/2, ...) """
+        return [leaf for name in self.fields for v in sc.tolist(getattr(self, name)) if isinstance(v, Expr) for leaf in v.leaves if isinstance(leaf, par)]
+
+    def __call__(self, sim):
+        return self.at(sim.t.now('year'), sim)
+
+    def series(self, years, sim, convert):
+        """ The value at each of an array of years, converted to plain numbers by `convert` """
+        return np.array([convert(self.at(year, sim)) for year in years], dtype=float)
+
+    @property
+    def __name__(self): # So it can be named in messages like any other function of the sim
+        return type(self).__name__
+
+    @property
+    def typed(self):
+        """ The typed quantities it holds, used to infer the sim's unit """
+        return []
+
+    # Arithmetic gives an expression, for a rate, e.g. 2 * ss.seasonal(...) or beta * ss.timeseries(...)
+    def __mul__(self, other):      return as_expr(self) * other
+    def __rmul__(self, other):     return other * as_expr(self)
+    def __truediv__(self, other):  return as_expr(self) / other
+    def __rtruediv__(self, other): return other / as_expr(self)
+    def __add__(self, other):      return as_expr(self) + other
+    def __radd__(self, other):     return other + as_expr(self)
+    def __sub__(self, other):      return as_expr(self) - other
+    def __rsub__(self, other):     return other - as_expr(self)
+    def __neg__(self):             return -1 * as_expr(self)
+
+
+class timeseries(TimeValue):
+    """
+    A value that varies in time, given at some times and interpolated between them
+
+    It can be used wherever a value or a function of the sim can: as a rate or a
+    duration, as the amount of `ss.modify()`, or as the coverage or capacity of a delivery.
+    Before the first time the first value is used, and after the last time the last.
+
+    Args:
+        data (dict/str/dataframe): the value at each time, as a dict, a dataframe (the first column is
+            the time, the second the value), or the name of a file holding one. A time is a date, or a
+            number, which is a time in the sim's unit (in a sim with dates, that long after the start)
+        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings), or 'spline'
+        period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
+
+    Examples:
+        ```python
+        beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
+        decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
+        ```
+    """
+    def __init__(self, data, mode='constant', period=None):
+        if isinstance(data, str):
+            data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
+        if not isinstance(data, dict):
+            data = dict(zip(data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()))
+        if mode not in ['constant', 'linear', 'cosine', 'spline']:
+            errormsg = f'The mode of ss.timeseries() is "constant", "linear", "cosine", or "spline", not "{mode}"'
+            raise ValueError(errormsg)
+        self.times = list(data.keys())
+        self.values = list(data.values())
+        self.mode = mode
+        self.period = period
+        self._years = None # The times as years, worked out for the sim it is used in
+        return
+
+    def __repr__(self):
+        return f'timeseries({dict(zip(self.times, self.values))}, mode={self.mode!r})'
+
+    @property
+    def typed(self):
+        return self.values
+
+    def years(self, sim):
+        """ The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years) """
+        if self._years is None or self._years[0] is not sim:
+            out = []
+            for time in self.times:
+                time = ss.connectors.to_time(sim, time)
+                out.append(time.years if isinstance(time, ss.date) else time.to('year').value)
+            if np.any(np.diff(out) <= 0):
+                errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
+                raise ValueError(errormsg)
+            self._years = (sim, np.array(out, dtype=float))
+        return self._years[1]
+
+    fields = ['values']
+
+    def weights(self, year, sim):
+        """ For a year (or an array of them), the index of the value before it, and the weight of the value after it """
+        years = self.years(sim)
+        if self.period is not None: # Fold the time into one period from the first time
+            period = self.period.years if isinstance(self.period, ss.dur) else float(self.period)
+            year = years[0] + (year - years[0]) % period
+        i = np.clip(np.searchsorted(years, year + 1e-9, side='right') - 1, 0, len(years) - 1)
+        j = np.minimum(i + 1, len(years) - 1)
+        w = np.where(j > i, np.clip((year - years[i])/np.where(j > i, years[j] - years[i], 1), 0, 1), 0) # 0 before the first time and after the last
+        if self.mode == 'constant':
+            w = np.zeros_like(w)
+        elif self.mode == 'cosine':
+            w = (1 - np.cos(np.pi*w))/2
+        return year, i, j, w
+
+    def at(self, year, sim):
+        vals = [const_value(v) for v in self.values]
+        year, i, j, w = self.weights(year, sim)
+        i, j, w = int(i), int(j), float(w)
+        if w == 0: # At or outside the times given, or with mode 'constant'
+            return vals[i]
+        elif self.mode == 'spline':
+            import scipy.interpolate as spi
+            typed = isinstance(vals[0], ss.TimePar)
+            if typed: # Interpolate the values in the units of the first, and give a value of that type
+                vals = [v.to(type(vals[0])) for v in vals]
+            value = float(spi.CubicSpline(self.years(sim), np.array([v.value if typed else v for v in vals], dtype=float))(year))
+            if typed:
+                out = sc.dcp(vals[0])
+                out.value = value
+                return out
+            return value
+        return vals[i]*(1 - w) + vals[j]*w
+
+    def series(self, years, sim, convert):
+        vals = [const_value(v) for v in self.values]
+        if self.mode == 'spline' or any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
+            return super().series(years, sim, convert)
+        vals = np.array([convert(v) for v in vals], dtype=float) # Converted once, rather than at each time
+        year, i, j, w = self.weights(np.asarray(years, dtype=float), sim)
+        return vals[i]*(1 - w) + vals[j]*w
+
+    def __deepcopy__(self, memo): # The cached times belong to one sim
+        new = object.__new__(type(self))
+        new.__dict__.update(times=list(self.times), values=sc.dcp(self.values, memo=memo), mode=self.mode, period=self.period, _years=None)
+        return new
+
+    def to_json(self):
+        out = dict(timeseries={str(time):ss.presentation.quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
+        if self.period is not None:
+            out['period'] = ss.presentation.quantity_json(self.period, 'dur', None)
+        return out
+
+
+class seasonal(TimeValue):
+    """
+    A value with a yearly cycle: `mean × (1 + amplitude × cos(2π(t − peak)))`, with `t` in years
+
+    It can be used wherever a value or a function of the sim can. In a sim with no
+    dates, time starts at the beginning of a year.
+
+    Args:
+        mean (any): the mean over the year: a number or a typed quantity
+        amplitude (float): the size of the cycle relative to the mean (0.3 means from 70% to 130% of it)
+        peak (str/float): when the value is highest: a month (its middle is used), or a fraction of the year
+
+    Examples:
+        ```python
+        beta = ss.seasonal(mean=0.3, amplitude=0.4, peak='January')
+        sis = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=10), init_prev=0.01)
+        sim = ss.Sim(sis, start='2020-01-01', stop='2023-01-01').run()
+        ```
+    """
+    months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+
+    def __init__(self, mean=1.0, amplitude=0.0, peak=0.0):
+        self.mean = mean
+        self.amplitude = amplitude
+        self.peak = peak
+        if isinstance(peak, str):
+            matches = [i for i,month in enumerate(self.months) if month.startswith(peak.lower())]
+            if len(matches) != 1 or len(peak) < 3:
+                errormsg = f'The peak of ss.seasonal() is a month (e.g. "January") or a fraction of the year, not "{peak}"'
+                raise ValueError(errormsg)
+            self.peak_frac = (matches[0] + 0.5)/12
+        else:
+            self.peak_frac = float(peak)
+        return
+
+    def __repr__(self):
+        return f'seasonal(mean={self.mean}, amplitude={self.amplitude}, peak={self.peak!r})'
+
+    @property
+    def typed(self):
+        return [self.mean]
+
+    fields = ['mean', 'amplitude']
+
+    def factor(self, year):
+        """ The value relative to the mean, at a year or an array of them """
+        return np.maximum(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)))
+
+    def at(self, year, sim=None):
+        return const_value(self.mean)*float(self.factor(year))
+
+    def series(self, years, sim, convert):
+        mean = const_value(self.mean)
+        if isinstance(mean, ss.prob): # A probability is not converted in proportion to its value
+            return super().series(years, sim, convert)
+        return convert(mean)*self.factor(np.asarray(years, dtype=float)) # Converted once, rather than at each time
+
+    def to_json(self):
+        return dict(seasonal=dict(mean=ss.presentation.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak))

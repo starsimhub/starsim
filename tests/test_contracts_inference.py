@@ -148,6 +148,9 @@ def test_particle_filter(key):
     data = simulate(model, **kw)
     sim = model.build(model.truth, data=data, solver='gillespie', **kw).init() # Tau-leaping, at this size
     filt = ss.ParticleFilter(sim, likelihood=lik)
+    with ss.options.context(threads=1):
+        one = filt(n_particles=20, seed=0)
+    assert filt(n_particles=20, seed=0) == one # Each particle has its own random numbers, so the estimate does not depend on the threads
     name = list(fitted_pars(sim))[0]
     values = [0.8*model.truth, model.truth, 1.2*model.truth]
     n_seeds = 3
@@ -179,9 +182,12 @@ def test_particle_filter(key):
 def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
     """ Simulate data from corpus.outcomes() at a known beta, and fit beta (starting from 0.25) by a method """
     model = models.outcomes
-    if method == 'pmcmc':
-        # A stochastic compartmental sim, made quick: a small population, two-day steps, and data on
-        # infections (read straight from the run; an outcome such as cases makes the filter about 2.5x slower)
+    if method == 'if2': # Maximum likelihood of a stochastic compartmental sim, as for particle MCMC below, with data on cases (an outcome, with a delay)
+        kw = dict(solver='binomial', total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
+        sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, **kw), **kw)
+        return sim.calibrate(method=method, likelihood=dict(cases=ss.poisson()), particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2, rand_seed=seed, verbose=verbose)
+    elif method == 'pmcmc':
+        # A stochastic compartmental sim, made quick: a small population, two-day steps, and data on infections
         kw = dict(solver='binomial', total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
         n, particles = (100, 20) if quick else (300, 50)
@@ -218,6 +224,7 @@ methods = [
     pytest.param('nuts', marks=pytest.mark.skipif(not (has_jax and has_blackjax), reason='JAX and BlackJAX are not installed')),
     'pmcmc',
     'abc-smc',
+    'if2',
 ]
 
 
@@ -229,7 +236,7 @@ def check_converged(fits):
 # How close an optimizer must come: the data are 20 weeks of 10,000 or more cases each, so the
 # likelihood is sharp (its 95% interval is about 0.2% of beta wide); the tolerances are well above
 # that, and allow for the stopping rule of each method
-rtols = {'nelder-mead':0.02, 'l-bfgs-b':0.02, 'optuna':0.05} # Optuna samples rather than converges, so it gets near, not to, the best value
+rtols = {'nelder-mead':0.02, 'l-bfgs-b':0.02, 'optuna':0.05, 'if2':0.05} # Optuna samples rather than converges, so it gets near, not to, the best value; IF2 fits a stochastic sim (of 10,000 people), whose best value is further from the truth
 
 @pytest.mark.parametrize('method', methods)
 def test_sbc(method):
@@ -242,6 +249,36 @@ def test_sbc(method):
         check_converged([fit])
     else: # Chains this short are not converged by the rule of an R-hat of at most 1.01 (nor is the tolerance of ABC-SMC settled on a deterministic model), and a posterior method should say so
         assert fit.converged is not None and fit.why
+    if method == 'if2': # And a rate that varies in time (the summer2 pattern), whose values each particle's rates are worked out from, a data point at a time
+        model = models.detect
+        kw = dict(solver='binomial', total_pop=1e5)
+        detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).calibrate(method='if2', likelihood={model.col:ss.nbinom(n=20)}, particles=300, iterations=30, chains=2, verbose=False)
+        assert np.isclose(detect.table.best[0], model.truth, rtol=rtols['if2']) # The detection rate that made the data
+    return fit
+
+
+@pytest.mark.skipif(not has_blackjax, reason='BlackJAX is not installed')
+def test_two_optima():
+    sc.heading('Testing that a fit with two local optima finds the better one, or says it has not converged')
+    def make(counts):
+        b = ss.par(0.32, bounds=[0.1, 1], name='b')
+        dur = ss.par(ss.days(6.3), bounds=[2, 20], name='dur')
+        S, I, R = ss.states(3)
+        infection = S >> I @ b * I
+        cases = ss.outcome(0.5 * infection, delay=ss.days(3), likelihood=ss.nbinom(n=10))
+        sir = ss.Disease(infection, I >> R @ dur, cases, init=dict(I=1e-3), name='sir')
+        data = pd.DataFrame(dict(cases=counts), index=pd.date_range('2020-01-08', periods=17, freq='7D'))
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-05-01', total_pop=1e5, data=data, verbose=0)
+
+    # From the review's simulation-based calibration: an optimizer started from the best point of a scan stopped at 58.86, and SciPy said it had converged
+    fit = make([408, 16683, 30842, 4196, 170, 58, 18, 5, 0, 1, 1, 0, 0, 0, 0, 0, 0]).calibrate(method='l-bfgs-b', rand_seed=57)
+    assert fit.mismatch < 54.26 # The better optimum (b = 0.605, dur = 15.3)
+    assert fit.converged is False # Only one of the searches from the scan's points found it
+
+    # NUTS chains that all started at the initial values agreed on an epidemic that burns out early (b = 0.44), not on the truth (b = 0.116)
+    fit = make([12, 47, 35, 42, 24, 16, 17, 12, 15, 20, 16, 5, 10, 4, 5, 10, 5]).calibrate(method='nuts', draws=200, warmup=200, chains=2, rand_seed=23)
+    table = fit.table.set_index('par')
+    assert table.lower.b < 0.116 < table.upper.b # The chains start from points of the scan that are apart
     return fit
 
 
@@ -276,6 +313,9 @@ def test_log_density():
     h = 1e-6
     assert np.isclose(ld.grad(x)[0], (ld(x + h) - ld(x - h))/(2*h), rtol=1e-5) # Reverse mode agrees with finite differences
     assert np.allclose(ld.run(x)['sir.n_I'], sim.new().run().results.sir.n_I, rtol=1e-9) # And the run, as a function
+    slow = corpus.outcomes(beta=0.06, likelihood=ss.poisson(), data=simulate(models.outcomes, 0.35))
+    (_, from_jax, from_run), = jax_loglik(slow, [1.0]) # Built where a step needs 1 substep, evaluated where it needs several
+    assert np.isclose(from_jax, from_run, rtol=1e-9) # The substeps are worked out over the bounds, not only at the initial values
     return ld
 
 

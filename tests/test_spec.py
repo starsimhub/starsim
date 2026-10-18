@@ -121,8 +121,8 @@ def test_error_catalog():
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
     'Sim and modules': ('Sim People people Module Disease Infection Demographics Intervention Connector Analyzer', 'people'),
-    'States, transitions, parameters, results': ('State states null Transition transmission progression birth death immigration emigration lifetable transfer par outcome data', 'all'),
-    'Time': ('dur days weeks months years datedur per perday perweek permonth peryear prob date', ''),
+    'States, transitions, parameters, results': ('State states null Transition transmission progression birth death immigration emigration lifetable transfer par outcome update data', 'all'),
+    'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date', ''),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
     'Mixing and space': ('Network RandomNet MFNet StaticNet MixingPool MixingPools PartnerNet contacts geo Mobility gravity', 'PartnerNet contacts geo Mobility gravity'),
@@ -135,7 +135,7 @@ vocabulary = {
 # The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr)
 code_names = """
 AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr BoolState
-BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dists Dx
+BreastfeedingNet CalibComponent Calibration CampaignDelivery CodedDisease Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dists Dx
 DynamicNetwork FloatArr GammaPoisson IndexArr IntArr ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
 Pregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx apply_age_range beta_dist
 beta_mean check_requires check_sims_match check_version choose_n compare demo diff_sims dist_list dtypes dynamics_by_age find_contacts find_modules fit
@@ -261,6 +261,10 @@ def test_namespace():
     assert not set(code_names) & counted, f'In both tiers: {sorted(set(code_names) & counted)}'
     gone = set(code_names) - exported
     assert not gone, f'In code_names but not exported: {sorted(gone)}'
+    for name in ss._removed: # Removed names say what to write instead
+        assert name not in exported
+        with pytest.raises(AttributeError, match='Instead'):
+            getattr(ss, name)
     return
 
 if __name__ == '__main__':

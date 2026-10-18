@@ -317,6 +317,12 @@ def test_solvers(do_plot=False):
             init_prev = 0.01,
         ),
         cholera = make_cholera(),
+        delay = ss.Disease( # A fixed latent period, and a minimum stay before recovery: conveyors in a compartmental run
+            infection = ss.transmission('S -> E', beta=0.3, source='I'),
+            latency   = ss.progression('E -> I', dur=ss.constant(3)),
+            recovery  = ss.progression('I -> R', rate=0.125, after=2),
+            init = dict(I=0.01),
+        ),
     )
     sims = sc.objdict()
     for name,mod in models.items():
@@ -474,6 +480,21 @@ def test_counts():
     adults = ss.Disease(move=ss.Transition(X, Y, rate=ss.perday(1.0), where=growth.A), name='adults')
     assert ss.Sim([growth, adults], n_agents=100, unit='day', stop=5, **kw).run().results.adults.move.sum() > 0
     assert ss.death('M | S | R ->', rate=0.1).src == ['M', 'S', 'R'] # Resolved to states when the model is built
+
+    # A count set each step to a value (ss.update), as odin's update() of a variable that is not a flow: the largest prevalence so far, which slows the spread, and the number infectious a step before
+    def behaviour():
+        S, I, R = ss.states(3)
+        peak, last = ss.State(people=False), ss.State(people=False)
+        return ss.Disease(infection=S >> I @ ss.perday(0.3)*I*np.exp(-5*peak.n), recovery=I >> R @ ss.days(10), track=ss.update(peak, np.maximum(peak.n, I.frac)),
+                          lag=ss.update(last, I.n), init=dict(I=10), name='behaviour')
+    peaks = []
+    for solver in ['ode', 'binomial', 'gillespie', 'abm']:
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        res = ss.Sim(behaviour(), unit='day', stop=200, solver=solver, **size, **kw).run().results.behaviour
+        frac = res.n_I.values/10_000
+        assert np.allclose(res.n_peak[1:], np.maximum.accumulate(frac)[:-1]) and np.allclose(res.n_last[1:], res.n_I[:-1]), f'{solver}: the counts should be set from the step before'
+        peaks.append(frac.max())
+    assert np.allclose(peaks, peaks[0], rtol=0.15) and peaks[0] < 0.15 # Without the slowing, 30% are infectious at the peak
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
     S, I, Q, R = ss.states(4)
@@ -1301,12 +1322,22 @@ def test_stays_and_offspring():
     sim = ss.Sim(growth, unit='day', stop=40, n_agents=5000, verbose=0).run()
     n_W = sim.results.growth.n_W.values
     assert sim.solver == 'abm' and n_W[21] == 0 and n_W[22] > 0.25*5000 # Nobody leaves for 21 days, then at the rate
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(growth, unit='day', stop=40, solver='ode', verbose=0).init()
+    binomial = ss.Sim(growth, unit='day', stop=40, total_pop=5000, solver='binomial', verbose=0).run(n_runs=20).results.growth.n_W.values # As compartments, by a conveyor of whole steps
+    ode = ss.Sim(growth, unit='day', stop=40, total_pop=5000, verbose=0).run()
+    assert ode.solver == 'ode' and ode.results.growth.n_W[21] == 0 < ode.results.growth.n_W[22]
+    assert np.max(binomial[:, 21]) == 0 and np.isclose(np.mean(binomial[:, 22]), n_W[22], rtol=0.05) # The same as agents, step for step
     E, D, I = ss.states(3) # An escape during a minimum stay (before=), as EMULSION's
     x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), after=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5), before=ss.days(10)), init=dict(E=1.0), name='x')
-    r = ss.Sim(x, unit='day', stop=30, n_agents=5000, verbose=0).run().results.x
-    assert r.n_I[10] == 0 and r.n_I[11] > 0 and r.n_D[11] == r.n_D[30] > 0
+    for solver in ['abm', 'ode', 'binomial']:
+        size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+        r = ss.Sim(x, unit='day', stop=30, solver=solver, verbose=0, **size).run().results.x
+        assert r.n_I[10] == 0 and r.n_I[11] > 0 and r.n_D[11] == r.n_D[30] > 0, f'{solver}: nobody should become infectious before day 10, or die after it'
+    S, I, R = ss.states('S I R') # A stay on a transmission is not built yet, and no engine ignores it
+    for solver in ['abm', 'ode']:
+        infection = ss.transmission('S -> I', beta=0.3)
+        infection.after = ss.days(5)
+        with pytest.raises(ss.CapabilityError):
+            ss.Sim(ss.Disease(infection=infection, recovery=I >> R @ ss.days(10), init=dict(I=10), name='x'), n_agents=500, unit='day', stop=20, solver=solver, verbose=0).init()
 
     G, L, NB = ss.states(3)
     herd = ss.Disease(farrowing=ss.Transition(G, L, dur=ss.days(10), offspring=(NB, 3)), weaning=ss.Transition(L, G, dur=ss.days(20)), init=dict(G=1.0), name='herd')

@@ -2,7 +2,7 @@
 Switching demo for the odin seat: the stochastic SIR from R, fitted by PMCMC, then as agents.
 
 Passes when: distinct runs; the filter within 3x of dust per particle-step.
-Blocked today by: N17, N5, N27, the odin importer (N13).
+Blocked today by: N17, N5, the odin importer (N13).
 The model is the report's age-structured stochastic SEIR (4 ages, a contact matrix, seasonal forcing, a quarter-day step).
 The step "from R" is tests/test_r.py (about 20 s, so not repeated here): building a model, and ss.parallel after init(), from R now work.
 """
@@ -16,6 +16,9 @@ ref_final_R = 532_176 # Mean final R over 1,000 odin 1.2.7 runs: switching/odin.
 ref_step_us = 1.35 # odin's single-threaded forward run per particle-step, in µs: switching/odin.md, "The second week" §3
 ref_cases = [3, 1, 12, 10, 32, 73, 116, 129, 246, 390, 740, 1094, 1950, 1599, 2598, 3189, 4885, 4012, 5096, 5655, 7789, 4031, 9381, 8058,
              8006, 5767, 5989, 3812, 4955, 3666, 3992, 3093, 5952, 4071, 3806, 4024, 2205, 3734, 3202, 1549] # Weekly cases from one odin run (cases.csv): switching/odin.md §3
+
+ref_delay = dict(peak=6_185_515, day=125, S=334_138, E=1_305_913, I=2_792_751, R=5_567_199) # odin's seir_array (a 14-day delay() solved by deSolve::dede): the peak of I and its day, and each state on day 365 (LFD examples/odin/seir_array/reference)
+ref_delay_run = 0.002 # odin's run of seir_array, in s (the same reference's timing.json); with 200 Erlang stages for the delay, Starsim took 1.9 s and was 1.6% off
 
 m = [[12, 4, 2, 1], [4, 8, 3, 1], [2, 3, 6, 2], [1, 1, 2, 3]]
 pop = np.array([200_000, 300_000, 350_000, 150_000])
@@ -68,7 +71,6 @@ def test_odin_runs():
     return msim
 
 
-@pytest.mark.xfail(reason='N27: the particle filter is serial, about 11 µs (23 µs on a loaded machine) per particle-step against odin\'s 1.35 µs', strict=False)
 def test_odin_filter():
     sc.heading('Timing the particle filter that PMCMC uses, per particle-step')
     sim = make_seir(fitted=True).init()
@@ -82,6 +84,40 @@ def test_odin_filter():
     assert step_us < 3*ref_step_us, f'Filter {step_us:.1f} µs per particle-step, against 3 × {ref_step_us} µs for dust'
     # The fit itself, fit = sim.calibrate(), is 4 chains of particle MCMC at 1,000 particles; it is too slow for CI until this passes
     return step_us
+
+
+def test_odin_delay():
+    sc.heading('The age-structured SEIR with a latent period of exactly 14 days, a delay() in odin and a fixed delay here')
+    b = 1/50 # Births and deaths, per year
+    aging = np.array([1, 1/4, 1/10, 1/15, 0]) # One over the width of each age group, per year
+    split = b*np.cumprod(np.append(1, aging[:-1])/(aging + b)) # The stable age distribution
+    surv = np.exp(-b*14/365) # The share of the latent who live 14 days
+    S, E, I, R = ss.states(4)
+    seir = ss.Disease(
+        infection = S >> E @ ss.perday(1) * I,
+        onset     = E >> I @ ss.constant(ss.days(14)), # A conveyor of 14 steps, not stiff Erlang stages
+        recovery  = I >> R @ ss.days(30),
+        waning    = R >> S @ ss.days(60),
+        births    = ss.birth('-> S', rate=ss.peryear(b)),
+        deaths    = ss.death(rate=ss.peryear(b)),
+        history   = ss.null >> I @ ss.timeseries({0: ss.perday(surv), 14: 0}), # odin's delay() takes the first 14 days from before the start (see the vignette's README)
+        init      = dict(I=1),
+        name      = 'seir',
+    )
+    seir.stratify(age=[0, 1, 5, 15, 30], split=split)
+    sim = ss.Sim(seir, total_pop=1e7, unit='day', stop=365, verbose=0).init()
+    sim.run()
+    res = sim.results.seir
+    n_I = res.n_I.values
+    assert n_I.argmax() == ref_delay['day'] and np.isclose(n_I.max(), ref_delay['peak'], rtol=0.003), f'Peak of {n_I.max():,.0f} on day {n_I.argmax()}, against odin\'s {ref_delay["peak"]:,} on day {ref_delay["day"]}'
+    for state in 'SEIR':
+        assert np.isclose(res[f'n_{state}'][-1], ref_delay[state], rtol=0.005), f'{state} on day 365: {res[f"n_{state}"][-1]:,.0f}, against odin\'s {ref_delay[state]:,}'
+    T = sc.timer()
+    sim.restart()
+    sim.run()
+    seconds = T.toc(output=True)
+    assert seconds < 50*ref_delay_run, f'A run took {seconds:.3f} s, against {ref_delay_run} s for odin'
+    return sim
 
 
 @pytest.mark.xfail(reason='New: a whole-number seed below one agent rounds to zero with no note, so I=ss.by(age=[10, 0, 0, 0]) for 1M people gives no infections with 20,000 agents', strict=False)
@@ -98,4 +134,5 @@ if __name__ == '__main__':
     sim   = test_odin_import(sc.path(tempfile.mkdtemp()))
     msim  = test_odin_runs()
     step  = test_odin_filter()
+    delay = test_odin_delay()
     agent = test_odin_agents()

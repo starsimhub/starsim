@@ -118,16 +118,16 @@ The likelihoods available are `ss.normal(scale=...)`, `ss.lognorm_ex(std=...)`, 
 
 ## The trials
 
-Every evaluation is in `fit.to_df()`, one row per trial, with the values tried and the mismatch of each. For example, the 10 best:
+Every evaluation is in `fit.to_df()`, one row per trial, with the values tried and the objective at each (the mismatch here; `fit.measure` says what it is). For example, the 10 best:
 
 ```{python}
 trials = fit.to_df()
-trials.sort_values('mismatch').head(10)
+trials.sort_values('objective').head(10)
 ```
 
 ```{python}
 fig, ax = plt.subplots()
-scat = ax.scatter(trials.beta, trials.n_contacts, c=trials.mismatch, cmap='viridis_r')
+scat = ax.scatter(trials.beta, trials.n_contacts, c=trials.objective, cmap='viridis_r')
 ax.scatter(fit.pars.beta.value, fit.pars.n_contacts, 100, marker='x', color='red', zorder=10, label='Best fit')
 ax.set_xscale('log')
 ax.set_xlabel('beta (per day)')

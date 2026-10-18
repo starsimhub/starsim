@@ -473,6 +473,9 @@ def test_arithmetic():
                 assert type(out) is type(expected) and np.isclose(out.value, expected.value), f'{row} gave {out!r}, not {expected!r}'
             else:
                 assert np.isclose(out, expected), f'{row} gave {out}, not {expected}'
+    ts = ss.timeseries({'2020-01-01': 1.0, '2020-03-01': 0.5})
+    for out in [r(0.1) * ts, ts * r(0.1)]:
+        assert isinstance(out, ss.transitions.Expr) # A rate times a time series is a rate that varies in time, in either order
 
     # The slot is checked: a rate times a duration, or a duration, is not a rate, and a rate is not a dwell time
     S, I, R = ss.states('S I R')

@@ -12,7 +12,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `rate: expr` | The rate per person, classified (`beta * total_I / total_population` is exposure, `beta * I`) | yes |
 | `proba: p` | `-log(1 - p)`, the rate that gives it: `p` is per time unit, not per step (EMULSION makes it `1 - (1 - p)**delta_t` for a step) | yes |
 | `duration:` on a state whose only way out is `proba: 1` or `amount-all-but: 0` | A fixed dwell, `ss.constant(ss.days(d))` | yes |
-| `duration:` on a state with other ways out | A minimum stay: a function of the time in the state (see `idioms.md`) | no |
+| `duration:` on a state with other ways out | A minimum stay: `after=` on the ways out (and nothing on an escape), as agents or compartments | yes |
 | `autoremove: yes` (a dead state) | An outflow to `ss.null` | yes |
 | `escape: yes` | Nothing: once the minimum stay is not translated, every way out applies throughout | yes |
 | `escape: cond`, `cond: is_X` | `where=` on the transition, against the other machine's state | no |

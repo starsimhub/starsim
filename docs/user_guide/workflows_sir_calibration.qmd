@@ -102,13 +102,13 @@ We can look at every trial with `fit.to_df()`, for example the 10 best:
 
 ```{python}
 trials = fit.to_df()
-trials.sort_values('mismatch').head(10)
+trials.sort_values('objective').head(10)
 ```
 
 ```{python}
 # Plot the trials, colored by how well they fit
 fig, ax = plt.subplots()
-scat = ax.scatter(trials.beta, trials.gamma, c=np.log(trials.mismatch), cmap='viridis_r')
+scat = ax.scatter(trials.beta, trials.gamma, c=np.log(trials.objective), cmap='viridis_r')
 ax.axvline(true_pars['beta'], ls='--', color='black', label='True parameters')
 ax.axhline(true_pars['gamma'], ls='--', color='black')
 ax.scatter(fit.pars.beta.value, fit.pars.gamma.value, 100, marker='x', color='red', zorder=10, label='Best fit')

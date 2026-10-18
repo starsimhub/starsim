@@ -11,6 +11,7 @@ import scipy.optimize as spo
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # This has a significant impact on runtime, surprisingly
 ss_float = ss.dtypes.float
@@ -782,14 +783,14 @@ class RandomNet(DynamicNetwork):
         if mixing is None or mixing.space is None:
             return self.get_edges(inds, n_contacts)
         stubs = np.repeat(inds, n_contacts)
-        place = self.sim.level_raw(mixing.space)[stubs]
-        mobility = self.sim.strats[mixing.space].mobility
+        place = self.sim.groups.level_raw(mixing.space)[stubs]
+        mobility = self.sim.groups.strats[mixing.space].mobility
         if mobility is not None and mobility.kind in ['commute', 'visit']:
             cum = np.cumsum(mixing.time_share, axis=1)[place]
             place = np.minimum((cum < self.dist.rng.random(len(stubs))[:, None]).sum(axis=1), cum.shape[1] - 1)
             self.dist.jump()
         order = np.argsort(place, kind='stable')
-        ends = np.cumsum(np.bincount(place, minlength=self.sim.strats[mixing.space].n))
+        ends = np.cumsum(np.bincount(place, minlength=self.sim.groups.strats[mixing.space].n))
         p1, p2 = [], []
         for a,b in zip(np.append(0, ends[:-1]), ends):
             if b > a:
@@ -1121,9 +1122,9 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
         """ The level of every person in a property of people (by default, the one match= names), as an array indexed by UID """
         sim = self.sim
         name = list(self.pars.match.keys())[0] if name is None else name
-        names = [strat.name for strat in sim.strats]
+        names = [strat.name for strat in sim.groups.strats]
         if name in names: # A stratification
-            return sim.level_raw(names.index(name))
+            return sim.groups.level_raw(names.index(name))
         return np.asarray(sim.people[name].raw)
 
     def match_pairs(self, people, rvs):
@@ -1279,7 +1280,7 @@ class MFNet(DegreeTargets, SexualNetwork):
         self.define_pars(
             dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=ss.time.freq(80, 'year')),
+            acts = ss.poisson(lam=ss.freqperyear(80)),
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             rel_part_rates = 1.0,
             n_contacts = None,
@@ -1592,7 +1593,7 @@ class LevelGroup(sc.prettyobj):
     def __call__(self, sim):
         in_group = sim.people.alive
         for dim,level in self.levels.items():
-            strat = sim.strats[sim.dim_index(dim)]
+            strat = sim.groups.strats[sim.groups.dim_index(dim)]
             raw = sim.people[strat.attr]
             in_group = in_group & ((raw >= strat.edges[level]) & (raw < np.append(strat.edges, np.inf)[level+1]) if strat.edges is not None else (raw == level))
         return ss.uids(in_group)
@@ -1980,3 +1981,350 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
     out.constant = True # Everyone in a group has the same number of contacts
     out.ref = ref # Where a named matrix came from, for the model spec
     return out
+
+
+#%% Places and the movement between them
+
+class geo:
+    """
+    A geography: named places with populations and positions, used as the levels of a spatial stratification
+
+    A country's administrative units come from `starsim_data` by name (`ss.geo('Kenya', level=1)`):
+    their names, populations, centroids, areas, p-codes, and which share a border. The first
+    two levels of every country are bundled, so this needs no download.
+
+    Args:
+        data (dataframe/str/list): a country (or a list of them) by name or code, e.g. 'Kenya' or 'KE'; or a table (or the name of a file holding one) with a column `name`, and optionally `pop`, and `x` and `y` or `lat` and `lon`
+        level (int/str): for a country, the administrative level: 1 (the default) for its first-level units (counties, provinces, states), 2 for the next (fetched), 0 for the country itself
+        year (int): for a country, the year of the populations (default: those bundled, for 2020; another year is fetched)
+        places (list): for a country, only these units, by name, `dot_name` ('Kenya:Nairobi'), or p-code
+        names (list): the name of each place (instead of `data`)
+        pop (list): the population of each place; sets the share of people who start in each (for a country, in place of the bundled ones)
+        x (list): a position for each place, in any unit of distance
+        y (list): the other coordinate
+        lat (list): latitudes in degrees (instead of `x` and `y`); distances are then great-circle distances in km
+        lon (list): longitudes in degrees
+        distances (array): the distance between each pair of places (instead of positions)
+        adjacency (array): whether each pair of places shares a border
+
+    Examples:
+        ```python
+        kenya = ss.geo('Kenya', level=1) # Its 47 counties
+        towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        sir.stratify(patch=towns, mobility=ss.gravity(k=0.01))
+        ```
+    """
+    def __init__(self, data=None, names=None, pop=None, x=None, y=None, lat=None, lon=None, distances=None, adjacency=None, level=1, year=None, places=None):
+        self.ref = None # Where a named geography came from, for the model spec
+        self.area = None
+        self.codes = None
+        named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx')) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
+        if named: # A country's administrative units, from starsim_data
+            found = ss.named.geography(data, level=level, year=year, places=places)
+            names, lat, lon, adjacency = [found[key] for key in ['names', 'lat', 'lon', 'adjacency']]
+            pop = found['pop'] if pop is None else pop # Populations given by hand win
+            self.area, self.codes, self.ref = found['area'], found['codes'], found['ref']
+            data = None
+        elif isinstance(data, str):
+            data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
+        if data is not None:
+            cols = {key:data[key].tolist() for key in ['name', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
+            names, pop, x, y, lat, lon = [cols.get(key) for key in ['name', 'pop', 'x', 'y', 'lat', 'lon']]
+        if names is None:
+            errormsg = 'ss.geo() needs the names of the places: names=[...], or a table with a column called "name"'
+            raise ValueError(errormsg)
+        self.names = list(names)
+        self.pop = None if pop is None else np.array(pop, dtype=float)
+        self.lat = None if lat is None else np.array(lat, dtype=float)
+        self.lon = None if lon is None else np.array(lon, dtype=float)
+        self.adjacency = None if adjacency is None else np.array(adjacency, dtype=bool)
+        self.distances = None
+        if distances is not None:
+            self.distances = np.array(distances, dtype=float)
+        elif x is not None and y is not None:
+            x, y = np.array(x, dtype=float), np.array(y, dtype=float)
+            self.distances = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :])
+        elif lat is not None and lon is not None: # Great-circle distances, in km
+            lat, lon = np.radians(np.array(lat, dtype=float)), np.radians(np.array(lon, dtype=float))
+            a = np.sin((lat[:, None] - lat[None, :])/2)**2 + np.cos(lat[:, None])*np.cos(lat[None, :])*np.sin((lon[:, None] - lon[None, :])/2)**2
+            self.distances = 2*6371*np.arcsin(np.sqrt(a))
+        for key,val in dict(pop=self.pop, distances=self.distances, adjacency=self.adjacency).items():
+            if val is not None and len(val) != len(self.names):
+                errormsg = f'ss.geo() has {len(self.names)} places but {len(val)} entries in {key}'
+                raise ValueError(errormsg)
+        return
+
+    def __repr__(self):
+        if self.ref is not None:
+            return f"geo({self.ref['place']!r}, level={self.ref['level']}: {len(self)} places)"
+        return f'geo({sc.strjoin(self.names)})'
+
+    def __len__(self):
+        return len(self.names)
+
+
+class gravity:
+    """
+    The gravity model of movement: the share of their time that a person from place `i` spends in place `j` (or, for migration,
+    the rate at which they move there) is `k × pop[i]^(a−1) × pop[j]^b / distance[i,j]^c`
+
+    Populations and distances come from the geography of the dimension it is used on (`ss.geo`).
+    The model gives the shape of the movement, and `away=` its amount: the share of their time
+    that people spend away from home, split between the other places by gravity. `k` has units
+    of distance^c / pop^(a+b−1), so no default fits both three towns and a country; give it only
+    if it has been calibrated. With neither, people spend 10% of their time away.
+
+    Args:
+        away (float): for commuting and visiting, the share of their time people spend away from home (default 0.1, unless `k` is given)
+        k (float): the overall amount of movement, instead of `away`; for migration, the scale of the rates (required)
+        a (float): the exponent of the population of the place people come from
+        b (float): the exponent of the population of the place they go to
+        c (float): the exponent of the distance between the two
+
+    Examples:
+        ```python
+        sir.stratify(patch=towns, mobility=ss.gravity(away=0.1, a=1.0, b=1.0, c=2.0))
+        sir.stratify(patch=towns, mobility=ss.gravity(k=2e-4)) # A calibrated amount
+        ```
+    """
+    def __init__(self, away=None, k=None, a=1.0, b=1.0, c=2.0):
+        if away is not None and k is not None:
+            errormsg = 'ss.gravity() takes away= (the share of time spent away) or k= (a calibrated amount of movement), not both'
+            raise ValueError(errormsg)
+        self.away = away
+        self.k = k
+        self.a = a
+        self.b = b
+        self.c = c
+        return
+
+    def __repr__(self):
+        amount = f'away={self.away}, ' if self.away is not None else f'k={self.k}, ' if self.k is not None else ''
+        return f'gravity({amount}a={self.a}, b={self.b}, c={self.c})'
+
+    def matrix(self, strat):
+        """ The movement between each pair of levels of a stratification, from its geography """
+        place = strat.geo
+        if place is None or place.distances is None or place.pop is None:
+            raise ss.NoGeography(f'ss.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+                                 f'     Give the places with ss.geo(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.Mobility(matrix=...).')
+        pop, dist = place.pop, place.distances
+        with np.errstate(divide='ignore'):
+            out = sc.ifelse(self.k, 1.0)*pop[:, None]**(self.a - 1)*pop[None, :]**self.b/dist**self.c # Without k, only the shape matters: see Mobility.time_share()
+        np.fill_diagonal(out, 0)
+        return out
+
+
+class Mobility:
+    """
+    Movement between the levels of a spatial stratification
+
+    People either commute (they keep their home, and spend a share of their time in
+    other places, where they are exposed and expose others), visit (the same, but
+    they are exposed to the residents of the places they go to and do not expose
+    anyone there), or migrate (they relocate). Or, with `kind='force'`, nobody moves
+    and the force of infection does, as in LASER: with `M[i,k]` the movement from
+    `i` to `k` (scaled by `away=`), each place keeps `1 − Σ_k M[i,k]` of its own
+    force of infection and receives `M[k,i]` of each other place's.
+
+    A movement register (`data=`) is a table of events on given dates, with columns
+    `date`, `from`, `to`, `n`, and optionally `states`. Each row moves `n` people from
+    one place to another; a row with no `from` adds them to `to` (births, purchases),
+    and one with no `to` removes them from `from` (deaths, sales out of the model).
+    The people who move or leave are chosen at random from those in `states` (by
+    default, everyone); people who are added go into `states` (by default, the first
+    state). Each event happens at the start of the first step that begins on or after
+    its date, before that step's transitions, and the events of a step happen in the
+    order of the table.
+
+    Args:
+        model (gravity): a movement model (instead of `matrix`)
+        matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there
+        data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
+        kind (str): 'commute', 'visit', 'migrate', or 'force'; by default 'migrate' for a register and 'commute' otherwise
+        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that leaves it); the movement is rescaled to give it
+        scale (str): how `away=` rescales the movement: 'each' (the default) gives every place that share; 'mean' keeps the differences between places and gives them that share on average
+        cap (float): if given, the most that any place's share can be; a place over it is scaled down to it
+
+    Examples:
+        ```python
+        sir.stratify(patch=towns, mobility=ss.Mobility(ss.gravity(), kind='commute', away=0.4))
+
+        # LASER's coupling: the mean share exported over places is 4.46%, and no place exports more than 20%
+        sir.stratify(patch=places, mobility=ss.Mobility(ss.gravity(a=1, b=0.25, c=1.56), kind='force', away=0.0446, scale='mean', cap=0.2))
+        sir.stratify(patch=['a', 'b'], mobility=ss.Mobility(matrix=[[0, 0.1], [0.2, 0]]))
+        sir.stratify(herd=herds, mobility=ss.Mobility(data='movements.csv'))
+        ```
+    """
+    def __init__(self, model=None, matrix=None, kind=None, away=None, scale='each', cap=None, data=None):
+        if sum(arg is not None for arg in [model, matrix, data]) != 1:
+            errormsg = 'ss.Mobility() takes one of a movement model (e.g. ss.gravity()), matrix=, or data='
+            raise ValueError(errormsg)
+        if kind is None:
+            kind = 'migrate' if data is not None else 'commute'
+        if kind not in ['commute', 'visit', 'migrate', 'force']:
+            errormsg = f'The kind of ss.Mobility() is "commute", "visit", "migrate", or "force", not "{kind}"'
+            raise ValueError(errormsg)
+        if data is not None and kind != 'migrate':
+            errormsg = f'A movement register moves people from one place to another, so its kind is "migrate", not "{kind}"'
+            raise ValueError(errormsg)
+        self.guessed = None
+        if isinstance(model, gravity): # The amount of movement: away= here, or on the gravity model, or its k
+            away = sc.ifelse(away, model.away)
+            if kind == 'migrate' and model.k is None:
+                errormsg = 'ss.gravity() for migration needs k=, the scale of the rates of moving; the share of time away (away=) is for commuting and visiting'
+                raise ValueError(errormsg)
+            if away is None and model.k is None:
+                away = 0.1
+                self.guessed = '10% of time away, since neither away= nor k= was given'
+        self.model = model
+        self.given = None if matrix is None else np.array(matrix, dtype=float)
+        self.data = None if data is None else self.load(data)
+        if scale not in ['each', 'mean']:
+            errormsg = f'scale= of ss.Mobility() is "each" (every place has the share given by away=) or "mean" (the places have it on average), not "{scale}"'
+            raise ValueError(errormsg)
+        if (scale == 'mean' and away is None) or (cap is not None and kind == 'migrate'):
+            errormsg = 'scale= and cap= of ss.Mobility() rescale the share of time away, so they need away= and are not for migration'
+            raise ValueError(errormsg)
+        self.kind = kind
+        self.away = away
+        self.scale = scale
+        self.cap = cap
+        return
+
+    def __repr__(self):
+        what = self.model if self.model is not None else 'matrix' if self.data is None else f'register of {len(self.data):n} events'
+        away = f', away={self.away}' if self.away is not None else ''
+        away += f', scale={self.scale!r}' if self.scale != 'each' else ''
+        away += f', cap={self.cap}' if self.cap is not None else ''
+        return f'Mobility({what}, kind={self.kind!r}{away})'
+
+    @staticmethod
+    def blank(v):
+        """ Whether an entry of a register is empty """
+        return v is None or (isinstance(v, float) and np.isnan(v)) or (isinstance(v, str) and not v.strip())
+
+    @staticmethod
+    def by_value(vals, func, missing):
+        """
+        A function of each entry of a column of a register, worked out once for each distinct value, since a register can have millions of rows
+
+        Returns the results for the distinct values, then `missing` (for None and NaN), and the index of each entry's result.
+        """
+        codes, uniq = pd.factorize(np.asarray(vals, dtype=object)) # None and NaN are -1, which is the last result
+        return [func(v) for v in uniq] + [missing], codes
+
+    @staticmethod
+    def load(data):
+        """ Read a movement register, with a blank `from` or `to` (or a blank `states`) as None """
+        df = sc.dataframe(pd.read_csv(data) if isinstance(data, str) else data)
+        missing = [col for col in ['date', 'from', 'to', 'n'] if col not in df.columns]
+        if missing:
+            errormsg = f'A movement register needs the columns date, from, to, and n (and optionally states), but {sc.strjoin(missing)} {"is" if len(missing) == 1 else "are"} missing; its columns are {list(df.columns)}'
+            raise KeyError(errormsg)
+        out = sc.dataframe(date=df['date'].values, n=np.asarray(df['n'], dtype=float))
+        empty = sc.objdict() # Whether each entry of each column is blank
+        for col in ['from', 'to', 'states', 'to_states']:
+            vals = np.array(df[col].values, dtype=object) if col in df.columns else np.full(len(df), None, dtype=object)
+            blanks, codes = Mobility.by_value(vals, Mobility.blank, True)
+            empty[col] = np.array(blanks)[codes]
+            vals[empty[col]] = None
+            out[col] = vals
+        if (~empty.to_states & (empty['from'] | empty.to | empty.states)).any():
+            errormsg = 'A row of a movement register with to_states moves people from its states to those states (in order, e.g. states "S1, I1" and to_states "S2, I2"), so it needs a from, a to (which can be the same place), and states'
+            raise ValueError(errormsg)
+        if (empty['from'] & empty.to).any():
+            errormsg = 'Every row of a movement register needs a from, a to, or both'
+            raise ValueError(errormsg)
+        if (out['n'] < 0).any():
+            errormsg = 'The numbers of people in a movement register cannot be negative'
+            raise ValueError(errormsg)
+        return out
+
+    def events(self, strat, sim):
+        """
+        The register, resolved against the levels and the timeline of a sim
+
+        Returns the step at whose start each event happens, the position of the place each leaves
+        (-1 for none) and goes to (-1 for none), the number of people, and the states it names (None
+        for the default), in the order of the table within each step. Events before the start or
+        after the last step are dropped, with a note. Also the distinct pairs of `states` and
+        `to_states` (`sets`, in the order they first appear), and which of them each event names (`set_of`).
+        """
+        df = self.data
+        times = sc.dataframe(index=df['date'].values)
+        sim_t, data_t = ss.calibration.data_times(sim, times)
+        tol = 1e-9*max(np.abs(sim_t).max(initial=1), 1)
+        ti = np.searchsorted(sim_t, data_t - tol, side='left') # The first step that starts on or after each date
+        inside = (data_t >= sim_t[0] - tol) & (ti < len(sim_t))
+        if not inside.all():
+            ss.note(f'{(~inside).sum():n} of the {len(df):n} events in the movement register for "{strat.name}" fall outside the run, and are left out', sim=sim)
+        labels = {str(label):i for i,label in enumerate(strat.labels)}
+        def level(v):
+            """ Places are given by label (a number read from a file with blanks in it is read as a float, so 5.0 is "5") """
+            if Mobility.blank(v):
+                return -1
+            key = str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)
+            if key not in labels:
+                errormsg = f'The movement register names a place "{v}", which is not a level of "{strat.name}"; places are given by label, e.g. {sc.strjoin(list(labels)[:3])}'
+                raise KeyError(errormsg)
+            return labels[key]
+        order = np.argsort(ti[inside], kind='stable')
+        rows = np.flatnonzero(inside)[order]
+        col = lambda name: np.asarray(df[name].values, dtype=object)[rows] # As arrays, since reading a dataframe one cell at a time is slow
+        def places(name):
+            """ The position of the place in each entry of a column """
+            vals, codes = Mobility.by_value(col(name), level, -1)
+            return np.array(vals, dtype=np.int64)[codes]
+        names = lambda v: None if Mobility.blank(v) else tuple(s.strip() for s in str(v).replace(';', ',').split(','))
+        st_vals, st_codes = Mobility.by_value(col('states'), names, None)
+        ts_vals, ts_codes = Mobility.by_value(col('to_states'), names, None)
+        n_ts = len(ts_vals)
+        set_of, pairs = pd.factorize((st_codes % len(st_vals))*n_ts + ts_codes % n_ts) # The distinct pairs of states and to_states, by their positions in st_vals and ts_vals (a code of -1 is the last, None)
+        sets = [(st_vals[pair//n_ts], ts_vals[pair%n_ts]) for pair in pairs]
+        for a,b in sets:
+            if b is not None and len(a) != len(b):
+                errormsg = f'A row of a movement register moves people from the states {a} to {b}, which need to be the same number'
+                raise ValueError(errormsg)
+        states, to_states = np.empty(len(sets), dtype=object), np.empty(len(sets), dtype=object) # Filled one at a time, since NumPy would read a list of tuples as rows
+        for i,(a,b) in enumerate(sets):
+            states[i], to_states[i] = a, b
+        return sc.objdict(ti=ti[rows], src=places('from'), dst=places('to'), n=np.asarray(df['n'].values[rows], dtype=float),
+                          states=states[set_of], to_states=to_states[set_of], sets=sets, set_of=set_of)
+
+    def matrix(self, strat):
+        """ The movement between each pair of levels, with nothing on the diagonal """
+        if self.data is not None:
+            errormsg = 'A movement register has no matrix of rates; its events are applied on their dates'
+            raise ValueError(errormsg)
+        out = self.model.matrix(strat) if self.model is not None else self.given.copy()
+        if out.shape != (strat.n, strat.n):
+            raise ss.ShapeError(f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
+        np.fill_diagonal(out, 0)
+        return out
+
+    def time_share(self, strat):
+        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1 """
+        out = self.matrix(strat)
+        total = out.sum(axis=1)
+        if self.away is not None and self.scale == 'mean':
+            scale = np.full(strat.n, self.away/total.mean() if total.mean() > 0 else 0.0)
+        elif self.away is not None:
+            scale = np.divide(self.away, total, out=np.zeros(strat.n), where=total>0)
+        else: # Nobody can spend more than all their time away
+            capped = (total > 1).sum()
+            if capped:
+                ss.warn(f'The movement for "{strat.name}" would have the people of {capped:n} of its {strat.n:n} places spend more than all their time away, so it was capped at all of it (nobody is ever at home there). Give the share of time away with away= instead.')
+            scale = 1/np.maximum(total, 1)
+        if self.cap is not None: # No place over the cap
+            scale = np.minimum(scale, np.divide(self.cap, total, out=np.zeros(strat.n), where=total>0))
+        out = out*scale[:, None]
+        np.fill_diagonal(out, np.maximum(1 - out.sum(axis=1), 0))
+        return out
+
+    def coupling(self, strat):
+        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives """
+        share = self.time_share(strat)
+        moved = share - np.diag(np.diag(share)) # The share of each place's force that goes to each other place
+        return moved.T + np.diag(np.diag(share))

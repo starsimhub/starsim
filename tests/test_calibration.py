@@ -352,6 +352,7 @@ def test_particle_mcmc():
     # The particle filter's estimate of the likelihood is highest at the value that made the data
     sim = make(data=data).init()
     filt = ss.ParticleFilter(sim)
+    assert filt.series[0].spans[-1][0] > 70 # The last weekly point is worked out from its own week, not from the start
     est = {}
     for beta in [0.4, 0.5, 0.6]:
         sim.restart(pars=dict(beta=beta))
@@ -363,7 +364,7 @@ def test_particle_mcmc():
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'pmcmc'
-    assert len(fit.samples) == 300 and len(fit.acceptance) == 2
+    assert len(fit.samples) == 300 and len(fit.diagnostics.acceptance) == 2
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     with pytest.raises(ss.NoPosterior): # A posterior needs a likelihood
         make(data=data).calibrate(method='pmcmc', gof='nae')
@@ -371,7 +372,7 @@ def test_particle_mcmc():
     # A best fit scores each point by the mean of several runs with the same seeds, and reports the score it minimized
     best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
     assert len(best.scores) == 4 # The default for a stochastic sim
-    assert np.isclose(best.mismatch, best.trials.mismatch.min())
+    assert np.isclose(best.mismatch, best.trials.objective.min())
     return fit
 
 

@@ -68,7 +68,7 @@ def note(msg, category=None, sim=None, verbose=None):
 #%% Errors
 
 class IncompatibleTypes(CodedError, TypeError):
-    """ Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.time.freq`, or a number to a rate; names both types """
+    """ Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq`, or a number to a rate; names both types """
 
 class WrongDimension(CodedError, TypeError):
     """

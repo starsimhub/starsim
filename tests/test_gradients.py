@@ -115,7 +115,14 @@ def test_posterior():
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     assert np.all(table.rhat < 1.1)
     assert np.isnan(ss.calibration.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
-    assert fit.band['cases'].shape == (2, len(truth.cases))
+    chains = np.zeros((4, 4000)) # Four AR(1) chains with a lag-1 correlation of 0.5, whose effective sample size is a third of the draws
+    noise = np.random.default_rng(1).standard_normal(chains.shape)
+    for t in range(1, chains.shape[1]):
+        chains[:, t] = 0.5*chains[:, t-1] + noise[:, t]
+    rhat, ess = ss.calibration.diagnose(chains[:, :, None])
+    assert rhat[0] < 1.01 and np.isclose(ess[0], chains.size/3, rtol=0.05)
+    assert ss.calibration.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
+    assert fit.diagnostics.band['cases'].shape == (2, len(truth.cases))
     with pytest.raises(ss.NoPosterior): # A posterior needs a likelihood
         make_sir(data=data).calibrate(pars=['beta'], method='nuts')
     return fit

@@ -109,11 +109,29 @@ class MultiSim:
         self.ready = False # Whether the sim of each run has been made, by init_sims()
         self.timer = sc.timer() # Create a timer
 
+        # Sims that have already run: their results across runs, without running them again
+        if sims is not None and all(sim.results_ready for sim in sims):
+            self.sims, self.runs = self.expand(sims)
+            self.results = MultiResults.from_sims(self.sims, self.runs)
+
         # Optionally initialize
         if initialize:
             self.init_sims()
 
         return
+
+    _removed = { # Starsim 3 methods, with what to write instead
+        'reduce': "msim.results.<module>.<result>, which has a run axis first: .median(), .mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]); msim.plot() draws the median and an interval of each scenario",
+        'mean':   "msim.results.<module>.<result>.mean() (each result has a run axis first); msim.plot() draws the scenarios",
+        'median': "msim.results.<module>.<result>.median() (each result has a run axis first); msim.plot() draws the scenarios",
+        'reset':  "nothing (the results across runs are kept beside the sims, so there is nothing to undo)",
+    }
+
+    def __getattr__(self, attr):
+        """ Say what a removed method has become """
+        if attr in MultiSim._removed:
+            raise AttributeError(f'MultiSim.{attr}() has been removed from Starsim. Instead, write: {MultiSim._removed[attr]}. (The migrate-starsim3 skill lists every change.)')
+        raise AttributeError(f"'MultiSim' object has no attribute '{attr}'")
 
     def __len__(self):
         """ The length of a MultiSim is its number of runs """
@@ -755,16 +773,6 @@ class MultiResults(ss.Results):
 
     Each result is an `ss.Result` (see there for what one across runs does), e.g. `msim.results.sir.n_I.quantiles()`.
     """
-    def walk(self):
-        """ Each result, as (module name, key, result), with the module None for the sim's own results """
-        for key,val in self.items():
-            if isinstance(val, ss.Results):
-                for k,res in val.items():
-                    if isinstance(res, ss.Result):
-                        yield key, k, res
-            elif isinstance(val, ss.Result):
-                yield None, key, val
-
     def to_df(self, quantiles=None, **kwargs):
         """ Every result across the runs, as a long dataframe with columns for the module and result: one row per run and time (see `ss.Result.to_df()`), or with `quantiles=`, per scenario, quantile, and time """
         dfs = []
@@ -789,46 +797,6 @@ class MultiResults(ss.Results):
                     else:
                         entry.setdefault(modname, sc.objdict())[key] = diff
         return out
-
-    def plot(self, key=None, lines=False, fig=None, legend=True, **kwargs):
-        """
-        Plot each result across the runs: the median and a 95% interval for each scenario, or every run if `lines=True`
-
-        Args:
-            key (str/list): the result (e.g. `'sir.n_I'`) or results to plot; by default, those that `sim.plot()` shows
-            lines (bool): plot every run instead of the median and interval
-            fig (Figure): if provided, plot into an existing figure
-            legend (bool): whether to label the scenarios, if there is more than one
-            kwargs (dict): passed to `ss.plot_args()`
-        """
-        flat = sc.objdict({key if modname is None else f'{modname}.{key}':res for modname,key,res in self.walk()})
-        norm = lambda k: k.replace('.', '_').lower()
-        flatkeys = {norm(k):k for k in flat} # Also as Starsim 3 wrote them, e.g. 'sis_new_infections'
-        if key is None:
-            keys = [k for k,res in flat.items() if res.auto_plot]
-        else:
-            keys = []
-            for k in sc.tolist(key):
-                if k not in flat and isinstance(self.get(k), ss.Results): # A module: its results that sim.plot() shows
-                    keys += [f'{k}.{rk}' for rk,res in self[k].items() if isinstance(res, ss.Result) and res.auto_plot]
-                else:
-                    keys.append(k if k in flat else flatkeys.get(norm(k), k))
-        kw = ss.plot_args(kwargs)
-        with ss.style(**kw.style):
-            if fig is None:
-                fig, axs = sc.getrowscols(len(keys), make=True, **kw.fig)
-                axs = np.array(axs).flatten()
-            else:
-                axs = fig.axes
-            many = False
-            for ax,k in zip(axs, keys):
-                res = flat[k]
-                res.plot(ax=ax, lines=lines, plot_kw=kw.plot, fill_kw=kw.fill)
-                ax.set_title(res.label)
-                many = many or len(res.scenarios()) > 1
-            if legend and many:
-                axs[0].legend(**kw.legend)
-        return ss.return_fig(fig, **kw.return_fig)
 
     @classmethod
     def build(cls, arrays, runs, timevec=None):

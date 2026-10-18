@@ -67,6 +67,7 @@ module_titles = sc.objdict(
     connectors    = 'Connectors',
     analyzers     = 'Analyzers',
     time          = 'Time, durations, and rates',
+    dates         = 'Dates',
     timeline      = 'Timelines',
     distributions = 'Distributions',
     parameters    = 'Parameters',

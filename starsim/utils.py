@@ -584,49 +584,6 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     return output
 
 
-def validate_sim_data(data=None, die=None):
-    """
-    Validate data intended to be compared to the sim outputs, e.g. for calibration
-
-    Args:
-        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
-        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
-
-    """
-    success = False
-    if data is not None:
-        # Try loading the data
-        try:
-            data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
-            found = False
-            for timecol in timecols:
-                if timecol in data.cols:
-                    if found:
-                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
-                        raise ValueError(errormsg)
-                    data.set_index(timecol, inplace=True)
-                    found = True
-            if len(data.index) and all(isinstance(v, str) for v in data.index): # Dates written as text, e.g. '2020-01-08', are dates, so they can be plotted against the sim's
-                data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
-            success = True
-
-        # Data loading failed
-        except Exception as E:
-            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
-            if die == False:
-                print(errormsg)
-            else:
-                raise ValueError(errormsg)
-
-    # Validation
-    if not success and die == True:
-        errormsg = f'Data "{data}" could not be converted and die == True'
-        raise ValueError(errormsg)
-
-    return data
-
-
 def combine_rands(a, b):
     """
     Efficient algorithm for combining two arrays of random integers into an array
@@ -888,86 +845,6 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     if _debug: print('Final output:', kw)
 
     return kw
-
-
-def match_result_keys(results, key, show_skipped=False, flattened=False):
-    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
-
-    def normkey(key):
-        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
-        return key.replace('.','_').lower()
-
-    # Handle accessing subdicts
-    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
-        flat = results[key].flatten() # e.g. sim.results['sis']
-        key = None # We've already used the key, so reset it
-    else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
-
-    # Configuration
-    flat_orig = flat # Copy reference before we modify in place
-    if not show_skipped: # Skip plots with auto_plot set to False
-        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-            res = flat[k]
-            if isinstance(res, ss.Result) and not res.auto_plot:
-                flat.pop(k)
-
-    if key is not None:
-        if isinstance(key, str):
-            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
-                flat = {normkey(key):flat[normkey(key)]}
-            else:
-                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
-            if len(flat) != 1:
-                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-        else:
-            try:
-                flat = {k.lower():flat[normkey(k)] for k in key}
-            except sc.KeyNotFoundError as e:
-                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
-                raise sc.KeyNotFoundError(errormsg) from e
-
-    return flat
-
-
-def get_result_plot_label(res, show_module=None):
-    """ Helper function for getting the label to plot for a result; not for the user """
-    # Sanitize
-    if show_module is None:
-        show_module = 26 # Default maximum length
-    elif isinstance(show_module, bool):
-        if show_module is True:
-            show_module = 999
-        else:
-            show_module = 0
-    if not isinstance(show_module, int):
-        errormsg = f'"show_module" must be a bool or int, not {show_module}'
-        raise TypeError(errormsg)
-
-    # Decide how/if to show the module
-    if show_module == -1:
-        label = res.full_label.replace(':', '\n')
-    elif len(res.full_label) > show_module:
-        label = sc.ifelse(res.label, res.name)
-    else:
-        label = res.full_label
-
-    return label
-
-
-def format_axes(ax, res, n_ticks=None, show_module=None):
-    """ Standard formatting for axis results; not for the user """
-    if n_ticks is None:
-        n_ticks = (2,5)
-
-    # Set y axis -- commas
-    sc.commaticks(ax)
-
-    # Set the axes title
-    label = ss.utils.get_result_plot_label(res, show_module)
-    ax.set_title(label)
-    return
 
 
 def show(**kwargs):

@@ -194,6 +194,7 @@ website:
           contents:
             - api/arrays.qmd
             - api/time.qmd
+            - api/dates.qmd
             - api/timeline.qmd
             - api/distributions.qmd
             - api/settings.qmd
@@ -213,6 +214,7 @@ quartodoc:
         - arrays
         - calibration
         - connectors
+        - dates
         - debugtools
         - demographics
         - diseases

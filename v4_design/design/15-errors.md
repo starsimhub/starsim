@@ -48,7 +48,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 | Name | Kind | When |
 |---|---|---|
-| `IncompatibleTypes` | error (also a `TypeError`) | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.time.freq`, or a number to a rate; names both types |
+| `IncompatibleTypes` | error (also a `TypeError`) | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq`, or a number to a rate; names both types |
 | `WrongDimension` | error (also a `TypeError`) | Typed arithmetic whose result has no type (a rate times a rate, a duration times a duration), or typed values that give a slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; or both `beta` and `n_contacts` carry a time unit |
 | `ReservedName` | error | A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) |
 | `UnknownState` | error (also a `KeyError`) | States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred |
