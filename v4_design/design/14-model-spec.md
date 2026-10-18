@@ -41,7 +41,7 @@ This is the spec of the model on the first page of [00-overview.md](00-overview.
   "schema": "lingua-franca/1.0",
   "modules": [
     {
-      "name": "sir", "type": "Disease", "dt": null, "init_prev": 0.01,
+      "name": "sir", "type": "Disease", "dt": null, "init_prev": 0.01, "first": "S",
       "states": [
         {"name": "S", "people": true, "init": null, "infectious": false, "rel_sus": 1.0, "rel_trans": 1.0, "label": null},
         {"name": "I", "people": true, "init": null, "infectious": true, "rel_sus": 1.0, "rel_trans": 1.0, "label": null},
@@ -233,7 +233,7 @@ The same model can be written in three spellings and in any keyword order. Norma
 1. **Resolve.** Every guessed default is written out as a value.
 2. **Type.** Every bare number in a rate or duration slot becomes a quantity in the sim's unit (`null` in a sim with no unit).
 3. **Expand shorthand.** Arrow strings, in any accepted spelling (`'I -> R'`, `'I->R'`, `'I >> R'`), become `src` and `dst` lists, with `ss.null` and a missing end of an arrow both written as `null`; `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, and the operator form all become the one transition object; a constant rate becomes an exponential `dur`; an inline value becomes a named parameter; an `init=` dict on the disease is written into the `init` field of each state; `transitions=`, `results=`, and `outcomes=` lists are merged with members passed as keywords.
-4. **Order.** Modules, states, and stratifications stay in declared order, because that order means something (the first state receives the remainder of the initial population; modules run in the order given; stratifications apply in sequence). Transitions, parameters, results, and functions are sorted by name. Object keys are written in the order shown in this document. The terms of an expression are kept in the order written, so `beta * I` and `I * beta` are written (and hashed) differently.
+4. **Order.** Modules, states, transitions, and stratifications stay in declared order (modules run in the order given; stratifications apply in sequence; `to_code()` writes the states and transitions as they were given). The state that receives the remainder of the initial population is written as the module's `first`, so that it does not depend on any order; `sim.hash()` sorts the transitions by name, since their order does not change the model. Parameters, results, and functions are sorted by name. Object keys are written in the order shown in this document. The terms of an expression are kept in the order written, so `beta * I` and `I * beta` are written (and hashed) differently.
 5. **Numbers.** Floating-point values are written with full round-trip precision.
 
 After normalization, the three spellings of the same model ([01-objects.md](01-objects.md#the-equivalence-rule)), and a class with the same members, MUST produce the same document once names agree (`tests/test_transitions.py::test_forms` checks that their hashes are equal).

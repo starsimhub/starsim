@@ -322,6 +322,16 @@ def test_treat():
 
     with pytest.raises(ss.UnknownEffect):
         ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(cure=0.5, transition='cure')), **kw).init()
+
+    # A cure takes people out of every infected state, not only the sources of the transition named (before, those in Y stayed)
+    for solver in ['ode', 'abm']:
+        S, A, Y = ss.State(), ss.State(init=0.5), ss.State(init=0.5)
+        sti = ss.Disease(S=S, A=A, Y=Y, infection=S >> A @ ss.perday(1e-9)*(A + Y), symp=A >> Y @ ss.days(1e5), clear_a=A >> S @ ss.days(1000), clear_y=Y >> S @ ss.days(1000), name='sti')
+        tx = ss.treat(ss.Treatment(transition='clear_a'), at=[5], name='tx')
+        res = ss.Sim(sti, interventions=tx, unit='day', stop=10, solver=solver, n_agents=2000, verbose=0).run().results.sti
+        assert res.n_A[-1] == 0 and res.n_Y[-1] == 0 # Was 995 left in Y
+    with pytest.raises(ss.UnknownEffect): # Its recoveries go to Y and S, so it does not guess which (to= says)
+        ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.1), carrier=ss.progression('I -> C', dur=5), recovery=ss.progression('I -> R', dur=10), name='sic'), interventions=ss.treat(ss.Treatment(cure=0.5)), **kw).init()
     with pytest.raises(TypeError): # A value of the sim's time, not of the time since delivery
         ss.Treatment(efficacy=dict(transmission=0.5), waning=ss.timeseries({0: 1, 10: 0.5}))
 

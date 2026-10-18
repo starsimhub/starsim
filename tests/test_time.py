@@ -111,6 +111,9 @@ def test_syntax():
     assert ss.date('2020-01-01') + 52*ss.datedur(weeks=1) == ss.date('2020-12-30')# Should give us 30th December 2020
     assert ss.date('2020-01-01') + 52*ss.years(1/52) == ss.date('2021-01-01') # Should give us 1st Jan 2021
     assert ss.date('2020-01-01') + ss.datedur(years=1) == ss.date('2021-01-01') # Should give us 1st Jan 2021
+    assert ss.date('2000-01-01') + ss.days(200) == ss.days(200) + ss.date('2000-01-01') == ss.date('2000-07-19') # Days are added as days (was a day late after the leap day)
+    monthly = ss.Sim(stop=2, dt=1/12, verbose=0).init()
+    assert ss.connectors.to_ti(monthly, ss.months(7)) == ss.connectors.to_ti(monthly, 7/12) == 7 # On its step (was step 8, from rounding)
 
     # Operations on date vectors
     ss.date.arange(2020,2030)+ss.years(1) # add years to date array

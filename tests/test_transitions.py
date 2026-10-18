@@ -4,6 +4,7 @@ Test models written as declared states and transitions, and the solvers that run
 
 # %% Imports and settings
 import sys
+import types
 import time
 import _thread
 import functools
@@ -1192,6 +1193,17 @@ def test_functions():
     r2 = ss.Sim(stg, unit='day', stop=100, **kw).run()
     assert not r1.notes # No approximation
     assert np.allclose(r1.results.erl.n_I, r2.results.stg.n_I)
+
+    # A branch with p= and where= fires once people are in where= (before, never), and a function p= leaves the rest to the timed exit with none (before, 0.45 instead of 0.9)
+    due = lambda sim: sim.people.uid.raw*0 + (sim.ti >= 5) # Everyone, from step 5
+    I, R = ss.states('I R')
+    gated = ss.Disease(recovery=ss.Transition(I, R, p=1.0, rate=ss.perday(1e6), where=due), init=dict(I=1.0), name='gated')
+    assert ss.Sim(gated, n_agents=1000, stop=10, unit='day', verbose=0).run().results.gated.n_R[-1] == 1000
+    for solver in ['ode', 'abm']:
+        S, E, A, Y = ss.State(), ss.State(init=0.5), ss.State(), ss.State()
+        d = ss.Disease(S=S, E=E, A=A, Y=Y, symp=ss.Transition(E, Y, p=lambda sim: 0.9, dur=ss.weeks(1)), asymp=ss.Transition(E, A, dur=ss.weeks(1)), name='d')
+        res = ss.Sim(d, n_agents=10_000, total_pop=10_000, start=2000, stop=2001, dt=1/52, solver=solver, verbose=0).run().results.d
+        assert np.isclose(res.symp.sum()/(res.symp.sum() + res.asymp.sum()), 0.9, atol=0.01)
     return sim
 
 
@@ -1240,6 +1252,14 @@ def test_time_values():
         assert n_I.max() > 1.5*n_I.min()
     assert sim.unit == 'day'
     assert 'seasonal(mean=' in sim.describe(output=True)
+
+    # A branch (split on entry) whose rate varies in time is a wait at that rate, with its flow recorded (before, a compartmental run moved them all at once and recorded nothing)
+    for solver in ['ode', 'binomial']:
+        I, H, R = ss.states('I H R')
+        severe = I >> 0.25*H @ ss.par(0.2778, name='rate_severe')*ss.seasonal(mean=1.0, amplitude=0.3, peak=0.5)
+        sir = ss.Disease(severe=severe, mild=I >> 0.75*R @ 0.0909, init=dict(I=1.0), name='sir')
+        res = ss.Sim(sir, total_pop=10_000, stop=60, dt=0.1, unit='day', solver=solver, verbose=0).run().results.sir
+        assert res.n_H[0] == 0 and np.isclose(res.severe.cum[-1], res.n_H[-1], rtol=1e-3) # Was 2,500 at the start, and a flow of 0
 
     # The ODE takes a value that varies smoothly at the time of each stage of a step, so a step of a day is as good as a step of three hours; with a function in the model too
     for extra in [None, lambda sim: 0.0]:
@@ -1398,6 +1418,16 @@ def test_cross_disease_rate():
         return ss.Sim([syph, hiv], total_pop=20_000, stop=10, solver=solver, verbose=0, **kw).run().results.hiv.n_I[-1]
     for solver in ['ode', 'abm']:
         assert np.isclose(final(True, solver), final(False, solver), rtol=1e-9) # syph.I is syphilis's, not HIV's own I
+
+    # The same for a condition: where=a.C is the other disease's C, whether or not this one has a C too
+    def cancelled(names, solver):
+        S, I, C = ss.states('S I C')
+        a = ss.Disease(infection=S >> I @ ss.peryear(2)*I, cancer=I >> C @ ss.years(2), init_prev=0.2, name='a')
+        S, I, C, X = ss.states(names)
+        b = ss.Disease(infection=S >> I @ ss.peryear(2)*I, cancer=I >> C @ ss.years(2), cancel=ss.Transition(I, X, rate=ss.peryear(4), where=a.C), init_prev=0.2, name='b')
+        return ss.Sim([a, b], n_agents=2000, total_pop=2000, stop=2005, solver=solver, verbose=0).run().results.b.cancel.sum()
+    for solver in ['ode', 'abm']:
+        assert np.isclose(cancelled('S I C X', solver), cancelled('S I D X', solver), rtol=1e-9) # Was 0 (b's own C) with agents, and an error with the ODE
     return
 
 
@@ -1408,6 +1438,19 @@ def test_anchor_order():
         sir = ss.Disease(infection=S >> I @ 0.3*I.frac, recovery=I >> R @ ss.days(10), init=dict(I=100), name='sir')
         sim = ss.Sim(sir, total_pop=10_000, n_agents=10_000, stop=1, unit='day', solver=solver, verbose=0).run()
         assert sim.results.sir.n_S[0] == 9900 and sim.results.sir.n_R[0] == 0
+
+    # Nor on the order of the transitions, and the code written for it says which state it is (before, a breakthrough given first started everyone in V)
+    def make(**kw):
+        S, I, V = ss.states('S I V')
+        trs = dict(infection=S >> I @ ss.perday(0.3)*I, vax=S >> V @ ss.perday(0.01), breakthrough=V >> I @ ss.perday(0.1)*I)
+        sir = ss.Disease(**{k:trs[k] for k in reversed(trs)}, init=dict(I=100), name='sir', **kw)
+        return ss.Sim(sir, total_pop=10_000, stop=10, unit='day', solver='ode', verbose=0)
+    sim = make()
+    rebuilt = types.SimpleNamespace()
+    exec(sim.to_code(), rebuilt.__dict__)
+    assert "first = 'S'" in sim.to_code() and list(rebuilt.sir.graph.transitions.keys()) == ['breakthrough', 'vax', 'infection'] # In the order given
+    assert sim.run().results.sir.n_S[0] == rebuilt.sim.run().results.sir.n_S[0] == 9900 # Was 0 after the round trip
+    assert make(first='V').run().results.sir.n_V[0] == 9900 # Or given
     return
 
 if __name__ == '__main__':

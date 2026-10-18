@@ -560,11 +560,11 @@ class dur(TimePar):
             return self._new(self.value + self.to_base(other), other=other)
         elif isinstance(other, Rate):
             incompatible(self, '+', other)
-        elif isinstance(other, ss.date): # If adding to a date, convert to years
+        elif isinstance(other, ss.date): # If adding to a date, convert to years (or, for days, add them; see ss.date.__add__())
             if self.is_array:
                 return ss.DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
             else:
-                return ss.date.from_year(other.to_year() + self.years)
+                return other + self
         elif isinstance(other, ss.DateArray):
             return ss.DateArray(np.vectorize(self.__add__)(other))
         else:

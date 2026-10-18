@@ -79,23 +79,25 @@ The phases are ordered by harm: silent wrong answers first, then what makes unch
 
 ### Phase A: silent wrong answers and regressions (S each; first)
 
-- [ ] **HPN1.** A condition naming another disease's state uses that disease's state, as rates already do (the same fix as the cross-disease count fixed this round, in `conditions.py:299-303`); test with two diseases with same-named states.
-- [ ] **F1, F1b.** Apply D-B; write the anchor explicitly in the spec and in `to_code()`, and keep the declaration order of transitions in `to_code()`; a round-trip test over the corpus and the fuzzer's models.
-- [ ] **ST10, FP7, HP12.** `Sim.new()` rebuilds `type(self)` with the recorded constructor call, and raises when a subclass has no inputs to rebuild from (FPsim's 16-line prototype, `v4port/framework/newfix.py`).
-- [ ] **MA23.** An override of a coded method on a declared class (`set_prognoses()` on an `ss.SIS` subclass) raises, naming the coded base to subclass instead.
-- [ ] **ST9.** A declared disease accepts a keyword parameter it does not use when a network or another module reads it, or says which module should own it.
-- [ ] **HP29.** Re-time three genotypes as an ODE on a quiet machine; if it regressed, find the cause (likely the crossing, now that same-named states are kept distinct).
-- [ ] **WA1.** A split branch whose rate is a fitted parameter times a time-varying value records its flow (it records 0 while 2,500 people move).
-- [ ] **C02 remainder.** A `sim.pars` value set after construction survives `new()` and `ss.parallel` (it is lost: a peak of 2,600 against 25,293), or `new()` raises.
-- [ ] **C11, C11c.** Times compared against the step grid with a tolerance (`ss.months(7)` at `dt=1/12` is delivered on step 8), and days added to dates as days (`2000-01-01` plus 200 days is a day late).
-- [ ] **ST5, HP25.** A cure never guesses one transition when several infected states exist: it cures from every infected state, or raises asking for `to=`; `describe()` names what it does.
-- [ ] **MA10.** A value by level of a dimension the state does not have raises rather than taking level 0.
-- [ ] **MA18.** Newborns from `ss.Births` are placed at each dimension's split, not all in the first level.
-- [ ] **HP4.** Results of a weighted agent population are weighted by `people.scale` (`n_alive` is 10,000 against 5,050).
-- [ ] **ST6, ST7.** `where=` with `p=` fires (it never does), and a function `p=` gets the remainder at run time (0.445 instead of 0.9).
+- [x] **HPN1.** A condition naming another disease's state uses that disease's state, as rates already do (the same fix as the cross-disease count fixed this round, in `conditions.py:299-303`); test with two diseases with same-named states.
+- [x] **F1, F1b.** Apply D-B; write the anchor explicitly in the spec and in `to_code()`, and keep the declaration order of transitions in `to_code()`; a round-trip test over the corpus and the fuzzer's models.
+- [x] **ST10, FP7, HP12.** `Sim.new()` rebuilds `type(self)` with the recorded constructor call, and raises when a subclass has no inputs to rebuild from (FPsim's 16-line prototype, `v4port/framework/newfix.py`).
+- [x] **MA23.** An override of a coded method on a declared class (`set_prognoses()` on an `ss.SIS` subclass) raises, naming the coded base to subclass instead.
+- [x] **ST9.** A declared disease accepts a keyword parameter it does not use when a network or another module reads it, or says which module should own it.
+- [~] **HP29.** (Partly, by PA: a quadratic lookup in `Crossing.build()` removed; three genotypes now run in 358 s against 22 s at `03741ba2`; the rest is the crossing's exposure terms, Phase G.) Re-time three genotypes as an ODE on a quiet machine; if it regressed, find the cause (likely the crossing, now that same-named states are kept distinct).
+- [x] **WA1.** A split branch whose rate is a fitted parameter times a time-varying value records its flow (it records 0 while 2,500 people move).
+- [x] **C02 remainder.** A `sim.pars` value set after construction survives `new()` and `ss.parallel` (it is lost: a peak of 2,600 against 25,293), or `new()` raises.
+- [x] **C11, C11c.** Times compared against the step grid with a tolerance (`ss.months(7)` at `dt=1/12` is delivered on step 8), and days added to dates as days (`2000-01-01` plus 200 days is a day late).
+- [x] **ST5, HP25.** A cure never guesses one transition when several infected states exist: it cures from every infected state, or raises asking for `to=`; `describe()` names what it does.
+- [x] **MA10.** A value by level of a dimension the state does not have raises rather than taking level 0.
+- [x] **MA18.** Newborns from `ss.Births` are placed at each dimension's split, not all in the first level.
+- [x] **HP4.** Results of a weighted agent population are weighted by `people.scale` (`n_alive` is 10,000 against 5,050).
+- [x] **ST6, ST7.** `where=` with `p=` fires (it never does), and a function `p=` gets the remainder at run time (0.445 instead of 0.9).
 - [x] **SC3 residual.** One line, `calibration.py:1384`, makes the particle filter linear in data length, with the same log-likelihood.
 - [x] **A2, R5.** A fit restarted from the best two or three scan points, with disagreement reported as `converged=False` (today it stops at 58.86 against 54.25 and says it converged).
 - [x] **A4.** NUTS chains start from dispersed points (or an optimum, as the spec says), not all from `x0`.
+
+Done by PA. For Cliff: F1 applies D-B among the contact-mediated sources (taken literally it started everyone in a vaccinated or maternal-immunity state), and `ss.Disease(first=...)` names it explicitly; ST9 was done by the fallback (the error points to `define_pars()`), since passing plain values to coded modules changes what `mod.pars` holds; HP4 weights results, but rates (`I.n`) still count agents.
 
 ### Phase B: a clear migration that simplifies downstream code (S to M; with A)
 

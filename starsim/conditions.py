@@ -126,6 +126,15 @@ def modname(mod):
     return mod if (mod is None or isinstance(mod, str)) else mod.name
 
 
+def leaf_states(cond):
+    """ The state leaves of a condition, as (module, state name), with the module as given (an object, a name, or None) """
+    if cond.op == 'state':
+        return [(cond.args[0], cond.args[1])]
+    elif cond.op in leaves:
+        return []
+    return [ref for arg in cond.args if isinstance(arg, Cond) for ref in leaf_states(arg)]
+
+
 def state_refs(obj):
     """ The states of named modules that the conditions of a module (e.g. an `ss.modify()` or a delivery, and its product) refer to, as (module name, state name) """
     out = []

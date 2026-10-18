@@ -246,7 +246,7 @@ class Compartmental(Engine):
                     self.unsupported(staged[0], f'a non-exponential dwell time out of "{name}" alongside branches with p=')
                 for tr in branches:
                     p = tr.p[0] if tr.p is not None else None
-                    tracks.append(Bunch(tr=tr, p=p, immediate=tr.name not in self.dwells))
+                    tracks.append(Bunch(tr=tr, p=p, immediate=tr.rate is None and tr.dur is None)) # With neither, nobody waits in the branch
             else:
                 if len(staged) > 1:
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}"')
@@ -257,10 +257,11 @@ class Compartmental(Engine):
                 track.first = None
                 if track.immediate:
                     continue
-                fixed = tr is not None and self.dwells[tr.name].fixed # A fixed delay: a conveyor, out of which people leave by it
+                dwell = self.dwells.get(tr.name) if tr is not None else None # None for a branch whose rate changes with time: a hazard out of its own compartment
+                fixed = dwell is not None and dwell.fixed # A fixed delay: a conveyor, out of which people leave by it
                 n_slots = self.delay_steps(tr) if fixed else max([n for pair in stays.values() for n in pair if n is not None], default=0) # Or a minimum stay: a conveyor, then the rest of the state
                 slots = [add_comp(state, j, None) for i in range(n_slots + 1)] if n_slots else []
-                k = 0 if fixed else self.dwells[tr.name].k if tr is not None else 1
+                k = 0 if fixed else dwell.k if dwell is not None else 1
                 inds = [add_comp(state, j, i) for i in range(k)]
                 track.first = (slots + inds)[0]
                 for i,ind in enumerate(slots[:-1]): # The last slot is left by the people due to leave in the next step, and by nothing else
@@ -269,7 +270,9 @@ class Compartmental(Engine):
                     add_flow(tr if fixed else self.graph.transitions[next(iter(stays))], slots[-1], 'conveyor', named=fixed, to=None if fixed else inds[0])
                     self.conveyors.append(Bunch(slots=slots, flow=self.flows[-1]))
                 for i,ind in enumerate(inds):
-                    if tr is not None:
+                    if tr is not None and dwell is None:
+                        add_flow(tr, ind, 'hazard')
+                    elif tr is not None:
                         last = i == k-1
                         add_flow(tr, ind, 'stage', named=last, to=None if last else inds[i+1], stages=k)
                     add_exits(ind, state, exits, competing, stays)
@@ -484,9 +487,11 @@ class Compartmental(Engine):
         self.changed()
         return moved
 
-    def force(self, frac, tr, dst):
-        """ Move a fraction of the people in each state a transition leaves from, and each group, to a state, along the transition (as when a treatment cures) """
-        total = self.move_states(frac, tr.src, dst)
+    def force(self, frac, tr, dst, srcs=None):
+        """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures) """
+        total = self.move_states(frac, tr.src if srcs is None else srcs, dst)
+        if tr is None:
+            return total
         self.flowcounts[tr.name] += total.sum()
         self.forced[tr.name] = self.forced.get(tr.name, 0) + total
         return total

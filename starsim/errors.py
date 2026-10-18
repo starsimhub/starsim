@@ -209,7 +209,7 @@ class TimeOutsideSim(CodedError):
     """
 
 class MissingDimension(CodedError, KeyError):
-    """ An `ss.transfer` names a stratification the model does not have. (A boolean coordinate that does not exist yet is created instead) """
+    """ An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of """
 
 class NothingToFit(CodedError):
     """ `calibrate()` or `sensitivity()` is called and no parameter has `bounds` """

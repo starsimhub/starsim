@@ -748,7 +748,7 @@ class Delivery(Intervention):
                 tis += list(range(self.ti_start, min(self.ti_stop, npts), every))
             self.round_tis = set(tis)
         if getattr(self.product, 'cure', None) is not None:
-            self.cure_tr, self.cure_dst = self.product.recovery(self.dis)
+            self.cure_tr, self.cure_dst, self.cure_srcs = self.product.recovery(self.dis)
         if self.move_states is not None:
             states = self.dis.graph.states
             for name in self.move_states:
@@ -1199,9 +1199,9 @@ class Delivery(Intervention):
             if abm:
                 uids = self.uids(chosen)
                 p = cure if np.ndim(cure) == 0 else cure[uids]
-                self.eng.force(uids[self.rng_eff.rvs(uids) < p], self.cure_tr, self.cure_dst)
+                self.eng.force(uids[self.rng_eff.rvs(uids) < p], self.cure_tr, self.cure_dst, srcs=self.cure_srcs)
             else:
-                self.eng.force(chosen*cure, self.cure_tr, self.cure_dst)
+                self.eng.force(chosen*cure, self.cure_tr, self.cure_dst, srcs=self.cure_srcs)
         elif isinstance(product, ss.Test):
             self.test(chosen)
         return

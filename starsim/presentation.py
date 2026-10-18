@@ -43,10 +43,11 @@ class Presentation:
         inits = {s.name:s.init for s in self.states.values() if s.init is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
+        guesses = [self.guessed[key] for key in ['init', 'first'] if key in self.guessed]
         if inits:
-            add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + f'; the rest in {self.first.name}', f'guessed: {self.guessed["init"]}' if 'init' in self.guessed else None)
+            add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + f'; the rest in {self.first.name}', f'guessed: {"; ".join(guesses)}' if guesses else None)
         else:
-            add('', f'init: {self.first.name} = 1.0', 'guessed: nothing given')
+            add('', f'init: {self.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
         lines.append('')
 
         for name,tr in self.transitions.items():
@@ -313,14 +314,14 @@ class Presentation:
         out.type = 'Disease' if isinstance(mod, ss.Disease) else type(mod).__name__
         out.dt = None if (mod.t.dt is None or sim is None or mod.t.dt == sim.t.dt) else float(mod.t.dt.to(sim.unit_base).value)
         out.init_prev = self.init_prev.raw if isinstance(self.init_prev, par) else self.init_prev
+        out.first = self.first.name if self.people_states else None # The state that people not put elsewhere start in
         out.states = [dict(name=s.name, people=bool(s.people), init=s.init if s.init is None or sc.isnumber(s.init) else quantity_json(s.init, None, unit), infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
 
         def par_json(p, kind):
             return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=None if p.prior is None else str(p.prior), source=p.source, doc=p.doc)
 
         transitions = []
-        for name in sorted(self.transitions.keys()):
-            tr = self.transitions[name]
+        for name,tr in self.transitions.items(): # In the order given (sim.hash() sorts them)
             entry = sc.objdict(name=name, kind='contact-mediated' if tr.contact else 'spontaneous')
             entry.src = [s.name for s in tr.src] or None
             entry.dst = [s.name for s in tr.dst] or None

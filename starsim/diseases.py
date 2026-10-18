@@ -41,6 +41,7 @@ class Disease(ss.Module):
         outcomes (list): `ss.outcome` objects
         init_prev (float): the initial prevalence, seeded through the transmission
         init (dict): the initial fraction or count in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`
+        first (str): the state that everyone not put elsewhere starts in; by default, the one that no transition moves people into (see `ss.transitions.Graph.anchor()`)
         kwargs (dict): one keyword per state, transition, parameter, result, or function; also `name`, `label`, and `dt`
 
     The results are the number in each state (`n_I`), the flow along each transition by its
@@ -67,6 +68,21 @@ class Disease(ss.Module):
     graph = None # The declared states and transitions; defined on the class so it always exists
     standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
 
+    _coded = False # Written as code (ss.Infection and its subclasses), not declared
+    _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital', 'step_congenital'] # Called only on a disease written as code
+
+    def __init_subclass__(cls, **kwargs):
+        """ A declared class never calls the methods of a disease written as code, so overriding one (e.g. set_prognoses() on a subclass of ss.SIS) would be silently ignored """
+        super().__init_subclass__(**kwargs)
+        overridden = [name for name in cls._coded_methods if name in vars(cls)]
+        declared = any(isinstance(val, (ss.State, ss.Transition)) for b in cls.__mro__ for val in vars(b).values()) # Its class body, or a base's, declares states or transitions (e.g. ss.SIS)
+        if overridden and declared and not cls._coded:
+            base = next((f'ssl.Coded{b.__name__}' for b in cls.__mro__ if b.__module__ == __name__ and b.__name__ in ['SIR', 'SIS', 'SEIR']), 'ss.Infection')
+            errormsg = (f'{cls.__name__} defines {sc.strjoin(overridden)}, which a declared disease never calls, so it would be silently ignored.\n'
+                        f'     A disease written as code subclasses {base} instead (import starsim.library as ssl); a declared one changes its transitions.')
+            raise ss.CapabilityError(errormsg)
+        return
+
     def __init__(self, *args, pars=None, **kwargs):
         super().__init__()
         self.infection_log = None
@@ -89,10 +105,15 @@ class Disease(ss.Module):
         pars = {}
         endpoints = set() # States that the transitions given move people between, which this disease will own
         counted = {} # States counted in a rate (I.n), which may be another disease's
-        def walk(obj, depth=0): # The states, transitions, and parameters in what was given
+        conds = [] # Conditions in a where=, which may be on another disease's states
+        def walk(obj, depth=0, where=False): # The states, transitions, and parameters in what was given
             if isinstance(obj, (list, tuple)):
                 for item in obj:
-                    walk(item, depth)
+                    walk(item, depth, where)
+            elif isinstance(obj, ss.conditions.Cond):
+                conds.append(obj)
+            elif isinstance(obj, ss.State) and where: # A state in a where=, e.g. where=hpv16.Ca
+                counted[id(obj)] = obj
             elif isinstance(obj, ss.par):
                 pars[id(obj)] = obj
             elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)) and depth < 6:
@@ -106,9 +127,12 @@ class Disease(ss.Module):
                     counted.update({id(st):st for st in obj.states})
                 for key,val in vars(obj).items():
                     if key != 'module':
-                        walk(val, depth + 1)
+                        walk(val, depth + 1, where or key == 'where')
         walk(list(args) + list(members.values()))
         others = {key:st for key,st in counted.items() if key not in endpoints and getattr(st, 'module', None) is not None} # Another disease's state in a rate, e.g. syph.I.n: a reference to it, not a copy
+        for cond in conds: # A condition on another disease's states is kept as it is, unless it is on a state being copied
+            if not any(id(mod.graph.states.get(name)) in endpoints for mod,name in ss.conditions.leaf_states(cond) if getattr(mod, 'graph', None) is not None):
+                others[id(cond)] = cond
         if not owners:
             return args, members
         members = dict(members)
@@ -131,6 +155,7 @@ class Disease(ss.Module):
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
+        first = kwargs.pop('first') if isinstance(kwargs.get('first'), str) else None # A state named "first" can still be declared by keyword
         self.set_metadata(**meta)
         self.t.update(**timepars)
         members = sc.dcp(members) # Copy class members (together, so they still refer to each other) so instances do not share them
@@ -138,7 +163,7 @@ class Disease(ss.Module):
             members[key].merge(kwargs.pop(key))
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, frame)
-        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, frame=frame)
+        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, first=first, frame=frame)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
@@ -386,6 +411,8 @@ class CodedDisease(Disease):
             def step_state(self):
                 self.anemic[self.pars.p_onset.filter()] = True
     """
+
+    _coded = True
 
     def __init__(self, pars=None, **kwargs):
         ss.Module.__init__(self) # Written as code, so there is no graph of declared states to build (see ss.Disease)

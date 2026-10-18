@@ -84,7 +84,7 @@ At module level there is no such hook, which is why the lookup happens when the 
 
 A state belongs to the module whose transitions lead into or out of it. A state that appears only inside another module's rate (for example one disease's `I` in another disease's progression rate) is a reference, not a member. One set of states and transitions can build several diseases: when a disease is given states or transitions that another disease already has, they are copied (together, so they still refer to each other), and parameters stay shared. Two members of one module with the same explicit name raise `DuplicateDeclaration`.
 
-**The first state** (the anchor) is where people are unless they are put elsewhere: the source of the first contact-mediated transition; with none, the earliest state of the states connected to those given initial values. It does not depend on the order in which the states were made.
+**The first state** (the anchor) is where people are unless they are put elsewhere. It is found among the states connected to those seeded (given initial values, or entered through the transmission that `init_prev` seeds). With contact-mediated transitions it is a source of one that people do not reach from another (`S`, not `V` after `S >> V`); of several, the one that no transition moves people into, then the earliest declared, and `describe()` notes the choice. With none, it is the earliest state that no transition moves people into. It can be given with `ss.Disease(..., first='S')`, and `to_spec()` and `to_code()` always write it. It depends neither on the order in which the states were made nor on the order of the transitions.
 
 ### Declare states or infer them
 

@@ -391,6 +391,20 @@ class Vaccine(Held):
         return out if self.take is None else f'{out}; all or nothing: {self.take:n} of those who receive it are fully protected'
 
 
+def _reach(start, links, stop):
+    """ The ids of the states reached from some states along the links between them, not going on past the states in `stop` """
+    seen = set()
+    todo = list(start)
+    while todo:
+        state = todo.pop()
+        if id(state) in seen:
+            continue
+        seen.add(id(state))
+        if not any(state is s for s in stop):
+            todo += links.get(id(state), [])
+    return seen
+
+
 class Treatment(Held):
     """
     A treatment: what `ss.treat()` delivers
@@ -399,10 +413,11 @@ class Treatment(Held):
     (`efficacy=`), or both. By default it is given to the people who are infected.
 
     Args:
-        cure (float): the probability that treatment cures: the person leaves the infected states by the disease's recovery
-            transition (or by `transition=`); 1 if neither `cure` nor `efficacy` is given
+        cure (float): the probability that treatment cures: the person leaves whichever infected state they are in for the
+            state the disease's recovery leads to (or `to=`, or the destination of `transition=`); 1 if neither `cure` nor `efficacy` is given
         efficacy (dict): the effects while it is held, as for `ss.Vaccine` (e.g. `dict(transmission=0.96, mortality=0.9)`)
-        transition (str): the transition a cured person leaves by, if the disease has more than one recovery
+        transition (str): the transition a cured person leaves by (its flow counts them), if the disease has recoveries to more than one state
+        to (str): the state cured people go to, if the disease has recoveries to more than one state
         waning (dur/func): as for `ss.Vaccine`, for the effects while held
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the treatment is assigned to
@@ -414,7 +429,7 @@ class Treatment(Held):
         both = ss.Treatment(cure=0.3, efficacy=dict(transmission=0.9))
         ```
     """
-    def __init__(self, cure=None, efficacy=None, transition=None, **kwargs):
+    def __init__(self, cure=None, efficacy=None, transition=None, to=None, **kwargs):
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
             raise ValueError(errormsg)
@@ -423,6 +438,8 @@ class Treatment(Held):
         super().__init__(efficacy=efficacy, **kwargs)
         self.cure = cure
         self.transition = transition if transition is None or isinstance(transition, str) else transition.name
+        self.to = to if to is None or isinstance(to, str) else to.name
+        self.cures = None # What a cure does, once the disease is known: see recovery()
         return
 
     @property
@@ -430,24 +447,53 @@ class Treatment(Held):
         return self.efficacy is not None
 
     def recovery(self, dis):
-        """ The transition a cured person leaves by, and the state they go to """
+        """
+        How a cured person leaves: the transition whose flow counts them (or None), the state they go to, and the states they leave
+
+        A cure takes people out of whichever infected state they are in (the states counted in prevalence, and those that
+        people infected reach on the way to the state cured people go to), never only the sources of one transition (unless
+        `transition=` names one out of states that are not infected, which people are then moved along).
+        """
         graph = dis.graph
-        infected = graph.infected
+        infected = [s for s in graph.infected if s.people]
         options = {name:tr for name,tr in graph.transitions.items() if tr.people and not tr.outflow and not tr.contact and len(tr.dst) == 1
                    and any(s in infected for s in tr.src) and tr.dst[0] not in infected}
+        tr = None
         if self.transition is not None:
             if self.transition not in graph.transitions:
                 raise ss.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[self.transition]
-        elif len(options) == 1:
-            tr = list(options.values())[0]
+        if self.to is not None:
+            if self.to not in graph.states or not graph.states[self.to].people:
+                raise ss.UnknownState(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+            dst = graph.states[self.to]
+        elif tr is not None:
+            dst = tr.dst[0]
         else:
-            raise ss.UnknownEffect(f'the treatment "{self.name}" cures, so it needs a transition out of the infected states of "{dis.name}" for cured people to leave by, and there {"is none" if not options else "are several: " + sc.strjoin(options.keys())}.\n'
-                                   f'     Name it with transition=, or give efficacy as a dict for a treatment that changes rates without curing.')
-        return tr, tr.dst[0]
+            dsts = {id(t.dst[0]):t.dst[0] for t in options.values()}
+            if len(dsts) != 1:
+                example = next((d for d in dsts.values() if d is graph.first), graph.first)
+                raise ss.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
+                                       f'     Give it with to= (e.g. to="{example.name}"), or give efficacy as a dict for a treatment that changes rates without curing.')
+            dst = list(dsts.values())[0]
+        if tr is None: # The flow that counts the cured: the one recovery into that state, if there is one
+            into = [t for t in options.values() if t.dst[0] is dst]
+            tr = into[0] if len(into) == 1 else None
+
+        # The states cured people leave: the infected ones, and those that people reach from them on the way to the state they are cured to
+        links = {id(s):[d for t in graph.transitions.values() if t.people and any(src is s for src in t.src or []) for d in t.dst or [] if d.people] for s in graph.people_states}
+        reach = lambda start, stop: _reach(start, links, stop)
+        contact = [s for t in graph.transmissions for s in t.src or []]
+        onward = reach(infected, [dst] + contact)
+        srcs = [s for s in graph.people_states if (id(s) in onward and s is not dst and id(dst) in reach([s], contact)) or any(s is i for i in infected)]
+        srcs = [s for s in srcs if s is not dst]
+        if self.transition is not None and not any(s is i for s in tr.src for i in infected): # A transition out of states that are not infected, e.g. S -> P: a move along it
+            srcs = list(tr.src)
+        self.cures = f'from {sc.strjoin(s.name for s in srcs)} to {dst.name}' + (f' (counted in {tr.name})' if tr is not None else '')
+        return tr, dst, srcs
 
     def describe(self):
-        cures = f'cures with probability {self.cure}' if self.cure is not None else ''
+        cures = f'cures with probability {self.cure}' + (f', {self.cures}' if self.cures else '') if self.cure is not None else ''
         if self.holds:
             return super().describe() + (f'; {cures}' if cures else '')
         return f'{self.name}: treatment that {cures}'

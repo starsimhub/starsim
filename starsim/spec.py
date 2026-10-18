@@ -267,7 +267,7 @@ def disease_code(spec, lines, left):
         elif plain:
             add(f"{plain[0]} = ss.State('{plain[0]}')")
         plain.clear()
-    linked = {spec['states'][0]['name']} if spec['states'] else set() # The states Starsim takes to be people: those connected by transitions to the first
+    linked = {spec.get('first') or spec['states'][0]['name']} if spec['states'] else set() # The states Starsim takes to be people: those connected by transitions to the first
     for i in range(len(spec['states'])):
         for t in spec['transitions']:
             ends = set(t['src'] or []) | set(t['dst'] or [])
@@ -356,6 +356,8 @@ def disease_code(spec, lines, left):
         kwargs.append(('init', 'dict(' + ', '.join(f'{k}={code_value(v)}' for k,v in inits.items()) + ')'))
     if spec['init_prev']:
         kwargs.append(('init_prev', code_value(spec['init_prev'])))
+    if spec.get('first') and any(s['people'] for s in spec['states']): # Written, so that the model does not depend on the rule that finds it
+        kwargs.append(('first', repr(spec['first'])))
     kwargs.append(('name', repr(name)))
 
     var = name if name.isidentifier() else 'disease'
@@ -638,7 +640,9 @@ def diff(a, b, output=False):
         # States
         sx, sy = [s['name'] for s in x.get('states', [])], [s['name'] for s in y.get('states', [])]
         model += [f"{prefix}state '{s}' removed" for s in sx if s not in sy] + [f"{prefix}state '{s}' added" for s in sy if s not in sx]
-        first = sx[0] if sx else None
+        first = x.get('first', sx[0] if sx else None)
+        if x.get('first') != y.get('first') and None not in (x.get('first'), y.get('first')):
+            model.append(f"{prefix}first {x['first']} -> {y['first']}")
         for s in [s for s in x.get('states', []) if s['name'] in sy]:
             t = next(o for o in y['states'] if o['name'] == s['name'])
             for key in ['people', 'rel_sus', 'rel_trans', 'init']:

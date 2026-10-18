@@ -22,6 +22,17 @@ class lazy_attr:
         raise AttributeError(self.name) # Not on this People object (see People.__getattr__())
 
 
+class AgentScale(ss.FloatArr):
+    """ The number of people each agent stands for relative to the others (`people.scale`); setting it other than 1 makes results add up the agents' weights """
+    weighted = False # Set once any agent's scale is set other than 1, so that results are worked out as before until then
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if not self.weighted and np.any(np.asarray(value) != 1):
+            self.weighted = True
+        return
+
+
 class People:
     """
     A class to perform all the operations on the people
@@ -86,7 +97,7 @@ class People:
             ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
-            ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
+            AgentScale('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
@@ -416,13 +427,14 @@ class People:
         """ Male boolean  (female is a state) """
         return ~self.female
 
-    def grow(self, n=None, new_slots=None):
+    def grow(self, n=None, new_slots=None, placed=False):
         """
         Increase the number of agents
 
         Args:
             n: Integer number of agents to add
             new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
+            placed: whether the caller gives them their levels of the sim's stratifications; if not, they are drawn from each one's split
         """
         if n is None:
             if new_slots is None:
@@ -454,6 +466,8 @@ class People:
         sim = getattr(self, 'sim', None)
         if getattr(sim, 'solver', None) == 'abm': # A dimension called sex is people.female
             sim.groups.set_sex(new_uids)
+            if not placed and sim.initialized and sim.groups.strats: # E.g. newborns from ss.Births, who would otherwise all be at the first level
+                sim.groups.place_new(new_uids)
         return new_uids
 
     def add_active(self, new_uids):
@@ -613,12 +627,21 @@ class People:
         states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. n_alive, n_female
         dying = self.dying()
         counts = None
-        if all(state.raw.ndim == 1 for state in states):
+        if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
+            auids = self.auids
+            w = self.scale.raw[auids]
+            gone = dying[self.ti_dead.raw[dying] <= ti], dying[self.ti_removed.raw[dying] <= ti]
+            counts = [float(w[state.raw[auids]].sum()) for state in states] + [float(self.scale.raw[uids].sum()) for uids in gone]
+        elif all(state.raw.ndim == 1 for state in states):
             counts = ss.kernels.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
             if counts[-1] + len(dying) == len(self.auids):
                 counts = [count + np.count_nonzero(state.raw[dying]) for state,count in zip(states, counts)] + [np.count_nonzero(self.ti_dead.raw[dying] <= ti), np.count_nonzero(self.ti_removed.raw[dying] <= ti)]
             else: # From the active agents themselves
                 counts = ss.kernels.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
+        if self.scale.weighted: # Agents of different weights make fractions of people
+            for key in [f'n_{state.name}' for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
+                if res[key].values.dtype.kind in 'iu':
+                    res[key].init_values(dtype=float, force=True)
         if counts is not None:
             for state,count in zip(states, counts):
                 res[f'n_{state.name}'][ti] = count

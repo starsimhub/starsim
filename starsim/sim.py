@@ -62,6 +62,15 @@ class Sim(ss.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
+    def __new__(cls, *args, **kwargs):
+        obj = super().__new__(cls)
+        if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
+            try:
+                obj._call = (sc.dcp(args), sc.dcp(kwargs))
+            except Exception:
+                obj._call = None
+        return obj
+
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
                  modules=None, copy_inputs=True, data=None, pars=None, **kwargs):
@@ -111,7 +120,23 @@ class Sim(ss.Base):
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
+        self._made = self._settings() # The settings as made, to find the ones set afterwards (see set_after())
+        self._set_after = {}
         return
+
+    def _settings(self):
+        """ The sim settings, not the modules or people (which would be found again by the search for distributions) """
+        skip = ss.modules.module_types() + ['custom', 'modules', 'people']
+        return {key:val for key,val in self.pars.items() if key not in skip}
+
+    def set_after(self):
+        """ The sim settings set after the sim was made and before it was initialized (e.g. `sim.pars.stop = 30`), which `sim.new()` keeps """
+        made = self.__dict__.get('_made')
+        if made is not None:
+            for key,val in self._settings().items():
+                if val is not made.get(key):
+                    self._set_after[key] = sc.dcp(val)
+        return self.__dict__.get('_set_after', {})
 
     @staticmethod
     def _name_modules(frame, *args):
@@ -262,6 +287,8 @@ class Sim(ss.Base):
             self.timer.start()
 
         # Validation and initialization -- this is "pre"
+        self.set_after() # Before the settings are converted
+        self._made = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
@@ -418,9 +445,23 @@ class Sim(ss.Base):
             errormsg = 'sim.new() needs the inputs the sim was built from, which this sim (e.g. one saved by an earlier version) does not have'
             raise ValueError(errormsg)
         data = kwargs.pop('data', self.data) # Data is not a sim parameter, so it is passed on separately
-        inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
-        inputs = {key:val for key,val in inputs.items() if not (key in kwargs and val is None)} # As if it had not been given
-        sim = Sim(inputs, data=sc.dcp(data))
+        if type(self) is Sim:
+            inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
+            inputs = {key:val for key,val in inputs.items() if not (key in kwargs and val is None)} # As if it had not been given
+            sim = Sim(inputs, data=sc.dcp(data))
+        else: # A subclass is made again by the call that made it
+            call = self.__dict__.get('_call')
+            if call is None:
+                errormsg = f'sim.new() cannot make this {type(self).__name__} again, since the arguments it was made with were not kept (its arguments cannot be copied). Make it again by calling {type(self).__name__}(...)'
+                raise ValueError(errormsg)
+            args, kw = sc.dcp(call)
+            kw = sc.mergedicts(kw, kwargs)
+            kw = {key:val for key,val in kw.items() if not (key in kwargs and val is None)}
+            sim = type(self)(*args, **kw)
+            sim.data = sc.dcp(data)
+        for key,val in self.set_after().items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
+            if key not in kwargs:
+                sim.pars[key] = sc.dcp(val)
         sim.par_values = sc.mergedicts(self.par_values, pars)
         if hasattr(self, 'imported'): # The same import, with what it did not translate
             sim.imported = self.imported
@@ -961,6 +1002,8 @@ class Sim(ss.Base):
             if isinstance(mod.get('pars'), list): # A declared module's parameters
                 for p in mod['pars']:
                     p.pop('source', None)
+            if isinstance(mod.get('transitions'), list): # The order of the transitions is not part of the model
+                mod['transitions'] = sorted(mod['transitions'], key=lambda t: t['name'])
             dis = self.diseases.get(mod.get('name')) if mod.get('init_prev') else None
             if dis is not None and dis.graph is not None and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
                 state = next(s for s in mod['states'] if s['name'] == dis.graph.transmissions[0].dst[0].name)

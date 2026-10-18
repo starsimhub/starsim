@@ -51,6 +51,7 @@ def choose_solver(sim):
                 else: # A condition, a state, or an array
                     others = ~ss.conditions.as_cond(where)
                 pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=others, name=key)
+                pars.connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in where=
     for m in list(pars.interventions.values()) + list(pars.connectors.values()): # A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted
         if isinstance(m, ss.modify) and isinstance(m.amount, ss.par):
             p = m.amount

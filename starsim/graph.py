@@ -30,12 +30,14 @@ class Graph(Presentation):
         members (dict): states, transitions, parameters, results, and functions, by name
         init_prev (float): the initial prevalence, seeded through the transmission
         init (dict): the initial fraction or count in each state, by name
+        first (str): the state people are in unless they are put elsewhere (by default, the one nothing moves people into; see `anchor()`)
         frame (frame): the calling frame, used to find the names of variables
     """
     grouped = ['transitions', 'results', 'outcomes'] # The keywords that each take several members, e.g. ss.Disease(transitions=[...])
 
-    def __init__(self, module, args=None, members=None, init_prev=None, init=None, frame=None):
+    def __init__(self, module, args=None, members=None, init_prev=None, init=None, first=None, frame=None):
         self.module = module
+        self.first_given = first # The state people are in unless they are put elsewhere, if given
         self.init_prev = init_prev
         if isinstance(init_prev, par): # So it can be fitted
             init_prev.name = init_prev.name or 'init_prev'
@@ -305,19 +307,34 @@ class Graph(Presentation):
 
     def anchor(self, states, connected):
         """
-        The state that people are in unless they are put elsewhere, which the other people states are connected to: the
-        source of the first contact-mediated transition; else the earliest state of the group of states connected to
-        the ones given initial values (else of the largest group of connected states) that no transition moves people
-        into, or else the earliest state of that group
+        The state that people are in unless they are put elsewhere (`first=`), which the other people states are connected to
+
+        Unless it is given, it is found among the group of states connected to the ones seeded (given initial values, or
+        entered by the contact-mediated transition that init_prev seeds through; else the largest group of connected
+        states). With contact-mediated transitions, it is a source of one that people do not reach from another (S, not V
+        after S -> V); of several, the one that no transition moves people into, then the earliest declared, with a note in
+        `guessed`. With none, it is the earliest state that no transition moves people into, or else the earliest state.
+        The order in which the transitions are given does not matter.
         """
-        for tr in self.transitions.values():
-            if tr.contact and tr.src:
-                return tr.src[0]
-        given = [self.states[key] for key in self.init if key in self.states]
-        group = connected(given) if given else max((connected([s]) for s in states), key=len)
+        if self.first_given is not None:
+            name = self.first_given.name if isinstance(self.first_given, State) else self.first_given
+            if name not in self.states:
+                raise ss.UnknownState(f'first="{name}" is not a state of "{self.module.name}". Its states are {sc.strjoin(self.states.keys())}{did_you_mean(name, list(self.states.keys()))}')
+            return self.states[name]
+        given = [s for s in states if s.init is not None]
+        seeded = given + ([st for tr in self.transitions.values() if tr.contact for st in tr.dst or []] if self.init_prev is not None else [])
+        group = connected(seeded) if seeded else max((connected([s]) for s in states), key=len)
         members = [s for s in states if id(s) in group]
         entered = {id(st) for tr in self.transitions.values() for st in (tr.dst or []) if isinstance(st, State)}
         entered |= {id(self.states[kid] if isinstance(kid, str) else kid) for kid in [tr.offspring[0] for tr in self.transitions.values() if getattr(tr, 'offspring', None) is not None]} # Newborns enter theirs
+        sources = [s for s in members if any(tr.contact and any(src is s for src in tr.src or []) for tr in self.transitions.values())] # In declared order
+        if sources:
+            fed = {id(st) for tr in self.transitions.values() if any(src is s for src in tr.src or [] for s in sources) for st in tr.dst or []} # Reached from a source, e.g. by vaccination
+            candidates = [s for s in sources if id(s) not in fed] or sources
+            first = next((s for s in candidates if id(s) not in entered), candidates[0])
+            if len(candidates) > 1:
+                self.guessed['first'] = f'{first.name}, of the sources of contact-mediated transitions {sc.strjoin(s.name for s in candidates)}'
+            return first
         return next((s for s in members if id(s) not in entered), members[0])
 
     def resolve_people(self):
@@ -390,7 +407,8 @@ class Graph(Presentation):
         for name,value in self._keywords.items():
             if name not in self.pars:
                 raise ss.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
-                                          f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).')
+                                          f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
+                                          f'     If another module reads it from this disease (as STIsim\'s networks read disease.pars.eff_condom), add it after making the disease: {self.module.name}.define_pars({name}={value!r}).')
             self.pars[name].value = value
         return
 
@@ -491,7 +509,10 @@ class Graph(Presentation):
                 ps = [tr.p[0] for tr in exits.branches]
                 const = all(isinstance(p, par) and sc.isnumber(p.raw) for p in ps)
                 total = sum(p.raw for p in ps) if const else None
-                if const and not np.isclose(total, 1):
+                if not const and len(exits.timed) == 1: # A share that is worked out as the sim runs (e.g. a function): the timed exit with no p= takes the rest, then
+                    exits.remainder = exits.timed.pop()
+                    exits.remainder.guessed['p'] = f'1 - {" - ".join(tr.name for tr in exits.branches)}'
+                elif const and not np.isclose(total, 1):
                     if total < 1 and len(exits.timed) == 1:
                         exits.remainder = exits.timed.pop()
                         exits.remainder.guessed['p'] = f'{1 - total:n}'

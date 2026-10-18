@@ -42,6 +42,16 @@ def test_people():
     assert dead.sum() == sim.results.cum_deaths[-1] > 0
     assert not np.isin(dead.uids, sim.people.auids).any()
 
+    # Agents that stand for fewer people (people.scale, as HPVsim's finer agents) count for less in the results (before, every agent counted as one)
+    S, I = ss.states('S I')
+    sis = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.0)*I, recovery=I >> S @ ss.years(1000), init=dict(I=0.5), name='sis')
+    sim = ss.Sim(sis, n_agents=1000, start=2000, stop=2001, verbose=0).init()
+    sim.people.scale[sim.people.auids[:500]] = 0.01
+    sim.run()
+    weights = sim.people.scale.raw[sim.people.auids]
+    assert sim.results.n_alive[-1] == weights.sum() == 505
+    assert np.isclose(sim.results.sis.n_I[-1], weights[sim.diseases.sis.I.raw[sim.people.auids]].sum())
+
     return ppl
 
 

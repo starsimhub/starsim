@@ -103,6 +103,12 @@ def test_custom_imports():
     sim = ss.Sim(n_agents=1000, diseases=['hiv', 'mydisease'], networks='mynetwork')
     sim.run()
 
+    # A method of a disease written as code, on a declared one, would never be called (before, it was silently ignored)
+    with pytest.raises(ss.CapabilityError):
+        class CodedHook(ss.SIS):
+            def set_prognoses(self, uids, sources=None):
+                pass
+
     return o
 
 

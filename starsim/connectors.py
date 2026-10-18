@@ -84,6 +84,14 @@ def to_time(sim, val):
     return val
 
 
+def reached(now, time):
+    """ Whether a time on the timeline is at or after another, allowing for rounding: the timeline keeps its times to 9 decimals, so e.g. `ss.months(7)` is a hair after step 7 of monthly steps """
+    if now >= time:
+        return True
+    gap = time - now
+    return hasattr(gap, 'years') and abs(float(gap.years)) < 1e-6
+
+
 def to_ti(sim, val, name='time', after=False):
     """
     The first timestep at or after a time, which must be within the sim and before its last time point (where no step starts)
@@ -102,7 +110,7 @@ def to_ti(sim, val, name='time', after=False):
             hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start" + (f", so for the year {val:n} write it as a date, '{val:n}'" if ss.time.assume_cal_year(val) else '')
         when = f'{val}, which is {time}' if sc.isnumber(val) else f'{val}'
         raise ss.TimeOutsideSim(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
-    ti = next((ti for ti,now in enumerate(tvec) if now >= time), len(tvec)) # len(tvec) if after the end
+    ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
     if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen
         raise ss.TimeOutsideSim(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
     return ti
@@ -262,7 +270,7 @@ class modify(Connector):
             found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers))
         if not found:
             raise ss.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
-        if kind == 'transition':
+        if kind == 'transition' and not getattr(self, 'on_rate', False):
             kind = graph.modifier_kind(name)
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
@@ -299,7 +307,7 @@ class modify(Connector):
         now = sim.t.now()
         start = to_time(sim, self.start)
         stop = to_time(sim, self.stop)
-        if (start is not None and now < start) or (stop is not None and now >= stop):
+        if (start is not None and not reached(now, start)) or (stop is not None and reached(now, stop)):
             return False
         if self.when is None:
             return True

@@ -279,9 +279,13 @@ class Crossing:
         arr = lambda items: np.array(items, dtype=np.int64)
         pairs = lambda I, C: (arr(I), np.array(C, dtype=np.int64).reshape(len(I), R))
 
+        positions = {} # The position of each key in its dict (sets, exposures, maps), kept so that finding it is not a search of the dict, which made building a crossing of three diseases take hours
         def add(items, key, val=None):
-            items.setdefault(key, val)
-            return list(items).index(key)
+            pos = positions.setdefault(id(items), {})
+            if key not in pos:
+                items.setdefault(key, val)
+                pos[key] = len(pos)
+            return pos[key]
 
         def which_map(k, m, o):
             if m < 0:
@@ -302,12 +306,12 @@ class Crossing:
                 key = (k, int(e), o_src, o_sus if split else None)
                 if key not in exposures:
                     comps = p.set_comps[p.set_starts[p.exp_set[e]]:p.set_starts[p.exp_set[e]+1]]
-                    exposures[key] = add(sets, tuple(sorted(L.rowmap[comps, o_src])))
+                    add(exposures, key, add(sets, tuple(sorted(L.rowmap[comps, o_src]))))
                     XI.append(e)
                     XC.append(L.cols[o_src])
                     KI.append(e if p.contacts.shape[0] > 1 else 0)
                     KC.append(L.cols[o_sus] if split else np.zeros(R, dtype=np.int64))
-                return list(exposures).index(key)
+                return positions[id(exposures)][key]
 
             for f in range(len(p.src)):
                 for o in range(O):

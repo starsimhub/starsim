@@ -749,6 +749,21 @@ class Groups:
         self.groups_changed()
         return
 
+    def place_new(self, uids):
+        """ In an agent-based run: the levels of agents added by a module written as code (e.g. `ss.Births`), drawn from each dimension's split, as the declared births draw them (see `ss.solvers.Agents.add_people()`) """
+        sim = self.sim
+        people = sim.people
+        for strat in self.strats:
+            if strat.kind in ['age', 'strain', 'disease'] or strat.female is not None: # Ages are their own, a sex dimension is people.female (see set_sex()), and newborns have no strain
+                continue
+            rvs = getattr(sim, f'rng_strat_{strat.name}').rvs(uids)
+            if strat.cond is not None:
+                people[strat.attr][uids] = strat.draw(sim, uids, rvs)
+            else:
+                people[strat.attr][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+        self.groups_changed(uids)
+        return
+
     def set_sex(self, uids, from_level=False):
         """ In an agent-based run with a dimension called sex: its level for some agents from people.female (or, if from_level, the other way round) """
         sim = self.sim

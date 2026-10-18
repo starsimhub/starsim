@@ -410,6 +410,8 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.dur):
             if other.is_array:
                 return ss.DateArray(np.vectorize(self.__add__)(other))
+            elif other.base in ['days', 'weeks'] and np.isclose(other.days, round(other.days)): # A whole number of days is added as days, not as a share of a year (which is a day off after a leap day)
+                return self._timestamp_add(pd.Timedelta(days=round(other.days)))
             else:
                 return date(self.to_year() + other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):

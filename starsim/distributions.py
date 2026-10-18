@@ -187,7 +187,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=['module', 'inputs', 'declared'], subclasses=(Dists, ss.solvers.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', 'declared'], subclasses=(Dists, ss.solvers.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found

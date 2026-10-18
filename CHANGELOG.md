@@ -74,6 +74,19 @@ This version adds a way to write a model as declared states and transitions, whi
 - Under Gillespie by place (`solver='gillespie'` with places that do not affect each other within a step), counts such as an environmental pressure are settled after the step's register events, as SimInf does, so people who move count towards the place they arrive at. In the SimInf SISe3 example, infection now spreads between herds as fast as in SimInf (it was about 25% slower).
 
 ### Bugfixes
+- A condition naming another disease's state (`where=A.Ca` in disease B) used B's own state of that name.
+- The state everyone starts in depended on the order transitions were declared, and `to_code()` wrote transitions in alphabetical order, so a round trip could start everyone elsewhere; `ss.Disease(first=...)` names it, `to_spec()` and `to_code()` always write it, and `to_code()` keeps the declaration order.
+- `sim.new()` and `ss.parallel()` on a subclassed sim (`fp.Sim`, `sti.Sim`, `hpv.Sim`, a fit's sim) returned an empty `ss.Sim`; they rebuild the subclass, or raise. Settings changed after construction (`sim.pars.stop = 30`) survive `new()` and `ss.parallel()`.
+- A declared subclass that overrides a coded method (`set_prognoses()` on an `ss.SIS` subclass) raises, naming the coded class to use (`ssl.CodedSIS`); the override was ignored.
+- A branch whose rate varies in time moved everyone at the start in compartmental runs; it waits at its rate and records its flow.
+- Times on the step grid are compared with a tolerance (`ss.months(7)` at `dt=1/12` was delivered a step late), and whole days are added to dates as days.
+- A cure leaves every infected state, and asks for `to=` when recovery leads to several states; `describe()` says what it does.
+- A value by level of a dimension the states do not have raises `MissingDimension` (it took the first level).
+- Newborns from `ss.Births` and other modules written as code are placed by each dimension's split (they all joined the first level).
+- Results of agents with weights (`people.scale`) are weighted.
+- `where=` with `p=` on a transition fires, and a function `p=` leaves the remainder, as agents and in the ODE.
+- Three crossed diseases as an ODE no longer stall building (a quadratic lookup in the crossing).
+- A keyword a declared disease does not use raises an error that points to `disease.define_pars(...)`.
 - A result key such as `plot(key='cpr')` matches the result named `cpr` when it is also part of other names.
 - `ss.MultiSim(sims)` of sims that have run has their results across runs (`msim.results`) without running them again.
 - A coded disease whose people were infected but whose `new_infections` are all 0 warns that its `set_prognoses()` should call `super()`.

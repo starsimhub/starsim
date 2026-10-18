@@ -181,6 +181,10 @@ def test_states():
     assert np.isclose(*sizes, rtol=0.05)
     with pytest.raises(ss.InvalidAdjustment): # Susceptible people have no clinical level
         ss.Sim(clinical(adjust={'rel_sus': [1, 2]}), **kw).init()
+    with pytest.raises(ss.MissingDimension): # Nor is there a level to take a value by clinical level from (before, it took the first)
+        seir = ss.Disease(infection=ss.transmission('S -> E', beta=0.4, source='I'), onset=ss.progression('E -> I', rate=ss.by(clinical=[0.2, 0.4])), recovery=ss.progression('I -> R', dur=7), init=dict(I=0.01), name='seir')
+        seir.stratify(clinical=['mild', 'severe'], states=['I'], split=[0.8, 0.2])
+        ss.Sim(seir, **kw).init()
     return sims
 
 
@@ -347,6 +351,13 @@ def test_space():
     with pytest.raises(ss.NoGeography):
         sir = ss.Disease(recovery=ss.progression('I -> R', dur=3)).stratify(patch=['a', 'b'], mobility=ss.gravity())
         ss.Sim(sir, **kw).init()
+
+    # Newborns from ss.Births, written as code, are placed by the split, as declared births are (before, all in the first place)
+    sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
+    sis.stratify(patch=['a', 'b', 'c'], kind='space', split=[0.4, 0.3, 0.3])
+    sim = ss.Sim(sis, n_agents=5_000, demographics=[ss.Births(birth_rate=ss.peryear(40)), ss.Deaths(death_rate=ss.peryear(40))], start=2000, stop=2020, verbose=0).run()
+    n = sim.results.sis.n_S.by('patch').values[-1] + sim.results.sis.n_I.by('patch').values[-1]
+    assert np.allclose(n/n.sum(), [0.4, 0.3, 0.3], atol=0.03) # Was 0.73, 0.13, 0.13
     return peaks
 
 

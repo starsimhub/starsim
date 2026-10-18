@@ -129,6 +129,15 @@ class Agents(Engine):
         out = self.sim.groups.group_raw()[uids]
         return out if state is None else self.collapse[state.name][out]
 
+    def weights(self, uids):
+        """ The number of people each of some agents stands for relative to the others (`people.scale`), or None if every agent stands for the same number """
+        people = self.sim.people
+        return people.scale.raw[uids] if people.scale.weighted else None
+
+    def n_of(self, uids):
+        """ The number of people some agents stand for, before the population scale: their number, or, if agents are weighted (`people.scale`), the sum of their weights """
+        return len(uids) if not self.sim.people.scale.weighted else float(self.sim.people.scale.raw[uids].sum())
+
     def strain_raw(self):
         """ The strain each agent carries, as an array indexed by UID """
         return self.sim.groups.level_raw(self.strain)
@@ -168,12 +177,14 @@ class Agents(Engine):
         out = self.mult_raw(kind, name)
         return out if np.ndim(out) == 0 else out[uids]
 
-    def force(self, uids, tr, dst):
-        """ Move agents who are in a state a transition leaves from to a state, along the transition (as when a treatment cures) """
-        moved = self.move_states(uids, tr.src, dst)
-        self.flowcounts[tr.name] += len(moved)
+    def force(self, uids, tr, dst, srcs=None):
+        """ Move agents who are in a state a transition leaves from (or in `srcs`) to a state, counted in the transition's flow if there is one (as when a treatment cures) """
+        moved = self.move_states(uids, tr.src if srcs is None else srcs, dst)
+        if tr is None:
+            return len(moved)
+        self.flowcounts[tr.name] += self.n_of(moved)
         if self.sim.groups.n_groups > 1 and len(moved):
-            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(moved, dst), minlength=self.sim.groups.n_groups)
+            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(moved, dst), weights=self.weights(moved), minlength=self.sim.groups.n_groups)
         self.forced[tr.name] = ss.uids.concatenate([self.forced[tr.name], moved]) if tr.name in self.forced else moved
         return len(moved)
 
@@ -365,6 +376,13 @@ class Agents(Engine):
             return vals.astype(float)
         return np.bincount(self.collapse[state.name], weights=vals, minlength=self.sim.groups.n_groups)
 
+    def weighted_count(self, state):
+        """ As `counted()`, with each agent counted by its weight (`people.scale`) """
+        uids = self.mod[state.name].uids
+        if self.sim.groups.n_groups == 1:
+            return np.array([self.sim.people.scale.raw[uids].sum()], dtype=float)
+        return np.bincount(self.groups(uids, state), weights=self.sim.people.scale.raw[uids], minlength=self.sim.groups.n_groups)
+
     def by_place(self, vals):
         """ Numbers by group as numbers by place, or None if a group does not say where its people are (when it leaves out the dimension of places) """
         sim = self.sim
@@ -375,7 +393,7 @@ class Agents(Engine):
     def record_stocks(self):
         """ As for the other engines (see `Engine.record_stocks()`), with the number in each state of people as it has been kept since the last census (see `census()`) """
         people = self.graph.people_states
-        counts = {state.name:self.counted(state) for state in people}
+        counts = {state.name:(self.counted(state) if not self.sim.people.scale.weighted else self.weighted_count(state)) for state in people}
         for state in self.graph.states.values():
             if state.name in counts:
                 if self.sim.groups.n_groups > 1:
@@ -502,13 +520,13 @@ class Agents(Engine):
         ti = mod.ti
         mod[src.name][uids] = False
         self.clear_exit(src.name, uids)
-        self.flowcounts[tr.name] += len(uids)
+        self.flowcounts[tr.name] += self.n_of(uids)
         self.events[tr.name] = uids if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], uids])
         if self.sim.groups.n_groups > 1 and not (self.enters(tr, src) and not (tr.contact and self.strain is not None)): # A move into a dimension is recorded at the level people arrive at, once they have one: see finish_moves()
             groups = self.groups(uids, src)
             if tr.contact and self.strain is not None and not self.applies[src.name][self.strain]: # A new infection is recorded under the strain acquired (which, for someone infected again, is already their strain)
                 groups = groups + self.strain_raw()[uids]*int(self.sim.groups.group_mults[self.strain])
-            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(groups, minlength=self.sim.groups.n_groups)
+            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(groups, weights=self.weights(uids), minlength=self.sim.groups.n_groups)
         self._moved.append((tr, src, uids))
         return
 
@@ -558,7 +576,7 @@ class Agents(Engine):
                     self.sim.people[self.sim.groups.strats[d].attr][inds] = level
                     self.sim.groups.groups_changed(inds)
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
-                    self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), minlength=self.sim.groups.n_groups)
+                    self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
         return
 
     def add_offspring(self, tr, uids, ti):
@@ -657,13 +675,20 @@ class Agents(Engine):
             sel = uids[which == i]
             if not len(sel):
                 continue
-            now = np.maximum(np.broadcast_to(self.adjusted(candidates[i].name, sel), len(sel)), 1e-9)
+            raw = np.broadcast_to(self.adjusted(candidates[i].name, sel), len(sel))
+            now = np.maximum(raw, 1e-9)
             before = mod[f'mult_{name}'][sel]
-            changed = now != before
+            stalled = before <= 0 # Their rate was 0 when they entered (e.g. outside a where=), so none of their dwell has passed
+            changed = np.where(stalled, raw > 0, now != before)
             if changed.any():
-                sel, now, before = sel[changed], now[changed], before[changed]
+                sel, now, before, stalled = sel[changed], now[changed], before[changed], stalled[changed]
                 ti_exit = mod[f'ti_exit_{name}'][sel]
-                mod[f'ti_exit_{name}'][sel] = ti + np.maximum(ti_exit - ti, 0)*before/now
+                new_exit = np.empty(len(sel))
+                ok = ~stalled
+                new_exit[ok] = ti + np.maximum(ti_exit[ok] - ti, 0)*before[ok]/now[ok]
+                if stalled.any(): # Now that their rate is not 0, a dwell is drawn from now
+                    new_exit[stalled] = ti + self.sample_dwell(candidates[i], sel[stalled])/self.dt - 0.5
+                mod[f'ti_exit_{name}'][sel] = new_exit
                 mod[f'mult_{name}'][sel] = now
         return
 
@@ -675,7 +700,8 @@ class Agents(Engine):
             self._uids = uids
             mean = self.dwell_mean(tr.name)
             rvs = rvs*(mean if np.ndim(mean) == 0 or len(mean) == len(uids) else np.asarray(mean)[uids])
-        return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
+        with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a where=) is a dwell that does not end until it changes: see rescale_exits()
+            return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
 
     #%% Stepping
 
@@ -857,9 +883,9 @@ class Agents(Engine):
             new = self.add_people(enter, self.mod.ti, f'born_{tr.name}', newborn=not tr.migration)
             if not tr.migration and not any(strat.kind == 'age' for strat in sim.groups.strats):
                 sim.people.age[new] = 0
-            self.flowcounts[tr.name] += len(new)
+            self.flowcounts[tr.name] += self.n_of(new)
             if sim.groups.n_groups > 1:
-                self.flow_groups[tr.name] = np.bincount(self.groups(new), minlength=sim.groups.n_groups)
+                self.flow_groups[tr.name] = np.bincount(self.groups(new), weights=self.weights(new), minlength=sim.groups.n_groups)
         return
 
     def step_transfers(self, dt):
@@ -885,8 +911,8 @@ class Agents(Engine):
             if len(uids):
                 hazard = (self.eval_for(tf.rate, uids) if tf.rate is not None else 1/self.eval_for(tf.dur, uids))*self.mult('transition', tf.name, uids)
                 moving = uids[self.dists[f'transfer_{name}'].rvs(uids) < -np.expm1(-np.maximum(hazard, 0)*dt)]
-                self.flowcounts[name] += len(moving)
-                self.flow_groups[name] = np.bincount(self.groups(moving), minlength=sim.groups.n_groups)
+                self.flowcounts[name] += self.n_of(moving)
+                self.flow_groups[name] = np.bincount(self.groups(moving), weights=self.weights(moving), minlength=sim.groups.n_groups)
                 arr[moving] = dst
                 sim.groups.groups_changed(moving)
         rates = sim.mixing.migration
@@ -1075,7 +1101,7 @@ class Agents(Engine):
         total = sum(k for dst,states,k in enter)
         if not total:
             return ss.uids()
-        new = people.grow(total)
+        new = people.grow(total, placed=True)
         dsts = np.concatenate([np.full(k, dst) for dst,states,k in enter])
         sets = [states for dst,states,k in enter for i in range(k)]
         d = sim.mixing.space

@@ -560,11 +560,24 @@ class Engine:
                     if tr.src and not any(self.applies[src.name][d] for src in tr.src) and not (d == self.strain and tr.contact):
                         raise ss.InvalidAdjustment(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since the people it moves ({sc.strjoin(src.name for src in tr.src)}) have no level of "{strat.name}". '
                                                    f'To make where they arrive depend on it, give "{strat.name}" a split instead.')
+                    if not tr.src and tr.dst and not any(self.applies[dst.name][d] for dst in tr.dst): # An inflow into states with no level of it: all of it would arrive at the first level, at that level's multiplier
+                        raise ss.InvalidAdjustment(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since what it brings in ({sc.strjoin(dst.name for dst in tr.dst)}) has no level of "{strat.name}". '
+                                                   f'Stratify {sc.strjoin(dst.name for dst in tr.dst)} by "{strat.name}" too (e.g. kind=\'space\' for a place), or leave the adjustment out.')
                     if d == self.strain and tr.contact:
                         self.strain_adjust[name] = vals
                     else:
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*sim.groups.group_vals(d, vals)
+        for name,tr in self.graph.transitions.items(): # A value by level of a dimension that the states moved have no level of: there is no level to take (it took the first)
+            ends = tr.src or tr.dst or []
+            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
+                for leaf in (expr.leaves if isinstance(expr, ss.transitions.Expr) else []):
+                    if isinstance(getattr(leaf, 'raw', None), ss.by):
+                        for d in leaf.raw.check(sim)[0]:
+                            if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
+                                dim = sim.groups.strats[d].name
+                                raise ss.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
+                                                          f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by().')
         self.init_strain_weights()
         return
 
@@ -1069,6 +1082,10 @@ class Engine:
         graph = self.graph
         res = mod.results
         ti = mod.ti
+        if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
+            for key in [f'n_{name}' for name in self.stocks] + list(self.flowcounts):
+                if res[key].values.dtype.kind in 'iu':
+                    res[key].init_values(dtype=float, force=True)
         for name,val in self.stocks.items():
             res[f'n_{name}'][ti] = val
         for name,val in self.flowcounts.items():
