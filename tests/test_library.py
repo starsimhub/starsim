@@ -86,7 +86,7 @@ def test_diseases():
 @sc.timer()
 def test_compartments():
     """
-    Check the SEIR-type library diseases keep consistent compartments
+    Check the SEIR-type library diseases (written as code) keep consistent compartments
 
     'exposed' and 'infectious' are the literal E and I compartments, while 'infected' is
     derived as E plus I. Infections are counted when they happen rather than inferred from
@@ -96,7 +96,7 @@ def test_compartments():
     sc.heading('Testing disease compartments...')
 
     diseases = dict(
-        seir    = ss.SEIR(beta=ss.perday(0.3), init_prev=0.1),
+        codedseir = ssl.CodedSEIR(beta=ss.perday(0.3), init_prev=0.1),
         cholera = ssl.Cholera(beta=ss.perday(0.5), init_prev=0.1),
         ebola   = ssl.Ebola(beta=ss.perday(0.1), init_prev=0.1),
         measles = ssl.Measles(beta=ss.perday(0.3), init_prev=0.1),
@@ -215,7 +215,7 @@ def test_mnch():
     """ Check that the MNCH modules run and produce their headline outcomes """
     sc.heading('Testing MNCH modules...')
 
-    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()]
+    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
     networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
     sims = sc.objdict()
 
@@ -240,7 +240,7 @@ def test_mnch():
     sims.sepsis = sim
 
     # Fetal health: infection during pregnancy should restrict growth
-    sim = ss.Sim(diseases=ss.SIR(beta=ss.peryear(20)), demographics=demographics(),
+    sim = ss.Sim(diseases=ssl.CodedSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
                  connectors=ssl.mnch.fetal_infection(), custom=ssl.mnch.FetalHealth(),
                  interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2003),
                  networks=networks(), **mnch_pars)

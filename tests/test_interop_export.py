@@ -67,11 +67,11 @@ def test_sbml(tmp_path):
         out.append(back)
 
     # The stages are listed as a change, and what SBML cannot carry as not exported
-    with pytest.warns(RuntimeWarning, match='W1401') as record:
+    with pytest.warns(ss.LossyExport) as record:
         ss.interop.export(make_seird(), 'sbml')
     assert '7 exponential stages' in str(record[0].message)
     sim = ss.Sim(sir(), networks='random', n_agents=500, stratify=dict(age=[0, 18]), unit='day', stop=10, **kw)
-    with pytest.warns(RuntimeWarning, match='W1401') as record:
+    with pytest.warns(ss.LossyExport) as record:
         ss.interop.export(sim, 'sbml')
     msg = str(record[0].message)
     assert 'agent-based' in msg and 'network "randomnet"' in msg and 'stratified (age' in msg
@@ -82,7 +82,7 @@ def test_sbml(tmp_path):
 def test_odin(tmp_path):
     sc.heading('Testing export to odin and back')
     sim = make_seird()
-    with pytest.warns(RuntimeWarning, match='W1401'):
+    with pytest.warns(ss.LossyExport):
         ss.save(tmp_path/'seird.R', sim, format='odin')
     text = sc.loadtext(tmp_path/'seird.R')
     assert 'deriv(S) <- births - deaths_1 - infection' in text and 'beta <- user(0.4)' in text

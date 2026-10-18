@@ -11,9 +11,39 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['provider', 'geography', 'population', 'contact_matrix']
+__all__ = ['provider', 'geography', 'population', 'contact_matrix', 'world', 'age_data', 'age_split']
 
 layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the contact matrices
+
+
+# The default ages of the people of a declared model, as a guess: the world's population in 2024 by 5-year age group
+# (the last is 100 and over), in millions; the sum of the 187 countries of the UN World Population Prospects 2024 in starsim_data
+world = sc.objdict(
+    ages   = np.arange(0, 101, 5, dtype=float),
+    counts = np.array([664.2, 666.0, 663.6, 647.4, 625.3, 609.7, 601.1, 566.7, 530.8, 498.0, 452.7,
+                       410.7, 353.9, 296.2, 219.8, 154.3, 98.6, 49.7, 19.8, 4.7, 0.6]),
+    guess  = "ages as the world's population in 2024",
+)
+
+
+def age_data(ages, counts):
+    """ The `age_data` of `ss.People` for counts by 5-year age group (the last is 100 and over, taken to end at 105) """
+    return np.column_stack([np.append(ages, ages[-1] + 5), np.append(counts, 0)])
+
+
+def age_split(edges, ages, counts):
+    """
+    The share of people in each age group, from counts by 5-year age group, with ages uniform within each
+
+    Args:
+        edges (array): the lower edge of each age group; the last is open-ended
+        ages (array): the lower edge of each 5-year group of the counts
+        counts (array): the number of people in each
+    """
+    ends = np.append(ages, ages[-1] + 5)
+    below = np.interp(np.append(edges, np.inf), ends, np.append(0, np.cumsum(counts))) # People younger than each edge
+    out = np.diff(below)
+    return out/out.sum()
 
 
 def provider():
@@ -27,9 +57,9 @@ def provider():
 
 
 def unknown(place, E, what='place'):
-    """ Raise E605 for a place that the provider cannot resolve, with its suggestions """
+    """ Raise `ss.UnknownLocation` for a place that the provider cannot resolve, with its suggestions """
     msg = str(E).strip('"\'')
-    ss.error('E605', f'the {what} "{place}" was not found in starsim_data: {msg}.')
+    raise ss.UnknownLocation(f'the {what} "{place}" was not found in starsim_data: {msg}.')
 
 
 def ref(ssd, df, **kwargs):
@@ -179,6 +209,6 @@ def contact_matrix(place, source='prem2021', layer='all'):
             unknown(place, E)
         others = [s for s in ['prem2021', 'prem2017', 'mistry2021'] if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
-        ss.error('E605', f'"{source}" has no contact matrix for {key}{hint}.')
+        raise ss.UnknownLocation(f'"{source}" has no contact matrix for {key}{hint}.')
     ages = [float(a) for a in df.index]
     return df.values.astype(float), ages, ref(ssd, df, place=place, source=source, layer=layer, location=df.attrs.get('location'))

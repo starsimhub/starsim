@@ -3,13 +3,15 @@ Test importing SimInf models
 """
 import os
 import tempfile
+import pytest
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import paths
 from starsim.interop.siminf import load_siminf, read_script, event_register, as_matrix, predefined, Unknown
 
-examples = sc.path(__file__).parent.parent.parent / 'lingua_franca_design' / 'examples' / 'siminf' # The originals, if present
+examples = paths.lfd/'examples/siminf' # The originals, if present
 kw = dict(verbose=False)
 
 script = '''
@@ -92,8 +94,7 @@ def test_examples():
     sc.heading('Testing the SimInf examples (if present)')
     folder = examples / 'sir_herds'
     if not folder.exists():
-        print(f'Skipping: {folder} not found')
-        return
+        pytest.skip(paths.no_lfd)
     script = folder/'original'/'events_SIR.R'
     assert [k for k,v in read_script(script).items() if isinstance(v, Unknown)] == ['u0', 'events'] # Computed in R, by u0_SIR() and events_SIR()
     sim = load_siminf(script, u0=folder/'reference'/'u0.csv', events=folder/'reference'/'events.csv.gz', stop=100, **kw) # So passed in, as R wrote them

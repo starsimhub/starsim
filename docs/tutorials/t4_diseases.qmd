@@ -9,16 +9,16 @@ jupyter: python3
 %pip install -q starsim # Install Starsim if required
 ```
 
-Diseases are the cornerstone of almost any Starsim analysis. In this tutorial, you'll learn how to work with diseases in Starsim, starting with simple modifications and building up to creating your own custom disease models.
+Diseases are the cornerstone of almost any Starsim analysis. In this tutorial, you'll learn how to work with diseases in Starsim, starting with simple modifications and building up to creating your own disease models.
 
 By the end of this tutorial, you'll understand how to:
 - Modify parameters of existing diseases
 - Run simulations with multiple diseases
-- Create your own custom disease from scratch
+- Create your own disease from its states and transitions
 
 ## Step 1: Modifying disease parameters
 
-The easiest way to customize a disease is by changing its parameters. Much like sims or networks, a `Disease` can be customized by passing in a `pars` dictionary containing parameters. Let's start with a simple SIR model and see how different parameters affect the simulation:
+The easiest way to customize a disease is by changing its parameters. Much like sims or networks, a disease can be customized by passing in parameters. Let's start with a simple SIR model and see how different parameters affect the simulation:
 
 ```{python}
 import starsim as ss
@@ -29,49 +29,30 @@ sim.run().plot()
 ```
 
 Notice how we modified several key parameters:
-- `dur_inf=10`: How long people stay infectious (10 years)
-- `beta=0.2`: Transmission probability per contact
+- `dur_inf=10`: How long people stay infectious (10 years, since the sim's unit is a year)
+- `beta=0.2`: Transmission rate per contact
 - `init_prev=0.4`: Starting with 40% of the population infected
 - `p_death=0.2`: 20% of infected people die
 
-We already saw that this model creates results that are stored in `sim.results.sir`. The results can also be directly accessed via `sir.results`.
+We already saw that this model creates results that are stored in `sim.results.sir`: a count for each state (`n_S`, `n_I`, `n_R`), and a flow for each transition (`infection`, `recovery`, and `death`). The sim works on its own copy of the disease, so the disease that ran is `sim.diseases.sir` (not the `sir` we made), and its results can also be accessed via `sim.diseases.sir.results`:
+
+```{python}
+print(f'Deaths from the disease: {sim.results.sir.death.cum[-1]:n}')
+sim.diseases.sir.plot()
+```
 
 For more detail on any of the diseases that are in the Starsim library of diseases, please refer to the docstrings and source code of the disease files.
 
 ## Step 2: Simulating multiple diseases
-You can add multiple diseases to the same simulation, like so. Here we are making use of a "connector". A connector is a module in Starsim that tells you how two things relate to one another - in this case, how HIV modifies a person's transmissibility and susceptibility to SIS and vice versa. Unlike dieases, networks, interventions, etc., connectors don't have any pre-specified location in the sim. Instead, they can be placed wherever they make the most sense (for example, a connector that mediated how two networks behaved might be placed at the beginning or end of the list of networks; for diseases, it might be placed at the beginning or end of the list of diseases).
+You can add multiple diseases to the same simulation. Here we model HIV together with a sexually transmitted SIS infection, and say how HIV changes a person's susceptibility to the SIS infection and their transmissibility of it. Each of these interactions is a *modifier*, made with `ss.modify()`: for example, `ss.modify(sis.rel_sus, multiply=2, where=hiv.cd4 < 500)` reads as "for people with a CD4 count below 500, multiply their susceptibility to SIS by 2". Modifiers that are part of the biology are passed to the sim as `connectors`:
 
 ```{python}
 #| jupyter: {outputs_hidden: false}
 import starsim as ss
 import starsim.library as ssl
 
-class simple_hiv_sis(ss.Module):
-    """ Simple connector whereby rel_sus to SIS doubles if CD4 count is <200"""
-    def __init__(self, pars=None, label='HIV-SIS', **kwargs):
-        super().__init__()
-        self.define_pars(
-            rel_trans_hiv  = 2,
-            rel_trans_aids = 5,
-            rel_sus_hiv    = 2,
-            rel_sus_aids   = 5,
-        )
-        self.update_pars(pars, **kwargs)
-        return
-
-    def step(self):
-        """ Specify how HIV increases SIS rel_sus and rel_trans """
-        sis = self.sim.people.sis
-        hiv = self.sim.people.hiv
-        p = self.pars
-        sis.rel_sus[hiv.cd4 < 500] = p.rel_sus_hiv
-        sis.rel_sus[hiv.cd4 < 200] = p.rel_sus_aids
-        sis.rel_trans[hiv.cd4 < 500] = p.rel_trans_hiv
-        sis.rel_trans[hiv.cd4 < 200] = p.rel_trans_aids
-        return
-
 # Make HIV
-hiv = ssl.diseases.HIV(
+hiv = ssl.HIV(
     beta = {'mf': [0.0008, 0.0004]},  # Specify transmissibility over the MF network
     init_prev = 0.05,
 )
@@ -82,84 +63,85 @@ sis = ss.SIS(
     init_prev = 0.025,
 )
 
-# Make the sim, including a connector between HIV and SIS:
+# How HIV changes SIS: twice as susceptible and transmissible with a CD4 count below 500, and 5 times below 200
+hiv_sis = [
+    ss.modify(sis.rel_sus,   multiply=2,   where=hiv.cd4 < 500),
+    ss.modify(sis.rel_sus,   multiply=2.5, where=hiv.cd4 < 200),
+    ss.modify(sis.rel_trans, multiply=2,   where=hiv.cd4 < 500),
+    ss.modify(sis.rel_trans, multiply=2.5, where=hiv.cd4 < 200),
+]
+
+# Make the sim, including the connectors between HIV and SIS:
 n_agents = 5_000
-sim = ss.Sim(n_agents=n_agents, networks='mf', diseases=[simple_hiv_sis(), hiv, sis])
+sim = ss.Sim(n_agents=n_agents, networks='mf', diseases=[hiv, sis], connectors=hiv_sis)
 sim.run()
 sim.plot('hiv')
 sim.plot('sis')
 ```
 
-You can see how the two diseases interact - HIV creates a vulnerable population that's more susceptible to SIS infection.
+You can see how the two diseases interact - HIV creates a vulnerable population that's more susceptible to SIS infection. Modifiers multiply each other, so someone with a CD4 count below 200 is 2 × 2.5 = 5 times as susceptible. A modifier never overwrites the quantity it changes, so modifiers from several modules (or a disease's own immunity) combine.
 
 ## Step 3: Creating your own disease model
 
-Now for the fun part - creating your own disease from scratch! Rather than starting from a blank page, the easiest approach is usually to inherit from one of the templates in `diseases.py` and change only what's different.
+Now for the fun part - creating your own disease! In Starsim, a disease is a set of states and the transitions between them, so creating one is mostly a matter of writing these down.
 
-Let's turn the SIR model into an SIRS model, where immunity wanes: recovered agents eventually become susceptible again. This is what lets a disease settle into endemic transmission rather than burning through the population once and disappearing.
+Let's turn the SIR model into an SIRS model, where immunity wanes: recovered agents eventually become susceptible again. This is what lets a disease settle into endemic transmission rather than burning through the population once and disappearing. All it takes is one more transition, from `R` back to `S`:
 
 ```{python}
-import numpy as np
-import starsim as ss
-
-class SIRS(ss.SIR):
-    def __init__(self, pars=None, *args, **kwargs):
-        super().__init__()
-        self.define_pars(
-            dur_imm = ss.lognorm_ex(mean=ss.years(10)), # How long immunity lasts after recovery
-        )
-        self.update_pars(pars, **kwargs)
-
-        # SIR states are added automatically; here we add the time of losing immunity
-        self.define_states(
-            ss.FloatArr('ti_susceptible', label='Time of becoming susceptible again'),
-        )
-        return
-
-    def set_progression(self, uids):
-        """ Schedule recovery and death as usual, then schedule the waning of immunity """
-        super().set_progression(uids)
-        recovering = uids[np.isfinite(self.ti_recovered[uids])] # Agents who are going to die have ti_recovered = NaN
-        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + self.pars.dur_imm.rvs(recovering)
-        return
-
-    def step_state(self):
-        """ Do the usual SIR transitions, then return agents whose immunity has waned to susceptible """
-        super().step_state()
-        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
-        self.recovered[waning] = False
-        self.susceptible[waning] = True
-        return
+sirs = ss.Disease(
+    infection = ss.transmission('S -> I', beta=ss.peryear(0.1)),
+    recovery = ss.progression('I -> R', dur=ss.years(10)),
+    waning = ss.progression('R -> S', dur=ss.years(5)), # Immunity lasts 5 years on average
+    init_prev = 0.01,
+)
 ```
 
-The new class includes the following main changes:
+Each keyword is a transition, and its name (`infection`, `recovery`, `waning`) is also the name of its result. A duration (`dur=`) is the mean time spent in a state before the transition, exponentially distributed unless you give a distribution.
 
-1. In `__init__` we added the extra parameter (`dur_imm`) and state (`ti_susceptible`) that the model needs. We don't need to redefine the SIR states, since we inherit them.
-2. `ss.SIR.set_prognoses()` does two things: it calls `set_infection()` to make the agents infectious, then `set_progression()` to schedule what happens to them next. Waning immunity is part of the second, so that's the only one we extend - we call `super()` to do the usual scheduling, then sample a waning time for everyone who is going to recover. Agents who are going to die instead have `ti_recovered` set to `NaN`, which is how we filter them out.
-3. `step_state()` likewise calls `super()` and adds only the recovered → susceptible transition.
+If you want to use the disease more than once with different values, you can write it as a class, with its states declared and its parameters as `ss.par`, which can then be changed like those of any library disease:
+
+```{python}
+class SIRS(ss.Disease):
+    S, I, R = ss.states(3)
+    beta = ss.par(ss.peryear(0.1))     # Transmission rate per contact
+    dur_inf = ss.par(ss.years(10))     # How long people are infectious
+    dur_imm = ss.par(ss.years(10))     # How long immunity lasts after recovery
+    infection = S >> I @ beta * I      # S goes to I at rate beta times the chance that a contact is infectious
+    recovery = I >> R @ dur_inf        # A duration after @ is a mean time in the state
+    waning = R >> S @ dur_imm
+```
 
 Here's how it looks in practice:
 
 ```{python}
-sirs = SIRS(dur_imm=ss.lognorm_ex(mean=ss.years(5)))
-sim = ss.Sim(diseases=sirs, networks='random', dur=100, verbose=0)
+sirs = SIRS(dur_imm=ss.years(5), init_prev=0.01)
+sim = ss.Sim(diseases=sirs, networks='random', stop=100, verbose=0)
 sim.run()
 sim.diseases.sirs.plot()
 ```
 
-Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes.
+Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes. The disease is called `sirs`, after its class.
 
-The other classic extension is to add an "exposed" state, for agents who are infected but not yet infectious. That one is built into Starsim as `ss.SEIR`, and it's made in much the same way as `SIRS` above - except that it overrides `set_infection()` rather than `set_progression()`, so that agents enter `exposed` at the moment of transmission and `infectious` only after the latent period `dur_exp` has passed:
+The other classic extension is to add an "exposed" state, for agents who are infected but not yet infectious. That one is built into Starsim as `ss.SEIR`, but it is just as quick to write down. Note that the source of infection is `I`, not `E`: an exposed agent doesn't transmit:
 
 ```{python}
-sim = ss.Sim(diseases=ss.SEIR(), networks='random', verbose=0)
+class SEIR(ss.Disease):
+    S, E, I, R = ss.states(4)
+    beta = ss.par(ss.peryear(0.1))
+    exposure = S >> E @ beta * I       # Exposed by contact with infectious people
+    onset = E >> I @ ss.years(1)       # Infectious after a latent period
+    recovery = I >> R @ ss.years(10)
+
+sim = ss.Sim(diseases=SEIR(init_prev=0.01), networks='random', verbose=0)
 sim.run()
 sim.diseases.seir.plot()
 ```
 
-Note that an exposed agent doesn't transmit, because transmission uses `infectious`, which in `ss.SEIR` is the I compartment alone. But an exposed agent *does* have the infection, so `n_infected` and `prevalence` count both E and I: in `ss.SEIR`, `infected` is derived as `exposed | infectious`. See [Infected vs. infectious](../user_guide/modules_diseases.qmd#infected-vs-infectious) for why the two names come apart.
+Writing a disease from states and transitions has another advantage: the same disease can run as agents (as here, on a network) or, without a network, as an ODE or a stochastic compartmental model (see [T2](t2_model.qmd)).
+
+Some diseases need more than states and transitions: for example a per-agent quantity that changes continuously, like a CD4 count or a level of immunity. These are written as code, as a subclass of `ss.Infection` with its own methods, as Starsim's HIV model is. See [Diseases](../user_guide/modules_diseases.qmd) in the user guide for how.
 
 ## Exercises
 1. **Parameter exploration**: Try different values of `dur_imm` in the SIRS model - how does it affect the epidemic curve?
-2. **SEIRS model**: Apply the same waning immunity to `ss.SEIR` to make an SEIRS model.
+2. **SEIRS model**: Apply the same waning immunity to the SEIR model to make an SEIRS model.
 3. **Multi-strain model**: Can you create a model with two strains of the same disease that provide partial cross-immunity?

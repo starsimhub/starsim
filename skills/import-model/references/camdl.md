@@ -25,7 +25,7 @@ or `ss.load(m)` on a live pycamdl model, if pycamdl can be imported where Starsi
 | A birth or death (`--> S`, `S -->`) | An inflow or an outflow against `ss.null` | yes |
 | `let N = S + I + R` | A named expression, written out where it is used | yes |
 | Parameters with bounds, priors (`log_normal`, `normal`, `beta`, `gamma`, `exponential`, `uniform`, `truncated_normal`, `half_normal`; a flat prior is the bounds), and docs | `ss.par(value, bounds=[...], prior=ss.lognorm_im(mean=mu, sigma=sigma), doc=...)` | yes |
-| Observations of a flow (`incidence(...)`) with a share (`rho * projected`), weekly (`closing_at(time, 7 'days)`), and a likelihood (`neg_binomial`, `poisson`, `normal` with a fixed sd) | `ss.outcome(rho * infection, every=ss.days(7), likelihood=ss.nbinom(n=k))` | yes |
+| Observations of a flow (`incidence(...)`) with a share (`rho * projected`), weekly (`closing_at(time, 7 'days)`), and a likelihood (`neg_binomial`, `poisson`, `normal` with a fixed sd) | `ss.outcome(rho * infection, likelihood=ss.nbinom(n=k))` (weekly data is compared with the total over each week) | yes |
 | `time_unit`, `simulate { from, to }`, `dt` | `unit=`, `start=`, `stop=`, `dt=` | yes |
 | `init`, including expressions of parameters and other compartments | `init=dict(...)` (worked out to numbers) | yes |
 | A guard, `N > 0 ? I/N : 0` | `(N > 0) * (I / maximum(N, 1e-300))`, which is 0 for an empty group rather than 0/0 | yes |
@@ -33,15 +33,15 @@ or `ss.load(m)` on a live pycamdl model, if pycamdl can be imported where Starsi
 | Dimensions, `stratify()`, families, tables, `sum(b in age, ...)`, aging along a dimension, movement | One state per combination of levels (`S_child_north`), with the IR's rates; exact, but not written as `stratify()` (listed in the notes) | yes, flat |
 | An initial number drawn from a distribution | Its mean (listed) | no |
 | A forcing function of time (`sinusoidal`, `periodic`, `piecewise`) | A parameter set to 1 (listed): write it as `ss.seasonal(...)` or `ss.timeseries(...)` | no |
-| Interventions (off unless enabled) and events (`transfer`, `add` at times) | Left out (an intervention, noted) or listed (an event, or an intervention a scenario enables) | no |
+| Interventions (off unless enabled) and events (`transfer`, `add` at times) | Listed in `ImportIncomplete`, with the scenarios that enable each (a one-off move between states has no declared form yet) | no |
 | A compartment with an ODE (`ode`), a reaction such as `A + B --> C` | Listed | no |
 | An observation of a number in states (`prevalence`), a ratio of flows | A result, or listed; give the likelihood when calibrating | no |
 | Fitting (NUTS, IF2, PMMH) | `sim.calibrate()` (NUTS when every series has a likelihood and the sim is an ODE) | by hand |
 
 ## What needs care
 
-- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, age=[0, 5, 50])` (see the worked example). Check it against the flat import with the validate-import skill before replacing one with the other.
-- **A one-off move between states has no declared form.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed. The closest declared form is a fully effective vaccine, `ss.vaccinate(ss.Vaccine(efficacy=1.0), years=[20], coverage=0.6, eligible=...)`, which gives the same infections but leaves the people in `S`; compare infections and `I`, not `S` and `R`.
+- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, bands=[0, 5, 50])` (see the worked example). Check it against the flat import with the validate-import skill before replacing one with the other.
+- **A one-off move between states has no declared form.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed. The closest declared form is a fully effective vaccine, `ss.vaccinate(ss.Vaccine(efficacy=1.0), at=[20], coverage=0.6, where=...)`, which gives the same infections but leaves the people in `S`; compare infections and `I`, not `S` and `R`.
 - **Interventions are off unless enabled**, in camdl as in pycamdl (`--enable vaccinate`, `run(enable=[...])`); events always happen.
 - **Give the solver.** The import runs as an ODE (`solver='ode'`, camdl's `--backend ode`); camdl's default backend is chain-binomial (`solver='binomial'`). At a step of a day the binomial import's mean infectious curve is within 0.9% of camdl's 200 runs; at a quarter of a day it is 12% away, since the two schemes differ by order dt.
 - **An initial number below 1** is read by Starsim as a fraction of the population, not a number of people.
@@ -49,7 +49,7 @@ or `ss.load(m)` on a live pycamdl model, if pycamdl can be imported where Starsi
 
 ## Worked example
 
-`lingua_franca_design/vignettes/camdl/sir/sir.py` (an SIR with weekly cases and a negative-binomial likelihood) and `lingua_franca_design/vignettes/camdl/stratified/model.py` (SEIR by age and patch). `ss.load('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))` gives the vignette's model, with its priors, and agrees with camdl's ODE to camdl's rounding (its compartments are written as whole numbers: within 0.5 people) and to 1e-7 in the daily infections and weekly cases. The pycamdl SEIR by age and patch (24 states, 58 transitions, with aging and movement), written with `dump_pycamdl.py`, agrees with pycamdl's ODE to 3e-16 in every compartment; its vaccination is an intervention, off unless enabled, and left out. The declared form of the stratified model, by hand:
+`lingua_franca_design/vignettes/camdl/sir/sir.py` (an SIR with weekly cases and a negative-binomial likelihood) and `lingua_franca_design/vignettes/camdl/stratified/model.py` (SEIR by age and patch). `ss.load('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))` gives the vignette's model, with its priors, and agrees with camdl's ODE to camdl's rounding (its compartments are written as whole numbers: within 0.5 people) and to 1e-7 in the daily infections and weekly cases. The pycamdl SEIR by age and patch (24 states, 58 transitions, with aging and movement), written with `dump_pycamdl.py`, agrees with pycamdl's ODE to 3e-16 in every compartment; its vaccination is an intervention, off unless enabled, and listed. The declared form of the stratified model, by hand:
 
 ```python
 contacts = [[12, 4, 1], [4, 8, 2], [1, 2, 3]]
@@ -63,7 +63,7 @@ seir = ss.Disease(
 )
 seir.stratify(age=[0, 5, 50]) # Children, adults, and elders, who age at 1/5 and 1/45 a year
 seir.stratify(patch=['north', 'south'], kind='space', split=pop, mobility=ss.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
-sim = ss.Sim(seir, networks=ss.contacts(contacts, age=[0, 5, 50]), total_pop=13_510, unit='day', stop=150)
+sim = ss.Sim(seir, networks=ss.contacts(contacts, bands=[0, 5, 50]), total_pop=13_510, unit='day', stop=150)
 ```
 
 Over camdl's own test models (85 files), 84 import and run; 54 with nothing listed, and the rest listing forcing functions of time (17), observations of numbers in states (11), ODE compartments (7), and events (7).

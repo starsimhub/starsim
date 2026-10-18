@@ -130,7 +130,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, birth_rate=ss.freqperyear(10), death_rate=ss.freqperyear(10/1010*1000), dur=ss.years(200), rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, demographics=[ss.birth(rate=ss.peryear(0.01)), ss.death(rate=ss.peryear(0.01/1.01))], dur=ss.years(200), rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
@@ -145,11 +145,11 @@ def test_constant_pop(do_plot=False):
 def test_module_adding():
     """ Test that modules can't be added twice """
     sc.heading('Testing module duplication')
-    births = ss.Births(birth_rate=ss.freqperyear(10))
-    deaths = ss.Deaths(death_rate=ss.freqperyear(10))
+    births = ss.Births(birth_rate=ss.time.freq(10, 'year'))
+    deaths = ss.Deaths(death_rate=ss.time.freq(10, 'year'))
     demographics = [births, deaths]
-    with pytest.raises(ValueError):
-        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.freqperyear(10), death_rate=ss.freqperyear(10)).run()
+    with pytest.raises(ValueError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
+        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.time.freq(10, 'year')).run()
     return demographics
 
 
@@ -196,8 +196,8 @@ def test_pregnancy():
     sim = ss.Sim(
         n_agents=20e3, # Large enough that the <18 mother cohort has a robust sample (~85 babies) for the gestational-age assertions below
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(20), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.years(10),
         rand_seed=1,
@@ -275,8 +275,8 @@ def test_pregnancy_short_sim():
     sim = ss.Sim(
         n_agents=1e3,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(10, 'year'), burnin=False),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.days(250),
         rand_seed=1,
@@ -288,7 +288,7 @@ def test_pregnancy_short_sim():
     # Check that a number or a non-choice distribution works for dur_pregnancy, including with fertility data
     asfr = pd.read_csv(datadir/'nigeria_asfr.csv')
     for dur_preg in [39, ss.normal(ss.weeks(39), ss.weeks(1))]:
-        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.month, verbose=0).run().demographics.pregnancy
+        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
         assert 0.7 < preg.mean_dur_pregnancy < 0.8, 'Mean pregnancy should be roughly 39 weeks' # 39 weeks = 0.75 years
 
     sc.printgreen('✓ Short sim pregnancy finalize test passed')
@@ -307,8 +307,8 @@ def test_loss_classification():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(30), p_loss=ss.bernoulli(p=0.05), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=0.05), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.years(5),
         dt=ss.years(1/12),
@@ -345,8 +345,8 @@ def test_background_loss():
         sim = ss.Sim(
             n_agents=5_000,
             demographics=[
-                ss.Pregnancy(fertility_rate=ss.freqperyear(30), p_loss=ss.bernoulli(p=p_loss), burnin=True),
-                ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+                ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=p_loss), burnin=True),
+                ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
             ],
             dur=ss.years(5),
             dt=ss.years(1/12),
@@ -379,12 +379,12 @@ def test_nnd():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         diseases=ssl.mnch.NeonatalSepsis(),
         dur=ss.years(3),
-        dt=ss.years(1/12),
+        dt=ss.days(7), # Weekly, since a sepsis death (about a week after birth) is only seen at a step, and at monthly steps a newborn is a month old by then
         rand_seed=1,
         networks=ss.PrenatalNet(),
     )

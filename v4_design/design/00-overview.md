@@ -15,14 +15,14 @@ S, I, R = ss.states(3)                      # named from the variables they are 
 # --- the disease: transitions, written like the equations ------------------
 infection = S >> I @ beta * I               # "S goes to I at rate beta times I"
 recovery  = I >> R @ dur                    # a duration after @ is a mean dwell time
-cases     = ss.outcome(0.5 * infection, delay=ss.days(5), every=ss.weeks(1))   # half of infections are reported, 5 days later, totaled by week
+cases     = ss.outcome(0.5 * infection, delay=ss.days(5))   # half of infections are reported, 5 days later; weekly data is compared with the total over each week
 sir = ss.Disease(infection, recovery, cases, init_prev=0.01)  # names come from the variable names
 
 # --- a sim: age groups, the mixing that goes with them, and data attached to results by name
 kw  = dict(stratify=dict(age=[0, 15, 65]), networks=ss.contacts('Kenya'), total_pop=50e6, start='2020-01-01', stop='2021-01-01')
 sim = ss.Sim(sir, data='weekly_cases.csv', **kw)     # the file has a column called 'cases'
-sim.describe()                              # the resolved model, with every guessed default marked
-sim.run()                                   # prints the unit (days, from the dates) and "solver: ode (every part has a compartmental form)"
+sim.describe()                              # initializes the sim, which prints "solver: ode (every part of the model has a compartmental form)" and the unit (day, from the typed values); then the resolved model, with every guessed default marked
+sim.run()
 sim.plot()                                  # results, with the data drawn over 'cases'
 
 # --- calibration: fit what has bounds to what has data ---------------------
@@ -37,7 +37,7 @@ sims  = ss.parallel(
 sims.plot()                                 # ss.parallel runs the sims
 
 # --- chance: a sim is one run; many runs are a MultiSim --------------------
-msim = ss.parallel(ss.Sim(sir, solver='stochastic', **kw), n_runs=100)
+msim = ss.parallel(ss.Sim(sir, solver='gillespie', **kw), n_runs=100)
 msim.plot()                                 # the median and an interval
 ```
 
@@ -45,8 +45,9 @@ The short form of the same disease, for when nothing needs a name, is two lines:
 
 ```python
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
+    infection = ss.transmission('S -> I', beta=0.3),
     recovery  = ss.progression('I -> R', dur=10),
+    init_prev = 0.01,
 )
 ss.Sim(sir, stop=100).run().plot()          # nothing has a unit, so time is in timesteps: 100 steps
 ```
@@ -62,24 +63,25 @@ ss.Sim(sir, stop=100).run().plot()          # nothing has a unit, so time is in 
 | **Mixing** | `ss.Sim(networks=...)` | Who contacts whom, and how often? | [06](06-routes.md) |
 | **Interaction** | `ss.modify(...)`, or Python in a module's `step()` | What changes what? | [07](07-effects.md) |
 
-Interventions ([08](08-interventions.md)) are a product or a change to a quantity, plus a delivery. Results ([09](09-results.md)) are automatic for every state and transition, extra ones are declared with the model, and data attaches to them by name. A sim is one run; many runs are an `ss.MultiSim`, made by `ss.parallel(sim, n_runs=100)`. Calibration ([13](13-inference.md)) fits parameters that have bounds to results that have data.
+Interventions ([08](08-interventions.md)) are a product or a change to a quantity, plus a delivery. Results ([09](09-results.md)) are automatic for every state and transition, extra ones are declared with the model, and data attaches to them by name. A sim is one run; many runs are an `ss.MultiSim`, made by `ss.parallel(sim, n_runs=100)` or its shortcut `sim.run(n_runs=100)`. Calibration ([13](13-inference.md)) fits parameters that have bounds to results that have data.
 
 ## The object model
 
 ```
 ss.Sim                          modules, a population, mixing, a timeline, a solver
  ├── modules                    one or more ss.Module
- │     ├── ss.Disease           states people are in, and transitions between them
+ │     ├── ss.Disease           states people are in, and transitions between them (ss.Infection for a disease written as code)
  │     │     ├── ss.State           declared, or inferred from arrow strings; people, or a plain count
  │     │     ├── ss.Transition      contact-mediated or spontaneous (derived from its rate)
  │     │     ├── ss.par             named parameters, in sir.pars
  │     │     └── results            n_<state>, one flow per transition, ss.outcome, ratios
  │     ├── ss.Demographics      births, deaths, pregnancy
- │     ├── ss.Intervention      ss.vaccinate, ss.screen, ss.treat, ss.change
+ │     ├── ss.Intervention      deliveries: ss.vaccinate, ss.screen, ss.treat
  │     └── ss.Connector, ss.Analyzer
  ├── people:   ss.People        size, demography, per-agent attributes
- ├── networks: ss.Network, ss.MixingPool, ss.Mobility     none given means homogeneous mixing
- ├── modifiers: ss.modify       changes to named quantities while a condition holds
+ ├── stratifications            dimensions such as age and place (sim.stratify), with ss.Mobility between places
+ ├── networks: ss.Network, ss.MixingPool     none given means homogeneous mixing
+ ├── modifiers: ss.modify, ss.change     changes to named quantities while a condition holds, or at given times
  ├── loop                       the order modules run in each step (sim.loop)
  └── results                    sim.results, with data attached by name
 ss.MultiSim                     many runs of a sim (ss.parallel); its results have a run dimension
@@ -93,19 +95,19 @@ The same transition can be written three ways, and a module can be built with a 
 
 ```python
 # Arrow strings: states inferred
-infection = ss.transmission('S -> I', beta=0.05)
+infection = ss.transmission('S -> I', beta=0.3)
 
 # Operators: states declared
 S, I, R   = ss.states(3)
-infection = S >> I @ 0.05 * I
+infection = S >> I @ 0.3 * I
 
 # Fully explicit
-infection = ss.Transition(S, I, rate=0.05 * I, name='infection')
+infection = ss.Transition(S, I, rate=0.3 * I, name='infection')
 
 # A class, when there is behavior that is not a transition
 class SIR(ss.Disease):
     S, I, R   = ss.states(3)
-    infection = S >> I @ 0.05 * I
+    infection = S >> I @ 0.3 * I
     recovery  = I >> R @ ss.days(10)
 
     def step(self):
@@ -118,18 +120,19 @@ Subclassing adds behavior. It does not add vocabulary.
 ## Four properties the design aims for
 
 1. **The model is data.** States and transitions are objects, so the diagram, the equations, the stratified model, the hash, and the saved file are all derived from them. The serialized form is the model spec ([14-model-spec.md](14-model-spec.md)).
-2. **The solver is chosen for you, and can be changed.** `solver='auto'` picks the simplest, fastest representation that runs the model faithfully: an ODE if every part has a compartmental form, agents otherwise. `solver='ode' | 'gillespie' | 'tau' | 'binomial' | 'sde' | 'abm'` asks for one. For simple models this is a free run-time choice; for complex models the solver is effectively part of the specification. [12-backends.md](12-backends.md)
-3. **Approximations are stated.** `'auto'` never approximates the mixing and never drops individual-level structure; the one thing it does unasked is represent a non-exponential dwell time by Erlang sub-stages, and it says so. When a solver is asked for that the model does not natively fit, the library uses the standard approximation where one exists and says so in one line; it stops only when there is no sensible approximation. `approx=False` makes any approximation an error and `approx=True` hides the note. `sir.solvers()` shows which solvers can run a model before anything runs.
+2. **The solver is chosen for you, and can be changed.** `solver='auto'` picks the simplest, fastest representation that runs the model faithfully: an ODE if every part has a compartmental form, agents otherwise. `solver='ode' | 'binomial' | 'gillespie' | 'abm'` asks for one. For simple models this is a free run-time choice; for complex models the solver is effectively part of the specification. [12-backends.md](12-backends.md)
+3. **Approximations are stated.** `'auto'` never approximates the mixing and never drops individual-level structure; the one thing it does unasked is represent a non-exponential dwell time by Erlang sub-stages, and it says so. When a solver is asked for that the model does not natively fit, the library uses the standard approximation where one exists and says so in one line; it stops only when there is no sensible approximation. `approx=False` makes any approximation an error, and `approx=True` keeps the note in `sim.notes` without printing it. `sir.solvers()` shows which solvers can run a model before anything runs.
 4. **Defaults are guessed and printed.** `describe()` shows every inferred state, source of infection, dwell-time distribution, unit, and mixing assumption, and which states are people and which are counts. [01-objects.md §`describe()`](01-objects.md#describe)
 
 ## What happens at build time
 
-Nothing is computed when a model is written. `sim.init()`, which `sim.run()` calls if it has not been called already, does four things in order:
+Nothing is computed when a model is written. `sim.init()`, which `sim.run()` (and `sim.describe()`) calls if it has not been called already, does three things in order:
 
-1. **Resolve defaults.** Names are assigned (states and transitions take theirs from the variables they are bound to); states are inferred from arrow strings if none were declared; sources of infection, which states are people, the sim's unit, initial conditions, dwell-time distributions, and the mixing are filled in where they were not given. Every guess is recorded so that `describe()` can mark it.
-2. **Check.** Unknown state and parameter names, shapes that do not match their stratification, branch probabilities that do not sum to 1, values outside their bounds. Problems that can be found here are reported here, before the first timestep, by code and name ([15-errors.md](15-errors.md)).
-3. **Build the model spec.** The resolved model is written out as plain data ([14-model-spec.md](14-model-spec.md)): this is what gets hashed, saved, compared, drawn, and exported.
-4. **Pick the solver.** Under `solver='auto'`, the library checks whether every part has a compartmental form (trying any user functions on groups, and turning a non-exponential dwell time into sub-stages) and chooses an ODE or agents accordingly; under an explicit solver it works out what, if anything, has to be approximated. The choice, the reason, and any approximation are printed.
+1. **Resolve defaults and check.** Names are assigned (states and transitions take theirs from the variables they are bound to); states are inferred from arrow strings if none were declared; sources of infection, which states are people, initial conditions, dwell-time distributions, and the mixing are filled in where they were not given. Unknown state and parameter names, values outside their bounds, and shapes that do not match their stratification are reported here, before the first timestep, as named errors ([15-errors.md](15-errors.md)). Every guess is recorded so that `describe()` can mark it.
+2. **Pick the unit and the solver.** The sim's unit comes from the model ([02-types.md](02-types.md#the-sims-unit)). Under `solver='auto'`, the library checks whether every part has a compartmental form (trying any user functions on groups, and turning a non-exponential dwell time into sub-stages) and chooses an ODE or agents accordingly; under an explicit solver it works out what, if anything, has to be approximated. The choice and its reason are printed (`solver: ode (every part of the model has a compartmental form)`), with a note for the unit if it was inferred and one for each approximation.
+3. **Build the population and the results.** The people (agents, or one row per group in a compartmental run), the initial values of every state, the results, and the loop. For a compartmental run with transmission, it prints R0 and the number infectious at the start (`sir: R0 = 3, with 100 infectious at the start`), as a check that the model and its seed are what was meant.
+
+The model spec ([14-model-spec.md](14-model-spec.md)), which is what gets hashed, compared, and saved as code, is built from the resolved model when it is asked for (`sim.to_spec()`, `sim.hash()`, `ss.diff()`, `sim.to_code()`), not at `init()`.
 
 Then `sim.run()` steps through the loop ([10-execution.md](10-execution.md)), in which modules run in a defined, printable order.
 

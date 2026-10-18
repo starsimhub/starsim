@@ -38,6 +38,23 @@ def strip(df):
     return df
 
 
+def prior_of(val):
+    """ The distribution a parameter is drawn from for each run, as the prior of its ss.par (so ss.parallel(sim, priors=True) draws it), or None for a fixed value """
+    if not isinstance(val, dict):
+        return None
+    dist = str(val.get('distribution', 'fixed')).lower()
+    num = lambda key, default=None: float(val[key]) if key in val else default
+    if dist == 'truncnorm':
+        return ss.truncnorm(loc=num('mean'), scale=num('sd'), low=num('a', -np.inf), high=num('b', np.inf))
+    elif dist in ['norm', 'normal']:
+        return ss.normal(loc=num('mean'), scale=num('sd'))
+    elif dist == 'uniform':
+        return ss.uniform(low=num('low'), high=num('high'))
+    elif dist == 'lognorm':
+        return ss.lognorm_im(mean=num('meanlog'), std=num('sdlog'))
+    return None
+
+
 def mean_of(val, name, src):
     """ The value of a parameter: a number, an expression of numbers, or a distribution (at its mean, listed as not translated) """
     if isinstance(val, dict):
@@ -158,25 +175,26 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     setup = cfg.get('subpop_setup') or {}
     if setup.get('geodata'):
         geo = strip(pd.read_csv(folder / setup['geodata']))
-        places = list(geo['subpop'].astype(str))
-        pop = geo['population'].values.astype(float)
+        allplaces = list(geo['subpop'].astype(str))
+        keep = np.array([p in [str(x) for x in sc.tolist(setup['selected'])] for p in allplaces]) if setup.get('selected') else np.ones(len(allplaces), dtype=bool) # Only the places selected, as flepiMoP does
+        places = list(np.array(allplaces)[keep])
+        pop = geo['population'].values.astype(float)[keep]
+        if not keep.all():
+            notes.append(f'subpop_setup.selected: {len(places)} of the {len(allplaces)} places in the geodata')
         if setup.get('mobility'):
             path = folder / setup['mobility']
             if path.suffix == '.txt':
                 moves = np.loadtxt(path)
             elif path.suffix == '.csv':
                 mob = strip(pd.read_csv(path))
-                moves = np.zeros((len(places), len(places)))
+                moves = np.zeros((len(allplaces), len(allplaces)))
                 for ori,dest,amount in zip(mob['ori'].astype(str), mob['dest'].astype(str), mob['amount'].astype(float)):
-                    moves[places.index(ori), places.index(dest)] += amount
+                    moves[allplaces.index(ori), allplaces.index(dest)] += amount
             else:
                 moves = None
                 src.skip('subpop_setup.mobility', f'the mobility file {path.name} is not a .csv or .txt file')
             if moves is not None:
-                away = 0.5*moves/pop[:, None] # flepiMoP's travelers spend half the day away (percent_day_away = 0.5)
-        for key in ['selected']:
-            if setup.get(key):
-                src.skip(f'subpop_setup.{key}', f'only some places ({setup[key]}) were to be used; all were imported')
+                away = 0.5*moves[keep][:, keep]/pop[:, None] # flepiMoP's travelers spend half the day away (percent_day_away = 0.5)
 
     # Initial numbers, by place and compartment
     ic = cfg.get('initial_conditions') or {}
@@ -188,6 +206,8 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
             comp = str(row['mc_name']) if 'mc_name' in df.columns else compartment([str(row[f'mc_{d}']) for d in dims])
             if comp not in states:
                 src.skip(f'initial_conditions: {comp}', 'names a compartment the model does not have')
+                continue
+            if places and str(row['subpop']) not in places: # A place that was not selected
                 continue
             col = places.index(str(row['subpop'])) if places else 0
             init[states.index(comp), col] += float(row['amount'])
@@ -209,13 +229,15 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
 
     # Parameters
     pars = {}
+    priors = {} # The distributions that parameters are drawn from for each run
     for key,p in (seir.get('parameters') or {}).items():
         p = p if isinstance(p, dict) else dict(value=p)
         if 'timeseries' in p:
             src.skip(key, f'a time series read from {p["timeseries"]}; imported as 1. An ss.timeseries would carry it')
             pars[key] = 1.0
         else:
-            pars[key] = mean_of(p.get('value'), key, src)
+            priors[key] = prior_of(p.get('value'))
+            pars[key] = mean_of(p.get('value'), key, src if priors[key] is None else Source('', '')) # A distribution that becomes a prior is translated
         for extra in ['rolling_mean_windows']:
             if extra in p:
                 src.skip(f'{key}.{extra}', f'"{extra}: {p[extra]}" was not translated')
@@ -240,7 +262,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
             used |= {n.id for n in ast.walk(ast.parse(rate, mode='eval')) if isinstance(n, ast.Name)}
             src.add_flow(frm, to, rate, per='total' if groups else 'person', name=f'{frm}_to_{to}')
     for key in sorted(used & set(pars)):
-        src.add_par(key, pars[key])
+        src.add_par(key, pars[key], prior=priors.get(key))
 
     # Places, as a stratification with commuting; and their initial numbers
     if places:
@@ -259,8 +281,8 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     if method == 'euler':
         notes.append('integration: flepiMoP\'s "euler" moves 1 - exp(-rate*dt) of each compartment a step; run as an ODE')
     cfg_sim = dict(solver=solver, unit='day', total_pop=float(sizes.sum()))
-    if cfg.get('start_date'):
-        cfg_sim.update(start=str(cfg['start_date']), stop=str(cfg['end_date']))
+    if cfg.get('start_date'): # flepiMoP's output includes what happens during its end date, so the sim stops a day later
+        cfg_sim.update(start=str(cfg['start_date']), stop=str(sc.date(str(cfg['end_date'])) + pd.Timedelta(days=1))[:10])
     if float(integ.get('dt', 1)) != 1:
         cfg_sim['dt'] = float(integ['dt'])
     src.config.update(cfg_sim)

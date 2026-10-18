@@ -55,7 +55,7 @@ class Source:
         self.pars[name] = sc.objdict(value=value, doc=doc, bounds=bounds, prior=prior)
         return
 
-    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None):
+    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None, after=None):
         """
         A flow between states
 
@@ -68,11 +68,12 @@ class Source:
             name (str): the name in the source, if it has one
             label (str): a description
             p (list): for a branch (dst a list of states), the probability of each destination, as expressions of parameters (None for the rest)
+            after (dur): a minimum stay in src before the flow can happen (see `ss.Transition`)
         """
-        self.flows.append(sc.objdict(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p))
+        self.flows.append(sc.objdict(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, after=after))
         return
 
-    def add_outcome(self, name, source, p=None, delay=None, duration=None, every=None, doc=None, likelihood=None):
+    def add_outcome(self, name, source, p=None, delay=None, duration=None, doc=None, likelihood=None):
         """
         A reported quantity: a share of a flow, or of another outcome, with a delay (see `ss.outcome`)
 
@@ -82,11 +83,10 @@ class Source:
             p (float/str): the share of the source, as a number (a parameter named p_<name>) or the name of a parameter
             delay (any): the time from the source event, as a duration or a distribution
             duration (any): how long each stays in the outcome, if the number in it is wanted
-            every (dur): a reporting period
             doc (str): a description of the share, for its parameter
             likelihood (func): a function of the parameters (by name) that gives the likelihood, e.g. `lambda pars: ss.nbinom(n=pars.k)`
         """
-        self.outcomes[name] = sc.objdict(source=source, p=p, delay=delay, duration=duration, every=every, doc=doc, likelihood=likelihood)
+        self.outcomes[name] = sc.objdict(source=source, p=p, delay=delay, duration=duration, doc=doc, likelihood=likelihood)
         return
 
     def stratify(self, **kwargs):
@@ -207,6 +207,8 @@ class Rates:
     def counts_of(self, node):
         """ The expression with every state written as its number (I.n), and the total as the sum of the states of people """
         def visit(node):
+            if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'everywhere': # The number in the whole population, every place, e.g. who a program in several populations reaches
+                return ast.Attribute(node.args[0], 'total')
             if isinstance(node, ast.Name) and node.id in self.source.states:
                 return ast.Attribute(node, 'n')
             elif isinstance(node, ast.Name) and node.id == total:
@@ -284,8 +286,15 @@ class Rates:
             how.append('spontaneous' if flow.dst is not None else 'an outflow')
             return ast.unparse(node), how, 4
 
-        # 2. Another state divided by the total is exposure to that state
+        # A parameter that a rate is divided by, and that equals the number of people at the start, is the total
         num, den = factors(node)
+        pop = sum(total_init(self.source.states[k].init) for k in self.people)
+        for i,f in enumerate(den):
+            if isinstance(f, ast.Name) and f.id in self.source.pars and pop and sc.isnumber(self.source.pars[f.id].value) and np.isclose(self.source.pars[f.id].value, pop, rtol=1e-4):
+                den[i] = ast.Name(total)
+                how.append(f'{f.id} taken as the total [guessed: {f.id} = {pop:n}, the number of people at the start]')
+
+        # 2. Another state divided by the total is exposure to that state
         stateful_num = [f for f in num if free(f) & set(self.source.states)]
         stateful_den = [f for f in den if free(f) & (set(self.source.states) | {total})]
         if len(stateful_num) == 1 and len(stateful_den) == 1 and self.is_total(stateful_den[0]) and self.is_people(stateful_num[0]):
@@ -299,7 +308,8 @@ class Rates:
 
         # 3. Another state with no division by the total is mass action between the numbers
         if stateful_num and not stateful_den and all(self.is_people(f) for f in stateful_num):
-            how.append(f'mass action with the number in {sc.strjoin(ast.unparse(f) for f in stateful_num)} (not divided by the total: density-dependent, kept as counts)')
+            divided = f'divided by {sc.strjoin(ast.unparse(f) for f in den)}, not by the population' if den else 'not divided by the total'
+            how.append(f'mass action with the number in {sc.strjoin(ast.unparse(f) for f in stateful_num)} ({divided}: density-dependent, kept as counts)')
             return ast.unparse(self.counts_of(node)), how, 3
 
         # 5. Anything else is kept as written, with counts
@@ -309,8 +319,8 @@ class Rates:
 
 #%% Building the sim
 
-def disease(source):
-    """ The disease for one source, and how each of its flows was read """
+def disease(source, total=None):
+    """ The disease for one source, and how each of its flows was read (total is the number of people, for initial numbers of people below one) """
     rates = Rates(source)
     states = sc.objdict()
     for name,s in source.states.items():
@@ -339,11 +349,16 @@ def disease(source):
                     break
                 name = f'{base}_{i}'
         if flow.dur is not None:
-            tr = ss.Transition(*endpoints, dur=flow.dur, name=name, label=flow.label)
+            tr = ss.Transition(*endpoints, dur=flow.dur, after=flow.get('after'), name=name, label=flow.label)
             lines.append(f'  {arrow:16s} a dwell time of {flow.dur}')
         else:
             text, how, rule = rates.classify(flow)
-            tr = ss.Transition(*endpoints, rate=parse(text), p=p, name=name, label=flow.label)
+            try:
+                rate = parse(text)
+            except (ValueError, SyntaxError) as E: # Something only the source's own language can say: listed, and the rest is built
+                source.skip(arrow, f'the rate "{flow.rate}" could not be translated ({E})')
+                continue
+            tr = ss.Transition(*endpoints, rate=rate, p=p, after=flow.get('after'), name=name, label=flow.label)
             if rule in (2, 3, 5):
                 tr.guessed['import'] = how[-1]
             lines.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
@@ -368,7 +383,7 @@ def disease(source):
             p = pars[p]
         elif not whole:
             p = ss.par(p, doc=o.doc, name=f'p_{name}')
-        kw = {k:o[k] for k in ['delay', 'duration', 'every'] if o[k] is not None}
+        kw = {k:o[k] for k in ['delay', 'duration'] if o[k] is not None}
         if o.get('likelihood') is not None:
             kw['likelihood'] = o.likelihood(pars)
         outcomes[name] = ss.outcome(base if whole else p*base, name=name, **kw)
@@ -380,8 +395,9 @@ def disease(source):
     for name,text in source.results.items():
         if name not in taken:
             node = rates.parse(text)
-            if isinstance(node, ast.Name) and node.id in states: # Already a result, which would otherwise be taken as the state itself under another name
-                lines.append(f'  {name:16s} is n_{node.id}')
+            if isinstance(node, ast.Name) and node.id in states: # One state: n_X already, and also kept under the source's name (as 1 * X, which would otherwise be taken as the state itself under another name)
+                named[name] = 1*states[node.id]
+                lines.append(f'  {name:16s} a result: n_{node.id}')
                 continue
             named[name] = parse(ast.unparse(rates.bare_of(node)))
             lines.append(f'  {name:16s} a result: {text}')
@@ -393,7 +409,13 @@ def disease(source):
         if not sc.isnumber(val) and val is not None: # e.g. ss.by(place=[...])
             init[name] = val
         elif val:
-            init[name] = int(val) if float(val).is_integer() else val
+            near = round(float(val))
+            if near and np.isclose(val, near, rtol=0, atol=1e-9): # A count with rounding error (10*(1 - 0.9)) is still a count
+                init[name] = int(near)
+            elif val < 1 and total: # A count below one person is written as the fraction of everyone it is, since a number below 1 is read as a fraction
+                init[name] = val/total
+            else:
+                init[name] = val
     dis = ss.Disease(*states.values(), **named, init=init or None, name=source.name)
     for kwargs in source.strats:
         dis.stratify(**kwargs)
@@ -415,7 +437,7 @@ def build(sources, verbose=None, **kwargs):
     Build a sim from one or more models read from another framework
 
     Each source becomes a disease. Prints how each flow was read and, as
-    `W1601 ImportIncomplete`, what could not be translated; both are kept in
+    `ss.ImportIncomplete`, what could not be translated; both are kept in
     `sim.imported`.
 
     Args:
@@ -434,31 +456,48 @@ def build(sources, verbose=None, **kwargs):
     incomplete = []
     cfg = sc.objdict()
     for source in sources:
+        cfg.update(source.config)
+    cfg.update(kwargs)
+    if quiet:
+        cfg.setdefault('verbose', 0) # A quiet import is a quiet sim
+    if 'total_pop' not in cfg:
+        cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
+    for source in sources:
         if source.states:
-            dis, choices = disease(source)
+            dis, choices = disease(source, total=cfg.total_pop)
             diseases.append(dis)
         else: # Nothing to declare (e.g. a model of modules written by hand), only its configuration
             choices = [f'  {note}' for note in source.notes]
         source.choices = choices
         lines += [f'{source.name}:'] + choices if len(sources) > 1 else choices
         incomplete += source.incomplete
-        cfg.update(source.config)
         if verbose:
             print(f'Imported "{source.name}" from {source.format}: {len(source.states)} states, {len(source.flows)} transitions, {len(source.pars)} parameters')
             for line in choices:
                 print(line)
-    cfg.update(kwargs)
-    if quiet:
-        cfg.setdefault('verbose', 0) # A quiet import is a quiet sim
-    if 'total_pop' not in cfg:
-        cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
     sim = ss.Sim(diseases=diseases, **cfg)
     first = sources[0]
     code = sc.objdict()
     for source in sources:
         code.update(source.code)
-    sim.imported = sc.objdict(format=first.format, file=first.file, choices=lines, incomplete=incomplete, code=code)
+    sim.imported = sc.objdict(format=first.format, file=first.file, choices=lines, incomplete=incomplete, code=code, prompt=None, warned=False)
     if incomplete:
+        sim.imported.prompt = handoff(sim.imported)
         items = '\n'.join(f'  {name}: {why}' for name,why in incomplete)
-        ss.warn(f'W1601 ImportIncomplete: {len(incomplete)} part(s) of the model were not translated:\n{items}')
+        ss.warn(f'{len(incomplete)} part(s) of the model were not translated:\n{items}\n'
+                f'The sim runs without them. {sim.imported.prompt}', ss.ImportIncomplete)
     return sim
+
+
+def handoff(imported):
+    """
+    What to ask an AI assistant to finish an incomplete import (kept as `sim.imported.prompt`)
+
+    Starsim cannot finish an import itself: the parts it lists in `sim.imported.incomplete`
+    need judgment (the closest Starsim form, or a gap to report), which is what the
+    import-model skill is for.
+    """
+    source = sc.path(imported.file).name if imported.file else 'the model'
+    prompt = (f'Finish importing {source} ({imported.format}) into Starsim: write it with sim.to_code(), translate each part listed in '
+              f'sim.imported.incomplete (or the code\'s "Not translated" comments), and check the result against the original with the validate-import skill.')
+    return f'To finish the import, ask an AI assistant with the import-model skill loaded (skills/import-model in the Starsim repo, "Finishing an incomplete import"): "{prompt}"'

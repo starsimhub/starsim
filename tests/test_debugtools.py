@@ -5,6 +5,7 @@ import numpy as np
 import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
+import starsim.library as ssl
 import pytest
 
 sc.options.interactive = False # Assume not running interactively
@@ -94,7 +95,7 @@ def test_mock_objects():
     assert o.ppl.age.mean() > 15, 'People did not have the expected age'
 
     # Initializing Modules
-    o.mod = ss.SIS().init_mock()
+    o.mod = ssl.CodedSIS().init_mock() # Written as code, so it can be stepped on its own
     for i in range(5):
         o.mod.step()
         o.mod.set_outcomes(ss.uids([i])) # Manually "infect" people

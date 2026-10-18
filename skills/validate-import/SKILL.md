@@ -30,13 +30,13 @@ Run the original in its own framework and the port in Starsim, write both as the
 ## Usual causes of a difference
 
 - **Time labels.** Starsim's `n_X[ti]` is the number at time point `ti` (`n_X[0]` is the start), and a flow at `ti` is the number during the step that ends there (0 at `ti = 0`). Most frameworks do the same, but some label a step by its start, or report a flow at the start of its step. If the port looks one step early or late, check with `--shift 1` (or `-1`), and say which convention each side uses rather than leaving the shift unexplained.
-- **New against cumulative, and per step against per unit of time.** A transition's result (`sir.infection`) is the number in the step; `cum_infection` the running total. An incidence per day from a weekly step is the step's number divided by 7.
+- **New against cumulative, and per step against per unit of time.** A transition's result (`sir.infection`) is the number in the step; `sir.infection.cum` the running total. An incidence per day from a weekly step is the step's number divided by 7.
 - **Rates and probabilities.** A per-step probability imported as a rate (or the reverse), or a probability per unit of time confused with a rate, shifts everything a little at small steps and a lot at large ones.
 - **The step.** Agents and a compartmental run of the same model differ by an amount of order `dt` (5 to 10% at a weekly step in some models); a discrete-time stochastic model differs from the ODE by the same. Compare like with like (the same kind of run), or at a finer step, before calling it a disagreement.
 - **Order within a step.** Frameworks that apply processes one after another in a step (EMULSION's `processes:`, Atomica's order of transitions) differ from Starsim's simultaneous competing hazards, by order `dt`.
 - **Initial conditions.** Counts against fractions, the remainder placed in the first state, initial numbers drawn rather than fixed, and a source that starts people "before" the first step.
 - **Extinction.** In small populations many runs die out; means are pulled down and peaks are bimodal. Compare the share of runs that die out, and the distributions of the others.
 - **Random numbers.** A stochastic port never matches run for run; only distributions can agree. Two deterministic runs that should match exactly but do not point to a real difference in the model.
-- **What was not translated.** Everything in `sim.imported.incomplete` (or the import's `W1601` warning) that was left out changes the results; say which differences it explains.
+- **What was not translated.** Everything in `sim.imported.incomplete` (or the import's `ImportIncomplete` warning) that was left out changes the results; say which differences it explains.
 
 A difference that remains after all of these is reported with the numbers, as a finding: either the port is wrong (fix it), or Starsim cannot yet say what the original says (a gap to report).

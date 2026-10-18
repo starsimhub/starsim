@@ -9,23 +9,38 @@ jupyter: python3
 ```
 
 
-There are a few basic ways to add vital dynamics to your model, e.g.
+There are a few basic ways to add vital dynamics to your model. The simplest is to declare births and deaths for the population, in `demographics=`. `ss.birth(rate=...)` is a crude birth rate (per person per year) of people born into each disease's first state (here `S`), and `ss.death(rate=...)` applies the same death rate to everyone:
 
 ```{python}
 import starsim as ss
 ss.options(jupyter=True)
 
+sis = ss.Disease(
+    infection = ss.transmission('S -> I', beta=ss.peryear(2)),
+    recovery = ss.progression('I -> S', dur=ss.years(1)),
+    init_prev = 0.01,
+)
+demographics = [
+    ss.birth(rate=ss.peryear(0.02)),  # 20 births per 1,000 people per year
+    ss.death(rate=ss.peryear(0.015)), # 15 deaths per 1,000 people per year
+]
+sim = ss.Sim(sis, demographics=demographics, total_pop=10_000, start='2000', stop='2050')
+sim.run()
+sim.plot()
+```
+
+Births and deaths become flows of the disease like any other transition, so they appear in the results (`sim.results.sis.births`) and in `describe()`. Written this way, the model still runs as an ODE, and with several diseases, the same people are born into and die from each of them, under every solver. The same declaration works as agents, e.g. with a network:
+
+```{python}
 pars = dict(
-    birth_rate = ss.peryear(20),      # Annual crude birth rate (per 1000 people)
-    death_rate = ss.peryear(15),      # Annual crude death rate (per 1000 people)
+    demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.015))],
     networks = 'random',
     diseases = 'sir'
 )
 sim = ss.Sim(pars)
 ```
 
-
-This will apply annual birth and death rates as specified in the `pars` dict. Alternatively, we can make demographic components, which achieves the same thing:
+In an agent-based model, births and deaths can also be demographic modules, which add and remove agents, and which take data by year (and, for deaths, by age and sex; below). Their rates are per 1,000 people:
 
 ```{python}
 demographics = [
@@ -35,14 +50,13 @@ demographics = [
 sim = ss.Sim(demographics=demographics)
 ```
 
-You can even simply set `demographics=True` to use default rates:
+You can even simply set `demographics=True` to use default rates (20 births and 10 deaths per 1,000 people per year):
 
 ```{python}
 ss.Sim(demographics=True).run().plot();
 ```
 
 By default, agents age if and only if at least one demographics module is included. You can override this behavior by setting `use_aging`, e.g. `ss.Sim(use_aging=False)`
-
 
 ## Scaling results to whole populations
 Even though we've been simulating populations of a few thousand agents, we can also use the `total_pop` parameter to scale our results so that they reflect a much larger population. You can think of this as a kind of statistical sampling approximation. If we want to model the population of Nigeria, for example, it would be much too computationally intensive to simulate 200 million agents. However, we could simulate 50,000 agents and then say that each agent represents 4,000 people. Again, we can do this by passing `total_pop=200e6` to the sim or in the `pars` dictionary. Here's an example:
@@ -79,7 +93,7 @@ age_data = pd.read_csv('test_data/nigeria_age.csv')
 ppl = ss.People(n_agents, age_data=age_data)
 
 # Make the sim, run and plot
-sim = ss.Sim(total_pop=nga_pop_1995, start=1995, people=ppl, demographics=demographics, networks='random', diseases='sir')
+sim = ss.Sim(total_pop=nga_pop_1995, start='1995', stop='2030', people=ppl, demographics=demographics, networks='random', diseases='sir')
 sim.run()
 
 # Read in a file with the actual population size

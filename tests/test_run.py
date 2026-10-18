@@ -16,6 +16,7 @@ sc.options(interactive=False) # Assume not running interactively
 def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.objdict(
         n_agents = n_agents,
+        start = 2000,
         demographics = True,
         networks = 'random',
         diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
@@ -66,36 +67,38 @@ def test_multisim():
     pars = make_sim_pars()
     msim = ss.MultiSim(ss.Sim(pars))
     msim.init_sims()
-    msim.run(n_runs=4)
+    msim.run()
 
-    # Plot individual sims
-    msim.plot()
+    # The results have a run axis first
+    res = msim.results.sis.n_I
+    npts = msim.sims[0].t.npts
+    assert len(msim) == 4 and isinstance(res, ss.Result) and res.shape == (4, npts)
+    assert np.array_equal(res.select(run=2).values, msim.sims[2].results.sis.n_I.values) # One run is the result of its sim
+    msim.plot() # The median and an interval
+    msim.plot(lines=True) # Every run
 
-    # Reduce and plot mean
-    msim.mean()
-    msim.plot()
+    # Summaries over the runs
+    low, mid, high = res.quantiles([0.1, 0.5, 0.9])
+    assert np.all(low <= mid) and np.all(mid <= high)
+    assert np.array_equal(res.median().values, np.median(res.values, axis=0))
+    res.median().plot()
+    assert msim.summarize().sis_n_I.std > 0
+    msim.show()
 
     # Export results
-    res_df = msim.results.to_df(resample='2YE')
-    assert res_df.sis_n_susceptible_low.loc['2030-12-31'] == msim.results.sis_n_susceptible.low[29:31].mean()
+    two = msim.results.sis.n_S.resample(ss.years(2))
+    assert np.array_equal(two.values[:, 1], msim.results.sis.n_S.values[:, 4]) # A stock at the end of each two years from the start
+    df = msim.to_df(quantiles=None)
+    assert len(df[(df.module == 'sis') & (df.result == 'n_I')]) == 4*npts # One row per run and time
 
-    # Reduce and plot median
-    msim.median()
-    msim.plot()
-
-    # Other methods
-    msim.show()
-    msim.summarize()
-    msim.reset()
-
-    # Reduce 2D results
+    # 2D results
     msim2 = ss.MultiSim(ss.Sim(make_sim_pars(analyzers=BySex())), n_runs=3)
     msim2.run(parallel=False)
-    msim2.mean()
-    res = msim2.results.bysex_n_infected
-    assert res.shape == res.low.shape == (msim2.base_sim.t.npts, 2) # Bounds are 2D too
-    assert np.all(res.low <= res) and np.all(res <= res.high)
-    assert 'bysex_n_infected_male_high' in msim2.results.to_df().columns
+    res = msim2.results.bysex.n_infected
+    med = res.median()
+    assert res.shape == (3, npts, 2) and med.shape == (npts, 2) # The columns are kept
+    assert np.array_equal(med.male, np.median(res.values[..., 1], axis=0))
+    assert 'n_infected_male' in set(msim2.to_df().result)
     msim2.plot()
 
     return msim
@@ -138,10 +141,10 @@ def test_combine_merge():
     sims = msim.sims
 
     # Combine
-    sim = msim.combine(output=True)
+    sim = msim.combine()
     res = sim.results
     assert sim.pars.n_agents == 3*n_agents and sim.pars.pop_scale == 1 # Population sizes are summed
-    assert res.sis.n_infected[-1] == sum(s.results.sis.n_infected[-1] for s in sims) # Counts are summed
+    assert res.sis.n_I[-1] == sum(s.results.sis.n_I[-1] for s in sims) # Counts are summed
     assert np.isclose(res.sis.prevalence[-1], np.mean([s.results.sis.prevalence[-1] for s in sims])) # Proportions are averaged
     assert np.array_equal(res.bysex.n_infected[-1], sum(s.results.bysex.n_infected[-1] for s in sims)) # Including for 2D results
     msim.plot()
@@ -153,14 +156,11 @@ def test_combine_merge():
     msim.plot_compare(t='2005-01-01')
 
     # Merge and split
-    msim.reset()
     m1, m2 = msim.split(chunks=[1,2])
     merged = ss.MultiSim.merge(m1, m2)
     assert len(m1) == 1 and len(m2) == 2 and len(merged) == 3
+    assert np.array_equal(merged.results.sis.n_I.values, msim.results.sis.n_I.values)
     assert [len(m) for m in merged.split()] == [1, 2] # Uses the chunks from the merge
-    m1.mean(); m2.mean()
-    merged = ss.MultiSim.merge([m1, m2], base=True)
-    assert len(merged) == 2 and merged.sims[1].results.sis.n_infected.low is not None # The reduced sims
     return msim
 
 

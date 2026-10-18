@@ -1,7 +1,7 @@
 """
 Import a camdl model (a .camdl file, camdl's JSON IR, or a pycamdl model)
 
-camdl (https://github.com/epiforecasts/camdl) declares compartments, parameters (with
+camdl (https://github.com/vsbuffalo/camdl) declares compartments, parameters (with
 bounds and priors), named expressions, transitions whose rates are total flows
 (`S --> I @ beta * S * I / N`), observations with their likelihoods, initial numbers,
 and the time to simulate. Its compiler, `camdlc`, expands the model into a JSON
@@ -353,22 +353,23 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
 
         sched = ob.get('emit_schedule', {}).get('regular')
         covers = ob.get('covers', {})
-        every = None
-        if sched and covers.get('kind') == 'until' and covers.get('span') == sched['step']:
-            every = getattr(ss, f'{unit}s')(sched['step'])
-        elif sched or covers:
+        total = sched and covers.get('kind') == 'until' and covers.get('span') == sched['step'] # A total over each period, which data by period is compared with automatically
+        if (sched or covers) and not total:
             src.skip(f'{oname} (period)', f'reported {covers or sched}, which is not a total over each period')
-        src.add_outcome(oname, pval, p=p, every=every, likelihood=likelihood)
+        src.add_outcome(oname, pval, p=p, likelihood=likelihood)
 
     # Scheduled effects
     enabled = scens[chosen].get('enable', []) if scens else []
     for iv in m.get('interventions', []):
         acts = sc.strjoin(list(a)[0] for a in iv['actions'])
         when = iv['fire']
-        if iv.get('kind') != 'event' and not {iv['name'], iv.get('base_name')} & set(enabled): # An intervention, unlike an event, is off unless enabled
-            src.notes.append(f'the intervention {iv["name"]} ({acts}, {when}) is off unless enabled in camdl, so it is left out')
+        names = {iv['name'], iv.get('base_name')}
+        if iv.get('kind') != 'event' and not names & set(enabled): # An intervention, unlike an event, is off unless enabled: listed all the same, since a scenario that enables it is the model's question
+            where = [k for k,scen in scens.items() if names & set(scen.get('enable', []))]
+            src.skip(iv['name'], f'an intervention ({acts}, {when}) that is off unless enabled{", as scenario " + sc.strjoin(where) + " does" if where else ""}; '
+                                 f'write it as a one-off move, ss.Delivery(move="S -> V", ...), with its times')
             continue
-        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); a one-off move between states has no declared form: a product (e.g. ss.vaccinate(..., years=[...])) protects people without moving them, or write a function that moves them')
+        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); write it as a one-off move, ss.Delivery(move="S -> V", ...), with its times')
 
     # The run
     simulation = m.get('simulation', {})
@@ -382,5 +383,5 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         cfg['dt'] = tdur(simulation['dt'])
     src.config.update(cfg)
     sim = build(src, verbose=verbose, **kwargs)
-    sim.imported.scenarios = {k:s.get('params', {}) for k,s in scens.items()}
+    sim.imported.scenarios = {k:s.get('params', {}) for k,s in scens.items()} # The parameter values of each; the interventions each enables are listed in sim.imported.incomplete
     return sim

@@ -6,57 +6,93 @@ jupyter: python3
 
 Let's be honest, there isn't much you can do with a single sim run. So 99.9% of the time, you'll be wanting to run multiple simulations and compare them.
 
-The easiest way to do this is with `ss.parallel()`, which, as the name suggests, runs the sim in parallel on your computer using all available cores. Let's say we want to see what difference swapping the network makes:
-
+The easiest way to do this is with `ss.parallel()`, which, as the name suggests, runs the sims in parallel on your computer using all available cores. Sims passed as keywords are labeled with the keyword, which is the name of their scenario. Let's say we want to see what difference swapping the network makes:
 
 ```{python}
 import starsim as ss
+import starsim.library as ssl
 ss.options(jupyter=True) # Improve plot resolution
 
-sim1 = ss.Sim(label='random', n_agents=2000, diseases='sis', networks='random')
-sim2 = ss.Sim(label='randomsafe', n_agents=2000, diseases='sis', networks='randomsafe')
-msim = ss.parallel(sim1, sim2)
+sim1 = ss.Sim(n_agents=2000, diseases='sis', networks='random')
+sim2 = ss.Sim(n_agents=2000, diseases='sis', networks=ssl.RandomSafeNet())
+msim = ss.parallel(random=sim1, randomsafe=sim2)
 msim.plot()
 ```
 
-`ss.parallel()` is just a wrapper for `ss.MultiSim().run()` (and note how we can pass arguments to all of the sims, e.g. `verbose=0` here):
+`ss.parallel()` is just a wrapper for `ss.MultiSim().run()` (and note how we can pass arguments to all of the sims, e.g. `verbose=0` here). Sims given in a list are labeled by their own `label`:
 
 ```{python}
-sim1 = ss.Sim(n_agents=2000, diseases='sis', networks='random')
-sim2 = ss.Sim(n_agents=2000, diseases='sis', networks='randomsafe')
+sim1 = ss.Sim(label='random', n_agents=2000, diseases='sis', networks='random')
+sim2 = ss.Sim(label='randomsafe', n_agents=2000, diseases='sis', networks=ssl.RandomSafeNet())
 msim = ss.MultiSim(sims=[sim1, sim2]).run(verbose=0)
 msim.plot()
 ```
 
-In most cases, this is the most efficient workflow: make some sims (potentially via a loop), and then run them. But there are some other common workflows as well. One is to run the same simulation with different random seeds. This is what happens by default if you call `ss.MultiSim()` with a single sim:
+In most cases, this is the most efficient workflow: make some sims (potentially via a loop), and then run them. But there are some other common workflows as well.
+
+## Many runs of one sim
+
+A stochastic sim (one that runs as agents, or with the `'binomial'` or `'gillespie'` solver) gives a different answer each time it is run with a different random seed. `sim.run(n_runs=10)` runs it that many times, each with its own seed, and returns a MultiSim; it is a shortcut for `ss.parallel(sim, n_runs=10)`:
 
 ```{python}
 sim = ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0)
-msim = ss.MultiSim(sim).run()
+msim = sim.run(n_runs=10)
 msim.plot()
 ```
 
-In addition to plotting the individual sims, we can quickly compute stats on the sim by calling `msim.mean()` or `msim.median()` (or more generally, `msim.reduce()` if we want to specify e.g. quantiles):
+`msim.plot()` shows the median of the runs and a 95% interval; `msim.plot(lines=True)` shows every run, which is how to see extinction or bimodality that a median hides:
 
 ```{python}
-msim.mean()
-msim.plot()
+msim.plot(lines=True)
 ```
 
-This looks a little wonky because the error bounds shown are ±2 standard deviations, but we know things like deaths can't go negative. In cases like this, we get more reasonable results with `median()`, which by default shows the 10th and 90th quantiles:
+Every result of the runs is in `msim.results`, as the same result as for one sim, with a run axis first, so it can be summarized over the runs directly:
 
 ```{python}
-msim.median()
-msim.plot()
+res = msim.results.sir.n_I # One row per run
+low, mid, high = res.quantiles([0.1, 0.5, 0.9]) # Quantiles over the runs
+res.median().plot() # The median, as a result of one run
+print(len(msim), res.shape)
 ```
+
+`res.select(run=3)` is the result of one run, and `msim.sims` still holds the sims that were run.
+
+## Scenarios
+
+A scenario is a sim: it contains exactly the interventions passed to it. `sim.new()` makes a copy of a sim with something changed, which is the easiest way to make a scenario from a baseline. With `n_runs=`, each scenario is run that many times, and the runs of each scenario share their random numbers, so the difference between them is the effect of the intervention rather than noise. `msim.diff()` gives the difference of each scenario from the baseline, run by run:
+
+```{python}
+base = ss.Sim(n_agents=2000, start='2000', stop='2030', diseases=ss.SIS(beta=0.1), networks='random', verbose=0)
+vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.8), coverage=0.3, at=['2010'])
+msim = ss.parallel(baseline=base, vaccine=base.new(interventions=vaccine), n_runs=5)
+msim.plot()
+
+averted = -msim.diff('baseline').vaccine.sis.infection.cum # Infections averted, one row per run
+print(f'Infections averted by 2030: {averted.median()[-1]:,.0f}')
+```
+
+A result across scenarios can be selected by scenario, e.g. `msim.results.sis.prevalence.select(scenario='vaccine')`.
+
+## Parameter sweeps
+
+`ss.parallel()` also takes sets of parameter values to run a sim with: a dict with a list of values for each parameter. Each value is run `n_runs` times, and the values become coordinates of the runs, so they can be selected:
+
+```{python}
+sim = ss.Sim(n_agents=2000, diseases=ss.SIR(beta=0.05), networks='random', verbose=0)
+msim = ss.parallel(sim, pars=dict(beta=[0.03, 0.05, 0.08]), n_runs=3)
+print(msim.results.sir.n_I.runs) # The scenario and parameter values of each run
+msim.results.sir.n_I.select(beta=0.08).quantiles().plot()
+```
+
+When there is more than one module, give the parameter with the module's name, e.g. `pars={'sir.beta': [0.03, 0.05]}`.
 
 ## Comparing sims
 
 To compare sims side by side, use `msim.compare()`. By default this shows the summary of each sim (see `sim.summarize()`), with one column per sim; pass `t` to compare the results at a particular timestep index or date instead (dates are matched against each result's own timeline, so this works even if modules have different timesteps):
 
 ```{python}
-s1 = ss.Sim(label='Low beta', n_agents=2000, diseases=ss.SIS(beta=0.05), networks='random')
-s2 = ss.Sim(label='High beta', n_agents=2000, diseases=ss.SIS(beta=0.10), networks='random')
+s1 = ss.Sim(label='Low beta', n_agents=2000, start='2000', stop='2050', diseases=ss.SIS(beta=0.05), networks='random')
+s2 = ss.Sim(label='High beta', n_agents=2000, start='2000', stop='2050', diseases=ss.SIS(beta=0.10), networks='random')
 msim = ss.parallel(s1, s2, verbose=0)
 msim.compare() # Compare the summaries
 msim.compare(t='2030-01-01') # Compare the results on a particular date
@@ -70,16 +106,16 @@ msim.plot_compare()
 
 ## Combining, merging, and splitting
 
-Several smaller sims can be treated as one larger population with `msim.combine()`. Results that scale with population size (e.g. counts) are summed, and other results (e.g. prevalence) are averaged, weighted by each sim's `total_pop`. Unlike `mean()` and `median()`, there are no uncertainty bounds, since the result is a single sim:
+Several smaller sims can be treated as one larger population with `msim.combine()`, which returns a single sim. Results that scale with population size (e.g. counts) are summed, and other results (e.g. prevalence) are averaged, weighted by each sim's `total_pop`:
 
 ```{python}
 sim = ss.Sim(n_agents=1000, diseases='sis', networks='random', verbose=0)
-msim = ss.MultiSim(sim, n_runs=4).run()
-msim.combine() # Equivalent to a single sim with 4,000 agents
-msim.plot()
+msim = sim.run(n_runs=4)
+combined = msim.combine() # Equivalent to a single sim with 4,000 agents
+combined.plot()
 ```
 
-You can also merge several MultiSims into one with `ss.MultiSim.merge()`, and split one into several with `msim.split()`. With `base=True`, `merge()` keeps only the base sim of each MultiSim (e.g. the result of `mean()`), which is a quick way to plot several scenarios with uncertainty together:
+You can also merge several MultiSims into one with `ss.MultiSim.merge()`, and split one into several with `msim.split()`. Each sim's label is the scenario of its runs, so a merged MultiSim plots each scenario with its uncertainty:
 
 ```{python}
 m1 = ss.MultiSim(ss.Sim(label='Low beta', n_agents=2000, diseases=ss.SIS(beta=0.05), networks='random'), n_runs=3)
@@ -87,13 +123,9 @@ m2 = ss.MultiSim(ss.Sim(label='High beta', n_agents=2000, diseases=ss.SIS(beta=0
 m1.run(verbose=0)
 m2.run(verbose=0)
 
-merged = ss.MultiSim.merge(m1, m2) # A MultiSim with 6 sims
-m1, m2 = merged.split() # Back to two MultiSims with 3 sims each (or use inds or chunks to split another way)
-
-m1.mean()
-m2.mean()
-scens = ss.MultiSim.merge(m1, m2, base=True) # A MultiSim with 2 sims, the means of each
-scens.plot()
+merged = ss.MultiSim.merge(m1, m2) # A MultiSim with 6 runs
+merged.plot() # The median and interval of each scenario
+m1, m2 = merged.split() # Back to two MultiSims with 3 runs each (or use inds or chunks to split another way)
 ```
 
 ## Copies
@@ -176,7 +208,7 @@ def make_sim(seed=1, n_agents=None, start=1990, stop=2030, debug=False, add_stis
 
     total_pop = {1970: 5.203e6, 1980: 7.05e6, 1985: 8.691e6, 1990: 9980999, 2000: 11.83e6}[start]
     if n_agents is None: n_agents = [int(10e3), int(5e2)][debug]
-    if dt is None: dt = [1/12, 1][debug]
+    dt = [ss.months(1), ss.years(1)][debug]
 
     # Demographic modules
     fertility_data = pd.read_csv(f'data/asfr.csv')
@@ -194,7 +226,7 @@ def make_sim(seed=1, n_agents=None, start=1990, stop=2030, debug=False, add_stis
         p_pair_form=0.58,
         condom_data=pd.read_csv(f'data/condom_use.csv'),
     )
-    maternal = ss.MaternalNet(dt='month')
+    maternal = ss.PrenatalNet(dt='month')
 
     # Diseases
     hiv = make_hiv()
@@ -220,8 +252,8 @@ def make_sim(seed=1, n_agents=None, start=1990, stop=2030, debug=False, add_stis
         dt=dt,
         rand_seed=seed,
         total_pop=total_pop,
-        start=start,
-        stop=stop,
+        start=str(start), # The year as a date string
+        stop=str(stop),
         people=ppl,
         diseases=diseases,
         networks=[sexual, maternal],

@@ -258,6 +258,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 ## Departures from the spec
 
 - Sims with no declared states keep Starsim 3's time defaults.
+- The unit of a model's bare numbers comes from the model (`unit=`, else its typed values, else dates, else a typed `dt` or `stop`), as the review's Decision lang 1 recommends, with two departures from that recommendation: a year-like number for `start` or `stop` is still a calendar year (`stop=2020`), since Starsim 3 sims are written that way; and the typed defaults of modules written as code do not set the unit, since they convert themselves and would otherwise disagree with most declared models.
 - Rates are written as strings in the model spec, and the spec is `sim.to_spec()`; `sim.to_json()` is unchanged from Starsim 3. `ss.load()` reads the strings back with a parser that accepts only arithmetic, comparisons, the functions allowed in rates, typed quantities (`perday(0.5)`), and the names the module declares, so loading a spec runs no code from it.
 - The default ODE integrator is fixed-step RK4 with automatic substeps, in the Numba kernels, with or without gradients being asked for; JAX is used only for `integrator='jax'`, `sim.gradient()`, and gradient-based fitting. `integrator='jax'` takes the same RK4 steps (not an adaptive JAX integrator), so its results are the kernels'.
 - What JAX differentiates is the run, from the numbers in the program and the compartments at the start to the compartments and flows at every step. The steps either side are Python (the parameters to those numbers, and the run to the results, outcomes, and goodness of fit), and are differentiated by central differences along the direction of each parameter. So a gradient is exact to about 1e-10, not to the last bit, and costs two restarts and two runs' worth of results for each parameter.
@@ -266,7 +267,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - The property of people that says they hold a product is named `has_<product>` (e.g. `has_bcg`), and the record that a routine delivery has been offered is `offered_<delivery>`. The product's own name is taken by the product module.
 - A product whose `waning=` is a duration is lost at an exponentially distributed time, under every solver, after which the person can receive it again. Only a function of time since delivery fades the efficacy while the person still holds the product.
 - A delivery never gives a product to someone who already holds it.
-- A bare number in `ss.change(at=...)` or `start=` is a year only if the sim has dates; otherwise it is a time in the sim's unit.
+- A bare number for a time (`ss.change(at=...)`, a delivery's `start=`) is a time in the sim's unit, counted from the start, even in a sim with dates; it is a calendar year only in a sim whose own `start`/`stop` are year-like numbers. A time outside the sim raises `E1101`.
 - A modifier acts where the engine uses the quantity; reading `sir.rel_sus` from custom code gives the base value, and `sir.rel_sus.effective` the value with the modifiers applied (agents only). So `.base` is not needed.
 - In a compartmental run, a product whose protection fades by a function of time is held at levels of time since delivery (`stage 1`, ...), so `has_<product>` has more than two levels.
 - A network's parameter is the target of a modifier as a path (`'school.pars.n_contacts'`), since `school.pars.n_contacts` is a plain value.
@@ -274,26 +275,22 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - Under `gillespie` (and `tau`), a value that varies smoothly in time is held for a quarter of a step at a time, at its middle, with a note, rather than by thinning, which needs a bound on every rate over the step; a rate can be any expression of the parameters.
 - A module written as code that works on groups as well as on agents says so with the class attribute `compartmental = True`; otherwise it makes the model agent-based.
 - The peak of `ss.seasonal` given as a month is the middle of that month. In a sim with no dates, time starts at the beginning of a year.
-- `ss.geo` takes the places directly (names, populations, and positions or distances); there are no named geographies.
 - `ss.gravity` gives `k × pop[i]^(a−1) × pop[j]^b / distance^c`: for commuting, the share of time a person from `i` spends in `j` (capped so that it sums to at most 1, or rescaled to `away=`), and for migration the rate of moving.
 - An inflow whose rate uses a count (`xi * I.n`, or `ss.birth`) arrives in each place according to the count there; an inflow at a fixed rate is shared between places by their split.
 - A new infection is recorded under the strain acquired, and a state that a dimension does not apply to is counted at that dimension's first level.
 - As agents, the number who start in each state is exact (rounded to whole agents), not a chance for each agent.
 - A level of a stratification named like an attribute of a result (`low`, `high`) is a column called `<dimension>_<level>` in `result.by()`.
-- There is no ABC-SMC: a stochastic sim without a likelihood for every data series, and any agent-based sim, is fitted by Optuna (a best fit, not a posterior), which in practice works better for agent-based models; a stochastic compartmental sim with a likelihood for every series gets a posterior from particle MCMC.
 
 - An imported rate with another state and no division by the total (`beta * S * I`, rule 3 of 16) is kept as counts (`beta * I.n`), which is exact, rather than given `dependence='density'` and an `n_ref`: there is no density-dependent mixing.
 - Results follow the convention of other frameworks under every solver: `n_<state>[ti]` is the number at time point `ti` (after `ti` steps, so `n_<state>[0]` is the number at the start), and a flow at `ti` (`recovery[ti]`) is the number during the step that ends there (0 at the start), so `n_R[ti] - n_R[ti-1] == recovery[ti]`; a sim with `stop=T` ends at `T`.
 
 ## Known issues
 
-- The kernels are compiled the first time they are used after Starsim is installed or changed, which takes about 12 s; after that they are loaded from a cache.
+- The kernels are compiled the first time they are used after Starsim is installed or changed, which takes one or two minutes (a line says so); after that they are loaded from a cache.
 - With `sim.run(n_runs=)` in one call to the kernel, only the states and transitions are kept by group (not outcomes or results given as expressions), and reported outcomes are drawn for all the runs at once, so differ (in the draw, not the distribution) from those of a single run with the same seed.
-- The kernels draw random numbers from Numba's generator, so a stochastic compartmental run gives different numbers (from the same distribution) with `engine.use_kernels = False`.
 - A typed quantity that is changed in place during a run (the number inside an `ss.perday`, say) is not seen, since a converted value is kept for as long as the parameter holds the same object; assigning a new value is.
 - A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`); the error says to convert it first (`rate.to_prob(dt)`).
 - A bare number given for a parameter of a module written as code (`ss.MFNet(duration=5)`, `ss.SIS(dur_inf=10)`) keeps the unit of its default, as in Starsim 3, while one in a declared model is in the sim's unit. It warns when the two units differ (`duration` read in years in a sim in days).
-- With `stop=ss.weeks(12)` and no `unit=`, the sim runs in weeks even if every rate is per day.
 - As agents, a dwell time is sampled when someone enters a state, so an `adjust` on a duration does not follow a person who later moves to another level (through an `ss.transfer`, or by aging). A rate does.
 - A strain's initial share is the split of the dimension (equal by default), which applies to everyone who starts in an infected state.
 - A function of the sim that compares ages with a number that is not a bin edge runs in a compartmental model without complaint (each group has the age of its midpoint); the lazy form (`ppl.age > 70`) is checked.
@@ -310,7 +307,75 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - A plain `duration=` on an outcome is an exponential stay, while `delay=` is an exact shift.
 - As agents, TB (LSHTM) comes out 5–10% higher than the ODE with weekly steps, and 20–30% higher with monthly ones; this is the difference of order `dt` above, made larger by an epidemic that is near R = 1.
 - `rel_sus` and `rel_trans` on a state are numbers, not `ss.par`s, so they cannot be fitted; the TB models write them into the rates instead.
-- As agents, a delivery comes after the step's progressions (which a declared model takes in `step_state()`, before the interventions) and before its transmission, while in a compartmental run it comes before all of the step's flows. So a delivery as agents misses the people who progress in that step: TPT on the first step reached 7% fewer people with a latent infection that leaves at 3.9 per year with weekly steps.
 - Once JAX has run in a process (`sim.gradient()`, a gradient fit, or `integrator='jax'`), running sims in parallel by forking processes (`ss.parallel()` of agent-based sims, Optuna with several workers) can deadlock, as JAX warns. Spawning instead would be safe but takes about 1.5 s longer to start.
 - Gradients need a sim that the kernels run from start to finish (no interventions other than deliveries the kernels take, no modifiers with `when=`, transfers whose rate varies, or movement register), and a rate that is a Python function of the sim has none (one written with NumPy functions of counts does).
 - The JAX run is compiled the first time it is used for a model (about 1 s), and again if a step needs more substeps than it has allowed for.
+
+## Review of 2026-10-17
+
+The work from [the review's plan](../review_oct17/implementation.md), by phase. Finding numbers are those of the review.
+
+### Phase 1: unblock
+
+- [x] R can build a model (N17): every frame lookup goes through `ss.utils.getframe()`, which gives None when there is no frame. Tested with no Python frame (`tests/test_transitions.py`) and from R (`tests/test_r.py`, which runs `tests/r/sir.R` through reticulate; a CI workflow, `test_r.yml`, installs R and reticulate to run it).
+- [x] A line says when the kernels are being built (X8).
+- [x] Distinct runs after `init()` (N5): `ss.parallel()` builds each run again with `sim.new(rand_seed=)` (or restarts it), and builds again a sim that has run, so `ss.parallel(baseline=fit.sim)` works (P1b); an initialized sim with no inputs raises.
+- [x] `sim.stratify()` survives `sim.new()` (N18).
+- [x] `sim.save()` after a run (R15): `Loop.shrink()` no longer makes the plan, the engines have a `shrink()`, and copying a sim no longer leaves its parameters and states referring to the original's modules (the custom `__deepcopy__` of `ss.par` and `ss.State` kept the old module when the parameter was reached before its module, through `sim.pars.<name>`).
+- [x] The headline examples run (P1a, P1b): the two-line SIR is `beta=0.3` with `init_prev=0.01` throughout the spec, best practices, and docstrings; `AlreadyRunError` names `sim.new()`; `msim.plot()` of declared runs draws the median and a 95% interval of each scenario (`MultiResults.plot()`).
+- [x] Portable test paths (P12): `tests/paths.py` finds the design repo from `STARSIM_LFD` (and camdl from `STARSIM_CAMDL`), next to this repo by default, and the tests that need it skip with a message naming the variable; `test_samples` uses `tmp_path`.
+
+### Phase 2: contract tests
+
+- [x] The model corpus, `tests/corpus.py`: the 18 conformance models and five of the users' patterns, each a function that returns a sim. The older test files keep their own models.
+- [x] The spec's code runs (`tests/test_spec.py`): every block in `design/00` to `09`, file by file, with fragments marked `<!-- fragment -->` and the known library failures listed in the test, which fails when one is fixed.
+- [x] The likelihoods match the run, and simulation-based calibration for each method (`tests/test_contracts_inference.py`; longer runs with `STARSIM_SLOW=1`).
+- [x] Streams, agreement between solvers (the simple models by default, the whole corpus with `STARSIM_SLOW=1`), the order of competing exits, conservation, exact identities, and the guesses `describe()` marks (`tests/test_contracts.py`).
+- [x] The thirteen switching demos (`tests/switching/`, run with `pytest switching`): 19 tests pass and 31 are expected failures, each naming what blocks it.
+
+### Phase 3: the silent wrong answers
+
+- [x] All the items, by three agents in worktrees and in the main checkout, apart from: `sde` (X5), which goes with the solver menu in phase 5; X7 (agents' `dur=` against `rate=`, and seeded people leaving a step late), which is for Cliff; and W11, deferred. Each agent's notes, with the decision options taken (all the recommended ones), are in the session's scratchpad (`wt/WORKLOG_*.md`).
+- X3: each engine draws from its own `np.random.Generator` (stream 0 for Python, 1 for the kernels, 2 for a register's events at the start), seeded from `[rand_seed, crc32(name), stream]` and passed into every kernel that draws (a typed list for `run_many()`), so a stepped run gives the same draws as a whole one. Numba's generators have no hypergeometric draw, so the kernels have their own (one draw per person moved, which is cheap for a register's events). Reseeding Numba's global generator each step was measured at 4.8 µs a call, too slow.
+- X19: a distribution's seed is a hash of its name and the sim's seed together, which moved every agent-based baseline once (`tests/baseline.yaml` regenerated).
+- N1: the particle filter took the rows of the tables as one per step when a smooth value makes three. N2: the JAX density wrote one value into every row of the table for a flow whose rate is a fitted value times a time series.
+- Fixed along the way: copying a sim left its parameters and states referring to the original's modules; `next_generation()` left the compartments at the disease-free state.
+
+### Phase 4: the guessing rules
+
+- [x] The principle restated (a guess fills in what is missing and never reinterprets what was given) in `best-practices/principles.md`, `design/README.md`, and the guess table in `03`.
+- [x] The unit rule (L1), keyword numbers (L3, `E602`), the people anchor (L4), the default seed and the R0 line at `init()` (L5), `source=` for SEIR-shaped strings (L8, `E212`), a dwell shorter than the step (L9), initial values by size and one hash for `init`/`init_prev` (L17), bare times in the sim's unit and outside the span (D2, `E1101`), a dimension's first level (D3), a dimension's kind from its value (D4), the world's ages by default (D11), aging only with births or deaths (D12a), the printed step unit (L18, partly), the typed-arithmetic table and `E102` (L19), and a set of states reused for several diseases (L20, partly). L23 is deferred; the departures and the parts for Cliff are in "Departures from the spec" and `deferred.md`.
+
+### Phase 7, started early: inference
+
+- [x] ABC-SMC (`method='abc-smc'`, `ss.calibration.abc_smc()`), staged fitting (`method=` a list, `W1303`), `sim.sensitivity()` (Latin hypercube and partial rank correlations), `ss.binom()` and `ss.bernoulli()` as likelihoods, `ss.parallel(sim, priors=True)` (`ss.calibration.prior_draws()`), `fit.project()`, `msim.to_df(quantiles=)`, `msim.to_hub()`, and the spread of Optuna's best trials (Cliff's note in `13`). The flepiMoP importer gives a drawn parameter its distribution as its prior. IF2 is deferred until N27.
+
+### Phase 5: one system (first round)
+
+- [x] Errors and notes as classes (P6, P5, Decision 13): `starsim/errors.py`, 37 errors, 6 warnings, and 10 notes, each `ss.<Name>`; the catalog in `design/15-errors.md` is generated from their docstrings and checked by `test_spec.py::test_error_catalog`; `verbose` is one integer.
+- [x] One language (X11, L31, P3, D23, N19, R13; Decision 2): declared `ss.SIR`, `ss.SIS`, and `ss.SEIR`; `ss.Disease` declared only, `ss.Infection` for code; the duplicated Starsim 3 vocabulary removed, mapped in `skills/migrate-starsim3`; v4 verbs (`ss.modify`, conditions, `calibrate()`, `sim.new()`) on modules written as code. Kept for Cliff: the 11 intervention classes and `ss.Calibration` that downstream packages subclass.
+- [x] One `ss.Result` (a MultiSim is its results; `ss.parallel` the one way, with `sim.run(n_runs=)` its shortcut; one name per flow, `.cum`), the Python solvers deleted and the solver menu (`auto`, `ode`, `binomial`, `gillespie`, `abm`), `auto`'s reasons in one record, one time index during a step and one delivery slot, and one compartmental program per crossing (X25), by agents R, S, T, and X25. For Cliff: `sim.people = None` in a compartmental run, the dating of infections, S's thresholds.
+
+### Phase 6: docs
+
+- [x] "Starsim 4 in ten minutes" (`docs/ten_minutes.qmd`), the Starsim 3 to 4 migration guide (`docs/migration/v3_v4.md`), the R path on the same page, and `tests/north_star.py` (lines, first run, and best of five against the originals).
+- [x] The tutorials and user guide ported (35 pages, all run), and a "Coming from" page for each of 13 frameworks; the bugs they found fixed or recorded (W15).
+
+### Phase 7: features for the seats
+
+- [x] Inference: see above; also vector parameters (`ss.par(ss.by(patch=...), bounds=)`, fitted level by level, `pars={'beta[a]': ...}`), a modifier's amount as an `ss.par`, typed bounds, `calibrate(gof=fn)` without data, and `sim.log_density()` (reverse-mode gradients).
+- [x] `ss.optimize()` over spending, and the Atomica importer's program books (Atomica's baseline exactly, and its optimum within 0.014%); `.total` counts over every place.
+- [x] `ss.modify(hold=)` and `tr.incidence(over=, by=)` (MEmilio's dynamic NPIs, matched exactly); `PartnerNet(n_contacts=ss.by(...), acts=)` and the duration in `net.check()`; `ss.Mobility(scale='mean', cap=)`; `ss.death(lifetable=)`; seeding as a delivery with `move=` and `capacity=`; `ss.Vaccine(leaky=False)`; `at_age=`; `after=`, `before=`, and `offspring=` on transitions (agents); a thin R layer in rstarsim (`R/declare.R`).
+- [ ] Not done: the importers as a companion package (for Cliff), odin's fixed delay, IF2 (deferred), the data for US states and German districts (written up in `starsim_data_issues.md`), a fittable `away=` (deferred), offspring by prototype, and a declared `ss.program()`.
+
+### Phase 8: performance
+
+- [x] N23 (factored mixing within places with commuting; sparse movers), N24 (results by group at a reporting interval, `ss.Sim(results=[...])`), N28 (`ss.contacts()` as numbers), by agent P.
+- [x] N25 and N26 prototyped: both targets reachable. [ ] N25, N26, N27 (and IF2) being built in.
+
+### Phase 9: surface and structure
+
+- [x] The time vocabulary (L28): `ss.prob(0.1, 'day')`, `ss.time.freq`, units required.
+- [~] The saved form (R21): the spec is not read back (Decision 10); `ss.save('model.py', sim)`. R29's cleaning of the spec waits.
+- [~] Dependencies (P14): `seaborn` dropped, `[data]` and `[interop]` extras; `starsim_data` as a dependency needs it on PyPI.
+- [ ] The rest after phase 5.

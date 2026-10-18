@@ -7,15 +7,18 @@ Each equation is split into its signed terms, and a term that leaves one state a
 enters another is a flow between them; a term with no partner is an inflow or an
 outflow. The file is parsed here, so importing needs neither R nor odin.
 
-Arrays are translated in two cases: arrays of alike, independent copies (such as
-odin's replicates), which become one model run many times, and arrays over levels
-with flows from each level to the next (aging), which become an age stratification.
+Arrays are translated in three cases: arrays of alike, independent copies (such as
+odin's replicates), which become one model run many times; arrays over levels with
+flows from each level to the next (aging), which become an age stratification; and
+arrays coupled by a contact matrix (`sum(s_ij[i, ])`), which become a stratification
+with that matrix.
 `delay()` of a flow into a state becomes a fixed dwell time in that state. What is
 listed as not translated is left for a person, or the import-model skill, to add.
 """
 import re
 import ast
 import math
+import keyword
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -26,16 +29,18 @@ __all__ = ['load_odin']
 lhs_pattern = re.compile(r'^(?:(deriv|update|initial|dim|output|config)\s*\()?\s*([A-Za-z_][\w.]*)\s*(?:\[([^\]]*)\])?\s*\)?$')
 draws = ['rbinom', 'rpois', 'rmultinom', 'rnorm', 'runif', 'rexp', 'rgamma', 'rnbinom', 'rhyper', 'rgeom']
 years = dict(day=365, week=365/7, month=12, year=1) # Units in a year, for age bands
+reserved = sorted(set(keyword.kwlist) - {'if', 'else', 'for', 'while', 'break', 'in', 'True', 'False', 'None'}) # Names R allows and Python does not (lambda, is, ...)
 
 
 #%% Reading the file
 
 def statements(text):
-    """ The statements of an odin file as (left, right), joining lines that continue """
+    """ The statements of an odin file as (left, right), joining lines that continue, with names Python reserves renamed (lambda is lambda_) """
     out = []
     buf = ''
     for line in text.splitlines():
         line = line.split('#')[0].rstrip()
+        line = re.sub(rf'\b({"|".join(reserved)})\b', r'\1_', line)
         if not line.strip():
             continue
         buf = f'{buf} {line.strip()}' if buf else line.strip()
@@ -51,9 +56,52 @@ def statements(text):
 
 def r2py(text):
     """ An R expression in Python syntax """
-    text = text.replace('^', '**').replace('TRUE', 'True').replace('FALSE', 'False')
+    text = text.replace('^', '**').replace('TRUE', 'True').replace('FALSE', 'False').replace('%%', '%')
+    text = text.replace('&&', ' and ').replace('||', ' or ').replace('&', ' and ').replace('|', ' or ')
+    text = re.sub(r'!(?!=)', ' not ', text)
     text = re.sub(r'(\w)\[\]', r'\1', text) # X[] is the whole array
-    return text
+    return r_if(text)
+
+
+def closing(text, start):
+    """ The index of the bracket that closes the one at text[start] """
+    depth = 0
+    for j in range(start, len(text)):
+        depth += text[j] in '(['
+        depth -= text[j] in ')]'
+        if depth == 0:
+            return j
+    errormsg = f'Unbalanced brackets in "{text}"'
+    raise SyntaxError(errormsg)
+
+
+def r_if(text):
+    """ R's `if (c) a else b` as Python's `((a) if (c) else (b))`; `b` runs to the end of the brackets the if is in """
+    m = re.search(r'\bif\s*\(', text)
+    if not m:
+        return text
+    j = closing(text, m.end() - 1)
+    cond, rest = text[m.end():j], text[j+1:]
+    depth = 0
+    for k,c in enumerate(rest): # The else at the same depth
+        depth += c in '(['
+        depth -= c in ')]'
+        if depth == 0 and re.match(r'else\b', rest[k:]) and (k == 0 or not (rest[k-1].isalnum() or rest[k-1] == '_')):
+            break
+    else:
+        errormsg = f'An if with no else in "{text}"'
+        raise SyntaxError(errormsg)
+    a, other = rest[:k], rest[k+4:]
+    depth = 0
+    for e,c in enumerate(other): # The end of the else: the end of the text, or a bracket that closes one opened before the if
+        depth += c in '(['
+        depth -= c in ')]'
+        if depth < 0 or (depth == 0 and c == ','):
+            break
+    else:
+        e = len(other)
+    b, after = other[:e], other[e:]
+    return f'{text[:m.start()]}(({r_if(a.strip())}) if ({r_if(cond)}) else ({r_if(b.strip())})){r_if(after)}'
 
 
 def index_range(text, env):
@@ -269,13 +317,96 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
     exprs = {var:items for var,items in assign.items() if var not in env}
     dt = env.get('dt', 1)
 
+    # States that are not stocks: the time (update(time) <- (step + 1) * dt), and a count over a period (update(cases) <- if (step %% 7 == 0) ... else cases + ...)
+    counters = {} # Name: (the flows it counts, the period)
+    for s in list(state_eqs) if discrete else []:
+        items = state_eqs[s]
+        node = ast.parse(r2py(items[0][1]), mode='eval').body
+        if len(items) == 1 and isinstance(node, ast.IfExp):
+            total = ast.unparse(node.body)
+            test = node.test
+            period = None
+            if ast.unparse(node.orelse).replace(' ', '') == f'{s}+{total}'.replace(' ', '') and isinstance(test, ast.Compare) and isinstance(test.left, ast.BinOp) and isinstance(test.left.op, ast.Mod):
+                if ast.unparse(test.left.left) == 'step' and ast.unparse(test.comparators[0]) == '0':
+                    try:
+                        period = float(evaluate(ast.unparse(test.left.right), env))*dt
+                    except KeyError:
+                        pass
+            if period is not None:
+                counters[s] = (total, period)
+            else:
+                src.skip(f'update({s})', f'"{items[0][1]}" is a condition, not {s} plus or minus flows, so it was not translated (a value to declare as a result, or an ss.outcome)')
+        elif not any(sign > 0 and isinstance(term, ast.Name) and term.id == s for sign,term in signed_terms(strip_index(node))):
+            used = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+            if used <= {'step', 't', 'time', 'dt'}:
+                notes.append(f'{s} is the time ("{items[0][1]}"), which the sim keeps itself')
+            else:
+                src.skip(f'update({s})', f'"{items[0][1]}" is not {s} plus or minus flows, so it was not translated (a value to declare as a result)')
+        else:
+            continue
+        states.remove(s)
+        state_eqs.pop(s)
+        eqs['initial'].pop(s, None)
+
+    # A contact matrix: Y[i, j] <- M[i, j] * X[j] / N[j], summed over j as sum(Y[i, ]), is exposure to X through ss.contacts()
+    mixing = None
+    for var,items in list(exprs.items()):
+        idx, rhs = items[0]
+        if len(items) > 1 or (idx or '').replace(' ', '') not in ['', ',', 'i,j'] or not re.search(r'\[\s*i\s*,\s*j\s*\]', rhs):
+            continue
+        num, den = factors(ast.parse(r2py(rhs), mode='eval').body)
+        mats = [f for f in num if isinstance(f, ast.Subscript) and isinstance(f.value, ast.Name) and np.ndim(env.get(f.value.id)) == 2 and ast.unparse(f.slice).replace(' ', '').strip('()') == 'i,j']
+        summed = rf'sum\(\s*{re.escape(var)}\s*\[\s*i\s*,\s*\]\s*\)'
+        if len(mats) != 1 or mixing is not None:
+            continue
+        inner = ast.unparse(product([f for f in num if f is not mats[0]], den))
+        if re.search(r'\bi\b', inner.replace('[j]', '')):
+            continue
+        uses = [(v, k) for v,its in exprs.items() for k,(_,r) in enumerate(its) if re.search(summed, r)]
+        if not uses:
+            continue
+        for v,k in uses:
+            exprs[v][k] = (exprs[v][k][0], re.sub(summed, f'({inner.replace("[j]", "[i]")})', exprs[v][k][1]))
+        del exprs[var]
+        mixing = (mats[0].value.id, np.asarray(env[mats[0].value.id], dtype=float))
+        notes.append(f'{var} = {mats[0].value.id}[i, j] * {inner}, summed over j: exposure to {inner.replace("[j]", "")} through the contact matrix {mats[0].value.id} (ss.contacts)')
+
+    # Seasonality: 1 + A * cos(2 * pi * t / 365) (with the time as t, time, or step * dt) is ss.seasonal()
+    seasonals = {}
+    for var,items in list(exprs.items()):
+        node = ast.parse(r2py(items[0][1]), mode='eval').body
+        if len(items) > 1 or not (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add) and ast.unparse(node.left) == '1'):
+            continue
+        num, den = factors(node.right)
+        waves = [f for f in num if isinstance(f, ast.Call) and isinstance(f.func, ast.Name) and f.func.id in ['cos', 'sin'] and len(f.args) == 1]
+        if len(waves) != 1:
+            continue
+        try:
+            amp = float(evaluate(ast.unparse(product([f for f in num if f is not waves[0]], den)), env))
+            at = lambda k: float(evaluate(ast.unparse(waves[0].args[0]), {**env, 'step':k, 't':k*dt, 'time':k*dt}))
+            phase, per_unit = at(0), (at(1) - at(0))/dt
+        except (KeyError, TypeError):
+            continue
+        if unit in years and per_unit > 0 and np.isclose(2*np.pi/per_unit, years[unit], rtol=0.01): # A cycle of a year
+            shift = np.pi/2 if waves[0].func.id == 'sin' else 0 # sin(x) peaks a quarter of a cycle later than cos(x)
+            peak = float(((shift - phase)/(2*np.pi)) % 1)
+            seasonals[var] = ss.seasonal(mean=1.0, amplitude=amp, peak=peak)
+            del exprs[var]
+            notes.append(f'{var} = {items[0][1]} read as a yearly cycle: ss.seasonal(amplitude={amp:g}, peak={peak:g})')
+
     # Arrays: alike, independent copies (replicates), or levels with flows between them
     arrayed = [s for s in states if dims.get(s, 1) > 1]
     n_levels = max([dims[s] for s in arrayed], default=1)
     all_text = ' '.join(rhs for items in list(state_eqs.values()) + list(exprs.values()) + list(eqs['initial'].values()) for _,rhs in items)
     by_level = bool(re.search(r'\[\s*i\s*-\s*1\s*\]|\[\s*\d+\s*\]|sum\(', all_text)) or any(idx not in (None, '', 'i') for items in state_eqs.values() for idx,_ in items)
     varying = [k for k,v in env.items() if isinstance(v, np.ndarray) and not np.allclose(v, v[0])]
-    copies = arrayed and not by_level and not varying
+    copies = arrayed and not by_level and not varying and mixing is None
+    dim = 'group' # The name of the dimension the levels are, from what they are counted by: dim(S) <- n_age is age
+    if arrayed:
+        m = re.match(r'^n_(\w+)$', eqs['dim'][arrayed[0]][0][1].strip())
+        dim = m.group(1) if m else dim
+    if re.search(r'\[\s*i\s*-\s*1\s*\]', all_text): # Flows from each level to the next: aging (below)
+        dim = 'age'
     if copies:
         notes.append(f'the arrays ({sc.strjoin(arrayed)}) are {n_levels} alike, independent copies: imported as one model, to run {n_levels} times with sim.run(n_runs={n_levels})')
 
@@ -305,7 +436,10 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
         else:
             init = vals.sum()
             shares += vals
-        src.add_state(s, init=float(np.round(init, 6)) if init else None) # Rounded, since a sum of shares is not exact
+        if mixing is not None and init: # Groups coupled only by the contacts, each with its own numbers
+            src.add_state(s, init=ss.by(**{dim:list(vals)}))
+        else:
+            src.add_state(s, init=float(np.round(init, 6)) if init else None) # Rounded, since a sum of shares is not exact
 
     # Flows: each term of each equation, by state
     terms = {} # canonical text: list of (state, sign, node, levels)
@@ -357,6 +491,17 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             if shares.sum() > 0:
                 strat['split'] = list(shares/shares.sum())
             src.stratify(**strat)
+        if mixing is not None and strat is not None: # Age groups with a contact matrix between them
+            src.config.networks = ss.contacts(age=mixing[1].tolist())
+            src.code['networks'] = f'ss.contacts(age={mixing[1].tolist()!r})'
+        elif mixing is not None:
+            src.skip(f'contact matrix {mixing[0]}', 'the levels it is between are not a stratification, so it was not translated')
+    elif mixing is not None:
+        levels = [str(lev) for lev in range(1, n_levels + 1)]
+        src.stratify(**{dim:levels}, split=list(shares/shares.sum()))
+        src.config.networks = ss.contacts(**{dim:mixing[1].tolist()})
+        src.code['networks'] = f'ss.contacts({dim}={mixing[1].tolist()!r})'
+        notes.append(f'the arrays ({sc.strjoin(arrayed)}) over {n_levels} levels of {dim}, coupled by the contact matrix {mixing[0]}: stratified by {dim} ("1" to "{n_levels}"), with ss.contacts({dim}={mixing[0]})')
     elif arrayed and not copies:
         src.skip('arrays', f'{sc.strjoin(arrayed)} are arrays over {n_levels} levels with no flows between levels: they could be a stratification (stratify()) with values by level (ss.by()), written by hand')
 
@@ -378,6 +523,15 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             continue
         flow(src, frm, to, term, discrete, env, assign, dt, unit, notes)
 
+    # A count over a period of the flows it adds up is an outcome
+    for s,(total,period) in counters.items(): # The period is not needed: an outcome is a flow, which data are compared with as the total since the last data point
+        counted = [n for n in re.findall(r'\w+', total) if n != 'sum']
+        found = [f.name for f in src.flows if f.name in counted]
+        if counted and len(found) == len(counted):
+            src.add_outcome(s, source=found)
+        else:
+            src.skip(f'update({s})', f'a count over a period of {total}, which is not a sum of flows that were translated')
+
     # Parameters: those the flows and expressions use
     used = set()
     for f in src.flows:
@@ -387,13 +541,16 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
         used |= {n.id for n in ast.walk(ast.parse(e, mode='eval')) if isinstance(n, ast.Name)}
     for var in sorted(used):
         val = env.get(var)
-        if val is None:
+        if var in seasonals:
+            src.add_par(var, seasonals[var])
+            continue
+        elif val is None:
             continue
         if isinstance(val, np.ndarray):
             if copies or np.allclose(val, val[0]):
                 src.add_par(var, float(val[0]))
             elif src.strats:
-                src.add_par(var, ss.by(age=list(val)))
+                src.add_par(var, ss.by(**{dim if mixing is not None else 'age':list(val)}))
             else:
                 src.skip(var, f'an array of parameters ({val}) with no stratification to give it')
         else:
@@ -418,7 +575,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             if e in src.exprs:
                 found |= {n.id for n in ast.walk(ast.parse(src.exprs[e], mode='eval')) if isinstance(n, ast.Name)}
         bad = [n for n in found if '__at_' in n or '__index' in n or '__prev' in n]
-        own = [n for n in found if n in states and n != f.src and not copies and src.strats]
+        own = [n for n in found if n in states and n != f.src and not copies and src.strats and mixing is None]
         if bad or own:
             why = f'uses {sc.strjoin(bad)} (a fixed or other level of an array)' if bad else f'uses {sc.strjoin(own)} at its own level ({own[0]}[i]): mixing within each level, which needs a contact matrix by level (ss.contacts) rather than the total'
             src.skip(f'{f.src or ""} -> {f.dst or ""}', why)

@@ -100,7 +100,7 @@ Now we can build and run the two simulations to compare the results:
 ss.options.crn = False
 
 # Shared parameters for both simulations
-pars = dict(n_agents=20, start=ss.days(0), dur=ss.days(1), rand_seed=42)
+pars = dict(n_agents=20, start=ss.days(0), stop=ss.days(3), rand_seed=42, verbose=0)
 
 print('SIMULATION A: WITHOUT BANNED AGENTS', '-'*25)
 simA = ss.Sim(modules=Fishing(), **pars)
@@ -125,8 +125,8 @@ print('SIMULATION A: WITHOUT BANNED AGENTS', '-'*25)
 simA = ss.Sim(modules=Fishing(), **pars)
 simA.run()
 
-print('\nSIMULATION B: WITH AGENT 1 BANNED', '-'*25)
-simB = ss.Sim(modules=Fishing(banned_uids=[1]), **pars)
+print('\nSIMULATION B: WITH AGENT 0 BANNED', '-'*25)
+simB = ss.Sim(modules=Fishing(banned_uids=[0]), **pars)
 simB.run()
 ```
 

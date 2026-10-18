@@ -28,7 +28,7 @@ def test_infection_log(do_plot=False):
 def test_dynamics_by_age(do_plot=False):
     """ Test dynamics by age """
     sc.heading('Testing dynamics by age')
-    by_age = ss.dynamics_by_age('sis.infected', age_bins=(0, 10, 30, 100))
+    by_age = ss.dynamics_by_age('sis.I', age_bins=(0, 10, 30, 100))
     sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
     sim.run()
 

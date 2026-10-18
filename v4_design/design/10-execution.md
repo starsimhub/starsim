@@ -26,44 +26,38 @@ The loop calls these functions, in this order, at every step. This is the order 
 | 2 | every module | `start_step()` | Advance each module's distributions; per-step bookkeeping |
 | 3 | plain `ss.Module`s | `step()` | Modules that are none of the types below |
 | 4 | demographics | `step()` | Births and immigration add agents; background deaths are requested |
-| 5 | diseases | `step_state()` | Disease state updates: every declared transition that is not contact-mediated (progression, branching, `ss.transfer`, disease deaths) |
+| 5 | diseases | `step_state()` | State updates of a disease written as code (a declared disease takes all its transitions at row 9) |
 | 6 | connectors | `step()` | Cross-module code |
-| 7 | networks | `step()` | Add and remove edges; mixing pools and `ss.Mobility` update who meets whom |
+| 7 | networks | `step()` | Add and remove edges; mixing pools update who meets whom |
 | 8 | interventions | `step()` | Deliveries, products, parameter changes |
-| 9 | diseases | `step()` | Transmission: every contact-mediated transition |
+| 9 | diseases | `step()` | Every declared transition: those that are not contact-mediated (progression, branching, `ss.transfer`, disease deaths), then transmission |
 | 10 | people | `step_die()` | Requested deaths take effect (see [Removals](#removals-are-deferred)) |
-| 11 | people, then every module | `update_results()` | Counts, flows, declared results and `ss.outcome`s for this step |
-| 12 | analyzers | `step()` | Analyzers read the finished step |
-| 13 | every module, people, sim | `finish_step()` | Remove dead agents; increment the time index |
+| 11 | sim | `advance()` | The time index moves to the end of the step |
+| 12 | people, then every module | `update_results()` | Counts, flows, declared results and `ss.outcome`s for this step |
+| 13 | analyzers | `step()` | Analyzers read the finished step |
+| 14 | every module, people, sim | `finish_step()` | Remove dead agents |
 
-The reasons for this order are Starsim's: new agents exist before diseases initialize them; states update before networks, so that a state change can alter who is eligible for contact; networks update before interventions, so that an intervention can alter the final network for the step; and interventions run before transmission, so that someone vaccinated today is protected today.
+**One time index.** During the step from time point `k-1` to `k` (rows 1 to 10), `sim.ti` is `k-1` in every module, and `sim.now` is the start of the step, so the first step has `ti == 0`, as in Starsim 3. `advance()` then moves it to `k`, where `update_results()` and the analyzers record the results of the step. So a result written during a step goes at `ti + 1`, and the latest result that code in a step can read is at `ti`. At the first time point there is no step: only rows 12 and 13 run, recording the start.
+
+The reasons for this order are Starsim's: new agents exist before diseases initialize them; states update before networks, so that a state change can alter who is eligible for contact; networks update before interventions, so that an intervention can alter the final network for the step; and interventions run before transmission, so that someone vaccinated today is protected today. A declared disease takes all of its transitions at row 9, after the interventions, so a delivery sees the same people under every solver: those at the start of the step, before any of its flows.
 
 ### Order within a type
 
-**Within a type, modules run in the order given.** `ss.Sim(diseases=[syphilis, hiv])` runs syphilis before HIV in rows 5 and 9; `interventions=[screen, treat]` runs screening before treatment in row 8. There is no other ordering mechanism: no priorities, no phases, no dependency graph.
+**Within a type, modules run in the order given.** `ss.Sim(diseases=[syphilis, hiv])` runs syphilis before HIV in row 9 (and row 5, for diseases written as code); `interventions=[screen, treat]` runs screening before treatment in row 8. There is no other ordering mechanism: no priorities, no phases, no dependency graph.
 
 ### Where declared transitions run
 
-A disease built from declared transitions ([03-states-and-transitions.md](03-states-and-transitions.md)) needs no `step()` written by the user. The library puts each transition in one of the two disease rows by its kind, which is derived from its rate:
+A disease built from declared transitions ([03-states-and-transitions.md](03-states-and-transitions.md)) needs no `step()` written by the user. All of its transitions run in row 9, `step()`, after networks and interventions have run, under every solver; within the row, as agents, they are taken in two parts by their kind, which is derived from the rate:
 
-- **Not contact-mediated** (the rate mentions no state): row 5, `step_state()`. This covers `ss.progression`, branching, dwell times that elapse this step, `ss.transfer`, and `ss.death` declared on the disease.
-- **Contact-mediated** (the rate mentions a state): row 9, `step()`, after networks and interventions have run.
-- **`ss.birth` declared on a disease** adds agents at row 4, with the demographics modules, so that they are initialized with everyone else at row 5.
-- **Transitions into and out of states that are not people** (a water reservoir, a mosquito population; [03-states-and-transitions.md](03-states-and-transitions.md)) are scheduled by the same rule and belong to the same disease: `shedding = ss.null >> W @ shed * I.n` and `decay = W >> ss.null @ rate` mention no bare state, so they run at row 5. See [States that are not people](#states-that-are-not-people).
-- **A plain function passed to `ss.Disease(...)`** as a keyword is called at the end of that disease's row 9. A subclass that overrides `step()` or `step_state()` replaces the corresponding row, as in Starsim.
+- **Not contact-mediated** (the rate mentions no state), first. This covers `ss.progression`, branching, dwell times that elapse this step, `ss.transfer`, `ss.death` and `ss.birth` declared on the disease, and the transitions into and out of states that are not people (a water reservoir, a mosquito population; [03-states-and-transitions.md](03-states-and-transitions.md)): `shedding = ss.null >> W @ shed * I.n` and `decay = W >> ss.null @ rate` mention no bare state. See [States that are not people](#states-that-are-not-people).
+- **Contact-mediated** (the rate mentions a state), then.
+- **A plain function passed to `ss.Disease(...)`** as a keyword is called at the end of that disease's row 9. A subclass that overrides `step()` replaces the row, as in Starsim (and so has to call `super().step()`).
 
 ### Where `ss.modify` is evaluated
 
-A modifier ([07-effects.md](07-effects.md)) has no row of its own. The effective value of a modified quantity is its base value combined with the modifiers currently active, and the library keeps that value up to date as follows:
+A modifier ([07-effects.md](07-effects.md)) acts where the engine uses the quantity, so a modifier with a `where=` on a state reflects that state as it is when the quantity is used, whatever the module order. A `when=` function is called once per step, at the modifier's place among the connectors. A modifier that depends only on time, and on who it applies to only through states and stratifications, is worked out before a compartmental run, so the run stays in one call to the kernels. Because the base value is never overwritten, the original value comes back when a modifier ends.
 
-1. The effective value is cached.
-2. The cache is marked stale when something a modifier depends on changes: a state used in its `where=` gains or loses members, the sim passes its `start=` or `stop=`, or a base value is assigned.
-3. A stale value is recomputed the next time the quantity is read, before the read returns.
-4. A modifier whose amount varies in time (`multiply=ss.seasonal(...)`, a waning curve, a function) is marked stale once per step, at row 2.
-
-So a modifier with a `where=` on a state always reflects that state as it is at the moment of the read, whatever the module order. (A `when=` function is the exception: it is called once per step, at the modifier's place among the connectors or interventions; see [07-effects.md](07-effects.md).) A modifier that is inactive or constant costs nothing per step. Because the base value is never overwritten, the original value comes back when a modifier ends.
-
-Direct writes by custom code are a different matter: the loop does not record them unless asked. `ss.Sim(..., track_writes=True)` makes the state arrays record which module assigned them at each step; it is **off by default**, because recording the writer on every assignment is a cost inside the loop that most runs do not need. `sim.what_modifies(x)` always lists the declared modifiers on `x`, and lists the modules observed writing it only when tracking was on for the run ([07-effects.md](07-effects.md)).
+Direct writes by custom code are a different matter: the loop does not record them. `sim.what_modifies(x)` lists the declared modifiers on `x` ([07-effects.md](07-effects.md)).
 
 Example: `ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)`. If syphilis is listed before HIV, a person who acquires syphilis at row 9 of this step has doubled HIV transmissibility when HIV transmission runs later in row 9 of the same step. If syphilis is listed after HIV, the doubling is first used one step later. Both are valid; the difference is O(dt).
 
@@ -73,17 +67,18 @@ Example: `ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)`. If syp
 import starsim as ss
 
 sir    = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
+    infection = ss.transmission('S -> I', beta=0.3),
     recovery  = ss.progression('I -> R', dur=10),
+    init_prev = 0.01,
 )
 test   = ss.Test(sensitivity=0.9, specificity=0.98)
-drug   = ss.Treatment(efficacy=0.95)
+drug   = ss.Treatment(cure=0.95)
 screen = ss.screen(test, coverage=0.2, on_positive=ss.treat(drug))
 
 sim = ss.Sim(sir, interventions=screen, unit='day', dt=1, stop=100)
 ```
 
-Testing and treatment happen in the same step: the follow-up given as `on_positive=` runs immediately, inside the screening call at row 8, for the people who tested positive. Follow-ups chain to any depth this way.
+Testing and treatment happen in the same step: the follow-up given as `on_positive=` is a module of its own (`screen_positive`), placed right after the screening in row 8, and it acts on the people who tested positive in that step. Follow-ups chain to any depth this way.
 
 Infection is at row 9, after interventions, so with the default order a person infected today is first eligible for screening tomorrow. To put screening after transmission, so that infection, testing, and treatment can all happen in one step, move it in the loop:
 
@@ -98,15 +93,24 @@ Which of the two is right depends on what a step represents in the model. With a
 ## The loop is a data object
 
 ```python
+sim = ss.Sim(sir, unit='day', stop=100)
+sim.init()
+
+def fn(sim):             # any function of the sim
+    pass
+
 sim.loop                 # the plan: every (time, module, function) entry in execution order
-print(sim.loop.to_df())  # as a table: time, ti, func_order, label, module, func_name
+print(sim.loop.to_df())  # as a table: time, ti, func_order, label, module, func_name, cpu_time
 sim.loop.plot()          # as a diagram
 sim.loop.insert(fn, label='sir.step')                 # call fn(sim) after sir.step at every step
 sim.loop.insert(fn, label='sir.step', before=True)    # ... or before it
-sim.loop.insert(fn, match_fn=lambda plan: (plan.label == 'sir.step') & (plan.time > ss.date('2021-01-01')))
+sim.loop.insert(fn, match_fn=lambda plan: (plan.label == 'sir.step') & (plan.time > 50))
+sim.run()
 ```
 
-This is Starsim's `ss.Loop`, unchanged apart from one addition: `insert()` also accepts a module, which moves that module's `step()` to the given position (as in the screening example above). The loop exists after `sim.init()`. Labels are `'<module name>.<function name>'`; `sim.loop.to_df().label.unique()` lists them.
+This is Starsim's `ss.Loop`, unchanged apart from one addition: `insert()` also accepts a module, which moves that module's `step()` to the given position (as in the screening example above). The loop exists after `sim.init()`; its plan is made when it is first needed, so a sim that the kernels run in one call never makes it. Labels are `'<module name>.<function name>'`; `sim.loop.to_df().label.unique()` lists them. In the plan, the calls of a step are listed under the time point it ends at (`ti` is 1 for the first step), while `sim.ti` during the step is the time point it starts from.
+
+A sim with functions inserted into its loop is taken a step at a time, not in one call to the kernels; `sim.kernel_reason()` says why a run is stepped.
 
 Whatever the order is, it can be printed, and it is the only thing that determines what runs when.
 
@@ -117,15 +121,13 @@ Whatever the order is, it can be printed, and it is the only thing that determin
 ```text
 >>> sim.describe()
 ...
-schedule:
-  every day:   sir, random network, screen
-  every year:  births, deaths
+schedule     every day: randomnet, sir
+             every 365 days: births, deaths
 ```
 
-- Groups are ordered from the shortest timestep to the longest. Within a group, modules are in loop order (the table above), and a module with two rows (a disease's state update and its transmission) is listed once, at its first.
-- A module moved with `sim.loop.insert()` is shown at its new place.
+- Groups are ordered from the shortest timestep to the longest. Within a group, modules are in the order of their first row in the table above, and a module with several rows is listed once.
 - In a sim with no unit the line reads `every step:`, and a module on a coarser timestep `every 7 steps:`.
-- `sim.describe(verbose=True)` adds the rows of the table above under each group; the unrolled list is `sim.loop.to_df()`, on request.
+- The unrolled list is `sim.loop.to_df()`, on request.
 
 ## Competing hazards are resolved jointly
 
@@ -142,14 +144,14 @@ In a discrete-time run this MUST be implemented as a single multinomial draw per
 Details:
 
 - Transitions out of one state that carry `p=` are a split decided on entry to the state, not a competition ([03-states-and-transitions.md](03-states-and-transitions.md) §Branching); the split is one draw as well.
-- A state with both spontaneous exits (row 5) and a contact-mediated exit (row 9) resolves the spontaneous ones jointly first, and transmission then acts on whoever is still in the state. This is an ordering effect between rows, of size O(dt), and is the same in every agent-based or chain-binomial run.
-- Hazards from *different* modules acting on the same people (background mortality from a demographics module, disease mortality from a disease) are not pooled; they run in module order. Because deaths are deferred (next section), neither prevents the other from being recorded.
+- As agents, a state with both spontaneous exits and a contact-mediated exit resolves the spontaneous ones jointly first, and transmission then acts on whoever is still in the state (both in row 9). This is an ordering effect of size O(dt); the compartmental solvers draw them together (the chain-binomial solver draws the number leaving each compartment once, then shares it between the exits).
+- Hazards from *different* modules acting on the same people (background mortality from a demographics module, disease mortality from a disease) are not pooled; they run in module order. Because deaths are deferred (next section), neither prevents the other from being recorded. The exception is diseases whose states are crossed in a compartmental run ([07-effects.md](07-effects.md)): they are one model, whose rates are all worked out from the people at the start of the step.
 
 ## Removals are deferred
 
-Nobody is removed in the middle of a step. A module that kills an agent calls `sim.people.request_death(uids)`, which only records the request; the deaths take effect at row 10 (`step_die()`), after every module has run, and the agents are removed from the active population at row 13. This is Starsim's behavior, kept. A declared `ss.death` transition, and `I >> ss.null @ rate` out of a state of people, do the same thing.
+Nobody is removed in the middle of a step. A module that kills an agent calls `sim.people.request_death(uids)`, which only records the request; the deaths take effect at row 10 (`step_die()`), after every module has run, and the agents are removed from the active population at row 14. This is Starsim's behavior, kept. A declared `ss.death` transition, and `I >> ss.null @ rate` out of a state of people, do the same thing.
 
-Consequences: an agent who is requested to die at row 5 can still transmit at row 9 of that step and is still counted by any module that runs before row 10; two modules requesting the same death do not conflict; and custom code never sees arrays change length partway through a step. Emigration and other non-death removals use the same mechanism (`request_removal`).
+Consequences: an agent who is requested to die earlier in the step can still transmit at row 9 of that step and is still counted by any module that runs before row 10; two modules requesting the same death do not conflict; and custom code never sees arrays change length partway through a step. Emigration and other non-death removals use the same mechanism (`request_removal`).
 
 ## Per-module timesteps
 
@@ -165,20 +167,22 @@ So a disease at `dt=ss.days(1)` and a demographics module at `dt=ss.years(1)` sh
 - **Time with no unit is in timesteps.** If nothing in the model has a unit (no `unit=`, no unit on `dt`, no dates, no typed values), the sim's `dt` is one step, the times in the plan are step indices, `stop=100` is 100 steps, and a module's own `dt` is a number of steps (`dt=7` runs it every seventh step). No unit is invented, and results are indexed by step. As soon as anything has a unit the sim takes its unit from that, in the order `unit=`, the unit of `dt`, `start`/`stop`, the typed values, and prints where it came from ([02-types.md](02-types.md)).
 - A module reading another module's state reads its current value, whichever timestep that module is on.
 - Rates and durations are converted using the `dt` of the module that uses them ([02-types.md](02-types.md)).
-- Results are reported on each module's own timeline, as in Starsim. A flow from a coarse module that is requested on a finer grid is spread evenly across the interval and noted once (`W1002 CoarseFlow`).
+- Results are reported on each module's own timeline, as in Starsim.
+- A declared disease with a timestep of its own is taken a step at a time (it is not run in one call to the kernels).
 - `sim.loop.plot_step_order()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
 
-Events inside a step (a commuting population that mixes at work from 08:00 and at home from 18:00, say) use the same mechanism: give the network or `ss.Mobility` a sub-daily `dt`, and it appears in the plan at those times. See [06-routes.md](06-routes.md).
+Events inside a step use the same mechanism: a network given a sub-daily `dt` appears in the plan at those times. Commuting between places (`ss.Mobility`) is not a module and has no place in the loop: it is a share of time spent in each place, applied within every step ([06-routes.md](06-routes.md)).
 
 ## Order under each solver
 
 | Solver | Declared transitions | Everything else (interventions, `step()` code, results) |
 |---|---|---|
-| `'abm'`, `'binomial'` | Evaluated in the loop, at rows 5 and 9 | In the loop, in order |
-| `'ode'`, `'sde'` | All flows are evaluated together from the current state and integrated between loop times, so there is no order among them | Called at loop times, in loop order, on groups |
-| `'gillespie'`, `'tau'` | Events are drawn in continuous time between loop times; no order among flows | Called at loop times, in loop order, on groups |
+| `'abm'` | Drawn per agent at row 9, in the two parts above | In the loop, in order |
+| `'binomial'` | Drawn at row 9 from the counts at the start of the step, all flows together | Called at loop times, in loop order, on groups |
+| `'ode'` | All flows are evaluated together from the current state and integrated over the step, so there is no order among them | Called at loop times, in loop order, on groups |
+| `'gillespie'` (and its tau leaps) | Events are drawn in continuous time over the step; no order among flows | Called at loop times, in loop order, on groups |
 
-In a compartmental ODE run the question "does recovery happen before or after infection?" has no meaning, which is one reason the simplest models behave identically however they are written. Things that happen at points in time (a campaign on a date, a custom function called each step) still happen in loop order under every solver. The continuous-time solvers have no `dt` of their own; the sim's `dt` is then only the spacing of the loop times and of the results. See [12-backends.md](12-backends.md).
+In a compartmental run the question "does recovery happen before or after infection?" has no meaning, which is one reason the simplest models behave identically however they are written. Things that happen at points in time (a campaign on a date, a custom function called each step) still happen in loop order under every solver. A compartmental sim with nothing that needs a step of its own is run in one call to the kernels, with no loop at all: deliveries on a schedule to people chosen by states and stratifications are taken by the kernels at their place in the order (before the step's flows), and `sim.kernel_reason()` says why a run is stepped instead. The continuous-time solver has no `dt` of its own; the sim's `dt` is then only the spacing of the loop times and of the results. See [12-backends.md](12-backends.md).
 
 ### States that are not people
 
@@ -186,10 +190,10 @@ A state that is not people (bacteria in water, mosquitoes) is an ordinary `ss.St
 
 | Solver | People | States that are not people |
 |---|---|---|
-| `'ode'`, `'sde'`, `'gillespie'`, `'tau'`, `'binomial'` | Counts per group | More counts, advanced by the same solver with every other flow |
-| `'abm'` | Agents | Counts (one number, or one per patch), advanced once per step in the disease's own rows: their flows are computed from the current counts (`I.n` is the number of agents in `I` at that moment) and applied to the count |
+| `'ode'`, `'binomial'`, `'gillespie'` | Counts per group | More counts, advanced by the same solver with every other flow |
+| `'abm'` | Agents | Counts (one number, or one per patch), advanced in row 9 with the transitions that are not contact-mediated: as an ODE over the step (by RK4), with the people as they were at its start (`I.n` is the number of agents in `I` then) |
 
-In an agent-based run the transitions among people are draws per agent, as always. The flows into and out of a count are applied as expected values each step (with the conversions in [02-types.md](02-types.md)), because these quantities are usually large and are not individuals; `n_agents=` and `total_pop` do not apply to them, and neither does the scale factor between agents and people. A person's infection rate that uses the count (`beta * W.n / (W.n + K)`) is evaluated per agent from the count as it stands when row 5 runs. `describe()` prints which states were taken to be people and which were not, and marks the ones it guessed. Whether these flows should be random draws by default is open ([19-open-questions.md](19-open-questions.md)).
+In an agent-based run the transitions among people are draws per agent, as always. The flows into and out of a count are not drawn, because these quantities are usually large and are not individuals; `n_agents=` and `total_pop` do not apply to them, and neither does the scale factor between agents and people. A person's infection rate that uses the count (`beta * W.n / (W.n + K)`) is evaluated per agent from the count as it stands when transmission is taken, after the count has been advanced. `describe()` prints which states were taken to be people and which were not, and marks the ones it guessed. Whether these flows should be random draws by default is open ([19-open-questions.md](19-open-questions.md)).
 
 ## Determinism
 
@@ -206,22 +210,23 @@ Requirement 2 rules out one random number stream shared across workers, and is o
 
 `sim.init()` builds the sim in this order (`sim.run()` calls it if it has not been called):
 
-1. Resolve the declarations: states (declared or inferred, and which of them are people), the kind of each transition, the sim's unit (from `unit=`, then the unit of `dt`, then `start`/`stop`, then the typed values; none of these means time is in steps), and defaults. Every guessed default is recorded for `describe()`.
+1. Resolve the declarations: states (declared or inferred, and which of them are people), the kind of each transition, the sim's unit (from `unit=`, else the model's typed values, else dates; none of these means time is in steps; [02-types.md](02-types.md)), and defaults. Every guessed default is recorded for `describe()`.
 2. Expand stratifications into strata and generate the transitions between them.
 3. Load named data: parameters from data sources, and observed data attached to results by name.
-4. Check the dimension of every rate and the shape of every array-valued parameter.
+4. Check the dimension of every rate, the shape of every array-valued parameter, and every parameter's value against its bounds (`ss.UnvaluedParameter`, `ss.OutOfBounds`).
 5. Register modifiers against their targets.
 6. Choose the solver if `solver='auto'`, and work out any approximations the solver needs ([12-backends.md](12-backends.md)).
-7. Write the model spec ([14-model-spec.md](14-model-spec.md)) and compute `sim.hash()` ([11-random.md](11-random.md#run-identity)).
-8. Build the loop.
-9. Allocate state, set initial conditions, and initialize the random number streams.
-10. Print the solver with its reason, any approximations, and where the sim's unit came from if it was not given as `unit=`, one line each (`verbose=0` hides them; `approx=True` hides the approximation notes only). `sim.describe()` prints the full resolved model, including the schedule, at any time.
+7. Collect the loop's functions (the plan itself is made when the loop first runs).
+8. Allocate state, set initial conditions, and initialize the random number streams.
+9. Print the solver with its reason, any approximations, where the sim's unit came from if it was not given as `unit=`, and, for each disease with a transmission, R0 and the number infectious at the start, one line each (`verbose=0` hides them; `approx=True` hides the approximation notes only). The notes are kept in `sim.notes` whatever is printed. `sim.describe()` prints the full resolved model, including the schedule, at any time.
+
+The model spec ([14-model-spec.md](14-model-spec.md)) and `sim.hash()` ([11-random.md](11-random.md#run-identity)) are worked out when asked for, not at `init()`, since a run does not need them.
 
 Problems are reported at the earliest step that can detect them ([15-errors.md](15-errors.md)): a typo in a state name is an error at step 1, not at the first timestep. The exception is user functions, which are not analyzed in advance; a function that asks for something the solver cannot provide is reported when it is first called ([12-backends.md](12-backends.md) §Functions).
 
 ## Finishing
 
-After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim raises `E1003 RunAfterFinish`; copy the sim or build a new one to run again.
+After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim raises `AlreadyRunError`, which says to make a new sim with `sim.new()` (or to copy the sim before running it).
 
 ## Rejected
 

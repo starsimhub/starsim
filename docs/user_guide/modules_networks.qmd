@@ -3,23 +3,106 @@ title: Networks
 jupyter: python3
 ---
 
+This guide explains how infection gets from one person to another in Starsim: the mixing (who meets whom, and how often), what `beta` means under each kind of mixing, and how to use, customize, and write networks and mixing pools. For learning-oriented examples, see the [Networks tutorial](../tutorials/t5_networks.qmd).
 
-This guide provides technical reference for implementing and customizing networks in Starsim. For learning-oriented examples, see the Networks tutorial.
+## Routes: who meets whom
+
+A disease says who infects whom (`S >> I @ beta * I`, or `ss.transmission('S -> I', beta=beta)`); the **routes** say who meets whom and how often. Changing from homogeneous mixing to a contact matrix to a network does not change the disease. Routes are passed to the sim with `networks=`, which takes networks and mixing pools alike, singly or as a list:
+
+- **No network given**: mixing is homogeneous, with one contact per unit time. `beta` is then the classical transmission rate (per unit time, in the sim's unit), and the model runs as an ODE under `solver='auto'`.
+- **`ss.MixingPool(n_contacts=10)`**: homogeneous mixing with 10 contacts per unit time. `beta` is now the probability of transmission per contact. This still has a compartmental form, so it also runs as an ODE.
+- **`ss.contacts(...)`**: a contact matrix between groups (by age, say), used with a stratified model. It runs as an ODE, or as agents.
+- **A network** such as `ss.RandomNet(n_contacts=10)`, `ss.MFNet()`, or `ss.StaticNet()`: individual contacts, with `beta` per contact (per act, on a sexual network that defines acts). A model with a network runs as agents under `solver='auto'`.
+
+Here is the same disease under three kinds of mixing. With no network, `beta=0.05` per day and a 10-day infection give R0 = 0.5, so there is no epidemic; with 10 contacts a day, R0 is about 5, and the mixing pool (an ODE) and the random network (agents) give nearly the same epidemic:
+
+```{python}
+import starsim as ss
+import starsim.library as ssl
+ss.options(jupyter=True)
+
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.05),
+    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    init_prev = 0.01,
+    name = 'sir',
+)
+
+kw = dict(stop=ss.days(150), verbose=0)
+sims = ss.parallel(
+    homogeneous = ss.Sim(sir, **kw),                                                 # ODE; beta is a rate per day
+    pool        = ss.Sim(sir, networks=ss.MixingPool(n_contacts=10), **kw),          # ODE; beta is per contact
+    random      = ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), n_agents=10_000, **kw), # Agents
+)
+sims.plot()
+```
+
+The disease object is the same in all three. `sim.solvers()` shows which solvers can run a model with a given route, and `describe()` shows the mixing and what each rate resolved to:
+
+```{python}
+sim = ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), **kw)
+sim.solvers()
+```
+
+A compartmental solver can be asked for even with a network: `solver='ode'` approximates a `RandomNet` by homogeneous mixing with the same number of contacts, and says so in one line. Partnership networks (`ss.MFNet`, `ss.PartnerNet`) have no compartmental approximation yet, so they run as agents (and `solver='ode'` raises `CapabilityError`).
+
+| Route | What it supplies | As agents | As compartments |
+|---|---|---|---|
+| none given | homogeneous mixing, 1 contact per unit time | exact | exact |
+| `ss.MixingPool(n_contacts=c)` | homogeneous mixing, `c` contacts per unit time | exact | exact |
+| `ss.MixingPools(...)`, `ss.contacts(...)` | a contact matrix between groups | exact | exact (for age groups) |
+| `ss.RandomNet(n_contacts=c)` | individual contacts | exact | approximated by homogeneous mixing with `c` contacts |
+| `ss.StaticNet(graph=...)` | a fixed set of contacts | exact | approximated by homogeneous mixing with the graph's mean degree |
+| `ss.MFNet()`, `ss.PartnerNet()`, and other partnership networks | partnerships with durations and acts | exact | not available |
+
+### Contact matrices
+
+`ss.contacts()` gives the mixing between the groups of a stratified model: `matrix[i, j]` is the number of contacts per unit time that a person in group `i` has with people in group `j`. A country's matrix can be loaded by name, e.g. `ss.contacts('Kenya')` (from the Prem et al. 2021 study). With a contact matrix, `beta` is the probability of infection per contact:
+
+```{python}
+S, I, R = ss.states(3)
+infection = S >> I @ 0.03 * I
+recovery  = I >> R @ ss.days(7)
+sir_age = ss.Disease(infection, recovery, init_prev=0.001)
+sir_age.stratify(age=[0, 15, 65])
+
+contacts = ss.contacts([[10, 4, 1], [4, 8, 2], [1, 2, 3]], bands=[0, 15, 65])
+sim = ss.Sim(sir_age, networks=contacts, total_pop=1e6, stop=ss.days(120), verbose=0).run()
+sim.results.sir_age.infection.by('age').plot()
+```
+
+### Beta by network
+
+Infectiousness belongs to the disease and contact to the network, but transmission can differ by route (HIV is far more transmissible through a shared needle than through sex, and more from men to women than the reverse). The disease then gives one `beta` per network, keyed by the network's name; a pair is the two directions of a directed network (for `ss.MFNet`, male to female and then female to male):
+
+```{python}
+sis = ss.Disease(
+    infection = ss.transmission('S -> I', beta=dict(randomnet=ss.peryear(0.2), mfnet=[ss.peryear(1.0), ss.peryear(0.5)])),
+    recovery  = ss.progression('I -> S', dur=ss.years(1)),
+    init_prev = 0.05,
+    name = 'sis',
+)
+sim = ss.Sim(sis, networks=[ss.RandomNet(), ss.MFNet()], n_agents=2000, start='2000', stop='2020', dt=ss.months(1), verbose=0)
+sim.run()
+sim.plot('sis')
+```
+
+The rest of this page is about networks and mixing pools as modules: the classes Starsim provides, how they work, and how to write your own.
 
 ## Transmission routes and the Route base class
 
-All disease transmission in Starsim occurs via **routes** - pathways through which infectious agents can spread. Both contact networks and mixing pools inherit from the base `ss.Route` class, which defines the interface for transmission mechanisms.
+All disease transmission in Starsim occurs via **routes** - pathways through which infectious agents can spread. Both contact networks and mixing pools inherit from the base `ss.networks.Route` class, which defines the interface for transmission mechanisms.
 
 ### Route hierarchy
 ```
-ss.Route (base class for all transmission pathways)
+ss.networks.Route (base class for all transmission pathways)
 ├── ss.Network (contact-based transmission)
 │   └── ss.DynamicNetwork (time-varying connections)
 │       └── ss.SexualNetwork (sexual partnership networks)
 └── ss.MixingPool (group-based transmission)
 ```
 
-When diseases calculate transmission, they iterate through all routes in the simulation and call each route's transmission methods. This unified interface allows diseases to work seamlessly with any combination of networks and mixing pools.
+When diseases calculate transmission as agents, they iterate through all routes in the simulation and call each route's transmission methods. This unified interface allows diseases to work seamlessly with any combination of networks and mixing pools. (In a compartmental run there are no individual contacts: each route is turned into contact rates between groups, as in the table above.)
 
 ### How transmission works via routes
 1. **Disease calls route**: Each disease loops through `sim.networks` (which contains all routes)
@@ -47,7 +130,7 @@ Starsim provides different network types for different transmission scenarios:
 ### Base classes
 | Class | Purpose | Key Features | When to Use |
 |-------|---------|--------------|-------------|
-| `Route` | Base for all transmission pathways | Defines transmission interface | Never directly - inherit from this |
+| `networks.Route` | Base for all transmission pathways | Defines transmission interface | Never directly - inherit from this |
 | `Network` | Base contact network | Edge management, validation | Rarely - use concrete classes |
 | `DynamicNetwork` | Time-varying connections | Adds/removes edges over time | When relationships form/dissolve |
 | `SexualNetwork` | Sexual partnerships | Age of debut, acts per partnership | For STI modeling |
@@ -56,11 +139,9 @@ Starsim provides different network types for different transmission scenarios:
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
 | `StaticNet` | NetworkX graph conversion | `graph`, `p`, `n_contacts` | Pre-defined network structures |
-| `RandomNet` | Random connections | `n_contacts`, `dur`, `dynamic`, `age_range` | General infectious diseases |
-| `ClusterNet` | Fully connected clusters | `cluster_size`, `dynamic`, `age_range` | Households and other small groups |
-| `HybridNet` | Covasim's household, school, work, and community networks | `household_size`, `contacts`, `school_ages`, `work_ages` | Respiratory diseases with structured contacts |
-| `MFNet` | Male-female partnerships | `duration`, `acts`, `debut` | Heterosexual STI transmission |
-| `MSMNet` | Male-male partnerships | `duration`, `acts`, `participation` | MSM STI transmission |
+| `RandomNet` | Random connections | `n_contacts`, `dur`, `dynamic`, `age_range`, `method` | General infectious diseases |
+| `PartnerNet` | Partnerships with a target number of partners at a time | `n_contacts`, `dur`, `concurrency`, `max_contacts`, `match` | Partnership networks fitted to target statistics (as in EpiModel) |
+| `MFNet` | Male-female partnerships | `dur`, `acts`, `debut`, `n_contacts`, `concurrency` | Heterosexual STI transmission |
 | `PrenatalNet` | Prenatal transmission | `dur`, `start`, `end` | In-utero (vertical) transmission |
 | `PostnatalNet` | Postnatal transmission | Inherits from `DynamicNetwork` | Breastfeeding, birth canal |
 
@@ -69,6 +150,10 @@ Starsim provides different network types for different transmission scenarios:
 
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
+| `ClusterNet` | Fully connected clusters | `cluster_size`, `dynamic`, `age_range` | Households and other small groups |
+| `HybridNet` | Covasim's household, school, work, and community networks | `household_size`, `contacts`, `school_ages`, `work_ages` | Respiratory diseases with structured contacts |
+| `MSMNet` | Male-male partnerships | `dur`, `acts`, `participation` | MSM STI transmission |
+| `RandomSafeNet` | Random connections that are random-number safe | `n_edges`, `dur` | Scenario comparisons that need common random numbers |
 | `ErdosRenyiNet` | Probabilistic edges | `p` (edge probability), `dur` | Theoretical network studies |
 | `DiskNet` | Spatial proximity | `r` (radius), `v` (velocity) | Geographic transmission |
 | `NullNet` | Self-connections only | `n_people` | Debugging, placeholders |
@@ -77,19 +162,22 @@ Starsim provides different network types for different transmission scenarios:
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
 | `AgeGroup` | Age-based filtering | `low`, `high` | Defining age groups for mixing |
-| `MixingPool` | Single group transmission | `src`, `dst`, `beta`, `contacts` | Simple group-to-group mixing |
-| `MixingPools` | Multi-group mixing | `src`, `dst`, `contacts` (matrix) | Complex age/risk structured mixing |
+| `MixingPool` | Single group transmission | `src`, `dst`, `n_contacts` | Homogeneous mixing with a contact rate, or simple group-to-group mixing |
+| `MixingPools` | Multi-group mixing | `src`, `dst`, `n_contacts` (matrix) | Complex age/risk structured mixing |
+| `ss.contacts()` | A contact matrix for a stratified model; returns `MixingPools` | `matrix` and `bands`, a matrix over a stratification (`age=`), or a country name | Age-structured mixing, as an ODE or as agents |
 
 ### Choosing the right network type
 
 - **For respiratory diseases (flu, COVID-19, measles):**
     - `RandomNet`: Simple random mixing; the default in most cases
-    - `MixingPools`: Age-structured mixing with contact matrices
-    - `ClusterNet`: Households or other fully connected groups
-    - `HybridNet`: Households, schools, workplaces, and community, as in Covasim
+    - No network: homogeneous mixing, which runs as an ODE
+    - `ss.contacts()`: Age-structured mixing with contact matrices (e.g. `ss.contacts('Kenya')`)
+    - `ssl.ClusterNet`: Households or other fully connected groups
+    - `ssl.HybridNet`: Households, schools, workplaces, and community, as in Covasim
 - **For sexually transmitted infections:**
     - `MFNet`: Male-female (heterosexual) transmission
-    - `MSMNet`: Transmission between men who have sex with men (MSM)
+    - `PartnerNet`: Partnerships with a target number of partners at a time
+    - `ssl.MSMNet`: Transmission between men who have sex with men (MSM)
 - **For mother-to-child transmission:**
     - `PrenatalNet`: In-utero transmission (HIV, syphilis)
     - `PostnatalNet`: Birth/breastfeeding transmission (HIV, HBV)
@@ -113,24 +201,24 @@ All networks inherit key methods from the base classes. Override these to create
 | `update()` | Main update method each timestep | Rarely - calls add/remove pairs |
 | `find_contacts()` | Query network connections | Override for custom queries |
 
-Let's compare a simple SIR model configured with transmission using a single Mixing Pool to a similar model using a contact network. Mixing pools are not the same as contact networks, so the results are not expected to be identical.
+## Mixing pools as agents
+
+Mixing pools can be used for agents too. Let's compare a simple SIR model configured with transmission using a single mixing pool to a similar model using a contact network, both run as agents (because `n_agents` is given). Mixing pools are not the same as contact networks, so the results are not expected to be identical: here each agent's number of contacts in the pool is drawn once from a Poisson distribution, while the random network redraws its edges every step.
 
 ```{python}
 import starsim as ss
 ss.options(jupyter=True)
 
 # Transmission using a mixing pool
-mp = ss.MixingPool(beta=1.0, n_contacts=ss.poisson(lam=3)) # A single mixing pool
-sir = ss.SIR()
-sim1 = ss.Sim(diseases=sir, networks=mp, verbose=0, label='Mixing Pool')
+mp = ss.MixingPool(n_contacts=ss.poisson(lam=3)) # A single mixing pool
+sim1 = ss.Sim(diseases=ss.SIR(), networks=mp, n_agents=5000, verbose=0)
 
 # Transmission using a network
 net = ss.RandomNet(n_contacts=ss.poisson(lam=3))
-sir = ss.SIR()
-sim2 = ss.Sim(diseases=sir, networks=net, verbose=0, label='Contact Network')
+sim2 = ss.Sim(diseases=ss.SIR(), networks=net, n_agents=5000, verbose=0)
 
-msim = ss.MultiSim([sim1, sim2]).run()
-msim.plot()
+msim = ss.parallel(mixing_pool=sim1, contact_network=sim2)
+msim.plot('sir')
 ```
 
 Each MixingPool has several configuration parameters, including `src` and `dst`. The value of these parameters can either be an array of uids, like `ss.uids([0,1,2])` or a callable function that takes `sim` as an argument and returns an array of uids (or a BoolArr) like `lambda sim: sim.people.age<10`. One helper class we have created is called `AgeGroup`, which takes `low` and `high` ages as parameters. This class has some performance advantages when using multiple pools via `MixingPools` through caching.
@@ -145,10 +233,10 @@ acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * di
 ```
 Ultimately, the acquisition probability for each susceptible agent in `dst_uids` is computed as
 ```python
-p = self.pars.beta * trans * acq
+p = self.pars.beta * disease_beta * trans * acq
 ```
 
-You can see the `beta` parameter here, which is another pool parameter and should use `ss.timeprob()` to automatically adjust for time units. Mixing pools do not currently use the `beta` parameters configured in individual disease modules.
+where `disease_beta` is the disease's `beta` for this pool, converted to the timestep. As with networks, the `beta` belongs to the disease: in a declared disease the pool's own `beta` must be left at its default of 1 (any other value raises `RouteMismatch`, which says to give it to the transmission instead, e.g. `beta=dict(mixingpool=...)`). For a disease written as code, the pool's `beta` is a plain multiplier.
 
 ```{python}
 mp = ss.MixingPool(
@@ -157,7 +245,7 @@ mp = ss.MixingPool(
     dst = ss.AgeGroup(low=15, high=None), # Here demonstrating the AgeGroup class, identical to lambda sim: sim.people.age >= 15
     n_contacts = ss.poisson(lam=5), # Contacts will be poisson distributed with a mean of 5
 )
-sim = ss.Sim(diseases=['sir', 'sis'], networks=mp) # Two diseases, but only "sir" will have transmission
+sim = ss.Sim(diseases=['sir', 'sis'], networks=mp, n_agents=5000, verbose=0) # Two diseases, but only "sir" will have transmission
 sim.run()
 sim.plot()
 ```
@@ -200,7 +288,7 @@ class InfectionsByAge(ss.Analyzer):
         self.new_cases = np.zeros((len(self), len(self.bins)-1))
 
     def step(self):
-        new_inf = self.sim.diseases.sir.ti_infected == self.ti
+        new_inf = self.sim.diseases.sir.ti_I == self.ti # ti_I is the time point at which each agent entered I
         if not new_inf.any(): return
         self.new_cases[self.ti, :] = np.histogram(self.sim.people.age[new_inf], bins=self.bins)[0]
 
@@ -215,10 +303,10 @@ class InfectionsByAge(ss.Analyzer):
 az = InfectionsByAge(np.concatenate([lows, [1000]]))
 
 sir = ss.SIR()
-sim = ss.Sim(diseases=sir, networks=mps, analyzers=az, dur=5, dt=1/4, n_agents=1000, verbose=0)
+sim = ss.Sim(diseases=sir, networks=mps, analyzers=az, start='2000', stop='2005', dt=ss.months(3), n_agents=1000, verbose=0)
 sim.run()
 sim.analyzers[0].plot()
-print('↑ The default age distribution is uniform, so the 75+ group contains many more people than the other age groups, explaining the larger number of new infections.')
+print('↑ The default age distribution has more young people than old, so the younger age groups have more new infections.')
 ```
 
 Mixing pools work well with properties other than age. Here's an example that mixes by socio-economic status (SES).
@@ -251,7 +339,7 @@ class New_Infections_By_SES(ss.Analyzer):
         self.new_cases = np.zeros((len(self), len(ses)))
 
     def step(self):
-        new_inf = self.sim.diseases.sir.ti_infected == self.ti
+        new_inf = self.sim.diseases.sir.ti_I == self.ti
         if not new_inf.any():
             return
 
@@ -267,7 +355,7 @@ def seeding(self, sim, uids):
     return p
 sir = ss.SIR(init_prev = ss.bernoulli(p=seeding), beta=ss.peryear(0.2)) # The probability of being selected as a seed is determined on a per-agent basis by the above 'seeding' function
 
-sim = ss.Sim(people=ppl, diseases=sir, networks=mps, analyzers=az, dt=1/12, dur=35, verbose=0)
+sim = ss.Sim(people=ppl, diseases=sir, networks=mps, analyzers=az, start='2000', stop='2035', dt=ss.months(1), verbose=0)
 sim.run()
 
 fig, ax = plt.subplots()
@@ -284,12 +372,12 @@ In the above figure, infections are seeded into the high group at the beginning 
 
 ## Clustered and hybrid networks
 
-`ss.ClusterNet` divides agents into fully connected clusters, such as households: each agent is assigned to one cluster, with sizes drawn from `cluster_size` (a number is treated as the mean of a Poisson distribution), and every pair of agents within a cluster is connected. By default the clusters are created once and never change; set `dynamic=True` to recreate them on each timestep.
+`ssl.ClusterNet` (`import starsim.library as ssl`) divides agents into fully connected clusters, such as households: each agent is assigned to one cluster, with sizes drawn from `cluster_size` (a number is treated as the mean of a Poisson distribution), and every pair of agents within a cluster is connected. By default the clusters are created once and never change; set `dynamic=True` to recreate them on each timestep.
 
-`ss.RandomNet` and `ss.RandomExactNet` also accept `dynamic` (set `dynamic=False` for a static network, where edges are created once and agents who join later, e.g. newborns, are not added) and `age_range`, which restricts the network to agents with `age_range[0] <= age < age_range[1]`. Together, these let you build structured contact patterns, for example:
+`ss.RandomNet` also accepts `dynamic` (set `dynamic=False` for a static network, where edges are created once and agents who join later, e.g. newborns, are not added) and `age_range`, which restricts the network to agents with `age_range[0] <= age < age_range[1]`. Together, these let you build structured contact patterns, for example:
 
 ```{python}
-households = ss.ClusterNet(name='households', cluster_size=ss.poisson(3))
+households = ssl.ClusterNet(name='households', cluster_size=ss.poisson(3))
 work = ss.RandomNet(name='work', n_contacts=10, age_range=[20, 65], dynamic=False)
 sim = ss.Sim(n_agents=2000, diseases='sis', networks=[households, work], verbose=0)
 sim.run()
@@ -297,10 +385,10 @@ print(f'Number of households: {sim.networks.households.n_clusters}')
 sim.plot('sis')
 ```
 
-`ss.HybridNet` reproduces [Covasim](https://covasim.org/)'s "hybrid" population: when added to a sim, it expands into four separate networks, households (`h`, an `ss.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each an `ss.RandomNet` restricted by age where appropriate. Any `dt`, `start`, or `stop` given to `ss.HybridNet` is passed to all four networks, and each network can then be accessed (or modified) separately, e.g. `sim.networks.s`:
+`ssl.HybridNet` reproduces [Covasim](https://covasim.org/)'s "hybrid" population: when added to a sim, it expands into four separate networks, households (`h`, an `ssl.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each an `ss.RandomNet` restricted by age where appropriate. Any `dt`, `start`, or `stop` given to `ssl.HybridNet` is passed to all four networks, and each network can then be accessed (or modified) separately, e.g. `sim.networks.s`:
 
 ```{python}
-sim = ss.Sim(n_agents=2000, diseases='sis', networks=ss.HybridNet(household_size=3), verbose=0)
+sim = ss.Sim(n_agents=2000, diseases='sis', networks=ssl.HybridNet(household_size=3), verbose=0)
 sim.run()
 for net in sim.networks():
     print(f'{net.name} ({net.label}): {len(net)} edges')

@@ -4,74 +4,31 @@ States, transitions, and the expressions that drive them.
 A model is a set of `ss.State` objects and the `ss.Transition` objects between
 them. A transition can be written three ways, all of which build the same objects:
 
-    ss.transmission('S -> I', beta=0.05)            # Arrow strings: states inferred
-    S >> I @ 0.05 * I                               # Operators: states declared
-    ss.Transition(S, I, rate=0.05 * I)              # Fully explicit
+    ss.transmission('S -> I', beta=0.3)             # Arrow strings: states inferred
+    S >> I @ 0.3 * I                                # Operators: states declared
+    ss.Transition(S, I, rate=0.3 * I)               # Fully explicit
 
-The `ss.Graph` class collects the states and transitions of one module, names
+The `ss.transitions.Graph` class collects the states and transitions of one module, names
 them, fills in defaults (recording each guess), and checks them.
 """
 import re
 import math
 import inspect
+import textwrap
 import itertools
+import types
 import numpy as np
 import pandas as pd
 import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
 
-__all__ = ['CodedError', 'error', 'note', 'Expr', 'par', 'State', 'states', 'null',
-           'Transition', 'transmission', 'progression', 'birth', 'death', 'immigration', 'emigration', 'outcome', 'Graph',
+__all__ = ['Expr', 'par', 'State', 'states', 'null',
+           'Transition', 'transmission', 'progression', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
            'by', 'timeseries', 'seasonal', 'geo', 'gravity', 'Mobility', 'Strat', 'Transfer', 'transfer', 'stratify']
 
 
-#%% Errors and notes
-
-codes = dict(
-    E101='IncompatibleTypes', E102='WrongDimension', E201='ReservedName', E204='UnknownState', E205='BadBranchSplit',
-    E206='DuplicateDeclaration', E208='NonlinearExposure', E209='UndrivenTransition', E210='UnnamedState',
-    E211='ExposureToCount', E301='UnknownTransition', E302='BadSplit', E305='DuplicateStructuralDimension',
-    E306='InvalidAdjustment', E307='PartialStratificationMixing', E308='InconsistentDimension', E402='NoGeography', E403='RouteMismatch', E504='UnmodifiableTarget', E505='UnknownEffect', E506='UnknownDisease',
-    E602='UnknownParameter', E603='ShapeError', E604='UnvaluedParameter', E606='OutOfBounds', E702='UnknownOutcomeSource',
-    E703='OutcomeCycle', E704='DataMisaligned', E705='UnknownDataColumn', E804='CapabilityError', E1003='RunAfterFinish',
-    E1102='MissingDimension', E1301='NothingToFit', E1302='NoData', E1303='NoPosterior',
-    W101='UnitInferred', W102='LargeStep', W103='UnitsDisagree', W207='UnreachableState', W212='StateNotPeople',
-    W309='LargeStateSpace', W404='MatrixAggregated', W502='OverlappingSet', W503='ClippedToRange', W1304='NotConverged', W1201='SmallCounts', W1202='ExtinctionPossible', W1205='StagesUnderAuto',
-)
-
-
-class CodedError(ValueError):
-    """ An error with a stable code, e.g. "E204 UnknownState"; see `ss.error()` """
-    def __init__(self, code, msg):
-        self.code = code
-        self.codename = codes.get(code, '')
-        super().__init__(f'{code} {self.codename}: {msg}')
-        return
-
-
-def error(code, msg):
-    """ Raise a coded error, e.g. `ss.error('E204', "no state named 'J'")` """
-    raise CodedError(code, msg)
-
-
-def note(msg, code=None, sim=None, verbose=None):
-    """
-    Print a one-line note about something that was assumed or approximated
-
-    Notes are stored in `sim.notes` (if a sim is supplied), so they are kept even
-    if printing is turned off with `verbose=0`.
-    """
-    if sim is not None:
-        if msg in sim.notes: # Only say it once
-            return
-        sim.notes.append(msg)
-        verbose = sc.ifelse(verbose, sim.pars.verbose)
-    verbose = sc.ifelse(verbose, ss.options.verbose)
-    if verbose:
-        print(f'  note: {msg}')
-    return
-
+#%% Helpers
 
 def closest(name, options):
     """ String listing the closest matches to a name, for error messages """
@@ -79,14 +36,36 @@ def closest(name, options):
     return sc.strjoin(matches)
 
 
+def did_you_mean(name, options):
+    """ The end of a sentence in an error message: the closest matches to a name, e.g. "; did you mean S, I?", or "." if none is close; a name with no module (beta) is matched to the options' own names (sir.beta) """
+    short = lambda opt: opt if '.' in name else opt.rpartition('.')[2]
+    dists = sc.suggest(name, [short(opt) for opt in options], n=3, fulloutput=True) or {}
+    best = min(dists.values(), default=0)
+    close = [key for key,dist in dists.items() if dist <= best + 1] # Not those much further away than the closest
+    matches = [opt for opt in options if short(opt) in close]
+    return f'; did you mean {sc.strjoin(matches)}?' if matches else '.'
+
+
 #%% Expressions
+
+class Nameable:
+    """ Something declared in a class body (a state, transition, parameter, or outcome), which takes the name it is assigned to unless given one """
+    def __set_name__(self, owner, name):
+        if self.name is None:
+            self.name = name
+        return
+
 
 def as_expr(obj):
     """ Convert an object to an expression: anything that is not one becomes an anonymous parameter """
     if isinstance(obj, Expr):
         return obj
-    elif isinstance(obj, StateSet): # A set of states is their sum
-        return obj.sum()
+    elif isinstance(obj, ss.conditions.Cond): # e.g. 0.3*(Ia | Is)
+        errormsg = 'A condition cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
+        raise TypeError(errormsg)
+    elif isinstance(obj, Transition) and obj.src is None: # Part of a weighted destination, e.g. 0.5*I + 0.5*R @ 0.1, where @ binds before +
+        errormsg = f'"@" binds before "+", so in a weighted destination the destination needs parentheses: S >> (0.5*I + 0.5*R) @ rate, not S >> 0.5*I + 0.5*R @ rate'
+        raise TypeError(errormsg)
     elif isinstance(obj, Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
         raise TypeError(errormsg)
@@ -153,6 +132,11 @@ class Expr:
         """ The fraction of the module's people in these states """
         return Count(self._sum_states(), kind='frac')
 
+    @property
+    def total(self):
+        """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
+        return Count(self._sum_states(), kind='total')
+
     def _sum_states(self):
         """ The states in a plain sum of states, e.g. S + I + R """
         const, terms = linear(self)
@@ -168,10 +152,10 @@ class Expr:
         return [self]
 
     def __repr__(self):
-        return self.to_str()
+        return format_expr(self)
 
 
-class par(Expr):
+class par(Nameable, Expr):
     """
     A named parameter with bounds, a prior, and provenance
 
@@ -205,39 +189,44 @@ class par(Expr):
         self.literal = literal # An anonymous value written inline, e.g. the 0.5 in 0.5*A
         self.slot = None # The kind of slot it fills: 'rate', 'dur', or None (a plain number)
         self.module = None # Set by the graph when the parameter is registered
-        if value is None and bounds is not None: # Start a fitted parameter from the middle of its bounds
-            self.value = (bounds[0] + bounds[1])/2
+        self.midpoint = None # The value it starts from, if it was given only bounds (a guess, which describe() marks)
+        if value is None and bounds is not None: # Start a fitted parameter from the middle of its bounds, on the scale they are searched on (see ss.fit())
+            low, high = bounds
+            self.value = self.midpoint = float(np.sqrt(low*high) if low > 0 and high >= 10*low else (low + high)/2)
         return
 
-    def __set_name__(self, owner, name):
-        if self.name is None:
-            self.name = name
-        return
+    def __getattr__(self, attr):
+        """ The methods of a distribution or time value are its parameter's, as in a module written as code, e.g. `sir.pars.dur_inf.set(mean=8)` """
+        value = self.__dict__.get('value') # Not self.value, which would recurse while unpickling
+        if not attr.startswith('_') and isinstance(value, (ss.Dist, ss.TimePar)):
+            return getattr(value, attr)
+        raise AttributeError(f"'par' object has no attribute '{attr}'")
+
+    def __float__(self):
+        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta) """
+        raw = self.raw
+        if sc.isnumber(raw):
+            return float(raw)
+        errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
+        raise TypeError(errormsg)
 
     @property
     def raw(self):
-        """ The current value: the module's parameter if registered, else the value it was created with """
-        mod = self.module
-        if mod is not None and not self.literal and self.name in mod.pars:
-            val = mod.pars[self.name]
-            return val.value if isinstance(val, par) else val # The module holds the parameter itself, unless it has been replaced by a plain value
+        """ The current value (the module holds this parameter itself, so a value set there is this one) """
         return self.value
 
-    def to_str(self, parent=False):
-        if self.name and not self.literal:
-            return self.name
-        return value_str(self.value)
+    def merge(self, other):
+        """ Take what another parameter gives (its value, bounds, prior, and description), keeping this one's name and module, e.g. for `sir.pars.beta = ss.par(0.1, bounds=[0.05, 1])` """
+        for attr in ['value', 'bounds', 'source', 'doc', 'label']:
+            if getattr(other, attr) is not None:
+                setattr(self, attr, getattr(other, attr))
+        if other.bounds is not None or other.prior is not None: # New bounds come with their own prior, or none
+            self.prior = other.prior
+        return self
 
     def __repr__(self):
         bounds = f', bounds={self.bounds}' if self.bounds is not None else ''
         return f'par({value_str(self.raw)}{bounds})'
-
-    def __deepcopy__(self, memo):
-        new = object.__new__(type(self))
-        memo[id(self)] = new
-        for k,v in self.__dict__.items():
-            new.__dict__[k] = sc.dcp(v, memo=memo) if k != 'module' else memo.get(id(v), v)
-        return new
 
 
 def value_str(val):
@@ -255,16 +244,21 @@ def is_one(expr):
 
 
 class Count(Expr):
-    """ The number of people (or things) in one or more states (`I.n`), or that number as a fraction of the module's people (`I.frac`) """
+    """ The number of people (or things) in one or more states (`I.n`), that number as a fraction of the module's people (`I.frac`), or the number in the whole population (`I.total`, which in a model with places is not only the same place) """
     def __init__(self, states, kind='n'):
         self.states = states
         self.kind = kind
         return
 
-    def to_str(self, parent=False):
-        names = [s.label_name for s in self.states]
-        inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
-        return f'{inner}.{self.kind}'
+
+def count_power(expr):
+    """ How many counts of people (`I.n`) a rate is multiplied by, net of those it is divided by: 1 for `beta * I.n` (density-dependent), 0 for `beta * I.frac` or `k * N.n / S.n` """
+    if isinstance(expr, Count):
+        return int(expr.kind in ['n', 'total'] and all(getattr(s, 'people', True) for s in expr.states))
+    elif isinstance(expr, BinOp):
+        a, b = count_power(expr.a), count_power(expr.b)
+        return a + b if expr.op == '*' else a - b if expr.op == '/' else max(a, b) if expr.op in ['+', '-'] else 0
+    return 0
 
 
 class Flow(Expr):
@@ -276,9 +270,6 @@ class Flow(Expr):
     @property
     def name(self):
         return self.tr.name
-
-    def to_str(self, parent=False):
-        return str(self.tr.name)
 
 
 binops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', power='**')
@@ -301,11 +292,6 @@ class Func(Expr):
     def leaves(self):
         return [leaf for arg in self.args for leaf in arg.leaves]
 
-    def to_str(self, parent=False):
-        if self.name in comparisons:
-            return f'({self.args[0].to_str()} {comparisons[self.name]} {self.args[1].to_str()})'
-        return f'{self.name}({", ".join(arg.to_str() for arg in self.args)})'
-
 
 class BinOp(Expr):
     """ Arithmetic between two expressions """
@@ -316,15 +302,14 @@ class BinOp(Expr):
         return
 
     def __rshift__(self, other):
-        """ A plain sum of states as the sources of a transition, e.g. (Ia + Is) >> R, is the same as (Ia | Is) >> R """
-        return StateSet(self._sum_states()) >> other
+        """ A sum of states as the sources of one transition, e.g. S + I + R >> D @ mu """
+        if isinstance(other, Transition):
+            return other._copy()._set_src(self._sum_states())
+        return Transition(src=self._sum_states(), dst=other)
 
     @property
     def leaves(self):
         return self.a.leaves + self.b.leaves
-
-    def to_str(self, parent=False):
-        return join_binop(self, lambda e: e.to_str())
 
 
 precedence = {'+':1, '-':1, '*':2, '/':2, '**':3}
@@ -345,11 +330,11 @@ def linear(expr):
     Split an expression into a constant part and a coefficient for each bare state
 
     Returns `(const, terms)`, where `const` is an expression with no bare states
-    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `E208` if
+    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.NonlinearExposure` if
     the expression is not linear in its bare states.
     """
     def nonlinear():
-        error('E208', f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
+        raise ss.NonlinearExposure(f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
 
     if isinstance(expr, State):
         return None, {expr: par(1, literal=True)}
@@ -407,14 +392,20 @@ def evaluate(expr, ctx):
         if   op == '+': return a + b
         elif op == '-': return a - b
         elif op == '*': return a * b
-        elif op == '/': return a / b
+        elif op == '/': # Nothing divided by anything is nothing, e.g. the infectious share of an empty group; the inner where keeps a gradient finite
+            if np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape'):
+                return 0.0 if a == 0 else a / b
+            xp = getattr(ctx, 'xp', np)
+            return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
         else:           return a ** b
     elif isinstance(expr, Func):
         return 1.0*getattr(getattr(ctx, 'xp', np), expr.name)(*[evaluate(arg, ctx) for arg in expr.args]) # A comparison is 1 or 0; a context can give another NumPy, e.g. jax.numpy
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
-        return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.local_frac(expr.states)
+        if hasattr(ctx, 'count_expr'): # An engine, which counts another disease's states through that disease
+            return ctx.count_expr(expr)
+        return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.total_count(expr.states) if expr.kind == 'total' else ctx.local_frac(expr.states)
     elif isinstance(expr, State):
         return ctx.exposure(expr)
     elif isinstance(expr, Flow):
@@ -423,9 +414,60 @@ def evaluate(expr, ctx):
     raise TypeError(errormsg)
 
 
+def value_dimension(val):
+    """
+    The time dimension of a value: -1 for a rate, 1 for a duration, 0 for a number made by
+    multiplying a rate by a duration (`ss.time.dimless`), and None for anything untyped
+    """
+    if isinstance(val, ss.time.dimless):
+        return 0
+    elif isinstance(val, ss.dur):
+        return 1
+    elif isinstance(val, ss.Rate):
+        return -1 if val.unit is not None else None # A probability with no unit is a plain number
+    elif isinstance(val, ss.Dist):
+        if val.unit is not None:
+            return 1 if issubclass(val.unit, ss.dur) else -1
+        items = val.pars.values()
+    elif isinstance(val, TimeValue):
+        items = val.typed
+    elif isinstance(val, by):
+        items = val.items
+    else:
+        return None
+    dims = [value_dimension(v) for v in items]
+    return next((d for d in dims if d is not None), None)
+
+
+def dimension(expr):
+    """
+    The time dimension of an expression, from the typed values in it (see `value_dimension()`),
+    or None if nothing in it is typed: e.g. -1 for `ss.perday(0.3) * I`, 0 for `ss.perday(0.3) * I * ss.days(3)`,
+    and NaN for a sum of values with different dimensions
+    """
+    if isinstance(expr, par):
+        return value_dimension(expr.raw)
+    elif isinstance(expr, BinOp):
+        a, b = dimension(expr.a), dimension(expr.b)
+        if a is None and b is None:
+            return None
+        elif expr.op in '+-':
+            return a if b is None or a == b else b if a is None else np.nan
+        elif expr.op == '*':
+            return (a or 0) + (b or 0)
+        elif expr.op == '/':
+            return (a or 0) - (b or 0)
+        elif b is None and isinstance(expr.b, par) and sc.isnumber(expr.b.raw): # A power, e.g. a rate squared
+            return a*expr.b.raw
+        return np.nan
+    elif isinstance(expr, Func) and expr.name in ['minimum', 'maximum']:
+        return dimension(BinOp('+', *expr.args))
+    return None # A state, a count, or a function of them (a comparison is 1 or 0)
+
+
 #%% States
 
-class State(Expr):
+class State(Nameable, Expr):
     """
     Something a person can be in, or a count of something that is not people
 
@@ -460,12 +502,7 @@ class State(Expr):
         self.label = label
         self.order = next(State._counter)
         self.module = None # Set by the graph
-        return
-
-    def __set_name__(self, owner, name):
-        """ In a class body, a state learns its own name """
-        if self.name is None:
-            self.name = name
+        self.guessed = sc.objdict() # Which fields were guessed (people, infectious), and why
         return
 
     __hash__ = object.__hash__
@@ -474,23 +511,23 @@ class State(Expr):
     def label_name(self):
         return self.name or '<unnamed state>'
 
-    def to_str(self, parent=False):
-        return self.label_name
-
     def __rshift__(self, other):
         """ S >> I, or S >> (a transition into I) """
         if isinstance(other, Transition):
-            return other._set_src(self)
+            return other._copy()._set_src(self)
         return Transition(src=self, dst=other)
 
     def __matmul__(self, driver):
         """ I @ rate: a transition into I, with no source yet """
         return Transition(dst=self) @ driver
 
-    def __or__(self, other):
-        return StateSet([self]) | other
+    def __or__(self, other): # As a condition: the people in either state, e.g. where=sir.I | sir.R (a set of sources is a sum: S + I >> D)
+        return ss.conditions.as_cond(self) | other
 
-    def __and__(self, other): # As a condition: the people in this state, e.g. eligible=sir.I & ~sir.diagnosed
+    def __ror__(self, other):
+        return other | ss.conditions.as_cond(self)
+
+    def __and__(self, other): # As a condition: the people in this state, e.g. where=sir.I & ~sir.diagnosed
         return ss.conditions.as_cond(self) & other
 
     def __rand__(self, other):
@@ -507,62 +544,10 @@ class State(Expr):
     def frac(self):
         return Count([self], kind='frac')
 
-    def __deepcopy__(self, memo):
-        new = object.__new__(type(self))
-        memo[id(self)] = new
-        for k,v in self.__dict__.items():
-            new.__dict__[k] = sc.dcp(v, memo=memo) if k != 'module' else memo.get(id(v), v)
-        return new
-
-
-class StateSet:
-    """ Several states used as the sources of one transition: (S | I | R) >> D @ mu """
-    def __init__(self, states):
-        self.states = states
-        return
-
-    def __or__(self, other):
-        if isinstance(other, Transition):
-            errormsg = 'A set of sources needs parentheses: write (S | I | R) >> D @ rate'
-            raise TypeError(errormsg)
-        new = other.states if isinstance(other, StateSet) else [other]
-        return StateSet(self.states + new)
-
-    def __rshift__(self, other):
-        if isinstance(other, Transition):
-            return other._set_src(self.states)
-        return Transition(src=self.states, dst=other)
-
-    def __and__(self, other):
-        return ss.conditions.as_cond(self) & other
-
-    def __invert__(self):
-        return ~ss.conditions.as_cond(self)
-
-    # In arithmetic, a set of states is their sum, e.g. Ih / (Ia | Is | Ih) or (Ia | Is).n
-    def sum(self):
-        """ The states added together, as an expression """
-        out = self.states[0]
-        for state in self.states[1:]:
-            out = out + state
-        return out
-
-    def __add__(self, other):      return self.sum() + other
-    def __radd__(self, other):     return other + self.sum()
-    def __sub__(self, other):      return self.sum() - other
-    def __rsub__(self, other):     return other - self.sum()
-    def __mul__(self, other):      return self.sum() * other
-    def __rmul__(self, other):     return other * self.sum()
-    def __truediv__(self, other):  return self.sum() / other
-    def __rtruediv__(self, other): return other / self.sum()
-
     @property
-    def n(self):
-        return self.sum().n
-
-    @property
-    def frac(self):
-        return self.sum().frac
+    def total(self):
+        """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
+        return Count([self], kind='total')
 
 
 def states(arg):
@@ -583,14 +568,14 @@ def states(arg):
         out = [State(name) for name in arg.replace(',', ' ').split()]
     else:
         out = [State() for i in range(arg)]
-    return out[0] if len(out) == 1 else out
+    return out
 
 
 class Null:
     """ Outside the model: the source of an inflow (births, shedding) and the destination of an outflow (deaths, decay) """
     def __rshift__(self, other):
         if isinstance(other, Transition):
-            return other._set_src(self)
+            return other._copy()._set_src(self)
         return Transition(src=self, dst=other)
 
     def __matmul__(self, driver):
@@ -619,7 +604,7 @@ def parse_arrow(arrow):
     return src, dst
 
 
-class Transition:
+class Transition(Nameable):
     """
     A movement between states
 
@@ -637,6 +622,9 @@ class Transition:
         where (Cond/func): who it applies to: a condition (e.g. `ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0
         move (dict): a change of level in a dimension as well as of state: the dimension, and an arrow between two of its levels
             (e.g. `move=dict(strain='A+B -> A')`, which applies only to people at the first), or the level people move to
+        after (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then); agents only
+        before (dur): the opposite, for a rate: it applies only until people have been in its source state this long, as EMULSION's escape during a minimum stay; agents only
+        offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -647,11 +635,16 @@ class Transition:
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
         selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
+        weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
+        farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10)) # Ten piglets for each sow that farrows
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, after=None, before=None, offspring=None):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes rate= or dur=, not both'
+            raise ValueError(errormsg)
+        if stages is not None and rate is not None:
+            errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
             raise ValueError(errormsg)
         self.src = None
         self.dst = None
@@ -661,9 +654,17 @@ class Transition:
         self.stages = stages
         self.name = name
         self.label = label
-        self.beta = beta # For ss.transmission(): the rate is beta times the source of infection, resolved when the module is built
-        self.source = source
+        self._pending = None if beta is None else (beta, source) # For ss.transmission(): the rate is beta times the source of infection (if not given, worked out when the module is built)
         self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
+        if before is not None and rate is None:
+            errormsg = 'before= limits a rate to the first part of a stay, so it goes with rate=, not dur='
+            raise ValueError(errormsg)
+        self.after = after # A minimum stay in the source state before this transition can happen
+        self.before = before # Or the time in it after which it cannot
+        self.offspring = None # The state newborns go into, and how many each person has, when they go through it
+        if offspring is not None:
+            state, n = offspring if isinstance(offspring, (tuple, list)) else (offspring, 1)
+            self.offspring = (state, int(n))
         self.move = None # A change of level in some dimensions: {dim: level}
         if move:
             self.move = sc.objdict()
@@ -671,13 +672,13 @@ class Transition:
                 if isinstance(level, str) and re.search(r'->|>>', level):
                     srcs, dsts = parse_arrow(level)
                     level = dsts[0]
-                    at = ss.Cond('dim', dim) == srcs # Only people at the level they move from
+                    at = ss.conditions.Cond('dim', dim) == srcs # Only people at the level they move from
                     self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
                 self.move[dim] = level
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
-        self.flow_of = None # For arithmetic on a finished transition, e.g. 0.5 * infection: the original transition and the weight
+        self.arrow_given = True # For ss.birth() and ss.immigration() in demographics=: whether the state people arrive in was given
         self.guessed = sc.objdict() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)
@@ -685,12 +686,23 @@ class Transition:
             self._set_dst(dst)
         if p is not None:
             self.p = [None if v is None else as_expr(v) for v in sc.tolist(p)]
+        self.check_dimensions()
         return
 
-    def __set_name__(self, owner, name):
-        if self.name is None:
-            self.name = name
-        return
+    def incidence(self, over=None, by=None):
+        """
+        A condition on how many go through the transition: the number over the last `over`, as a share of the people at the same level of `by`
+
+        Args:
+            over (dur): the window (default, one step); a bare number is in the sim's unit
+            by (str): a stratification, e.g. `'patch'`, so that each place is compared on its own (default: the whole population)
+
+        Examples:
+            ```python
+            npi = ss.modify(sir.pars.beta, multiply=0.6, where=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, hold=ss.days(14))
+            ```
+        """
+        return ss.conditions.Cond('incidence', self, over, by) # The transition itself, since it may be named and given its module later
 
     def _set_src(self, src):
         self.src = [] if src is null else [s for s in sc.tolist(src)]
@@ -709,8 +721,8 @@ class Transition:
         else:
             self.dst = sc.tolist(dst)
             if len(self.dst) > 1 and any(d is null for d in self.dst):
-                error('E205', 'ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
-                              'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')
+                raise ss.BadBranchSplit('ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
+                                        'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')
         return self
 
     @property
@@ -729,17 +741,57 @@ class Transition:
 
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, anything else is a rate """
+        if self.rate is not None or self.dur is not None or self._pending is not None:
+            errormsg = f'The transition {self} already has what drives it, so cannot take a second "@ {driver}"'
+            raise TypeError(errormsg)
         value = driver.value if isinstance(driver, par) else driver
-        if isinstance(value, (ss.dur, ss.Dist)) or (isinstance(value, TimeValue) and any(isinstance(v, ss.dur) for v in value.typed)):
-            self.dur = as_expr(driver)
+        if isinstance(value, ss.bernoulli):
+            errormsg = f'"@ {value}" is a probability, not a rate or a duration; a share that goes one way is p=, e.g. ss.progression("I -> R | D", dur=10, p=[None, 0.1])'
+            raise TypeError(errormsg)
+        typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
+        new = self._copy()
+        if isinstance(value, (ss.dur, ss.Dist)) or any(isinstance(v, ss.dur) for v in typed):
+            new.dur = as_expr(driver)
         else:
-            self.rate = as_expr(driver)
-        return self
+            new.rate = as_expr(driver)
+        new.check_dimensions()
+        return new
+
+    def check_dimensions(self):
+        """
+        Check the typed values in the rate and the dwell time: the rate must be per unit time, and
+        the dwell time a duration; otherwise raise `ss.WrongDimension`, e.g. for rate=ss.peryear(0.1) * ss.days(3)
+        """
+        words = {-1:'a rate', 1:'a duration', 0:'a plain number (a rate times a duration)'}
+        hints = {
+            ('rate', 0): 'A rate times a duration is a probability over that duration, not a rate; give the rate itself, e.g. rate=ss.peryear(0.1).',
+            ('rate', 1): 'A duration on its own is a dwell time, given with dur= (or after "@" on its own); a rate is one over a duration, e.g. 1/ss.days(10).',
+            ('dur', -1): 'A dwell time is a duration, e.g. dur=ss.days(10); a rate is given with rate= (and 1/ss.perday(0.1) is ss.days(10)).',
+            ('dur', 0): 'A dwell time is a duration, e.g. dur=ss.days(10).',
+        }
+        for slot,expr,want in [('rate', self.rate if self._pending is None else None, -1), ('dur', self.dur, 1)]: # A beta is per contact with a route, so is not checked
+            dim = None if expr is None else dimension(expr)
+            if dim is None or dim == want:
+                continue
+            raw = expr.raw if isinstance(expr, par) else None
+            given = f'{raw.src[0]!r} * {raw.src[1]!r} = {raw:n}' if isinstance(raw, ss.time.dimless) and raw.src else format_expr(expr, values=True)
+            word = words.get(dim, 'a sum of values with different time dimensions' if np.isnan(dim) else f'in units of time to the power {dim:n}')
+            label = self.name or (self.arrow if self.src is not None else f'... {self.arrow}') # Before its source is known, e.g. R @ rate in I >> R @ rate
+            raise ss.WrongDimension(f'the {slot} of the transition "{label}" is {word}, not {words[want]}:\n       {slot} = {given}\n     {hints.get((slot, dim), "")}'.rstrip())
+        return
+
+    def _copy(self):
+        """ A copy, so that a partial transition (S >> I, or I @ rate) can be used to build more than one """
+        new = sc.cp(self)
+        new.guessed = sc.objdict(self.guessed)
+        return new
 
     def _arith(self, op, other, reverse=False):
-        """ Arithmetic on a transition applies to its rate; but a finished transition divided by something is its flow, in a result (`infection / S`) """
+        """ Arithmetic on a transition that is being written applies to its rate (`I @ beta * I`); on a finished one it is its flow: divided by something, in a result (`infection / S`), and times something, a share of it (`0.5 * infection`, an outcome) """
         if op == '/' and self.src is not None and not reverse:
             return BinOp('/', Flow(self), Flow(other) if isinstance(other, Transition) else as_expr(other))
+        if op == '*' and self.src is not None and not isinstance(other, (Transition, outcome, FlowSum)): # A share of the flow, never a change of rate (which is written in the rate, or with ss.modify)
+            return FlowSum([self]) * other
         if isinstance(other, (Transition, outcome, FlowSum)):
             if op == '+': # A sum of flows, e.g. for an outcome: 0.1*mild + 0.5*severe
                 return FlowSum([self]) + other
@@ -749,15 +801,17 @@ class Transition:
         new.guessed = sc.objdict()
         if self.rate is not None:
             new.rate = BinOp(op, other, self.rate) if reverse else BinOp(op, self.rate, other)
-        elif self.beta is not None and op == '*':
-            new.beta = BinOp(op, other, as_expr(self.beta))
+        elif self._pending is not None and op == '*':
+            beta, source = self._pending
+            new._pending = (BinOp(op, other, as_expr(beta)), source)
+        elif self.dur is not None and self.src is None: # e.g. R @ ss.days(10) * 2, which would otherwise be dropped
+            if isinstance(other, Expr): # e.g. S >> I @ ss.days(3) * I, a duration in a rate
+                raise ss.WrongDimension(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
+            errormsg = f'Cannot apply "{op}" to the transition {self}, which is driven by a duration; write the duration itself, e.g. @ ss.days(20)'
+            raise TypeError(errormsg)
         elif op != '*':
             errormsg = f'Cannot apply "{op}" to the transition {self}, since it has no rate'
             raise TypeError(errormsg)
-        if op == '*' and self.src is not None: # A finished transition times a number is a fraction of its flow, e.g. 0.5 * infection
-            base, weight = self.flow_of or (self, 1)
-            new.flow_of = (base, weight*other if sc.isnumber(weight) and sc.isnumber(other) else BinOp('*', weight, other))
-            new.name = None
         return new
 
     def __mul__(self, other):      return self._arith('*', other)
@@ -768,7 +822,7 @@ class Transition:
     def __sub__(self, other):      return self._arith('-', other)
 
     def __or__(self, other):
-        errormsg = 'A set of sources needs parentheses: write (S | I | R) >> D @ rate'
+        errormsg = 'Several sources are a sum of states: write S + I + R >> D @ rate (| on states is a condition, for where=)'
         raise TypeError(errormsg)
     __ror__ = __or__
 
@@ -793,8 +847,8 @@ class Transition:
             return f'dur = {value_str(self.dur.raw)}'
         elif self.rate is not None:
             return format_expr(self.rate)
-        elif self.beta is not None:
-            return f'{as_expr(self.beta)} * source'
+        elif self._pending is not None:
+            return f'{as_expr(self._pending[0])} * source'
         return ''
 
     def __repr__(self):
@@ -819,10 +873,12 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, name=None, l
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, beta=sc.ifelse(beta, 1.0), source=source, p=p, where=where, name=name, label=label)
+    if beta is None: # A forgotten beta is an explosive epidemic, so it is not guessed
+        raise ss.UndrivenTransition(f'ss.transmission("{arrow}") has no beta. Give it one, e.g. ss.transmission("{arrow}", beta=0.3)')
+    return Transition(src, dst, beta=beta, source=source, p=p, where=where, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, after=None, before=None, offspring=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -834,30 +890,104 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         stages (int): number of sub-stages used to realize the dwell time
         where (Cond/func): who it applies to (see `ss.Transition`)
         move (dict): a change of level in a dimension as well (see `ss.Transition`)
+        after (dur): a minimum stay in the source state first (see `ss.Transition`)
+        before (dur): for a rate, the time in the source state after which it no longer applies (see `ss.Transition`)
+        offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, after=after, before=before, offspring=offspring, name=name, label=label)
 
 
-def birth(arrow='-> S', rate=None, name=None, label=None):
+def birth(arrow=None, rate=None, name=None, label=None):
     """
     An inflow of people at a crude (per-person) birth rate, e.g. `ss.birth('-> S', rate=ss.peryear(0.02))`
 
+    Births of the whole population go in `ss.Sim(demographics=[...])`, where they are declared once
+    for every disease's people and run under every solver; births into one disease's state go in
+    the disease.
+
     Args:
-        arrow (str): the state people are born into, e.g. `'-> S'`
+        arrow (str): the state people are born into, e.g. `'-> S'` (default: `S` in a disease; in `demographics=`, each disease's first state)
         rate (any): the birth rate per person per unit time
         name (str): the name of the transition
         label (str): a human-readable name
+
+    Examples:
+        ```python
+        ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))])
+        ```
     """
+    given = arrow is not None
+    arrow = arrow or '-> S'
     src, dst = parse_arrow(arrow if '>' in arrow else f'-> {arrow}')
     out = Transition(null, dst, rate=rate, name=name, label=label)
     out.per_capita = True
+    out.arrow_given = given
     return out
 
 
-def death(arrow=None, rate=None, dur=None, name=None, label=None):
+class lifetable:
+    """
+    A life table: how many die at each age, from which each person's age at death is drawn, given their age (see `ss.death(lifetable=)`)
+
+    Deaths are spread evenly within each age band.
+
+    Args:
+        ages (list): the start of each age band, in years (the last band is as wide as the one before)
+        deaths (list): the number, or share, of a cohort who die in each band (a life table's d(x))
+
+    Examples:
+        ```python
+        table = ss.lifetable(ages=np.arange(101), deaths=dx) # dx from a national life table
+        deaths = ss.death(lifetable=table)
+        ```
+    """
+    def __init__(self, ages, deaths):
+        ages = np.asarray(ages, dtype=float)
+        deaths = np.asarray(deaths, dtype=float)
+        if ages.ndim != 1 or len(ages) != len(deaths) or len(ages) < 2 or np.any(np.diff(ages) <= 0) or np.any(deaths < 0) or deaths.sum() <= 0:
+            errormsg = f'ss.lifetable() takes increasing ages (the start of each band) and as many numbers dying, which are not negative and not all zero; not {len(ages)} ages and {len(deaths)} deaths'
+            raise ValueError(errormsg)
+        self.edges = np.append(ages, ages[-1] + (ages[-1] - ages[-2]))
+        self.survival = np.append(1.0, 1 - np.cumsum(deaths)/deaths.sum()) # The share of a cohort alive at each edge
+        self.survival[-1] = 0.0
+        return
+
+    def __repr__(self):
+        return f'lifetable(ages {self.edges[0]:n} to {self.edges[-1]:n})'
+
+    def survive(self, age):
+        """ The share of a cohort alive at each age """
+        return np.interp(age, self.edges, self.survival, left=1.0, right=0.0)
+
+    def draw(self, age, u):
+        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age """
+        target = self.survive(age)*(1 - np.asarray(u))
+        keep = np.r_[True, np.diff(self.survival[::-1]) > 0] # The survival curve is flat where nobody dies, which is not a point it can be inverted at
+        out = np.interp(target, self.survival[::-1][keep], self.edges[::-1][keep])
+        return np.maximum(out, age)
+
+    def hazards(self, edges):
+        """ The death rate per year in each of some age groups (given by their lower edges; the last is open), as a compartmental run takes it """
+        edges = np.asarray(edges, dtype=float)
+        out = []
+        for k,lo in enumerate(edges):
+            s_lo = self.survive(lo)
+            if s_lo <= 0:
+                out.append(1e3) # Nobody is alive at this age in the table, so they leave at once
+            elif k + 1 < len(edges):
+                hi = edges[k+1]
+                out.append(-np.log(max(self.survive(hi), 1e-300)/s_lo)/(hi - lo))
+            else: # Open-ended: the rate whose mean is the life expectancy at its start
+                ages = np.unique(np.r_[lo, self.edges[self.edges > lo]])
+                remaining = np.trapezoid(self.survive(ages), ages)/s_lo
+                out.append(1/max(remaining, 1e-9))
+        return np.array(out)
+
+
+def death(arrow=None, rate=None, dur=None, lifetable=None, name=None, label=None):
     """
     An outflow of people, e.g. `ss.death('I ->', rate=ss.peryear(0.1))`
 
@@ -865,9 +995,21 @@ def death(arrow=None, rate=None, dur=None, name=None, label=None):
         arrow (str): the state people die from, e.g. `'I ->'`; if not given, every state that is people
         rate (any): the death rate per person per unit time
         dur (any): the mean time to death (instead of `rate`)
+        lifetable (`ss.lifetable`): instead of a rate, a life table: as agents, each person's age at death is drawn from it once (at the start, or at birth), given their age; in a compartmental run, which needs a stratification by age, it is a death rate for each age group
         name (str): the name of the transition
         label (str): a human-readable name
     """
+    if lifetable is not None:
+        if rate is not None or dur is not None or arrow is not None:
+            errormsg = 'ss.death(lifetable=) is the deaths of everyone, from a life table; it takes no arrow, rate=, or dur='
+            raise ValueError(errormsg)
+        if not isinstance(lifetable, globals()['lifetable']):
+            errormsg = f'lifetable= of ss.death() is an ss.lifetable(ages, deaths), not {type(lifetable).__name__}'
+            raise TypeError(errormsg)
+        out = Transition(None, null, rate=par(ss.peryear(0.0), name=f'mortality_{name}' if name else 'mortality', doc='The death rate from the life table'), name=name, label=label)
+        out.every_state = True
+        out.lifetable = lifetable
+        return out
     if arrow is None:
         out = Transition(None, null, rate=rate, dur=dur, name=name, label=label)
         out.every_state = True
@@ -877,7 +1019,7 @@ def death(arrow=None, rate=None, dur=None, name=None, label=None):
     return out
 
 
-def immigration(arrow='-> S', rate=None, name=None, label=None):
+def immigration(arrow=None, rate=None, name=None, label=None):
     """
     People arriving from outside the population, e.g. `ss.immigration('-> S', rate=ss.peryear(100))`
 
@@ -885,14 +1027,17 @@ def immigration(arrow='-> S', rate=None, name=None, label=None):
     agents they arrive at ages drawn from the population's age distribution rather than as newborns.
 
     Args:
-        arrow (str): the state people arrive in, e.g. `'-> S'`
+        arrow (str): the state people arrive in, e.g. `'-> S'` (default: `S` in a disease; in `demographics=`, each disease's first state)
         rate (any): the number arriving per unit time
         name (str): the name of the transition
         label (str): a human-readable name
     """
+    given = arrow is not None
+    arrow = arrow or '-> S'
     src, dst = parse_arrow(arrow if '>' in arrow else f'-> {arrow}')
     out = Transition(null, dst, rate=rate, name=name, label=label)
     out.migration = True
+    out.arrow_given = given
     return out
 
 
@@ -915,7 +1060,7 @@ def emigration(arrow=None, rate=None, dur=None, name=None, label=None):
     return out
 
 
-class outcome:
+class outcome(Nameable):
     """
     A reported quantity: a flow worked out from other flows, which moves nobody
 
@@ -923,39 +1068,30 @@ class outcome:
         source (Transition/outcome/list): a transition, another outcome, or a weighted sum of them, e.g. `0.5 * infection`
         delay (any): the time from the source event to this one: a duration or a distribution
         duration (any): if given, also produces `n_<name>`: the number currently in this outcome
-        every (dur): a reporting period (e.g. `ss.weeks(1)`): the outcome is totaled over each period
         likelihood (`ss.Dist`): optional likelihood, for calibration
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
 
     Examples:
         ```python
-        cases = ss.outcome(0.5 * infection, delay=ss.days(5), every=ss.weeks(1))
+        cases = ss.outcome(0.5 * infection, delay=ss.days(5))
         hosp  = ss.outcome(0.05 * infection, delay=ss.days(7), duration=ss.days(10))
         ```
+
+    Data reported by week (or any period) is compared with the outcome's total over each
+    period automatically; to see the weekly series, use `res.cases.resample('week')`.
     """
-    def __init__(self, source, delay=None, duration=None, every=None, likelihood=None, name=None, label=None):
+    def __init__(self, source, delay=None, duration=None, likelihood=None, name=None, label=None):
         self.source = source
         self.delay = delay
         self.duration = duration
-        self.every = every
         self.likelihood = likelihood
         self.name = name
         self.label = label
-        self.flow_of = None
-        return
-
-    def __set_name__(self, owner, name):
-        if self.name is None:
-            self.name = name
         return
 
     def __rmul__(self, other):
         """ A fraction of an outcome, e.g. 0.2 * hosp """
-        new = sc.cp(self)
-        base, weight = self.flow_of or (self, 1)
-        new.flow_of = (base, weight*other)
-        new.name = None
-        return new
+        return FlowSum([self]) * other
     __mul__ = __rmul__
 
     def __add__(self, other):
@@ -965,42 +1101,58 @@ class outcome:
         return f'outcome({self.name})'
 
     @property
+    def flows(self):
+        """ The flows it is worked out from, each with its weight: (transition, outcome, or name; weight) """
+        return FlowSum(sc.tolist(self.source)).items
+
+    @property
     def weights(self):
         """ The weights of its sources that are expressions, e.g. the rho in rho * infection """
-        source = self.source
-        items = source.items if isinstance(source, FlowSum) else sc.tolist(source)
-        weights = [item.flow_of[1] for item in items if not isinstance(item, str) and item.flow_of]
-        return [weight for weight in weights if isinstance(weight, Expr)]
+        return [weight for base,weight in self.flows if isinstance(weight, Expr)]
 
     def to_json(self, unit=None):
         """ The outcome as it is written in the model spec """
-        def flow_str(item):
-            base, weight = item.flow_of or (item, 1)
+        def flow_str(base, weight):
+            if isinstance(base, str):
+                return base
             if isinstance(weight, BinOp) and is_one(weight.a): # From 1 * rho
                 weight = weight.b
             if isinstance(weight, Expr):
-                weight = format_expr(weight)
+                weight = format_expr(weight, exact=True)
             return base.name if sc.isnumber(weight) and weight == 1 else f'{weight} * {base.name}'
-        source = self.source
-        items = source.items if isinstance(source, FlowSum) else sc.tolist(source)
-        source = ' + '.join(item if isinstance(item, str) else flow_str(item) for item in items)
+        source = ' + '.join(flow_str(base, weight) for base,weight in self.flows)
         return dict(name=self.name, type='outcome', source=source, delay=quantity_json(self.delay, 'dur', unit),
-                    duration=quantity_json(self.duration, 'dur', unit), every=quantity_json(self.every, 'dur', unit),
-                    likelihood=None if self.likelihood is None else str(self.likelihood))
+                    duration=quantity_json(self.duration, 'dur', unit), likelihood=self.likelihood_json())
+
+    def likelihood_json(self):
+        """ The likelihood as data: its distribution, and each parameter as a model parameter (by name) or a number """
+        lik = self.likelihood
+        if lik is None:
+            return None
+        pars = {}
+        for key,val in lik.pars.items():
+            if isinstance(val, par) and val.name is not None:
+                pars[key] = dict(par=val.name)
+            else:
+                val = val.raw if isinstance(val, par) else val
+                pars[key] = float(val) if sc.isnumber(val) else str(val)
+        return dict(type=type(lik).__name__, pars=pars)
 
 
 class FlowSum:
-    """ A weighted sum of flows (transitions and outcomes), used as the source of an outcome: 0.1*mild + 0.5*severe """
+    """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection """
     def __init__(self, items):
-        self.items = list(items)
+        self.items = [] # Each flow, with its weight
+        for item in items:
+            self.items += item.items if isinstance(item, FlowSum) else [item if isinstance(item, tuple) else (item, 1)]
         return
 
     def __add__(self, other):
-        return FlowSum(self.items + (other.items if isinstance(other, FlowSum) else [other]))
+        return FlowSum(self.items + [other])
     __radd__ = __add__
 
     def __mul__(self, other):
-        return FlowSum([item*other for item in self.items])
+        return FlowSum([(base, weight*other if sc.isnumber(weight) and sc.isnumber(other) else BinOp('*', weight, other)) for base,weight in self.items])
     __rmul__ = __mul__
 
     def __repr__(self):
@@ -1019,7 +1171,9 @@ def dwell_stats(dist, convert):
     """
     pars = numeric_pars(dist, convert)
     name = type(dist).__name__
-    if name == 'expon':
+    if any(callable(val) for val in pars.values()): # A function of the agents: known only per agent, when it is drawn
+        return np.nan, np.nan
+    elif name == 'expon':
         mean = std = pars['scale']
     elif name == 'gamma':
         mean = pars['a']*pars['scale']
@@ -1051,11 +1205,22 @@ def numeric_pars(dist, convert):
     for key,val in dist.pars.items():
         if key in shape_pars and not isinstance(val, ss.TimePar):
             pars[key] = val
+        elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn
+            pars[key] = converted_func(val, dist.unit, convert)
         else:
             if dist.unit is not None and sc.isnumber(val):
                 val = dist.unit(val)
             pars[key] = convert(val)
     return pars
+
+
+def converted_func(func, unit, convert):
+    """ A function parameter of a distribution whose values are converted to the sim's unit, called as the original is (see `ss.Dist`) """
+    def wrapped(*args):
+        out = func(*args)
+        return convert(unit(out) if unit is not None else out)
+    wrapped.__signature__ = inspect.signature(func) # The distribution passes arguments by their names
+    return wrapped
 
 
 def numeric_dist(dist, convert):
@@ -1072,16 +1237,22 @@ def erlang_stages(mean, std, max_stages=50):
 
 #%% The graph
 
-def find_name(obj, frame):
-    """ Find the name of the variable an object is bound to in the calling frame; returns None unless there is exactly one """
+def bound_names(obj, frame):
+    """ The names of the variables an object is bound to in the calling frame: the local ones, else the global ones """
     if frame is None:
-        return None
+        return []
     names = []
     for space in [frame.f_locals, frame.f_globals]:
         names += [key for key,val in space.items() if val is obj and not key.startswith('_')]
         if names:
             break
-    return names[0] if len(set(names)) == 1 else None
+    return sorted(set(names))
+
+
+def find_name(obj, frame):
+    """ Find the name of the variable an object is bound to in the calling frame; returns None unless there is exactly one """
+    names = bound_names(obj, frame)
+    return names[0] if len(names) == 1 else None
 
 
 def class_members(cls):
@@ -1103,7 +1274,7 @@ class Graph:
     The graph is built when the module is constructed. It names everything, infers
     states from arrow strings, works out the source of infection of each transmission
     and which states are people, turns inline values into named parameters, and checks
-    the result. Every guess is recorded in `graph.guessed`.
+    the result. Every guess is recorded, in `graph.guessed` and in the `guessed` of each state and transition.
 
     This class is not usually used directly: see `ss.Disease`.
 
@@ -1115,7 +1286,7 @@ class Graph:
         init (dict): the initial fraction or count in each state, by name
         frame (frame): the calling frame, used to find the names of variables
     """
-    reserved = ['transitions', 'results', 'outcomes']
+    grouped = ['transitions', 'results', 'outcomes'] # The keywords that each take several members, e.g. ss.Disease(transitions=[...])
 
     def __init__(self, module, args=None, members=None, init_prev=None, init=None, frame=None):
         self.module = module
@@ -1141,8 +1312,16 @@ class Graph:
         self.resolve_transitions()
         self.resolve_people()
         self.resolve_pars(frame)
+        self.set_keywords()
         self.resolve_exits()
         self.check()
+        return
+
+    def guess_init(self):
+        """ When the sim is built: with no initial values at all, 1% start infected, since nobody infected would mean no epidemic """
+        if self.init_prev is None and not self.init and self.transmissions and all(s.init is None for s in self.states.values()):
+            self.init_prev = 0.01
+            self.guessed['init'] = 'nothing given'
         return
 
     def __repr__(self):
@@ -1152,22 +1331,26 @@ class Graph:
         """ Sort the members by what they are, and name them """
         module = self.module
         named = [] # (name, obj) pairs
-        for key in ['transitions', 'results', 'outcomes']:
+        for key in self.grouped:
             args = args + sc.tolist(members.pop(key, None))
         for arg in args:
             named.append((None, arg))
         named += list(members.items())
 
         self._declared = [] # States that were passed in directly
+        self._keywords = dict() # Values given as keywords, e.g. ss.Disease(..., beta=0.3)
         unnamed = sc.autolist()
         for name,obj in named:
-            if isinstance(obj, FlowSum): # A sum of flows, e.g. recovery + death, is an outcome
+            if isinstance(obj, FlowSum): # A sum or a share of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
             if isinstance(obj, (Transition, outcome, par, State)):
                 if name is not None:
                     obj.name = name
                 elif obj.name is None:
                     obj.name = find_name(obj, frame)
+                    names = bound_names(obj, frame) if obj.name is None and isinstance(obj, Transition) else []
+                    if len(names) > 1: # Which one is meant is not known, so the name is built from its endpoints
+                        obj.guessed['name'] = f'built from its endpoints, since it is bound to {sc.strjoin(names, sep=" and ")}'
             if isinstance(obj, Transfer):
                 obj.name = name or obj.name or find_name(obj, frame)
                 self.add(self.transfers, obj.name, obj)
@@ -1188,10 +1371,10 @@ class Graph:
                     errormsg = f'Could not find a name for the result "{obj}"; pass it as a keyword, e.g. ss.Disease(..., prevalence=I/N)'
                     raise ValueError(errormsg)
                 self.add(self.exprs, name, obj)
-            elif callable(obj) and not isinstance(obj, (ss.Dist, type)):
+            elif callable(obj) and not isinstance(obj, (ss.Dist, type, TimeValue)): # A value that varies in time is a value, e.g. beta=ss.seasonal(...)
                 self.add(self.funcs, name or obj.__name__, obj)
-            elif name is not None: # A number, typed quantity, or distribution is a parameter
-                self._add_par(par(obj), name=name)
+            elif name is not None: # A number, typed quantity, or distribution sets the value of a parameter, once they are known
+                self._keywords[name] = obj
             else:
                 errormsg = f'Could not understand the argument {obj} of type {type(obj)}; expecting a transition or an outcome'
                 raise TypeError(errormsg)
@@ -1205,11 +1388,14 @@ class Graph:
 
     def add(self, container, name, obj):
         """ Add a named member, checking the name """
-        if name in self.reserved or name in dir(ss.Module) or name in ['sim', 'pars', 'results', 't', 'dists', 'name', 'label', 'graph', 'engine']:
-            error('E201', f'"{name}" cannot be used as the name of a state, transition, parameter, or result, since it is an attribute of every module. Please choose another name.')
+        reserved = set(self.grouped) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'} # The attributes of every module
+        if container is not self.pars: # And this module's methods, e.g. a transition named "describe" would replace the method (parameters are kept in pars, so may be named "R0")
+            reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
+        if name in reserved:
+            raise ss.ReservedName(f'"{name}" cannot be used as the name of a state, transition, parameter, or result, since it is an attribute of every module. Please choose another name.')
         for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers]:
             if name in other and other[name] is not obj:
-                error('E206', f'two members of "{self.module.name}" are both named "{name}"; names must be unique within a module.')
+                raise ss.DuplicateDeclaration(f'two members of "{self.module.name}" are both named "{name}"; names must be unique within a module.')
         container[name] = obj
         return
 
@@ -1239,14 +1425,23 @@ class Graph:
                         for s in ([leaf] if isinstance(leaf, State) else leaf.states if isinstance(leaf, Count) else []):
                             if id(s) not in found:
                                 self._refs.append(s)
-            strings += [s for s in sc.tolist(tr.source) if isinstance(s, str)]
+            if tr._pending is not None: # The source of a transmission, if given
+                strings += [s for s in sc.tolist(tr._pending[1]) if isinstance(s, str)]
+            if getattr(tr, 'offspring', None) is not None: # The state newborns go into, which may be in no arrow
+                kid = tr.offspring[0]
+                if isinstance(kid, State): found[id(kid)] = kid
+                else:                      strings += kid
         for s in self._refs: # A state used only in a rate still belongs to this module unless another module has claimed it
             if s.module is None or s.module is self.module:
                 found[id(s)] = s
         if found and frame is not None: # A string can also name a declared state that is not used as an object, e.g. ss.Transition('I', 'R') after S, I, R = ss.states(3)
             for string in strings:
                 var = frame.f_locals.get(string, frame.f_globals.get(string))
-                if isinstance(var, State) and (var.name is None or var.name == string):
+                if isinstance(var, State) and (var.name is None or var.name == string) and string not in [s.name for s in found.values()]:
+                    if var.module not in (None, self.module): # A state of another disease: this one gets its own
+                        var = sc.cp(var)
+                        var.module = None
+                        var.guessed = sc.objdict()
                     found[id(var)] = var
         declared = sorted(found.values(), key=lambda s: s.order)
 
@@ -1256,23 +1451,26 @@ class Graph:
                 state.name = find_name(state, frame)
             if state.name is None:
                 used = [tr.name or tr.arrow for tr in trs if any(end is state for end in (tr.src or []) + (tr.dst or []))]
-                error('E210', f'state number {i+1} of the module has no name. It is used in {used}, and no variable or keyword holding it was found.\n'
-                              f"     Give the names up front: S, I, R = ss.states('S I R').")
+                raise ss.UnnamedState(f'state number {i+1} of the module has no name. It is used in {used}, and no variable or keyword holding it was found.\n'
+                                      f"     Give the names up front: S, I, R = ss.states('S I R').")
 
         # Either check the strings against the declared states, or infer the states from them
         names = [s.name for s in declared]
         if declared:
             for string in strings:
                 if string not in names:
-                    error('E204', f'no state named "{string}" was declared in "{self.module.name}". Declared states are {sc.strjoin(names)}; did you mean {closest(string, names)}?')
+                    raise ss.UnknownState(f'no state named "{string}" was declared in "{self.module.name}". Declared states are {sc.strjoin(names)}{did_you_mean(string, names)}')
             statelist = declared
         else:
             self.inferred = True
             self.guessed['states'] = 'inferred from the arrows'
+            for string in strings:
+                if not string.isidentifier():
+                    raise ss.UnknownState(f'"{string}" in an arrow string of "{self.module.name}" is not a state name. Branches are written with "|", e.g. "I -> R | D".')
             statelist = [State(name) for name in dict.fromkeys(strings)] # Unique names, in order of first appearance
         for state in statelist:
             if state.module is not None and state.module is not self.module:
-                error('E206', f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
+                raise ss.DuplicateDeclaration(f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
             state.module = self.module
             self.add(self.states, state.name, state)
 
@@ -1282,12 +1480,14 @@ class Graph:
         for tr in trs:
             if tr.src is not None: tr.src = [lookup(end) for end in tr.src]
             if tr.dst is not None: tr.dst = [lookup(end) for end in tr.dst]
-            if tr.source is not None: tr.source = [lookup(end) for end in sc.tolist(tr.source)]
+            if tr._pending is not None and tr._pending[1] is not None:
+                beta, source = tr._pending
+                tr._pending = (beta, [lookup(end) for end in sc.tolist(source)])
 
         # Initial conditions given on the module
         for name,val in self.init.items():
             if name not in self.states:
-                error('E204', f'init= names a state "{name}" that "{self.module.name}" does not have. States are {sc.strjoin(self.states.keys())}.')
+                raise ss.UnknownState(f'init= names a state "{name}" that "{self.module.name}" does not have. States are {sc.strjoin(self.states.keys())}.')
             self.states[name].init = val
         return
 
@@ -1304,7 +1504,7 @@ class Graph:
                 count += 1
                 name = f'{base}_{count}'
             tr.name = name
-            tr.guessed['name'] = 'built from its endpoints'
+            tr.guessed.setdefault('name', 'built from its endpoints')
             self.add(self.transitions, name, tr)
 
         for name,tr in self.transitions.items():
@@ -1313,123 +1513,183 @@ class Graph:
                 raise ValueError(errormsg)
 
             # ss.transmission(): the rate is beta times the source of infection
-            if tr.beta is not None:
-                if tr.source is None:
+            if tr._pending is not None:
+                beta, sources = tr._pending
+                if sources is None:
                     infectious = [s for s in self.states.values() if s.infectious]
                     if infectious:
-                        tr.source = infectious
+                        sources = infectious
                         tr.guessed['source'] = 'the states declared infectious'
                     else:
-                        tr.source = tr.dst[:1]
+                        sources = tr.dst[:1]
                         tr.guessed['source'] = 'source is the destination'
-                source = tr.source[0]
-                for s in tr.source[1:]:
+                        latent = self.latent_states(tr)
+                        if latent:
+                            raise ss.SourceNeeded(f'"{name}" ({tr.arrow}) leads to {tr.dst[0].name}, from which people move on to {sc.strjoin(s.name for s in latent)} and then on again, so whether they infect others in {tr.dst[0].name} (as in an SIR with hospital care) or in {latent[0].name} (as in an SEIR) cannot be guessed.\n'
+                                                  f'     Give the source, e.g. ss.transmission("{tr.arrow}", beta=..., source="{latent[0].name}").')
+                source = sources[0]
+                for s in sources[1:]:
                     source = source + s
-                tr.rate = as_expr(tr.beta) * source
-                tr.beta = None
-
-            # ss.birth(): a per-person rate, so multiply by the population
-            if tr.per_capita:
-                tr.rate = tr.rate * Count([], kind='N') # Filled in by resolve_people()
+                tr.rate = as_expr(beta) * source
+                tr._pending = None
 
             if tr.rate is None and tr.dur is None and tr.p is None:
-                error('E209', f'the transition "{name}" ({tr.arrow}) has no rate, no duration, and no p=. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
+                raise ss.UndrivenTransition(f'the transition "{name}" ({tr.arrow}) has no rate, no duration, and no p=. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
 
             # Derive the kind from the rate
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
+                if not state.infectious: # Not declared, so a guess
+                    state.guessed['infectious'] = name
                 state.infectious = True
         return
+
+    def anchor(self, states, connected):
+        """
+        The state that people are in unless they are put elsewhere, which the other people states are connected to: the
+        source of the first contact-mediated transition; else the earliest state of the group of states connected to
+        the ones given initial values (else of the largest group of connected states) that no transition moves people
+        into, or else the earliest state of that group
+        """
+        for tr in self.transitions.values():
+            if tr.contact and tr.src:
+                return tr.src[0]
+        given = [self.states[key] for key in self.init if key in self.states]
+        group = connected(given) if given else max((connected([s]) for s in states), key=len)
+        members = [s for s in states if id(s) in group]
+        entered = {id(st) for tr in self.transitions.values() for st in (tr.dst or []) if isinstance(st, State)}
+        entered |= {id(self.states[kid] if isinstance(kid, str) else kid) for kid in [tr.offspring[0] for tr in self.transitions.values() if getattr(tr, 'offspring', None) is not None]} # Newborns enter theirs
+        return next((s for s in members if id(s) not in entered), members[0])
 
     def resolve_people(self):
         """ Work out which states are people: the ones connected by transitions to the first state """
         states = list(self.states.values())
         links = {id(s):set() for s in states}
         for tr in self.transitions.values():
+            kid = [self.states[tr.offspring[0]] if isinstance(tr.offspring[0], str) else tr.offspring[0]] if getattr(tr, 'offspring', None) is not None else [] # Newborns are people, as their parents are
             for a in tr.src or []:
-                for b in tr.dst or []:
+                for b in (tr.dst or []) + kid:
                     links[id(a)].add(id(b))
                     links[id(b)].add(id(a))
 
-        # Start from the first state, and from everything declared to be people
-        first = states[0]
-        todo = [first] + [s for s in states if s.people is True]
-        seen = set()
+        # Start from the anchor, and from everything declared to be people
         lookup = {id(s):s for s in states}
-        while todo:
-            state = todo.pop()
-            if id(state) not in seen and state.people is not False:
-                seen.add(id(state))
-                todo += [lookup[i] for i in links[id(state)]]
+        def connected(start):
+            todo = list(start)
+            seen = set()
+            while todo:
+                state = todo.pop()
+                if id(state) not in seen and state.people is not False:
+                    seen.add(id(state))
+                    todo += [lookup[i] for i in links[id(state)]]
+            return seen
+        first = self.anchor(states, connected)
+        seen = connected([first] + [s for s in states if s.people is True])
         for state in states:
             if state.people is None:
                 state.people = id(state) in seen
                 if not state.people:
-                    self.guessed[f'states.{state.name}.people'] = f'no transition connects {state.name} to {first.name}'
+                    state.guessed['people'] = f'no transition connects {state.name} to {first.name}'
         self.people_states = [s for s in states if s.people]
         self.count_states = [s for s in states if not s.people]
         self.first = first
 
         # Now that the people are known, fill in the things that depend on them
         for name,tr in self.transitions.items():
-            if tr.every_state:
-                tr.src = list(self.people_states)
-            for expr in [tr.rate] + sc.tolist(tr.p):
-                if expr is not None:
-                    for leaf in expr.leaves:
-                        if isinstance(leaf, Count) and leaf.kind == 'N':
-                            leaf.states = list(self.people_states)
-                            leaf.kind = 'n'
+            self.fill_people(tr)
             for state in tr.terms:
                 if not state.people:
-                    error('E211', f'the rate for "{name}" uses the bare state {state.name}, and {state.name} is not people.\n'
-                                  f'       rate = {tr.rate}\n'
-                                  f'     A bare state means contact with people in that state, and there is no contact with a count.\n'
-                                  f'     Write {state.name}.n for the number itself. If {state.name} is people, declare it with ss.State(people=True).')
+                    raise ss.ExposureToCount(f'the rate for "{name}" uses the bare state {state.name}, and {state.name} is not people.\n'
+                                             f'       rate = {tr.rate}\n'
+                                             f'     A bare state means contact with people in that state, and there is no contact with a count.\n'
+                                             f'     Write {state.name}.n for the number itself. If {state.name} is people, declare it with ss.State(people=True).')
             tr.people = all(s.people for s in (tr.src or []) + (tr.dst or []))
         return
 
+    def fill_people(self, tr):
+        """ Fill in what depends on which states are people: the sources of the deaths of everyone (`ss.death()` with no arrow), and the people a birth rate is per person of (`ss.birth()`) """
+        if tr.every_state:
+            tr.src = list(self.people_states)
+        if tr.per_capita:
+            tr.rate = tr.rate * Count(list(self.people_states), kind='n')
+            tr.const, tr.terms = linear(tr.rate)
+        return
+
+    def latent_states(self, tr):
+        """ For a transmission whose source would be guessed as its destination: the states that people move on to from there and then leave for somewhere other than the susceptible state, as in an SEIR (in an SIR, SIS, or SIRS, there are none) """
+        def onward(state):
+            return [dst for t in self.transitions.values() if t is not tr and any(src is state for src in t.src or []) for dst in t.dst or []]
+        susceptible = tr.src or []
+        out = []
+        for state in onward(tr.dst[0]):
+            if any(dst is not state and not any(dst is s for s in susceptible) for dst in onward(state)):
+                out.append(state)
+        return out
+
+    def set_keywords(self):
+        """ A value given as a keyword sets the parameter of that name; there is nothing else for it to be """
+        for name,value in self._keywords.items():
+            if name not in self.pars:
+                raise ss.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
+                                          f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).')
+            self.pars[name].value = value
+        return
+
+    @staticmethod
+    def set_slots(tr):
+        """
+        Record the kind of value each parameter of a transition is, as `par.slot` (which describe() and the model spec use):
+        'rate' or 'dur', or None for a plain number (e.g. a factor of a rate); returns the standard slots it fills, as (slot name, parameter)
+        """
+        slots = []
+        if tr.dur is not None:
+            tr.dur.slot = 'dur'
+            slots.append(('dur', tr.dur))
+        if tr.rate is not None:
+            for leaf in tr.rate.leaves:
+                if isinstance(leaf, par):
+                    leaf.slot = 'rate' if isinstance(leaf.raw, (ss.TimePar, ss.Dist)) else None
+            if isinstance(tr.rate, par):
+                tr.rate.slot = 'rate'
+                slots.append(('rate', tr.rate))
+            elif tr.contact and tr.const is None: # The coefficient of the source of infection is beta
+                coefs = list(tr.terms.values())
+                rate = tr.rate
+                alone = isinstance(rate, BinOp) and not any(isinstance(leaf, par) and not leaf.literal for leaf in rate.b.leaves) # Only the rate as a whole has a unit, so a factor of a product of parameters is a number: R0 in R0 * (gamma * I)
+                if isinstance(rate, BinOp) and rate.op == '*' and isinstance(rate.a, par) and alone:
+                    rate.a.slot = 'rate'
+                    slots.append(('beta', rate.a))
+                elif len(coefs) == 1 and isinstance(coefs[0], par) and not is_one(coefs[0]):
+                    coefs[0].slot = 'rate'
+                    slots.append(('beta', coefs[0]))
+        for p in tr.p or []:
+            if isinstance(p, par) and len(tr.p) == 1:
+                slots.append(('p', p))
+        return slots
+
     def resolve_pars(self, frame):
         """ Turn inline values in the standard slots into named parameters (beta, dur, rate, p) """
-        slots = [] # (transition, slot name, parameter)
-        for name,tr in self.transitions.items():
-            if tr.dur is not None:
-                tr.dur.slot = 'dur'
-                slots.append((tr, 'dur', tr.dur))
-            if tr.rate is not None:
-                for leaf in tr.rate.leaves:
-                    if isinstance(leaf, par):
-                        leaf.slot = 'rate' if isinstance(leaf.raw, (ss.TimePar, ss.Dist)) else None
-                if isinstance(tr.rate, par):
-                    tr.rate.slot = 'rate'
-                    slots.append((tr, 'rate', tr.rate))
-                elif tr.contact and tr.const is None: # The coefficient of the source of infection is beta
-                    coefs = list(tr.terms.values())
-                    rate = tr.rate
-                    if isinstance(rate, BinOp) and rate.op == '*' and isinstance(rate.a, par):
-                        rate.a.slot = 'rate'
-                        slots.append((tr, 'beta', rate.a))
-                    elif len(coefs) == 1 and isinstance(coefs[0], par) and not is_one(coefs[0]):
-                        coefs[0].slot = 'rate'
-                        slots.append((tr, 'beta', coefs[0]))
-            for p in tr.p or []:
-                if isinstance(p, par) and len(tr.p) == 1:
-                    slots.append((tr, 'p', p))
+        slots = [(tr, slot, p) for tr in self.transitions.values() for slot,p in self.set_slots(tr)] # (transition, slot name, parameter)
 
         # Name the anonymous ones after their slot, qualified by the transition where two would clash
         anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or (p.name is None and find_name(p, frame) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1])
         counts = sc.objdict()
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
+        inner = {q.name or find_name(q, frame) for tr,slot,p in slots if isinstance(p.value, TimeValue) for q in p.value.pars} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), which are registered below
         for tr,slot,p in anon:
-            clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions
+            clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions or slot in inner
             self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
         used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if isinstance(val, par)]
+        for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
+            for key,val in (oc.likelihood.pars.items() if oc.likelihood is not None else []):
+                if isinstance(val, par) and not val.literal and val.name is None and find_name(val, frame) is None:
+                    val.name = f'{oc.name}_{key}'
         used += [(f'init of {state.name}', state.init) for state in self.states.values() if isinstance(state.init, Expr)] # So an initial count can be fitted
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] # And a parameter in the rate of a transfer
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, TimeValue) for inner in leaf.value.pars] # And a parameter inside a value that varies in time
@@ -1475,34 +1735,36 @@ class Graph:
                 if const and not np.isclose(total, 1):
                     if total < 1 and len(exits.timed) == 1:
                         exits.remainder = exits.timed.pop()
+                        exits.remainder.guessed['p'] = f'{1 - total:n}'
                     else:
-                        error('E205', f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
-                                      f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).')
+                        raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
+                                                f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).')
         return
 
     def check(self):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
+            tr.check_dimensions()
             if tr.p is not None and len(tr.dst) > 1:
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dst) == 2: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
                 if len(ps) != len(tr.dst):
-                    error('E205', f'"{name}" has {len(tr.dst)} destinations but {len(ps)} branch probabilities.')
+                    raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but {len(ps)} branch probabilities.')
                 given = [p for p in ps if p is not None]
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)
                     if (len(given) == len(ps) and not np.isclose(total, 1)) or total > 1 + 1e-9:
-                        error('E205', f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
+                        raise ss.BadBranchSplit(f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
             elif tr.p is None and len(tr.dst) > 1:
-                error('E205', f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
+                raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
         return
 
     def describe(self, sim=None):
         """ The resolved model as text, with every guessed default marked; see `ss.Disease.describe()` """
         mod = self.module
         engine = getattr(mod, 'engine', None)
-        unit = sim.unit if sim is not None else None
+        unit = sim.unit_name if sim is not None else None
         lines = []
         def add(key, text, guess=None):
             line = f'{key:12s} {text}'
@@ -1515,17 +1777,17 @@ class Graph:
         people = ', '.join(s.name for s in self.people_states)
         add('states', people, self.guessed.get('states'))
         for state in self.count_states:
-            guess = self.guessed.get(f'states.{state.name}.people')
+            guess = state.guessed.get('people')
             add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
         for state in self.infectious:
             sources = [name for name,tr in self.transitions.items() if state in tr.terms]
-            declared = not sources
-            add('', f'{state.name} infectious', None if declared else f"guessed: source of {sc.strjoin(repr(s) for s in sources)}")
+            guessed = 'infectious' in state.guessed
+            add('', f'{state.name} infectious', f"guessed: source of {sc.strjoin(repr(s) for s in sources)}" if guessed else None)
         inits = {s.name:s.init for s in self.states.values() if s.init is not None}
-        if self.init_prev:
-            inits['init_prev'] = self.init_prev
+        if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
+            inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
         if inits:
-            add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + f'; the rest in {self.first.name}')
+            add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + f'; the rest in {self.first.name}', f'guessed: {self.guessed["init"]}' if 'init' in self.guessed else None)
         else:
             add('', f'init: {self.first.name} = 1.0', 'guessed: nothing given')
         lines.append('')
@@ -1533,7 +1795,7 @@ class Graph:
         for name,tr in self.transitions.items():
             if tr.contact:
                 source = ' + '.join(s.name for s in tr.terms)
-                guess = tr.guessed.get('source')
+                guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([tr.guessed['source']] if 'source' in tr.guessed else []), sep='; ')
                 add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
@@ -1547,30 +1809,39 @@ class Graph:
                 else:
                     add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}', 'exposure through the networks')
             else:
-                add(name, f'{tr.arrow}   spontaneous' if not tr.inflow else f'{tr.arrow}   inflow, in total per {unit or "step"}')
+                guess = tr.guessed.get('name')
+                add(name, f'{tr.arrow}   spontaneous' if not tr.inflow else f'{tr.arrow}   inflow, in total per {unit or "step"}', f'guessed: name {guess}' if guess else None)
                 if not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
                     p = tr.dur if tr.dur is not None else tr.rate
                     raw = p.raw
                     dw = engine.dwells.get(name) if engine is not None else None
+                    stages = None # The guess of how many stages, if one was made
                     if isinstance(raw, ss.Dist):
                         text = f'dwell ~ {raw}'
                         if dw is not None and not dw.exact:
                             text += f', as {dw.k} Erlang stages'
+                            stages = None if tr.stages else 'guessed: stages from the mean and standard deviation'
                     elif tr.dur is None:
                         text = f'dwell ~ exponential(rate = {quantity_str(raw, "rate", unit)})'
                     else:
                         text = f'dwell ~ exponential(mean = {quantity_str(raw, "dur", unit)})'
                         if tr.stages:
                             text = f'dwell ~ Erlang({tr.stages} stages, mean = {quantity_str(raw, "dur", unit)})'
-                    add('', text, 'guessed: scalar duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else None)
+                    add('', text, 'guessed: scalar duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else stages)
                 elif tr.rate is not None:
                     add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}')
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
                 add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in tr.p)}')
+            elif 'p' in tr.guessed:
+                add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
+        for p in self.all_pars(): # A parameter given only its bounds starts from their middle
+            midpoint = getattr(p, 'midpoint', None)
+            if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
+                add('fitted', f'{p.name} = {value_str(p.raw)}, bounds {p.bounds}', 'guessed: the middle of its bounds')
         return lines
 
     def edges(self):
@@ -1703,8 +1974,8 @@ class Graph:
         """
         mod = self.module
         if engine is None or not hasattr(engine, 'flows'): # Not in a compartmental sim, so lay the model out with a stand-in
-            mock = sc.objdict(unit_base='day', solver='ode', n_groups=1, pars=sc.objdict(rand_seed=0, total_pop=1, approx=True), unit=None, crossings=[])
-            engine = ss.Compartmental(mod, mock)
+            mock = sc.objdict(unit_base='day', solver='ode', n_groups=1, pars=sc.objdict(rand_seed=0, total_pop=1, approx=True), unit=None, unit_name='day', crossings=[])
+            engine = ss.solvers.Compartmental(mod, mock)
             engine.init_dwells()
             engine.build_layout()
 
@@ -1731,7 +2002,7 @@ class Graph:
             src = None if flow.src is None else comp_name(flow.src)
             if flow.kind == 'stage' or (flow.kind == 'hazard' and tr.dur is not None):
                 p = tr.dur
-                name = p.name if (p.name and not p.literal) else value_str(p.raw)
+                name = format_expr(p)
                 if isinstance(p.raw, ss.Dist): name = f'mean({name})'
                 k = f'{flow.stages} * ' if flow.kind == 'stage' and flow.stages > 1 else ''
                 term = f'{k}{src} / {name}'
@@ -1775,7 +2046,6 @@ class Graph:
         def par_json(p, kind):
             return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=None if p.prior is None else str(p.prior), source=p.source, doc=p.doc)
 
-        kinds = dict()
         transitions = []
         for name in sorted(self.transitions.keys()):
             tr = self.transitions[name]
@@ -1786,57 +2056,42 @@ class Graph:
             entry.dur = None
             if tr.dur is not None:
                 raw = tr.dur.raw
-                kinds[id(tr.dur)] = 'dur'
                 entry.dur = quantity_json(raw, 'dur', unit) if isinstance(raw, ss.Dist) else dict(dist='expon', mean=['par', tr.dur.name])
             elif isinstance(tr.rate, par): # A constant hazard is an exponential dwell time
-                kinds[id(tr.rate)] = 'rate'
                 entry.dur = dict(dist='expon', rate=['par', tr.rate.name])
             elif tr.rate is not None:
-                entry.rate = format_expr(tr.rate)
-                for leaf in tr.rate.leaves:
-                    if isinstance(leaf, par) and not leaf.literal:
-                        kinds.setdefault(id(leaf), 'rate' if leaf.slot == 'rate' or tr.contact else None)
-            entry.p = None if tr.p is None else [None if p is None else format_expr(p) for p in tr.p]
+                entry.rate = format_expr(tr.rate, exact=True)
+            entry.p = None if tr.p is None else [None if p is None else format_expr(p, exact=True) for p in tr.p]
             entry.stages = tr.stages
             entry.label = tr.label
             if tr.migration: # Only when set, so that other specs are unchanged
                 entry.migration = True
             transitions.append(entry)
-        out.pars = [par_json(self.pars[name], kinds.get(id(self.pars[name]))) for name in sorted(self.pars.keys())]
+        out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
         out.transitions = transitions
         out.stratifications = [sc.dcp(s.spec) for s in self.strats]
-        results = [dict(name=name, type='result', source=format_expr(expr)) for name,expr in self.exprs.items()]
+        results = [dict(name=name, type='result', source=format_expr(expr, exact=True)) for name,expr in self.exprs.items()]
         results += [oc.to_json(unit) for oc in self.outcomes.values()]
         out.results = sorted(results, key=lambda r: r['name'])
         out.functions = sorted([dict(name=name, source=func_source(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
         guessed = list(self.guessed.keys())
+        for name,state in self.states.items():
+            guessed += [f'states.{name}.{key}' for key in state.guessed.keys()]
         for name,tr in self.transitions.items():
             guessed += [f'transitions.{name}.{key}' for key in tr.guessed.keys()]
         out.guessed = sorted(guessed)
         return out
 
-    def stratify(self, split=None, adjust=None, states=None, where=None, kind=None, mobility=None, immunity=None, frame=None, **kwargs):
+    def stratify(self, frame=None, **kwargs):
         """ Stratify the graph by one or more dimensions; see `ss.Disease.stratify()` """
-        if states is not None:
-            states = [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
-            for name in states:
-                if name not in self.states:
-                    error('E204', f'states= names a state "{name}" that "{self.module.name}" does not have. Its states are {sc.strjoin(self.states.keys())}; did you mean {closest(name, self.states.keys())}?')
-        dims = {k:v for k,v in kwargs.items() if not isinstance(v, Transfer)}
-        transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
-        if len(dims) > 1 and (split is not None or adjust is not None or states is not None or where is not None or mobility is not None or immunity is not None):
-            errormsg = 'When using split=, adjust=, states=, where=, or mobility=, give one dimension per call to stratify(), so it is clear which one they belong to'
-            raise ValueError(errormsg)
-        for key in (adjust or {}):
-            if key not in self.transitions and key not in ['rel_trans', 'rel_sus']:
-                error('E301', f'adjust= names a transition "{key}" that "{self.module.name}" does not have. Its transitions are {sc.strjoin(self.transitions.keys())} (and it can also adjust rel_trans and rel_sus).')
-        for name,levels in dims.items():
-            if any(s.name == name for s in self.strats):
-                error('E305', f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
-            strat = Strat(name, levels, split=split, adjust=adjust, kind=kind, states=states, where=where, mobility=mobility, immunity=immunity)
-            if strat.kind == 'strain' and states is None: # A strain belongs to an infection, so the states people can be in without ever being infected have none
-                strat.states = [s.name for s in self.people_states if s.name not in self.uninfected]
-                strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(self.uninfected)})'
+        strats, transfers = parse_stratify(kwargs, graphs=[self])
+        old = {s.name:s for s in self.strats}
+        if strats and all(strat.name in old and strat.same_as(old[strat.name]) for strat in strats) and all(name in self.transfers for name in transfers):
+            ss.note(f'"{self.module.name}" is already stratified by {sc.strjoin(strat.name for strat in strats)} in the same way, so this stratify() does nothing (stratify() works in place)')
+            return self.module
+        for strat in strats:
+            if strat.name in old:
+                raise ss.DuplicateStructuralDimension(f'"{self.module.name}" is already stratified by "{strat.name}", in another way. stratify() works in place, so the stratification can be given once; to change it, build the model again.')
             self.strats.append(strat)
         for name,tf in transfers.items():
             tf.name = name
@@ -1847,9 +2102,37 @@ class Graph:
                 for leaf in [] if expr is None else expr.leaves:
                     if isinstance(leaf, par) and not leaf.literal and not any(p is leaf for p in self.pars.values()):
                         self._add_par(leaf, name=leaf.name or find_name(leaf, frame) or f'rate_{name}')
-                        self.module.define_pars(**{leaf.name:leaf.value})
-                        dict.__setitem__(self.module.pars, leaf.name, leaf)
+                        self.module.define_pars(**{leaf.name:leaf})
         return self.module
+
+    def add_flow(self, tr):
+        """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.Sim.init_flows()` """
+        name = tr.name or ('births' if tr.per_capita else 'immigration' if tr.inflow else 'emigration' if tr.migration else 'deaths')
+        if name in self.transitions:
+            raise ss.DuplicateDeclaration(f'"{self.module.name}" already has a transition named "{name}"; give the one in demographics= another name, e.g. ss.birth(..., name="{name}2")')
+        tr.name = name
+        if tr.inflow: # Born into (or arriving in) the state named, or else the state people are in unless they are put elsewhere
+            dst = tr.dst[0] if tr.arrow_given else self.first.name
+            if dst not in self.states or not self.states[dst].people:
+                raise ss.UnknownState(f'"{name}" in demographics= adds people to "{dst}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
+            tr.dst = [self.states[dst]]
+        if tr.rate is None and tr.dur is None:
+            raise ss.UndrivenTransition(f'"{name}" in demographics= has no rate; give it one, e.g. ss.birth(rate=ss.peryear(0.02))')
+        tr.const, tr.terms = linear(tr.rate) if tr.rate is not None else (None, {})
+        self.fill_people(tr)
+        tr.contact = False
+        tr.people = True
+        tr.module = self.module
+        self.set_slots(tr)
+        self.add(self.transitions, name, tr)
+        self.module.setattribute(name, tr) # e.g. sir.births, so it can be the target of ss.modify()
+        for expr in [tr.rate, tr.dur]: # Register its parameters, as for those of the transitions
+            for leaf in [] if expr is None else expr.leaves:
+                if isinstance(leaf, par) and not any(p is leaf for p in self.pars.values()):
+                    self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else f'rate_{name}')
+                    self.module.define_pars(**{leaf.name:leaf})
+        self.resolve_exits()
+        return tr
 
     @property
     def infectious(self):
@@ -1901,7 +2184,7 @@ class Graph:
         for p in self.all_pars():
             check(p.raw)
         for oc in self.outcomes.values():
-            for val in [oc.delay, oc.duration, oc.every]:
+            for val in [oc.delay, oc.duration]:
                 check(val)
         return out
 
@@ -1921,10 +2204,24 @@ class Graph:
                     out.update({id(leaf):leaf for leaf in expr.leaves if isinstance(leaf, par)})
         return list(out.values())
 
+    def unentered(self):
+        """ The states inferred from arrow strings that nothing moves people into and that start empty, which are usually typos """
+        if not self.inferred:
+            return []
+        first = next(iter(self.states.values()))
+        entered = {id(first)} | {id(dst) for tr in self.transitions.values() for dst in tr.dst or []}
+        entered |= {id(self.states[key]) for key in self.init if key in self.states}
+        return [state for state in self.states.values() if id(state) not in entered]
+
+    def spread_pars(self):
+        """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognorm_ex(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """
+        dwells = [tr.dur for tr in self.transitions.values()]
+        return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
+
 
 #%% Looking at the model: describe(), equations(), the transition table, and the model spec
 
-def format_expr(expr, values=False, bare=None, mul='*'):
+def format_expr(expr, values=False, bare=None, mul='*', exact=False):
     """
     Write an expression as text
 
@@ -1933,8 +2230,9 @@ def format_expr(expr, values=False, bare=None, mul='*'):
         values (bool): whether to print the values of parameters rather than their names
         bare (func): how to write a bare state (a function of the state, returning a string); by default, its name
         mul (str): the multiplication sign
+        exact (bool): write numbers at full precision (for the model spec, so its hash and code are exact), rather than to six significant figures
     """
-    def fmt(e, parent=False):
+    def fmt(e):
         if isinstance(e, BinOp):
             return join_binop(e, fmt, op=mul if e.op == '*' else e.op)
         elif isinstance(e, Func):
@@ -1945,10 +2243,17 @@ def format_expr(expr, values=False, bare=None, mul='*'):
             if e.name and not e.literal and not values:
                 return e.name
             raw = e.raw
-            return value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)
+            text = value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)
+            if exact and isinstance(raw, float) and float(text) != raw: # E.g. 1 + 1e-9, which is "1" to six figures
+                text = repr(float(raw))
+            return text
         elif isinstance(e, State):
-            return e.name if bare is None else bare(e)
-        return e.to_str()
+            return e.label_name if bare is None else bare(e)
+        elif isinstance(e, Count):
+            names = [s.label_name for s in e.states]
+            inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
+            return f'{inner}.{e.kind}'
+        return str(e.name) # A flow
     return fmt(expr)
 
 
@@ -1973,7 +2278,7 @@ def quantity_json(raw, kind, unit):
     if isinstance(raw, ss.dur):
         return dict(type='dur', value=float(raw.value), unit=type(raw).base.removesuffix('s'))
     elif isinstance(raw, ss.Rate):
-        types = {ss.per:'per', ss.prob:'prob', ss.freq:'freq'}
+        types = {ss.per:'per', ss.prob:'prob', ss.time.freq:'freq'}
         key = [v for k,v in types.items() if isinstance(raw, k)][0]
         return dict(type=key, value=float(raw.value), unit=None if raw.unit is None else type(raw.unit).base.removesuffix('s'))
     elif isinstance(raw, ss.Dist):
@@ -1990,9 +2295,9 @@ def quantity_json(raw, kind, unit):
     elif isinstance(raw, (TimeValue, by)):
         return raw.to_json()
     elif isinstance(raw, Expr):
-        return format_expr(raw)
+        return format_expr(raw, exact=True)
     elif callable(raw):
-        return dict(fn=getattr(raw, '__name__', 'function'))
+        return func_json(raw)
     elif isinstance(raw, dict):
         return {k:quantity_json(v, kind, unit) for k,v in raw.items()}
     elif isinstance(raw, (list, tuple)):
@@ -2035,9 +2340,32 @@ class TransitionTable(sc.objdict):
 
 
 def func_source(func):
-    """ The source text of a function, if available """
-    try:    return inspect.getsource(func)
+    """ The source text of a function, if available, without the indentation of where it was defined """
+    try:    return textwrap.dedent(inspect.getsource(func))
     except: return None
+
+
+def func_json(func):
+    """ A function in the model spec: its name, source, and the values it uses, so that the hash changes with what the function does """
+    return dict(fn=getattr(func, '__name__', 'function'), source=func_source(func), values=func_values(func))
+
+
+def func_values(func):
+    """ The plain values (numbers, strings, and lists of them) that a function takes from outside its source: the variables it closes over, the global ones it uses, and its defaults """
+    simple = lambda v: isinstance(v, (bool, int, float, str, type(None))) or (isinstance(v, (list, tuple)) and all(isinstance(x, (bool, int, float, str)) for x in v))
+    code = getattr(func, '__code__', None)
+    if code is None:
+        return None
+    out = {}
+    for name,cell in zip(code.co_freevars, func.__closure__ or ()):
+        try:    val = cell.cell_contents
+        except: continue # A variable not yet assigned
+        if simple(val):
+            out[name] = val
+    glob = getattr(func, '__globals__', {})
+    out.update({name:glob[name] for name in code.co_names if name in glob and simple(glob[name])})
+    out.update({f'default_{i}':v for i,v in enumerate(func.__defaults__ or ()) if simple(v)})
+    return out or None
 
 
 #%% Stratification
@@ -2118,7 +2446,11 @@ class by:
         if sc.isnumber(other):
             return self.map(lambda v: func(v, other))
         elif isinstance(other, by) and self.dim is not None and other.dim == self.dim:
-            return by(**{self.dim:[func(a, b) for a,b in zip(sc.tolist(self.values), sc.tolist(other.values))]})
+            a, b = sc.tolist(self.values), sc.tolist(other.values)
+            if len(a) != len(b):
+                errormsg = f'Cannot combine an ss.by() of {len(a)} levels of "{self.dim}" with one of {len(b)}'
+                raise ValueError(errormsg)
+            return by(**{self.dim:[func(x, y) for x,y in zip(a, b)]})
         return NotImplemented
 
     def __mul__(self, other):      return self._op(other, lambda a,b: a*b)
@@ -2154,7 +2486,11 @@ class by:
     @property
     def values(self):
         """ The values, if there is one dimension """
-        return self.given[self.dim] if self.given and len(self.dims) == 1 else None
+        if len(self.dims) != 1:
+            return None
+        elif self.array is not None: # ss.by([...], dims=['age'])
+            return self.array.tolist()
+        return self.given[self.dim] if self.given else None
 
     def __repr__(self):
         if self.array is not None:
@@ -2162,6 +2498,20 @@ class by:
         if self.table is not None:
             return f'by(table of {len(self.table)} rows by {sc.strjoin(self.dims)})'
         return f'by({", ".join(f"{k}={v}" for k,v in self.given.items())})'
+
+    def check(self, sim):
+        """ Check that there is a value for each level of each dimension (`ss.ShapeError`); returns the positions of the dimensions in the sim, and the dimensions """
+        ds = [sim.dim_index(dim) for dim in self.dims]
+        strats = [sim.strats[d] for d in ds]
+        if self.array is not None:
+            shape = tuple(strat.n for strat in strats)
+            if self.array.shape != shape:
+                raise ss.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
+        elif self.table is None:
+            for strat,(dim,vals) in zip(strats, self.given.items()):
+                if np.ndim(vals) != 0 and len(sc.toarray(vals)) != strat.n: # One value is for every level, e.g. ss.by(subpop=2.2)
+                    raise ss.ShapeError(f'ss.by({dim}=...) has {len(sc.toarray(vals))} values, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+        return ds, strats
 
     def grid(self, sim, convert=None, year=None):
         """
@@ -2172,19 +2522,16 @@ class by:
         """
         given = convert or (lambda v: v)
         convert = lambda v: given((v(sim) if year is None else v.at(year, sim)) if isinstance(v, TimeValue) else v)
-        ds = [sim.dim_index(dim) for dim in self.dims]
-        strats = [sim.strats[d] for d in ds]
+        ds, strats = self.check(sim)
         if self.array is not None:
-            shape = tuple(strat.n for strat in strats)
-            if self.array.shape != shape:
-                error('E603', f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
             return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if self.array.size else self.array.copy()
         if self.table is None:
             out = np.ones([strat.n for strat in strats])
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
+                single = np.ndim(vals) == 0 # One value for every level, e.g. ss.by(subpop=2.2)
                 vals = np.array([convert(v) for v in sc.toarray(vals)], dtype=float)
-                if len(vals) != strat.n:
-                    error('E603', f'ss.by({dim}=...) has {len(vals)} values, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                if single:
+                    vals = np.full(strat.n, vals[0])
                 shape = [1]*len(strats)
                 shape[i] = strat.n
                 out = out*vals.reshape(shape)
@@ -2196,7 +2543,7 @@ class by:
                 labels = [str(label) for label in strat.labels]
                 label = str(row[strat.name])
                 if label not in labels:
-                    error('E603', f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                    raise ss.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                 index.append(labels.index(label))
             out[tuple(index)] += convert(row['value'])
         return ds, out
@@ -2251,6 +2598,17 @@ class TimeValue:
         """ The typed quantities it holds, used to infer the sim's unit """
         return []
 
+    # Arithmetic gives an expression, for a rate, e.g. 2 * ss.seasonal(...) or beta * ss.timeseries(...)
+    def __mul__(self, other):      return as_expr(self) * other
+    def __rmul__(self, other):     return other * as_expr(self)
+    def __truediv__(self, other):  return as_expr(self) / other
+    def __rtruediv__(self, other): return other / as_expr(self)
+    def __add__(self, other):      return as_expr(self) + other
+    def __radd__(self, other):     return other + as_expr(self)
+    def __sub__(self, other):      return as_expr(self) - other
+    def __rsub__(self, other):     return other - as_expr(self)
+    def __neg__(self):             return -1 * as_expr(self)
+
 
 class timeseries(TimeValue):
     """
@@ -2263,7 +2621,7 @@ class timeseries(TimeValue):
     Args:
         data (dict/str/dataframe): the value at each time, as a dict, a dataframe (the first column is
             the time, the second the value), or the name of a file holding one. A time is a date, or a
-            number: a year if the sim has dates, and otherwise a time in the sim's unit
+            number, which is a time in the sim's unit (in a sim with dates, that long after the start)
         mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings), or 'spline'
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
 
@@ -2427,8 +2785,8 @@ class seasonal(TimeValue):
         return dict(seasonal=dict(mean=quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak))
 
 
-kinds = dict(age='age', patch='space', node='space', region='space', district='space', county='space',
-             strain='strain', variant='strain', genotype='strain', serotype='strain', resistance='strain')
+hints = dict(patch='space', node='space', region='space', district='space', county='space', place='space', location='space', province='space',
+             strain='strain', variant='strain', genotype='strain', serotype='strain', resistance='strain') # Names that suggest a kind, for a note only: the kind comes from the value (see ss.transitions.Strat)
 
 
 class geo:
@@ -2516,19 +2874,29 @@ class gravity:
     the rate at which they move there) is `k × pop[i]^(a−1) × pop[j]^b / distance[i,j]^c`
 
     Populations and distances come from the geography of the dimension it is used on (`ss.geo`).
+    The model gives the shape of the movement, and `away=` its amount: the share of their time
+    that people spend away from home, split between the other places by gravity. `k` has units
+    of distance^c / pop^(a+b−1), so no default fits both three towns and a country; give it only
+    if it has been calibrated. With neither, people spend 10% of their time away.
 
     Args:
-        k (float): the overall amount of movement
+        away (float): for commuting and visiting, the share of their time people spend away from home (default 0.1, unless `k` is given)
+        k (float): the overall amount of movement, instead of `away`; for migration, the scale of the rates (required)
         a (float): the exponent of the population of the place people come from
         b (float): the exponent of the population of the place they go to
         c (float): the exponent of the distance between the two
 
     Examples:
         ```python
-        sir.stratify(patch=towns, mobility=ss.gravity(k=0.01, a=1.0, b=1.0, c=2.0))
+        sir.stratify(patch=towns, mobility=ss.gravity(away=0.1, a=1.0, b=1.0, c=2.0))
+        sir.stratify(patch=towns, mobility=ss.gravity(k=2e-4)) # A calibrated amount
         ```
     """
-    def __init__(self, k=1.0, a=1.0, b=1.0, c=2.0):
+    def __init__(self, away=None, k=None, a=1.0, b=1.0, c=2.0):
+        if away is not None and k is not None:
+            errormsg = 'ss.gravity() takes away= (the share of time spent away) or k= (a calibrated amount of movement), not both'
+            raise ValueError(errormsg)
+        self.away = away
         self.k = k
         self.a = a
         self.b = b
@@ -2536,17 +2904,18 @@ class gravity:
         return
 
     def __repr__(self):
-        return f'gravity(k={self.k}, a={self.a}, b={self.b}, c={self.c})'
+        amount = f'away={self.away}, ' if self.away is not None else f'k={self.k}, ' if self.k is not None else ''
+        return f'gravity({amount}a={self.a}, b={self.b}, c={self.c})'
 
     def matrix(self, strat):
         """ The movement between each pair of levels of a stratification, from its geography """
         place = strat.geo
         if place is None or place.distances is None or place.pop is None:
-            error('E402', f'ss.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
-                          f'     Give the places with ss.geo(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.Mobility(matrix=...).')
+            raise ss.NoGeography(f'ss.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+                                 f'     Give the places with ss.geo(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.Mobility(matrix=...).')
         pop, dist = place.pop, place.distances
         with np.errstate(divide='ignore'):
-            out = self.k*pop[:, None]**(self.a - 1)*pop[None, :]**self.b/dist**self.c
+            out = sc.ifelse(self.k, 1.0)*pop[:, None]**(self.a - 1)*pop[None, :]**self.b/dist**self.c # Without k, only the shape matters: see Mobility.time_share()
         np.fill_diagonal(out, 0)
         return out
 
@@ -2579,15 +2948,20 @@ class Mobility:
         data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
         kind (str): 'commute', 'visit', 'migrate', or 'force'; by default 'migrate' for a register and 'commute' otherwise
         away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that leaves it); the movement is rescaled to give it
+        scale (str): how `away=` rescales the movement: 'each' (the default) gives every place that share; 'mean' keeps the differences between places and gives them that share on average
+        cap (float): if given, the most that any place's share can be; a place over it is scaled down to it
 
     Examples:
         ```python
         sir.stratify(patch=towns, mobility=ss.Mobility(ss.gravity(), kind='commute', away=0.4))
+
+        # LASER's coupling: the mean share exported over places is 4.46%, and no place exports more than 20%
+        sir.stratify(patch=places, mobility=ss.Mobility(ss.gravity(a=1, b=0.25, c=1.56), kind='force', away=0.0446, scale='mean', cap=0.2))
         sir.stratify(patch=['a', 'b'], mobility=ss.Mobility(matrix=[[0, 0.1], [0.2, 0]]))
         sir.stratify(herd=herds, mobility=ss.Mobility(data='movements.csv'))
         ```
     """
-    def __init__(self, model=None, matrix=None, kind=None, away=None, data=None):
+    def __init__(self, model=None, matrix=None, kind=None, away=None, scale='each', cap=None, data=None):
         if sum(arg is not None for arg in [model, matrix, data]) != 1:
             errormsg = 'ss.Mobility() takes one of a movement model (e.g. ss.gravity()), matrix=, or data='
             raise ValueError(errormsg)
@@ -2599,22 +2973,51 @@ class Mobility:
         if data is not None and kind != 'migrate':
             errormsg = f'A movement register moves people from one place to another, so its kind is "migrate", not "{kind}"'
             raise ValueError(errormsg)
+        self.guessed = None
+        if isinstance(model, gravity): # The amount of movement: away= here, or on the gravity model, or its k
+            away = sc.ifelse(away, model.away)
+            if kind == 'migrate' and model.k is None:
+                errormsg = 'ss.gravity() for migration needs k=, the scale of the rates of moving; the share of time away (away=) is for commuting and visiting'
+                raise ValueError(errormsg)
+            if away is None and model.k is None:
+                away = 0.1
+                self.guessed = '10% of time away, since neither away= nor k= was given'
         self.model = model
         self.given = None if matrix is None else np.array(matrix, dtype=float)
         self.data = None if data is None else self.load(data)
+        if scale not in ['each', 'mean']:
+            errormsg = f'scale= of ss.Mobility() is "each" (every place has the share given by away=) or "mean" (the places have it on average), not "{scale}"'
+            raise ValueError(errormsg)
+        if (scale == 'mean' and away is None) or (cap is not None and kind == 'migrate'):
+            errormsg = 'scale= and cap= of ss.Mobility() rescale the share of time away, so they need away= and are not for migration'
+            raise ValueError(errormsg)
         self.kind = kind
         self.away = away
+        self.scale = scale
+        self.cap = cap
         return
 
     def __repr__(self):
         what = self.model if self.model is not None else 'matrix' if self.data is None else f'register of {len(self.data):n} events'
         away = f', away={self.away}' if self.away is not None else ''
+        away += f', scale={self.scale!r}' if self.scale != 'each' else ''
+        away += f', cap={self.cap}' if self.cap is not None else ''
         return f'Mobility({what}, kind={self.kind!r}{away})'
 
     @staticmethod
     def blank(v):
         """ Whether an entry of a register is empty """
         return v is None or (isinstance(v, float) and np.isnan(v)) or (isinstance(v, str) and not v.strip())
+
+    @staticmethod
+    def by_value(vals, func, missing):
+        """
+        A function of each entry of a column of a register, worked out once for each distinct value, since a register can have millions of rows
+
+        Returns the results for the distinct values, then `missing` (for None and NaN), and the index of each entry's result.
+        """
+        codes, uniq = pd.factorize(np.asarray(vals, dtype=object)) # None and NaN are -1, which is the last result
+        return [func(v) for v in uniq] + [missing], codes
 
     @staticmethod
     def load(data):
@@ -2625,13 +3028,17 @@ class Mobility:
             errormsg = f'A movement register needs the columns date, from, to, and n (and optionally states), but {sc.strjoin(missing)} {"is" if len(missing) == 1 else "are"} missing; its columns are {list(df.columns)}'
             raise KeyError(errormsg)
         out = sc.dataframe(date=df['date'].values, n=np.asarray(df['n'], dtype=float))
+        empty = sc.objdict() # Whether each entry of each column is blank
         for col in ['from', 'to', 'states', 'to_states']:
-            vals = df[col].values if col in df.columns else [None]*len(df)
-            out[col] = np.array([None if Mobility.blank(v) else v for v in vals], dtype=object)
-        if any(not Mobility.blank(ts) and (Mobility.blank(src) or Mobility.blank(dst) or Mobility.blank(states)) for src,dst,states,ts in zip(out['from'], out['to'], out['states'], out['to_states'])):
+            vals = np.array(df[col].values, dtype=object) if col in df.columns else np.full(len(df), None, dtype=object)
+            blanks, codes = Mobility.by_value(vals, Mobility.blank, True)
+            empty[col] = np.array(blanks)[codes]
+            vals[empty[col]] = None
+            out[col] = vals
+        if (~empty.to_states & (empty['from'] | empty.to | empty.states)).any():
             errormsg = 'A row of a movement register with to_states moves people from its states to those states (in order, e.g. states "S1, I1" and to_states "S2, I2"), so it needs a from, a to (which can be the same place), and states'
             raise ValueError(errormsg)
-        if any(Mobility.blank(src) and Mobility.blank(dst) for src,dst in zip(out['from'], out['to'])):
+        if (empty['from'] & empty.to).any():
             errormsg = 'Every row of a movement register needs a from, a to, or both'
             raise ValueError(errormsg)
         if (out['n'] < 0).any():
@@ -2646,10 +3053,11 @@ class Mobility:
         Returns the step at whose start each event happens, the position of the place each leaves
         (-1 for none) and goes to (-1 for none), the number of people, and the states it names (None
         for the default), in the order of the table within each step. Events before the start or
-        after the last step are dropped, with a note.
+        after the last step are dropped, with a note. Also the distinct pairs of `states` and
+        `to_states` (`sets`, in the order they first appear), and which of them each event names (`set_of`).
         """
         df = self.data
-        times = sc.dataframe(index=list(df['date']))
+        times = sc.dataframe(index=df['date'].values)
         sim_t, data_t = ss.calibration.data_times(sim, times)
         tol = 1e-9*max(np.abs(sim_t).max(initial=1), 1)
         ti = np.searchsorted(sim_t, data_t - tol, side='left') # The first step that starts on or after each date
@@ -2668,16 +3076,26 @@ class Mobility:
             return labels[key]
         order = np.argsort(ti[inside], kind='stable')
         rows = np.flatnonzero(inside)[order]
-        cols = {col:np.asarray(df[col].values, dtype=object)[rows] for col in ['from', 'to', 'states', 'to_states'] if col in df.columns} # As arrays, since reading a dataframe one cell at a time is slow
+        col = lambda name: np.asarray(df[name].values, dtype=object)[rows] # As arrays, since reading a dataframe one cell at a time is slow
+        def places(name):
+            """ The position of the place in each entry of a column """
+            vals, codes = Mobility.by_value(col(name), level, -1)
+            return np.array(vals, dtype=np.int64)[codes]
         names = lambda v: None if Mobility.blank(v) else tuple(s.strip() for s in str(v).replace(';', ',').split(','))
-        states = [names(v) for v in cols['states']]
-        to_states = [names(v) for v in cols['to_states']] if 'to_states' in cols else [None]*len(rows)
-        for a,b in zip(states, to_states):
+        st_vals, st_codes = Mobility.by_value(col('states'), names, None)
+        ts_vals, ts_codes = Mobility.by_value(col('to_states'), names, None)
+        n_ts = len(ts_vals)
+        set_of, pairs = pd.factorize((st_codes % len(st_vals))*n_ts + ts_codes % n_ts) # The distinct pairs of states and to_states, by their positions in st_vals and ts_vals (a code of -1 is the last, None)
+        sets = [(st_vals[pair//n_ts], ts_vals[pair%n_ts]) for pair in pairs]
+        for a,b in sets:
             if b is not None and len(a) != len(b):
                 errormsg = f'A row of a movement register moves people from the states {a} to {b}, which need to be the same number'
                 raise ValueError(errormsg)
-        return sc.objdict(ti=ti[rows], src=np.array([level(v) for v in cols['from']], dtype=np.int64), dst=np.array([level(v) for v in cols['to']], dtype=np.int64),
-                          n=np.asarray(df['n'].values[rows], dtype=float), states=states, to_states=to_states)
+        states, to_states = np.empty(len(sets), dtype=object), np.empty(len(sets), dtype=object) # Filled one at a time, since NumPy would read a list of tuples as rows
+        for i,(a,b) in enumerate(sets):
+            states[i], to_states[i] = a, b
+        return sc.objdict(ti=ti[rows], src=places('from'), dst=places('to'), n=np.asarray(df['n'].values[rows], dtype=float),
+                          states=states[set_of], to_states=to_states[set_of], sets=sets, set_of=set_of)
 
     def matrix(self, strat):
         """ The movement between each pair of levels, with nothing on the diagonal """
@@ -2686,7 +3104,7 @@ class Mobility:
             raise ValueError(errormsg)
         out = self.model.matrix(strat) if self.model is not None else self.given.copy()
         if out.shape != (strat.n, strat.n):
-            error('E603', f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
+            raise ss.ShapeError(f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
         np.fill_diagonal(out, 0)
         return out
 
@@ -2694,12 +3112,19 @@ class Mobility:
         """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1 """
         out = self.matrix(strat)
         total = out.sum(axis=1)
-        if self.away is not None:
+        if self.away is not None and self.scale == 'mean':
+            scale = np.full(strat.n, self.away/total.mean() if total.mean() > 0 else 0.0)
+        elif self.away is not None:
             scale = np.divide(self.away, total, out=np.zeros(strat.n), where=total>0)
         else: # Nobody can spend more than all their time away
+            capped = (total > 1).sum()
+            if capped:
+                ss.warn(f'The movement for "{strat.name}" would have the people of {capped:n} of its {strat.n:n} places spend more than all their time away, so it was capped at all of it (nobody is ever at home there). Give the share of time away with away= instead.')
             scale = 1/np.maximum(total, 1)
+        if self.cap is not None: # No place over the cap
+            scale = np.minimum(scale, np.divide(self.cap, total, out=np.zeros(strat.n), where=total>0))
         out = out*scale[:, None]
-        np.fill_diagonal(out, 1 - out.sum(axis=1))
+        np.fill_diagonal(out, np.maximum(1 - out.sum(axis=1), 0))
         return out
 
     def coupling(self, strat):
@@ -2716,9 +3141,9 @@ class Strat:
     Args:
         name (str): the dimension, e.g. 'age'
         levels (list): bin edges (for a continuous property such as age) or labels
-        split (list): the share of the population in each level
+        split (list): the share of the population in each level (if not given: from an `ss.geo`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level
-        kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
+        kind (str): 'age', 'space', 'strain', or 'plain'; if not given, 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for a dimension called age, and otherwise 'plain'
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
         mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
@@ -2727,7 +3152,13 @@ class Strat:
     def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None, immunity=None):
         self.name = name
         self.geo = levels if isinstance(levels, geo) else None
-        self.kind = kind or ('space' if self.geo is not None else kinds.get(name, 'plain'))
+        self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'strain' if immunity is not None else 'age' if name == 'age' else 'plain')
+        self.hint = hints.get(name) if kind is None and self.kind == 'plain' else None # A name that suggests another kind, which is noted
+        self.guessed = sc.objdict()
+        if self.hint == 'space':
+            self.guessed['kind'] = 'plain, so its levels mix; for places, give them as ss.geo(names=[...]) or pass kind="space"'
+        elif self.hint == 'strain':
+            self.guessed['kind'] = 'plain, so it does not change who infects whom; for strains, give immunity= or pass kind="strain"'
         self.states = states
         if where is not None and not isinstance(where, dict):
             errormsg = f'where= takes a dict of a dimension and its level (or levels), e.g. dict(sex="female"), not {type(where).__name__}'
@@ -2736,7 +3167,6 @@ class Strat:
             errormsg = f'where= is for a property of people such as age or risk, but "{name}" is of kind "{self.kind}"; a {"place" if self.kind == "space" else "strain"} is one that everyone (or every infection) has'
             raise ValueError(errormsg)
         self.where = dict(where) if where else None
-        self.guessed = sc.objdict()
         if self.geo is not None:
             levels = self.geo.names
             if split is None and self.geo.pop is not None:
@@ -2744,6 +3174,8 @@ class Strat:
         if mobility is not None and not isinstance(mobility, Mobility): # A movement model or a matrix on its own is commuting
             mobility = Mobility(mobility) if isinstance(mobility, gravity) else Mobility(matrix=mobility)
             self.guessed['mobility'] = 'commuting, since kind= was not given'
+        if mobility is not None and mobility.guessed:
+            self.guessed['mobility'] = sc.strjoin([self.guessed['mobility'], mobility.guessed]) if 'mobility' in self.guessed else mobility.guessed
         if mobility is not None and self.kind != 'space':
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
@@ -2758,6 +3190,13 @@ class Strat:
         else:
             self.labels = levels
         self.n = len(self.labels)
+        self.female = None # For a dimension called sex, which is people.female: the position of the level for women
+        if name == 'sex' and kind is None: # kind= says it is something else, e.g. a place
+            women = [i for i,label in enumerate(self.labels) if str(label).lower() in ['female', 'females', 'f', 'women', 'woman']]
+            if self.n != 2 or len(women) != 1:
+                errormsg = f'A dimension called "sex" is people.female, so it has two levels, one of them "female" (e.g. sex=["female", "male"]), not {sc.strjoin(self.labels)}; give another name for any other property'
+                raise ValueError(errormsg)
+            self.female = women[0]
         self.carries = None # For a strain with levels for people who carry several strains at once ('A+B'): see init_carriage()
         if self.kind == 'strain' and any('+' in str(label) for label in self.labels):
             self.init_carriage()
@@ -2768,9 +3207,9 @@ class Strat:
         for key,vals in (adjust or {}).items():
             vals = np.array(vals, dtype=float)
             if len(vals) != self.n:
-                error('E603', f'the adjustment of "{key}" has {len(vals)} values, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
+                raise ss.ShapeError(f'the adjustment of "{key}" has {len(vals)} values, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
             if np.any(vals < 0):
-                error('E306', f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
+                raise ss.InvalidAdjustment(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
         self.immunity = None
         if immunity is not None:
@@ -2779,7 +3218,7 @@ class Strat:
                 errormsg = f'immunity= is for a strain dimension, but "{name}" is of kind "{self.kind}"; pass kind="strain" if it is one'
                 raise ValueError(errormsg)
             if immunity.shape != (self.n, self.n):
-                error('E603', f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
+                raise ss.ShapeError(f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
             self.immunity = immunity
         self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
         self.cond = None # For a dimension of some states only, a split given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
@@ -2789,19 +3228,28 @@ class Strat:
         if split is not None:
             split = np.array(split, dtype=float)
             if len(split) != self.n:
-                error('E302', f'split= has {len(split)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
+                raise ss.BadSplit(f'split= has {len(split)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
             if not np.isclose(split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {split.sum():n}'
                 split = split/split.sum()
-        elif self.kind == 'age' and self.edges is not None: # As in ss.People: ages are uniform up to 100
-            widths = np.diff(np.append(self.edges, max(100, self.edges[-1] + 10)))
-            split = widths/widths.sum()
-            self.guessed['split'] = 'ages uniform from 0 to 100'
+        elif self.kind == 'age' and self.edges is not None: # As the people of a declared model, unless the sim has a named population
+            world = ss.named.world
+            split = ss.named.age_split(self.edges, world.ages, world.counts)
+            self.guessed['split'] = world.guess
+        elif all(isinstance(v, (bool, np.bool_)) for v in self.labels): # e.g. vaccinated=[False, True]
+            split = self.first()
+            self.guessed['split'] = f'everyone at {self.labels[0]}, the first level'
         else:
             split = np.ones(self.n)/self.n
             self.guessed['split'] = 'equal across levels'
         self.split = split
         return
+
+    def first(self):
+        """ A split with everyone at the first level """
+        out = np.zeros(self.n)
+        out[0] = 1
+        return out
 
     def init_carriage(self):
         """
@@ -2817,9 +3265,9 @@ class Strat:
         for label,s in zip(self.labels, sets):
             missing = s - set(names)
             if missing:
-                error('E603', f'the level "{label}" of "{self.name}" carries {sc.strjoin(sorted(missing))}, which has no level of its own; each strain carried needs one.')
+                raise ss.ShapeError(f'the level "{label}" of "{self.name}" carries {sc.strjoin(sorted(missing))}, which has no level of its own; each strain carried needs one.')
         if len(set(sets)) != len(sets):
-            error('E603', f'"{self.name}" has two levels that carry the same strains ({sc.strjoin(self.labels)}).')
+            raise ss.ShapeError(f'"{self.name}" has two levels that carry the same strains ({sc.strjoin(self.labels)}).')
         lookup = {s:i for i,s in enumerate(sets)}
         self.base = np.array(sorted(names.values())) # The levels of a single strain
         self.carries = np.zeros((self.n, self.n), dtype=bool) # carries[l, j]: people at level l carry strain j
@@ -2870,7 +3318,7 @@ class Strat:
         if getattr(self, 'split_from', None): # A split taken from a named population (ss.people)
             named['split_from'] = self.split_from
         return dict(**named, name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
-                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
+                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=self.mobility.cap)), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property
     def mids(self):
@@ -2891,6 +3339,12 @@ class Strat:
 
     def same_levels(self, other):
         return list(self.labels) == list(other.labels)
+
+    def same_as(self, other):
+        """ Whether another stratification is this one given again: the same levels, kind, split, adjustments, and states """
+        same = self.same_levels(other) and self.kind == other.kind and self.states == other.states and self.where == other.where
+        same = same and np.allclose(self.split, other.split) and list(self.adjust.keys()) == list(other.adjust.keys())
+        return same and all(np.allclose(self.adjust[key], other.adjust[key]) for key in self.adjust)
 
 
 class Transfer:
@@ -2939,10 +3393,9 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
     """
     Movement between the levels of a stratification, without a change of disease state
 
-    Given a rate or a duration, people move all the time, and the transfer is part of
-    the model: pass it to `ss.Disease()` or `stratify()`. Given delivery keywords
-    (`coverage`, `years`, `eligible`, and the others of `ss.Delivery`), it is an
-    intervention: pass it to the sim in `interventions`.
+    People move all the time, at a rate or after a duration, and the transfer is part of the
+    model: pass it to `ss.Disease()` or `stratify()`. A move delivered to some people, at some
+    times, is a delivery: `ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[2021])`.
 
     Args:
         rate (any): the per-person hazard
@@ -2950,23 +3403,87 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         kwargs (dict): the dimension, and an arrow between two of its levels (e.g. `risk='low -> high'`),
-            or the level people move to (e.g. `vaccinated=True`); and any delivery keywords (and `disease=`, if the dimension is not of one disease's states only)
+            or the level people move to (e.g. `vaccinated=True`)
 
     Examples:
         ```python
         ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
-        ss.transfer(vaccinated=True, coverage=0.7, years=[2021, 2022])
+        ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
         ```
     """
-    opts = {key:kwargs.pop(key) for key in ss.interventions.delivery_keys + ['disease'] if key in kwargs}
+    opts = [key for key in kwargs if key in ss.interventions.delivery_keys + list(ss.interventions.renamed_keys) + ['disease']]
     if opts:
-        if rate is not None or dur is not None or len(kwargs) != 1:
-            errormsg = f'ss.transfer() as an intervention takes one dimension and delivery keywords, e.g. ss.transfer(vaccinated=True, coverage=0.7, years=[2021]); rate= and dur= are for a transfer that happens all the time, as part of the model'
-            raise ValueError(errormsg)
-        return ss.Delivery(move=kwargs, name=name, label=label, **opts)
+        dim = next((key for key in kwargs if key not in opts), 'vaccinated')
+        errormsg = (f'ss.transfer() is movement that happens all the time, at a rate (rate= or dur=); {sc.strjoin(f"{key}=" for key in opts)} {"is" if len(opts) == 1 else "are"} for a delivery. '
+                    f'A move delivered to some people is ss.Delivery(move=dict({dim}=...), ...), e.g. ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[2021])')
+        raise TypeError(errormsg)
     return Transfer(rate=rate, dur=dur, states=states, name=name, label=label, **kwargs)
 
 
-def stratify(model, **kwargs):
-    """ Stratify a model (a module or a sim) in place and return it; the same as `model.stratify()` """
-    return model.stratify(**kwargs)
+strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility', 'immunity']
+
+
+def parse_stratify(kwargs, graphs, sim=False):
+    """
+    The one parser of the arguments of `stratify()`, for a module, a sim, or `ss.Sim(stratify=...)`: returns the new
+    stratifications and (for a module) the transfers
+
+    Every keyword that is not an option is a dimension, with its levels. A sim's stratification applies to the graphs of all
+    its declared modules, which `states=` and `adjust=` are checked against: `adjust=` names a transition by its name, if only
+    one module has it, or as e.g. 'flu.infection'.
+
+    Args:
+        kwargs (dict): the arguments
+        graphs (list): the graphs of the modules it applies to (for a sim, all of them; it can be empty before they are known)
+        sim (bool): whether it is the sim's stratification
+    """
+    kwargs = dict(kwargs)
+    opts = {key:kwargs.pop(key, None) for key in strat_options}
+    if opts['immunity'] is not None and np.ndim(opts['immunity']) == 1 and not any(isinstance(v, (list, tuple, np.ndarray, geo)) for v in kwargs.values()): # Levels, not the protection between strains: a dimension called immunity
+        kwargs['immunity'] = opts.pop('immunity')
+        opts['immunity'] = None
+    misplaced = [key for key in kwargs if key in ['inplace', 'frame']]
+    if misplaced:
+        errormsg = f'{sc.strjoin(misplaced)} is not an option of {"sim.stratify() or ss.Sim(stratify=...)" if sim else "stratify() here"}, and cannot be the name of a dimension'
+        raise ValueError(errormsg)
+    dims = {k:v for k,v in kwargs.items() if not isinstance(v, Transfer)}
+    transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
+    given = [key for key,val in opts.items() if val is not None]
+    if not dims and not transfers:
+        errormsg = f'stratify() needs a dimension and its levels, e.g. stratify(age=[0, 15, 65]); it was given only {sc.strjoin(given) or "nothing"}' + (' (immunity= is the protection between the levels of a strain dimension given in the same call)' if 'immunity' in given else '')
+        raise ValueError(errormsg)
+    if transfers and sim:
+        errormsg = f'A transfer ({sc.strjoin(transfers)}) belongs to a disease: pass it to that disease\'s stratify()'
+        raise ValueError(errormsg)
+    if len(dims) > 1 and given:
+        errormsg = f'When using {sc.strjoin(f"{key}=" for key in given)}, give one dimension per call to stratify(), so it is clear which one they belong to'
+        raise ValueError(errormsg)
+    names = lambda key: {name for g in graphs for name in getattr(g, key)}
+    states = opts['states']
+    if states is not None:
+        states = opts['states'] = [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
+        for name in states:
+            if graphs and name not in names('states'):
+                where = f'"{graphs[0].module.name}" does not have. Its states are' if not sim else 'no module in the sim has. The states are'
+                raise ss.UnknownState(f'states= names a state "{name}" that {where} {sc.strjoin(names("states"))}{did_you_mean(name, names("states"))}')
+    adjust = opts['adjust'] or {}
+    for key in adjust:
+        if key in ['rel_trans', 'rel_sus'] or not graphs:
+            continue
+        modname, _, bare = key.rpartition('.')
+        having = [g for g in graphs if bare in g.transitions and modname in ['', g.module.name]]
+        if len(having) != 1:
+            options = [f'{g.module.name}.{t}' if sim else t for g in graphs for t in g.transitions]
+            what = 'names a transition' if not having else 'names a transition of more than one module,'
+            whose = f'"{graphs[0].module.name}" does not have. Its transitions are' if not sim else 'no single module has. The transitions are'
+            raise ss.UnknownTransition(f'adjust= {what} "{key}" that {whose} {sc.strjoin(options)} (and it can also adjust rel_trans and rel_sus).')
+    strats = []
+    for name,levels in dims.items():
+        strat = Strat(name, levels, **opts)
+        if strat.kind == 'strain' and states is None and graphs: # A strain belongs to an infection, so the states people can be in without ever being infected have none
+            uninfected = sorted({s for g in graphs for s in g.uninfected})
+            strat.states = [s.name for g in graphs for s in g.people_states if s.name not in g.uninfected]
+            strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(uninfected)})'
+        strats.append(strat)
+    return strats, transfers
+

@@ -3,6 +3,7 @@ Networks that connect people within a population
 """
 import inspect
 import itertools
+import functools
 import numpy as np
 import numba as nb
 import scipy.stats as sps
@@ -27,8 +28,8 @@ def fisher_yates_shuffle(arr, randvals):
 
     Note: `randvals` is consumed in order (`randvals[k]` for the k-th swap), not indexed
     by position. This means that changing the array length (e.g. adding one agent) shifts
-    every swap, so the shuffle is *not* random-number safe -- matching `ss.RandomExactNet`'s
-    intended behavior (see `ss.RandomSafeNet` for the CRN-safe version).
+    every swap, so the shuffle is *not* random-number safe -- matching `ss.RandomNet(method='exact')`'s
+    intended behavior (see `ssl.RandomSafeNet` for the CRN-safe version).
     """
     n = arr.shape[0]
     for k in range(n - 1):
@@ -525,6 +526,14 @@ class DynamicNetwork(Network):
         return len(active)
 
 
+def check_duration(net, pars, kwargs):
+    """ The duration of a partnership is dur=, as for every other network; Starsim 3's duration= is an error that says so """
+    if 'duration' in kwargs or 'duration' in (pars or {}):
+        errormsg = f'duration= of ss.{type(net).__name__}() is now dur=, as for every other network, e.g. ss.{type(net).__name__}(dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)))'
+        raise TypeError(errormsg)
+    return
+
+
 class SexualNetwork(DynamicNetwork):
     """ Base class for all sexual networks """
     def __init__(self, pars=None, edges=None, **kwargs):
@@ -644,9 +653,31 @@ class StaticNet(Network):
         pass
 
 
-class RandomExactNet(DynamicNetwork):
+class RandomNet(DynamicNetwork):
     """
     Random connectivity between agents
+
+    Each agent has a number of contacts (`n_contacts`), and the other end of each is
+    drawn from the other agents' contacts (`method='fast'`, the default), so an agent's
+    chance of being picked is proportional to its own number of contacts. This keeps
+    the mixing structure of risk-stratified networks (a small high-risk core with many
+    contacts forms most of its edges with itself).
+
+    `method` says how the other end of each contact is drawn:
+
+    - `'fast'` (the default): by sampling the contacts *with* replacement. The source
+      side of each edge is exactly `n_contacts`, while the target side is
+      Poisson-distributed with mean `n_contacts`, so agents have somewhat more variable
+      numbers of contacts than with `'exact'`; about 1.8x faster than `'exact'`.
+    - `'exact'`: by shuffling the contacts (sampling *without* replacement), so each
+      agent has exactly `n_contacts` contacts.
+    - `'uniform'`: uniformly from all eligible agents, regardless of their own
+      `n_contacts`, as in Covasim v3's random networks. This gives less variable numbers
+      of contacts (e.g. with `n_contacts=ss.poisson(20)`, a variance of about 15, rather
+      than 30 for `'fast'` or 20 for `'exact'`), but loses the mixing structure above.
+
+    None of these is random-number safe; see `ssl.RandomSafeNet` (`import starsim.library as ssl`)
+    for a CRN-safe (but slower) version.
 
     Args:
         n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
@@ -655,6 +686,7 @@ class RandomExactNet(DynamicNetwork):
         age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
         dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
             (so agents who join later, e.g. newborns, are not added)
+        method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', or 'uniform' (see above)
 
     Note: n_contacts = 10 will create *5* edges per agent. Since disease transmission
     usually occurs bidirectionally, this means that the effective number of contacts
@@ -664,36 +696,41 @@ class RandomExactNet(DynamicNetwork):
     Example:
         ```python
         # Static network with Poisson-distributed contacts among adults, as in Covasim v3
-        net = ss.RandomNet(n_contacts=ss.poisson(20), age_range=[18, 65], dynamic=False)
+        net = ss.RandomNet(n_contacts=ss.poisson(20), age_range=[18, 65], dynamic=False, method='uniform')
         ```
     """
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, **kwargs):
+    methods = ['fast', 'exact', 'uniform']
+
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, method=_, **kwargs):
         """ Initialize """
         super().__init__()
+        if 'uniform_targets' in kwargs: # Starsim 4 prereleases
+            errormsg = "uniform_targets=True of ss.RandomNet() is now method='uniform'"
+            raise TypeError(errormsg)
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
             age_range = None,
             dynamic = True,
+            method = 'fast',
         )
         self.update_pars(pars, **kwargs)
-        self.dist = ss.Dist(distname='RandomNet') # Default RNG; name kept as 'RandomNet' (not the class name) so results stay reproducible across the rename, and shared with the RandomNet subclass
+        if self.pars.method not in self.methods:
+            errormsg = f'method= of ss.RandomNet() is one of {sc.strjoin(self.methods)}, not {self.pars.method!r}'
+            raise ValueError(errormsg)
+        self.dist = ss.Dist(distname='RandomNet') # Default RNG; the same name for every method, so results stay reproducible
         return
 
     def get_edges(self, inds, n_contacts):
         """
         Efficiently find edges
 
-        Note that because of the shuffling operation, each person is assigned 2N contacts
-        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
-        times in the 'target' array). Therefore, the `n_contacts` argument to this
-        function should be HALF of the total contacts a person is expected to have, if both
-        the source and target array outputs are used (e.g. for social contacts)
-
-        adjusted_number_of_contacts = np.round(n_contacts / 2).astype(ss.dtype.int)
-
-        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
+        Note that each person is assigned 2N contacts (i.e. if a person has 5 contacts,
+        they appear 5 times in the 'source' array and, on average, 5 times in the 'target'
+        array). Therefore, the `n_contacts` argument to this function should be HALF of
+        the total contacts a person is expected to have, if both the source and target
+        array outputs are used (e.g. for social contacts)
 
         Args:
             inds (list/array): person indices
@@ -702,6 +739,31 @@ class RandomExactNet(DynamicNetwork):
         Returns:
             Two arrays, for source and target
         """
+        if self.pars.method == 'exact':
+            return self.shuffle_edges(inds, n_contacts)
+        source = np.repeat(inds, n_contacts)
+        n = len(source)
+        if n and self.pars.method == 'uniform':
+            idx = self.dist.rng.integers(0, len(inds), n) # A random target agent for each source stub
+            target = np.take(np.asarray(inds), idx).view(ss.uids)
+        elif n:
+            idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
+            nc = np.asarray(n_contacts)
+            nc0 = int(nc.flat[0])
+            # Fast path: if every agent has the same number of stubs, then stub j belongs to agent j//nc0,
+            # so the (identical) targets can be gathered from the much smaller, cache-resident agent array
+            if nc.size == 1 or (nc == nc0).all():
+                np.floor_divide(idx, nc0, out=idx)
+                target = np.take(np.asarray(inds), idx).view(ss.uids)
+            else:
+                target = np.take(np.asarray(source), idx).view(ss.uids) # np.take is slightly faster than source[idx] since it skips the ss.uids subclass machinery
+        else:
+            target = source
+        self.dist.jump() # Reset the RNG manually, as in shuffle_edges()
+        return source, target
+
+    def shuffle_edges(self, inds, n_contacts):
+        """ Find edges by shuffling the contacts, so each agent has exactly as many as given (`method='exact'`) """
         source = np.repeat(inds, n_contacts)
         target = source.copy()
         randvals = self.dist.rng.random(len(target)) # Precompute the random values for the shuffle
@@ -788,80 +850,6 @@ class RandomExactNet(DynamicNetwork):
         return
 
 
-class RandomNet(RandomExactNet):
-    """
-    A faster, approximate version of `ss.RandomExactNet`
-
-    Identical to `ss.RandomExactNet` except that the target end of each edge is drawn
-    by sampling the source stubs *with* replacement, rather than by shuffling them
-    (i.e. sampling without replacement). This is roughly 1.8x faster at generating
-    edges, but the per-agent degree is no longer fixed: the source side of each edge
-    is still exactly `n_contacts`, while the target side is Poisson-distributed with
-    mean `n_contacts`. Agents therefore have somewhat more variable numbers of
-    contacts than with `ss.RandomExactNet`.
-
-    Because targets are drawn from the stub list, an agent's chance of being picked
-    as a target is proportional to its own `n_contacts`, exactly as in
-    `ss.RandomExactNet`. This means the approximation preserves the mixing structure
-    of risk-stratified networks (e.g. a small high-risk core with many contacts
-    correctly forms most of its edges with itself); drawing targets uniformly over
-    agents instead would destroy that clustering and bias the realized degrees.
-
-    Alternatively, with `uniform_targets=True`, each target is chosen uniformly from all
-    eligible agents, regardless of their own `n_contacts`, as in Covasim v3's random networks.
-    This gives less variable numbers of contacts (e.g. with `n_contacts=ss.poisson(20)`, a
-    variance of about 15, rather than 30 for the default or 20 for `ss.RandomExactNet`), but
-    loses the mixing structure described above.
-
-    Note: like `ss.RandomExactNet`, this is not random-number safe; see `ss.RandomSafeNet`
-    for the CRN-safe (but slower) version.
-
-    Args:
-        n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
-        dur (int/`ss.dur`): the duration of each contact
-        beta (float): the default beta value for each edge
-        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
-        dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
-        uniform_targets (bool): if True, choose the target of each edge uniformly from the eligible agents, rather than in proportion to their number of contacts
-
-    Example:
-        ```python
-        # Static network with Poisson-distributed contacts, as in Covasim v3
-        net = ss.RandomNet(n_contacts=ss.poisson(20), dynamic=False, uniform_targets=True)
-        ```
-    """
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, uniform_targets=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            uniform_targets = False,
-        )
-        self.update_pars(pars, **kwargs)
-        return
-
-    def get_edges(self, inds, n_contacts):
-        """ Find edges by sampling the source stubs with replacement (see `ss.RandomExactNet.get_edges`) """
-        source = np.repeat(inds, n_contacts)
-        n = len(source)
-        if n and self.pars.uniform_targets:
-            idx = self.dist.rng.integers(0, len(inds), n) # A random target agent for each source stub
-            target = np.take(np.asarray(inds), idx).view(ss.uids)
-        elif n:
-            idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
-            nc = np.asarray(n_contacts)
-            nc0 = int(nc.flat[0])
-            # Fast path: if every agent has the same number of stubs, then stub j belongs to agent j//nc0,
-            # so the (identical) targets can be gathered from the much smaller, cache-resident agent array
-            if nc.size == 1 or (nc == nc0).all():
-                np.floor_divide(idx, nc0, out=idx)
-                target = np.take(np.asarray(inds), idx).view(ss.uids)
-            else:
-                target = np.take(np.asarray(source), idx).view(ss.uids) # np.take is slightly faster than source[idx] since it skips the ss.uids subclass machinery
-        else:
-            target = source
-        self.dist.jump() # Reset the RNG manually, as in RandomExactNet.get_edges
-        return source, target
-
-
 class DegreeTargets:
     """
     Targets for the number of partners people have at a time, for `ss.PartnerNet` and `ss.MFNet`
@@ -873,6 +861,9 @@ class DegreeTargets:
     @staticmethod
     def degree_dist(n_contacts, concurrency=None, max_contacts=None):
         """ The target share of people with 0, 1, 2, ... partners at a time """
+        if isinstance(n_contacts, ss.by):
+            errormsg = f'n_contacts={n_contacts} gives each level its own number of partners, which ss.PartnerNet takes; here give one number or distribution'
+            raise ValueError(errormsg)
         if sc.isnumber(n_contacts):
             n_contacts = ss.poisson(lam=n_contacts)
         pars = {k:v for k,v in n_contacts.pars.items()}
@@ -954,14 +945,14 @@ class DegreeTargets:
         Reports, for each target (the mean number of partners, the share with two or
         more, the maximum, and with `match=`, the share of partnerships at the same
         level), the target, the mean over the second half of each run, and the spread
-        across runs; a target that is missed by more than the spread is a `W402` warning.
+        across runs; a target that is missed by more than the spread is an `ss.TargetStatsNotRecovered` warning.
 
         Args:
             n_runs (int): the number of runs
             output (bool): return the table instead of printing it
         """
         if not hasattr(self.sim, 'inputs'):
-            errormsg = f'net.check() reruns the sim, which can only be rebuilt if it has declared states and transitions; the network\'s results (mean_degree, concurrency) show how close it is to the targets'
+            errormsg = f'net.check() reruns the sim, which can only be rebuilt from the inputs it was made with; the network\'s results (mean_degree, concurrency) show how close it is to the targets'
             raise ValueError(errormsg)
         rows = []
         for i in range(n_runs):
@@ -970,12 +961,23 @@ class DegreeTargets:
             res = net.results
             half = len(res.mean_degree)//2
             row = dict(mean_degree=res.mean_degree[half:].mean(), concurrency=res.concurrency[half:].mean(), max_contacts=net.degrees(net.people_seeking(run.people)).max())
+            if 'new_partnerships' in res and getattr(net, 'mean_dur', None) is not None and res.new_partnerships[half:].mean() > 0: # Little's law: partnerships = rate formed × how long they last
+                n_alive = len(run.people.alive.uids)
+                row['dur'] = res.mean_degree[half:].mean()*n_alive/2/res.new_partnerships[half:].mean()
+            if getattr(net, 'by_level', None) is not None:
+                uids = run.people.alive.uids
+                level = np.asarray(net.levels(net.by_level))[uids].astype(int)
+                degree = net.degrees(uids)
+                for lev in range(len(net.dists_degree)):
+                    row[f'mean_degree[{lev}]'] = degree[level == lev].mean() if np.any(level == lev) else np.nan
             if self.pars.get('match') is not None:
                 row['match'] = res.match[half:].mean()
             rows.append(row)
         df = sc.dataframe(rows)
         k = np.arange(len(self.dist_degree))
-        targets = dict(mean_degree=self.dist_degree @ k, concurrency=self.dist_degree[2:].sum(), max_contacts=self.pars.get('max_contacts'))
+        targets = dict(mean_degree=self.dist_degree @ k, concurrency=self.dist_degree[2:].sum(), max_contacts=self.pars.get('max_contacts'), dur=getattr(self, 'mean_dur', None))
+        if getattr(self, 'by_level', None) is not None:
+            targets.update({f'mean_degree[{lev}]':d @ np.arange(len(d)) for lev,d in enumerate(self.dists_degree)})
         if self.pars.get('match') is not None:
             targets['match'] = list(self.pars.match.values())[0]
         table = sc.dataframe(dict(target=[targets[c] for c in df.columns], realized=df.mean().values, spread=df.std().values), index=df.columns)
@@ -984,7 +986,7 @@ class DegreeTargets:
                 continue
             missed = row.realized > row.target if name == 'max_contacts' else abs(row.realized - row.target) > max(2*row.spread, 0.02*abs(row.target))
             if missed:
-                ss.warn(f'W402 TargetStatsNotRecovered: the network "{self.name}" has {name} {row.realized:.3g}, against a target of {row.target:.3g}')
+                ss.warn(f'the network "{self.name}" has {name} {row.realized:.3g}, against a target of {row.target:.3g}', ss.TargetStatsNotRecovered)
         if output:
             return table
         print(table)
@@ -1003,11 +1005,12 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
     networks fitted to target statistics. The network starts at the target.
 
     Args:
-        n_contacts (float/`ss.Dist`): the number of partners a person has at a time: a distribution over whole numbers (e.g. `ss.poisson(0.7)`), or a number, which is the mean of a Poisson
+        n_contacts (float/`ss.Dist`/`ss.by`): the number of partners a person has at a time: a distribution over whole numbers (e.g. `ss.poisson(0.7)`), or a number, which is the mean of a Poisson; or a number for each level of a property of people (`ss.by(risk=[0.4, 1.6])`), as EpiModel's nodefactor
         dur (float/`ss.dur`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit
         concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
         max_contacts (int): if given, nobody has more partners than this at once
         match (dict): if given, the share of partnerships between people at the same level of a property of people (a stratification, or an attribute such as `'female'`), e.g. `dict(risk=0.8)`, as EpiModel's nodematch
+        acts (float/`ss.Dist`/rate): if given, the number of acts in each partnership in a step (a number, a distribution drawn for each partnership, or a rate such as `ss.perweek(2)`); a disease's beta is then per act, so a partnership transmits with probability 1 − (1 − beta)^acts, as EpiModel's act rate
         beta (float): the default beta for each partnership
 
     The realized network is recorded in the results (`mean_degree`, `concurrency`, and
@@ -1020,9 +1023,12 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
 
         # Most partnerships within a risk group
         net = ss.PartnerNet(n_contacts=0.7, dur=50, match=dict(risk=0.8))
+
+        # And four times as many partners in the high-risk group (with sim.stratify(risk=['low', 'high']))
+        net = ss.PartnerNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50, match=dict(risk=0.8))
         ```
     """
-    def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, beta=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, beta=_, **kwargs):
         super().__init__()
         self.define_pars(
             n_contacts = 1.0,
@@ -1030,9 +1036,14 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
             concurrency = None,
             max_contacts = None,
             match = None,
+            acts = None,
             beta = 1.0,
         )
         self.update_pars(pars, **kwargs)
+        if self.pars.acts is not None:
+            self.meta.acts = ss_float # Acts in each partnership in a step
+            if 'acts' not in self.edges:
+                self.edges.acts = np.array([], dtype=ss_float)
         self.rng_degree = ss.random() # The number of partners each person starts with
         self.rng_order  = ss.random() # The order in which people are paired
         self.rng_seek   = ss.random() # Whether each person looks for a partner on this step
@@ -1047,7 +1058,18 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
     def init_pre(self, sim):
         super().init_pre(sim)
         p = self.pars
-        self.dist_degree = self.degree_dist(p.n_contacts, p.concurrency, p.max_contacts)
+        self.by_level = None # With n_contacts=ss.by(...): the property of people whose levels have degrees of their own, and the distribution and seeking probabilities of each
+        if isinstance(p.n_contacts, ss.by):
+            if len(p.n_contacts.dims) != 1 or p.n_contacts.dim is None:
+                errormsg = f'n_contacts= of "{self.name}" takes a number for each level of one property of people, e.g. ss.by(risk=[0.4, 1.6]), not {p.n_contacts}'
+                raise ValueError(errormsg)
+            self.by_level = p.n_contacts.dim
+            self.dists_degree = [self.degree_dist(v, p.concurrency, p.max_contacts) for v in sc.tolist(p.n_contacts.values)]
+            size = max(len(d) for d in self.dists_degree)
+            self.dists_degree = [np.pad(d, (0, size - len(d))) for d in self.dists_degree]
+            self.dist_degree = np.mean(self.dists_degree, axis=0) # Replaced by the population's mix of levels at init_post()
+        else:
+            self.dist_degree = self.degree_dist(p.n_contacts, p.concurrency, p.max_contacts)
         if isinstance(p.dur, ss.Dist):
             self.mean_dur = None
         else:
@@ -1059,8 +1081,29 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
         if p.match is not None and len(p.match) != 1:
             errormsg = f'match= of "{self.name}" takes one property of people and the share of partnerships at the same level of it, e.g. dict(risk=0.8), not {p.match}'
             raise ValueError(errormsg)
-        self.init_seek(self.mean_dur if self.mean_dur is not None else self.dwell_mean())
+        mean_dur = self.mean_dur if self.mean_dur is not None else self.dwell_mean()
+        if self.by_level is not None: # Seeking probabilities for each level
+            self.p_seeks = []
+            for d in self.dists_degree:
+                self.dist_degree = d
+                self.init_seek(mean_dur)
+                self.p_seeks.append(self.p_seek)
+            self.p_seeks = np.array(self.p_seeks)
+            self.dist_degree = np.mean(self.dists_degree, axis=0)
+        self.init_seek(mean_dur)
+        if p.acts is not None:
+            if isinstance(p.acts, ss.TimePar):
+                self.acts_per_step = ss.solvers.convert(p.acts, sim.unit_base)*self.t.dt.to(sim.unit_base).value
+            elif not isinstance(p.acts, ss.Dist):
+                self.acts_per_step = float(p.acts)
         return
+
+    def net_beta(self, disease_beta=None, inds=None, disease=None):
+        """ With acts=: the probability that a partnership transmits in a step, from beta per act """
+        if self.pars.acts is None:
+            return super().net_beta(disease_beta=disease_beta, inds=inds, disease=disease)
+        if inds is None: inds = Ellipsis
+        return self.edges.beta[inds]*(1 - (1 - disease_beta)**self.edges.acts[inds])
 
     def dwell_mean(self):
         """ The mean of a distribution of durations, in steps """
@@ -1069,14 +1112,15 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
     def init_results(self):
         super().init_results()
         self.define_degree_results()
+        self.define_results(ss.Result('new_partnerships', label='Partnerships formed', auto_plot=False))
         if self.pars.match is not None:
             self.define_results(ss.Result('match', label='Share of partnerships at the same level', auto_plot=False))
         return
 
-    def levels(self):
-        """ With match=: the level of every person in the property it names, as an array indexed by UID """
+    def levels(self, name=None):
+        """ The level of every person in a property of people (by default, the one match= names), as an array indexed by UID """
         sim = self.sim
-        name = list(self.pars.match.keys())[0]
+        name = list(self.pars.match.keys())[0] if name is None else name
         names = [strat.name for strat in sim.strats]
         if name in names: # A stratification
             return sim.level_raw(names.index(name))
@@ -1132,16 +1176,27 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
             p1, p2 = p1[keep], p2[keep]
         keep = p1 != p2
         p1, p2 = p1[keep], p2[keep]
-        self.append(p1=p1, p2=p2, beta=np.full(len(p1), self.pars.beta, dtype=ss_float), dur=self.end_times(p1))
+        acts = {} if self.pars.acts is None else dict(acts=self.pars.acts.rvs(p1).astype(ss_float) if isinstance(self.pars.acts, ss.Dist) else np.full(len(p1), self.acts_per_step, dtype=ss_float))
+        self.append(p1=p1, p2=p2, beta=np.full(len(p1), self.pars.beta, dtype=ss_float), dur=self.end_times(p1), **acts)
         return
 
     def init_post(self):
         """ Start at the target: give each person a number of partners, and pair them at random (with match=, some within their level) """
         super().init_post(add_pairs=False)
         uids = self.sim.people.alive.uids
-        stubs = np.repeat(uids, self.start_degrees(uids, self.rng_degree))
+        if self.by_level is not None: # Each level from its own distribution
+            level = np.asarray(self.levels(self.by_level))[uids].astype(int)
+            cdfs = np.cumsum(self.dists_degree, axis=1)
+            u = self.rng_degree.rvs(uids)
+            degrees = np.array([np.searchsorted(cdfs[lev], ui) for lev,ui in zip(level, u)], dtype=int)
+            degrees = np.minimum(degrees, cdfs.shape[1] - 1)
+            shares = np.bincount(level, minlength=len(self.dists_degree))/max(len(level), 1)
+            self.dist_degree = shares @ self.dists_degree # The population's target, for the results and check()
+        else:
+            degrees = self.start_degrees(uids, self.rng_degree)
+        stubs = np.repeat(uids, degrees)
         fisher_yates_shuffle(stubs, self.rng_stubs.rng.random(len(stubs)))
-        self.rng_stubs.jump() # Reset the RNG manually, as in RandomExactNet.get_edges
+        self.rng_stubs.jump() # Reset the RNG manually, as in RandomNet.shuffle_edges()
         rvs = None
         if self.pars.match is not None: # By position, since each person appears once for each partner
             rvs = self.rng_stubs.rng.random(len(stubs))
@@ -1164,7 +1219,10 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
             self.lost = 0
         uids = self.sim.people.alive.uids
         degree = np.minimum(self.degrees(uids), len(self.p_seek) - 1)
-        prob = self.p_seek[degree]
+        if self.by_level is not None:
+            prob = self.p_seeks[np.asarray(self.levels(self.by_level))[uids].astype(int), degree]
+        else:
+            prob = self.p_seek[degree]
         seek = self.rng_seek.rvs(uids) < prob
         if self.waiting is not None: # Someone left over last step looks again
             seek |= (uids == self.waiting) & (prob > 0)
@@ -1172,286 +1230,20 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
         seekers = seekers[np.argsort(self.rng_order.rvs(seekers), kind='stable')]
         p1, p2, left = self.match_pairs(seekers, self.rng_match.rvs(seekers) if self.pars.match is not None else None)
         self.waiting = left[-1] if len(left) else None
+        n = len(self)
         if len(p1):
             self.pair(p1, p2)
+        self.formed = len(self) - n # For the duration in check()
         return
 
     def update_results(self):
         super().update_results()
         self.update_degree_results(self.sim.people.alive.uids)
+        self.results.new_partnerships[self.ti] = getattr(self, 'formed', 0)
         if self.pars.match is not None and len(self):
             level = self.levels()
             self.results.match[self.ti] = np.mean(level[self.edges.p1] == level[self.edges.p2])
         return
-
-class RandomSafeNet(DynamicNetwork):
-    """
-    Create a CRN-safe, O(N) random network
-
-    This network is similar to `ss.RandomExactNet()`, but is random-number safe
-    (i.e., the addition of a single new agent will not perturb the entire rest
-    of the network). However, it is somewhat slower than `ss.RandomExactNet()`,
-    so should be used where CRN safety is important (e.g., scenario analysis).
-
-    Note: `ss.RandomExactNet` uses `n_contacts`, which is the total number of contacts
-    per agent. `ss.RandomSafeNet` uses `n_edges`, which is the total number of
-    *edges* per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges.
-    For example, `ss.RandomExactNet(n_contacts=10)` will give (nearly) identical results
-    to `ss.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
-    a distribution, `n_edges` can only be an integer.
-
-    Args:
-        n_edges (int): the average number of (bi-directional) edges between agents
-        dur (int/`ss.dur`): the duration of each contact
-        beta (float): the default beta value for each edge
-    """
-    def __init__(self, pars=None, n_edges=_, dur=_, beta=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            n_edges = 5,
-            dur = 0, # Note; network edge durations are required to have the same unit as the network
-            beta = 1.0,
-        )
-        self.update_pars(pars, **kwargs)
-        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years, as for ss.RandomExactNet (the default isn't ss.years(0) so a Dist is allowed)
-        self.dist = ss.random(name='RandomSafeNet')
-        self.dist.hash_dtype = np.float64 # Since float32 only gives 2^24 distinct values, which would mean many ties (e.g. 25% of edges with a million agents)
-        return
-
-    def rep_rand(self, uids, sort=True):
-        """ Reproducible repeated random numbers """
-        n_agents = len(uids)
-        n_conn = self.pars.n_edges
-        r_list = []
-        for i in range(n_conn): # Necessary loop; not possible to vectorize given the behavior of the random number generator
-            r = self.dist.rvs(uids)
-            r_list.append(r)
-        r_arr = np.array(r_list).flatten()
-        inds = np.tile(np.arange(n_agents), n_conn)
-        rr = np.array([inds, r_arr]).T
-        if sort:
-            order = np.argsort(r_arr)
-            rr = rr[order,:]
-        self.rr = rr
-        self.rr_uids = ss.uids(uids) # Store the UIDs so form_pairs() can map stub positions back to agents
-        return rr
-
-    def form_pairs(self, debug=False):
-        """ From a 2N input array, return 2N-2 nearest-neighbor pairs """
-        rr = self.rr
-        out = []
-        agent = self.rr_uids[rr[:,0].astype(int)] # Map stub positions back to agent UIDs
-        v     = rr[:,1]
-        center = v[1:-1]
-        p1_dist = abs(center - v[:-2])
-        p2_dist = abs(center - v[2:])
-        use_p1 = p1_dist <= p2_dist # Ties (which are common with many agents, since the random numbers are float32) go to the lower neighbor
-        source = agent[1:-1]
-        target = np.where(use_p1, agent[:-2], agent[2:]).view(ss.uids)
-
-        # Store additional information for debugging
-        if debug:
-            dist = np.where(use_p1, p1_dist, p2_dist)
-            out = sc.objdict()
-            out.pairs = sorted(list(zip(source, target)))
-            out.src = source
-            out.trg = target
-            out.dist = dist
-            out.p1dist = p1_dist
-            out.p2dist = p2_dist
-            self.pairs = out
-        return source,target
-
-    def add_pairs(self):
-        """ Generate edges """
-        people = self.sim.people
-        born = people.alive & (people.age > 0)
-
-        # Get the random numbers
-        self.rep_rand(born.uids)
-
-        # Form the pairs
-        p1, p2 = self.form_pairs()
-        beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
-
-        if isinstance(self.pars.dur, ss.Dist):
-            dur = self.pars.dur.rvs(p1)
-        elif self.pars.dur == 0:
-            dur = np.zeros(len(p1))
-        else:
-            dur = np.ones(len(p1))*self.pars.dur/self.t.dt # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
-        return
-
-    def plot_matrix(self, **kwargs):
-        """ Plot the distance matrix used for forming pairs: only ±1 from the diagonal is used """
-        kw = ss.plot_args(kwargs)
-        v = self.rr[:,1]
-        dm = abs(v[:, np.newaxis] - v)**2
-        with ss.style(**kw.style):
-            fig = plt.figure(**kw.fig)
-            plt.imshow(dm)
-        return ss.return_fig(fig)
-
-
-class ClusterNet(Network):
-    """
-    Fully connected clusters of agents, e.g. households, schools, or workplaces
-
-    Each agent (optionally, only those within an age range) is assigned to one
-    cluster, with cluster sizes drawn from `cluster_size`, and every pair of agents
-    within a cluster is connected. Agents are assigned to clusters in a random order
-    (from a CRN-safe random number per agent), so clusters are not correlated with
-    other networks. Based on `make_microstructured_contacts()` from Covasim v3: as
-    there, clusters of size 0 are skipped, and the last cluster is truncated to fit.
-
-    Args:
-        cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution
-        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
-        beta (float): the beta value for each edge
-        dynamic (bool): if True, the clusters are recreated on each timestep; if False (default), they are created once and never change
-
-    Example:
-        ```python
-        households = ss.ClusterNet(name='households', cluster_size=ss.poisson(3))
-        sim = ss.Sim(diseases='sis', networks=households)
-        sim.run()
-        ```
-    """
-    def __init__(self, pars=None, cluster_size=_, age_range=_, beta=_, dynamic=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            cluster_size = ss.poisson(lam=4),
-            age_range = None,
-            beta = 1.0,
-            dynamic = False,
-        )
-        self.update_pars(pars, **kwargs)
-        self.define_states(
-            ss.FloatArr('cluster', label='Cluster ID'),
-        )
-        self.rng_order = ss.random() # Order in which agents are assigned to clusters
-        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ss.RandomSafeNet
-        self.n_clusters = 0
-        return
-
-    def step(self):
-        """ If dynamic, recreate the clusters; otherwise, do nothing """
-        if self.pars.dynamic:
-            self.remove_edges(np.ones(len(self), dtype=bool))
-            self.cluster.set_nan(self.cluster.auids)
-            self.n_clusters = 0
-            self.add_pairs()
-        return
-
-    def add_pairs(self):
-        """ Assign agents to clusters, and connect every pair of agents within each cluster """
-        uids = self.eligible(self.pars.age_range).uids
-        uids = uids[np.argsort(self.rng_order.rvs(uids), kind='stable')] # Shuffle; use a stable sort since the default order of ties depends on the CPU
-        n = len(uids)
-        if not n:
-            return
-
-        # Draw cluster sizes until there are enough to cover everyone
-        sizes = np.empty(0, dtype=ss_int)
-        while sizes.sum() < n:
-            new = np.round(self.pars.cluster_size.rvs(n)).astype(ss_int) # n clusters is enough unless some have size 0
-            if not np.any(new > 0): # Avoid an infinite loop
-                errormsg = f'The cluster size distribution for {self.name} did not produce any clusters of size 1 or more: {self.pars.cluster_size}'
-                raise ValueError(errormsg)
-            sizes = np.concatenate([sizes, new[new > 0]])
-        n_clusters = np.searchsorted(np.cumsum(sizes), n) + 1
-        sizes = sizes[:n_clusters]
-        sizes[-1] -= sizes.sum() - n # Truncate the last cluster
-        self.cluster[uids] = self.n_clusters + np.repeat(np.arange(n_clusters), sizes)
-        self.n_clusters += n_clusters
-
-        # Connect every pair (i<j) within each cluster, looping over cluster sizes rather than clusters
-        starts = np.cumsum(sizes) - sizes
-        p1 = [np.empty(0, dtype=ss_int)]
-        p2 = [np.empty(0, dtype=ss_int)]
-        for size in np.unique(sizes[sizes > 1]):
-            these = starts[sizes == size][:, None]
-            i, j = np.triu_indices(size, k=1)
-            p1.append((these + i).ravel())
-            p2.append((these + j).ravel())
-        p1 = uids[np.concatenate(p1)]
-        p2 = uids[np.concatenate(p2)]
-        beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
-        self.append(p1=p1, p2=p2, beta=beta)
-        return
-
-
-class HybridNet(Network):
-    """
-    Covasim v3's "hybrid" population: households, schools, workplaces, and community
-
-    When added to a sim, this expands into four separate networks: households (`h`,
-    an `ss.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each
-    an `ss.RandomNet` with Poisson-distributed contacts. As in Covasim v3, the networks
-    are static, and schools and workplaces are random networks restricted by age.
-    Each network can then be modified separately, e.g. `sim.networks.s`.
-
-    The default `beta` values are Covasim v3's per-layer relative transmissibility,
-    and are applied to the edges of each network; for per-network transmissibility
-    on the disease instead, set them to 1 and use e.g. `ss.SIS(beta=dict(h=0.3, s=0.06, w=0.06, c=0.03))`.
-
-    Args:
-        household_size (int/`ss.Dist`): the size of each household; a number is the mean of a Poisson distribution
-        contacts (dict): the mean number of contacts per agent in schools, workplaces, and community (numbers or `ss.Dist`s)
-        beta (dict): the beta value for each edge in each network
-        school_ages (list): the age range of agents in schools
-        work_ages (list): the age range of agents in workplaces
-        dynamic (bool): whether the networks are recreated on each timestep
-        uniform_targets (bool): whether to choose the targets of edges in schools, workplaces, and community uniformly, as in Covasim v3 (see `ss.RandomNet`)
-
-    Examples:
-        ```python
-        sim = ss.Sim(diseases='sis', networks=ss.HybridNet())
-        sim.run()
-        print(sim.networks.keys()) # ['h', 's', 'w', 'c']
-
-        # Larger households and smaller schools; contacts and beta can be partial
-        hybrid = ss.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))
-        ```
-    """
-    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, uniform_targets=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            household_size = ss.poisson(lam=2.0), # Covasim v3 default (contacts['h'])
-            contacts = dict(s=20, w=16, c=20),
-            beta = dict(h=3.0, s=0.6, w=0.6, c=0.3),
-            school_ages = [6, 22],
-            work_ages = [22, 65],
-            dynamic = False,
-            uniform_targets = False,
-        )
-        defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
-        self.update_pars(pars, **kwargs)
-        for key,default in defaults.items(): # Allow partial dicts, e.g. contacts=dict(s=10)
-            self.pars[key] = sc.mergedicts(default, self.pars[key])
-        return
-
-    def expand(self):
-        """ Create the four networks; called automatically when added to a sim """
-        p = self.pars
-        n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
-        kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
-        rkw = dict(uniform_targets=p.uniform_targets, **kw)
-        networks = [
-            ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
-            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **rkw),
-            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **rkw),
-            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **rkw),
-        ]
-        return networks
-
-    def step(self):
-        """ Not used, since the networks returned by expand() are used instead """
-        errormsg = 'ss.HybridNet() should be added to a sim, which replaces it with the networks from expand()'
-        raise RuntimeError(errormsg)
-
 
 class MFNet(DegreeTargets, SexualNetwork):
     """
@@ -1467,7 +1259,7 @@ class MFNet(DegreeTargets, SexualNetwork):
     and `net.check()` say how close it is.
 
     Args:
-        duration (`ss.Dist`): Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+        dur (`ss.Dist`): the duration of each partnership; can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
         debut (`ss.Dist`): Age of debut can vary by using callable parameter values
         acts (`ss.Dist`): Number of acts per year
         participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
@@ -1478,15 +1270,16 @@ class MFNet(DegreeTargets, SexualNetwork):
 
     Examples:
         ```python
-        net = ss.MFNet(n_contacts=ss.poisson(0.7), duration=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)), concurrency=0.1)
+        net = ss.MFNet(n_contacts=ss.poisson(0.7), dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)), concurrency=0.1)
         ```
     """
-    def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, n_contacts=_, concurrency=_, max_contacts=_, **kwargs):
+    def __init__(self, pars=None, dur=_, debut=_, acts=_, participation=_, rel_part_rates=_, n_contacts=_, concurrency=_, max_contacts=_, **kwargs):
         super().__init__()
+        check_duration(self, pars, kwargs)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=ss.freqperyear(80)),
+            acts = ss.poisson(lam=ss.time.freq(80, 'year')),
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             rel_part_rates = 1.0,
             n_contacts = None,
@@ -1515,7 +1308,7 @@ class MFNet(DegreeTargets, SexualNetwork):
         p = self.pars
         if self.targeted:
             self.dist_degree = self.degree_dist(p.n_contacts, p.concurrency, p.max_contacts)
-            mean = ss.transitions.dwell_stats(p.duration, lambda v: ss.solvers.convert(v, sim.unit_base))[0]
+            mean = ss.transitions.dwell_stats(p.dur, lambda v: ss.solvers.convert(v, sim.unit_base))[0]
             self.init_seek(mean/self.t.dt.to(sim.unit_base).value) # In steps
         elif p.concurrency is not None or p.max_contacts is not None:
             errormsg = f'concurrency= and max_contacts= of "{self.name}" are targets for the number of partners at a time, so need n_contacts= as well'
@@ -1544,7 +1337,7 @@ class MFNet(DegreeTargets, SexualNetwork):
         rng = self.rng_order.rng # By position, since each person appears once for each partner
         p1, p2 = self.pair_sexes(stubs, rng.random(len(stubs)))
         n = len(p1)
-        dur = self.pars.duration.rvs(3*n) # What is left of partnerships under way: one picked in proportion to how long it lasts, and a uniform share of it
+        dur = self.pars.dur.rvs(3*n) # What is left of partnerships under way: one picked in proportion to how long it lasts, and a uniform share of it
         dur = dur[rng.choice(len(dur), size=n, p=dur/dur.sum())]*rng.random(n) if n else dur[:0]
         self.rng_order.jump()
         self.add(p1, p2, dur)
@@ -1567,7 +1360,7 @@ class MFNet(DegreeTargets, SexualNetwork):
     def add(self, p1, p2, dur=None):
         """ Add partnerships, with their durations (drawn if not given) and acts """
         if len(p1):
-            dur = self.pars.duration.rvs(len(p1)) if dur is None else dur
+            dur = self.pars.dur.rvs(len(p1)) if dur is None else dur
             self.append(p1=p1, p2=p2, beta=np.ones(len(p1)), dur=dur, acts=self.pars.acts.rvs(len(p1)))
         return len(p1)
 
@@ -1628,7 +1421,7 @@ class MFNet(DegreeTargets, SexualNetwork):
         # Figure out durations and acts
         if (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur_vals = self.pars.duration.rvs(p1)
+            dur_vals = self.pars.dur.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else: # TODO: rethink explanation without multirng
             # If multirng is enabled, we're here because some individuals in p1
@@ -1636,7 +1429,7 @@ class MFNet(DegreeTargets, SexualNetwork):
             # slotted draws, as above, repeated relationships will get the same
             # duration and act rates, which is scientifically undesirable.
             # Instead, we fall back to a not-CRN safe approach:
-            dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
+            dur_vals = self.pars.dur.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
             act_vals = self.pars.acts.rvs(len(p1))
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
@@ -1656,77 +1449,6 @@ class MFNet(DegreeTargets, SexualNetwork):
         return
 
 
-class MSMNet(SexualNetwork):
-    """
-    A network that randomly pairs males
-
-    Args:
-        duration (`ss.Dist`): Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-        debut (`ss.Dist`): Age of debut can vary by using callable parameter values
-        acts (`ss.Dist`): Number of acts per year
-        participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-    """
-    def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)),
-            debut = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_ex(mean=ss.freqperyear(80), std=ss.freqperyear(20)),
-            participation = ss.bernoulli(p=0.1),
-        )
-        self.update_pars(pars, **kwargs)
-        self.dist = ss.random(name='MSMNet') # For shuffling available males before pairing
-        self.dist.hash_dtype = np.float64 # Avoid ties, as for ss.RandomSafeNet
-        return
-
-    def init_post(self):
-        self.set_network_states()
-        super().init_post()
-        return
-
-    def set_network_states(self, upper_age=None):
-        """ Set network states including age of entry into network and participation rates """
-        people = self.sim.people
-        if upper_age is None: uids = people.uid[people.male]
-        else: uids = people.uid[people.male & (people.age < upper_age)]
-
-        # Participation
-        self.participant[people.female] = False
-        self.participant[uids] = self.pars.participation.rvs(uids) # Should be CRN safe?
-
-        # Debut
-        self.debut[uids] = self.pars.debut.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
-        return
-
-    def add_pairs(self):
-        """ Pair all unpartnered MSM """
-        available_m = self.available(self.sim.people, 'male')
-        available_m = available_m[np.argsort(self.dist.rvs(available_m), kind='stable')] # Shuffle so pairing is random; use a stable sort since the default order of ties depends on the CPU
-        n_pairs = int(len(available_m)/2)
-        p1 = available_m[:n_pairs]
-        p2 = available_m[n_pairs:n_pairs*2]
-
-        # Figure out durations
-        if (len(p1) == len(np.unique(p1))):
-            # No duplicates, so use slotting based on p1
-            dur = self.pars.duration.rvs(p1)
-            act_vals = self.pars.acts.rvs(p1)
-        else:
-            dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
-            act_vals = self.pars.acts.rvs(len(p1))
-
-        self.append(p1=p1, p2=p2, beta=np.ones_like(p1), dur=dur, acts=act_vals)
-
-        return len(p1)
-
-    def step(self):
-        self.end_pairs()
-        self.set_network_states(upper_age=self.t.dt.years)
-        self.add_pairs()
-        return
-
-
-
 class PrenatalNet(Network):
     """
     Prenatal transmission network
@@ -1744,11 +1466,6 @@ class PrenatalNet(Network):
         if n:
             self.append(p1=mother_uids, p2=unborn_uids, beta=np.ones(n))
         return n
-
-
-class MaternalNet(PrenatalNet):
-    """ Alias for `PrenatalNet`, kept for backwards compatibility """
-    pass
 
 
 class PostnatalNet(DynamicNetwork):
@@ -1923,6 +1640,7 @@ class MixingPools(Route):
         self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
+        self.constant = False # Whether a number of contacts is the same for everyone in a group (as from ss.contacts()), rather than Poisson
         return
 
     def __len__(self):
@@ -1965,8 +1683,8 @@ class MixingPools(Route):
             for j,dk,dst in p.dst.enumitems():
                 n_contacts = p.n_contacts[i,j]
                 if sc.isnumber(n_contacts): # If it's a number, convert to a distribution
-                    n_contacts = ss.poisson(lam=n_contacts)
-                name = f'pool:{sk}->{dk}'
+                    n_contacts = ss.constant(n_contacts) if self.constant else ss.poisson(lam=n_contacts)
+                name = f'{self.name}:{sk}->{dk}' # Named after the whole, so that two of them (e.g. home and school contacts) can be in one sim
                 mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, n_contacts=n_contacts, src=src, dst=dst, **time_args)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
@@ -2002,6 +1720,13 @@ class MixingPools(Route):
         for mp in self.pools:
             mp.shrink()
         return
+
+
+def transmits(disease):
+    """ Whether a disease is communicable: declared with a contact-mediated transition, or written as code with a beta """
+    if disease.graph is not None:
+        return len(disease.graph.transmissions) > 0
+    return 'beta' in disease.pars
 
 
 class MixingPool(Route):
@@ -2076,11 +1801,21 @@ class MixingPool(Route):
         except:
             return 0
 
+    def init_pre(self, sim):
+        """ A number of contacts given as a rate (e.g. `ss.perday(10)`) is a number per unit of the sim's time, as a bare number is """
+        n = self.pars.n_contacts
+        rate = n.pars.v if isinstance(n, ss.constant) else n
+        if isinstance(rate, ss.Rate):
+            self.pars.n_contacts = ss.constant(ss.solvers.convert(rate, sim.unit_base))
+            self.eff_contacts.default = self.pars.n_contacts
+        super().init_pre(sim)
+        return
+
     def init_post(self):
         super().init_post()
 
         if len(self.pars.diseases) == 0:
-            self.diseases = [d for d in self.sim.diseases.values() if isinstance(d, ss.Infection)] # Assume the user wants all communicable diseases
+            self.diseases = [d for d in self.sim.diseases.values() if transmits(d)] # Assume the user wants all communicable diseases
         else:
             self.diseases = []
             for d in self.pars.diseases:
@@ -2090,7 +1825,7 @@ class MixingPool(Route):
                     raise KeyError(f'Could not find disease with name {d} in the list of diseases.')
 
                 dis = self.sim.diseases[d]
-                if not isinstance(dis, ss.Infection):
+                if not transmits(dis):
                     raise TypeError(f'Cannot create a mixing pool for disease {d}. Mixing pools only work for communicable diseases.')
                 self.diseases.append(dis)
 
@@ -2102,7 +1837,8 @@ class MixingPool(Route):
         if func_or_array is None:
             return self.sim.people.auids
         elif callable(func_or_array):
-            return func_or_array(self.sim)
+            out = func_or_array(self.sim)
+            return out.uids if isinstance(out, ss.BoolArr) else out # A boolean array (e.g. sim.people.female) is over the agents alive, so is converted to their UIDs
         elif isinstance(func_or_array, ss.uids):
             return func_or_array
         errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(func_or_array)}'
@@ -2158,30 +1894,40 @@ class MixingPool(Route):
 
 
 
-def contacts(matrix=None, age=None, beta=1.0, name=None, source='prem2021', layer='all', **dims):
+def check_contacts(matrix, dim):
+    """ The entries of a contact matrix are numbers of contacts, so are finite and not negative """
+    bad = ~np.isfinite(matrix) | (matrix < 0)
+    if bad.any():
+        i, j = np.argwhere(bad)[0]
+        errormsg = f'The contact matrix of ss.contacts() for "{dim}" has {bad.sum()} entries that are negative or not finite, e.g. {matrix[i, j]} in row {i}, column {j}; each is a number of contacts per unit time'
+        raise ValueError(errormsg)
+    return
+
+
+def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all', **dims):
     """
     Mixing between groups from a contact matrix; returns `ss.MixingPools`
 
     There are three forms. A country's matrix by name (`ss.contacts('Kenya')`) comes
     from `starsim_data`, by 5-year age group. A matrix with the lower edge of each of its
-    age groups (`ss.contacts(matrix, age=[0, 15, 65])`) has its own age groups, which
-    need not be the model's. A matrix for each of one or more of the model's
+    own age bands (`ss.contacts(matrix, bands=[0, 15, 65])`) has its own age groups, which
+    need not be the model's. A matrix over each of one or more of the model's
     stratifications (`ss.contacts(age=..., location=...)`) uses the model's own levels,
-    and the contacts between two groups are the product of the entries for each dimension.
+    and the contacts between two groups are the product of the entries for each dimension;
+    so `age=` is always a matrix over the model's age groups.
 
     Args:
-        matrix (array/str): a country, by name or code ('Kenya', 'KE'); or `matrix[i,j]`, the number of contacts per unit time that one person in age group `i` has with people in age group `j`
-        age (list/array): the lower edge of each age group of `matrix`, e.g. `[0, 15, 65]`; or, with no `matrix`, the matrix for the model's own age groups
-        beta (float): a multiplier on transmission through these contacts
+        matrix (array/str): a country, by name or code ('Kenya', 'KE'); or `matrix[i,j]`, the number of contacts per unit time that one person in age band `i` has with people in age band `j`
+        bands (list/array): the lower edge of each age band of `matrix`, e.g. `[0, 15, 65]`
         name (str): the name of the mixing (default: 'contacts', or the layer, e.g. 'home')
         source (str): for a country, the study: 'prem2021' (the default; bundled, 177 countries), 'prem2017' (152), or 'mistry2021' (36, by single year of age); the last two are downloaded on first use
         layer (str): for a country, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'
-        dims (dict): a matrix for each stratification, e.g. `location=[[0.8, 0.2], [0.2, 0.8]]`
+        dims (dict): a matrix for each of the model's stratifications, e.g. `age=[[5, 1], [1.5, 2]]` or `location=[[0.8, 0.2], [0.2, 0.8]]`
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10))
-        mixing = ss.contacts([[10, 3], [3, 5]], age=[0, 18])
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        mixing = ss.contacts([[10, 3], [3, 5]], bands=[0, 18])
         sim = ss.Sim(sir, networks=mixing, unit='day', stop=100).run()
 
         sir.stratify(risk=['low', 'high'])
@@ -2192,44 +1938,45 @@ def contacts(matrix=None, age=None, beta=1.0, name=None, source='prem2021', laye
         ```
     """
     name = name or (layer if layer != 'all' else 'contacts')
-    if matrix is None and (age is not None or dims): # A matrix for each of the model's own dimensions
-        dims = sc.mergedicts(dict(age=age) if age is not None else {}, dims)
+    if matrix is not None and 'age' in dims: # Starsim 4 prereleases gave the matrix's own age bands as age=
+        errormsg = 'ss.contacts(matrix, age=[...]) is now ss.contacts(matrix, bands=[...]): bands= are the lower edges of the age bands of the matrix given, and age= is a matrix over the model\'s own age groups, e.g. ss.contacts(age=[[5, 1], [1.5, 2]])'
+        raise TypeError(errormsg)
+    if matrix is None and bands is None and dims: # A matrix for each of the model's own dimensions
         dims = {dim:np.array(mat, dtype=float) for dim,mat in dims.items()}
         for dim,mat in dims.items():
             if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
                 errormsg = f'ss.contacts({dim}=...) needs a square matrix, with a row and a column for each level of "{dim}"; got shape {mat.shape}'
                 raise ValueError(errormsg)
+            check_contacts(mat, dim)
         levels = list(itertools.product(*[range(len(mat)) for mat in dims.values()]))
         groups = {}
         for combo in levels:
             group = LevelGroup(**dict(zip(dims.keys(), combo)))
             groups[group.name] = group
-        n_contacts = np.empty((len(levels), len(levels)), dtype=object)
-        for i,a in enumerate(levels):
-            for j,b in enumerate(levels):
-                n_contacts[j, i] = ss.constant(np.prod([mat[a[d], b[d]] for d,mat in enumerate(dims.values())])) # ss.MixingPools is indexed [source, destination]
-        out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=n_contacts, beta=beta, name=name)
+        matrix = functools.reduce(np.kron, dims.values(), np.ones((1, 1))) # The product of the entries for each dimension, for each pair of combinations of levels (in the order of `levels`)
+        out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, name=name) # ss.MixingPools is indexed [source, destination]; kept as numbers, since a matrix with many levels would be a million objects to make and copy
+        out.constant = True # Everyone in a group has the same number of contacts
         out.dims = dims # So a compartmental run can use the matrices directly
         return out
     kwargs = dict(dims)
     ref = None
     if isinstance(matrix, str): # A country's matrix, from starsim_data
-        matrix, age, ref = ss.named.contact_matrix(matrix, source=source, layer=layer)
+        matrix, bands, ref = ss.named.contact_matrix(matrix, source=source, layer=layer)
     elif matrix is None:
-        errormsg = 'ss.contacts() needs a matrix: a country (ss.contacts("Kenya")), a matrix with its age groups (ss.contacts(matrix, age=[...])), or a matrix for each stratification (ss.contacts(age=...))'
+        errormsg = 'ss.contacts() needs a matrix: a country (ss.contacts("Kenya")), a matrix with its age groups (ss.contacts(matrix, bands=[...])), or a matrix for each stratification (ss.contacts(age=...))'
         raise ValueError(errormsg)
     matrix = np.array(matrix, dtype=float)
-    if age is None or len(age) != matrix.shape[0] or matrix.shape[0] != matrix.shape[1]:
-        errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, e.g. ss.contacts(matrix, age=[0, 15, 65]); got a matrix of shape {matrix.shape} and age={age}'
+    if bands is None or len(bands) != matrix.shape[0] or matrix.shape[0] != matrix.shape[1]:
+        errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age bands, e.g. ss.contacts(matrix, bands=[0, 15, 65]); got a matrix of shape {matrix.shape} and bands={bands}'
         raise ValueError(errormsg)
-    highs = list(age[1:]) + [None]
-    groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(age, highs)}
+    check_contacts(matrix, 'age')
+    if np.any(np.diff(np.array(bands, dtype=float)) <= 0):
+        errormsg = f'The age bands of ss.contacts() are given by their lower edges, which need to increase, e.g. bands=[0, 15, 65]; got bands={list(bands)}'
+        raise ValueError(errormsg)
+    highs = list(bands[1:]) + [None]
+    groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(bands, highs)}
     kwargs.setdefault('name', name)
-    n = len(age)
-    n_contacts = np.empty((n, n), dtype=object)
-    for i in range(n):
-        for j in range(n):
-            n_contacts[j, i] = ss.constant(matrix[i, j]) # ss.MixingPools is indexed [source, destination]; everyone in a group has the same number of contacts
-    out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=n_contacts, beta=beta, **kwargs)
+    out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, **kwargs) # ss.MixingPools is indexed [source, destination]
+    out.constant = True # Everyone in a group has the same number of contacts
     out.ref = ref # Where a named matrix came from, for the model spec
     return out

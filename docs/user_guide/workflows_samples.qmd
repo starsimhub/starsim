@@ -50,7 +50,7 @@ A `Sim` instance is (in general) too large and complex to efficiently store on d
 - Scalar outputs at each timepoint (e.g., daily new cases)
 - Scalar outputs for each simulation (e.g., total number of deaths)
 
-These outputs can each be produced from a `Sim` - the former has a tabular structure, and the latter has a dictionary structure (which can later be assembled into a table where the rows correspond to each simulation). The `export_df` method is a quick way to obtain a dataframe with the appropriate structure retaining all results from the `Sim`.
+These outputs can each be produced from a `Sim` - the former has a tabular structure, and the latter has a dictionary structure (which can later be assembled into a table where the rows correspond to each simulation). The `to_df()` method is a quick way to obtain a dataframe with the appropriate structure retaining all results from the `Sim`.
 
 
 <div class="alert alert-block alert-info"> In real-world use, it is often helpful to write your own function to extract a dataframe of simulation outputs, because typically some of the outputs need to be extracted from custom Analyzers. </div>
@@ -66,7 +66,7 @@ We can also consider extracting a summary dictionary of scalar values. For examp
 ```{python}
 summary = {}
 summary['seed'] = sim.pars['rand_seed']
-summary['p_death'] = sim.diseases[0].pars.p_death.pars.p
+summary['p_death'] = sim.diseases.sir.pars.p_death.value
 summary['cum_infections'] = sum(sim.results.sir.new_infections)
 summary['cum_deaths'] = sum(sim.results.new_deaths)
 summary
@@ -94,7 +94,7 @@ def run_sim(seed, p_death):
     
     summary = {}
     summary['seed'] = sim.pars['rand_seed']
-    summary['p_death']= sim.diseases[0].pars.p_death.pars.p
+    summary['p_death'] = sim.diseases.sir.pars.p_death.value
     summary['cum_infections'] = sum(sim.results.sir.new_infections)
     summary['cum_deaths'] = sum(sim.results.new_deaths)
     
@@ -122,7 +122,7 @@ outputs = [run_sim(seed, 0.2) for seed in seeds]
 
 ## Saving and loading the samples
 
-We have now produced simulation outputs (dataframes and summary statistics) for 20 simulation runs. The `outputs` here are a list of tuples, containing the dataframe and dictionary outputs for each sample. This list can be passed to the `cvv.Samples` class to produce a single compressed file on disk:
+We have now produced simulation outputs (dataframes and summary statistics) for 20 simulation runs. The `outputs` here are a list of tuples, containing the dataframe and dictionary outputs for each sample. This list can be passed to the `ss.Samples` class to produce a single compressed file on disk:
 
 ```{python}
 resultsdir = Path('results')
@@ -199,7 +199,7 @@ res.get(0) # Retrieve both summary quantities and dataframes
 In the same way that it is possible to index the `Samples` object directly in order to retrieve columns from the summary dataframe, it is also possible to directly index the `Samples` object to get a column of the time series dataframe. In this case, pass a tuple of items to the `Samples` object, where the first item is the seed, and the second is a column from the time series dataframe. For example:
 
 ```{python}
-res[0,'sir_n_infected'] # Equivalent to `res[0]['sir.n_infected']`
+res[0,'sir_n_i'] # Equivalent to res[0]['sir_n_i']
 ```
 
 ### Filtering results
@@ -210,17 +210,17 @@ The `.seeds` attribute contains a listing of seeds, which can be helpful for ite
 res.seeds
 ```
 
-The seeds are drawn from the summary dataframe, which defines which seeds are accessible via the `Samples` object. Therefore, you can drop rows from the summary dataframe to filter the results. For example, suppose we only wanted to analyze simulations with over 4900 deaths. We could retrieve a copy of the summary dataframe that only contains matching simulations:
+The seeds are drawn from the summary dataframe, which defines which seeds are accessible via the `Samples` object. Therefore, you can drop rows from the summary dataframe to filter the results. For example, suppose we only wanted to analyze simulations with more infections than the median. We could retrieve a copy of the summary dataframe that only contains matching simulations:
 
 ```{python}
-res.summary.loc[res['cum_infections']>4900]
+res.summary.loc[res['cum_infections'] > res['cum_infections'].median()]
 ```
 
 We can then make a copy of the results and write the reduced summary dataframe back to that object:
 
 ```{python}
 res2 = res.copy()
-res2.summary = res.summary.loc[res['cum_infections']>4900]
+res2.summary = res.summary.loc[res['cum_infections'] > res['cum_infections'].median()]
 ```
 
 <div class="alert alert-warning"> Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only deep copies the summary dataframe. It does not duplicate the time series dataframes or the cache. For <code>Samples</code> objects, it is therefore generally preferable to use <code>.copy()</code>. </div>
@@ -250,7 +250,7 @@ plt.ylabel('Probability density')
 Sometimes it might be necessary to calculate quantities that are derived from the time series dataframes. These could be simple scalar values, such as totals or averages that had not been computed ahead of time, or extracting values from each simulation at a particular point in time. As an alternative to writing a loop that iterates over the seeds, the `.apply()` method takes in a function and maps it to every dataframe. This makes it quick to construct lists or arrays with scalar values extracted from the time series. For example, suppose we wanted to extract the peak number of people infected from each simulation:
 
 ```{python}
-peak_infections = lambda df: df['sir_n_infected'].max()
+peak_infections = lambda df: df['sir_n_i'].max()
 res.apply(peak_infections)
 ```
 
@@ -335,14 +335,14 @@ initials = np.arange(1,4)
 p_deaths = np.arange(0,1,0.25)
 ```
 
-Recall that our `run_sim()` function had an argument for `p_death`. We can extend this to include the `initial` parameter too. We can actually generalize this further by passing the parameters as keyword arguments to avoid needing to hard-code all of them. Note that we also need to add the `initial` value to the summary outputs:
+Recall that our `run_sim()` function had an argument for `p_death`. We can extend this to include the `initial` parameter too, passed to the disease as `init_prev`: a whole number is a number of people, and a fraction a share of the population. We can actually generalize this further by passing the parameters as keyword arguments to avoid needing to hard-code all of them. Note that we also need to add the `initial` value to the summary outputs:
 
 ```{python}
 def get_sim(seed, **kwargs):
     ppl = ss.People(1000)
     net = ss.RandomNet(n_contacts=ss.poisson(5))
     sir = ss.SIR(pars=kwargs)
-    sim = ss.Sim(people=ppl, networks=net, diseases=sir, rand_seed=seed, dur=ss.years(10))
+    sim = ss.Sim(people=ppl, networks=net, diseases=sir, rand_seed=seed, start='2000', stop='2010')
     sim.init(verbose=0)
     return sim
     
@@ -354,8 +354,8 @@ def run_sim(seed, **kwargs):
     
     summary = {}
     summary['seed'] = sim.pars.rand_seed
-    summary['p_death']= sir.pars.p_death.pars.p
-    summary['initial']= sir.pars.init_prev.pars.n
+    summary['p_death'] = sir.pars.p_death.value
+    summary['initial'] = sir.pars.init_prev.value
     summary['cum_infections'] = sum(sim.results.sir.new_infections)
     summary['cum_deaths'] = sum(sim.results.new_deaths)
     
@@ -376,7 +376,7 @@ n = 5
 seeds = np.arange(n)
 for init_prev in initials:
     for p_death in p_deaths:
-        outputs = [run_sim(seed, init_prev=ss.choose_n(init_prev), p_death=p_death) for seed in seeds]
+        outputs = [run_sim(seed, init_prev=int(init_prev), p_death=p_death) for seed in seeds]
         ss.Samples.new(outputs, identifiers=["p_death", "initial"], folder=resultsdir)
 ```
 

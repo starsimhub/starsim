@@ -6,16 +6,36 @@ jupyter: python3
 
 Connectors enable interactions between different modules in Starsim, particularly between disease models. They allow you to model complex epidemiological scenarios where one disease affects the transmission or progression of another disease. For example, you might want to model how having SIS increases susceptibility to HIV, or how HIV affects the treatment outcomes of other sexually transmitted infections.
 
-## Basic concepts
+There are two ways to write an interaction, and both are first-class:
 
-A connector inherits from `ss.Connector` and implements custom logic to modify disease parameters or agent states based on the presence of other diseases. Connectors are called during each simulation timestep and can dynamically adjust transmission parameters, susceptibility, or other disease characteristics. Specifically, connectors are called after demographics and disease state updates, but before networks, interventions, and disease transmission updates. This means they can influence disease transmission for the current timestep.
+- **`ss.modify()`**, for the common case: while a condition holds, scale a named quantity (or shift it, or set it).
+- **A connector written as code**, a class that inherits from `ss.Connector` and implements `step()`, for everything else. Modules may read and write each other's state directly.
 
+## Modifiers: `ss.modify()`
 
-## Simple usage
+```python
+ss.modify(target, multiply=None, add=None, set=None, where=None, start=None, stop=None, when=None)
+```
 
-The most straightforward way to use connectors is to define a custom class that inherits from `ss.Connector` and implements a `step()` method. This method is called during each simulation timestep and can modify disease parameters based on the current state of the simulation.
+`ss.modify(hiv.rel_trans, multiply=2.7, where=sis.infected)` reads as "for people infected with SIS, multiply HIV transmissibility by 2.7". A modifier is passed to the sim in `connectors=` (interactions that are part of the biology) or `interventions=` (policy); the two lists differ only in where the modifier runs in the loop.
 
-Here's a simple example showing how HIV and "SIS" diseases can interact, and also illustrates how you would use an analyzer to compare the two simulations:
+| Argument | Meaning |
+|---|---|
+| `target` | the quantity to change: a per-agent float array (`hiv.rel_sus`, `sis.rel_trans`), a parameter (`sir.pars.beta`, `school.pars.n_contacts`), or the same as a string (`'sir.pars.beta'`) |
+| `multiply=`, `add=`, `set=` | what to do to it; exactly one. Each takes a number or anything a parameter takes, such as `ss.seasonal(...)` or `ss.timeseries(...)` |
+| `where=` | who it applies to: a condition (below). Omitted means everyone |
+| `start=`, `stop=` | the period it applies in. Omitted means always |
+| `when=` | a function of the sim returning `True` or `False`, for anything `start`/`stop` cannot say |
+
+On a per-person quantity (`rel_sus`, `rel_trans`) only `multiply=` is accepted; `add=` and `set=` are for parameters.
+
+### Conditions
+
+A condition says who a modifier applies to. It can be written directly against the modules' arrays, before the sim exists: `hiv.cd4 < 200`, `sis.infected`, `(sim.people.age > 65) & ~sir.vaccinated`. These are *lazy* conditions: they are evaluated each time they are needed during the run, against the sim they are running in, so the same condition works in every copy of a sim. Combine them with `&`, `|`, and `~` (not `and`, `or`, `not`). Anything else can be written as a function of the sim returning a boolean array, e.g. `where=lambda sim: sim.people.age < 15`.
+
+### An example: HIV and SIS
+
+Here HIV (from the library, written as code) and SIS (declared) interact in both directions: people with HIV are more likely to acquire and transmit SIS, more so with AIDS, and people with SIS are more likely to acquire and transmit HIV. Each interaction is one modifier:
 
 ```{python}
 import starsim as ss
@@ -24,22 +44,135 @@ import starsim.library as ssl
 import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
-sc.options(jupyter=True)
 
+# Create disease models
+hiv = ssl.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
+sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+
+# The interactions
+hiv_sis = [
+    ss.modify(sis.rel_sus,   multiply=2,   where=hiv.cd4 < 500), # People with HIV are 2x more likely to acquire SIS
+    ss.modify(sis.rel_sus,   multiply=2.5, where=hiv.cd4 < 200), # ... and 5x (2 x 2.5) with AIDS
+    ss.modify(sis.rel_trans, multiply=1.5, where=hiv.cd4 < 500), # People with HIV are 1.5x more likely to transmit SIS
+    ss.modify(sis.rel_trans, multiply=2,   where=hiv.cd4 < 200), # ... and 3x with AIDS
+    ss.modify(hiv.rel_sus,   multiply=2.7, where=sis.infected),  # People with SIS are 2.7x more likely to acquire HIV
+    ss.modify(hiv.rel_trans, multiply=2.7, where=sis.infected),  # ... and to transmit it
+]
+
+# Create simulations with and without the interactions
+kw = dict(diseases=[hiv, sis], networks=ss.MFNet(), n_agents=2000, verbose=0)
+s1 = ss.Sim(label='Without connector', **kw)
+s2 = ss.Sim(label='With connector', connectors=hiv_sis, **kw)
+
+# Run simulations
+msim = ss.parallel(s1, s2)
+s1, s2 = msim.sims
+
+# Compare results
+print('Final infection counts:')
+print(f'HIV infections - Without connector: {s1.results.hiv.n_infected[-1]:n}')
+print(f'HIV infections - With connector:    {s2.results.hiv.n_infected[-1]:n}')
+print(f'SIS infections - Without connector: {s1.results.sis.n_I[-1]:n}')
+print(f'SIS infections - With connector:    {s2.results.sis.n_I[-1]:n}')
+
+# Plot comparative results
+fig = plt.figure(figsize=(12, 4))
+plt.subplot(121)
+plt.plot(s1.timevec, s1.results.hiv.n_infected, label='Without connector', alpha=0.8)
+plt.plot(s2.timevec, s2.results.hiv.n_infected, label='With connector', alpha=0.8)
+plt.title('HIV infections over time')
+plt.xlabel('Year')
+plt.ylabel('Number infected')
+plt.legend()
+
+plt.subplot(122)
+plt.plot(s1.timevec, s1.results.sis.n_I, label='Without connector', alpha=0.8)
+plt.plot(s2.timevec, s2.results.sis.n_I, label='With connector', alpha=0.8)
+plt.title('SIS infections over time')
+plt.xlabel('Year')
+plt.ylabel('Number infected')
+plt.legend()
+plt.show()
+```
+
+`sim.what_modifies()` lists the modifiers on a quantity, with their conditions:
+
+```{python}
+s2.what_modifies(s2.diseases.sis.rel_sus)
+```
+
+### How modifiers combine
+
+When several modifiers are active on one target for the same person, the effective value is
+
+```
+effective = (set value if any, else base) × product of multipliers + sum of addends
+```
+
+that is, set, then multiply, then add, whatever order the modifiers were declared in. This is why, above, a person with AIDS has their SIS susceptibility multiplied by 2 × 2.5 = 5: both conditions hold for them. Two 40% reductions give a 64% reduction, the standard assumption. Product efficacies (e.g. a vaccine's) and stratification adjustments are multipliers of the same kind and combine by the same rule.
+
+### Base and effective values
+
+A modifier never overwrites the quantity it changes. A modified array keeps its own *base* values, which the module that owns it sets, and the modifiers that are active now are applied on top of them to give the *effective* values, which the model uses. Reading the array (`sis.rel_sus[uids]`) gives the base, and assigning to it sets the base; `sis.rel_sus.effective` gives the effective values:
+
+```{python}
+sis = ss.SIS(init_prev=0.2)
+protect = ss.modify(sis.rel_sus, multiply=0.5, where=lambda sim: sim.people.age < 15)
+sim = ss.Sim(diseases=sis, networks='random', n_agents=1000, connectors=protect, copy_inputs=False, verbose=0)
+sim.run()
+
+children = (sim.people.age < 15).uids[:3]
+sis.rel_sus[children] = 0.8 # Assigning sets the base
+print('Base:     ', sis.rel_sus[children])
+print('Effective:', sis.rel_sus.effective[children])
+```
+
+Because the base is never changed, nothing has to be restored when a modifier stops applying (a person is cured, or the period ends), and modifiers from several modules combine instead of erasing each other.
+
+### Time-varying modifiers: seasonality
+
+`multiply=` takes anything a parameter takes, including a seasonal curve. Here SIS transmission is 60% higher than average in January and 60% lower in July:
+
+```{python}
+sis = ss.SIS(beta=ss.peryear(0.4), dur_inf=ss.years(0.5), init_prev=0.05)
+seasonality = ss.modify(sis.rel_trans, multiply=ss.seasonal(amplitude=0.6, peak='January'))
+
+kw = dict(diseases=sis, networks='random', start='2000', stop='2010', dt=ss.months(1), n_agents=5000, verbose=0)
+s1 = ss.Sim(label='No seasonality', **kw)
+s2 = ss.Sim(label='Seasonal', connectors=seasonality, **kw)
+msim = ss.parallel(s1, s2)
+
+plt.figure()
+for sim in msim.sims:
+    plt.plot(sim.timevec, sim.results.sis.prevalence, label=sim.label)
+plt.title('SIS prevalence')
+plt.legend()
+plt.show()
+```
+
+For a declared disease, a seasonal `beta` can also be given directly: `ss.transmission('S -> I', beta=ss.seasonal(mean=ss.peryear(0.4), amplitude=0.6, peak='January'))`.
+
+## Connectors written as code
+
+A connector written as code inherits from `ss.Connector` and implements a `step()` method, which is called during each timestep and can read and change anything in the sim. Connectors are called after demographics and disease state updates, but before networks, interventions, and disease transmission, so they can influence transmission in the current timestep.
+
+Here's a simple example showing how HIV and "SIS" diseases can interact, and also illustrates how you would use an analyzer to compare the two simulations:
+
+```{python}
 class SIS_HIV(ss.Connector):
     """
     Simple connector that modifies HIV susceptibility based on SIS infection status.
     People with SIS infection are protected from HIV (rel_sus = 0),
     while susceptible people have normal HIV susceptibility (rel_sus = 1).
     """
-    
+
     def step(self):
         # Get disease modules
         hiv = self.sim.diseases.hiv
         sis = self.sim.diseases.sis
         sis_pos = (sis.infected).uids
         sis_neg = (sis.susceptible).uids
-        
+
         # Modify HIV relative susceptibility based on SIS infection status
         hiv.rel_sus[sis_neg] = 1.0  # Reset to baseline
         hiv.rel_sus[sis_pos] = 0  # SIS-infected people cannot acquire HIV
@@ -63,8 +196,8 @@ class check_connector(ss.Analyzer):
         # Get disease references
         sis = self.sim.diseases.sis
         hiv = self.sim.diseases.hiv
-        
-        # Append current timestep data
+
+        # Append current timestep data: an analyzer runs after the step's results are recorded, at self.ti
         self.time += self.ti
         self.rel_sus += hiv.rel_sus.mean()  # Average HIV relative susceptibility
         self.sis_prev += sis.results.prevalence[self.ti]  # SIS prevalence
@@ -76,27 +209,27 @@ class check_connector(ss.Analyzer):
         Plot the time series of relative susceptibility and disease prevalence.
         """
         fig = plt.figure()
-        
+
         # Plot each metric
         for key in ['rel_sus', 'sis_prev', 'hiv_prev']:
             plt.plot(self.time, self[key], label=key)
-        
+
         plt.legend()
         plt.title(self.sim.label)
         plt.show()
         return fig
-    
+
 # Create disease models
-hiv = ssl.diseases.HIV(beta=dict(mf=0.1, random=0), init_prev=0.001)
+hiv = ssl.HIV(beta=dict(mf=0.1, random=0), init_prev=0.001)
 sis = ss.SIS(beta=dict(mf=0.0, random=0.05))
-mf = ss.MFNet(duration=ss.lognorm_ex(mean=ss.years(5), std=ss.years(5)))
+mf = ss.MFNet(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(5)))
 
 # Configure simulation parameters
 pars = dict(
-    diseases=[hiv, sis],
-    networks=[mf,'random'],
-    analyzers=check_connector(),
-    verbose=0
+    diseases = [hiv, sis],
+    networks = [mf, 'random'],
+    analyzers = check_connector(),
+    verbose = 0,
 )
 
 # Create simulations with and without connector
@@ -114,37 +247,34 @@ for sim in msim.sims:
 
 In this example, the connector modifies HIV susceptibility based on SIS infection status. You can see that when the connector is active, HIV transmission is significantly reduced because SIS-infected individuals cannot acquire HIV.
 
-## Advanced usage with parameters
+:::{.callout-warning}
+A connector that *sets* an array (`hiv.rel_sus[sis_neg] = 1.0`) also erases whatever any other module set, such as a vaccine's protection or another connector's effect. Prefer a modifier, which multiplies a base it never overwrites: the connector above is `ss.modify(hiv.rel_sus, multiply=0, where=sis.infected)`. If code needs to decide who is affected (with memory, or several steps of logic), let `step()` set a boolean state and have a modifier read it.
+:::
 
-For more complex interactions, you can define parameters in your connector class to control the strength and nature of the interactions. Here's an example showing bi-directional interactions between HIV and SIS:
+Connectors can define parameters with `define_pars()`, like any other module, to control the strength and nature of the interactions:
 
 ```{python}
 class HIV_SIS(ss.Connector):
-    """
-    Advanced connector showing bi-directional interactions between HIV and SIS.
-    Models how HIV affects SIS susceptibility/transmission and vice versa,
-    with different effects based on CD4 count (AIDS progression).
-    """
+    """ The HIV-SIS interactions above, written as code """
     def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            label='HIV-SIS',
-            rel_sus_sis_hiv=2,      # People with HIV are 2x more likely to acquire SIS
-            rel_sus_sis_aids=5,     # People with AIDS are 5x more likely to acquire SIS
-            rel_trans_sis_hiv=1.5,  # People with HIV are 1.5x more likely to transmit SIS
-            rel_trans_sis_aids=3,   # People with AIDS are 3x more likely to transmit SIS
-            rel_sus_hiv_sis=2.7,    # People with SIS are 2.7x more likely to acquire HIV
-            rel_trans_hiv_sis=2.7,  # People with SIS are 2.7x more likely to transmit HIV
+            label = 'HIV-SIS',
+            rel_sus_sis_hiv = 2,     # People with HIV are 2x more likely to acquire SIS
+            rel_sus_sis_aids = 5,    # People with AIDS are 5x more likely to acquire SIS
+            rel_trans_sis_hiv = 1.5, # People with HIV are 1.5x more likely to transmit SIS
+            rel_trans_sis_aids = 3,  # People with AIDS are 3x more likely to transmit SIS
+            rel_sus_hiv_sis = 2.7,   # People with SIS are 2.7x more likely to acquire HIV
+            rel_trans_hiv_sis = 2.7, # People with SIS are 2.7x more likely to transmit HIV
         )
         self.update_pars(**kwargs)
         return
 
     def step(self):
         """Apply HIV-SIS interactions based on CD4 count and infection status"""
-        diseases = self.sim.diseases
-        sis = diseases.sis
-        hiv = diseases.hiv
-        cd4 = self.sim.people.hiv.cd4
+        sis = self.sim.diseases.sis
+        hiv = self.sim.diseases.hiv
+        cd4 = hiv.cd4
 
         # Reset relative susceptibility and transmission to baseline
         sis.rel_sus[:] = 1.0
@@ -160,190 +290,81 @@ class HIV_SIS(ss.Connector):
         sis.rel_trans[cd4 < 500] = self.pars.rel_trans_sis_hiv
         sis.rel_trans[cd4 < 200] = self.pars.rel_trans_sis_aids
 
-        # People with SIS are more likely to acquire HIV
+        # People with SIS are more likely to acquire and transmit HIV
         hiv.rel_sus[sis.infected] = self.pars.rel_sus_hiv_sis
-
-        # People with SIS are more likely to transmit HIV
         hiv.rel_trans[sis.infected] = self.pars.rel_trans_hiv_sis
         return
 
-# Create disease models
-hiv = ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
-sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
-
-# Create network
-mf = ss.MFNet()
-
-# Configure simulation parameters
 kw = dict(
-    diseases=[hiv, sis], 
-    networks=mf,
-    n_agents=2000,
-    verbose=0
+    diseases = [ssl.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2), ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)],
+    networks = ss.MFNet(),
+    n_agents = 2000,
+    verbose = 0,
 )
-
-# Create simulations
-s1 = ss.Sim(label='Without connector', **kw)
-s2 = ss.Sim(label='With connector', connectors=HIV_SIS(), **kw)
-
-# Run simulations
-msim = ss.parallel(s1, s2)
-
-# Compare results
-print("\nFinal infection counts:")
-print(f"HIV infections - Without connector: {s1.results.hiv.n_infected[-1]}")
-print(f"HIV infections - With connector: {s2.results.hiv.n_infected[-1]}")
-print(f"SIS infections - Without connector: {s1.results.sis.n_infected[-1]}")
-print(f"SIS infections - With connector: {s2.results.sis.n_infected[-1]}")
-
-# Plot comparative results
-fig = plt.figure(figsize=(12, 4))
-
-# HIV infections
-plt.subplot(121)
-plt.plot(s1.timevec, s1.results.hiv.n_infected, label='Without connector', alpha=0.8)
-plt.plot(s2.timevec, s2.results.hiv.n_infected, label='With connector', alpha=0.8)
-plt.title('HIV infections over time')
-plt.xlabel('Year')
-plt.ylabel('Number infected')
-plt.legend()
-
-# SIS infections
-plt.subplot(122)
-plt.plot(s1.timevec, s1.results.sis.n_infected, label='Without connector', alpha=0.8)
-plt.plot(s2.timevec, s2.results.sis.n_infected, label='With connector', alpha=0.8)
-plt.title('SIS infections over time')
-plt.xlabel('Year')
-plt.ylabel('Number infected')
-plt.legend()
-plt.show()
+sim = ss.Sim(connectors=HIV_SIS(), **kw).run()
+print(f'With the connector written as code: {sim.results.hiv.n_infected[-1]:n} HIV infections and {sim.results.sis.n_I[-1]:n} SIS infections at the end')
 ```
 
-This more complex example demonstrates several important concepts:
+This demonstrates several concepts that apply to any module written as code:
 
 1. **Parameter definition**: Using `define_pars()` to set configurable parameters for the interaction strengths
 2. **Bi-directional effects**: Both diseases affect each other's transmission and susceptibility
 3. **Disease progression considerations**: Different effects based on HIV progression (CD4 count)
 4. **Multiple attributes**: Modifying both relative susceptibility (`rel_sus`) and relative transmission (`rel_trans`)
 
-## Combining connectors with interventions
+Note that it resets every array to 1 on each step, which erases anything else that set them; the six modifiers at the top of this page say the same thing without that problem.
 
-Connectors can work alongside interventions to model complex treatment scenarios. Here's an example that combines the HIV-SIS connector with a treatment intervention:
+## Combining interactions with interventions
+
+Modifiers keep working when an intervention changes who they apply to. Here SIS is treated from 2020 on with `ss.treat()`. Because the effect of SIS on HIV is a modifier with the condition `sis.infected`, it stops applying to each person as soon as they are cured, with nothing to reset by hand:
 
 ```{python}
-class TreatSIS(ss.Intervention):
-    """
-    TreatSIS treatment intervention for SIS.
-    Also resets HIV transmission/susceptibility parameters when SIS is cured.
-    """
-    
-    def __init__(self, year=2020, prob=0.8):
-        super().__init__()
-        self.prob = prob  # Probability of receiving treatment
-        self.year = ss.date(year)  # Year treatment becomes available
-        return
+def make_sim(label, connectors=None, interventions=None):
+    hiv = ssl.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
+    sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+    if connectors:
+        connectors = [
+            ss.modify(hiv.rel_sus,   multiply=2.7, where=sis.infected),
+            ss.modify(hiv.rel_trans, multiply=2.7, where=sis.infected),
+        ]
+    return ss.Sim(label=label, diseases=[hiv, sis], networks=ss.MFNet(), connectors=connectors,
+                  interventions=interventions, n_agents=2000, start='2000', stop='2040', verbose=0)
 
-    def step(self):
-        sim = self.sim
-        if sim.now >= self.year:
-            sis = sim.diseases.sis
+treat_sis = ss.treat(ss.Treatment(cure=0.9), disease='sis', coverage=0.8, interval=ss.years(1), start='2020')
 
-            # Define who is eligible for treatment (currently infected)
-            eligible_ids = sis.infected.uids
-            n_eligible = len(eligible_ids)
-
-            if n_eligible > 0:
-                # Determine who receives treatment
-                is_treated = np.random.rand(n_eligible) < self.prob
-                treat_ids = eligible_ids[is_treated]
-
-                # Cure SIS
-                sis.infected[treat_ids] = False
-                sis.susceptible[treat_ids] = True
-
-                # Reset HIV parameters (removes SIS co-infection effects)
-                sim.diseases.hiv.rel_sus[treat_ids] = 1.0
-                sim.diseases.hiv.rel_trans[treat_ids] = 1.0
-        return
-
-# Create simulations with different combinations
-sims = {}
-
-# Base configuration
-base_kw = dict(
-    diseases=[ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2),
-              ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)], 
-    networks=ss.MFNet(),
-    n_agents=2000,
-    verbose=0
+sims = sc.objdict(
+    baseline  = make_sim('Baseline (no connector, no treatment)'),
+    connector = make_sim('With connector only', connectors=True),
+    both      = make_sim('Connector + treatment', connectors=True, interventions=treat_sis),
 )
-
-# 1. No connector, no treatment
-sims['baseline'] = ss.Sim(label='Baseline (no connector, no treatment)', **base_kw)
-
-# 2. Connector only
-sims['connector'] = ss.Sim(label='With connector only', 
-                          connectors=HIV_SIS(), **base_kw)
-
-# 3. Connector + treatment
-sims['both'] = ss.Sim(label='Connector + treatment', 
-                     connectors=HIV_SIS(), 
-                     interventions=TreatSIS(year=2020, prob=0.8), **base_kw)
-
-# Run all simulations
 msim = ss.parallel(*sims.values())
+sims = sc.objdict({key:sim for key,sim in zip(sims.keys(), msim.sims)})
 
 # Create comparison plot
 fig, ax = plt.subplots(2, 2, figsize=(12, 8))
-
-# HIV infections
-ax[0,0].set_title('HIV infections over time')
-for sim in sims.values():
-    ax[0,0].plot(sim.timevec, sim.results.hiv.n_infected, label=sim.label, alpha=0.8)
-ax[0,0].axvline(2020, color='red', linestyle='--', alpha=0.5, label='Treatment start')
-ax[0,0].set_xlabel('Year')
-ax[0,0].set_ylabel('Number infected')
-ax[0,0].legend()
-
-# SIS infections
-ax[0,1].set_title('SIS infections over time')
-for sim in sims.values():
-    ax[0,1].plot(sim.timevec, sim.results.sis.n_infected, label=sim.label, alpha=0.8)
-ax[0,1].axvline(2020, color='red', linestyle='--', alpha=0.5, label='Treatment start')
-ax[0,1].set_xlabel('Year')
-ax[0,1].set_ylabel('Number infected')
-ax[0,1].legend()
-
-# Cumulative HIV infections
-ax[1,0].set_title('Cumulative HIV infections')
-for sim in sims.values():
-    ax[1,0].plot(sim.timevec, sim.results.hiv.cum_infections, label=sim.label, alpha=0.8)
-ax[1,0].set_xlabel('Year')
-ax[1,0].set_ylabel('Cumulative infections')
-ax[1,0].legend()
-
-# Cumulative SIS infections
-ax[1,1].set_title('Cumulative SIS infections')
-for sim in sims.values():
-    ax[1,1].plot(sim.timevec, sim.results.sis.cum_infections, label=sim.label, alpha=0.8)
-ax[1,1].set_xlabel('Year')
-ax[1,1].set_ylabel('Cumulative infections')
-ax[1,1].legend()
-
+panels = [
+    ('HIV infections over time', 'hiv', 'n_infected'),
+    ('SIS infections over time', 'sis', 'n_I'),
+    ('Cumulative HIV infections', 'hiv', 'cum_infections'),
+    ('Cumulative SIS infections', 'sis', 'cum_infections'),
+]
+for axis, (title, disease, key) in zip(ax.flatten(), panels):
+    axis.set_title(title)
+    for sim in sims.values():
+        axis.plot(sim.timevec, sim.results[disease][key], label=sim.label, alpha=0.8)
+    axis.axvline(ss.date(2020), color='red', linestyle='--', alpha=0.5)
+    axis.set_xlabel('Year')
+    axis.legend()
 plt.tight_layout()
 plt.show()
 
 # Print summary statistics
-sc.heading("Final results summary:")
+sc.heading('Final results summary:')
 for sim in sims.values():
-    hiv_final = sim.results.hiv.n_infected[-1]
-    sis_final = sim.results.sis.n_infected[-1]
-    hiv_cum = sim.results.hiv.cum_infections[-1]
-    sis_cum = sim.results.sis.cum_infections[-1]
-    print(f"{sim.label}:")
-    print(f"  HIV: {hiv_final:3.0f} current, {hiv_cum:4.0f} cumulative")
-    print(f"  SIS: {sis_final:3.0f} current, {sis_cum:4.0f} cumulative")
+    res = sim.results
+    print(f'{sim.label}:')
+    print(f'  HIV: {res.hiv.n_infected[-1]:3.0f} current, {res.hiv.cum_infections[-1]:4.0f} cumulative')
+    print(f'  SIS: {res.sis.n_I[-1]:3.0f} current, {res.sis.cum_infections[-1]:4.0f} cumulative')
 ```
 
-This example demonstrates how interventions and connectors work together. The treatment intervention not only cures SIS but also resets the HIV transmission parameters, effectively removing the co-infection effects when SIS is treated.
-
+With a connector written as code, the same scenario needs the treatment to undo the co-infection effects itself (resetting `hiv.rel_sus` and `hiv.rel_trans` for the people it cures), and the two modules then have to agree on what the baseline values are.

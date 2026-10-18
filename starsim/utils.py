@@ -2,6 +2,7 @@
 Numerical utilities and other helper functions
 """
 import re
+import sys
 import json
 import hashlib
 import warnings
@@ -234,6 +235,14 @@ def warn(msg, category=None, verbose=None, die=None):
         raise ValueError(errormsg)
 
     return
+
+
+def getframe(depth=1):
+    """ The frame `depth` levels above the caller, or None if the stack is not that deep (e.g. when called from R via reticulate) """
+    try:
+        return sys._getframe(depth+1)
+    except ValueError:
+        return None
 
 
 def short_hash(obj, n=6):
@@ -650,15 +659,13 @@ def combine_rands(a, b):
 
 def load(filename, format=None, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`, which also reads model specs and other frameworks' models
+    Alias to Sciris `sc.loadany()`, which also reads other frameworks' models
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function. This can also be used to load other objects of known type
-    (e.g. JSON), although this usage is discouraged.
-
-    A model spec (written by `sim.to_spec()`) is built into a sim (see `ss.from_spec()`),
-    and so is a model from another framework, given its format or one that can be told
-    from the file (see `ss.interop`).
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model from
+    another framework is built into a sim, given its format or one that can be told
+    from the file (see `ss.interop`). A model saved as code (`ss.save('model.py', sim)`)
+    is a script: run or import it.
 
     Args:
         filename (str/path/any): the name of the file to load, or another framework's model object
@@ -666,11 +673,11 @@ def load(filename, format=None, **kwargs):
         kwargs (dict): passed to the importer, or to `sc.loadany()`
 
     Returns:
-        The loaded object; a model spec or another framework's model is returned as an `ss.Sim`
+        The loaded object; another framework's model is returned as an `ss.Sim`
 
     **Examples**:
 
-        sim = ss.load('sim.json') # A model spec
+        sim = ss.load('run.sim') # A sim saved with ss.save()
         sim = ss.load('compart_SIR.yaml', format='emulsion')
     """
     if format is None:
@@ -680,7 +687,8 @@ def load(filename, format=None, **kwargs):
     if str(filename).endswith('.json'):
         spec = sc.loadjson(filename)
         if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
-            return ss.from_spec(spec)
+            errormsg = f'{filename} is a model spec, which is the normalized form of a model for sim.hash() and ss.diff(), and is not read back into a sim. Save a model as code with ss.save("model.py", sim), or a sim with its results with ss.save("run.sim", sim)'
+            raise ValueError(errormsg)
         return spec
     return sc.loadany(filename, **kwargs)
 
@@ -692,8 +700,9 @@ def save(filename, obj, format=None, **kwargs):
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
 
+    A sim saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
     With `format`, a sim is exported instead (see `ss.interop.export()`), and what
-    the format cannot carry is listed as `W1401 LossyExport`.
+    the format cannot carry is listed as `ss.LossyExport`.
 
     Args:
         filename (str/path): the name of the file to save
@@ -703,11 +712,16 @@ def save(filename, obj, format=None, **kwargs):
 
     **Examples**:
 
+        ss.save('model.py', sim) # The model, as code
+        ss.save('run.sim', sim) # The sim, with its results
         ss.save('sir.xml', sim, format='sbml')
         ss.save('sir.md', sim, format='mermaid')
     """
     if format is not None:
         ss.interop.export(obj, format, filename=filename, **kwargs)
+        return sc.path(filename)
+    if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
+        obj.to_code(filename, **kwargs)
         return sc.path(filename)
     return sc.save(filename=filename, obj=obj, **kwargs)
 

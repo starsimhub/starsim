@@ -9,6 +9,7 @@ stratification (with its population split, flow adjustments, infectiousness
 adjustments, and mixing matrix), and the derived outputs can be worked out from the
 results with `ss.interop.summer2.outputs()`.
 """
+import ast
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -19,14 +20,34 @@ __all__ = ['load_summer2', 'outputs']
 skipped_kinds = dict(ReplacementBirthFlow='births that replace the deaths in each step, which have no rate of their own')
 
 
-def read(source):
-    """ The model as a dict: from a dict, a JSON file, or a live summer2 model """
+def read(source, pars=None):
+    """ The model as a dict: from a dict, a JSON file, or a live summer2 model (with the values of its parameters) """
     if isinstance(source, dict):
         return source
     elif hasattr(source, 'compartments') and hasattr(source, 'flows') and hasattr(source, '_stratifications'):
         from . import dump_summer2 # Needs only summer2, which is installed if a model was made
-        return dump_summer2.model_dict(source)
+        return dump_summer2.model_dict(source, pars=pars)
     return sc.loadjson(source)
+
+
+def function_rate(src, name, param, values):
+    """ A flow's parameter that is a function of named parameters and of time (as series), as an expression; None if it uses anything else """
+    text = param['function']
+    found = param.get('series', {})
+    for i,(key,vals) in enumerate(found.items()):
+        sname = f'{name}_series' if len(found) == 1 else f'{name}_series_{i+1}'
+        src.add_par(sname, ss.timeseries({float(t):v for t,v in vals.items()}, mode='linear'), doc=f'summer2 function of time in flow "{name}"')
+        text = text.replace(key, sname)
+    try:
+        used = {n.id for n in ast.walk(ast.parse(text, mode='eval')) if isinstance(n, ast.Name)}
+    except SyntaxError:
+        return None
+    for var in used - set(src.pars):
+        val = values.get(var)
+        if not sc.isnumber(val):
+            return None
+        src.add_par(var, float(val), doc='summer2 Parameter')
+    return text
 
 
 def multiplier(adj, base):
@@ -43,12 +64,13 @@ def multiplier(adj, base):
     return None
 
 
-def load_summer2(source, verbose=None):
+def load_summer2(source, pars=None, verbose=None):
     """
     Read a summer2 model into a sim
 
     Args:
         source (str/dict/CompartmentalModel): the JSON file written by `dump_summer2.py` (or its contents), or the model itself
+        pars (dict): the values of the model's named parameters, instead of their defaults (summer2 is given them when it is run)
         verbose (bool): whether to print how each flow was read
 
     Returns:
@@ -59,7 +81,8 @@ def load_summer2(source, verbose=None):
         # In the summer2 environment: python dump_summer2.py my_model.py:build_model model.json
         sim = ss.load('model.json', format='summer2')
     """
-    d = read(source)
+    d = read(source, pars=pars)
+    values = {**d.get('parameters', {}), **(pars or {})}
     file = source if isinstance(source, str) else None
     src = Source(name='summer2', format='summer2', file=file)
     comps = d['compartments']
@@ -89,26 +112,34 @@ def load_summer2(source, verbose=None):
         suffix = dict(InfectionFrequencyFlow='contact_rate', InfectionDensityFlow='contact_rate', ImportFlow='number').get(kind, 'rate')
         pname = suffix if suffix == 'contact_rate' and n_infection == 1 else f'{name}_{suffix}'
         if isinstance(param, dict) and 'par' in param:
-            pname, param = param['par'], param['value']
-        if not sc.isnumber(param):
-            src.skip(f'flow {name}', f'its parameter is a function ({param.get("function") if isinstance(param, dict) else param}); a value that varies in time could be an ss.timeseries')
+            pname, param = param['par'], values.get(param['par'], param['value'])
+        if isinstance(param, dict) and 'function' in param: # A function of named parameters and time
+            rate = function_rate(src, name, param, values)
+            if rate is None:
+                src.skip(f'flow {name}', f'its parameter is a function ({param["function"]}) of something other than named parameters and time')
+                continue
+            base[name] = None
+        elif not sc.isnumber(param):
+            src.skip(f'flow {name}', f'its parameter is a function ({param}); a value that varies in time could be an ss.timeseries')
             continue
-        base[name] = param
-        src.add_par(pname, param, doc=f'summer2 {kind} "{name}"')
+        else:
+            rate = pname
+            base[name] = param
+            src.add_par(pname, param, doc=f'summer2 {kind} "{name}"')
         sources = f['sources']
         sick = ' + '.join(infectious)
         if kind == 'InfectionFrequencyFlow':
-            flows = [(sources[0], f['dest'], f'{pname} * ({sick}) / N', 'person')]
+            flows = [(sources[0], f['dest'], f'{rate} * ({sick}) / N', 'person')]
         elif kind == 'InfectionDensityFlow':
-            flows = [(sources[0], f['dest'], f'{pname} * ({sick})', 'person')]
+            flows = [(sources[0], f['dest'], f'{rate} * ({sick})', 'person')]
         elif kind in ['TransitionFlow', 'DeathFlow']:
-            flows = [(s, f['dest'], pname, 'person') for s in sources]
+            flows = [(s, f['dest'], rate, 'person') for s in sources]
         elif kind == 'AbsoluteFlow':
-            flows = [(sources[0], f['dest'], pname, 'total')]
+            flows = [(sources[0], f['dest'], rate, 'total')]
         elif kind == 'CrudeBirthFlow':
-            flows = [(None, f['dest'], f'{pname} * N', 'total')]
+            flows = [(None, f['dest'], f'{rate} * N', 'total')]
         elif kind == 'ImportFlow':
-            flows = [(None, f['dest'], pname, 'total')]
+            flows = [(None, f['dest'], rate, 'total')]
         else:
             src.skip(f'flow {name}', f'a {kind}, which is not translated')
             continue
@@ -277,7 +308,10 @@ def outputs(sim):
 
     As in summer2, a flow is a rate (the number moved in a step, divided by the step), a
     cumulative output is the sum of those rates, and a function output is evaluated from
-    the other outputs.
+    the other outputs. summer2's flow output at a time is the mean of the rates at the
+    start and end of the step before it (the trapezoid rule), where this is the number that
+    actually moved, so the two differ where the flow curves sharply within a step (e.g. 5%
+    early in a yearly TB model's scale-up, 0.2% later).
 
     Args:
         sim (Sim): a sim made by `load_summer2()`, that has been run

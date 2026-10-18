@@ -3,10 +3,12 @@ Test importing models from other frameworks (ss.load(..., format=...)), writing 
 """
 
 # %% Imports and settings
+import runpy
 import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
+import paths
 
 kw = dict(verbose=0)
 
@@ -62,6 +64,20 @@ outputs:
 """
 
 
+# Plain state names, a probability per day with a weekly step, births, and a metapopulation level, which is listed as not translated
+emulsion_weekly = """
+time_info: {time_unit: days, delta_t: 7, total_duration: 14}
+levels: {population: {aggregation_type: compartment}, metapop: {contains: [population], aggregation_type: metapopulation}}
+state_machines:
+  health_state:
+    states: [S, I, R]
+    transitions: [{from: S, to: I, rate: 0}, {from: I, to: R, proba: 0.1}]
+    productions: [{from: R, to: S, rate: 0.01}]
+prototypes: {population: [{infected: {health_state: I}}]}
+initial_conditions: {population: [{prototype: infected, amount: 1000}]}
+"""
+
+
 def emulsion_file(folder):
     """ Write the EMULSION model to a file """
     filename = sc.path(folder) / 'seirq.yaml'
@@ -75,7 +91,7 @@ def test_rates():
     for s in ['S', 'I', 'R']:
         src.add_state(s, init=dict(S=990, I=10).get(s, 0))
     src.add_state('W', people=False)
-    for p,v in dict(beta=0.3, gamma=0.1, xi=10, K=1e4, mu=0.01).items():
+    for p,v in dict(beta=0.3, gamma=0.1, xi=10, K=1e4, mu=0.01, pop=1000, K2=2000).items():
         src.add_par(p, v)
     src.totals = ['N']
     flows = [
@@ -86,19 +102,21 @@ def test_rates():
         ('S', 'I', 'beta * W / (W + K)', 'person'),    # 5 and 6: a count that is not people
         (None, 'W', 'xi * I', 'person'),               # An inflow is a total
         (None, 'S', 'mu * N', 'person'),
+        ('S', 'I', 'beta * S * I / pop', 'total'),     # 2: a parameter equal to the number of people is the total
+        ('S', 'I', 'beta * S * I / K2', 'total'),      # 3: one that is not, is not
     ]
     rates = ss.interop.core.Rates(src)
     out = [rates.classify(sc.objdict(src=a, dst=b, rate=r, per=per))[0] for a,b,r,per in flows]
-    assert out == ['beta * I', 'beta * I', 'beta * I.n', 'gamma', 'beta * W.n / (W.n + K)', 'xi * I.n', 'mu * (S + I + R).n'], out
+    assert out == ['beta * I', 'beta * I', 'beta * I.n', 'gamma', 'beta * W.n / (W.n + K)', 'xi * I.n', 'mu * (S + I + R).n', 'beta * I', 'beta * I.n / K2'], out
     rules = [rates.classify(sc.objdict(src=a, dst=b, rate=r, per=per))[2] for a,b,r,per in flows]
-    assert rules[:5] == [2, 2, 3, 4, 5]
+    assert rules[:5] == [2, 2, 3, 4, 5] and rules[7:] == [2, 3]
     return out
 
 
 def test_emulsion(tmp_path):
     sc.heading('Testing an EMULSION import')
     filename = emulsion_file(tmp_path)
-    with pytest.warns(RuntimeWarning, match='W1601'):
+    with pytest.warns(ss.ImportIncomplete):
         sim = ss.load(filename, **kw) # The format is told from the file
     imp = sim.imported
     assert imp.format == 'EMULSION'
@@ -121,6 +139,29 @@ def test_emulsion(tmp_path):
     ode.run()
     runs = ss.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.n_R.values[:, -1].mean()
     assert np.isclose(runs, ode.results.seirq.n_R[-1], rtol=0.1)
+
+    # A probability is per time unit, as EMULSION reads it, not per step
+    sc.savetext(tmp_path/'weekly.yaml', emulsion_weekly)
+    with pytest.warns(ss.ImportIncomplete):
+        weekly = ss.load(tmp_path/'weekly.yaml', format='emulsion', **kw)
+    listed = [name for name,why in weekly.imported.incomplete]
+    assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
+    assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
+    left = weekly.new(solver='ode').run().results.weekly.n_I[1]/1000
+    assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
+
+    # The originals: EMULSION's SIR as compartments, individuals, and hybrid groups, against 200 EMULSION runs
+    if paths.lfd.exists():
+        folder = paths.lfd/'examples/emulsion/sir'
+        ref = sc.dataframe.read_csv(folder/'reference/results.csv')
+        for kind in ['compart', 'IBM', 'hybrid']:
+            sir = ss.load(folder/f'original/{kind}_SIR.yaml', **kw)
+            assert not sir.imported.incomplete and 'n=100;' in repr(sir) # 100 animals, not the default number of agents
+            final = sir.run(n_runs=200).results[f'{kind}_SIR'].n_R.values[:, -1].mean() # With one infected at the start, many runs die out, so the mean needs many
+            series = dict(compart='compartment', IBM='ibm', hybrid='hybrid')[kind] + '_R'
+            expected = ref[(ref.series == series) & (ref.time == 100)].value.iloc[0]
+            rtol = 0.1 if kind == 'compart' else 0.15 # As agents, more runs die out at a daily step (24% of them, against 19% at a tenth of a day), a difference of order dt
+            assert np.isclose(final, expected, rtol=rtol), f'{kind}: {final} recovered at day 100 against EMULSION\'s {expected}'
     return sim
 
 
@@ -147,16 +188,44 @@ def test_to_code(tmp_path):
     same(ss.Sim(sir, total_pop=1000, stop=ss.days(50), unit='day', **kw))
 
     # An imported model: the code says how it was read and what was not translated
-    with pytest.warns(RuntimeWarning, match='W1601'):
+    with pytest.warns(ss.ImportIncomplete):
         sim = ss.load(emulsion_file(tmp_path), **kw)
     code = same(sim)
-    assert 'Imported from EMULSION' in code and '# Not translated (W1601 ImportIncomplete):' in code
+    assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code
+
+    # Every Starsim name is written with ss., and a function from its source, with the values it uses, so the code builds the same model
+    def make(beta=0.3, recovery=ss.days(10)):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ recovery, init_prev=0.01, name='sir')
+    same(ss.Sim(make(beta=ss.by(age=[0.3, 0.15])), stratify=dict(age=[0, 15]), unit='day', stop=20, **kw))
+    sim = ss.Sim(make(recovery=clearance), unit='day', stop=20, **kw)
+    sim.to_code(tmp_path/'clearance.py')
+    assert runpy.run_path(tmp_path/'clearance.py')['sim'].hash() == sim.hash()
+
+    # Only a rate as a whole has a unit: R0 in R0 * gamma * I is written as a number, so the code gives the same epidemic in any unit
+    R0, gamma = ss.par(2.5, name='R0'), ss.par(0.2, name='gamma')
+    sim = ss.Sim(make(beta=R0*gamma, recovery=gamma), total_pop=1000, unit='day', stop=100, **kw)
+    ns = {}
+    exec(sim.to_code(), ns)
+    peak = lambda s: s.run().results.sir.n_I.max()
+    assert np.isclose(peak(ns['sim'].new(unit='week', dt=ss.days(1))), peak(sim), rtol=1e-3)
+
+    # What cannot be written is listed in the code and in a warning
+    with pytest.warns(ss.LossyExport):
+        code = ss.Sim(make(beta=0.05), networks=ss.RandomNet(), n_agents=100, **kw).to_code()
+    assert 'network "randomnet"' in code
     return code
+
+
+clearance_rate = 0.2
+def clearance(sim):
+    """ A rate given as a function, for test_to_code() """
+    return clearance_rate
 
 
 def test_diff(tmp_path):
     sc.heading('Testing ss.diff(): an import and a hand translation are the same model')
-    with pytest.warns(RuntimeWarning, match='W1601'):
+    with pytest.warns(ss.ImportIncomplete):
         sim = ss.load(emulsion_file(tmp_path), **kw)
     def hand(beta=0.5):
         S, E, I, Q, R = ss.states('S E I Q R')

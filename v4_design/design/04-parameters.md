@@ -10,15 +10,17 @@ A parameter used once lives in the transition that uses it. There is no paramete
 
 ```python
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
+    infection = ss.transmission('S -> I', beta=0.3),
     recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    init_prev = 0.01,
 )
 ```
 
-Both values are addressable through their transition, as `sir.infection.beta` and `sir.recovery.dur`, for modifiers ([07-effects.md](07-effects.md)), `ss.change` ([08-interventions.md](08-interventions.md)), and inspection. Name a parameter when it is reused, fitted, or documented.
+Both values become parameters of the module, named after their slots, `sir.pars.beta` and `sir.pars.dur` (qualified only on a clash, e.g. `dur_recovery`), for modifiers ([07-effects.md](07-effects.md)), `ss.change` ([08-interventions.md](08-interventions.md)), `pars=`, and inspection. Name a parameter when it is reused, fitted, or documented.
 
 ## `ss.par`
 
+<!-- fragment -->
 ```python
 ss.par(
     value  = None,        # any form on the ladder below
@@ -26,6 +28,8 @@ ss.par(
     prior  = None,        # a distribution: the prior, for posterior methods
     source = None,        # free text: where the number came from
     doc    = None,        # free text: what it means
+    name   = None,        # usually taken from the keyword or variable
+    label  = None,        # human-readable
 )
 ```
 
@@ -43,18 +47,19 @@ sir = ss.Disease(
 An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates. In the string form it is passed the same way: `ss.transmission('S -> I', beta=beta)`.
 
 - **Names.** A named parameter is collected into the module's `pars`, Starsim's parameter container, under its name: `sir.pars.beta`. The name is the keyword if it was passed as one (`ss.Disease(beta=ss.par(0.05), ...)`), else the variable it is bound to, by the same lookup as for transitions ([01-objects.md](01-objects.md#names)). A plain Python number used in a rate is just a number; wrap it in `ss.par` to make it addressable by name.
-- **`bounds`** is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data ([13-inference.md](13-inference.md)). The scale used for the search (log for rates and durations, logit for probabilities) follows from the slot the parameter is used in. Bounds given as bare numbers are in the unit of the value. A value outside its bounds raises `E606 OutOfBounds`.
+- **`bounds`** is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data, wherever it is used (a rate, an initial value, a seasonal mean, a modifier's amount) ([13-inference.md](13-inference.md)). Bounds that are positive and span a factor of 10 or more are searched on a log scale, and others on a linear one. Bounds given as bare numbers are in the unit of the value, and typed bounds are converted (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`). A value outside its bounds raises `OutOfBounds` when the sim is initialized.
+- **A value per level.** `ss.par(ss.by(patch=[...]), bounds=[...])` is fitted level by level, each with the same bounds and prior; the fitted value is an `ss.by`, and one level is set by name, `pars={'beta[a]': 0.3}`.
 - **`prior`** is needed only for posterior methods. Without one, a parameter with bounds is treated as uniform over them. `bounds` and `prior` are separate fields: bounds say which values are valid and where to search, a prior says what is believed. Whether they should be one field is an open question ([19-open-questions.md](19-open-questions.md)); both are kept.
 - **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()` and saved in the model spec.
 - **The type** of a parameter (rate, duration, probability) comes from the slot it is used in ([02-types.md](02-types.md)) or from its typed value. There is no `kind=` argument.
-- **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises `E604 UnvaluedParameter`.
+- **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises `UnvaluedParameter` when the sim is initialized.
 
-Setting a parameter name that the module does not have raises `E602 UnknownParameter`, listing the closest names. This is Starsim's existing behavior and it is kept, because a misspelled parameter that is silently ignored is one of the hardest bugs to find:
+Setting a parameter name that the module does not have raises `UnknownParameter`, listing the parameters it has. This is Starsim's existing behavior and it is kept, because a misspelled parameter that is silently ignored is one of the hardest bugs to find. A keyword number on `ss.Disease` sets the parameter of that name:
 
 ```text
-E602 UnknownParameter: 'sir' has no parameter 'dur_inff'.
-     Did you mean 'dur_inf'?
-     Parameters: beta, dur_inf
+>>> ss.SIR(dur_inff=3)
+UnknownParameter: "dur_inff=3" was given to "sir", but it has no parameter called "dur_inff"; its parameters are beta, dur_inf, p_death, init_prev.
+     To add a parameter, use it in a transition, e.g. infection = S >> I @ dur_inff * I with dur_inff = ss.par(3).
 ```
 
 ## The ladder
@@ -73,12 +78,13 @@ beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03      # a fu
 ```
 
 - `ss.timeseries(..., period=ss.years(1))` repeats with the period given, as a seasonal pattern written out over one year does.
-- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, `'cosine'` (an S-shaped change between each value and the next), or `'spline'`.
+- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, `'cosine'` (an S-shaped change between each value and the next), or `'spline'`. A bare number for a time is a time in the sim's unit counted from the start ([02-types.md](02-types.md#bare-numbers)).
+- `ss.seasonal(mean=, amplitude=, peak=)` is `mean × (1 + amplitude × cos(2π(t − peak)))` with `t` in years; a peak given as a month is the middle of that month, and in a sim with no dates time starts at the beginning of a year. Its `mean` may be an `ss.par`, which is then fitted or set like any other.
 - A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the solver provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
-- The forms combine: `ss.by(age=[...])` may hold time series, and a function may return any of the others' values.
+- The forms combine: `ss.by(age=[...])` may hold time series, a time series or a seasonal value may be multiplied by a number or a parameter, and a function may return any of the others' values.
 - Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a source.
 
-Every solver handles every form or says that it cannot. In particular a time-varying rate under the exact continuous-time solver (`'gillespie'`) needs the time-inhomogeneous algorithm; a solver MUST NOT freeze the rate at its starting value.
+Every solver handles every form or says that it cannot, and no solver freezes a value that varies in time at its starting value. The ODE takes it at each stage of a step; the chain-binomial solver at the middle of each substep; and Gillespie holds it for a quarter of a step at a time, at its middle, with events exact within each quarter, and with a note (`approx=False` refuses it instead; [12-backends.md](12-backends.md)).
 
 ### A distribution as a value, a distribution as a prior
 
@@ -98,9 +104,9 @@ A compartmental run has no individuals to draw for, so variation between people 
 | A dwell time (`dur=`) | Erlang stages matched to the distribution's mean and variance, with a note ([03-states-and-transitions.md](03-states-and-transitions.md)) | the same |
 | Anything else (`beta`, `rel_sus`, `rel_trans`) | the model runs as agents | the mean is used, with a note naming the parameter |
 
-To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `E804 CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
+To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
 
-The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.truncnorm` (a normal between `low` and `high`, as flepiMoP draws its parameters), `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. An Erlang distribution is `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`); sub-stages are also `stages=3` on the transition.
+The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. Two are added: `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), given by its number of stages and its mean (sub-stages are also `stages=3` on the transition); and `ss.truncnorm`, a normal between `low` and `high`, as flepiMoP draws its parameters.
 
 The unit of a distribution is given once, either with `unit=` or on one of its parameters; the other parameters of the same dimension take it:
 
@@ -113,6 +119,7 @@ ss.lognorm_ex(mean=ss.days(10), std=3)        # the same
 
 Types say what a number means; shapes say how many there are and along which stratification.
 
+<!-- fragment -->
 ```python
 beta = 0.05                                    # the same everywhere
 beta = ss.by(age=[0.08, 0.05, 0.03])           # one per age group
@@ -121,7 +128,7 @@ beta = ss.by(table)                            # a dataframe with a column per s
 pop  = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch'])   # an array with one axis per stratification
 ```
 
-`ss.by` names the stratification each axis belongs to, so values never depend on the order strata happen to be stored in. A value with fewer axes than the model is used for every level of the missing ones; `describe()` shows this (`beta: by age (3); the same for every patch (47)`). A value whose length does not match its stratification, such as four values for three age groups, raises `E603 ShapeError`, naming the parameter, the transition, and both lengths.
+`ss.by` names the stratification each axis belongs to, so values never depend on the order strata happen to be stored in. A value with fewer axes than the model is used for every level of the missing ones, and `describe()` prints the value with its axes (`beta = by(age=[0.08, 0.05, 0.03])`). Arithmetic works on `ss.by` values (over the same levels; different numbers of levels raise an error), and any of their values can be a time series. A value whose length does not match its stratification, such as four values for three age groups, raises `ShapeError` when the sim runs, naming the dimension and both lengths.
 
 `ss.by` replaces the separate global and local parameter concepts of other frameworks (SimInf's `gdata`/`ldata`, MetaCast's `universal_params`/`subpop_params`) and replaces string-built parameter names such as `'beta_[high,vaccinated]'`, which are not part of the language.
 
@@ -138,20 +145,20 @@ sir  = ss.Disease(
 sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
 ```
 
-`pars=` takes a dict or a file (CSV, TOML, or JSON) of values by name (`beta`, or `sir.beta` when there is more than one module). Names it does not recognize raise `E602 UnknownParameter`.
+`pars=` takes a dict or a file of values by name (`beta`, or `sir.beta` when there is more than one module): a CSV with a column of names and a column of values (`name,value`) or one row with a column per parameter, or a TOML or JSON table. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise `UnknownParameter`.
 
 Either way, `sim.hash()` returns the parts of the run's identity as an `sc.objdict` ([11-random.md](11-random.md)):
 
 ```text
 >>> sim.hash()
-objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', seed=1)
+objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', data='a90f3e', seed=1)
 ```
 
 A change of values changes `pars` and nothing else, so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file. The hash is a cheap by-product, useful for telling apart the many runs of a sweep or a calibration made from one commit; the git hash or tag of the code remains the main record of what was run.
 
 ## Requirements
 
-A module MAY list the data it needs. One word, `requires`, names the list on the module, the entries in it, and the table. This is optional metadata, used to tell the user what to supply, to check inputs before anything runs, and to generate a data-entry form. It is not enforced: a module can read anything, and a module that lists nothing works as before.
+A module MAY list the data it needs. One word, `requires`, names the list on the module, the entries in it, and the table. This is optional metadata, used to tell the user what to supply and to check inputs before anything runs. It is not enforced: a module can read anything, and a module that lists nothing works as before.
 
 ```python
 class MyNetwork(ss.Network):
@@ -165,10 +172,9 @@ class MyNetwork(ss.Network):
 
 ```python
 sim.requires()                 # the table of what this sim requires, and which items are still missing
-sim.requires(to='form.csv')    # a data-entry form with those fields, units, and labels
 ```
 
-`requires(to=...)` is Atomica's databook, generated from the model. It serves one use case and is deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); the list and the table are not. Because the list is optional, the table and the form are as complete as the declarations are; items a module reads without listing do not appear in them.
+`sim.requires()` works without initializing the sim. A data-entry form generated from the list (`sim.requires(to='form.csv')`, Atomica's databook) serves one use case and is deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)). Because the list is optional, the table is as complete as the declarations are; items a module reads without listing do not appear in it.
 
 ## Named data
 
@@ -176,8 +182,8 @@ A reference to data is part of the model: not just a contact matrix, but which o
 
 ```python
 ss.people('Kenya', year=2024)                     # size, age structure, sex ratio; returns an ss.People
-ss.contacts('Kenya', source='prem2021')           # an age contact matrix; returns a set of ss.MixingPools
-ss.geo('Kenya', level=1)                          # its counties: names, populations, centroids, borders
+ss.contacts('Kenya', source='prem2021')           # an age contact matrix; returns a set of ss.MixingPools (layer='home' for one setting)
+ss.geo('Kenya', level=1)                          # its counties: names, populations, centroids, distances, borders
 ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to results by column name
 ```
 
@@ -191,26 +197,26 @@ A named population gives the sim its size and the split of an age stratification
 
 **Bundled and pulled.** The data comes from [`starsim_data`](https://github.com/starsimhub/starsim_data) (`import starsim_data as ssd`), which does some of each:
 
-- **Bundled**: what is small and common. UN World Population Prospects population, birth, death, and migration rates for every country; the Prem (2021) age contact matrices by setting (`all`, `home`, `work`, `school`, `community`), for 177 countries; and the first two administrative levels of every country, with their populations, centroids, areas, and borders. Reading it (`ssd.load('kenya', which='prem2017', kind='home')`) never touches the network, so it works offline and is reproducible from a pinned version.
+- **Bundled**: what is small and common. UN World Population Prospects population, birth, death, and migration rates for every country; the Prem (2021) age contact matrices by setting (`all`, `home`, `work`, `school`, `community`), for 177 countries (with Prem 2017 for the ten it lacks); and the first two administrative levels of every country, with their populations, centroids, areas, and borders. Reading it (`ssd.load('kenya', which='prem2021', kind='home')`) never touches the network, so it works offline and is reproducible from a pinned version.
 - **Pulled**: everything else, fetched on demand and cached locally (`ssd.fetch('kenya', which='deaths', years=(2000, 2025))`): annual resolution, life tables, other projection variants, the earlier Prem (2017) and the Mistry (2021, by single year of age) contact matrices (`ss.contacts('Japan', source='mistry2021')`), and finer administrative levels or other years of population (which need the geospatial extra). The cache key includes the source and its version.
 - **Versioned**: each UN revision is kept as a separate store, so a new release adds data and does not change what an existing model loads; `revision=` pins one.
 - **Provenance**: every data set records its source and license (`ssd.provenance('prem2017')`).
 
 The library does not depend on other frameworks' packages (LASER's migration module, `epydemix-data`, `socialmixr`) for generators or data. A data set is adapted once, with its provenance recorded, and then it is ours to keep working.
 
-- The resolved source, version, and (for pulled data) retrieval date are shown by `describe()` and contribute to the `pars` part of `sim.hash()`, so a re-run against changed upstream data can be detected.
+- Where the data came from is shown by `describe()` and written in the model spec, so it is part of `sim.hash()` and `sim.to_code()` looks it up again.
 - Providers are pluggable, so a group can add its own sources, and a geography can always come from the user's own table instead ([06-routes.md](06-routes.md#geography)).
-- Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises `E605 UnknownLocation`, listing near matches and the providers searched.
+- Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises `UnknownLocation`, listing near matches.
 
 How data is matched to results is in [09-results.md](09-results.md).
 
 ## Not included
 
-- **Parameters that spring into existence on first use.** A typo then becomes a silent change in behavior; see `E602` above.
+- **Parameters that spring into existence on first use.** A typo then becomes a silent change in behavior; see `UnknownParameter` above.
 - **A required split between model and values.** The split is available; two files for an SIR are not required.
 - **String-built parameter names.** `ss.by` does this job.
 - **Required, enforced data declarations.** Requirements are metadata.
 - **A `use_defaults` switch** that hides a model's behavior. Defaults here are guessed and printed.
-- **New distribution names, other than `ss.erlang`.** Starsim's names are used. `ss.erlang(k=, mean=)` is the one addition: it is `ss.gamma` with an integer shape, given by its number of stages and its mean.
+- **New distribution names, other than `ss.erlang` and `ss.truncnorm`.** Starsim's names are used.
 - **Repeating the unit on every parameter of a distribution.** Once is enough.
 - **Depending on outside packages for data.** Bundle what is small and common, pull the rest with a cache, and own both.

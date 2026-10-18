@@ -40,7 +40,7 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
-        demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True), ss.Deaths()],
+        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
@@ -53,9 +53,10 @@ Usage::
 import numpy as np
 import sciris as sc
 import starsim as ss
+from ..diseases.coded import CodedSIR
 
 
-class CongenitalDisease(ss.SIR):
+class CongenitalDisease(CodedSIR):
     """
     Simple disease with congenital outcomes via the generic framework.
 

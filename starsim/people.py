@@ -11,6 +11,17 @@ import numba as nb
 
 
 
+class lazy_attr:
+    """ On the class, a lazy condition on an attribute of the people (e.g. `ss.People.age < 15`), so a condition can be written without making any people; on a People object, its array """
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, obj, cls=None):
+        if obj is None:
+            return ss.conditions.Cond('people', self.name)
+        raise AttributeError(self.name) # Not on this People object (see People.__getattr__())
+
+
 class People:
     """
     A class to perform all the operations on the people
@@ -32,8 +43,12 @@ class People:
     Examples:
         ```python
         ppl = ss.People(2000)
+        kids = ss.People.age < 15 # A lazy condition, for a sim run as agents or as compartments
         ```
     """
+    alive = lazy_attr() # The class attributes are lazy conditions; each People object has its own arrays
+    age = lazy_attr()
+    female = lazy_attr()
 
     def __init__(self, n_agents, age_data=None, extra_states=None, p_female=0.5, mock=False):
         """ Initialize """
@@ -110,8 +125,8 @@ class People:
         """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
         missing = self.__dict__.get('_no_groups', [])
         if attr in missing:
-            ss.error('E804', f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
-                             f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
+            raise ss.CapabilityError(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
+                                     f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
         raise AttributeError(f'People object has no attribute "{attr}"')
 
     def __getitem__(self, key):
@@ -435,8 +450,27 @@ class People:
             state.grow(new_uids)
 
         # Finally, update the alive indices
-        self.auids = self.auids.concatenate(new_uids)
+        self.add_active(new_uids)
+        sim = getattr(self, 'sim', None)
+        if getattr(sim, 'solver', None) == 'abm': # A dimension called sex is people.female
+            sim.set_sex(new_uids)
         return new_uids
+
+    def add_active(self, new_uids):
+        """ Add agents to the active agents, in place where there is room (so a few births do not copy all of them) """
+        auids = self.auids
+        n = len(auids)
+        k = len(new_uids)
+        room = getattr(self, '_auids_room', None)
+        if room is not None and auids is self._auids_view and n + k <= len(room): # The active agents are still the first part of the array with room
+            room[n:n+k] = new_uids
+        else:
+            room = np.empty(n + k + max(1000, (n + k)//10), dtype=np.int64)
+            room[:n] = auids
+            room[n:n+k] = new_uids
+            self._auids_room = room
+        self.auids = self._auids_view = room[:n+k].view(ss.uids)
+        return
 
     def filter(self, criteria=None, uids=None, split=False):
         """
@@ -517,48 +551,94 @@ class People:
 
     def step_die(self):
         """ Carry out any deaths or removals that took place this timestep """
-        death_uids = ((self.ti_dead <= self.sim.ti) | (self.ti_removed <= self.sim.ti)).uids
+        ti = self.sim.ti
+        deaths, n_alive = ss.kernels.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
+        if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
+            deaths = ss.kernels.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
+        death_uids = ss.uids(deaths)
         self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
+        self._dying = death_uids # Still active until the end of the step: see update_results() and remove_dead()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        for disease in self.sim.diseases():
-            if isinstance(disease, ss.Disease):
-                disease.step_die(death_uids)
+        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.Disease)]
+        diseases += [mod for mod in getattr(self.sim, 'declared', []) if all(mod is not disease for disease in diseases)] # A declared disease given as another kind of module: its agents leave its states as well
+        for disease in diseases:
+            disease.step_die(death_uids)
 
         return death_uids
 
-    def remove_dead(self):
+    def remove_dead(self, aging=False):
         """
         Remove agents who are exiting the population (death, migration, etc)
+
+        Args:
+            aging (bool): also age the agents who remain (as `update_post()` does), in the same pass over them
         """
-        uids = self.alive.false() # Agents who are still active but no longer alive
-        if len(uids):
+        auids = self.auids
+        dying = self.dying()
+        self._dying = None
+        age = self.age.raw if aging else np.zeros(0, dtype=ss.dtypes.float) # In a compartmental run, people have no ages
+        dt = age.dtype.type(self.sim.t.dt_year if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
+        expected = len(auids) - len(dying)
+        room = np.empty(expected + max(1000, expected//10), dtype=np.int64) # With room for births: see add_active()
+        n_kept = ss.kernels.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
+        if n_kept >= 0:
+            gone = dying.view(np.ndarray)
+        else: # ...or else from the active agents themselves
+            room = np.empty(len(auids) + max(1000, len(auids)//10), dtype=np.int64)
+            n_kept, gone = ss.kernels.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
+        if len(gone): # Agents who are still active but no longer alive
 
             # Remove the UIDs from the networks too
+            uids = ss.uids(gone)
             for network in self.sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
 
             # Keep the others, in order
-            self.auids = self.alive.true()
+            self._auids_room = room
+            self.auids = self._auids_view = room[:n_kept].view(ss.uids)
 
         return
+
+    def dying(self):
+        """ The agents who died or left in this step (see `step_die()`), who are active until the end of it """
+        dying = getattr(self, '_dying', None)
+        return dying if dying is not None else ss.uids()
 
     def update_results(self):
         """ Record per-timestep population counts into the simulation results """
         ti = self.sim.ti
         res = self.sim.results
-        for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
-            res[f'n_{state.name}'][ti] = getattr(self, state.name).count()
-        # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
-        res.new_deaths[ti], res.new_emigrants[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
+        states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. n_alive, n_female
+        dying = self.dying()
+        counts = None
+        if all(state.raw.ndim == 1 for state in states):
+            counts = ss.kernels.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
+            if counts[-1] + len(dying) == len(self.auids):
+                counts = [count + np.count_nonzero(state.raw[dying]) for state,count in zip(states, counts)] + [np.count_nonzero(self.ti_dead.raw[dying] <= ti), np.count_nonzero(self.ti_removed.raw[dying] <= ti)]
+            else: # From the active agents themselves
+                counts = ss.kernels.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
+        if counts is not None:
+            for state,count in zip(states, counts):
+                res[f'n_{state.name}'][ti] = count
+            # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
+            res.new_deaths[ti], res.new_emigrants[ti] = counts[-2:]
+        else:
+            for state in states:
+                res[f'n_{state.name}'][ti] = state.count()
+            res.new_deaths[ti], res.new_emigrants[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
     def finish_step(self):
-        """ Remove dead agents and run post-step updates """
-        self.remove_dead()
-        self.update_post()
+        """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
+        sim = self.sim
+        if type(self).update_post is People.update_post:
+            self.remove_dead(aging=bool(sim.pars.use_aging and sim.solver == 'abm'))
+        else:
+            self.remove_dead()
+            self.update_post()
         return
 
     def to_df(self):
@@ -730,7 +810,7 @@ def people(place, year=None, n_agents=None, revision=None):
     sim takes its population size (`total_pop`) from them, unless it is given one, and
     the split of an age stratification that is not given one, so a compartmental model
     can use a named population as well as agents can. Where the population came from is
-    written in the model spec, so `ss.from_spec()` and `sim.to_code()` look it up again.
+    written in the model spec, so `sim.to_code()` looks it up again.
 
     Args:
         place (str): a country, by name or code ('Kenya', 'KE', 'KEN')
@@ -748,8 +828,7 @@ def people(place, year=None, n_agents=None, revision=None):
     """
     ages, female, male, ref = ss.named.population(place, year=year, revision=revision)
     total = female + male
-    age_data = np.column_stack([np.append(ages, ages[-1] + 5), np.append(total, 0)]) # The last group is 100 and over
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=age_data, p_female=female.sum()/total.sum())
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.named.age_data(ages, total), p_female=female.sum()/total.sum())
     ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
     return ppl
 

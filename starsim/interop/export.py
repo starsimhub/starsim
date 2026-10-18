@@ -4,7 +4,7 @@ Export a sim to other formats
 `ss.save(filename, sim, format=...)` writes a sim's declared diseases in another
 format; see `v4_design/design/16-interop.md`. Only the model spec (`sim.to_spec()`)
 is complete: the other formats carry less, and what is left out or changed is listed
-as `W1401 LossyExport`. An export does not fail because something cannot be carried.
+as `ss.LossyExport`. An export does not fail because something cannot be carried.
 
 - `mermaid`: a diagram of each disease's states and transitions, labelled with their rates
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
@@ -193,7 +193,7 @@ def label(tr):
     fmt = ss.transitions.format_expr
     if tr.dur is not None:
         p = tr.dur
-        text = f'dur = {p.name if (p.name and not p.literal) else ss.transitions.value_str(p.raw)}'
+        text = f'dur = {ss.transitions.format_expr(p)}'
     elif tr.rate is not None:
         text = fmt(tr.rate)
     else:
@@ -379,7 +379,7 @@ def export(sim, format, filename=None, verbose=None):
     """
     Write a sim in another format; usually called as `ss.save(filename, sim, format=...)`
 
-    What the format cannot carry is listed as `W1401 LossyExport`; the export still
+    What the format cannot carry is listed as `ss.LossyExport`; the export still
     writes everything it can.
 
     Args:
@@ -402,7 +402,7 @@ def export(sim, format, filename=None, verbose=None):
         raise ValueError(errormsg)
     text, summary, lost = exporters[key](sim)
     if lost:
-        ss.warn(f'W1401 LossyExport: {summary}\n' + '\n'.join(f'  {line}' for line in lost))
+        ss.warn(f'{summary}\n' + '\n'.join(f'  {line}' for line in lost), ss.LossyExport)
     elif verbose is not False:
         print(summary)
     if filename is not None:

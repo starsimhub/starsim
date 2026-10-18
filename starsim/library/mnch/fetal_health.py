@@ -23,8 +23,8 @@ Usage::
     import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=ss.SIR(beta=0.1),
-        demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
+        diseases=ssl.CodedSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
+        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2025),
         custom=ssl.mnch.FetalHealth(),
@@ -215,7 +215,7 @@ class FetalHealth(ss.Module):
 
         # Results
         n  = len(newborn_uids)
-        ti = self.ti
+        ti = self.ti + 1 # At the end of the step (self.ti is its start)
         self.results['n_births'][ti]          += n
         self.results['n_lbw'][ti]             += lbw.sum()
         self.results['n_vlbw'][ti]            += vlbw.sum()
@@ -444,7 +444,7 @@ class fetal_infection(ss.Connector):
     2. During pregnancy, when a new infection occurs (detected in `step()`
        by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
 
-    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease in `diseases`.
+    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.CodedSIR(name="sir")`) in `diseases`.
 
     Args:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)

@@ -21,18 +21,20 @@ One key advantage of Starsim distributions is that they enable low-variance comp
 
 The starsim framework includes a wide range of distributions that can be used to model various phenomena. The following distributions are available:
 
-| Distribution         | Starsim Dist   | Parameters                                               | Description                                                                                                                                           |
+| Distribution         | Starsim dist   | Parameters                                               | Description                                                                                                                                           |
 |----------------------|----------------|----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Random               | random         | None                                                     | Random number between 0 and 1.                                                                                                                        |
 | Uniform              | uniform        | low, high                                                | Random number between a specified minimum and maximum.                                                                                                |
 | Normal               | normal         | loc (mean), scale (standard deviation)                   | Random number from a normal (Gaussian) distribution with specified mean and standard deviation.                                                        |
-| Lognormal (implicit) | lognormal_im   | mean, sigma (of the underlying normal distribution) | Random number from a lognormal distribution specified by the mean and standard deviation of the underlying normal distribution.                        |
-| Lognormal (explicit) | lognormal_ex   | mean, std (of the distribution itself; mean must be positive) | Random number from a lognormal distribution specified by the mean and standard deviation of the distribution itself.                                   |
+| Truncated normal     | truncnorm      | loc, scale, low, high                                    | Random number from a normal distribution between `low` and `high`. |
+| Lognormal (implicit) | lognorm_im     | mean, sigma (of the underlying normal distribution) | Random number from a lognormal distribution specified by the mean and standard deviation of the underlying normal distribution.                        |
+| Lognormal (explicit) | lognorm_ex     | mean, std (of the distribution itself; mean must be positive) | Random number from a lognormal distribution specified by the mean and standard deviation of the distribution itself.                                   |
 | Exponential          | expon          | scale (mean of the distribution, equivalent to 1/λ)                                                    | Random number from an exponential distribution with specified scale parameter.                                                                          |
 | Poisson              | poisson        | lam                                                     | Random number from a Poisson distribution with specified rate parameter.                                                                               |
 | Negative Binomial    | nbinom         | n, p (number of successes, probability of success)        | Random number from a negative binomial distribution with specified parameters.                                                                         |
 | Weibull              | weibull        | c (shape parameter, sometimes called "k"), loc (shifts the distribution), scale (sometimes called "λ")                                            | Random number from a Weibull distribution with specified parameters, uses scipy's `weibull_min`.                                       |
 | Gamma                | gamma          | a (shape parameter, sometimes called "k"), loc (shifts the distribution), scale (sometimes called "θ")                                            | Random number from a gamma distribution with specified shape and scale parameters.                                                                     |
+| Erlang               | erlang         | k (number of stages), mean                               | A gamma distribution with an integer shape, given by its number of stages and its mean; exact in compartmental runs. |
 | Beta                 | beta_dist      | a (shape parameter, must be > 0), b (shape parameter, must be > 0)                                                                                | Random number from a beta distribution with specified shape parameters.                                                                                 |
 | Constant             | constant       | v                                                    | Constant value, useful for fixed parameters and testing.                                                                                              |
 | Random Integer       | randint        | low, high                                                | Random integer between a specified minimum and maximum.                                                                                               |
@@ -121,7 +123,7 @@ print("95% Interval:", underlying_dist.ppf([0.025, 0.975]))
 Some quantities, such as durations measured in timesteps, need to be whole numbers. Distributions accept a `round` option, either when they are created or when calling `rvs()`: `round=True` (or `'stochastic'`) randomly rounds each value up or down based on how close it is (so the mean is preserved), while `round='nearest'` rounds to the nearest integer. For example, for a duration in a sim with daily timesteps:
 
 ```{python}
-sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', dur=ss.days(30)).init()
+sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', stop='2025-01-31').init()
 d_dur = ss.lognorm_ex(ss.days(5), ss.days(2), round='nearest', name="Rounded duration")
 d_dur.init(sim=sim)
 
@@ -133,15 +135,15 @@ print("Stochastic:", d_dur.rvs(sim.people.uid, round=True, reset=True))
 
 ## Setting model parameters that are distributions
 
-Many Starsim modules directly expose distributions as parameters for user customization. For example, the `SIR` disease module has three parameters are distributions:
+A distribution is accepted wherever a value of the same kind is. For example, the `SIR` disease has three parameters that are usually given as a number or a distribution:
 
-| Parameter  | Meaning | Default Value |
+| Parameter  | Meaning | Default value |
 |------------|---------|------|
-| `init_prev`  | Initial prevalence of infection | `ss.bernoulli(p=0.01)` |
-| `dur_inf`    | Duration of infection | `ss.lognorm_ex(mean=ss.dur(6))` |
-| `p_death`    | Probability of death given infection | `ss.bernoulli(p=0.01)` |
+| `init_prev`  | Initial prevalence of infection | `0.01` |
+| `dur_inf`    | Duration of infection | `ss.lognorm_ex(mean=ss.years(6))` |
+| `p_death`    | Probability of death at the end of an infection | `0.01` |
 
-You can change these parameters away from their defaults by passing in a different distribution, as demonstrated below:
+A number for `init_prev` is the chance that each agent starts infected; an `ss.bernoulli` (or `ss.choose_n`, below) can be given instead. A distribution for `dur_inf` gives each agent their own duration of infection. You can change these parameters away from their defaults when the disease is made, or by setting them afterwards:
 
 ```{python}
 sir = ss.SIR(
@@ -152,13 +154,15 @@ sir = ss.SIR(
     dur_inf = ss.weibull(c=2, loc=1, scale=2)
 )
 
-# Alternatively, update parameters of a default distribution
-sir.pars.p_death.set(p=0.5) # Update the death probability to 50%
+# Alternatively, set a parameter after the disease is made
+sir.pars.p_death = 0.5 # Update the death probability to 50%
 
 # Create, run, and plot a sim using the SIR disease model
-sim = ss.Sim(n_agents=100, diseases=sir, dur=15, dt=1, start=0, networks=ss.RandomNet())
+sim = ss.Sim(n_agents=100, diseases=sir, start=0, stop=15, networks=ss.RandomNet())
 sim.run().plot()
 ```
+
+The default `beta` of `ss.SIR` is a rate per year (`ss.peryear(0.1)`), so the sim's unit is a year, and the Weibull durations, which are bare numbers, are in years.
 
 It's easy to inspect distributions, for example `dur_inf` of the `SIR` module using `plot_hist`.
 
@@ -167,6 +171,25 @@ It's easy to inspect distributions, for example `dur_inf` of the `SIR` module us
 ```{python}
 rvs = sim.diseases.sir.pars.dur_inf.plot_hist()
 ```
+
+### Distributions in a declared disease
+
+In a disease declared from states and transitions, a distribution of durations after `@` (or in `dur=`) is a dwell-time distribution. Its unit is given once, with `unit=` or on one of its parameters, and the other parameters of the same kind take it: `ss.lognorm_ex(mean=10, std=3, unit='days')` is the same as `ss.lognorm_ex(mean=ss.days(10), std=3)`.
+
+As agents, each agent draws their own dwell time. A compartmental run has no agents to draw for, so a non-exponential dwell time is represented by Erlang sub-stages matched to its mean and variance, and the sim says so in a note:
+
+```{python}
+S, I, R = ss.states(3)
+infection = S >> I @ 0.3 * I
+recovery  = I >> R @ ss.lognorm_ex(mean=10, std=3, unit='days')
+sir = ss.Disease(infection, recovery, init_prev=0.01)
+
+ode = ss.Sim(sir, stop=ss.days(100)).run() # A note says how many stages were used
+abm = ss.Sim(sir, stop=ss.days(100), solver='abm', n_agents=5_000, verbose=0).run() # Sampled per agent
+print(f'Peak prevalence: ODE {ode.results.sir.n_I.max()/10_000:.2f}, agents {abm.results.sir.n_I.max()/5_000:.2f}')
+```
+
+An Erlang distribution can also be given directly, as `ss.erlang(k=3, mean=ss.days(10))` (a gamma distribution with an integer shape), or with `stages=3` on the transition; both are exact in every solver. A distribution on a quantity that varies between people, such as `beta`, makes the model run as agents under `solver='auto'`.
 
 ### Choosing a fixed number of agents
 
@@ -226,7 +249,7 @@ sir = ss.SIR(
 )
 
 # Create, run, and plot a sim using the SIR disease model
-sim = ss.Sim(n_agents=10, diseases=[sir], dur=30)
+sim = ss.Sim(n_agents=10, diseases=[sir], networks='random', stop=30)
 sim.run()
 ```
 
@@ -268,10 +291,10 @@ class MyVx(ss.Intervention):
         # Filter to select agents for which the Bernoulli sample is True
         vx_uids = self.pars.p_vx.filter(novx) # <-- can pass in mask or uids
         self.vaccinated[vx_uids] = True  # Set the state to vaccinated
-        sim.diseases.sir.rel_sus[vx_uids] = 0.0  # Set susceptibility to 0 for vaccinated agents
-        
-        # Store the results
-        self.results.new_vx[sim.ti] = len(vx_uids)
+        self.sim.diseases.sir.rel_sus[vx_uids] = 0.0  # Set susceptibility to 0 for vaccinated agents
+
+        # Store the results, at the end of the step
+        self.results.new_vx[self.ti + 1] = len(vx_uids)
 ```
 
 Now that we have created the intervention, we can configure it with a custom `p_vx_func` in "user space" and run the simulation.
@@ -294,13 +317,13 @@ def p_vx_func(self, sim, uids):
 vx_intv = MyVx(p_vx = ss.bernoulli(p=p_vx_func))
 
 # Create, run, and plot a sim using the SIR disease model
-sim = ss.Sim(n_agents=1000, dur=10, dt=1, start=0,
+sim = ss.Sim(n_agents=1000, start=0, stop=10,
     diseases=ss.SIR(), # Default SIR disease model
     interventions=[vx_intv],
     networks=ss.RandomNet()
 )
-sim.run().plot('myvx') # Verify vaccinations only on the 5th time step
+sim.run().plot('myvx') # Verify vaccinations only on the 5th time step (recorded at its end, time 6)
 ```
 
-See how vaccines were delivered only on time step 5? If we were to look at which agents received the vaccine, we would see probability increasing with age.
+See how vaccines were delivered only on time step 5? (Results are recorded at the end of each step, so the step from time 5 to time 6 is plotted at 6.) If we were to look at which agents received the vaccine, we would see probability increasing with age.
 

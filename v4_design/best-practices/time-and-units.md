@@ -2,8 +2,8 @@
 
 ## Recommendation
 
-1. **Keep Starsim's time types and their names.** `ss.dur` / `ss.per` / `ss.prob` / `ss.freq` as distinct types, with conversion as the type's responsibility, is the most-validated idea in the review. Nothing is renamed.
-2. **Calendar dates by default.** Interventions have dates, data has dates, and converting them to step indices is a recurring source of error.
+1. **Keep Starsim's time types and their names.** `ss.dur` / `ss.per` / `ss.prob` as distinct types, with conversion as the type's responsibility, is the most-validated idea in the review. Nothing is renamed; the duplicate spellings are dropped (a probability per period is `ss.prob(0.1, 'day')`, and a count per unit time is `ss.time.freq`, for modules written as code).
+2. **Calendar dates wherever they are wanted.** Interventions have dates, data has dates, and converting them to step indices is a recurring source of error, so a sim's start and stop, the times of interventions, and data can all be dates.
 3. **Do not assume a global timestep.** Per-module timelines interleaved by absolute time already work.
 4. **Accept a bare number; it takes the sim's unit.** A type system that makes `beta=0.05` an error will lose the audience. If nothing in the model has a unit, time is counted in timesteps and no unit is invented.
 5. **Print the conversion.** odin's transparency and Starsim's safety are not in conflict when the library can print what it resolved.
@@ -27,154 +27,34 @@ The negative evidence is just as strong. [EpiModel](../approaches/epimodel.md): 
 
 The specific error this prevents: `0.1` per year could be a hazard, a probability, or an event count, and they convert to a per-timestep quantity by three different formulas (`1 - exp(-r·dt)`, rescaling, `r·dt`). Conflating them is one of the quietest common errors in the field.
 
-## The proposal
+### A textbook model has no unit
 
-### Keep what exists
-
-Starsim already has this and it does not need redesigning:
-
-```python
-ss.days(10), ss.weeks(2), ss.months(3), ss.years(5), ss.datedur(months=1)   # durations
-ss.peryear(0.1)      # a hazard; converts by 1 - exp(-r·dt)
-ss.probperyear(0.1)  # a probability attached to a period; rescales
-ss.freqperyear(3)    # a count of events per unit time; scales linearly
-```
-
-`ss.datedur` earns its place: it handles the month-length problem that float-year arithmetic gets wrong.
-
-The names stay as they are. `ss.per` is the hazard type (base class `ss.Rate`, with `ss.perday`, `ss.perweek`, `ss.peryear`); it is not renamed to `ss.rate`. Existing Starsim code and the lingua franca use the same words.
-
-### Accept bare numbers
-
-This must work, with no warning:
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
-    recovery  = ss.progression('I -> R', dur=10),
-)
-sim = ss.Sim(sir, unit='day')
-```
-
-The argument slot knows what kind of quantity it wants: `beta=` is a rate, `dur=` is a duration, `p=` is a probability. The only missing information is the *unit*, and the sim's unit supplies it. `sir.describe()` prints what was resolved:
-
-```text
-infection: S -> I,  beta = 0.05/day  (rate; unit from sim)
-recovery:  I -> R,  dwell ~ Exp(mean = 10 days)
-```
-
-[camdl](../approaches/camdl.md)'s verbosity is "the right trade for correctness and a real trade against approachability". For our audience the balance falls the other way, and we can have both by taking the type from the slot and printing the result.
-
-The same rule covers operator-form models: in `I >> R @ 0.1` the number is a rate per unit time in the sim's unit, and in `I >> R @ ss.days(10)` the duration is a mean dwell time.
-
-### Where the unit comes from
-
-If nothing has a unit (no `unit=`, no unit on `dt`, no dates, no typed values), time is counted in timesteps. `beta=0.05` is per step, `dur=10` is ten steps, results are indexed by step, and nothing is said about days or years:
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
-    recovery  = ss.progression('I -> R', dur=10),
-)
-ss.Sim(sir, stop=100).run()    # 100 steps
-```
-
-This is what a textbook model means, and it is what most of the frameworks surveyed do: EpiModel, `individual`, LASER, epiworld, SimInf, odin, summer2, and epipack all count time in steps or in an unnamed unit. Forcing such a model into dates or years adds something its author never said.
-
-As soon as anything has a unit, the sim uses it, and prints where it came from:
-
-| What is given | The sim's unit |
-|---|---|
-| `unit='day'` | Days |
-| `dt=ss.weeks(1)` | Weeks, from `dt` |
-| `start='2020-01-01'` | Days, from the dates |
-| `start=2020, stop=2030` | Years, from the start and stop |
-| Typed values only (`dur=ss.days(10)`) | Their unit; if they differ, the smallest, with a note |
-
-```text
->>> ss.Sim(sir, start='2020-03-01', stop='2020-09-01').run()
-note: unit='day', dt=1 day (from start and stop dates)
-```
-
-Bare numbers then take that unit. Starsim today defaults to years with nothing specified, so the unitless case is a change from Starsim.
+Most of the frameworks surveyed (EpiModel, `individual`, LASER, epiworld, SimInf, odin, summer2, and epipack) count time in steps or in an unnamed unit, and that is what a textbook model means: `beta=0.3` per step, `dur=10` steps. Forcing such a model into dates or years adds something its author never said, which is why a model with no unit anywhere counts time in timesteps, and why no default unit is assumed (Starsim 3 assumed years).
 
 ### Print the conversion, do not make people write it
 
-**odin** ([approaches/odin.md](../approaches/odin.md)) puts `dt` in scope so the modeler writes the conversion explicitly:
-
-```r
-p_SI <- 1 - exp(-(beta * I / N * dt))
-```
-
-Its review calls this "more transparent and less safe: nothing stops a modeler writing `p_SI <- beta * I / N * dt`, which is correct only for small `dt`, and nothing marks `beta` as a rate rather than a probability."
-
-**Starsim** makes it the type's job: `beta.to_prob(dt)`.
-
-**Lingua franca**: Starsim's mechanism, odin's transparency, recovered from the printed model rather than from the source:
-
-```text
->>> sim.describe(verbose=True)
-timestep: 1 day
-infection: beta = 0.05/day  →  p = 1 - exp(-0.05 × 1) = 0.0488 per step
-```
-
-odin gets this transparency by having the modeler write the conversion. Here the library does the conversion and shows it.
-
-### Calendar dates
-
-[Epydemix](../approaches/epydemix.md), Starsim, camdl (with `origin`), and [flepiMoP](../approaches/flepimop.md) support real dates. [odin](../approaches/odin.md), [summer2](../approaches/summer2.md), [EpiModel](../approaches/epimodel.md), [epipack](../approaches/epipack.md), [`individual`](../approaches/individual.md), [epiworld](../approaches/epiworld.md), and [LASER](../approaches/laser.md) do not, or do so awkwardly.
-
-```python
-sim = ss.Sim(sir, start='2020-01-01', stop='2021-06-30', dt=ss.days(1))
-```
-
-and both of these are legal, because both are natural:
-
-```python
-ss.Sim(sir, start=2020, stop=2030, dt=ss.months(1))          # float years
-ss.Sim(sir, start='2020-03-15', stop='2020-06-01')           # dates
-```
-
-Relative time (`start=0, stop=100`) stays available, with or without a unit. Starsim's `Timeline` exposes `tvec` / `tivec` / `timevec` / `yearvec` / `datevec` / `relvec`, which is a lot of parallel representations, and does mean output can be requested in whatever frame the data are in. Do not add to it, and see the open questions for a possible reduction.
+[odin](../approaches/odin.md) puts `dt` in scope so the modeler writes the conversion (`p_SI <- 1 - exp(-(beta * I / N * dt))`). Its review calls this "more transparent and less safe: nothing stops a modeler writing `p_SI <- beta * I / N * dt`, which is correct only for small `dt`, and nothing marks `beta` as a rate rather than a probability." Starsim makes the conversion the type's job (`beta.to_prob(dt)`). Both can be had: the library converts, and prints what it resolved, so odin's transparency comes from the printed model rather than from the source. [camdl](../approaches/camdl.md)'s verbosity is "the right trade for correctness and a real trade against approachability"; taking the kind of quantity from the argument slot and printing the result gives most of the correctness without the verbosity.
 
 ### Per-module timesteps
 
-From the [Starsim review](../approaches/starsim.md): "a within-host progression module can run at `dt = 1 day` while a demographic module runs at `dt = 1 year` in the same sim. The `Loop` interleaves them by absolute time. Nothing else in the landscape does this."
+From the [Starsim review](../approaches/starsim.md): "a within-host progression module can run at `dt = 1 day` while a demographic module runs at `dt = 1 year` in the same sim. The `Loop` interleaves them by absolute time. Nothing else in the landscape does this." Contrast [EpiModel](../approaches/epimodel.md), where the network's dissolution coefficients are calibrated in time steps, so the network and the epidemic are locked to a common step by construction. [epymorph](../approaches/epymorph.md) has a different structure again, sub-step scheduling (`leaves=TickIndex(step=0)`, `returns=TickDelta(step=1, days=0)`: leave in the morning, mix at the destination, return in the evening). No sub-step mechanism is added for it: commuting is handled by the mixing ([metapopulation.md](metapopulation.md)), and a model that needs a day and a night phase can use a half-day timestep.
 
-Keep it, and make it the *default behavior* rather than an option: a module that declares `dt=ss.years(1)` gets it, and a module that declares nothing inherits the sim's. Contrast [EpiModel](../approaches/epimodel.md), where the network's dissolution coefficients are calibrated in time steps, so the network and the epidemic are locked to a common step by construction.
+### Dimension checking catches the missing `/N`
 
-[epymorph](../approaches/epymorph.md) has a different time structure again: **sub-step scheduling**. A movement clause declares `leaves=TickIndex(step=0)` and `returns=TickDelta(step=1, days=0)`: leave in the morning, mix at the destination, return in the evening. The lingua franca does not add a sub-step mechanism for this. Commuting is handled by the mixing ([metapopulation.md](metapopulation.md)), and a model that needs a day and a night phase can use a half-day timestep.
+camdl's `error[E300]: transition 'infection' rate has wrong dimension` with `rate = ((beta * S) * I)` is the missing `/N`, the check that justifies the whole apparatus. Here the common case cannot go wrong that way, because the user writes `S >> I @ beta * I` and the mixing supplies the denominator ([population-and-mixing.md](population-and-mixing.md)); a longer expression with typed values is still checked, and the error suggests the fix ([error messages are part of the language](principles.md)). Bare numbers cannot be checked this way, which is one reason to type the values in a model that mixes timescales.
 
-### Dimension checking
+## The specification
 
-The check that justifies the whole apparatus, from [camdl](../approaches/camdl.md):
-
-```text
-error[E300]: transition 'infection' rate has wrong dimension
-= note: rate = ((beta * S) * I)
-```
-
-That error is the missing `/N`. In the lingua franca the common case cannot go wrong this way, because the user writes `S >> I @ beta * I` and the mixing supplies the denominator ([population-and-mixing.md](population-and-mixing.md)). Where a user writes a longer expression with typed values, it is still checked:
-
-```python
-ss.progression('I -> R', rate=ss.peryear(0.1))
-# fine: a rate per person per year
-ss.progression('I -> R', rate=ss.peryear(0.1) * ss.days(3))
-# TimeError: the rate for 'recovery' has no time dimension; expected [1/time]
-#   rate = peryear(0.1) * days(3)
-#   A rate times a duration is a probability. Did you mean p= rather than rate=?
-```
-
-The last line of the message suggests the fix. [Error messages are part of the language](principles.md). Bare numbers cannot be checked this way, which is one reason to type the values in a model that mixes timescales.
+[02-types.md](../design/02-types.md) specifies the time types (`ss.dur`, `ss.per`, `ss.prob`, with `ss.days` to `ss.years`, `ss.perday` to `ss.peryear`, `ss.prob(0.1, 'day')`, `ss.datedur`, and `ss.date`), arithmetic between them, bare numbers and where the unit comes from, and time in a sim. Per-module timesteps and the ordered loop are in [10-execution.md](../design/10-execution.md), and the errors for meaningless arithmetic and wrong dimensions (`ss.IncompatibleTypes`, `ss.WrongDimension`) in [15-errors.md](../design/15-errors.md).
 
 ## Trade-offs
 
 - **`ss.perday(0.05)` is more to type than `0.05`.** Which is why bare numbers work; the typed form is for when the model spans timescales or the units are not obvious.
-- **Rate-to-probability conversion has corners at large `dt`.** Starsim's review flags this, particularly around calendar durations and `datedur` versus float-year arithmetic. The mitigation is a warning when `rate × dt > ~0.1`, where the exponential conversion starts to matter and people's intuitions stop being reliable.
-- **Per-module timesteps make the execution order harder to reason about.** Starsim's loop is an object that can be printed and plotted (`sim.loop`), which helps, but the printout is the fully unrolled list of every call at every time and is hard to read. `describe()` should show the loop as a schedule instead: one line per module in the order they run, with how often each runs ("every day: sir, random network; every year: births, deaths"), and the unrolled list only on request.
-- **Bare numbers skip the dimension check**, and an inferred unit can be the wrong one. Both are handled by printing: `describe()` shows every resolved value with its unit, and a unit taken from `dt`, the dates, or the typed values is announced at run time.
+- **Rate-to-probability conversion has corners at large `dt`.** Starsim's review flags this, particularly around calendar durations and `datedur` versus float-year arithmetic. The mitigation is a note when a step is large for a transition (`ss.LargeStep`), where the exponential conversion starts to matter and people's intuitions stop being reliable.
+- **Per-module timesteps make the execution order harder to reason about.** Starsim's loop is an object that can be printed and plotted (`sim.loop`), which helps, but the printout is the fully unrolled list of every call at every time and is hard to read. So `describe()` shows the loop as a schedule instead: one line for each step size, with the modules in the order they run (`schedule  every day: randomnet, sir`), and the unrolled list is `sim.loop`.
+- **Bare numbers skip the dimension check**, and an inferred unit can be the wrong one. Both are handled by printing: `describe()` shows every resolved value with its unit, and a unit taken from `dt`, the dates, or the typed values is announced when the sim is built. Typed values in different units alongside bare numbers are an error (`ss.IncompatibleTypes`) asking for `unit=`, since the unit of the bare numbers would be a guess.
 - **A unitless model cannot be compared with dated data or given a dated intervention.** Doing either supplies a unit, at which point the bare numbers that were "per step" become "per day" (or whatever the dates imply), and the note says so.
-- **Fifteen time classes is a lot** (Starsim's own review says so). Resist adding more. If a new one seems necessary, check whether it is a `datedur` in disguise.
+- **Starsim's time classes were a lot** (its own review says so), and the duplicate spellings have been dropped. Resist adding more. If a new one seems necessary, check whether it is a `datedur` in disguise.
 
 ## Rejected
 
@@ -183,13 +63,10 @@ The last line of the message suggests the fix. [Error messages are part of the l
 - **Making the user write `1 - exp(-r*dt)`** (odin, `individual`). Transparent and unsafe; we get the transparency from the printout.
 - **Units as an optional annotation** ([SBML](../approaches/notes.md#sbml-systems-biology-markup-language)'s `unitDefinition`, which is in the standard and "widely ignored in practice"). Here the kind of quantity comes from the argument slot and the unit from the sim, so every value ends up with both whether or not the user typed them.
 - **Renaming Starsim's types** (`ss.per` to `ss.rate`, for example). The current names work and existing code uses them.
-- **Guessing the unit from the size of the numbers.** A default that depends on the values is harder to predict than one that does not.
+- **Guessing the unit from the size of the numbers.** A default that depends on the values is harder to predict than one that does not. (One exception is kept from Starsim: a year-like `start` or `stop`, such as `stop=2030`, is a calendar year.)
 - **A sub-step mechanism** (epymorph's tick offsets). See above.
 - **A general dimensional algebra** (mass, length, currency). Epidemiology needs time⁻¹, dimensionless, and counts. Cost per unit of the intervention is a number with a currency label, not a dimension to check.
 
 ## Open questions
 
-- What happens when a `ss.freq` and a `ss.per` are added? Probably an error, but the rules for the full type lattice need writing down once rather than discovering per operator.
-- **Typed values that disagree.** `dur=ss.days(10)` in one place and `ss.peryear(0.02)` in another, with a bare `beta=0.3` and no `unit=` or `dt=`: the rule above picks days and says so, which is a guess about what the bare number meant. An error asking for `unit=` may be the better answer here.
-- **Can the Timeline be simpler?** Dates and times are messy, and three views seem irreducible: the step index, time in the sim's own unit, and the calendar date. The other vectors (`yearvec`, `relvec`, `tvec`) could become conversions on request, `sim.t.to('year')`, without losing anything. Whether that is a real simplification or just moves the names needs trying in Starsim.
-- Continuous-time methods ([SimInf](../approaches/siminf.md)'s, [EoN](../approaches/eon.md)'s; here `solver='gillespie'` and `'ode'`) have no rate-to-probability conversion at all, which is a real correctness advantage. Does the *model* need to know? Probably not: see [paradigm-conversion.md](paradigm-conversion.md).
+The open questions from this document are in [19-open-questions.md](../design/19-open-questions.md).

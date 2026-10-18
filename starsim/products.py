@@ -30,15 +30,8 @@ class Product(ss.Module):
 
 class Dx(Product):
     """
-    Generic class for diagnostics
-
-    Called without `df=`, `ss.Dx(...)` is `ss.Test(...)`.
+    Generic class for diagnostics, written as code: test outcomes from a table of probabilities by disease state (for declared models, see `ss.Test`)
     """
-    def __new__(cls, *args, **kwargs):
-        if cls is Dx and kwargs and 'df' not in kwargs: # The short name for the new product (copies call this with no arguments)
-            return Test(**kwargs)
-        return super().__new__(cls)
-
     def __init__(self, df=None, hierarchy=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
@@ -99,18 +92,11 @@ class Dx(Product):
 
 class Tx(Product):
     """
-    Treatment products change fundamental properties about People, including their prognoses and infectiousness.
-
-    Called without `df=`, `ss.Tx(...)` is `ss.Treatment(...)`.
+    Treatment products change fundamental properties about People, including their prognoses and infectiousness (for declared models, see `ss.Treatment`).
 
     Args:
         df (DataFrame): treatment specification with columns 'disease', 'state', 'post_state', 'efficacy'
     """
-    def __new__(cls, *args, **kwargs):
-        if cls is Tx and kwargs and 'df' not in kwargs:
-            return Treatment(**kwargs)
-        return super().__new__(cls)
-
     def __init__(self, df=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
@@ -166,15 +152,8 @@ class Tx(Product):
 
 class Vx(Product):
     """
-    Vaccine product; subclasses implement administer() to apply immunity.
-
-    Called without `diseases=`, `ss.Vx(...)` is `ss.Vaccine(...)`.
+    Vaccine product, written as code: subclasses implement administer() to apply immunity (for declared models, see `ss.Vaccine`)
     """
-    def __new__(cls, *args, **kwargs):
-        if cls is Vx and kwargs and 'diseases' not in kwargs:
-            return Vaccine(**kwargs)
-        return super().__new__(cls)
-
     def __init__(self, diseases=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.diseases = sc.tolist(diseases)
@@ -183,45 +162,6 @@ class Vx(Product):
     def administer(self, uids):
         """ Apply the vaccine to the requested uids. """
         pass
-
-
-class simple_vx(Vx):
-    """
-    Create a simple vaccine product that affects the probability of infection.
-
-    The vaccine can be either "leaky", in which everyone who receives the vaccine
-    receives the same amount of protection (specified by the efficacy parameter)
-    each time they are exposed to an infection. The alternative (leaky=False) is
-    that the efficacy is the probability that the vaccine "takes", in which case
-    that person is 100% protected (and the remaining people are 0% protected).
-
-    Args:
-        efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
-        disease (int/str/list): the disease to modify (if None, modify all)
-        leaky (bool): see above
-    """
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            efficacy = 0.9,
-            leaky = True,
-            disease = None,
-        )
-        self.update_pars(**kwargs)
-        return
-
-    def administer(self, people, uids):
-        if self.pars.leaky:
-            factor = 1 - self.pars.efficacy
-        else:
-            factor = np.random.binomial(1, 1-self.pars.efficacy, len(uids))
-
-        diseases = self.pars.disease if self.pars.disease is not None else self.sim.diseases.keys()
-        for key in sc.tolist(diseases):
-            self.sim.diseases[key].rel_sus[uids] *= factor
-        return
-
-
 
 
 #%% Products for declared models: what is delivered by ss.vaccinate(), ss.screen(), and ss.treat()
@@ -240,7 +180,7 @@ class Effect:
 
     @property
     def tabulated(self):
-        """ Whether the engines can work out the effect for every step before a run (see `ss.Compartmental.tables()`): unless the efficacy is a function of the sim """
+        """ Whether the engines can work out the effect for every step before a run (see `ss.solvers.Compartmental.tables()`): unless the efficacy is a function of the sim """
         eff = self.efficacy
         return not callable(eff) or isinstance(eff, (ss.by, ss.Dist))
 
@@ -264,7 +204,8 @@ class Effect:
         return value*np.where(holds, 1 - efficacy, 1.0)
 
     def describe(self):
-        return f'{self.name:<16s} multiply={1 - self.efficacy if sc.isnumber(self.efficacy) else self.efficacy}   where={self.product.dim} ({self.key} efficacy of {type(self.product).__name__.lower()})'
+        mult = f'{1 - self.efficacy:.12g}' if sc.isnumber(self.efficacy) else self.efficacy # At the precision given: 0.1, not 0.09999999999999998
+        return f'{self.name:<16s} multiply={mult}   where={self.product.dim} ({self.key} efficacy of {type(self.product).__name__.lower()})'
 
 
 class Held(Product):
@@ -280,6 +221,9 @@ class Held(Product):
 
     def __init__(self, efficacy=None, waning=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
+        if isinstance(waning, ss.transitions.TimeValue): # Called with the sim, for the value at the current time
+            errormsg = f'waning= is a duration or a function of the time since delivery, not {type(waning).__name__}, which varies with the time of the sim; for protection that fades by a table, give e.g. waning=lambda t: np.interp(t, [0, 1, 2], [1, 0.5, 0])'
+            raise TypeError(errormsg)
         self.efficacy = efficacy
         self.waning = waning
         self.cost = cost
@@ -348,9 +292,9 @@ class Held(Product):
         if steps > 1:
             mids[0] = (steps - 1)/4 # People delivered between the moves stay in the first level for less than a level, on average
             if sim.pars.approx is False:
-                ss.error('E804', f'cannot run with solver="{sim.solver}" and approx=False: the protection of "{self.name}" fades by a function of time, which is kept as {n} levels of {steps} steps each. Run with solver="abm".')
-            elif sim.pars.approx is None:
-                ss.note(f'the protection of "{self.name}" fades by a function of the time since delivery, approximated by {n} levels of {steps} steps each', sim=sim)
+                raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: the protection of "{self.name}" fades by a function of time, which is kept as {n} levels of {steps} steps each. Run with solver="abm".')
+            else:
+                ss.note(f'the protection of "{self.name}" fades by a function of the time since delivery, approximated by {n} levels of {steps} steps each', sim=sim, verbose=0 if sim.pars.approx else None)
         self.stage_steps = steps
         self.stage_factors = np.concatenate([[0.0], np.broadcast_to(np.asarray(self.waning(mids*dt), dtype=float), (n,))]) # The share of protection left, at each level
         return
@@ -378,7 +322,7 @@ class Held(Product):
                 targets = [('transition', key)]
             else:
                 options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions)
-                ss.error('E505', f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}; did you mean {ss.transitions.closest(key, options)}?')
+                raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
             for kind,name in targets:
                 if kind == 'transition':
                     kind = graph.modifier_kind(name)
@@ -412,10 +356,11 @@ class Vaccine(Held):
     A vaccine: what `ss.vaccinate()` delivers
 
     Args:
-        efficacy (float/dict): protection against acquisition; or a dict of efficacy against each of 'acquisition' (scales
+        efficacy (float/dict): protection against acquisition (required); or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
         waning (dur/func): a duration, for protection that is lost after an exponentially distributed time with that mean;
             or a function of the time since delivery returning the fraction of protection that remains (in a compartmental run, kept as levels of time since delivery)
+        leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the vaccine is assigned to
 
@@ -423,37 +368,66 @@ class Vaccine(Held):
         ```python
         bcg = ss.Vaccine(efficacy=0.85, waning=ss.years(5), cost=12.50)
         ss.Vaccine(efficacy=dict(acquisition=0.85, transmission=0.3))
+        mcv = ss.Vaccine(efficacy=0.85, leaky=False) # 85% fully protected
         ```
     """
-    pass
+    def __init__(self, efficacy=None, leaky=True, **kwargs):
+        if efficacy is None:
+            errormsg = 'ss.Vaccine() needs efficacy=: the protection against acquisition (e.g. ss.Vaccine(efficacy=0.9)), or a dict of efficacy against each thing'
+            raise ValueError(errormsg)
+        take = None # With leaky=False: the share of those who receive it who are protected, fully
+        if not leaky:
+            if not sc.isnumber(efficacy):
+                errormsg = f'With leaky=False, the efficacy= of ss.Vaccine() is the share of those who receive it who are fully protected, a number, not {efficacy}'
+                raise ValueError(errormsg)
+            take, efficacy = efficacy, 1.0
+        super().__init__(efficacy=efficacy, **kwargs)
+        self.leaky = leaky
+        self.take = take
+        return
+
+    def describe(self):
+        out = super().describe()
+        return out if self.take is None else f'{out}; all or nothing: {self.take:n} of those who receive it are fully protected'
 
 
 class Treatment(Held):
     """
     A treatment: what `ss.treat()` delivers
 
+    A treatment can cure (`cure=`, once, when it is given), change rates for as long as it is held
+    (`efficacy=`), or both. By default it is given to the people who are infected.
+
     Args:
-        efficacy (float/dict): a number is the probability that treatment cures: the person leaves the infected states
-            by the disease's recovery transition. A dict, as for `ss.Vaccine`, is a treatment that changes rates without curing.
+        cure (float): the probability that treatment cures: the person leaves the infected states by the disease's recovery
+            transition (or by `transition=`); 1 if neither `cure` nor `efficacy` is given
+        efficacy (dict): the effects while it is held, as for `ss.Vaccine` (e.g. `dict(transmission=0.96, mortality=0.9)`)
         transition (str): the transition a cured person leaves by, if the disease has more than one recovery
-        waning (dur/func): as for `ss.Vaccine`, for a treatment that changes rates
+        waning (dur/func): as for `ss.Vaccine`, for the effects while held
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the treatment is assigned to
 
     Examples:
         ```python
-        drug = ss.Treatment(efficacy=0.95, cost=120.0)
+        drug = ss.Treatment(cure=0.95, cost=120.0)
         art = ss.Treatment(efficacy=dict(transmission=0.96, mortality=0.9))
+        both = ss.Treatment(cure=0.3, efficacy=dict(transmission=0.9))
         ```
     """
-    def __init__(self, efficacy=1.0, transition=None, **kwargs):
+    def __init__(self, cure=None, efficacy=None, transition=None, **kwargs):
+        if efficacy is not None and not isinstance(efficacy, dict):
+            errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
+            raise ValueError(errormsg)
+        if cure is None and efficacy is None:
+            cure = 1.0
         super().__init__(efficacy=efficacy, **kwargs)
+        self.cure = cure
         self.transition = transition if transition is None or isinstance(transition, str) else transition.name
         return
 
     @property
     def holds(self):
-        return isinstance(self.efficacy, dict)
+        return self.efficacy is not None
 
     def recovery(self, dis):
         """ The transition a cured person leaves by, and the state they go to """
@@ -463,19 +437,20 @@ class Treatment(Held):
                    and any(s in infected for s in tr.src) and tr.dst[0] not in infected}
         if self.transition is not None:
             if self.transition not in graph.transitions:
-                ss.error('E505', f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise ss.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[self.transition]
         elif len(options) == 1:
             tr = list(options.values())[0]
         else:
-            ss.error('E505', f'the treatment "{self.name}" cures, so it needs a transition out of the infected states of "{dis.name}" for cured people to leave by, and there {"is none" if not options else "are several: " + sc.strjoin(options.keys())}.\n'
-                             f'     Name it with transition=, or give efficacy as a dict for a treatment that changes rates without curing.')
+            raise ss.UnknownEffect(f'the treatment "{self.name}" cures, so it needs a transition out of the infected states of "{dis.name}" for cured people to leave by, and there {"is none" if not options else "are several: " + sc.strjoin(options.keys())}.\n'
+                                   f'     Name it with transition=, or give efficacy as a dict for a treatment that changes rates without curing.')
         return tr, tr.dst[0]
 
     def describe(self):
+        cures = f'cures with probability {self.cure}' if self.cure is not None else ''
         if self.holds:
-            return super().describe()
-        return f'{self.name}: treatment that cures with probability {self.efficacy}'
+            return super().describe() + (f'; {cures}' if cures else '')
+        return f'{self.name}: treatment that {cures}'
 
 
 class Test(Product):
@@ -514,7 +489,7 @@ class Test(Product):
     def agent_reasons(self):
         out = []
         detects = self.detects
-        if callable(detects) and not isinstance(detects, ss.Cond) and len(inspect.signature(detects).parameters) >= 2:
+        if callable(detects) and not isinstance(detects, ss.conditions.Cond) and len(inspect.signature(detects).parameters) >= 2:
             out.append(f'what the test "{self.name}" detects is a function of uids')
         return out
 

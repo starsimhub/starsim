@@ -7,9 +7,10 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import paths
 from starsim.interop.epydemix import load_epydemix
 
-lfd = '/home/cliffk/idm/lingua_franca_design/examples' # The original examples, if they are here
+lfd = paths.lfd/'examples' # The original examples, if they are here
 kw = dict(verbose=False)
 
 
@@ -42,7 +43,7 @@ def seird_model():
 
 def test_epydemix():
     sc.heading('Testing importing an epydemix model')
-    with pytest.warns(RuntimeWarning, match='W1601'): # The school closure is listed, not translated
+    with pytest.warns(ss.ImportIncomplete): # The school closure is listed, not translated
         sim = load_epydemix(seird_model(), solver='ode', **kw)
     assert [k for k,_ in sim.imported.incomplete] == ['intervention closure']
     sim.run()
@@ -77,7 +78,7 @@ def test_kenya():
     sc.heading('Testing importing the epydemix SIR in Kenya against the original')
     folder = f'{lfd}/epydemix/sir_kenya/reference'
     if not os.path.exists(folder):
-        pytest.skip('The lingua_franca_design examples are not here')
+        pytest.skip(paths.no_lfd)
     pop = sc.loadjson(f'{folder}/population.json')
     d = dict(
         format = 'epydemix',
@@ -90,8 +91,8 @@ def test_kenya():
         run = dict(start_date=pop['start'], end_date=pop['end'], dt=1.0, initial=pop['initial']),
     )
     sim = load_epydemix(d, **kw)
-    msim = ss.parallel(sim, n_runs=50) # Restarted in this process
-    ours = np.mean([s.results.epydemix.n_Infected.values for s in msim.sims], axis=0)
+    msim = ss.parallel(sim, n_runs=200) # Restarted in this process; enough runs that the mean is within about 1% of the true one
+    ours = msim.results.epydemix.n_Infected.mean() # Over the runs
     ref = pd.read_csv(f'{folder}/results.csv')
     theirs = ref[ref.series == 'Infected_total'].sort_values('time').value.values
     diff = np.abs(ours - theirs).max()/theirs.max()

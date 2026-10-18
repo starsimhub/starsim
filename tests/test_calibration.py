@@ -4,6 +4,7 @@ Test calibration
 
 #%% Imports and settings
 import starsim as ss
+import starsim.library as ssl
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -19,7 +20,8 @@ do_plot = True
 #%% Helper functions
 
 def make_sim():
-    sir = ss.SIR(
+    sir = ssl.CodedSIR( # Starsim 3's SIR, written as code, for the Starsim 3 calibration (ss.Calibration)
+        name = 'sir',
         beta = ss.peryear(0.075),
         init_prev = ss.bernoulli(0.02),
     )
@@ -65,7 +67,7 @@ def build_sim(sim, calib_pars, **kwargs):
         return sim
 
     # Ignoring the random seed if provided via the reseed=True option in Calibration
-    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False)
+    ms = ss.MultiSim(sim, pars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True)
     return ms
 
 
@@ -341,7 +343,7 @@ def test_particle_mcmc():
         infection = S >> I @ beta * I
         cases = ss.outcome(0.5 * infection, delay=ss.days(3), likelihood=ss.poisson())
         sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init=dict(I=0.002), name='sir')
-        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver='sde', total_pop=10_000, data=data, verbose=0, rand_seed=3)
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver='binomial', total_pop=10_000, data=data, verbose=0, rand_seed=3)
 
     truth = make().run().results.sir
     weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
@@ -363,8 +365,13 @@ def test_particle_mcmc():
     assert fit.method == 'pmcmc'
     assert len(fit.samples) == 300 and len(fit.acceptance) == 2
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
-    with pytest.raises(ss.CodedError, match='E1303'): # A posterior needs a likelihood
+    with pytest.raises(ss.NoPosterior): # A posterior needs a likelihood
         make(data=data).calibrate(method='pmcmc', gof='nae')
+
+    # A best fit scores each point by the mean of several runs with the same seeds, and reports the score it minimized
+    best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
+    assert len(best.scores) == 4 # The default for a stochastic sim
+    assert np.isclose(best.mismatch, best.trials.mismatch.min())
     return fit
 
 

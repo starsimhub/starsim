@@ -110,7 +110,7 @@ def hash_uniforms(seed, ind, slots, dtype=None):
 
 def no_dists():
     """ The classes of objects that never hold a distribution (or a time parameter), so are not searched for them """
-    return (ss.Result, ss.Results, ss.Timeline, np.dtype, type)
+    return (ss.Result, ss.Results, ss.Timeline, ss.arrays.Watch, np.dtype, type)
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
@@ -187,7 +187,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=['module', 'inputs'], subclasses=(Dists, ss.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs are only for building the sim again
+            skip = dict(keys=['module', 'inputs', 'declared'], subclasses=(Dists, ss.solvers.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
@@ -761,7 +761,7 @@ class Dist:
             self.offset = str2int(unique_name) # Key step: hash the path to the distribution
         else:
             self.offset = self.offset or 0
-        self.seed = self.offset + (seed or self.user_seed or 0)
+        self.seed = str2int(f'{self.offset}:{seed or self.user_seed or 0}') # Hashed together, so that seed s of one distribution cannot be seed s+1 of another
         return
 
     def process_dist(self):
@@ -809,7 +809,7 @@ class Dist:
                     if self.slots is None:
                         errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
                         raise ValueError(errormsg)
-                    slots = self.slots[uids]
+                    slots = ss.Arr.__getitem__(self.slots, uids) if isinstance(self.slots, ss.IndexArr) else self.slots[uids] # The slots as stored (32-bit), rather than as UIDs
                     if len(slots): # Handle case where uids is boolean
                         size = slots.max() + 1
                     else:
@@ -931,7 +931,7 @@ class Dist:
                 elif self.sim is not None:
                     dt = self.sim.dt
                 else:
-                    errormsg = 'Cannot do predraw scaling of timepar {v} when both module and sim are None. Consider e.g. ss.normal(3, 2, unit=ss.year) instead of ss.normal(ss.years(3), ss.years(2))'
+                    errormsg = 'Cannot do predraw scaling of timepar {v} when both module and sim are None. Consider e.g. ss.normal(3, 2, unit="year") instead of ss.normal(ss.years(3), ss.years(2))'
                     raise RuntimeError(errormsg)
 
                 if issubclass(timepar_type, ss.dur):
@@ -1329,7 +1329,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'nbinom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
+             'poisson', 'nbinom', 'binom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
              'randint', 'rand_raw', 'bernoulli', 'choose_n', 'choice', 'histogram']
 
 
@@ -1344,6 +1344,27 @@ class random(Dist):
 
     def ppf(self, rands):
         return rands
+
+    def crn_key(self):
+        """
+        For a compiled loop that draws the uniforms itself (e.g. `ss.kernels.infect()`), in place of `rvs(uids)`: the seed and
+        index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
+        `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
+        are being recorded or debugged), in which case `rvs()` is called instead.
+        """
+        diagnostics = self.sim.diagnostics if self.sim is not None else None
+        if not ss.options.crn or self.initialized is not True or self.slots is None or self.debug or (diagnostics and diagnostics.rvs is not None):
+            return None
+        if not self.ready and self.strict:
+            raise DistNotReadyError(self)
+        self.make_history()
+        key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
+        self.called += 1
+        if self.auto:
+            self.jump()
+        elif self.strict:
+            self.ready = False
+        return key
 
 
 class uniform(Dist):
@@ -1678,6 +1699,21 @@ class nbinom(Dist):
     unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
         super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
+        return
+
+
+class binom(Dist):
+    """
+    Binomial distribution: the number of successes in n trials; as a likelihood (see `ss.fit()`), the model's value is the probability, e.g. the positives among n tested
+
+    Args:
+        n (int): the number of trials (default 1)
+        p (float): the probability of success in [0,1], (default 0.5)
+    """
+    scaling = scale_types.predraw
+    unitless_pars = ('n',)
+    def __init__(self, n=1, p=0.5, **kwargs):
+        super().__init__(distname='binomial', dist=sps.binom, n=n, p=p, **kwargs)
         return
 
 

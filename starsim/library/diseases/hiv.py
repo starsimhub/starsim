@@ -111,7 +111,7 @@ class HIV(ss.Infection):
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti)
+        self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti - 1) # Died in the step that ends now (ti_dead is its start)
         return
 
     def set_prognoses(self, uids, sources=None):
@@ -187,10 +187,12 @@ class ART(ss.Intervention):
             hiv.ti_art[inds] = ti
             n_added = len(inds)
 
-        # Add result
-        self.results['n_art'][ti] = np.count_nonzero(hiv.on_art)
-
         return n_added
+
+    def update_results(self):
+        super().update_results()
+        self.results['n_art'][self.ti] = np.count_nonzero(self.sim.diseases.hiv.on_art)
+        return
 
 
 #%% Analyzers

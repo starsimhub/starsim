@@ -36,6 +36,11 @@ class Pars(sc.objdict):
 
     _locked = False # Whether new keys can be added; set by lock()
     _bare = None # The parameters set to a bare number, with the unit it is read in: see bare_units()
+    _bounded = None # For a module written as code: the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
+
+    def bounded(self):
+        """ The parameters of a module written as code that were given as `ss.par` (e.g. `beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1])`), by name; their values are used as any other's """
+        return dict(self._bounded or {})
 
     def note_bare(self, key, old, new):
         """ Note that a parameter with a unit (or a distribution of values with one) was set to a bare number, which keeps that unit """
@@ -51,7 +56,7 @@ class Pars(sc.objdict):
         return
 
     def bare_units(self, unit, label):
-        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.MFNet(duration=5) in a sim in days """
+        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.MFNet(dur=5) in a sim in days """
         for key,base in (self._bare or {}).items():
             if base != unit:
                 runs = f'runs in {unit}' if unit else 'counts time in timesteps'
@@ -74,6 +79,13 @@ class Pars(sc.objdict):
         if self._locked and key not in self:
             errormsg = f'Key "{key}" not found; available keys are {list(self.keys())}. To add a new parameter, use pars.update({key}=..., create=True).'
             raise sc.KeyNotFoundError(errormsg)
+        current = self.get(key)
+        if isinstance(current, ss.par): # A new value for a declared parameter (e.g. sir.pars.beta = 0.1) is taken by it, keeping its name and bounds, since the module's transitions use this same object
+            if isinstance(value, ss.par):
+                current.merge(value)
+            else:
+                current.value = value
+            return
         return super().__setitem__(key, value)
 
     def __deepcopy__(self, memo):
@@ -105,11 +117,15 @@ class Pars(sc.objdict):
         # Perform the update
         self.forget_bare(pars) # Noted again below if still a bare number
         for key,new in pars.items():
+            if isinstance(new, ss.par) and key in self.keys() and not isinstance(self[key], ss.par): # A parameter of a module written as code, given with bounds (say): its code uses the value, and the parameter is kept so it can be fitted
+                new.name = new.name or key
+                object.__setattr__(self, '_bounded', (self._bounded or {}) | {key:new})
+                new = new.value
             if key not in self.keys(): # It's a new parameter and create=True: update directly
                 super().__setitem__(key, new) # Skip the check for locked parameters
             else:
                 old = self[key] # Get the existing object we're about to update
-                if isinstance(old, atomic_classes): # It's a number, string, etc: update directly
+                if isinstance(old, atomic_classes + (ss.par,)): # It's a number, string, etc, or a declared parameter: update directly
                     self[key] = new
 
                 elif isinstance(old, Pars): # It's a Pars object: update recursively
@@ -283,24 +299,22 @@ class SimPars(Pars):
         dur (int): How many timesteps to simulate, if "stop" is not provided (default 50)
         dt (float): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
-        birth_rate (float): If provided, include births with this rate (per 1000 people per year)
-        death_rate (float): If provided, include deaths with this rate (per 1000 people per year)
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
         people_results (bool): Whether to collect the automatic People-level results (n_alive, n_female, new_deaths, cum_deaths, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.n_alive)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
         networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
-        demographics (str/list/Module): As above
+        demographics (str/list/Module/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, which run under every solver), or modules of agents (e.g. `ss.Births()`, `ss.Pregnancy()`); True for births and deaths at 20 and 10 per 1,000 people per year
         diseases (str/list/Module): As above
         connectors (str/list/Module): As above
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
-        verbose (float): How much detail to print (1 = every timestep, 0.1 = every 10 timesteps, etc.)
+        verbose (int): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
     """
     def __init__(self, pars=None, create=True, **kwargs):
 
         # General parameters
         self.label   = '' # The label of the simulation
-        self.verbose = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
+        self.verbose = ss.options.verbose # How much to print: 0 (nothing), 1 (the solver, notes, and progress; default), or 2 (everything)
 
         # Population parameters
         self.n_agents  = 10e3 # Number of agents
@@ -320,16 +334,14 @@ class SimPars(Pars):
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'gillespie', 'tau', 'binomial', 'sde', 'abm', or 'stochastic'
-        self.approx     = None   # None prints a note for each approximation; True hides the note; False makes it an error
-        self.integrator = None   # The ODE integration scheme: 'rk4' (the default), 'euler', or a scipy.integrate.solve_ivp method such as 'RK45' or 'LSODA'
-        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over by more than a quarter in one), and the 'binomial' and 'sde' solvers (default: one for each stage of the dwell time with the most stages for 'binomial', and 1 for 'sde')
+        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (which switches to tau-leaping for a run of too many events), or 'abm'
+        self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
+        self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
+        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over by more than a quarter in one), and the 'binomial' solver (default: 1, so each step is taken whole; the chain-binomial solver moves people through as many stages of a dwell time as they pass in a step)
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
-        self.track_writes = False # Whether the arrays that modifiers act on record which module assigns them, for sim.what_modifies() (agents only)
+        self.results    = None   # The results to keep by group, by name, e.g. ['n_I', 'cases'] or ['sir.n_I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.Sim.group_rows())
 
         # Demographic parameters
-        self.birth_rate = None
-        self.death_rate = None
         self.use_aging  = None # True if demographics, false otherwise
 
         # Modules
@@ -339,6 +351,28 @@ class SimPars(Pars):
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(pars, create=create, **kwargs)
         return
+
+    _names = None # The names of the sim parameters: see names()
+
+    removed = dict( # Sim parameters that have been removed, and what replaces them
+        track_writes = 'track_writes= has been removed: sim.what_modifies() lists the modifiers on a quantity, which are declared; code that assigns rel_sus or rel_trans directly is not tracked',
+        birth_rate = 'birth_rate= (births per 1,000 people per year) has been removed: declare births for the population, per person, e.g. ss.Sim(..., demographics=[ss.birth(rate=ss.peryear(0.02))]) for 20 per 1,000, which runs under every solver; or use ss.Births(birth_rate=...) for data by year',
+        death_rate = 'death_rate= (deaths per 1,000 people per year) has been removed: declare deaths for the population, per person, e.g. ss.Sim(..., demographics=[ss.death(rate=ss.peryear(0.01))]) for 10 per 1,000, which runs under every solver; or use ss.Deaths(death_rate=...) for data by year, age, and sex',
+    )
+
+    def check_key_mismatch(self, pars):
+        """ As for any parameters, with the removed sim parameters named """
+        for key in pars:
+            if key in self.removed:
+                raise ValueError(self.removed[key])
+        return super().check_key_mismatch(pars)
+
+    @classmethod
+    def names(cls):
+        """ The names of the sim parameters (as opposed to keys added later, e.g. one per module) """
+        if cls._names is None:
+            cls._names = set(cls().keys())
+        return cls._names
 
     def _reset_modules(self):
         """ Initialize ndicts for module storage """
@@ -375,11 +409,7 @@ class SimPars(Pars):
 
     def validate_verbose(self):
         """ Validate verbosity """
-        if self.verbose == 'brief':
-            self.verbose = -1
-        if not sc.isnumber(self.verbose):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.verbose)} "{self.verbose}"'
-            raise ValueError(errormsg)
+        self.verbose = check_verbose(self.verbose)
         return
 
     def validate_agents(self):
@@ -432,6 +462,8 @@ class SimPars(Pars):
         # Convert any modules that are not already Module objects
         modules = self.convert_modules()
         modules = self.expand_modules(modules)
+        if not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are run as modules of agents
+            modules = [(source, m) for source,mod in modules for m in (mod.as_modules() if isinstance(mod, ss.demographics.Flows) else [mod])]
         self._reset_modules()
         products = []
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
@@ -459,7 +491,7 @@ class SimPars(Pars):
     @staticmethod
     def expand_modules(modules):
         """
-        Replace any module that defines an `expand()` method with the modules it returns, e.g. `ss.HybridNet()` → four networks
+        Replace any module that defines an `expand()` method with the modules it returns, e.g. `ssl.HybridNet()` → four networks
 
         Args:
             modules (list): (source, module) tuples, as returned by `convert_modules()`
@@ -496,30 +528,20 @@ class SimPars(Pars):
 
     def validate_demographics(self):
         """ Validate demographics-related input parameters"""
-        # Allow shortcut for default demographics
+        # demographics=True is births and deaths at the default rates (20 and 10 per 1,000 people per year), declared for the population
         demog = self.demographics
-        use_default = demog in [True, 1] # ...turn it on with True or 1
-        if demog in [True, False, 1, 0]: # Allow turning it on or off
-            self.demographics = ss.ndict()
+        if demog in [True, 1]:
+            demog = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))]
+        elif demog in [False, 0]:
+            demog = ss.ndict()
 
-        # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
-        valid = isinstance(self.demographics, ss.ndict) and not len(self.demographics)
-        if self.birth_rate is not None:
-            if not valid:
-                errormsg = 'You can only specify birth_rate together with (optionally) death_rate, not other demographics modules; add ss.Births() manually'
-                raise ValueError(errormsg)
-            births = ss.Births(birth_rate=self.birth_rate)
-            self.demographics += births
-        elif use_default:
-            self.demographics += ss.Births()
-        if self.death_rate is not None:
-            if not valid:
-                errormsg = 'You can only specify death_rate together with (optionally) birth_rate, not other demographics modules; add ss.Deaths() manually'
-                raise ValueError(errormsg)
-            background_deaths = ss.Deaths(death_rate=self.death_rate)
-            self.demographics += background_deaths
-        elif use_default:
-            self.demographics += ss.Deaths()
+        # Births, deaths, and migration declared for the population are held together, until the sim adds them to a disease: see ss.demographics.Flows
+        if not isinstance(demog, ss.ndict):
+            demog = sc.tolist(demog)
+            flows = [mod for mod in demog if isinstance(mod, ss.Transition)]
+            if flows:
+                demog = [mod for mod in demog if not isinstance(mod, ss.Transition)] + [ss.demographics.Flows(flows)]
+        self.demographics = demog
 
         # Decide whether to use aging based on if demographics modules are present
         if self.use_aging is None:
@@ -630,6 +652,18 @@ class SimPars(Pars):
         return out
 
 
+def check_verbose(verbose):
+    """ Check that `verbose` is 0 (print nothing), 1 (the solver, notes, and progress), or 2 (everything), and return it as an integer """
+    if sc.isnumber(verbose) and verbose >= 0 and verbose == int(verbose): # Includes True and False
+        return int(verbose)
+    errormsg = f'verbose must be 0 (print nothing), 1 (the solver, notes, and progress), or 2 (everything), not {verbose!r}'
+    if sc.isnumber(verbose) and 0 < verbose < 1:
+        errormsg += '. A fraction of the steps (e.g. verbose=0.1 in Starsim 3) is now verbose=1, which shows the progress about ten times a run'
+    elif verbose in ['brief', -1]:
+        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0'
+    raise ValueError(errormsg)
+
+
 class Requires(sc.prettyobj):
     """
     One item of the data a module needs, for `sim.requires()`
@@ -659,3 +693,40 @@ class Requires(sc.prettyobj):
         self.doc = doc
         self.default = default
         return
+
+
+def load_pars(filename):
+    """
+    Read parameter values by name from a file, for `ss.Sim(pars=...)`
+
+    A CSV file has either a column of names and a column of values (`name,value`), or
+    one row of values with a column per parameter; a TOML or JSON file is a table of
+    values by name.
+
+    Args:
+        filename (str/path): the file
+
+    Examples:
+        ```python
+        sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
+        ```
+    """
+    path = sc.path(filename)
+    suffix = path.suffix.lower()
+    if suffix == '.json':
+        return dict(sc.loadjson(path))
+    elif suffix == '.toml':
+        import tomllib
+        with open(path, 'rb') as f:
+            return tomllib.load(f)
+    elif suffix == '.csv':
+        df = pd.read_csv(path)
+        cols = [str(col).lower() for col in df.columns]
+        if len(cols) == 2 and cols[1] == 'value':
+            return dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1]))
+        elif len(df) == 1:
+            return df.iloc[0].to_dict()
+        errormsg = f'The parameter file {path} should have a column of names and a column named "value", or one row of values with a column per parameter; it has columns {list(df.columns)} and {len(df)} rows'
+        raise ValueError(errormsg)
+    errormsg = f'The parameter file {path} should be a CSV, TOML, or JSON file, not "{suffix}"'
+    raise ValueError(errormsg)

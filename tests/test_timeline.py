@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 
 small = 100
 medium = 1000
@@ -280,24 +281,25 @@ def test_multi_timestep(do_plot=False):
 @sc.timer()
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
+    SIS = ssl.CodedSIS # Written as code, since a declared disease cannot yet have a timestep of its own
 
     siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
     kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
-    sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+    sis1 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))
     sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
 
     print('Day-day')
-    sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+    sis2 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
     sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
 
     print('Day-year')
-    sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+    sis3 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
     sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
 
     print('Year-day')
-    sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+    sis4 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))
     sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
     msim = ss.parallel(sim1, sim2, sim3, sim4)
@@ -317,8 +319,9 @@ def test_mixed_timesteps():
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
-    sis = ss.SIS(
-        beta = ss.probperday(0.05),
+    sis = ssl.CodedSIS( # Starsim 3's SIS, with waning immunity
+        name = 'sis',
+        beta = ss.prob(0.05, 'day'),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
         waning = ss.perday(0.05),

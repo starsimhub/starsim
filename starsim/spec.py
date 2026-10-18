@@ -1,12 +1,13 @@
 """
-Read a model spec (written by `sim.to_spec()`) back into a sim
+The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`), and the parser of expressions in it
 """
 import ast
+import textwrap
 import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['from_spec', 'to_code', 'diff']
+__all__ = ['to_code', 'diff']
 
 # Typed quantities that can be written inside a rate, e.g. perday(0.5)
 time_names = ['days', 'weeks', 'months', 'years', 'perday', 'perweek', 'permonth', 'peryear',
@@ -79,7 +80,7 @@ class Parser:
                 errormsg = f'The model spec uses "{node.id}", which is not a state, parameter, or transition of the module'
                 raise ValueError(errormsg)
             return self.names[node.id]
-        elif isinstance(node, ast.Attribute) and node.attr in ['n', 'frac']:
+        elif isinstance(node, ast.Attribute) and node.attr in ['n', 'frac', 'total']:
             return getattr(ev(node.value), node.attr)
         elif isinstance(node, ast.BinOp):
             a, b = ev(node.left), ev(node.right)
@@ -100,82 +101,6 @@ class Parser:
                 return ss.transitions.Func(name, *args)
         errormsg = f'ss.load() cannot read "{ast.unparse(node)}" in a model spec'
         raise ValueError(errormsg)
-
-
-def disease(spec):
-    """ One declared disease from its spec """
-    if spec['type'] != 'Disease':
-        unknown(f'a module of type {spec["type"]}')
-    if spec['functions']:
-        unknown(f'functions ({sc.strjoin(f["name"] for f in spec["functions"])})')
-
-    # States
-    states = sc.objdict()
-    for s in spec['states']:
-        init = s['init'] if isinstance(s['init'], str) else quantity(s['init']) # An expression of the parameters is read once they are
-        people = None if f'states.{s["name"]}.people' in spec['guessed'] else s['people'] # Worked out again, as it was the first time
-        states[s['name']] = ss.State(name=s['name'], init=init, people=people, infectious=s['infectious'], rel_sus=s['rel_sus'], rel_trans=s['rel_trans'], label=s['label'])
-
-    # Parameters
-    pars = sc.objdict()
-    for p in spec['pars']:
-        if p['prior'] is not None:
-            unknown(f'the prior of parameter {p["name"]}')
-        pars[p['name']] = ss.par(quantity(p['value']), bounds=p['bounds'], source=p['source'], doc=p['doc'], name=p['name'])
-    parse = Parser({**states, **pars})
-    for state in states.values():
-        if isinstance(state.init, str):
-            state.init = parse(state.init)
-
-    # Transitions
-    def find_par(ref):
-        assert ref[0] == 'par', ref
-        return pars[ref[1]]
-    kwargs = sc.objdict()
-    names = sc.objdict()
-    unnamed = []
-    for t in spec['transitions']:
-        src = [states[n] for n in t['src']] if t['src'] else None
-        dst = [states[n] for n in t['dst']] if t['dst'] else None
-        tr = dict(rate=parse(t['rate']), p=None if t['p'] is None else [parse(p) for p in t['p']], stages=t['stages'], label=t['label'])
-        dur = t['dur']
-        if dur is not None:
-            if dur['dist'] == 'expon' and 'mean' in dur and isinstance(dur['mean'], list):
-                tr['dur'] = find_par(dur['mean'])
-            elif dur['dist'] == 'expon' and 'rate' in dur:
-                tr['rate'] = find_par(dur['rate'])
-            else: # A distribution, held by the parameter that has it as its value
-                held = [p['name'] for p in spec['pars'] if p['value'] == dur]
-                tr['dur'] = pars[held[0]] if held else quantity(dur)
-        trans = ss.Transition(ss.null if src is None else src, ss.null if dst is None else dst, **tr)
-        trans.migration = t.get('migration', False)
-        if f'transitions.{t["name"]}.name' in spec['guessed']: # Named from its endpoints again
-            unnamed.append(trans)
-        else:
-            kwargs[t['name']] = trans
-        names[t['name']] = trans
-
-    # Results and outcomes, which may refer to the transitions
-    parse = Parser({**states, **pars, **names})
-    for r in spec['results']:
-        if r['type'] == 'result':
-            kwargs[r['name']] = parse(r['source'])
-        else:
-            if r['likelihood'] is not None:
-                unknown(f'the likelihood of outcome {r["name"]}')
-            kwargs[r['name']] = ss.outcome(parse(r['source']), delay=quantity(r['delay']), duration=quantity(r['duration']), every=quantity(r['every']), name=r['name'])
-
-    dis = ss.Disease(*states.values(), *unnamed, **kwargs, init_prev=spec['init_prev'], name=spec['name'])
-    graph = dis.graph
-    for key in spec['guessed']: # What was guessed in the model that was saved, and is declared here (the states, a transition's source)
-        parts = key.split('.')
-        if parts[0] == 'transitions' and parts[1] in graph.transitions:
-            graph.transitions[parts[1]].guessed.setdefault(parts[2], 'in the model spec')
-        elif parts[0] != 'transitions':
-            graph.guessed.setdefault(key, 'in the model spec')
-    for strat in spec['stratifications']:
-        dis.stratify(**strat_kwargs(strat))
-    return dis
 
 
 def named_args(ref, keys):
@@ -217,59 +142,6 @@ def joint_split(text):
     kwargs = {k.arg:ast.literal_eval(k.value) for k in node.keywords}
     return ss.by(*args, **kwargs)
 
-
-def from_spec(spec):
-    """
-    Build a sim from a model spec, as written by `sim.to_spec()`
-
-    Diseases declared from states and transitions, their stratifications, and the run
-    settings can be read back; networks, interventions, modifiers, functions, and
-    movement between places cannot yet.
-
-    Args:
-        spec (dict/str): the spec, or the name of a JSON file holding one
-
-    Examples:
-        ```python
-        sim.to_spec('sim.json')
-        sim2 = ss.load('sim.json')
-        assert sim2.hash() == sim.hash()
-        ```
-    """
-    if not isinstance(spec, dict):
-        spec = sc.loadjson(spec)
-    if not str(spec.get('schema', '')).startswith('lingua-franca/'):
-        errormsg = 'This is not a model spec: it has no "schema" of "lingua-franca/..."'
-        raise ValueError(errormsg)
-    networks = []
-    for net in spec.get('networks') or []: # Only named contact matrices can be read back, since they are looked up again
-        if not net.get('data') or net['data'].get('layer') is None:
-            unknown(f'the network "{net.get("name", "?")}"')
-        networks.append(ss.contacts(net['data']['place'], name=net.get('name'), **named_args(net['data'], contacts_keys)))
-    for key in ['modifiers', 'interventions']:
-        if spec.get(key):
-            unknown(key)
-    modules = [disease(mod) for mod in spec['modules']]
-    cfg = spec['config']
-    start, stop = cfg['start'], cfg['stop']
-    if cfg['unit'] is not None and sc.isnumber(start) and sc.isnumber(stop) and not start: # No dates: durations in the sim's unit
-        start = None
-    kwargs = dict(solver=cfg['solver'], integrator=cfg['integrator'], approx=cfg['approx'], unit=cfg['unit'], start=start, stop=stop,
-                  dt=cfg['dt'], total_pop=cfg['total_pop'], n_agents=cfg['n_agents'], rand_seed=cfg['rand_seed'], substeps=cfg.get('substeps'), use_aging=cfg.get('use_aging'))
-    if cfg.get('people'): # A named population, looked up again
-        ref = cfg['people']
-        kwargs['people'] = ss.people(ref['place'], **named_args(ref, people_keys))
-        if np.isclose(kwargs['total_pop'], ref['total']):
-            kwargs.pop('total_pop')
-    if networks:
-        kwargs['networks'] = networks
-    sim = ss.Sim(modules, **{k:v for k,v in kwargs.items() if v is not None})
-    for strat in spec['stratify']:
-        sim.stratify(**strat_kwargs(strat))
-    return sim
-
-
-#%% Writing a model spec as Python
 
 class Code(str):
     """ Python to write as it is, e.g. an object an importer passed to the sim """
@@ -325,9 +197,34 @@ def code_expr(text):
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
             if n.func.id in func_names:
                 n.func = ast.Attribute(ast.Name('np'), n.func.id)
-            elif n.func.id in time_names:
+            elif n.func.id in time_names or hasattr(ss, n.func.id): # Every Starsim name, e.g. ss.by() or ss.seasonal()
                 n.func = ast.Attribute(ast.Name('ss'), n.func.id)
     return ast.unparse(node)
+
+
+def func_code(fn, funcs, left):
+    """ A function in the model spec as the name of its definition, which is added to funcs (with the values it closes over); or None, listed in left, if its source is not a plain definition """
+    source = fn.get('source')
+    text = textwrap.dedent(source).strip() if source else ''
+    if not text.startswith('def '):
+        left.append(f'the function {fn["fn"]} (written as None): define it and pass it in place of None')
+        return None
+    values = [f'{k} = {v!r}' for k,v in (fn.get('values') or {}).items() if not k.startswith('default_')] # Defaults are in the source
+    block = '\n'.join(values + [text])
+    if block not in funcs:
+        funcs.append(block)
+    return Code(fn['fn'])
+
+
+def with_functions(obj, funcs, left):
+    """ The model spec with each function written as the name of its definition; see `func_code()` """
+    if isinstance(obj, dict):
+        if 'fn' in obj and set(obj) <= {'fn', 'source', 'values'}:
+            return func_code(obj, funcs, left)
+        return {k:with_functions(v, funcs, left) for k,v in obj.items()}
+    elif isinstance(obj, list):
+        return [with_functions(v, funcs, left) for v in obj]
+    return obj
 
 
 def operand(text):
@@ -437,9 +334,13 @@ def disease_code(spec, lines, left):
         if r['type'] == 'result':
             kwargs.append((r['name'], code_expr(r['source'])))
         else:
-            if r['likelihood'] is not None:
-                left.append(f'the likelihood of {r["name"]} ({r["likelihood"]})')
-            extra = ''.join(f', {k}={code_value(r[k])}' for k in ['delay', 'duration', 'every'] if r[k] is not None)
+            extra = ''.join(f', {k}={code_value(r[k])}' for k in ['delay', 'duration'] if r[k] is not None)
+            lik = r['likelihood']
+            if isinstance(lik, dict): # Its distribution, with each parameter a model parameter (by name) or a number
+                args = ', '.join(f'{k}={v["par"] if isinstance(v, dict) else repr(v)}' for k,v in lik['pars'].items())
+                extra += f', likelihood=ss.{lik["type"]}({args})'
+            elif lik is not None:
+                left.append(f'the likelihood of {r["name"]} ({lik})')
             source = r['source']
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
 
@@ -532,19 +433,24 @@ def kwargs_code(kwargs):
 
 
 def modify_code(mod):
-    """ An ss.modify as Python """
-    args = [repr(mod['target'])] + [f'{k}={mod[k]!r}' for k in ['multiply', 'add', 'set', 'start', 'stop'] if mod.get(k) is not None]
+    """ An ss.modify as Python, with a function in it as the name of its definition (see `with_functions()`) """
+    write = lambda val: str(val) if isinstance(val, Code) else repr(val)
+    keys = ['multiply', 'add', 'set', 'start', 'stop', 'when'] + (['where'] if isinstance(mod.get('where'), Code) else [])
+    args = [repr(mod['target'])] + [f'{k}={write(mod[k])}' for k in keys if mod.get(k) is not None]
     return f"ss.modify({', '.join(args)}, name={mod['name']!r})"
 
 
-def to_code(spec, filename=None, header=None, footer=None, code=None):
+def to_code(spec, filename=None, header=None, footer=None, code=None, missing=None):
     """
     Write a model spec as a Python file that builds the same sim
 
     The diseases are written in the operator form (`S >> I @ beta * I`), with each
-    parameter and state declared first. Covers what `ss.from_spec()` can read; what
-    it cannot (networks, modifiers, interventions, movement between places, priors,
-    and likelihoods) is listed in comments at the end, rather than failing.
+    parameter and state declared first, and each function used in the model defined
+    before them (from its source). What cannot be written (networks other than named
+    contact matrices, interventions other than `ss.modify`, movement between places,
+    priors, likelihoods, and functions whose source is not a plain definition) is listed
+    in comments at the end, and in a warning (`ss.LossyExport`), since the code then
+    builds a different model until it is added by hand.
 
     Args:
         spec (dict/str): the spec (from `sim.to_spec()`), or a JSON file holding one
@@ -552,30 +458,37 @@ def to_code(spec, filename=None, header=None, footer=None, code=None):
         header (str): a docstring for the top of the file
         footer (list): comments to add at the end, one line each (e.g. what an import did not translate)
         code (dict): Python for arguments to `ss.Sim` that the spec does not hold as data, e.g. `dict(networks='ss.contacts(...)')`
+        missing (list): parts of the sim that are not in the spec, to list with what is not written (e.g. the data)
 
     Returns:
         The code, as a string
     """
     if not isinstance(spec, dict):
         spec = sc.loadjson(spec)
-    left = [] # What is not written, listed at the end rather than failing (as for an export)
+    left = list(missing or []) # What is not written, listed at the end rather than failing (as for an export)
+    funcs = [] # The definitions of the functions used in the model
+    spec = dict(spec, modules=with_functions(spec['modules'], funcs, left))
     code = dict(code or {})
     extra = {}
     for key,simkey in [('networks', 'networks'), ('modifiers', 'connectors'), ('interventions', 'interventions')]:
         if key in code or simkey in code:
             extra[simkey] = code.get(simkey, code.get(key))
             continue
-        mods = spec.get(key) or []
+        mods = with_functions(spec.get(key) or [], funcs, left)
         written = [modify_code(m) for m in mods if m.get('type') == 'modify'] + [contacts_code(m) for m in mods if contacts_code(m)]
         if written:
             extra[simkey] = '[' + ', '.join(written) + ']'
         for mod in mods:
             if mod.get('type') != 'modify' and not contacts_code(mod):
                 left.append(f'{key[:-1]} "{mod.get("name", "?")}" ({mod.get("type", "?")}): add it to ss.Sim({simkey}=...)')
+            elif mod.get('type') == 'modify' and mod.get('where') is not None and not isinstance(mod['where'], Code):
+                left.append(f'where={mod["where"]} of the modifier "{mod.get("name", "?")}": add it to its ss.modify()')
     lines = []
     if header:
         lines += ['"""', *header.strip().splitlines(), '"""']
     lines += ['import starsim as ss', '']
+    if funcs:
+        lines += ['# Functions'] + [line for block in funcs for line in block.splitlines() + ['']]
     names = [disease_code(mod, lines, left) for mod in spec['modules']]
     cfg = spec['config']
     start, stop = cfg['start'], cfg['stop']
@@ -601,7 +514,8 @@ def to_code(spec, filename=None, header=None, footer=None, code=None):
         lines.append(f'sim.stratify({kwargs_code(movable(strat, left))})')
     footer = list(footer or [])
     if left:
-        footer += ['Not written as code (add by hand):'] + [f'  {item}' for item in left]
+        footer += ['Not written as code (LossyExport; add by hand):'] + [f'  {item}' for item in left]
+        ss.warn(f'the code builds a different model until these are added by hand: {"; ".join(left)}', ss.LossyExport)
     if footer:
         lines += [''] + [f'# {line}' for line in footer]
     lines += ['', "if __name__ == '__main__':", '    sim.run()', '    sim.plot()', '']
@@ -687,7 +601,8 @@ def diff(a, b, output=False):
 
     **Example**:
 
-        ss.diff(ss.load('compart_SIR.yaml'), my_sim)
+        my_sim.to_spec('model.json') # Saved earlier
+        ss.diff('model.json', my_sim)
     """
     specs = []
     for x in [a, b]:

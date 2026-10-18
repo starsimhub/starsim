@@ -43,6 +43,18 @@ def test_run_options():
 
     assert s1.summary == s2.summary, 'Sims do not match'
 
+    # One time index during a step: every module sees the step's start, so code written `if sim.ti == 0` runs on the first step
+    seen = sc.objdict(rate=[], intv=[])
+    def rate(sim):
+        seen.rate.append(sim.ti)
+        return 0.1
+    def intv(sim):
+        seen.intv.append(sim.ti)
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', rate=rate), init_prev=0.1, name='sir')
+    sim = ss.Sim(sir, interventions=intv, solver='abm', n_agents=100, unit='day', stop=4, verbose=0).run()
+    assert seen.intv == [0, 1, 2, 3] and set(seen.rate) == {0, 1, 2, 3} # Was 1 to 4 in the intervention and 0 to 3 in the rate
+    assert sim.ti == 4 # At the last time point, after the run
+
     return s2.loop
 
 

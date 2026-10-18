@@ -20,7 +20,7 @@ ops = {
     '&':operator.and_, '|':operator.or_, '+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv,
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
-leaves = ['people', 'state', 'dim', 'array']
+leaves = ['people', 'state', 'dim', 'array', 'incidence']
 
 
 class Cond:
@@ -32,7 +32,7 @@ class Cond:
     states, and on stratifications.
 
     Args:
-        op (str): the operation: a leaf ('people', 'state', 'dim', 'array'), an operator, '~', or 'isin'
+        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence'), an operator, '~', or 'isin'
         args (list): the operands
 
     Examples:
@@ -55,6 +55,7 @@ class Cond:
         if op == 'people': return f'people.{args[0]}'
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
+        elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
         elif op == '~':    return f'~{args[0]!r}'
         elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
         return f'({args[0]!r} {op} {args[1]!r})'
@@ -74,6 +75,10 @@ class Cond:
     def __rand__(self, other): return Cond('&', other, self)
     def __ror__(self, other):  return Cond('|', other, self)
     def __invert__(self):     return Cond('~', self)
+
+    def __rshift__(self, other):
+        errormsg = 'A condition is not states: several sources of a transition are a sum of states, S + I + R >> D @ rate (| on states is a condition, for where=)'
+        raise TypeError(errormsg)
     def __add__(self, other): return Cond('+', self, other)
     def __sub__(self, other): return Cond('-', self, other)
     def __mul__(self, other): return Cond('*', self, other)
@@ -105,6 +110,7 @@ class Cond:
             return np.isin(evaluate(args[0], ctx), vals)
         a, b = args
         if op in comparisons: # A level of a stratification can be given by its label, and an age must fall on a bin edge
+            op, a, b = ctx.bands(op, a, b)
             a_val, b_val = ctx.level(b, a), ctx.level(a, b)
             ctx.check_edge(a, b_val)
             ctx.check_edge(b, a_val)
@@ -134,7 +140,7 @@ def state_refs(obj):
         return
     for holder in [obj, getattr(obj, 'product', None)]:
         for val in (vars(holder).values() if holder is not None else []):
-            if isinstance(val, (Cond, ss.State, ss.transitions.StateSet)):
+            if isinstance(val, (Cond, ss.State)):
                 walk(as_cond(val))
     return out
 
@@ -158,7 +164,7 @@ def is_static(cond, sim):
         name = args[1]
         mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]
         return any(name in m.graph.states for m in mods) and not any(name in m.graph.transitions for m in mods)
-    elif op == 'array':
+    elif op in ['array', 'incidence']:
         return False
     elif op == 'isin':
         return is_static(args[0], sim)
@@ -185,11 +191,6 @@ def as_cond(obj):
         return obj
     elif isinstance(obj, (ss.State, ss.Transition)): # Looked up by name when the sim runs, since the sim works on copies
         return Cond('state', getattr(obj, 'module', None), obj.name)
-    elif isinstance(obj, ss.transitions.StateSet):
-        out = as_cond(obj.states[0])
-        for state in obj.states[1:]:
-            out = out | as_cond(state)
-        return out
     elif isinstance(obj, ss.Arr):
         return from_arr(obj)
     return obj
@@ -221,13 +222,14 @@ class Selector:
 
     Args:
         sim (`ss.Sim`): the sim
-        mod (`ss.Module`): the declared disease that states are looked up in (if None, the only one)
+        mod (`ss.Module`): the module that states are looked up in, declared or written as code (if None, the first declared disease)
     """
     def __init__(self, sim, mod=None):
         self.sim = sim
         self.abm = sim.solver == 'abm'
         self.mod = mod if mod is not None else (sim.declared[0] if len(sim.declared) else None)
-        self.states = [s.name for s in self.mod.graph.people_states] if self.mod is not None else []
+        graph = getattr(self.mod, 'graph', None) # A module written as code has no declared states
+        self.states = [s.name for s in graph.people_states] if graph is not None else []
         return
 
     @property
@@ -284,6 +286,8 @@ class Selector:
         dims = [strat.name for strat in sim.strats]
         if op == 'dim':
             return self.dim(args[0])
+        elif op == 'incidence':
+            return self.incidence(cond)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):
@@ -294,7 +298,7 @@ class Selector:
         mod = self.module(modname(args[0]))
         if args[0] is None: # A state or transition given without its module: look in this module first, then the others
             for other in [self.mod] + [m for m in sim.declared if m is not self.mod]:
-                if other is not None and (name in other.graph.states or name in other.graph.transitions):
+                if getattr(other, 'graph', None) is not None and (name in other.graph.states or name in other.graph.transitions):
                     mod = other
                     break
         graph = getattr(mod, 'graph', None)
@@ -305,14 +309,34 @@ class Selector:
             return self.in_states([name])
         elif graph is not None and name in graph.transitions:
             return self.event(mod, name)
-        elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.Crossing
+        elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.solvers.Crossing
             return np.isin(self.dim(mod.name), self.dim_strat(mod.name).state_levels[name])
         elif name in dims:
             return self.dim(name)
         elif not self.abm:
-            ss.error('E804', f'the condition {cond} cannot run with solver="{sim.solver}".\n'
-                             f'     "{name}" is a per-agent attribute of "{mod.name}", not one of its states or a stratification. Run with solver="abm".')
+            raise ss.CapabilityError(f'the condition {cond} cannot run with solver="{sim.solver}".\n'
+                                     f'     "{name}" is a per-agent attribute of "{mod.name}", not one of its states or a stratification. Run with solver="abm".')
         return mod[name].raw
+
+    def incidence(self, cond):
+        """ The number who went through a transition over a window, as a share of the people at the same level of a stratification, for each agent or group (see `ss.Transition.incidence()`) """
+        sim = self.sim
+        tr, over, by = cond.args
+        mod = self.mod if getattr(tr, 'module', None) is None else self.module(modname(tr.module))
+        name = tr.name
+        res = mod.results
+        strata = lambda key: np.asarray(res[key].strata if res[key].strata is not None else np.asarray(res[key].values)[:, None]) # By group
+        ti = min(sim.ti, len(res[name]) - 1) # The last time point with results
+        steps = 1 if over is None else ss.connectors.to_steps(sim, over)
+        flows = strata(name)[max(ti - steps + 1, 0):ti + 1].sum(axis=0)
+        people = sum(strata(f'n_{key}')[ti] for key,state in mod.graph.states.items() if state.people)
+        level = np.zeros(len(flows), dtype=int) if by is None else np.maximum(sim.group_levels[:, sim.dim_index(by)], 0)
+        num = np.bincount(level, weights=flows)
+        den = np.bincount(level, weights=people)
+        share = np.divide(num, den, out=np.zeros(len(num)), where=den > 0)[level] # For each group
+        if self.abm:
+            return share[sim.group_raw()] if len(share) > 1 else np.full(self.shape, share[0])
+        return share[None, :]
 
     def event(self, mod, name):
         """ The people who went through a transition this step """
@@ -342,6 +366,25 @@ class Selector:
                     return strat.labels.index(value)
         return value
 
+    def bands(self, op, a, b):
+        """
+        A binned dimension (e.g. `sir.age`, with bins [0, 5, 20]) compared with a number is compared with its bin edges:
+        `sir.age < 5` is the people in the bins below 5, as a position (`< 1`)
+        """
+        is_dim = isinstance(a, Cond) and a.op == 'dim'
+        if not is_dim or not sc.isnumber(b) or isinstance(b, (bool, np.bool_)) or not self.is_binned(a.args[0]):
+            return op, a, b
+        strat = self.sim.strats[self.sim.dim_index(a.args[0])]
+        edges = [int(e) if e == int(e) else e for e in strat.edges]
+        if op in ['==', '!=']:
+            errormsg = f'The condition {a} {op} {b:n} compares the bins of "{strat.name}" ({sc.strjoin(strat.labels)}) with a number; give a bin by its label, e.g. {strat.name} == "{strat.labels[0]}", or a range by its edges, e.g. {strat.name} < {edges[-1]}'
+            raise ValueError(errormsg)
+        if b not in strat.edges:
+            errormsg = f'The condition {a} {op} {b:n} needs {b:n} to be an edge of the bins of "{strat.name}" ({edges}), since people are counted by bin; add it as an edge, or use one of those'
+            raise ValueError(errormsg)
+        index = int(np.flatnonzero(strat.edges == b)[0])
+        return ('<' if op in ['<', '<='] else '>='), a, index # Ages are continuous, so below an edge (or at most it) is the bins below it
+
     def check_edge(self, cond, value):
         """ In a compartmental run, an age threshold has to be the edge of an age group """
         sim = self.sim
@@ -354,8 +397,8 @@ class Selector:
             if value not in strat.edges and strat.edges[0] < value:
                 edges = sorted(set(strat.edges.tolist() + [value]))
                 edges = [int(e) if e == int(e) else e for e in edges]
-                ss.error('E804', f'a condition uses people.{name} and {value:n}, but the model\'s {name} bins are {[int(e) if e == int(e) else e for e in strat.edges]} and {value:n} falls inside a bin.\n'
-                                 f'     Fix: add {value:n} as a bin edge, stratify({name}={edges}), or run with solver="abm".')
+                raise ss.CapabilityError(f'a condition uses people.{name} and {value:n}, but the model\'s {name} bins are {[int(e) if e == int(e) else e for e in strat.edges]} and {value:n} falls inside a bin.\n'
+                                         f'     Fix: add {value:n} as a bin edge, stratify({name}={edges}), or run with solver="abm".')
         return
 
     #%% Selections
@@ -374,8 +417,8 @@ class Selector:
             nargs = len(inspect.signature(cond).parameters)
             if nargs >= 2:
                 if not self.abm:
-                    ss.error('E804', f'the function "{getattr(cond, "__name__", "function")}" cannot run with solver="{sim.solver}".\n'
-                                     f'     It takes uids, which exist only per agent. Run with solver="abm".')
+                    raise ss.CapabilityError(f'the function "{getattr(cond, "__name__", "function")}" cannot run with solver="{sim.solver}".\n'
+                                             f'     It takes uids, which exist only per agent. Run with solver="abm".')
                 out = cond(sim, sim.people.auids if uids is None else uids)
             else:
                 out = cond(sim)
@@ -410,7 +453,7 @@ class Selector:
                 raise ValueError(errormsg)
             return as_bool(out)
         if isinstance(out, ss.uids):
-            ss.error('E804', f'the condition {cond} returned UIDs, which exist only per agent. In a compartmental run it has to return a boolean per group; or run with solver="abm".')
+            raise ss.CapabilityError(f'the condition {cond} returned UIDs, which exist only per agent. In a compartmental run it has to return a boolean per group; or run with solver="abm".')
         if isinstance(out, ss.Arr):
             out = out.raw[:sim.n_groups]
         out = np.asarray(out)
@@ -425,6 +468,8 @@ class Selector:
     def per_person(self, val, convert=None):
         """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
         sim = self.sim
+        if isinstance(val, ss.transitions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
+            val = self.mod.engine.eval(val)
         if isinstance(val, ss.by):
             ds, grid = val.grid(sim)
             return grid[tuple(self.dim(sim.strats[d].name) for d in ds)]

@@ -1,8 +1,6 @@
 """
 Define array-handling classes, including agent states
 """
-import os
-import sys
 import itertools
 import numbers
 import numpy as np
@@ -303,6 +301,8 @@ class Arr(BaseArr):
         (imm.col('mutant') > 0.5).uids  # Returns ss.uids([0, 1])
         ```
     """
+    mod = None # The module whose state this is, if any; set by Module.define_states(), so a condition on it (e.g. hiv.cd4 < 200) can find it
+
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None, columns=None):
         # Set attributes
         self.name = name
@@ -360,6 +360,8 @@ class Arr(BaseArr):
             self.people = ss.mock_people(n_agents)
             if raw is None:
                 self.init_vals()
+            else:
+                self.initialized = True # Its values are given, so arithmetic on it is not a lazy condition
 
         self.columns = colnames
         self.validate_columns() # Do this last, so column names can be checked against all attributes
@@ -450,7 +452,7 @@ class Arr(BaseArr):
         Returns:
             A BoolArr with the result of the operation.
         """
-        if not self.initialized and not inplace: # Before the sim exists, this builds a lazy condition instead: see ss.Cond
+        if not self.initialized and not inplace: # Before the sim exists, this builds a lazy condition instead: see ss.conditions.Cond
             return ss.conditions.lazy(op, self, other)
         self_raw = self.raw # Always size N
         both_raw = True # Assume this by default
@@ -535,6 +537,8 @@ class Arr(BaseArr):
 
             active = disease.state.isin([State.MILD, State.SEVERE]).uids
         """
+        if not self.initialized: # Before the sim exists, this builds a lazy condition instead: see ss.conditions.Cond
+            return ss.conditions.from_arr(self).isin(sc.tolist(values))
         values = np.atleast_1d(sc.toarray(values)) # Normalize scalars/lists/arrays to 1D (matches np.isin for other inputs)
         if values.dtype == object: # A set, dict, or generator is wrapped as a single object, which np.isin would silently treat as no-match; be louder
             errormsg = f'isin() expects a scalar or array-like object (list/tuple/array), not {values}'
@@ -561,6 +565,9 @@ class Arr(BaseArr):
 
         if isinstance(other, (ss.TimePar, ss.date)):
             return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
+        if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy expression instead, as a comparison does: see ss.conditions.Cond
+            arr = ss.conditions.from_arr(self)
+            return ss.conditions.Cond(op, other, arr) if reverse else ss.conditions.Cond(op, arr, other)
 
         inds = self.auids
         a = self._index(self.raw, inds)
@@ -734,7 +741,7 @@ class Arr(BaseArr):
 
         # Physically reshape the arrays, if needed
         if orig_len + n_new > self.len_tot:
-            n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
+            n_grow = max(n_new, self.len_tot//5)  # Minimum 20% growth, since growing arrays is slow (but each agent's arrays take a fifth more memory at most)
             new_empty = np.empty((n_grow, *self.item_shape), dtype=self.dtype) # 10x faster than np.zeros()
             self.raw = np.concatenate([self.raw, new_empty], axis=0)
             self.len_tot = len(self.raw)
@@ -918,45 +925,15 @@ class ModifiableArr(FloatArr):
 
     Reading it gives the base values, which a modifier never changes; `.effective` gives
     the values with the modifiers that are active now applied, which is what the model
-    uses. With `ss.Sim(track_writes=True)`, it records which module assigned it, for
-    `sim.what_modifies()`.
+    uses. `sim.what_modifies()` lists the modifiers.
     """
     engine = None # The engine that applies the modifiers; set by it
-    writes = None # For each module seen assigning it: [values assigned, the last step, where]; None if not tracked
 
     @property
     def effective(self):
         """ The values with the modifiers that are active now applied """
         mult = 1.0 if self.engine is None else self.engine.mult_raw(self.name)
         return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
-
-    def __setitem__(self, key, value):
-        super().__setitem__(key, value)
-        if self.writes is not None:
-            self.record(key)
-        return
-
-    def _math(self, op, other=None, inplace=False, reverse=False):
-        out = super()._math(op, other, inplace=inplace, reverse=reverse)
-        if inplace and self.writes is not None:
-            self.record(self.auids)
-        return out
-
-    def record(self, key):
-        """ Record the module whose code assigned the values """
-        frame = sys._getframe(2)
-        while frame is not None and not isinstance(frame.f_locals.get('self'), ss.Module):
-            frame = frame.f_back
-        if frame is None:
-            writer, where = 'code outside a module', ''
-        else:
-            writer = f'{type(frame.f_locals["self"]).__name__}.{frame.f_code.co_name}()'
-            where = f'{os.path.basename(frame.f_code.co_filename)}:{frame.f_lineno}'
-        n = np.size(self.raw[key])
-        entry = self.writes.setdefault(writer, [0, None, where])
-        entry[0] += n
-        entry[1] = None if self.engine is None else self.engine.sim.ti
-        return
 
 
 class IntArr(Arr):
@@ -1100,6 +1077,8 @@ class BoolState(BoolArr):
     Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
     (e.g. in `module.define_states()`, whether or not they are BoolStates.
     """
+    watch = None # What keeps count of the agents in the state (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
+
     def __init__(self, name=None, **kwargs):
         if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
             errormsg = f'BoolState "{name}" cannot be 2D since it automatically generates results; use ss.BoolArr instead'
@@ -1107,13 +1086,115 @@ class BoolState(BoolArr):
         super().__init__(name=name, **kwargs)
         return
 
+    def asnew(self, arr=None, cls=None, name=None, copy=None):
+        """ As `Arr.asnew()`; a copy whose values are not the state's own is not counted (see `watch`) """
+        new = super().asnew(arr=arr, cls=cls, name=name, copy=copy)
+        if new.raw is not self.raw and new.__dict__.get('watch') is not None:
+            new.__dict__['watch'] = None
+        return new
+
+    def _counter(self):
+        """ The engine keeping count of who is in the state, if it is counting now """
+        watch = self.watch
+        if watch is None or watch.engine.live is None:
+            return None
+        return watch.engine
+
+    def __setitem__(self, key, value):
+        engine = self._counter()
+        if engine is None: # The usual case
+            return super().__setitem__(key, value)
+        if not isinstance(key, uids):
+            key = self._convert_key(key)
+        inds = np.atleast_1d(np.asarray(key))
+        if len(inds) > 1 and not np.all(inds[1:] > inds[:-1]): # Each agent once, so a change is counted once
+            inds = np.unique(inds)
+        old = self.raw[inds]
+        self.raw[key] = value
+        engine.wrote(self.name, inds, old, self.raw[inds])
+        return
+
+    def set(self, uids, new_vals=None):
+        """ Set the values for the specified UIDs, telling whatever keeps count of the state (see `__setitem__()`) """
+        engine = self._counter()
+        if engine is None:
+            return super().set(uids, new_vals=new_vals)
+        inds = np.atleast_1d(np.asarray(uids))
+        old = self.raw[inds]
+        out = super().set(uids, new_vals=new_vals)
+        engine.wrote(self.name, inds, old, self.raw[inds])
+        return out
+
+    def grow(self, new_uids=None, new_vals=None):
+        """ Add new agents (see `Arr.grow()`); they were not counted before, so whatever keeps count of the state counts those who start in it """
+        engine = self._counter()
+        if engine is None:
+            return super().grow(new_uids, new_vals=new_vals)
+        watch = self.watch
+        self.watch = None # The values the new agents' rows had (if they existed already) are not a change
+        try:
+            super().grow(new_uids, new_vals=new_vals)
+        finally:
+            self.watch = watch
+        if new_vals is not None or self.default: # Otherwise they start out of the state (the usual case)
+            inds = np.atleast_1d(np.asarray(new_uids))
+            engine.wrote(self.name, inds, np.zeros(len(inds), dtype=bool), self.raw[inds])
+        return
+
+    def _changed_all(self):
+        """ After a change to the whole array (an in-place operation), whatever keeps count of the state counts it again """
+        if self.watch is not None:
+            self.watch.engine.regroup()
+        return
+
+    def __iand__(self, other):
+        out = super().__iand__(other)
+        self._changed_all()
+        return out
+
+    def __ior__(self, other):
+        out = super().__ior__(other)
+        self._changed_all()
+        return out
+
+    def __ixor__(self, other):
+        out = super().__ixor__(other)
+        self._changed_all()
+        return out
+
+
+class Watch:
+    """
+    The link from a state to the engine that keeps count of who is in it (`BoolState.watch`), which is told of
+    every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.distributions.no_dists()`),
+    so the link does not change where they are found, which gives each its random numbers.
+    """
+    __slots__ = ['engine']
+
+    def __init__(self, engine):
+        self.engine = engine
+        return
+
 
 class IndexArr(Arr):
-    """ A special class of Arr used for UIDs and RNG IDs; not to be used as a general integer array (for that, use IntArr) """
+    """
+    A special class of Arr used for UIDs and RNG IDs; not to be used as a general integer array (for that, use IntArr)
+
+    The values are stored as 32-bit integers, to save memory (so there can be up to 2^31 agents), and read as
+    UIDs (`ss.uids`, which are 64-bit).
+    """
     def __init__(self, name=None, label=None):
-        super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, skip_init=True)
-        self.raw = uids(self.raw)
+        super().__init__(name=name, dtype=np.int32, default=None, nan=-1, label=label, skip_init=True)
         return
+
+    def __getitem__(self, key):
+        out = super().__getitem__(key)
+        return uids(out) if isinstance(out, np.ndarray) else ss_int(out)
+
+    @property
+    def values(self):
+        """ The values of the active agents, as UIDs """
+        return uids(super().values)
 
     @property
     def uids(self):
@@ -1124,8 +1205,10 @@ class IndexArr(Arr):
         """ Change the size of the array """
         if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
             new_uids = new_vals
+        if new_vals is not None and np.size(new_vals) and np.max(new_vals) >= 2**31:
+            errormsg = f'"{self.name}" is stored as 32-bit integers, so it cannot hold {np.max(new_vals):n}: there can be at most 2^31 agents'
+            raise ValueError(errormsg)
         super().grow(new_uids=new_uids, new_vals=new_vals)
-        self.raw = uids(self.raw)
         return
 
 

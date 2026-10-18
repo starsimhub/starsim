@@ -204,9 +204,9 @@ def test_worlds(do_plot=False):
         start = 2000,
         stop = 2100,
         n_agents = 200,
-        verbose = 0.05,
-        diseases = dict(
-            type = 'sir',
+        verbose = 1,
+        diseases = ssl.CodedSIR( # Written as code, since OneMore sets its prognoses directly
+            name = 'sir',
             init_prev = 0.1,
             beta = 1.0,
             dur_inf = 20,
@@ -302,6 +302,12 @@ def test_independence(do_plot=False, thresh=0.1):
     max_corr = abs(stats).max()
     assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
 
+    # A declared disease's random numbers do not depend on which other declared diseases are in the sim
+    kw = dict(n_agents=1000, networks='random', dur=10, verbose=0)
+    alone = ss.Sim(diseases=ss.SIS(), **kw).run()
+    both = ss.Sim(diseases=[ss.SIR(p_death=0), ss.SIS()], **kw).run()
+    assert np.array_equal(alone.results.sis.n_I, both.results.sis.n_I) # The same people infected with SIS
+
     return sim
 
 
@@ -341,7 +347,7 @@ def test_crn_option():
     """ The opt-in non-CRN fast path (ss.options.crn=False) for transmission """
     def run(crn, seed=1):
         with ss.options.context(crn=crn):
-            sim = ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
+            sim = ss.Sim(diseases=ssl.CodedSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.Infection
                          n_agents=2000, dur=30, rand_seed=seed, verbose=0)
             sim.run()
         return sim.results['sis']['n_infected'].values

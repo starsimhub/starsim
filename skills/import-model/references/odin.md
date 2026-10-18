@@ -19,8 +19,14 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 | The history of a `delay()` | An inflow for the first `tau` (below) | no |
 | A chained draw (`n_ID <- rbinom(n_I, p_death)`) | A branch: `ss.Transition(I, [R, D], rate=gamma, p=[None, p_death])` | no |
 | `rmultinom` | Branches with `p=` | no |
-| A state at its own level in a stratified model (`beta * S[i] * I[i] / N[i]`) | A contact matrix by the dimension, `networks=ss.contacts(age=np.eye(n))` | no |
-| Arrays over levels with no flows between them (patches) | `stratify(patch=[...])`, with `ss.by(patch=[...])` for parameters that differ | no |
+| A contact matrix: `s_ij[, ] <- m[i, j] * I[j] / N[j]` and `lambda[] <- beta * sum(s_ij[i, ])` | A stratification by the arrays' dimension (named from `dim(S) <- n_age`, levels `"1"` to `"n"`, initial numbers by level) and `networks=ss.contacts(age=m)`; the force is `beta * I` | yes |
+| `1 + A * cos(2 * pi * step * dt / 365)` (or `t`, `time`; or `sin`) | `ss.seasonal(mean=1, amplitude=A, peak=...)` as a parameter | yes |
+| `update(time) <- (step + 1) * dt` | Nothing: the sim keeps the time | yes |
+| `update(cases) <- if (step %% k == 0) sum(n_SE) else cases + sum(n_SE)` | `ss.outcome(n_SE, every=ss.days(k * dt))` | yes |
+| Names Python reserves (`lambda`, `is`, ...) | Renamed with a trailing underscore (`lambda_`) | yes |
+| Another `if (c) a else b` in a rate | `ss.timeseries` (a condition on the time), `where=`, or a comparison of counts (`(Q.n < K)`) | no |
+| A state at its own level in a stratified model with no matrix (`beta * S[i] * I[i] / N[i]`) | A contact matrix by the dimension, `networks=ss.contacts(age=np.eye(n))` | no |
+| Arrays over levels with no flows between them (patches) | `stratify(patch=[...], kind='space')`, with `ss.by(patch=[...])` for parameters that differ | no |
 | `interpolate()`, `t`/`time`/`step` | `ss.timeseries({t0: v0, ...}, mode='linear')` as a parameter's value | no |
 | `output(x)` | A result on the disease, e.g. `prev = I / (S + I + R)` | no |
 
@@ -43,4 +49,4 @@ With it, the import agrees with odin within 5.6, 8.4, 6.3, and 3.6% in S, E, I, 
 
 ## Running the original
 
-odin's environment is `lingua_franca_design/_envs/odin` (`bin/Rscript` puts odin in R's library path). As in `examples/odin/*/run.py`: write an R driver that does `gen <- odin::odin(path); x <- gen$new(<user values>); set.seed(seed); out <- x$run(0:<stop>)` and `write.csv(out, ...)`, and run it with `tools.run(['Rscript', driver, ...], 'odin')`. The columns are `t` (or `step`) and one per variable (`S[1]`, ... for arrays). A stock at time `k` is the number at time `k` in both, so no shift is needed. Deterministic models compare exactly; for discrete stochastic ones, many runs, compared statistically (many die out early).
+odin's environment is `lingua_franca_design/_envs/odin` (`bin/Rscript` puts odin in R's library path). As in `examples/odin/*/run.py`: write an R driver that does `gen <- odin::odin_(path); x <- gen$new(<user values>); set.seed(seed); out <- x$run(0:<stop>)` and `write.csv(out, ...)`, and run it with `tools.run(['Rscript', driver, ...], 'odin')`. (`odin::odin()` quotes its argument, so a path in a variable, such as `commandArgs()`, needs `odin::odin_()`.) The columns are `t` (or `step`) and one per variable (`S[1]`, ... for arrays). A stock at time `k` is the number at time `k` in both, so no shift is needed. Deterministic models compare exactly; for discrete stochastic ones, many runs, compared statistically (many die out early).

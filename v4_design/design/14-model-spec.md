@@ -1,115 +1,117 @@
 # The model spec
 
-What a model is, written out as data. The model spec is a JSON document that holds everything needed to rebuild a model: its states, transitions, parameters, stratifications, mixing, interventions, results, and run settings.
+What a model is, written out as data. The model spec is a JSON-compatible document that holds the whole model: its states, transitions, parameters, stratifications, mixing, interventions, results, and run settings. It is the normalized form of the model, for hashing and comparing; it is not read back into a sim.
 
 Justified by [best-practices/model-structure.md](../best-practices/model-structure.md) and [best-practices/principles.md](../best-practices/principles.md).
 
 ## What it is for
 
-A model in this language is a set of objects (states, transitions, parameters), not a block of code. The model spec is those objects written to a file. It is what gets:
+A model in this language is a set of objects (states, transitions, parameters), not a block of code. The model spec is those objects written out as plain data. It is what gets:
 
-- **saved and loaded**, so a model can be sent to someone else or archived with a paper;
 - **hashed**, so that "is this the same model?" has an answer ([11-random.md](11-random.md));
 - **compared**, declaration by declaration (`ss.diff`);
-- **drawn and printed** (`diagram()`, `describe()`, `equations()` all read the same structure);
-- **translated** to and from other frameworks ([16-interop.md](16-interop.md)).
+- **written as code**: `sim.to_code()` writes the Python that builds the model again from its spec ([saved forms](#saved-forms)).
 
-Nobody is expected to write a model spec by hand. Models are written in Python; the spec is produced from them.
+Nobody is expected to write a model spec by hand, and nothing reads one back: models are written in Python, the spec is produced from them, and a model is saved and shared as code. There is no non-Python consumer of the spec.
 
 ```python
-sir.to_json()                  # the model spec of one disease, as a dict
-sir.to_json('sir.json')        # ... saved to a file
-sim.to_json('sim.json')        # the whole sim: modules, networks, interventions, data, settings
-sim2 = ss.load('sim.json')     # back to a sim
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.3),
+    recovery  = ss.progression('I -> R', dur=10),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sir, stop=100)
+
+sir.to_spec()                  # the model spec of one disease, as a dict (sir.to_json() gives the same)
+sir.to_spec('sir.json')        # ... saved to a file
+sim.to_spec()                  # the whole sim: modules, networks, stratifications, interventions, settings
+ss.save('model.py', sim)       # the model as code, which builds it again (sim.to_code())
 ```
 
-`to_json()` is Starsim's existing name. It works before the model is in a sim; values that are only resolved inside a sim (the unit of a bare number, a guessed population size) are then written as `null`.
+`sir.to_spec()` works before the disease is in a sim; values that are only resolved inside a sim (the unit of a bare number, a guessed population size) are then written as `null`. `sim.to_spec()` initializes the sim first if it is not initialized (`sim.hash()` instead works on a copy, and leaves the sim as it was). `ss.load()` of a saved spec raises an error that says to save the model as code instead.
 
 A sim is one run, so its spec holds one seed and no number of runs. The runs of an `ss.MultiSim` share one spec and differ only in `rand_seed`.
 
 ## Structure
 
-This is the spec of the model on the first page of [00-overview.md](00-overview.md): an age-stratified SIR with a fitted `beta`, a reported-cases outcome, a contact matrix, data, and one intervention.
+This is the spec of the model on the first page of [00-overview.md](00-overview.md) (an age-stratified SIR with a fitted `beta`, a reported-cases outcome, and a contact matrix), with the masks modifier as its intervention, as `sim.to_spec()` writes it:
 
 ```json
 {
   "schema": "lingua-franca/1.0",
   "modules": [
     {
-      "name": "sir",
-      "type": "Disease",
-      "dt": null,
-      "init_prev": 0.01,
+      "name": "sir", "type": "Disease", "dt": null, "init_prev": 0.01,
       "states": [
         {"name": "S", "people": true, "init": null, "infectious": false, "rel_sus": 1.0, "rel_trans": 1.0, "label": null},
         {"name": "I", "people": true, "init": null, "infectious": true, "rel_sus": 1.0, "rel_trans": 1.0, "label": null},
         {"name": "R", "people": true, "init": null, "infectious": false, "rel_sus": 1.0, "rel_trans": 1.0, "label": null}
       ],
       "pars": [
-        {"name": "beta", "value": {"type": "per", "value": 0.05, "unit": "day"},
-         "bounds": [0.01, 0.5], "prior": null, "source": null, "doc": null}
+        {"name": "beta", "value": {"type": "per", "value": 0.05, "unit": "day"}, "bounds": [0.01, 0.5], "prior": null, "source": null, "doc": null},
+        {"name": "dur", "value": {"type": "dur", "value": 10.0, "unit": "day"}, "bounds": null, "prior": null, "source": null, "doc": null}
       ],
       "transitions": [
-        {"name": "infection", "kind": "contact-mediated", "src": ["S"], "dst": ["I"],
-         "rate": ["*", ["par", "beta"], ["state", "I"]],
+        {"name": "infection", "kind": "contact-mediated", "src": ["S"], "dst": ["I"], "rate": "beta * I",
          "dur": null, "p": null, "stages": null, "label": null},
-        {"name": "recovery", "kind": "spontaneous", "src": ["I"], "dst": ["R"],
-         "rate": null,
-         "dur": {"dist": "expon", "mean": {"type": "dur", "value": 10.0, "unit": "day"}},
-         "p": null, "stages": null, "label": null}
+        {"name": "recovery", "kind": "spontaneous", "src": ["I"], "dst": ["R"], "rate": null,
+         "dur": {"dist": "expon", "mean": ["par", "dur"]}, "p": null, "stages": null, "label": null}
       ],
       "stratifications": [],
       "results": [
-        {"name": "cases", "type": "outcome", "source": ["*", 0.5, ["result", "infection"]],
-         "delay": {"type": "dur", "value": 5.0, "unit": "day"}, "duration": null, "every": {"type": "dur", "value": 1.0, "unit": "week"}, "likelihood": null}
+        {"name": "cases", "type": "outcome", "source": "0.5 * infection",
+         "delay": {"type": "dur", "value": 5.0, "unit": "day"}, "duration": null, "likelihood": null}
       ],
       "functions": [],
-      "guessed": ["states.I.infectious", "transitions.recovery.dur.dist", "pars.beta.value.unit"]
+      "guessed": ["states.I.infectious", "transitions.recovery.dwell"]
     }
   ],
   "networks": [
-    {"name": "contacts", "type": "MixingPools", "layer": null, "dependence": "frequency", "n_ref": null,
-     "data": {"provider": "contacts", "place": "Kenya", "source": "prem2021", "version": "2021.1"}}
+    {"type": "MixingPools", "name": "contacts", "label": "contacts", "pars": {"diseases": null, "beta": 1.0},
+     "data": {"provider": "starsim_data", "version": "0.4.0", "place": "Kenya", "source": "prem2021", "layer": "all",
+              "location": "Kenya", "study": "Prem et al. 2021", "license": "GPL-3.0"}}
   ],
   "stratify": [
-    {"name": "age", "kind": "age", "levels": [0, 15, 65], "split": null, "adjust": {},
-     "states": null, "where": null, "mobility": null, "immunity": null, "transitions": []}
+    {"split_from": "people", "name": "age", "kind": "age", "levels": [0.0, 15.0, 65.0],
+     "split": [0.39284168924481755, 0.5792660879552572, 0.02789222279992524],
+     "adjust": {}, "states": null, "where": null, "mobility": null}
   ],
   "modifiers": [],
   "interventions": [
-    {"name": "masks", "type": "modify", "target": "sir.pars.beta", "multiply": 0.6, "add": null, "set": null,
-     "where": null, "when": null, "start": "2020-03-15", "stop": null}
+    {"type": "modify", "name": "masks", "label": "masks", "target": "sir.pars.beta", "multiply": 0.6, "add": null, "set": null,
+     "start": "2020-03-15", "stop": null}
   ],
-  "data": {"file": "weekly_cases.csv", "sha256": "5b1f0c9e", "columns": ["cases"], "aliases": {}},
   "config": {
-    "solver": "auto", "integrator": null, "approx": null, "unit": "day",
-    "start": "2020-01-01", "stop": "2021-01-01", "dt": {"type": "dur", "value": 1.0, "unit": "day"},
-    "total_pop": 50000000.0, "n_agents": null, "rand_seed": 1
+    "solver": "auto", "integrator": null, "approx": null, "unit": "day", "start": "2020-01-01", "stop": "2021-01-01",
+    "dt": 1.0, "total_pop": 50000000.0, "n_agents": null, "rand_seed": 1, "crn": true, "precision": 32
   },
-  "fit": null,
   "meta": {
-    "library_version": "4.0.0", "created": "2026-10-12T00:00:00Z",
-    "solver_chosen": "ode", "solver_reason": "every part has a compartmental form",
-    "notes": ["unit: day (from start and stop dates)", "split for age taken from the population"]
+    "library_version": "4.0.0", "solver_chosen": "ode", "solver_reason": "every part of the model has a compartmental form",
+    "notes": [
+      "the ages of the people are those of Kenya, since the contacts \"contacts\" are; give people= for others",
+      "people do not age between the age groups, since nobody is born or dies; pass use_aging=True to age them",
+      "contact matrix \"contacts\" aggregated from 16 age groups to the model's 3 (0-14, 15-64, 65+)",
+      "unit='day' (from the typed values in the model)"
+    ]
   }
 }
 ```
 
-Every field is present in every document; a value that was not given and has no default is `null`, not left out. A fixed shape makes two specs easy to compare and makes a reader's job smaller.
+The fields of each kind of object are always written, in the same order; a value that was not given and has no default is `null`, not left out. A fixed shape makes two specs easy to compare. (A few fields are written only when set, so that other specs are unchanged: `migration` on a transition, `where` on a modifier.)
 
 The top-level parts:
 
 | Part | Holds |
 |---|---|
-| `modules` | Diseases, demographics, and custom modules, each with its states (people or not), parameters, transitions, stratifications, declared results, and functions |
-| `networks` | Networks, mixing pools, and mobility, as passed to `networks=`. An empty list means homogeneous mixing with one contact per unit time |
-| `stratify` | Stratifications applied to the whole sim (`sim.stratify(age=...)` or `ss.Sim(..., stratify=...)`), in the order applied, in the same form as a module's `stratifications`. They apply to every module; a module's own list holds the dimensions and adjustments that belong to it alone |
+| `modules` | Declared diseases, each with its states (people or not), parameters, transitions, stratifications, declared results, and functions. A module written as code is written as its type, name, label, and parameters |
+| `networks` | Networks, mixing pools, and mobility, as passed to `networks=`: each as its `type`, `name`, `label`, and `pars` (typed values and distributions written as elsewhere in the spec), and, for named data such as `ss.contacts('Kenya')`, a `data` reference saying where it came from |
+| `stratify` | Stratifications applied to the whole sim (`sim.stratify(age=...)` or `ss.Sim(..., stratify=...)`), in the order applied, in the same form as a module's `stratifications`, with the split resolved (`split_from` says where it came from). They apply to every module; a module's own list holds the dimensions and adjustments that belong to it alone |
 | `modifiers` | `ss.modify` objects passed to `connectors=`: interactions that are part of the model |
 | `interventions` | Everything passed to `interventions=`: deliveries, `ss.change`, and modifiers that are policy. These define the scenario |
-| `data` | The data attached to results by name: where it came from, a hash of its content, and its columns |
-| `config` | Run settings. `solver` is what was asked for (`"auto"` unless the user chose one); the solver actually used is in `meta`. `integrator` names the ODE integration library or scheme, or is `null` for the library's choice. `approx` is `null` (approximations are made and noted), `true` (made silently), or `false` (an error). `unit` is the sim's unit, or `null` when time is counted in timesteps |
-| `fit` | Calibration settings (data, weights, method, trials), or `null` |
-| `meta` | Things that describe the document or the run and do not change the model: versions, the chosen solver and its reason, the build notes |
+| `config` | Run settings. `solver` is what was asked for (`"auto"` unless the user chose one); the solver actually used is in `meta`. `integrator` is the ODE scheme (`"rk4"` or `"euler"`), or `null` for the default. `approx` is `null` (approximations are made and noted), `true` (made silently), or `false` (an error). `unit` is the sim's unit, or `null` when time is counted in timesteps; `dt` is a number in that unit |
+| `meta` | Things that describe the document or the run and do not change the model: the library version, the chosen solver and its reason, and the notes made while building it |
+
+The data attached to the sim is not in the spec; `sim.hash()` hashes it separately ([hashing](#hashing)). Fitting settings are not in it either: they are the arguments of `sim.calibrate()`, kept on the fit.
 
 ### States
 
@@ -125,17 +127,17 @@ There is one transition object, matching the one class `ss.Transition` ([03-stat
 |---|---|
 | `src` | A list of source state names, or `null` for an inflow (a birth, shedding into a reservoir) |
 | `dst` | A list of destination state names, or `null` for an outflow (a death, decay). More than one name is a branch |
-| `rate` | A rate expression (below), or `null` when the transition is driven by a dwell time |
-| `dur` | A dwell-time distribution, or `null` when the transition is driven by a rate |
+| `rate` | A rate expression (below), or `null` when the transition is driven by a dwell time or a constant rate |
+| `dur` | The dwell time: a distribution, or `{"dist": "expon", "mean": ["par", name]}` for a duration and `{"dist": "expon", "rate": ["par", name]}` for a constant rate, referring to the parameter that holds the value; `null` when the transition is driven by a rate expression |
 | `p` | Branch probabilities: one per destination, or one number for a transition that is one branch of several out of its source state |
 | `stages` | The number of sub-stages asked for with `stages=`, or `null` |
 | `kind` | `"contact-mediated"` if the rate contains a bare state, otherwise `"spontaneous"` |
 
 JSON `null` in `src` or `dst` is `ss.null`, outside the model: `ss.null >> W @ rate` is written `"src": null, "dst": ["W"]`.
 
-`kind` is derived from `rate` and is written only for the reader's convenience. A loader recomputes it and ignores what the file says.
+`kind` is derived from `rate` and is written for the reader's convenience.
 
-`dur=ss.days(10)` and `rate=ss.perday(0.1)` say the same thing, so they are written the same way: a constant hazard with no states in it is stored as an exponential `dur` with mean `1 / rate`. Anything else given as a rate (an expression, a time series, a per-period probability, a function) stays in `rate`.
+A value written inline in a transition is a parameter of the module, named after its slot (`dur`, `beta`; `rate_decay` for the rate of `decay` when the name is taken), so it appears in `pars` and is referred to by name. A constant rate (a number, a typed rate, a function, a time series) is written as an exponential `dur` given by its `rate`, and a duration as one given by its `mean`. `dur=ss.days(10)` and `rate=ss.perday(0.1)` mean the same model but are written differently, so they hash differently. Anything that mentions states or other parameters stays in `rate` as an expression.
 
 ### Outcomes
 
@@ -146,10 +148,9 @@ An `ss.outcome` is a result with `"type": "outcome"`:
 | `source` | An expression (below) that is a weighted sum of flows: transitions and other outcomes, each referred to as `["result", name]`. A number times a flow is that fraction of its events, so `0.5 * infection` is `["*", 0.5, ["result", "infection"]]` and there is no separate probability field |
 | `delay` | A duration, a distribution, or a function, or `null` |
 | `duration` | A duration or a distribution, or `null`. When given, the outcome also has an `n_<name>` result |
-| `every` | The reporting period the outcome is totaled by (a duration, or a function), or `null` |
-| `likelihood` | A distribution, or `null` |
+| `likelihood` | The likelihood's distribution and its parameters (`{"type": "nbinom", "pars": {"n": {"par": "k"}, "p": 0.5}}`, where `{"par": "k"}` is a fitted parameter), or `null` |
 
-A result that is a ratio or a sum of states (`prevalence = I / N`) is written the same way, with its expression in `source`. Whether a result was passed as its own keyword or through `results=` or `outcomes=` makes no difference to the spec.
+A result that is a ratio or a sum of states (`prev = I / (S + I + R)`) is written as `{"name": "prev", "type": "result", "source": "I / (S + I + R)"}`. Whether a result was passed as its own keyword or through `results=` or `outcomes=` makes no difference to the spec.
 
 ### Stratifications
 
@@ -161,40 +162,22 @@ Each module carries `guessed`: the paths of its fields whose values were guessed
 
 ## Rate expressions
 
-Rates, branch probabilities, result ratios, and conditions are written as nested lists: an operator or a kind, followed by its arguments. A number, a quantity, or a name can stand anywhere an argument can. Nothing in the spec is a string of code to be parsed. [CK: don't particularly like this, it's extremely hard to read]
+Rates, branch probabilities, result sources, and conditions are written as strings, in the Python syntax they were written in, with the names the module declares:
 
-```json
-["*", ["par", "beta"], ["state", "I"]]
-["/", ["*", ["par", "beta"], ["n", "W"]], ["+", ["n", "W"], ["par", "K"]]]
-["/", ["*", ["par", "a"], ["par", "b"], ["n", "Iv"]], ["n", "Sh", "Eh", "Ih", "Rh"]]
-["*", ["par", "beta"], ["+", ["state", "I"], ["*", 0.5, ["state", "A"]]]]
-```
+| Written | In the spec |
+|---|---|
+| `S >> I @ beta * I` | `"beta * I"` |
+| cholera's `beta * W.n / (W.n + K)` | `"beta * W.n / (W.n + K)"` |
+| malaria's `a * b * Iv.n / (Sh \| Eh \| Ih \| Rh).n` | `"a * b * Iv.n / (Sh + Eh + Ih + Rh).n"` |
+| `beta * (I + 0.5 * A)` | `"beta * (I + 0.5 * A)"` |
+| `np.clip(0.5 * I.frac, 0, 0.02)` | `"minimum(maximum(0.5 * I.frac, 0), 0.02)"` |
+| `(Q.n < 20) * 0.1` | `"(Q.n < 20) * 0.1"` |
+| `ss.outcome(0.5 * infection)` | `"0.5 * infection"` |
+| `where=(ss.People.age > 65) & ~sir.I` | `"((people.age > 65) & ~sir.I)"` |
 
-These are `beta * I`; cholera's `beta * W.n / (W.n + K)`; malaria's `a * b * Iv.n / Nh` with `Nh = (Sh + Eh + Ih + Rh).n`; and `beta * (I + 0.5 * A)`.
+What can appear: the names of the module's states, parameters, and transitions (a transition in a result's source is its flow); a bare state, which means contact with people in that state (its presence is what makes a transition contact-mediated); `.n` (the count in a state or a set of states, summed), `.frac` (that count as a fraction of the module's population), and `.total` (the count over every place); `+`, `-`, `*`, `/`, `**`; comparisons; `&`, `|`, and `~` in conditions, with attributes of the people (`people.age`); and the functions `exp`, `log`, `sqrt`, `absolute`, `sin`, `cos`, `minimum`, and `maximum`. A set of states is written as their sum, and `np.clip` as `minimum` and `maximum`. Numbers are written at full precision, with the parentheses the expression needs, so the string means exactly what was written. A state in another module is written with its module's name (`hiv.I`); inside its own module the short name is used.
 
-| First item | Arguments | Meaning |
-|---|---|---|
-| `state` | a state name | A bare state: contact with people in that state, through the model's routes. Its presence is what makes a transition contact-mediated. The state MUST be one that holds people |
-| `n` | one or more state names | The plain count in those states, summed (people, or whatever the states hold) |
-| `prev` | one or more state names | That count as a fraction of the module's population |
-| `par` | a parameter name | A named parameter (`sir.pars.beta`) |
-| `attr` | a path such as `people.age` | An attribute of the people or of a module, used in conditions |
-| `result` | a result name | A result: the flow of a transition, an outcome, or another declared result. Used in outcome sources and ratios |
-| `fn` | a function name | A function recorded in `functions` (below) |
-| `+` `-` `*` `/` | two or more expressions | Arithmetic |
-| `>` `<` `>=` `<=` `==` `!=` | two expressions | Comparison |
-| `&` `\|` `~` | expressions | And, or, not |
-| `isin` | an expression and a list | Membership |
-| `select` | an expression and an object of coordinates | Selection along a stratification, as `.select(age=0)` |
-| `sum` | an expression and a stratification name | Sum over a stratification, as `.n.sum('age')` |
-
-A state in another module is written with its module's name (`hiv.I`). Inside its own module the short name is used.
-
-A lazy condition ([07-effects.md](07-effects.md#conditions)) such as `(ppl.age > 65) & ~sir.vaccinated` is written the same way:
-
-```json
-["&", [">", ["attr", "people.age"], 65], ["~", ["attr", "sir.vaccinated"]]]
-```
+The spec is not parsed back. The importers read rates from other frameworks' formulas ([16-interop.md](16-interop.md)) with a parser of the same arithmetic (`ss.spec.Parser`: numbers, the declared names, `.n`, `.frac`, `.total`, arithmetic, comparisons, typed quantities such as `perday(0.5)`, and the functions above), which allows nothing else, so that reading a file runs no code from it.
 
 ## Values
 
@@ -207,7 +190,7 @@ Typed quantities, using Starsim's type names:
 {"type": "freq", "value": 2.0, "unit": "week"}
 ```
 
-A plain JSON number is a number with no time dimension (a probability, a multiplier, a count). A value keeps the unit it was written with. A bare number in a rate or duration slot is written as a quantity in the sim's unit, and is listed in `guessed` if that unit was inferred (from `dt`, the dates, or the typed values) and not given with `unit=`.
+A plain JSON number is a number with no time dimension (a probability, a multiplier, a count). A value keeps the unit it was written with. A bare number in a rate or duration slot is written as a quantity in the sim's unit. Where that unit was inferred (from the typed values or the dates) rather than given with `unit=`, the note that says so is in `meta.notes` (`unit='day' (from the typed values in the model)`).
 
 If nothing in the model has a unit, time is counted in timesteps: `config.unit` is `null`, a bare number is written as a quantity with `"unit": null` (`{"type": "per", "value": 0.05, "unit": null}` is 0.05 per step), and `start` and `stop` are step numbers. Nothing is listed in `guessed`, because nothing was assumed.
 
@@ -222,113 +205,101 @@ Values by stratum, time series, and seasonal curves:
 
 ```json
 {"by": ["age"], "values": [0.08, 0.05, 0.03]}
+{"by": ["age", "sex"], "product": {"age": [1.0, 2.0], "sex": [3.0, 4.0]}}
+{"by": ["patch", "patch2"], "array": [[1.0, 0.1], [0.1, 1.0]]}
 {"timeseries": {"2020-03-15": 0.2, "2020-06-01": 0.6}, "mode": "constant"}
 {"seasonal": {"mean": 0.05, "amplitude": 0.3, "peak": "January"}}
-{"by": ["patch", "patch"], "file": "mobility.npz", "sha256": "9c2e41aa"}
 ```
 
-Large arrays are stored as a reference to a file plus a hash of its content, so the spec stays readable. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).
+Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).
 
 ## Functions
 
-A function in a slot, a function passed as custom per-step behavior, and an overridden `step()` are recorded by name and source text:
+A function in a slot is the value of its parameter, written as its name, its source text, and the plain values (numbers, strings) it takes from outside its source (the variables it closes over, the globals it uses, its defaults):
 
 ```json
-{
-  "name": "clearance",
-  "args": ["sim", "uids"],
-  "used_in": ["transitions.discharge.rate"],
-  "source": "def clearance(sim, uids):\n    return 0.2 / (1 + sim.people.viral_load[uids])\n"
-}
+{"name": "rate_discharge", "value": {"fn": "clearance", "source": "def clearance(sim, uids):\n    return 0.2 / (1 + sim.people.viral_load[uids])\n", "values": null},
+ "bounds": null, "prior": null, "source": null, "doc": null}
 ```
 
-and referred to from the slot as `["fn", "clearance"]`. A lambda is given the name of the slot it fills.
+Like any inline value, the parameter is named after its slot. A function passed to the disease as custom per-step behavior is listed in the module's `functions`, by name and source text.
 
-**A spec that contains functions is not fully portable.** It can be read, compared, hashed, and drawn anywhere, but it can only be *run* by Python, and only if everything the function refers to (imports, other functions, global variables) is available where it is loaded. The source text is recorded so that a person can see what the function does and so the hash changes when it changes. `ss.load` on a spec with functions rebuilds them from the source text only if asked (`ss.load('sim.json', run_code=True)`); otherwise the functions must be supplied by importing the script that defines them. A spec with no functions is plain data and can be run by any implementation.
-
-`sir.to_json()` prints a one-line note when the spec contains functions, naming them.
+**A spec that contains functions is not portable.** It can be compared and hashed, but the model can only be run by Python, and only if everything the function refers to (imports, other functions, global variables) is available. The source text is recorded so that a person can see what the function does and so that the hash changes when it does. The code written by `sim.to_code()` includes the source text of each function.
 
 ## Normalization
 
-The same model can be written in three spellings and in any keyword order. Normalization is what makes all of them produce the same file. It is applied before saving, hashing, or comparing, and applying it twice MUST give the same result as applying it once.
+The same model can be written in three spellings and in any keyword order. Normalization is what makes all of them produce the same document. `to_spec()` applies it, so it is what is hashed and compared.
 
 1. **Resolve.** Every guessed default is written out as a value.
 2. **Type.** Every bare number in a rate or duration slot becomes a quantity in the sim's unit (`null` in a sim with no unit).
-3. **Expand shorthand.** Arrow strings, in any accepted spelling (`'I -> R'`, `'I->R'`, `'I >> R'`), become `src` and `dst` lists, with `ss.null` and a missing end of an arrow both written as `null`; `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, and the operator form all become the one transition object; a constant hazard becomes an exponential `dur`; an `init=` dict on the disease is written into the `init` field of each state; `transitions=`, `results=`, and `outcomes=` lists are merged with members passed as keywords; an alias for a solver becomes its name (`'ctmc'` becomes `'gillespie'`).
-4. **Order.** Modules, states, and stratifications stay in declared order, because that order means something (the first state receives the remainder of the initial population; modules run in the order given; stratifications apply in sequence). Transitions, parameters, results, and functions are sorted by name. The arguments of `+`, `*`, `&`, and `|` are sorted. Object keys are written in the order shown in this document.
+3. **Expand shorthand.** Arrow strings, in any accepted spelling (`'I -> R'`, `'I->R'`, `'I >> R'`), become `src` and `dst` lists, with `ss.null` and a missing end of an arrow both written as `null`; `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, and the operator form all become the one transition object; a constant rate becomes an exponential `dur`; an inline value becomes a named parameter; an `init=` dict on the disease is written into the `init` field of each state; `transitions=`, `results=`, and `outcomes=` lists are merged with members passed as keywords.
+4. **Order.** Modules, states, and stratifications stay in declared order, because that order means something (the first state receives the remainder of the initial population; modules run in the order given; stratifications apply in sequence). Transitions, parameters, results, and functions are sorted by name. Object keys are written in the order shown in this document. The terms of an expression are kept in the order written, so `beta * I` and `I * beta` are written (and hashed) differently.
 5. **Numbers.** Floating-point values are written with full round-trip precision.
 
-After normalization, the three spellings of the same model ([01-objects.md](01-objects.md#the-equivalence-rule)) MUST produce the same document, once names agree. This is tested ([18-conformance.md](18-conformance.md)).
+After normalization, the three spellings of the same model ([01-objects.md](01-objects.md#the-equivalence-rule)), and a class with the same members, MUST produce the same document once names agree (`tests/test_transitions.py::test_forms` checks that their hashes are equal).
 
 ## Hashing
 
-`sim.hash()` returns an `sc.objdict` with five parts ([11-random.md](11-random.md#run-identity)): four hashes and the seed. Each hash is SHA-256, shortened for display, of one slice of the normalized spec:
+`sim.hash()` returns an `sc.objdict` with six parts ([11-random.md](11-random.md#run-identity)): five hashes and the seed. Each hash is SHA-256, shortened to six characters, of one slice of the normalized spec:
 
 | Part | Computed from |
 |---|---|
-| `model` | `modules`, `networks`, `stratify`, and `modifiers`, with every number replaced by a placeholder: the structure |
-| `pars` | Every number in those parts, in document order, converted to the sim's unit, plus the provider, source, and version of any named data: the values |
-| `config` | `config`, apart from `rand_seed` |
-| `scenario` | `interventions`. Shown as the scenario's name where it has one (`ss.parallel(vaccine=...)`), as a hash otherwise |
+| `model` | `modules`, `networks`, `stratify`, and `modifiers`, with every number replaced by a placeholder: the structure, including the text of every expression and function, and where any named data came from |
+| `pars` | Every number in those parts, in document order, with typed quantities converted to the sim's unit: the values |
+| `config` | `config`, apart from `rand_seed`, including the numerical options that change results (`ss.options.crn` and `ss.options.precision`) |
+| `scenario` | `interventions` |
+| `data` | The data attached to the sim (as a table), or `None`; separate from `model` and `pars`, so that "the model changed" and "the data changed" can be told apart |
 | `seed` | `config.rand_seed`, as it is; not a hash |
 
 ```text
 >>> sim.hash()
-objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='vaccine', seed=1)
+#0. 'model':    '7fe765'
+#1. 'pars':     '70b78a'
+#2. 'config':   'a19c00'
+#3. 'scenario': '4162b6'
+#4. 'data':     '7b352e'
+#5. 'seed':     1
 ```
 
 Each part is a plain string or number, so `sim.hash().pars` can go in a file name or a column of a data frame. The hash is a by-product of the model being data. It tells apart the many runs that come from one commit (a sweep, a calibration) and is the test for whether two descriptions are the same model; the commit or tag remains the main record of what code was run.
 
-- Changing a rate from 0.05 to 0.08 changes `pars` and not `model`. Adding a state or a transition changes `model`.
+- Changing a parameter from 0.05 to 0.08 changes `pars` and not `model`. Adding a state or a transition changes `model`, and so does changing a number written inside an expression (`0.5 * infection`), which is part of the expression's text.
 - Because values are converted to one unit before hashing, `ss.days(7)` and `ss.weeks(1)` hash the same. Calendar durations (`ss.datedur`) are hashed as written.
 - `meta`, `guessed`, `label`, `doc`, and a parameter's `source` do not contribute to any hash. Relabeling a state does not change a model, and neither does writing down a value that would have been guessed.
-- `fit` and `data` are not part of `sim.hash()`. Fitting settings have their own hash, on the fit, so changing the number of trials does not look like a change to the model ([13-inference.md](13-inference.md)).
+- Fitting settings are not part of `sim.hash()`, so changing the number of trials does not look like a change to the model. The data is its own part, `data`.
+- `init_prev=0.01` and `init=dict(I=0.01)` are the same model, and hash the same.
 - The runs of an `ss.MultiSim` differ only in `seed`.
-- A function contributes its source text to `model`. This is a best effort: a function that depends on something outside its own source can change behavior without changing the hash.
+- A function contributes its source text to `model`, and the plain values it closes over or has as defaults (numbers, strings) to `pars`. This is a best effort: a function that depends on something else outside its own source (a global, an object) can change behavior without changing the hash.
+- Numbers written in rates are kept at full precision, so `beta * (1 + 1e-9) * I` and `beta * I` hash differently. A sim that is not initialized is hashed (from an initialized copy) without being changed.
 - Two models that are the same mathematically but declared differently (two transitions out of a state versus one branching transition, say) may hash differently. A spurious difference is the safe direction to fail in.
 
 ## Versioning
 
-`schema` is `lingua-franca/MAJOR.MINOR`.
+`schema` is `lingua-franca/MAJOR.MINOR` (now `lingua-franca/1.0`), and `meta.library_version` is the version of Starsim that wrote the spec. Neither is part of any hash. Since nothing reads a spec back, there is no converter between versions; a change to the shape of the spec changes the hashes of the models it affects, and is listed in the changelog.
 
-- A minor version may add fields. A reader SHOULD ignore fields it does not know within its own major version.
-- A major version may remove or change fields, and SHOULD come with a converter from the previous one.
-- Loading a document whose major version is newer than the reader raises `E1401 SchemaTooNew`, naming the version needed.
+## Saved forms
 
-## Round trip
-
-```python
-sim.to_json('sim.json')
-sim2 = ss.load('sim.json')
-```
-
-`ss.load` of a saved spec MUST give a model whose own spec is identical to the one saved, and therefore the same hash. For a spec without functions this holds on any machine. For one with functions it holds when the functions are available (above).
+A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). What `to_code()` cannot write (the attached data, priors written as text, a contact matrix given as numbers rather than by name) it lists in the code, for adding by hand. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`. There is no third form: the spec itself is not read back.
 
 ## Export to other formats
 
-The model spec is the only complete format. Exports to other frameworks' formats ([16-interop.md](16-interop.md)) usually cannot carry everything, and each MUST print what was left out or changed, one line per declaration (`W1401 LossyExport`):
+The model spec and the code `sim.to_code()` writes are the only complete forms. Exports to other frameworks' formats ([16-interop.md](16-interop.md)) usually cannot carry everything, and each MUST say what was left out or changed, one line per declaration, in an `ss.LossyExport` warning:
 
 ```text
 >>> ss.save('model.xml', sim, format='sbml')
-exported to SBML: 3 states, 2 transitions, 1 stratification (age, written out as 9 species)
-not exported: network 'mf' (SBML has no networks)
-not exported: function 'clearance' (Python code)
-changed: lognormal dwell time on 'recovery' written as 11 Erlang stages
+exported to SBML: 3 states, 2 transitions, as 13 species and 12 reactions (rates per day)
+  changed: the agent-based sim was written as its compartmental form (an ODE)
+  changed: the lognorm_ex dwell time "dur" written as 11 exponential stages (Erlang) with its mean, 10 days
+  changed: "sir" is stratified (age: 0-14, 15-64, 65+), written as one group, the sum of its groups, with the base values of its parameters
+  not exported: network "randomnet" (contacts written as homogeneous mixing)
 ```
 
 ## What makes a model checkable
 
-Because the model is data with a fixed shape:
-
-1. A model written by a person or generated by an AI can be checked before it is run, against the rules in this folder.
-2. Two descriptions of the same model produce the same document, so "did we build the same thing?" can be tested.
-3. A tool that produces or reads models has a schema to work to, with a version.
-
-This depends on the documentation being shipped with the library version and tested against it, which is a release requirement recorded in [18-conformance.md](18-conformance.md).
+Because the model is data with a fixed shape, two descriptions of the same model produce the same document, so "did we build the same thing?" can be tested: by `sim.hash()`, or declaration by declaration with `ss.diff(a, b)`. A model written by a person or generated by an AI is checked by building it: the errors in [15-errors.md](15-errors.md) are raised when the model is made or the sim initialized, before it runs. No JSON Schema file is published, since nothing outside Python reads the spec.
 
 ## Open questions
 
-- Whether `ss.prob` keeps its period in the spec (as above) or is converted to a per-step value at build time. Keeping it is more faithful; see [02-types.md](02-types.md).
 - Whether a people property stratified on the only disease in a sim (`sir.stratify(age=...)`) and the same stratification on the sim (`sim.stratify(age=...)`) should normalize to one document. They are the same model; as written they are recorded where they were applied and hash differently.
-- Whether an inferred `"people": true` belongs in `guessed`. As written only an inferred count is listed, because that is the guess worth reading.
-- Whether the spec should optionally write out the expanded strata and sub-stages for readers that cannot apply the stratification rules themselves. Exporters need the expanded form; it is not clear that the saved file does.
+- Whether the spec should optionally write out the expanded strata and sub-stages. The exporters expand the model from the engine, not from the spec, so nothing needs it now.
+- The grammar of the spec is not rewritten for the saved form, and priors are written as text (`"ss.normal(loc=0.3, scale=0.1)"`); see `deferred.md` (review R29).

@@ -10,7 +10,7 @@ on:
 jobs:
   install_and_test:
     name: Tests
-    timeout-minutes: 5
+    timeout-minutes: 20 # The contract tests, and compiling the kernels on each worker the first time, take longer than the Starsim 3 suite
     strategy:
       fail-fast: false
       max-parallel: 8

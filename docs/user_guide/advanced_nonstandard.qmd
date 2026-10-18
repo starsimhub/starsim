@@ -4,125 +4,57 @@ jupyter: python3
 ---
 
 
-Although Starsim is primarily intended as an agent-based disease model, due to its modular structure, it can be used for other applications as well. This tutorial describes how Starsim can be used (1) as a compartmental disease model, and (2) as a general-purpose agent-based model.
+Although Starsim is primarily intended as an agent-based disease model, due to its modular structure, it can be used for other applications as well. This guide describes how Starsim can be used (1) as a compartmental disease model, and (2) as a general-purpose agent-based model.
 
 
 ## Compartmental modeling
 
-Much of Starsim's power comes from how it handles agents. However, agent-based modeling may be too slow or too complex for some problems. While in many cases it probably makes more sense to do compartmental disease modeling in another framework (such as [Atomica](https://atomica.tools/)), it is also possible to do it within Starsim, taking advantage of features such as demographics, time units, etc. This is especially useful for a multi-disease simulation where some diseases need the detail and flexibility of an ABM, while others can be modeled more simply (and faster) as compartmental models.
+Much of Starsim's power comes from how it handles agents. However, agent-based modeling may be too slow or too complex for some problems. In Starsim 4, a disease declared from states and transitions can be run as a compartmental model as well as agents: as a deterministic ODE (`solver='ode'`), or as a stochastic compartmental model (`solver='binomial'` or `solver='gillespie'`). Under `solver='auto'` (the default), a model in which every part has a compartmental form runs as an ODE.
 
 ### Setting up the model
 
-Here we will define a simple compartmental susceptible-infectious-susceptible (SIS) model. The model definition here is quite similar to the agent-based implementation in Starsim's [SIR module](https://github.com/starsimhub/starsim/blob/main/starsim/diseases/sir.py); differences are noted in comments. Note that the model runs extremely fast, since a three-state compartmental model (susceptible, infecious, and immunity) runs as fast as an agent-based model with three agents!
+Here we will define a simple susceptible-infectious-recovered-susceptible (SIRS) model, in which immunity wanes. Note that the model runs extremely fast, since a three-state compartmental model runs about as fast as an agent-based model with three agents!
 
 ```{python}
-"""
-Example compartmental SIS model for Starsim
-"""
 import starsim as ss
 ss.options(jupyter=True)
 import sciris as sc
 import matplotlib.pyplot as plt
 
-class CompSIS(ss.Module): # We don't need the extra functionality of the Infection class, so just inherit from Module
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            beta = ss.peryear(0.8), # Leverage Starsim's automatic time unit handling
-            init_prev = 0.01, # NB: this is a scalar, rather than a distribution for an ABM
-            recovery = ss.peryear(0.1), # Also not a distribution
-            waning = ss.peryear(0.05),
-            imm_boost = 1.0,
-        )
-        self.update_pars(**kwargs)
-        
-        # Don't need to define states; just use scalars
-        self.N = 0
-        self.S = 0
-        self.I = 0
-        self.immunity = 0
-        return
-    
-    def init_post(self):
-        """ Finish initialization """
-        super().init_post()
-        self.N = len(self.sim.people) # Assumes a static population; could also use a dynamic population size
-        i0 = self.pars.init_prev
-        self.S = self.N*(1-i0)
-        self.I = self.N*i0
-        self.immunity = i0
-        return
-
-    @property
-    def rel_sus(self):
-        return 1 - self.immunity
-    
-    def step(self):
-        """ Carry out disease transmission logic """
-        self.immunity *= (1 - self.pars.waning.to_prob()) # Update immunity from waning
-        infected = (self.S*self.I/self.N)*(self.pars.beta.to_prob())*self.rel_sus # Replaces Infection.infect()
-        recovered = self.I*self.pars.recovery.to_prob() # Replaces setting a time to recovery and checking that time
-        net = infected - recovered # Net change in number infectious
-        self.S -= net
-        self.I += net
-        self.immunity += infected/self.N*self.pars.imm_boost # Update immunity from new infections
-        return
-    
-    def init_results(self):
-        """ Initialize results """
-        super().init_results()
-        self.define_results(
-            ss.Result('S', label='Susceptible'),
-            ss.Result('I', label='Infectious'),
-        )
-        return
-
-    def update_results(self):
-        """ Store the current state """
-        super().update_results()
-        self.results['S'][self.ti] = self.S
-        self.results['I'][self.ti] = self.I
-        return 
-
-    def plot(self):
-        """ Default plot for SIS model """
-        fig = plt.figure()
-        res = self.results
-        kw = dict(lw=2, alpha=0.7)
-        for rkey in ['S', 'I']:
-            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
-        plt.legend(frameon=False)
-        plt.xlabel('Time')
-        plt.ylabel('Number of people')
-        plt.ylim(bottom=0)
-        sc.boxoff()
-        sc.commaticks() 
-        plt.show()      
-        return fig
-    
+S, I, R = ss.states(3)
+infection = S >> I @ ss.peryear(0.8) * I # Starsim's time units work as for agents
+recovery  = I >> R @ ss.peryear(0.1)
+waning    = R >> S @ ss.peryear(0.05)
+sirs = ss.Disease(infection, recovery, waning, init_prev=0.01)
 
 # Run the compartmental simulation (csim)
-csim = ss.Sim(diseases=CompSIS(), dur=100, dt=0.1, verbose=0.01)
+csim = ss.Sim(sirs, stop=100, dt=ss.years(0.1))
 csim.run()
-
-# Plot the results
-csim.diseases.compsis.plot();
+csim.plot()
 ```
 
-Let's compare to our standard agent-based SIS model with similar parameters:
+The sim prints the solver it chose, and why. `csim.solvers()` shows which solvers can run the model.
+
+Let's compare to the same model run as agents. Nothing in the model changes: only the solver, and the number of agents:
 
 ```{python}
-import starsim as ss
-
-# Run the model
-abm = ss.Sim(diseases=ss.SIS(beta=0.03), networks='random', dur=100, dt=0.1, verbose=0.01)
+abm = ss.Sim(sirs, stop=100, dt=ss.years(0.1), solver='abm', n_agents=10_000, verbose=0)
 abm.run()
 
 # Plot the results
-abm.diseases.sis.plot()
+plt.figure()
+for sim, label in [(csim, 'ODE'), (abm, 'Agents')]:
+    plt.plot(sim.timevec, sim.results.sirs.n_I, label=label)
+plt.xlabel('Time (years)')
+plt.ylabel('Number infectious')
+plt.legend()
+sc.boxoff()
+plt.show()
 ```
 
-The results are broadly similar, although there are differences due to the network transmission, duration of infection, etc. Note that the compartmental version runs 20 times faster than the agent-based version. Does this mean that compartmental models are better than agent-based models? If all you want to simulate is a simple SIS model, then ... the answer is probably yes!
+The results are very similar, apart from the noise in the agent-based run, which is a stochastic process. Note that the compartmental version runs more than 10 times faster than the agent-based version. Does this mean that compartmental models are better than agent-based models? If all you want to simulate is a simple SIRS model, then ... the answer is probably yes! Adding a contact network (e.g. `networks='random'`), or anything else that exists only per agent, makes the same model run as agents.
+
+A compartmental model can also still be written as code, as a module whose `step()` updates counts that it holds as plain numbers. This works, but it runs only as written, and it does not get `describe()`, `equations()`, or the other solvers.
 
 ## Epiverse Epidemics: School closure model
 
@@ -130,103 +62,51 @@ This example adapts the example from the _Epidemics_ v0.4.0 R package:
 
 [https://epiverse-trace.github.io/epidemics/](https://epiverse-trace.github.io/epidemics/)
 
-Note that it does not use the same level of detail as the original in terms of the population or contact matrices, but produces similar results.
+Note that it does not use the same level of detail as the original in terms of the population or contact matrices, but produces similar results. School closure is approximated by halving the susceptibility and transmissibility of children while schools are closed, with `ss.modify()`. A modifier never overwrites the quantity it changes, so nothing has to be restored when schools reopen. Infections by age are results of the disease once the sim is stratified by age.
 
 ```{python}
-import numpy as np
 import pandas as pd
-import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
 
-# Intervention
-class close_schools(ss.Intervention):
-    """ Approximate closing schools by reducing susceptibility and transmissibility of children """
-    def __init__(self, start=50, stop=80, reduction=0.5):
-        super().__init__()
-        self.start = start
-        self.stop = stop
-        self.reduction = reduction
-        return
+sir = ss.SIR(
+    init_prev = 0.001,
+    beta = ss.perday(1/100),
+    dur_inf = ss.days(20.0),
+)
 
-    def step(self):
-        disease = self.sim.diseases[0]
-        children = self.sim.people.age < 20
-        if self.now == self.start:
-            disease.rel_sus[children] *= 1-self.reduction
-            disease.rel_trans[children] *= 1-self.reduction
-        elif self.now == self.stop:
-            disease.rel_sus[children] = 1.0
-            disease.rel_trans[children] = 1.0
-        return
-
-# Analyzer
-class infections_by_age(ss.Analyzer):
-    """ Count infections by age """
-    def __init__(self, age_bins=(0, 20, 40, 100)):
-        super().__init__()
-        self.age_bins = age_bins
-        self.mins = age_bins[:-1]
-        self.maxes = age_bins[1:]
-        self.hist = {k:[] for k in self.mins}
-        return
-
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        self.infections = np.zeros(len(self.sim.people.age))
-        return
-
-    def step(self):
-        age = self.sim.people.age
-        disease = self.sim.diseases[0]
-        for min, max in zip(self.mins, self.maxes):
-            mask = (age >= min) & (age < max)
-            self.hist[min].append(disease.infected[mask].sum())
-        return
-
-    def plot(self):
-        plt.figure()
-        x = self.sim.t.tvec
-        for min, max in zip(self.mins, self.maxes):
-            plt.plot(x, self.hist[min], label=f'Age {min}-{max}')
-        intv = self.sim.interventions[0]
-        for day in [intv.start, intv.stop]:
-            plt.axvline(day, linestyle=':')
-        plt.legend(frameon=False)
-        plt.xlabel('Model time (days)')
-        plt.ylabel('Individuals infected')
-        plt.ylim(bottom=0)
-        sc.boxoff()
-        plt.show()
-        return
+# Intervention: close schools from day 50 to day 80
+children = ss.People.age < 20
+closure = dict(multiply=0.5, where=children, start=ss.days(50), stop=ss.days(80))
+close_schools = [
+    ss.modify(sir.rel_sus, **closure),
+    ss.modify(sir.rel_trans, **closure),
+]
 
 # Run the model
 sim = ss.Sim(
     people = ss.People(n_agents=20e3, age_data=pd.read_csv('test_data/nigeria_age.csv')),
-    diseases = dict(
-        type = 'sir',
-        init_prev = 0.001,
-        beta = ss.perday(1/100),
-        dur_inf = ss.days(20.0),
-    ),
+    diseases = sir,
     networks = 'random',
-    interventions = close_schools(),
-    analyzers = infections_by_age(),
+    interventions = close_schools,
+    stratify = dict(age=[0, 20, 40]), # Results by age
     start = ss.days(0),
-    dur = ss.days(300),
-    dt = ss.days(1.0),
+    stop = ss.days(300),
     verbose = False,
 )
-
 sim.run()
-sim.analyzers.infections_by_age.plot()
+
+# Plot infections by age
+sim.results.sir.n_I.by('age').plot()
+for day in [50, 80]:
+    plt.axvline(day, linestyle=':')
+plt.show()
 ```
 
-While the Starsim version is longer than the Epidemics version, note that Epidemics has built-in contacts interventions and automatically reports infections by age. These have to be manually added to Starsim, but in turn Starsim provides much more control.
+While the Starsim version is longer than the Epidemics version, note that Epidemics has built-in contacts interventions. Starsim's modifiers and stratified results do the same jobs in a few lines, and a custom intervention or analyzer written as code is always available for anything they cannot say.
 
 ## Mesa: Wealth model
 
-This example illustrates a simple "weath model", in which each agent starts with a single unit of wealth, and on each timestep, every agent with more than zero wealth gives one unit of wealth to another agent.
+This example illustrates a simple "wealth model", in which each agent starts with a single unit of wealth, and on each timestep, every agent with more than zero wealth gives one unit of wealth to another agent.
 
 This tutorial is adapted from the following example:
 
@@ -234,7 +114,7 @@ This tutorial is adapted from the following example:
 
 ### Setting up the model
 
-We could define the wealth model as any type of module, since they all can store states and update them. Here we will define wealth as a subclass of `ss.Intervention` (though it could equally well be a subclass of `ss.Demographics` or even `ss.Disease`, if you are so inclined). All we need to do is update the `wealth` state (which we can store inside the "intervention"), and we can also use this class to track the wealth distribution over time and plot it. The full model looks like this:
+We could define the wealth model as any type of module, since they all can store states and update them. Here we will define it as a plain `ss.Module` (though it could equally well be a subclass of `ss.Intervention` or `ss.Demographics`, if you are so inclined), passed to the sim as a demographics module. All we need to do is update the `wealth` state (which we can store inside the "intervention"), and we can also use this class to track the wealth distribution over time and plot it. The full model looks like this:
 
 ```{python}
 """
@@ -254,7 +134,7 @@ class WealthModel(ss.Module):
         """ Define custom model attributes """
         super().init_post()
         self.npts = len(self.sim) # Number of timepoints
-        self.n_agents = len(sim.people) # Number of agents
+        self.n_agents = len(self.sim.people) # Number of agents
         self.wealth = np.ones(self.n_agents) # Initial wealth of each agent
         self.bins = np.arange(bins+1) # Bins used for plotting
         self.wealth_dist = np.zeros((self.npts, len(self.bins)-1)) # Wealth distribution over time
@@ -262,7 +142,6 @@ class WealthModel(ss.Module):
         
     def step(self):
         """ Transfer wealth between agents -- core model logic """
-        self.wealth_hist() # Store the wealth at this time point
         givers = self.wealth > 0 # People need wealth to be givers
         receivers = np.random.choice(self.sim.people.uid, size=givers.sum()) # Anyone can be a receiver
         self.wealth[givers] -= 1 # Givers are unique, so can use vectorized version
@@ -270,10 +149,10 @@ class WealthModel(ss.Module):
             self.wealth[receive] += 1
         return
     
-    def wealth_hist(self):
-        """ Calculate the wealth histogram """
-        ti = self.sim.ti # Current timestep
-        self.wealth_dist[ti,:], _ = np.histogram(self.wealth, bins=self.bins)
+    def update_results(self):
+        """ Store the wealth histogram at this time point (at the start, and after each step) """
+        super().update_results()
+        self.wealth_dist[self.ti,:], _ = np.histogram(self.wealth, bins=self.bins)
         return
     
     def plot(self):

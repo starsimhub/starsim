@@ -6,7 +6,10 @@ jupyter: python3
 
 Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.
 
-Demographics modules are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics.
+Demographics are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics. There are two ways to add them:
+
+- **Births and deaths declared for the population** (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`), at per-person rates. They run under every solver, including as an ODE, and add and remove the same people from every disease. `demographics=True` declares them at default rates.
+- **Demographics modules** (`ss.Births`, `ss.Deaths`, `ss.Pregnancy`), written as code, with rates per 1,000 people. They support rates that vary by age, sex, and year, pregnancy, and maternal transmission, and run as agents.
 
 ## Simple usage
 
@@ -28,7 +31,7 @@ sim2 = ss.Sim(label='With demographics', demographics=True, **pars)
 
 # Run both simulations and plot
 msim = ss.parallel(sim1, sim2)
-msim.plot(['n_alive', 'cum_deaths', 'sis_n_susceptible', 'sis_n_infected'])
+msim.plot(['n_alive', 'cum_deaths', 'sis_n_S', 'sis_n_I'])
 ```
 
 ## Advanced usage: Pregnancy and births
@@ -82,7 +85,7 @@ nga_pop_1995 = 106819805 #
 age_data = pd.read_csv('test_data/nigeria_age.csv')
 ppl = ss.People(n_agents, age_data=age_data)
 
-pars = dict(start=1995, people=ppl, n_agents=n_agents, diseases='sis', networks='random', verbose=0)
+pars = dict(start='1995', people=ppl, n_agents=n_agents, diseases='sis', networks='random', verbose=0)
 
 sim1 = ss.Sim(label='Births', **pars, demographics=[births, deaths])
 sim2 = ss.Sim(label='Pregnancy', **pars, demographics=[pregnancy, deaths])
@@ -104,15 +107,37 @@ msim = ss.parallel(sim1, sim2)
 msim.plot()
 ```
 
+## Declared births and deaths
+
+Births and deaths can be declared for the whole population, in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per person per unit time) into each disease's first state (or the state named, e.g. `ss.birth('-> S', rate=r)`), and `ss.death(rate=r)` removes people from every state at rate `r`:
+
+```{python}
+S, I = ss.states(2)
+sis = ss.Disease(
+    infection = S >> I @ ss.peryear(0.5) * I,
+    recovery  = I >> S @ ss.years(2),
+    init_prev = 0.01,
+)
+demographics = [
+    ss.birth(rate=ss.peryear(0.02)), # 20 births per 1000 people per year
+    ss.death(rate=ss.peryear(0.01)), # 10 deaths per 1000 people per year
+]
+sim = ss.Sim(sis, demographics=demographics, start='2000', stop='2050', verbose=0).run() # Runs as an ODE
+sim.results.sis.plot()
+```
+
+The births and deaths become transitions of the disease (of the first one, if there are several), so they are its results (`sim.results.sis.births`, `sim.results.sis.deaths`) like any other transition. With several diseases, the same people are born into and die from every one of them: as agents, the diseases share the people, and in a compartmental run, their states are tracked jointly. A disease-specific death rate is a death from one state, declared in the disease: `ss.death('I ->', rate=ss.peryear(0.1))`. As agents, people age when the model has births or deaths, as with the demographics modules. For rates that vary by age or year, or pregnancy, use the demographics modules above, which can run on their own timestep.
+
 ## Summary
 
 - **Demographics modules** enable realistic population dynamics in Starsim:
     - **Births**: Simple constant or time-varying birth rates
     - **Deaths**: Background mortality separate from disease deaths
     - **Pregnancy**: Detailed pregnancy modeling with maternal/neonatal outcomes
+    - **`ss.birth()` and `ss.death()`**: Births and deaths declared for the population, for any solver
 - **Key considerations:**
     - Use `demographics=True` for default birth/death rates
-    - Use `birth_rate` and `death_rate` for custom constant rates
+    - Use `demographics=[ss.birth(rate=...), ss.death(rate=...)]` for custom constant rates (per person)
     - Use `ss.Pregnancy()` for age-specific fertility, pregnancy modeling, and mother-to-child transmission
     - Demographics automatically enables aging; if you want to use demographics without aging, set `use_aging=False` (and conversely, `use_aging=True` to enable aging without demographics)
 

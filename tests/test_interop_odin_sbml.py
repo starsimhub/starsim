@@ -3,13 +3,17 @@ Test importing odin and SBML models
 """
 import os
 import sys
+import subprocess
+import pytest
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
+import paths
 from starsim.interop.odin import load_odin
 from starsim.interop.sbml import load_sbml
 
-lfd = sc.path('/home/cliffk/idm/lingua_franca_design') # The examples, with the originals' results, if this folder is here
+lfd = paths.lfd # The examples, with the originals' results, if this folder is here
 kw = dict(verbose=False)
 
 odin_sir = '''
@@ -58,6 +62,77 @@ beta <- 0.3
 gamma <- 0.1
 p_death <- user()
 '''
+
+# Age groups mixing by a contact matrix, with lambda (a Python keyword), seasonal forcing, the time as a variable, and weekly cases with if
+odin_age = '''
+n_age <- 3
+dt <- user(0.25)
+initial(time) <- 0
+update(time) <- (step + 1) * dt
+beta <- user(0.02)
+S0[] <- user()
+m[, ] <- user()
+N[] <- S[i] + I[i] + R[i]
+seas <- 1 + 0.3 * cos(2 * 3.141592653589793 * step * dt / 365)
+s_ij[, ] <- m[i, j] * I[j] / N[j]
+lambda[] <- beta * seas * sum(s_ij[i, ])
+n_SI[] <- rbinom(S[i], 1 - exp(-lambda[i] * dt))
+n_IR[] <- rbinom(I[i], 1 - exp(-0.1 * dt))
+update(S[]) <- S[i] - n_SI[i]
+update(I[]) <- I[i] + n_SI[i] - n_IR[i]
+update(R[]) <- R[i] + n_IR[i]
+initial(S[]) <- S0[i]
+initial(I[1]) <- 10
+initial(I[2:n_age]) <- 0
+initial(R[]) <- 0
+initial(cases) <- 0
+update(cases) <- if (step %% 28 == 0) sum(n_SI) else cases + sum(n_SI)
+dim(S0) <- n_age
+dim(m) <- c(n_age, n_age)
+dim(N) <- n_age
+dim(s_ij) <- c(n_age, n_age)
+dim(lambda) <- n_age
+dim(n_SI) <- n_age
+dim(n_IR) <- n_age
+dim(S) <- n_age
+dim(I) <- n_age
+dim(R) <- n_age
+'''
+age_pars = dict(S0=[29_990, 50_000, 20_000], m=[[10, 4, 1], [4, 8, 2], [1, 2, 4]])
+
+# The same as an ODE, run by odin itself with a contact matrix that is not symmetric
+odin_age_ode = '''
+n_age <- 3
+beta <- user(0.02)
+S0[] <- user()
+I0[] <- user()
+m[, ] <- user()
+N[] <- S[i] + I[i] + R[i]
+s_ij[, ] <- m[i, j] * I[j] / N[j]
+lambda[] <- beta * sum(s_ij[i, ])
+deriv(S[]) <- -lambda[i] * S[i]
+deriv(I[]) <- lambda[i] * S[i] - 0.1 * I[i]
+deriv(R[]) <- 0.1 * I[i]
+initial(S[]) <- S0[i]
+initial(I[]) <- I0[i]
+initial(R[]) <- 0
+dim(S0) <- n_age
+dim(I0) <- n_age
+dim(m) <- c(n_age, n_age)
+dim(N) <- n_age
+dim(s_ij) <- c(n_age, n_age)
+dim(lambda) <- n_age
+dim(S) <- n_age
+dim(I) <- n_age
+dim(R) <- n_age
+'''
+odin_run = '''
+options(odin.verbose = FALSE)
+args <- commandArgs(TRUE)
+mod <- odin::odin_(args[1])$new(S0 = c(29990, 50000, 20000), I0 = c(10, 0, 0), m = matrix(c(10, 1, 4, 2, 6, 1, 1, 3, 2), 3, 3, byrow = TRUE))
+write.csv(mod$run(0:200), args[2], row.names = FALSE)
+'''
+rscript = lfd / '_envs/odin/bin/Rscript' # odin's environment
 
 sbml_sir = '''<?xml version="1.0" encoding="UTF-8"?>
 <sbml xmlns="http://www.sbml.org/sbml/level3/version1/core" level="3" version="1">
@@ -177,14 +252,42 @@ def test_odin_discrete():
     assert 'n_ID' in missing and 'p_death' in missing
     rates = sc.strjoin(sim.imported.choices)
     assert 'beta * I' in rates and '=> gamma' in rates
+
+    # A contact matrix is ss.contacts() on the groups, the cycle is ss.seasonal(), the time is the sim's, and weekly cases are an outcome
+    sim = load_odin(write(odin_age, '.R'), stop=200, pars=age_pars, **kw)
+    assert not sim.imported.incomplete
+    S, I, R = ss.states(3)
+    sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=ss.perday(0.02), amplitude=0.3) * I, recovery=I >> R @ ss.perday(0.1), init=dict(I=ss.by(age=[10, 0, 0])), name='sir')
+    sir.stratify(age=['1', '2', '3'], split=[0.3, 0.5, 0.2])
+    hand = ss.Sim(sir, networks=ss.contacts(age=age_pars['m']), total_pop=1e5, unit='day', dt=0.25, stop=ss.days(200), solver='ode', verbose=0).run()
+    imported = sim.new(solver='ode').run()
+    final = imported.results[imported.diseases[0].name].n_R[-1]
+    assert np.isclose(final, hand.results.sir.n_R[-1], rtol=1e-6) # The same final size as the model written by hand
+    assert imported.results[imported.diseases[0].name].cases.values.sum() > 0.9*final # Weekly cases add up to everyone infected (but the 10 seeded)
+    return sim
+
+
+@pytest.mark.skipif(not rscript.exists(), reason='needs the odin environment')
+def test_odin_contacts(tmp_path):
+    sc.heading('Testing an odin model with a contact matrix against odin itself')
+    model, script, out = tmp_path/'age_ode.R', tmp_path/'run.R', tmp_path/'out.csv'
+    model.write_text(odin_age_ode)
+    script.write_text(odin_run)
+    subprocess.run([str(rscript), str(script), str(model), str(out)], check=True, cwd=tmp_path, capture_output=True)
+    ref = pd.read_csv(out)
+    sim = load_odin(model, stop=200, pars=dict(S0=[29_990, 50_000, 20_000], I0=[10, 0, 0], m=[[10, 1, 4], [2, 6, 1], [1, 3, 2]]), **kw)
+    assert not sim.imported.incomplete
+    res = sim.run().results.age_ode
+    for k in range(3): # The matrix is not symmetric, so a transposed matrix would not agree
+        diff = np.abs(res.n_R.select(age=str(k+1)).values - ref[f'R[{k+1}]'].values).max()
+        assert diff < 1, f'Expected R in group {k+1} within 1 person of odin, not {diff:.2f}' # About 0.07 (the two ODE solvers)
     return sim
 
 
 def test_odin_examples():
     sc.heading('Testing the odin examples against the originals')
     if not lfd.exists():
-        print('lingua_franca_design not found; skipping')
-        return
+        pytest.skip(paths.no_lfd)
     sys.path.insert(0, str(lfd / 'examples'))
     import tools
 
@@ -208,7 +311,7 @@ def test_odin_examples():
     code = sim.to_code().replace('    init ', f'    history = ss.null >> I @ ss.timeseries({{0: ss.perday({np.exp(-14/(365*50))}), 14: 0}}),\n    init ', 1)
     ns = {}
     exec(code, ns) # With the workaround that the import lists
-    res = ns['sim'].run().results[sim.diseases[0].name]
+    res = ns['sim'].run().results[ns['sim'].diseases[0].name]
     ref = tools.read_results(ex)
     for state in 'SEIR':
         theirs = np.array(ref[state][1])
@@ -237,9 +340,11 @@ def test_sbml():
 
 
 if __name__ == '__main__':
+    import tempfile
     T = sc.timer()
     test_odin_ode()
     test_odin_discrete()
+    test_odin_contacts(sc.path(tempfile.mkdtemp()))
     test_odin_examples()
     test_sbml()
     T.toc()

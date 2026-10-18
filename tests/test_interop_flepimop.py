@@ -10,11 +10,12 @@ import tempfile
 import sciris as sc
 import scipy.integrate as spi
 import starsim as ss
+import paths
 from starsim.interop.flepimop import load_flepimop
 
 kw = dict(verbose=0)
-examples = sc.path('/home/cliffk/idm/lingua_franca_design/examples/flepimop') # The originals and their reference results
-needs_examples = pytest.mark.skipif(not examples.exists(), reason='needs the lingua_franca_design examples')
+examples = paths.lfd/'examples/flepimop' # The originals and their reference results
+needs_examples = pytest.mark.skipif(not examples.exists(), reason=paths.no_lfd)
 
 
 def reference(folder, series):
@@ -38,7 +39,20 @@ def test_seir_2pop():
     for place in ['large_province', 'small_province']:
         for state in 'SEIR':
             ours, theirs = res[f'n_{state}'].select(subpop=place).values, reference(folder, f'{place}_{state}')
-            assert np.abs(ours - theirs).max() < 1e-6, f'{place} {state} differs from the original'
+            assert len(ours) == len(theirs) + 1 # The sim runs through the end date, as flepiMoP does, so its last number is the day after
+            assert np.abs(ours[:-1] - theirs).max() < 1e-6, f'{place} {state} differs from the original'
+
+    # Only the places in subpop_setup.selected
+    config = sc.loadyaml(folder / 'original' / 'config_sample_2pop.yml')
+    for key in ['geodata', 'mobility']:
+        config['subpop_setup'][key] = str(folder / 'original' / config['subpop_setup'][key])
+    config['initial_conditions']['initial_conditions_file'] = str(folder / 'original' / config['initial_conditions']['initial_conditions_file'])
+    config['subpop_setup']['selected'] = ['large_province']
+    with tempfile.TemporaryDirectory() as tmp:
+        sc.saveyaml(sc.path(tmp) / 'config.yml', config)
+        one = load_flepimop(sc.path(tmp) / 'config.yml', **kw)
+    assert not one.imported.incomplete
+    assert one.pars.total_pop == 9000 # The large province only
     return sim
 
 
@@ -49,7 +63,8 @@ def test_scenarios():
     base = load_flepimop(folder / 'original' / 'config_sample_2pop_vaccine_scenarios.yml', **kw)
     assert set(base.imported.scenarios) == {'no_vax', 'pess_vax', 'opt_vax'}
     skipped = dict(base.imported.incomplete)
-    assert 'Ro' in skipped and 'outcomes: incidCase.probability' in skipped, 'Expected the drawn values to be listed as not translated'
+    assert 'Ro' not in skipped and 'outcomes: incidCase.probability' in skipped, 'Expected the drawn Ro to be imported with its prior, and the drawn outcome probability listed as not translated'
+    assert base.new().init().diseases[0].pars.Ro.prior is not None # So ss.parallel(sim, priors=True) draws it
 
     # Each scenario, run with the values the original drew for each of its ten runs, has the same mean
     draws = pd.read_csv(folder / 'reference' / 'draws.csv')
@@ -59,11 +74,11 @@ def test_scenarios():
         res = [sim.results.sample_2pop for sim in sims]
         for place in ['large_province', 'small_province']:
             for key,theirs in [('n_V', 'V'), ('n_I', 'I')]:
-                ours = np.mean([r[key].select(subpop=place).values for r in res], axis=0)
+                ours = np.mean([r[key].select(subpop=place).values[:-1] for r in res], axis=0)
                 assert np.abs(ours - reference(folder, f'{scen}_{place}_{theirs}')).max() < 1e-6
             for key,theirs in [('incidCase', 'incidCase'), ('incidDeath', 'incidDeath'), ('n_incidHosp', 'currHosp')]: # A flow at index k is the number in the step ending on day k; the original's on day k is the number during day k
                 ours = np.mean([r[key].select(subpop=place).values[1:] for r in res], axis=0)
-                assert np.abs(ours - reference(folder, f'{scen}_{place}_{theirs}')[:-1]).max() < 1e-6, f'{scen} {place} {key} differs from the original'
+                assert np.abs(ours - reference(folder, f'{scen}_{place}_{theirs}')).max() < 1e-6, f'{scen} {place} {key} differs from the original' # Including the end date
     return sims
 
 

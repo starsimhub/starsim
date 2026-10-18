@@ -34,7 +34,7 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 phi = ss.State(people=False)
 decay = phi >> ss.null @ ss.perday(-np.log(1 - b))
 shed  = ss.null >> phi @ ss.perday(alpha*(-np.log(1 - b))/b) * I.n/(S + I).n
-infection = S >> I @ upsilon * phi.n # phi.n, not phi: phi is a count, not people (E211)
+infection = S >> I @ upsilon * phi.n # phi.n, not phi: phi is a count, not people (ExposureToCount)
 ```
 
 - **Compartments joined only by events** (age categories joined by `intTrans`) are declared as people by the import. By hand, write `ss.State(people=True)`, or v4 treats them as counts.

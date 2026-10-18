@@ -2,7 +2,6 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
-import sys
 import inspect
 import functools as ft
 import sciris as sc
@@ -23,7 +22,7 @@ def module_map(key=None):
     """
     module_map = sc.objdict(
         demographics  = ss.Demographics,
-        networks      = ss.Route, # NB, not ss.Network!
+        networks      = ss.networks.Route, # NB, not ss.Network!
         diseases      = ss.Disease,
         connectors    = ss.Connector,
         interventions = ss.Intervention,
@@ -140,7 +139,7 @@ def required(val=True):
 
     Examples:
         ```python
-        class CustomSIS(ss.SIS):
+        class CustomSIS(ss.library.CodedSIS):
 
             def step(self):
                 super().step()
@@ -304,6 +303,9 @@ class Module(Base):
     def __getattr__(self, attr):
         """ Called only if the attribute isn't found, in which case fall back to the aliases; see define_aliases() """
         if attr not in self._state_aliases:
+            prop = getattr(type(self), attr, None)
+            if isinstance(prop, property): # The property raised an AttributeError of its own (e.g. in a user's function), so let it through rather than reporting the property as missing
+                return prop.fget(self)
             raise AttributeError(f'{type(self).__name__} object has no attribute "{attr}"') # Note: don't use self or self.name here, since both can recurse into __getattr__
         alias = self._state_aliases[attr]
         if not callable(alias):
@@ -517,8 +519,8 @@ class Module(Base):
         pars = sc.mergedicts(pars, kwargs)
 
         # Inspect the parent frame and pull out any arguments
-        frame = sys._getframe(1)  # Go back 1 frame (to __init__, most likely)
-        if frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this
+        frame = ss.utils.getframe(1)  # Go back 1 frame (to __init__, most likely)
+        if frame is not None and frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this
             _, _, _, kw = inspect.getargvalues(frame) # Get the values provided
             for k,v in kw.items():
                 if k in self.pars and v is not None:
@@ -598,6 +600,7 @@ class Module(Base):
                 errormsg += f'New states being added:\n{new}\n'
                 raise AttributeError(errormsg)
             setattr(self, attr, state)
+            state.mod = self # So a condition on it, written before the sim exists, refers to this module
             if lock:
                 self._locked_attrs.append(attr)
 
@@ -870,7 +873,11 @@ class Module(Base):
 
     @required()
     def finish_step(self):
-        """ Define what should happen at the end of the step; at minimum, increment ti """
+        """ Define what should happen at the end of the step, after the results are recorded """
+        return
+
+    def advance(self):
+        """ For a module with a timeline of its own: move its time to the end of its step, where its results are recorded (the sim moves the time of the modules on its own timeline: see `ss.Sim.advance()`) """
         self.t.ti += 1
         return
 
@@ -891,9 +898,6 @@ class Module(Base):
     @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
-        # Update the time index (since otherwise pointing to a timepoint that doesn't exist)
-        self.t.ti -= 1
-
         self.finalize_results()
         self.finalized = True
         return
@@ -930,6 +934,9 @@ class Module(Base):
 
     def plot(self):
         """ Plot all results in the module """
+        if not len(self.results): # E.g. a module given to a sim, which runs a copy of it
+            errormsg = f'"{self.name}" has no results: a sim runs a copy of each module it is given, so plot the one in the sim, e.g. sim.diseases.{self.name}.plot()'
+            raise ValueError(errormsg)
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
             timevec = self.t.timevec

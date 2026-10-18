@@ -24,9 +24,8 @@ import starsim as ss
 __all__ = [] # Used as ss.gradients
 
 # The parts of the program that are numbers, and so can be differentiated (the rest says how the flows are put together)
-diff_fields = ['inflow', 'contacts', 'pre', 'post', 'tgt_w', 'crd_w', 'maps', 'mov_mat']
-table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.Compartmental.tables()
-methods = ['rk4', 'euler', 'jax'] # The integrators that the JAX run can take the place of ('jax' is RK4)
+diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 'mov_rate']
+table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
 
 
 def jax():
@@ -62,8 +61,6 @@ def reason(sim):
         return 'JAX is not installed'
     elif sim.solver != 'ode':
         return f'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'
-    elif sim.integrator not in methods:
-        return f'integrator="{sim.integrator}" is not RK4 or Euler'
     elif not sim.kernel_only():
         return sim.kernel_reason()
     for mod in sim.declared:
@@ -85,7 +82,7 @@ class Run:
         npts (int): the number of steps
         solver (int): 0 for RK4, 1 for Euler (see `ss.kernels.solvers`)
         n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over by more than a quarter in one
-        per_step (int): the rows of the tables for each step (see `ss.Compartmental.per_step()`)
+        per_step (int): the rows of the tables for each step (see `ss.solvers.Compartmental.per_step()`)
         n_max (int): the most substeps a step can take; a run that needs more is taken again with more
     """
     def __init__(self, program, dt, npts, solver, n_sub, per_step, n_max):
@@ -96,6 +93,7 @@ class Run:
         self.n_sub = n_sub
         self.per_step = per_step
         self.n_max = n_sub if n_sub else n_max
+        self.fixed = False # Whether a clamped step always takes n_max substeps (those past the ones it needs change nothing), so the run can be differentiated in reverse mode
         self.compiled = dict()
         self.layout()
         return
@@ -112,7 +110,7 @@ class Run:
         nf = len(p.src)
         ng = len(p.places)
         self.nf, self.ng = nf, ng
-        self.nflows = p.n_trans + len(p.mov_mat)
+        self.nflows = p.n_trans + p.n_movers
         self.dynamic = [f for f in range(nf) if p.starts[f] < p.starts[f+1]]
         self.leaves = np.flatnonzero(p.src >= 0) # The flows that leave a compartment
         self.place = np.zeros((p.n_places, ng)) # Which place each group is in
@@ -165,9 +163,9 @@ class Run:
         for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term
             infectious = (ys[self.sets[p.exp_set[e]]]*rel_trans[e]).sum(axis=0)
             expo = 0.0
-            if self.simple and not p.use_pre.any() and not p.use_post.any(): # One group, mixing with itself
+            if self.simple and not p.use[0].any() and not p.use[2].any(): # One group, mixing with itself
                 for t in range(len(p.sizes)):
-                    expo = expo + X['contacts'][t]*jnp.where(n > 0, infectious/jnp.where(n > 0, n, 1.0), 0.0)
+                    expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*jnp.where(n > 0, infectious/jnp.where(n > 0, n, 1.0), 0.0)
                 exposures.append(expo)
                 continue
             for t in range(len(p.sizes)):
@@ -176,14 +174,16 @@ class Run:
                 cells[p.levels[t], np.arange(self.ng)] = 1
                 num = cells @ infectious
                 den = cells @ n
-                if p.use_pre[t]: # Move people to where they spend their time
-                    pre = X['pre'][t, :size, :size]
-                    num = num @ pre
-                    den = den @ pre
+                block = int(p.block[t])
+                if p.use[0, t]: # Move people to where they spend their time
+                    num = self.share(num, block, X, True)
+                    den = self.share(den, block, X, True)
                 prev = jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
-                if p.use_post[t]: # Mix between cells
-                    prev = X['post'][t, :size, :size] @ prev
-                expo = expo + X['contacts'][t]*prev[p.levels[t]]
+                if p.use[1, t]: # Mix between the levels in each place
+                    prev = (prev.reshape(-1, block) @ X['mat'][t, :block, :block].T).ravel()
+                if p.use[2, t]: # Mix between places
+                    prev = self.share(prev, block, X, False)
+                expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*prev[p.levels[t]]
             exposures.append(expo)
 
         rows = [fixed[f] for f in range(self.nf)]
@@ -196,6 +196,8 @@ class Run:
                     stack.append(consts[arg])
                 elif op == kn.EXPOSURE:
                     stack.append(exposures[arg])
+                elif op == kn.TOTAL: # In the whole population, every place
+                    stack.append(jnp.broadcast_to(ys[self.sets[arg]].sum(), (self.ng,)))
                 elif op in [kn.COUNT, kn.FRAC]:
                     local = ys[self.sets[arg]].sum(axis=0)
                     if not self.simple:
@@ -211,7 +213,7 @@ class Run:
                     if   op == kn.ADD: stack.append(a + b)
                     elif op == kn.SUB: stack.append(a - b)
                     elif op == kn.MUL: stack.append(a * b)
-                    elif op == kn.DIV: stack.append(a / b)
+                    elif op == kn.DIV: stack.append(jnp.where(a == 0, 0.0, a/jnp.where(a == 0, 1.0, b))) # As in the kernels: nothing divided by anything is nothing
                     elif op == kn.POW: stack.append(a ** b)
                     elif op == kn.MIN: stack.append(jnp.minimum(a, b))
                     elif op == kn.MAX: stack.append(jnp.maximum(a, b))
@@ -222,6 +224,14 @@ class Run:
             rows[f] = jnp.broadcast_to(stack[0], (self.ng,))*mult[f]
         return jnp.stack(rows)
 
+    def share(self, v, block, X, by_columns):
+        """ The time share between places times values by place and level (as `ss.kernels.share()`) """
+        jnp = jax().numpy
+        p = self.p
+        v = v.reshape(-1, block)
+        frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
+        return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
+
     def derivs(self, ys, rates, X, h):
         """ The rate of change of each compartment, and of each transition and mover """
         jnp = jax().numpy
@@ -229,13 +239,13 @@ class Run:
         nc = ys.shape[0]
         dy = jnp.zeros_like(ys)
         df = jnp.zeros((self.nflows, self.ng))
-        for m in range(len(p.mov_mat)): # Movement between groups
-            mat = X['mov_mat'][m]
-            comps = p.mov_comps[p.mov_starts[m]:p.mov_starts[m+1]]
-            y = ys[comps]
-            leaving = y*mat.sum(axis=1)
-            dy = dy.at[comps].add(y @ mat - leaving)
-            df = df.at[p.n_trans + m].add(leaving.sum(axis=0))
+        for m in range(p.n_movers): # Movement between groups
+            ent = slice(p.mov_starts[1, m], p.mov_starts[1, m+1])
+            frm, to, rate = p.mov_pair[0, ent], p.mov_pair[1, ent], X['mov_rate'][ent]
+            comps = p.mov_comps[p.mov_starts[0, m]:p.mov_starts[0, m+1]]
+            moved = ys[comps][:, frm]*rate
+            dy = dy.at[comps].add(jnp.zeros((len(comps), self.ng)).at[:, to].add(moved).at[:, frm].add(-moved))
+            df = df.at[p.n_trans + m].add(jnp.zeros(self.ng).at[frm].add(moved.sum(axis=0)))
         src = np.maximum(p.src, 0)
         leave_mat, arrive_mat = self.comp_matrices(nc)
         amount = jnp.where((p.src >= 0)[:, None], rates*ys[src], rates*X['inflow'])
@@ -293,8 +303,8 @@ class Run:
             else: # Enough substeps that no compartment turns over by more than a quarter in one
                 rates0 = self.rates(y, vals(ti, 0.0))
                 fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
-                if len(self.p.mov_mat):
-                    fastest = jnp.maximum(fastest, jnp.max(X['mov_mat']))
+                if len(self.p.mov_rate):
+                    fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
                 n = jnp.maximum(jnp.ceil(lax.stop_gradient(fastest)*dt/0.25), 1)
                 if clamp:
                     n = jnp.minimum(n, n_max)
@@ -322,6 +332,8 @@ class Run:
                 for s in range(self.n_sub):
                     carry = sub(s, carry)
                 y_end, flows = carry
+            elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs
+                y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
             else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time)
                 def body(carry):
                     s, y, flows = carry
@@ -382,76 +394,47 @@ def compile_run(run, kind):
     return jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
 
 
-class JointRun:
+class CrossRun:
     """
-    The diseases of a crossing, run together: each takes each step in turn on the same people, as in `ss.Crossing.run()`
+    The diseases of a crossing, run together by the crossing's program (see `ss.solvers.Crossing`)
 
-    Called with a tuple of the numbers of each disease's run, and returns what `Run.function()` does, with a tuple over the diseases for each of the first three.
+    Called with a tuple of the numbers of each disease's run: they are put together into the numbers of the
+    program (`ss.solvers.Crossing.numbers()`), which is run as any other, and its output is split between the diseases
+    again. Returns what `Run.function()` does, with a tuple over the diseases for each of the first three.
 
     Args:
-        runs (list): the `Run` of each disease, in the order they step
-        maps (list): for each, where each of its people's compartments in each group is in the joint array (see `ss.Crossing.init_maps()`)
-        people (list): for each, its compartments of people
+        cross (`ss.solvers.Crossing`): the crossing
+        run (Run): the run of its program
+        reps (list): for each disease, the rows of the program's tables for each row of its own
     """
-    def __init__(self, runs, maps, people):
-        self.runs = runs
-        self.maps = maps
-        self.people = [np.asarray(rows) for rows in people]
-        self.valid = [G >= 0 for G in maps]
-        self.size = int(max(G.max() for G in maps)) + 1
-        self.npts = runs[0].npts
-        self.n_sub = runs[0].n_sub if all(run.n_sub for run in runs) else 0
+    def __init__(self, cross, run, reps):
+        self.cross = cross
+        self.run = run
+        self.runs = [run]
+        self.reps = reps
+        self.npts = run.npts
+        self.n_sub = run.n_sub
         self.compiled = dict()
         return
 
     @property
     def n_max(self):
-        return max(run.n_max for run in self.runs)
+        return self.run.n_max
 
     @n_max.setter
     def n_max(self, value):
-        for run in self.runs:
-            run.n_max = run.n_sub if run.n_sub else value
+        self.run.n_max = value
         return
 
-    def gather(self, joint, y, k):
-        """ Disease k's compartments, with its people as they are in the joint array """
-        jnp = jax().numpy
-        return y.at[self.people[k]].set(jnp.where(self.valid[k], joint[np.maximum(self.maps[k], 0)], 0.0))
-
-    def scatter(self, joint, y, k):
-        """ The joint array, with the people as disease k has them """
-        valid = self.valid[k]
-        return joint.at[self.maps[k][valid]].set(y[self.people[k]][valid])
-
     def function(self, clamp=False):
-        jx = jax()
-        jnp = jx.numpy
-        K = len(self.runs)
+        jnp = jax().numpy
+        inner = self.run.function(clamp)
+        cross = self.cross
 
         def run(Xs):
-            steps = [r.stepper(X, clamp) for r,X in zip(self.runs, Xs)]
-            joint = self.scatter(jnp.zeros(self.size), Xs[0]['y'], 0) # Every disease starts with the same people
-            ys = tuple(self.gather(joint, Xs[k]['y'], k) for k in range(K))
-
-            def body(carry, ti):
-                joint, ys = carry
-                ys = list(ys)
-                flows, ns = [], []
-                for k in range(K): # Each disease in turn
-                    y = self.gather(joint, ys[k], k)
-                    y_end, f, n = steps[k](y, ti)
-                    joint = self.scatter(joint, y_end, k)
-                    ys[k] = y_end
-                    flows.append(f)
-                    ns.append(n)
-                ys = tuple(self.gather(joint, ys[k], k) for k in range(K)) # Each records the people after all of them have stepped
-                return (joint, ys), (ys, tuple(flows), jnp.max(jnp.stack([jnp.asarray(n, dtype=float) for n in ns])))
-
-            (joint, y_end), (stocks, flows, n) = jx.lax.scan(body, (joint, ys), jnp.arange(self.npts - 1))
-            stocks = tuple(jnp.concatenate([y0[None], s]) for y0,s in zip(ys, stocks))
-            flows = tuple(jnp.concatenate([jnp.zeros((1,) + f.shape[1:]), f]) for f in flows)
-            return y_end, stocks, flows, jnp.max(n)
+            y_end, stocks, flows, n = inner(cross.numbers(list(Xs), xp=jnp, reps=self.reps))
+            parts = [cross.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
+            return tuple(part[0] for part in parts), tuple(part[1] for part in parts), tuple(part[2] for part in parts), n
 
         return run
 
@@ -488,15 +471,22 @@ def runner(engine, program, how):
     return run
 
 
-def joint_runner(cross, captured):
-    """ The `JointRun` of a crossing, from the program and how to run each of its engines; made again only if one of their runs has changed """
-    runs = [runner(engine, program, how) for engine,(program,how) in zip(cross.engines, captured)]
-    kept = getattr(cross, 'jax_run', None)
-    if kept is not None and all(a is b for a,b in zip(kept.runs, runs)):
-        return kept
-    cross.init_maps()
-    cross.jax_run = JointRun(runs, cross.maps, [engine.people_comps for engine in cross.engines])
-    return cross.jax_run
+def joint_runner(cross, captured, n_max=None):
+    """ The `CrossRun` of a crossing, from the program and how to run each of its engines; made again only if how the program's flows are put together has changed (or, with `n_max`, always) """
+    programs = [program for program,how in captured]
+    if cross.program is None or cross.built != [id(p) for p in programs]:
+        cross.build(programs)
+    per_step, reps = cross.per_step()
+    how = captured[0][1][:4] + (per_step,)
+    if n_max is not None:
+        return CrossRun(cross, Run(cross.program, *how, n_max=n_max), reps)
+    key = Run.key(cross.program, *how)
+    kept = cross.jax_run
+    if kept is not None and kept[0] == key:
+        return kept[1]
+    run = CrossRun(cross, Run(cross.program, *how, n_max=kept[1].n_max if kept is not None else 4), reps)
+    cross.jax_run = (key, run)
+    return run
 
 
 def units(sim):
@@ -581,7 +571,7 @@ def outputs(sim, Xs, kind='run', dX=None):
 
 
 def give(sim, outs, shift=None):
-    """ Give each engine the output of its run, so that `sim.run()` uses it instead of running the kernels (see `ss.Compartmental.run_all()`) """
+    """ Give each engine the output of its run, so that `sim.run()` uses it instead of running the kernels (see `ss.solvers.Compartmental.run_all()`) """
     for j,mod in enumerate(sim.declared):
         y, stocks, flows = outs[j][:3]
         if shift is not None:
@@ -602,7 +592,7 @@ def run_sets(sim, par_sets):
         sim (`ss.Sim`): an initialized sim
         par_sets (list): the values of each run
 
-    Returns, for each declared module, its results over the runs, as `ss.Compartmental.run_many()` does.
+    Returns, for each declared module, its results over the runs, as `ss.solvers.Compartmental.run_many()` does.
     """
     mods = sim.declared
     captured = [[] for mod in mods]
@@ -628,7 +618,8 @@ def run_sets(sim, par_sets):
             sim.set_par_values()
             engine.cache.clear()
             runs.append(engine.collect(stocks[i:i+1], flows[i:i+1]))
-        results[mod.name] = sc.objdict({key:(sc.objdict({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key == 'groups' else np.concatenate([run[key] for run in runs])) for key in runs[0]})
+        results[mod.name] = sc.objdict({key:(sc.objdict({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
+        results[mod.name].group_ti = None # The values by group, if kept, are at every time point
     sim.par_values = base
     sim.set_par_values()
     return results
@@ -760,11 +751,12 @@ class Unsupported(Exception):
 
 class Context:
     """ What expressions are evaluated with in JAX: the fitted parameters as JAX values, the others as the engine has them, and (for results) the number in each state """
-    def __init__(self, density, engine, x, n=None):
+    def __init__(self, density, engine, x, n=None, series=False):
         self.density = density
         self.engine = engine
         self.x = x
         self.n = n
+        self.series = series # Whether a value that varies in time is wanted at every row of the tables, rather than now
         self.xp = jax().numpy
         return
 
@@ -772,6 +764,9 @@ class Context:
         i = self.density.index.get(id(p))
         if i is not None:
             return self.density.convert(i, self.x[i])
+        kept = self.engine.series.get(id(p)) if self.series else None
+        if kept is not None: # Rows by groups, as in the engine's tables
+            return kept[1]
         return self.engine.value(p)
 
     def stock(self, state):
@@ -787,6 +782,9 @@ class Context:
 
     local_count = count
     local_frac = frac
+
+    def total_count(self, states):
+        return self.xp.sum(self.count(states))
 
     def exposure(self, state):
         if self.n is None:
@@ -890,8 +888,10 @@ class Density:
                 n_max = int(2**np.ceil(np.log2(max(2*np.asarray(out[3]).max(), 1)))) # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
             else:
                 n_max = base.n_sub
-            runs = [Run(self.programs[j], *self.hows[j], n_max=n_max) for j in unit]
-            self.runs.append(runs[0] if len(unit) == 1 else JointRun(runs, cross.maps, [self.engines[j].people_comps for j in unit]))
+            if len(unit) == 1:
+                self.runs.append(Run(self.programs[unit[0]], *self.hows[unit[0]], n_max=n_max))
+            else:
+                self.runs.append(joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit], n_max=n_max))
 
         # The values in the rates that are fitted, and the flows whose rate is worked out from fitted parameters alone
         self.consts = []
@@ -945,7 +945,7 @@ class Density:
                 X[key] = val
             for k,i in self.consts[j].items():
                 X['consts'] = X['consts'].at[:, k, :].set(self.convert(i, x[i]))
-            ctx = Context(self, engine, x)
+            ctx = Context(self, engine, x, series=True)
             for f,flow,dw,mult in self.fixed[j]:
                 if flow.expr is None: # A dwell time: the stages over the mean
                     val = ctx.value(dw.par)
@@ -992,14 +992,14 @@ class Density:
         return
 
     def outcomes(self, engine, ctx, new, npts):
-        """ The outcomes, as `ss.Compartmental.derived_outcomes()` works them out """
+        """ The outcomes, as `ss.solvers.Compartmental.derived_outcomes()` works them out """
         jnp = jax().numpy
         out = {}
         for name,info in engine.outcomes.items():
             amount = 0.0
             for key,weight in info.sources:
                 flow = new[key] if key in new else out[key]
-                if isinstance(weight, ss.Expr):
+                if isinstance(weight, ss.transitions.Expr):
                     weight = ss.transitions.evaluate(weight, ctx)
                 if np.ndim(weight) > 0:
                     raise Unsupported(f'the outcome "{name}", whose weight differs by group')
@@ -1012,10 +1012,6 @@ class Density:
             elif info.p_leave is not None: # A share leaves at each step: the arrivals of each step, decaying since
                 decay = (1 - np.asarray(info.p_leave, dtype=float))**np.arange(npts)
                 out[f'n_{name}'] = jnp.convolve(now, jnp.asarray(decay))[:npts]
-            if info.every is not None: # Totaled over each reporting period
-                ends = np.arange(info.every, npts, info.every)
-                totals = jnp.diff(jnp.cumsum(now)[ends], prepend=0.0)
-                now = jnp.zeros(npts).at[ends].set(totals)
             out[name] = now
         return out
 
@@ -1050,16 +1046,24 @@ class Density:
         """ As `ss.calibration.logpdf()`, in JAX """
         jnp = jax().numpy
         stats = jax().scipy.stats
+        gammaln = jax().scipy.special.gammaln
         def par(val):
             i = self.index.get(id(val)) if isinstance(val, ss.par) else None
             return x[i] if i is not None else (val.raw if isinstance(val, ss.par) else val)
         pars = {key:par(val) for key,val in dist.pars.items()}
         mean = jnp.maximum(model, 1e-9)
         if isinstance(dist, ss.poisson):
-            return stats.poisson.logpmf(observed, mean)
+            return observed*jnp.log(mean) - mean - gammaln(observed + 1)
         elif isinstance(dist, ss.nbinom):
             n = pars['n']
-            return stats.nbinom.logpmf(observed, n, n/(n + mean))
+            return gammaln(observed + n) - gammaln(n) - gammaln(observed + 1) + n*jnp.log(n/(n + mean)) + observed*jnp.log(mean/(n + mean))
+        elif isinstance(dist, ss.binom):
+            n = pars['n']
+            p = jnp.clip(model, 1e-12, 1 - 1e-12)
+            return gammaln(n + 1) - gammaln(observed + 1) - gammaln(n - observed + 1) + observed*jnp.log(p) + (n - observed)*jnp.log1p(-p)
+        elif isinstance(dist, ss.bernoulli):
+            p = jnp.clip(model, 1e-12, 1 - 1e-12)
+            return observed*jnp.log(p) + (1 - observed)*jnp.log1p(-p)
         elif isinstance(dist, ss.normal):
             return stats.norm.logpdf(observed, model, pars['scale'])
         elif isinstance(dist, ss.lognorm_ex):
@@ -1099,6 +1103,27 @@ class Density:
 
     #%% The whole of it
 
+    def reverse(self):
+        """ Make the runs differentiable in reverse mode (each step takes its most substeps), for `jax.grad`; forward mode, as NUTS uses, is faster without """
+        for run in self.runs:
+            for one in getattr(run, 'runs', [run]):
+                one.fixed = True
+        return self
+
+    def states(self, x):
+        """ The number in each state at each time point, at some parameter values: a dict of JAX arrays by 'module.n_state' """
+        Xs = self.numbers(x)
+        out = {}
+        for unit,run in zip(self.units, self.runs):
+            args = Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit)
+            stocks = run.function(clamp=True)(args)[1]
+            for k,j in enumerate(unit):
+                st = stocks if len(unit) == 1 else stocks[k]
+                total = st.sum(axis=-1) # Over the groups
+                for i,name in enumerate(self.engines[j].graph.states):
+                    out[f'{self.mods[j].name}.n_{name}'] = total @ self.member[j][i]
+        return out
+
     def __call__(self, x):
         """ The log of the posterior density at some parameter values (a JAX array), up to a constant """
         Xs = self.numbers(x)
@@ -1119,3 +1144,49 @@ class Density:
         for i in range(len(self.fitted)):
             total = total + self.logprior(i, x[i])
         return total
+
+
+class LogDensity:
+    """
+    The log of the posterior density of a sim's fitted parameters as a function of their values, in JAX, for use outside `sim.calibrate()`: see `ss.Sim.log_density()`
+
+    Attributes:
+        names (list): the parameters, in the order of the values
+        x0 (array): their current values
+        fn (func): the function itself, of a JAX array of values, which can be composed with JAX (`jax.grad`, `jax.vmap`, ...)
+    """
+    def __init__(self, sim, pars=None, likelihood=None):
+        why = reason(sim)
+        if why:
+            errormsg = f'The log-density in JAX needs a sim that runs in JAX, and this one cannot, since {why}'
+            raise ValueError(errormsg)
+        fitted = find_pars(sim, None if pars is None else sc.tolist(pars))
+        self.names = list(fitted.keys())
+        self.x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)
+        types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in fitted.values()]
+        def set_pars(x):
+            sim.restart(pars={key:(cls(val) if cls is not None else float(val)) for key,val,cls in zip(self.names, x, types)})
+        self.density = Density(sim, fitted, self.x0, set_pars, likelihood=likelihood).reverse()
+        self.fn = self.density
+        jx = jax()
+        with jx.enable_x64(True):
+            self._value = jx.jit(self.density)
+            self._grad = jx.jit(jx.grad(self.density))
+            self._states = jx.jit(self.density.states)
+        return
+
+    def __call__(self, x):
+        """ The log-density at some values """
+        with jax().enable_x64(True):
+            return float(self._value(jax().numpy.asarray(x, dtype=float)))
+
+    def grad(self, x):
+        """ Its gradient, by reverse-mode automatic differentiation (one pass, whatever the number of parameters) """
+        with jax().enable_x64(True):
+            return np.asarray(self._grad(jax().numpy.asarray(x, dtype=float)))
+
+    def run(self, x):
+        """ The number in each state at each time point, at some values: a dict of arrays by 'module.n_state' """
+        with jax().enable_x64(True):
+            return {key:np.asarray(val) for key,val in self._states(jax().numpy.asarray(x, dtype=float)).items()}
+

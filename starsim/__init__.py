@@ -44,6 +44,9 @@ from .utils import (
     return_fig,
 )
 
+t('errors')
+from .errors import *
+
 t('debugtools')
 from .debugtools import (
     Profile, Debugger, Diagnostics, check_requires, check_version,
@@ -59,26 +62,23 @@ t('distributions') # Slow import due to scipy.stats
 from .distributions import (
     link_dists, make_dist, dist_list, scale_types, Dists, Dist,
     random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
-    poisson, nbinom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
+    poisson, nbinom, binom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
     randint, rand_raw, bernoulli, choose_n, choice, histogram,
     multi_random,
 )
 
 t('time')
 from .time import (
-    DateArray, date, TimePar, dur, datedur, Rate, prob, per, freq,
-    years, months, weeks, days, year, month, week, day,
+    DateArray, date, TimePar, dur, datedur, Rate, prob, per,
+    years, months, weeks, days,
     perday, perweek, permonth, peryear,
-    probperday, probperweek, probpermonth, probperyear,
-    freqperday, freqperweek, freqpermonth, freqperyear,
-    rate, time_prob, rate_prob,
-)
+) # ss.prob(0.1, 'day') for a probability per unit time; ss.time.freq for a count per unit time, in modules written as code
 
 t('timeline')
 from .timeline import Timeline
 
 t('parameters')
-from .parameters import Pars, SimPars, Requires
+from .parameters import Pars, SimPars, Requires, load_pars
 
 t('people')
 from .people import People, Person, people
@@ -91,9 +91,9 @@ from .modules import (
 
 t('networks')
 from .networks import (
-    Route, Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomExactNet, RandomNet, PartnerNet, RandomSafeNet, ClusterNet, HybridNet, MFNet, MSMNet,
-    PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
+    Network, DynamicNetwork, SexualNetwork,
+    StaticNet, RandomNet, PartnerNet, MFNet,
+    PrenatalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )
 
@@ -106,15 +106,12 @@ from .demographics import (
 )
 
 t('products')
-from .products import Product, Dx, Tx, Vx, simple_vx, Vaccine, Treatment, Test
+from .products import Product, Dx, Tx, Vx, Vaccine, Treatment, Test
 
 t('interventions')
 from .interventions import (
     Intervention, RoutineDelivery, CampaignDelivery,
-    BaseTest, BaseScreening, routine_screening, campaign_screening,
-    BaseTriage, routine_triage, campaign_triage,
-    BaseTreatment, treat_num,
-    BaseVaccination, routine_vx, campaign_vx,
+    BaseTest, BaseScreening, BaseTriage, BaseTreatment, treat_num, BaseVaccination,
     Delivery, vaccinate, treat, screen,
 )
 
@@ -122,31 +119,30 @@ t('analyzers')
 from .analyzers import Analyzer, infection_log, dynamics_by_age
 
 t('connectors')
-from .connectors import Connector, seasonality, modify, change
+from .connectors import Connector, modify, change
 
 t('conditions')
 from . import conditions
 from . import kernels
-from .conditions import Cond
 
 t('transitions')
 from .transitions import (
-    CodedError, error, note, Expr, par, State, states, null,
-    Transition, transmission, progression, birth, death, immigration, emigration, outcome, Graph,
-    by, timeseries, seasonal, geo, gravity, Mobility, Strat, Transfer, transfer, stratify,
+    par, State, states, null,
+    Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome,
+    by, timeseries, seasonal, geo, gravity, Mobility, transfer,
 )
 
 t('solvers')
-from .solvers import solver_names, make_engine, Mixing, Engine, Compartmental, Agents, CountState, Crossing
+from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.solvers.Agents
 
 t('diseases')
-from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SEIR, SIS
+from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
 
 t('loop')
 from .loop import Loop
 
 t('spec')
-from .spec import from_spec, to_code, diff
+from .spec import to_code, diff
 
 t('named')
 from . import named # Places and contact matrices by name (ss.geo('Kenya'), ss.contacts('Kenya')); starsim_data is imported only when they are used
@@ -161,14 +157,14 @@ t('sim')
 from .sim import Sim, AlreadyRunError, demo, diff_sims, check_sims_match
 
 t('run')
-from .run import MultiSim, MultiResult, MultiResults, single_run, multi_run, parallel
+from .run import MultiSim, single_run, parallel
 
 t('calibration') # Lazy import to save 500 ms
 from .calibration import (
     Calibration, CalibComponent,
     linear_interp, linear_accum, step_containing,
     BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
-    data, compare, mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models,
+    data, compare, mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize,
 )
 
 t('samples')

@@ -29,7 +29,8 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 ## What needs care
 
 - Several dimensions are imported as a flat product of states. A cleaner Starsim model keeps the stages as states and the other dimension as a stratification, with moves between its levels as `ss.transfer` and differences as `adjust=`; check the two agree with the validate-import skill before replacing one with the other.
-- A stop date in flepiMoP is the last day that applies; Starsim's `stop=` is the first day that no longer does, so a modifier's stop is the end date plus one day (the import does this).
+- A stop date in flepiMoP is the last day that applies; Starsim's `stop=` is the first day that no longer does, so a modifier's stop is the end date plus one day (the import does this). The same holds for the run: flepiMoP's output includes what happens during `end_date`, so the import stops the sim a day later, and its last stock is the day after flepiMoP's last.
+- `subpop_setup.selected` imports only the places listed, with the commuting between them.
 - flepiMoP draws parameters for each run ("slot"). To compare exactly, run Starsim with the values that a slot drew (`spar/*.spar.csv`, `hpar/*.hpar.csv`), as the vignette does.
 
 ## Worked example

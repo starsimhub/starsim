@@ -56,14 +56,14 @@ def test_filtering():
     with sc.timer('Array filtering'):
         f1 = ppl.female == True
         f2 = f1 * (ppl.age>5)
-        f3 = f2 * (~ppl.sir.infected)
+        f3 = f2 * (~ppl.sir.I)
         af_res = f3.uids.to_numpy()
 
     # Equivalent using filter
     with sc.timer('Custom filtering'):
         f1 = ppl.filter('female')
         f2 = f1('age')>5
-        f3 = ~f2('sir.infected')
+        f3 = ~f2('sir.I')
         cf_res = f3.uids.to_numpy()
 
     assert np.array_equal(af_res, cf_res), 'Filtered arrays do not match'

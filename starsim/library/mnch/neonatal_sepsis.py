@@ -23,7 +23,7 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.mnch.NeonatalSepsis(),
-        demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
+        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
@@ -35,9 +35,10 @@ Usage::
 
 import numpy as np
 import starsim as ss
+from ..diseases.coded import CodedSIR
 
 
-class NeonatalSepsis(ss.SIR):
+class NeonatalSepsis(CodedSIR):
     """
     Minimal neonatal sepsis model.
 

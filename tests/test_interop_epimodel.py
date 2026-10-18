@@ -95,7 +95,7 @@ def test_epimodel_listed():
     second['param']['inf.prob'] = 0.2
     d['runs'].append(second)
 
-    sim = load_epimodel(d, verbose=0) # Warns W1601 for what is listed
+    sim = load_epimodel(d, verbose=0) # Warns ss.ImportIncomplete for what is listed
     listed = sc.strjoin([k for k,why in sim.imported.incomplete])
     for key in ['gwesp', 'recovery.FUN', 'inter.eff']:
         assert key in listed, f'{key} should be listed as not translated'

@@ -317,9 +317,9 @@ def test_choice_slots():
 def make_mock_modules():
     """ Create mock modules for the tests to use """
     mod = sc.objdict()
-    mod.year  = ss.mock_module(dt=ss.year)
-    mod.month = ss.mock_module(dt=ss.month)
-    mod.week  = ss.mock_module(dt=ss.week)
+    mod.year  = ss.mock_module(dt=ss.years(1))
+    mod.month = ss.mock_module(dt=ss.months(1))
+    mod.week  = ss.mock_module(dt=ss.weeks(1))
     return mod
 
 
@@ -338,7 +338,7 @@ def test_timepar_dists():
     v = sc.objdict()
     v.base = 30.0
     v.dur = ss.years(30)
-    v.freq = ss.freqperyear(30)
+    v.freq = ss.time.freq(30, 'year')
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
     check_which = ['linear', 'unitless', 'special']
@@ -408,7 +408,7 @@ def test_timepar_dists():
             sc.printgreen(f'✓ Choice passed: {expected:n} ≈ {mean:n} with dt={module.t.dt}')
 
         print('Testing Poisson distribution ...')
-        lam1 = ss.freqperyear(1)
+        lam1 = ss.time.freq(1, 'year')
         lam2 = ss.perday(1)
         for module in mock_mods.values():
             poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
@@ -423,8 +423,8 @@ def test_timepar_dists():
             sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
 
         print('Testing Bernoulli distribution ...')
-        p1 = ss.probperday(0.1/365)
-        p2 = ss.probperyear(0.1)
+        p1 = ss.prob(0.1/365, 'day')
+        p2 = ss.prob(0.1, 'year')
         ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
         ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
         mean1 = ber1.rvs(n).mean()
@@ -600,8 +600,8 @@ def test_choose_n():
     sir = ss.SIR(init_prev=ss.choose_n(lambda sim: sim.pars.n_agents//100))
     sim = ss.Sim(n_agents=500, diseases=sir, networks='random', dur=1, verbose=0).init()
     assert sim.diseases.sir.infected.sum() == 5 # Exactly 1% are seeded
-    with pytest.raises(ValueError, match='choose_n'):
-        ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init() # A count rather than a probability
+    sim = ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init()
+    assert sim.diseases.sir.I.sum() == 20 # A number of people rather than a probability
     return chosen
 
 

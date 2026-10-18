@@ -1,5 +1,5 @@
 ---
-title: People, States, and Arrays
+title: People, states, and arrays
 jupyter: python3
 ---
 
@@ -26,7 +26,7 @@ import sciris as sc
 import starsim as ss
 ss.options(jupyter=True)
 
-sim = ss.Sim(start=2000, stop=2020, n_agents=1000, diseases='sir', networks='random', demographics=True, verbose=False)
+sim = ss.Sim(start='2000', stop='2020', n_agents=1000, diseases='sir', networks='random', demographics=True, verbose=False)
 sim.init()
 
 sc.heading('Initial state')
@@ -39,7 +39,7 @@ sc.heading('After running the sim')
 sim.run()
 res = sim.results
 print('Number of agents after run:', len(ppl))
-print('Number of agents who were born:', sim.results.births.cumulative[-1])
+print('Number of agents who were born:', sim.results.sir.births.cum[-1]) # Births of the population are a transition of the (first) disease
 print('Number of agents who died:', sim.results.cum_deaths[-1])
 print('Maximum UID:', ppl.uid.max())
 print('Size of the raw arrays:', len(ppl.uid.raw))
@@ -103,10 +103,10 @@ We saw an example above of adding a custom state to people. However, a far more 
 ppl = ss.People(30)
 sim = ss.Sim(people=ppl, diseases=ss.SIS(init_prev=0.1), networks=ss.RandomNet())
 sim.run()
-print(f'Number of infected people: {sim.people.sis.infected.sum()}')
+print(f'Number of infected people: {sim.people.sis.I.sum()}')
 ```
 
-When states or arrays are added by modules, they are stored as dictionaries under the name of that module.
+When states or arrays are added by modules, they are stored as dictionaries under the name of that module. A declared disease such as `ss.SIS` adds one boolean state for each of its disease states (`S`, `I`), along with the time each agent entered it (`ti_I`) and is due to leave it (`ti_exit_I`), and the multipliers `rel_sus` and `rel_trans`.
 
 Note that the Starsim `Arr` class can be used like a Numpy array, with all the standard arithmetic operations like sums, mean, counting, etc.
 
@@ -126,7 +126,7 @@ class Immunity(ss.Module):
         self.sus_imm.mutant *= 0.9 # Update the "mutant" column for all agents
         return
 
-imm_sim = ss.Sim(n_agents=1000, modules=Immunity(), demographics=True, dur=5, verbose=False).run()
+imm_sim = ss.Sim(n_agents=1000, modules=Immunity(), demographics=True, stop=5, verbose=False).run()
 imm = imm_sim.people.immunity.sus_imm
 print('Number of agents:', len(imm_sim.people))
 print('Shape of values:', imm.values.shape)
@@ -160,13 +160,13 @@ df = sim.people.to_df()
 df.disp()
 ```
 
-This is usually too much information to understand directly, but can be useful for producing summary statistics; for example, let's say we want to understand the relationship between time since recovery and immunity:
+This is usually too much information to understand directly, but can be useful for producing summary statistics; for example, let's say we want to see when each agent was last infected, by age:
 
 ```{python}
 import matplotlib.pyplot as plt
-plt.scatter(df['sis.ti_recovered'], df['sis.immunity'])
-plt.xlabel('Time of recovery')
-plt.ylabel('Immunity')
+plt.scatter(df['age'], df['sis.ti_I'])
+plt.xlabel('Age')
+plt.ylabel('Time point of most recent infection')
 plt.show()
 ```
 

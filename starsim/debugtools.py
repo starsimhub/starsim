@@ -31,9 +31,9 @@ class Profile(sc.profile):
         import starsim as ss
 
         net = ss.RandomNet()
-        sis = ss.SIS()
-        sim = ss.Sim(networks=net, diseases=sis)
-        prof = sim.profile(follow=[net.add_pairs, sis.infect])
+        hiv = ss.library.HIV() # A disease written as code
+        sim = ss.Sim(networks=net, diseases=hiv)
+        prof = sim.profile(follow=[net.add_pairs, hiv.infect])
         prof.disp()
         ```
     """

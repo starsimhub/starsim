@@ -16,7 +16,7 @@ The documents are a specification. MUST, SHOULD, and MAY are used where a requir
 - **SHOULD**: recommended, with exceptions.
 - **MAY**: optional.
 
-The general policy is to guess a sensible default and print it, not to raise an error.
+The general policy is to guess a sensible default and print it, not to raise an error. A guess fills in what is missing and never reinterprets what was given ([best-practices/principles.md](../best-practices/principles.md#guessing-defaults)); the guesses are listed in [03-states-and-transitions.md](03-states-and-transitions.md#what-is-guessed).
 
 Each document starts with a pointer to the `best-practices` document that justifies it. Code is written against Starsim (`import starsim as ss`), because [the base for the lingua franca is Starsim](../README.md); where the specification differs from Starsim's current behavior, it says so. Decisions that are still guesses are collected in [19-open-questions.md](19-open-questions.md).
 
@@ -47,8 +47,8 @@ Each document starts with a pointer to the `best-practices` document that justif
 
 ### Machinery
 
-- [14-model-spec.md](14-model-spec.md): the model spec, the JSON form of a model: its structure, rate expressions, functions, normalization, hashing, and versioning.
-- [15-errors.md](15-errors.md): errors, warnings, and notes: the message shape and the list of every code.
+- [14-model-spec.md](14-model-spec.md): the model spec, the normalized JSON form of a model from which `sim.hash()`, `ss.diff()`, and `sim.to_code()` work: its structure, rate expressions, functions, normalization, hashing, and versioning.
+- [15-errors.md](15-errors.md): errors, warnings, and notes: the message shape, and the catalog of every one, each an exception or warning class (`ss.UnknownState`, `ss.LargeStep`), generated from the code.
 - [16-interop.md](16-interop.md): importing from and exporting to other frameworks, and the vignette test.
 
 ### Discipline
@@ -64,7 +64,7 @@ Each document starts with a pointer to the `best-practices` document that justif
 3. **Approximations are named when they happen.** Asking for a solver the model does not natively fit uses the standard approximation and prints one line saying so; `approx=True` silences the line, and `approx=False` makes the approximation an error instead. [12-backends.md](12-backends.md#approximations)
 4. **Defaults are guessed and printed.** `describe()` shows every guess, marked as one. [01-objects.md](01-objects.md#describe)
 5. **The vocabulary is small and counted.** [17-vocabulary.md](17-vocabulary.md)
-6. **A model is never easier to write without the lingua franca than with it.** For each vignette, the lingua franca version takes no more lines of model code and no more run time than the original framework's. [18-conformance.md](18-conformance.md#13-north-star)
+6. **A model is never easier to write without the lingua franca than with it.** For each vignette, the lingua franca version takes no more lines of model code than the original framework's; that is the hard target. Run time is reported as two numbers, the first run in a fresh process and the best of five repeated runs, each failing only if it is more than 2x and more than 1 s slower than the original's. Failing rows are published. [18-conformance.md](18-conformance.md#13-north-star)
 
 Each claim has a test suite in [18-conformance.md](18-conformance.md).
 

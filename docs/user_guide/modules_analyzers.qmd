@@ -5,7 +5,11 @@ jupyter: python3
 
 
 
-Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.pregnant`, and the `ss.HIV` module adds results like `sim.results.hiv.new_infections`. If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
+Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.pregnant`, and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
+
+## When analyzers run
+
+An analyzer runs once when the sim is initialized, and then at the end of each step, after the step's results have been recorded. So in an analyzer (and in a module's `update_results()`), `self.ti` (and `sim.ti`) is the time point at the *end* of the step, where its results go: the results so far are `res[:self.ti + 1]`. Events that happened during the step were dated by modules written as code at the step's *start*, `self.ti - 1`, since during a step `self.ti` is the time point it starts from; an analyzer that looks for this step's events by comparing with `self.ti` finds none. A declared disease is different: it dates entry into a state (`ti_I`) at the step's *end*, so this step's new infections are `sir.ti_I == self.ti`.
 
 ## Simple usage
 
@@ -25,7 +29,7 @@ def count_edges(sim):
     network = sim.networks[0] # Get the first network
     n = len(network)
     n_edges.append(n)
-    print(f'Number of edges for network {network.name} on step {sim.ti}: {n}')
+    print(f'Number of edges for network {network.name} at time point {sim.ti}: {n}')
     return
 
 # Create the sim
@@ -71,16 +75,16 @@ class HIV_preg(ss.Analyzer):
 
     def step(self):
         sim = self.sim
-        ti = sim.ti
+        ti = self.ti # The end of the step that has just run, where its results go
         hiv = sim.diseases.hiv
         pregnant = sim.demographics.pregnancy.pregnant
-        newly_infected = hiv.ti_infected == ti
+        newly_infected = hiv.ti_infected == ti - 1 # Infections during the step are dated at its start
         self.results['new_infections_pregnancy'][ti] = len((newly_infected & pregnant).uids)
         return
 
 pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv('test_data/nigeria_asfr.csv'))
-hiv = ssl.diseases.HIV(beta={'mfnet':[0.5,0.25]})
-sim = ss.Sim(diseases=hiv, networks='mfnet', demographics=pregnancy, analyzers=HIV_preg())
+hiv = ssl.HIV(beta={'mfnet':[0.5,0.25]})
+sim = ss.Sim(diseases=hiv, networks='mfnet', demographics=pregnancy, analyzers=HIV_preg(), start='2000', stop='2050')
 sim.run()
 print(f'Total infections among pregnant women: {sim.results.hiv_preg.new_infections_pregnancy.sum()}')
 ```
@@ -106,11 +110,11 @@ Starsim comes with two built-in analyzers, an infection log and an age analyzer.
 
 ### Infection log
 
-The infection log produces a line list of infections. It's integrated into the logic of `ss.Disease` in order to track infection sources and targets, which are not kept beyond this (for memory reasons).
+The infection log produces a line list of infections. It's integrated into the logic of disease transmission in order to track infection sources and targets, which are not kept beyond this (for memory reasons). It exists only in an agent-based run, since a compartmental run has no individuals to record.
 
 ```{python}
 # Demonstrate infection log
-sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
+sim = ss.Sim(n_agents=1000, dt=ss.years(0.2), stop=15, diseases='sir', networks='random', analyzers='infection_log')
 sim.run()
 infection_log = sim.analyzers[0]
 infection_log.plot()
@@ -124,7 +128,7 @@ sim.diseases.sir.plot()
 
 (Note: `ss.infection_log()` also has an `.animate()` method, which we will leave for you to try out!)
 
-The log for each disease is an `ss.InfectionLog`, stored in `infection_log.logs` (or `infection_log.log` if there is only one disease). It stores entries as arrays, and `to_df()` converts them to a line list, with one row per infection: the time (`t`), the infecting agent (`source`, which is `-1` for seed infections), the infected agent (`target`), and the name of the network the infection occurred on:
+The log for each disease is an `ss.diseases.InfectionLog`, stored in `infection_log.logs` (or `infection_log.log` if there is only one disease). It stores entries as arrays, and `to_df()` converts them to a line list, with one row per infection: the time (`t`), the infecting agent (`source`, which is `-1` for seed infections), the infected agent (`target`), and the name of the network the infection occurred on:
 
 ```{python}
 log = infection_log.log
@@ -137,15 +141,19 @@ If you want a NetworkX graph instead (e.g. to analyze transmission chains), use 
 
 Modules can also record extra data for each infection. A disease that records its own infections (e.g. one with multiple variants) can pass extra data when creating entries, e.g. `log.add_entries(uids, sources, time, variant=variants)`, while `log.add_data(uids, ...)` adds data to each agent's most recent infection, which is useful for recording outcomes that happen later (e.g. diagnosis or death). For example, to record the age of each agent when they were infected:
 
+Since this overrides a method, it is a disease written as code, here Starsim 3's SIR (`ssl.CodedSIR`):
+
 ```{python}
-class AgeSIR(ss.SIR):
+import starsim.library as ssl
+
+class AgeSIR(ssl.CodedSIR):
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources)
         if self.infection_log: # The log only exists if the infection_log analyzer is used
             self.infection_log.add_data(uids, age=self.sim.people.age[uids])
         return
 
-sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases=AgeSIR(), networks='random', analyzers='infection_log', verbose=0)
+sim = ss.Sim(n_agents=1000, dt=ss.years(0.2), stop=15, diseases=AgeSIR(), networks='random', analyzers='infection_log', verbose=0)
 sim.run()
 df = sim.analyzers.infection_log.to_df()
 df.tail()
@@ -193,11 +201,13 @@ class dynamics_by_age(ss.Analyzer):
         return ss.return_fig(fig, **kw.return_fig)
 
 # Demonstrate
-by_age = dynamics_by_age('sis.infected', age_bins=(0, 10, 30, 100))
+by_age = dynamics_by_age('sis.I', age_bins=(0, 10, 30, 100)) # People's states are named by module and state
 sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
 sim.run()
 by_age.plot()
 ```
 
-Since we are using a random network, we wouldn't expect any differences in transission by age, so what you're seeing here is the difference in age bin size.
+Since we are using a random network, we wouldn't expect any differences in transmission by age, so what you're seeing here is the difference in age bin size.
+
+For a declared disease, the same numbers need no analyzer: stratify the model by age, and read the result by group with `sim.results.sis.n_I.by('age')` (see [Results](basics_results.qmd)).
 

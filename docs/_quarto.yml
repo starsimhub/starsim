@@ -56,6 +56,10 @@ website:
     left:
       - href: index.qmd
         text: Home
+      - href: ten_minutes.qmd
+        text: Starsim 4 in ten minutes
+      - href: coming_from/index.qmd
+        text: Coming from another framework
       - href: whatsnew.qmd
         text: What's new
       - href: tutorials.qmd
@@ -77,6 +81,24 @@ website:
       contents:
         - href: index.qmd
           text: "**Home**"
+        - href: ten_minutes.qmd
+          text: "**Starsim 4 in ten minutes**"
+        - section: "**Coming from another framework**"
+          href: coming_from/index.qmd
+          contents:
+            - coming_from/epimodel.qmd
+            - coming_from/siminf.qmd
+            - coming_from/odin.qmd
+            - coming_from/epydemix.qmd
+            - coming_from/memilio.qmd
+            - coming_from/flepimop.qmd
+            - coming_from/summer2.qmd
+            - coming_from/atomica.qmd
+            - coming_from/camdl.qmd
+            - coming_from/emulsion.qmd
+            - coming_from/laser.qmd
+            - coming_from/ghana_measles.qmd
+            - coming_from/starsim3.qmd
         - href: whatsnew.qmd
           text: "**What's new**"
         - section: "**Tutorials**"

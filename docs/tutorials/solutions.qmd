@@ -19,21 +19,32 @@ An interactive version of this notebook is available on [Google Colab](https://c
 ```
 
 
-Let's start with the simplest version of a Starsim model. We'll make a version of a [classic SIR model](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology). Here's how our code would look:
-
 ## T1 Solutions
 
 ### Question 1
 
-**Q: To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?**
+**Q: To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the examples above?**
 
-A: We would simply change `'sir'` to `'sis'`:
+A: In the first example, recovered people go back to `S` instead of to `R`, so we change the recovery transition from `'I -> R'` to `'I -> S'`:
 
 ```{python}
 import starsim as ss
 ss.options(jupyter=True)
 import sciris as sc
 
+sis = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.3),
+    recovery = ss.progression('I -> S', dur=10), # <-- change this
+    init_prev = 0.01,
+)
+sim = ss.Sim(sis, stop=100)
+sim.run()
+sim.plot()
+```
+
+In the second example, we would simply change `'sir'` to `'sis'`:
+
+```{python}
 # Define the parameters
 pars = sc.objdict( # We use objdict to allow "." access
     n_agents = 10_000,
@@ -106,9 +117,9 @@ import sciris as sc
 pars = sc.objdict(
     n_agents = 2_000,
     start = '2025-01-01',
-    dur = 365,
+    stop = '2026-01-01',
     dt = 'day',
-    verbose = 1/30, # Print every month
+    verbose = 1, # Print the progress
 )
 sir = ss.SIR(
     dur_inf = ss.days(14),
@@ -118,7 +129,6 @@ sir = ss.SIR(
 net = ss.RandomNet(n_contacts=4)
 
 sim = ss.Sim(pars, diseases=sir, networks=net)
-sim.init()
 sim.run()
 sim.plot()
 
@@ -128,7 +138,7 @@ print(f'Cumulative infections over one year: {answer}')
 
 ### Question 2
 
-**Q: Whether an epidemic 'takes off' depends to a large extent on the basic reproduction number, which in this kind of model depends on `beta`, `n_contacts`, and `dur_inf`. Experiment with different values for each and compare the trajectory of `sim.results.sir.n_infected`.**
+**Q: Whether an epidemic 'takes off' depends to a large extent on the basic reproduction number, which in this kind of model depends on `beta`, `n_contacts`, and `dur_inf`. Experiment with different values for each and compare the trajectory of `sim.results.sir.n_I`.**
 
 A: All three parameters increase transmission, so increasing any of them makes the epidemic grow faster and larger. The cleanest way to see this is to write a small helper that builds a sim for a given set of parameters, then compare them:
 
@@ -153,7 +163,7 @@ sims = [
     make_sim(dur_inf=20),     # Longer infectious period
 ]
 msim = ss.parallel(sims)
-msim.plot('sir_n_infected')
+msim.plot('sir.n_I')
 ```
 
 Each of the three modified scenarios produces a larger, faster epidemic than the baseline, illustrating that they all push the reproduction number in the same direction.
@@ -171,11 +181,10 @@ import starsim as ss
 import sciris as sc
 
 pars = sc.objdict(
-    start = 2020,
-    stop = 2040,
+    start = '2020',
+    stop = '2040',
     total_pop = 24e6,
-    birth_rate = 45,
-    death_rate = 9,
+    demographics = [ss.birth(rate=ss.peryear(0.045)), ss.death(rate=ss.peryear(0.009))],
 )
 sim = ss.Sim(pars)
 sim.run()
@@ -190,29 +199,16 @@ print(f'Population size in year {pars.stop}: {answer} million')
 These solutions build on the `SIRS` class from the tutorial, so we define it again here:
 
 ```{python}
-import numpy as np
 import starsim as ss
 
-class SIRS(ss.SIR):
-    def __init__(self, pars=None, *args, **kwargs):
-        super().__init__()
-        self.define_pars(dur_imm=ss.lognorm_ex(mean=ss.years(10)))
-        self.update_pars(pars, **kwargs)
-        self.define_states(ss.FloatArr('ti_susceptible'))
-        return
-
-    def set_progression(self, uids):
-        super().set_progression(uids)
-        recovering = uids[np.isfinite(self.ti_recovered[uids])]
-        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + self.pars.dur_imm.rvs(recovering)
-        return
-
-    def step_state(self):
-        super().step_state()
-        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
-        self.recovered[waning] = False
-        self.susceptible[waning] = True
-        return
+class SIRS(ss.Disease):
+    S, I, R = ss.states(3)
+    beta = ss.par(ss.peryear(0.1))
+    dur_inf = ss.par(ss.years(10))
+    dur_imm = ss.par(ss.years(10))
+    infection = S >> I @ beta * I
+    recovery = I >> R @ dur_inf
+    waning = R >> S @ dur_imm
 ```
 
 ### Question 1
@@ -224,42 +220,30 @@ A: The shorter immunity is, the faster the susceptible pool is replenished, so t
 ```{python}
 sims = []
 for dur_imm in [2, 5, 20]:
-    sirs = SIRS(dur_imm=ss.lognorm_ex(mean=ss.years(dur_imm)))
-    sims.append(ss.Sim(diseases=sirs, networks='random', dur=100, verbose=0, label=f'dur_imm={dur_imm}'))
+    sirs = SIRS(dur_imm=ss.years(dur_imm), init_prev=0.01)
+    sims.append(ss.Sim(diseases=sirs, networks='random', stop=100, verbose=0, label=f'dur_imm={dur_imm}'))
 msim = ss.parallel(sims)
-msim.plot('sirs_n_infected')
+msim.plot('sirs.n_I')
 ```
 
 ### Question 2
 
-**Q: Apply the same waning immunity to `ss.SEIR` to make an SEIRS model.**
+**Q: Apply the same waning immunity to the SEIR model to make an SEIRS model.**
 
-A: The two new methods are identical to the ones in `SIRS`; only the base class changes. This works because `ss.SEIR` splits infection and progression the same way `ss.SIR` does, so overriding `set_progression()` picks up the latent period for free:
+A: We add the same `waning` transition, from `R` back to `S`, to the SEIR model:
 
 ```{python}
-class SEIRS(ss.SEIR):
-    def __init__(self, pars=None, *args, **kwargs):
-        super().__init__()
-        self.define_pars(dur_imm=ss.lognorm_ex(mean=ss.years(10)))
-        self.update_pars(pars, **kwargs)
-        self.define_states(ss.FloatArr('ti_susceptible'))
-        return
+class SEIRS(ss.Disease):
+    S, E, I, R = ss.states(4)
+    beta = ss.par(ss.peryear(0.1))
+    dur_imm = ss.par(ss.years(10))
+    exposure = S >> E @ beta * I
+    onset = E >> I @ ss.years(1)
+    recovery = I >> R @ ss.years(10)
+    waning = R >> S @ dur_imm  # <-- the new transition
 
-    def set_progression(self, uids):
-        super().set_progression(uids)
-        recovering = uids[np.isfinite(self.ti_recovered[uids])]
-        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + self.pars.dur_imm.rvs(recovering)
-        return
-
-    def step_state(self):
-        super().step_state()
-        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
-        self.recovered[waning] = False
-        self.susceptible[waning] = True
-        return
-
-seirs = SEIRS()
-sim = ss.Sim(diseases=seirs, networks='random', dur=100, verbose=0)
+seirs = SEIRS(init_prev=0.01)
+sim = ss.Sim(diseases=seirs, networks='random', stop=100, verbose=0)
 sim.run()
 sim.diseases.seirs.plot()
 ```
@@ -270,35 +254,23 @@ Unlike the SEIR model, the SEIRS model can sustain endemic transmission, because
 
 **Q: Can you create a model with two strains of the same disease that provide partial cross-immunity?**
 
-A: One clean way to do this is to model the two strains as two separate diseases, and use a [connector](../user_guide/modules_connectors.qmd) to couple them: recovery from one strain reduces susceptibility to the other. Here we reset and re-apply the cross-protection each timestep so it always reflects the current recovered population:
+A: One way to do this is to model the two strains as two separate diseases, and use modifiers to couple them: having recovered from one strain halves susceptibility to the other. Since a modifier depends on the current state of the sim, it always reflects the current recovered population, and since it never overwrites susceptibility, it combines with anything else that changes it:
 
 ```{python}
-# Two independent SIR "strains" (strain 2 is seeded slightly later)
+# Two independent SIR "strains"
 strain1 = ss.SIR(name='strain1', beta=0.1, init_prev=0.01)
-strain2 = ss.SIR(name='strain2', beta=0.1, init_prev=0.0)
+strain2 = ss.SIR(name='strain2', beta=0.1, init_prev=0.01)
 
-class CrossImmunity(ss.Connector):
-    """ Recovery from one strain reduces susceptibility to the other """
-    def __init__(self, protection=0.5, **kwargs):
-        super().__init__()
-        self.define_pars(protection=protection)
-        self.update_pars(**kwargs)
-        return
-
-    def step(self):
-        s1 = self.sim.diseases.strain1
-        s2 = self.sim.diseases.strain2
-        factor = 1 - self.pars.protection
-        s1.rel_sus[:] = 1.0  # Reset each step...
-        s2.rel_sus[:] = 1.0
-        s1.rel_sus[s2.recovered.uids] = factor  # ...then apply cross-protection
-        s2.rel_sus[s1.recovered.uids] = factor
-        return
+protection = 0.5 # Recovery from one strain gives 50% protection against the other
+cross_immunity = [
+    ss.modify(strain1.rel_sus, multiply=1-protection, where=strain2.R),
+    ss.modify(strain2.rel_sus, multiply=1-protection, where=strain1.R),
+]
 
 sim = ss.Sim(
     diseases = [strain1, strain2],
     networks = 'random',
-    connectors = CrossImmunity(protection=0.5),
+    connectors = cross_immunity,
     verbose = 0,
 )
 sim.run()
@@ -307,13 +279,28 @@ sim.plot('strain1')
 
 Higher values of `protection` make it harder for the second strain to spread through people who have already recovered from the first.
 
+Another way is to split one disease into strains with `stratify()`, giving the protection that infection with each strain gives against each other strain as a matrix. Strains with partial cross-immunity can't run over a network yet, so this version uses homogeneous mixing (and runs as an ODE):
+
+```{python}
+flu = ss.Disease(
+    infection = ss.transmission('S -> I', beta=ss.peryear(0.5)),
+    recovery = ss.progression('I -> R', dur=ss.years(4)),
+    waning = ss.progression('R -> S', dur=ss.years(10)),
+    init_prev = 0.01,
+)
+flu.stratify(strain=['A', 'B'], immunity=[[1.0, 0.5], [0.5, 1.0]])
+sim = ss.Sim(flu, stop=100, verbose=0)
+sim.run()
+sim.results.flu.n_I.by('strain').plot()
+```
+
 ## T5 Solutions
 
 ### Question 1
 
 **Q: Adapt the HIV example to include both MF and MSM transmission.**
 
-A: We add an `ss.MSMNet` alongside the `ss.MFNet`, and specify a `beta` for each network in the disease's `beta` dictionary:
+A: We add an `ssl.MSMNet` alongside the `ss.MFNet`, and specify a `beta` for each network in the disease's `beta` dictionary:
 
 ```{python}
 import starsim as ss
@@ -323,10 +310,10 @@ import starsim.library as ssl
 hiv = ssl.diseases.HIV(beta={'mf': [0.05, 0.025], 'msm': [0.08, 0.08]})
 
 # Heterosexual and MSM networks
-mf  = ss.MFNet(duration=1/24, acts=80)
-msm = ss.MSMNet(duration=1/24, acts=80)
+mf  = ss.MFNet(dur=ss.days(15), acts=ss.time.freq(80, 'year'))
+msm = ssl.MSMNet(dur=ss.days(15), acts=ss.time.freq(80, 'year'))
 
-pars = dict(start=2000, dur=20, dt=1/12, verbose=0)
+pars = dict(start='2000', stop='2020', dt=ss.months(1), verbose=0)
 sim = ss.Sim(pars=pars, diseases=hiv, networks=[mf, msm])
 sim.run()
 sim.plot('hiv')
@@ -350,7 +337,7 @@ s_rand = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.RandomNet(n_c
 s_age  = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.MFNet(),
                 n_agents=5000, verbose=0, label='Age-structured (MF)')
 msim = ss.parallel(s_rand, s_age)
-msim.plot('sir_n_infected')
+msim.plot('sir.n_I')
 ```
 
 The age-structured network restricts who can contact whom (and the `MFNet` only connects agents in partnerships), so it typically produces slower, smaller epidemics than a random network where every agent can mix freely.
@@ -361,7 +348,7 @@ The age-structured network restricts who can contact whom (and the `MFNet` only 
 
 **Q: If we change the disease from SIR to SIS and set coverage to 100%, what minimum efficacy of vaccine is required to eradicate the disease by 2050?**
 
-A: There are many ways we could solve this, including with formal numerical optimization packages. However, since we are only varying a single parameter, we can also just use a simple binay search or grid search. This solution illustrates both approaches.
+A: There are many ways we could solve this, including with formal numerical optimization packages. However, since we are only varying a single parameter, we can also just use a simple binary search or grid search. This solution illustrates both approaches. We deliver the vaccine routinely from 2015: everyone alive then is offered it, and so is everyone born afterwards, as soon as they are eligible.
 
 ```{python}
 import numpy as np
@@ -370,8 +357,9 @@ import starsim as ss
 
 pars = dict(
     n_agents = 5_000,
-    birth_rate = 20,
-    death_rate = 15,
+    start = '2000',
+    stop = '2050',
+    demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.015))],
     networks = dict(
         type = 'random',
         n_contacts = 4
@@ -384,31 +372,19 @@ pars = dict(
     verbose = False,
 )
 
-class sis_vaccine(ss.Vx):
-    """ A simple vaccine against "SIS" """
-    def __init__(self, efficacy=1.0, **kwargs):
-        super().__init__()
-        self.define_pars(efficacy=efficacy)
-        self.update_pars(**kwargs)
-        return
-
-    def administer(self, people, uids):
-        people.sis.rel_sus[uids] *= 1-self.pars.efficacy
-        return
-    
 def run_sim(efficacy):
     """ Run a simulation with a given vaccine efficacy """
     # Create the vaccine product
-    product = sis_vaccine(efficacy=efficacy)
+    vaccine = ss.Vaccine(efficacy=efficacy)
 
     # Create the intervention
-    intervention = ss.routine_vx(
-        start_year=2015, # Begin vaccination in 2015
-        prob=1.0,        # 100% coverage
-        product=product  # Use the SIS vaccine
+    intervention = ss.vaccinate(
+        vaccine,          # Use the vaccine
+        start = '2015',   # Begin vaccination in 2015
+        coverage = 1.0,   # 100% coverage
     )
 
-    # Now create two sims: a baseline sim and one with the intervention
+    # Create and run the sim
     sim = ss.Sim(pars=pars, interventions=intervention)
     sim.run()
     return sim

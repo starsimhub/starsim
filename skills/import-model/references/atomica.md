@@ -13,11 +13,14 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 | A link in the transition matrix | A transition `<from>_to_<to>` (with `_<parameter>` if a link has several) | yes |
 | Format `rate`, `probability` | A rate per year | yes |
 | Format `duration` | `1 / par` | yes |
+| A `duration` marked `Timed` | A fixed dwell time, `ss.constant(ss.years(d))` (a compartmental run approximates it by Erlang stages, which differs from Atomica by about 1e-5) | yes |
 | Format `number` | The whole flow, divided among the source's people | yes |
 | Format `proportion` (junctions) | Listed: a branch with `p=` by hand | no |
 | A parameter function | An expression of counts (`ch_prev * transpercontact`); `floor(x)` written as `x` (listed if `x` is not whole) | yes |
 | Databook values by year | `ss.timeseries(..., mode='linear')`, held constant outside, as Atomica does | yes |
-| Initial numbers | Solved from the databook's compartments and characteristics at the first year, as Atomica does | yes |
+| Initial numbers | Solved from the databook's compartments and characteristics at the first year, as Atomica does: those with a setup weight (by default, those in the databook or with a default), zeros fixed, least squares with the smallest norm | yes |
+| Several population types (`Population types` sheet) | The first type as the disease; the others (each would be a disease of its own) and the interactions between them listed | no |
+| `SRC_POP_AVG()`, `SRC_POP_SUM()` and the like, and a flow's value (`x*:ddis`) in a function | Listed (with the transitions that use them): an aggregate over interacting populations is a contact matrix, `ss.contacts(population=...)` | no |
 | Several populations | A stratification `population=[...]` with `kind='space'` (so `sus.n` is the count in each population), values as `ss.by(population=[...])` | yes |
 | Atomica's step | `integrator='euler', substeps=1`, `dt` in years (Atomica's default 0.25) | yes |
 | Programs (the program book) | Coverage from spending, and each affected parameter as baseline plus coverage times effect, by hand | no |

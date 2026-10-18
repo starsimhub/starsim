@@ -1,7 +1,6 @@
 """
 Base classes for diseases
 """
-import sys
 import numpy as np
 import numba as nb
 import pandas as pd
@@ -17,22 +16,21 @@ _ = None # For function signatures
 
 class Disease(ss.Module):
     """
-    Base module class for diseases.
+    A disease declared from its states and the transitions between them
 
-    A disease can be written in two ways. The first is to declare its states and
-    the transitions between them, in which case no methods need to be defined and
-    the disease can be run with any solver (see `ss.Sim`):
+    No methods need to be defined, and the disease can be run with any solver
+    (see `ss.Sim`):
 
         sir = ss.Disease(
-            infection = ss.transmission('S -> I', beta=0.05),
+            infection = ss.transmission('S -> I', beta=0.3),
             recovery  = ss.progression('I -> R', dur=10),
+            init_prev = 0.01,
         )
 
-    The second is to subclass and define `step()` and friends, as for any other
-    module; see `ss.Infection` for the standard base class for this, and
-    `ss.SIR`/`ss.SEIR`/`ss.SIS` for common patterns. The two can be combined: a
-    subclass can declare states and transitions in its class body and add behavior
-    by defining methods.
+    The same disease can be declared in a class body (the class form), which can also
+    add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR` are written
+    this way. A disease written as code instead, with `define_states()` and `step()`
+    and per-agent arrays, subclasses `ss.Infection`.
 
     Args:
         args (list): transitions and outcomes, named from the variables they are assigned to
@@ -44,11 +42,16 @@ class Disease(ss.Module):
         init (dict): the initial fraction or count in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`
         kwargs (dict): one keyword per state, transition, parameter, result, or function; also `name`, `label`, and `dt`
 
+    The results are the number in each state (`n_I`), the flow along each transition by its
+    name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
+    outcomes declared. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also have Starsim's
+    standard `new_infections`, `cum_infections`, and `prevalence` (`standard_results = True`).
+
     Examples:
         ```python
         # Operator form: declare the states, then the transitions
         S, I, R   = ss.states(3)
-        infection = S >> I @ 0.05 * I
+        infection = S >> I @ 0.3 * I
         recovery  = I >> R @ ss.days(10)
         sir = ss.Disease(infection, recovery, init_prev=0.01)
         ss.Sim(sir, stop=100).run().plot()
@@ -56,11 +59,12 @@ class Disease(ss.Module):
         # Class form: for when there is behavior that is not a transition
         class SIR(ss.Disease):
             S, I, R   = ss.states(3)
-            infection = S >> I @ 0.05 * I
+            infection = S >> I @ 0.3 * I
             recovery  = I >> R @ ss.days(10)
         ```
     """
-    graph = None # The declared states and transitions, if any; defined on the class so it always exists
+    graph = None # The declared states and transitions; defined on the class so it always exists
+    standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
 
     def __init__(self, *args, pars=None, **kwargs):
         super().__init__()
@@ -69,24 +73,70 @@ class Disease(ss.Module):
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.par, ss.outcome, ss.Expr, ss.transitions.FlowSum)
-        if args or members or any(isinstance(v, declared) for v in kwargs.values()) or any(key in kwargs for key in ss.Graph.reserved):
-            self.init_graph(args, members, pars, kwargs, frame=sys._getframe(1))
-        else:
-            self.update_pars(pars, **kwargs)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
+        if not args and not members and not any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
+            raise ss.CapabilityError(f'"{type(self).__name__}" declares no states or transitions. A disease written as code (with define_states() and step()) subclasses ss.Infection;\n'
+                             f'     a declared disease gives its transitions, e.g. ss.Disease(infection=ss.transmission("S -> I", beta=0.1), recovery=ss.progression("I -> R", dur=10)).')
+        self.init_graph(args, members, pars, kwargs, frame=ss.utils.getframe(1))
         return
 
+    @staticmethod
+    def reuse(args, members, frame=None):
+        """ States and transitions that already belong to another disease are copied (together, so they refer to each other), so one set can build several diseases; parameters stay shared """
+        owners = {}
+        pars = {}
+        endpoints = set() # States that the transitions given move people between, which this disease will own
+        counted = {} # States counted in a rate (I.n), which may be another disease's
+        def walk(obj, depth=0): # The states, transitions, and parameters in what was given
+            if isinstance(obj, (list, tuple)):
+                for item in obj:
+                    walk(item, depth)
+            elif isinstance(obj, ss.par):
+                pars[id(obj)] = obj
+            elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)) and depth < 6:
+                if getattr(obj, 'module', None) is not None and isinstance(obj, (ss.State, ss.Transition)):
+                    owners[id(obj.module)] = obj.module
+                if isinstance(obj, ss.Transition):
+                    endpoints.update(id(st) for st in (obj.src or []) + (obj.dst or []) if isinstance(st, ss.State))
+                elif isinstance(obj, ss.State) and depth == 0:
+                    endpoints.add(id(obj))
+                elif isinstance(obj, ss.transitions.Count):
+                    counted.update({id(st):st for st in obj.states})
+                for key,val in vars(obj).items():
+                    if key != 'module':
+                        walk(val, depth + 1)
+        walk(list(args) + list(members.values()))
+        others = {key:st for key,st in counted.items() if key not in endpoints and getattr(st, 'module', None) is not None} # Another disease's state in a rate, e.g. syph.I.n: a reference to it, not a copy
+        if not owners:
+            return args, members
+        members = dict(members)
+        grouped = [obj for key in ss.transitions.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
+        positional = []
+        for obj in list(args) + grouped: # Named first, as keywords, since a copy is not bound to the variable
+            name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else ss.transitions.find_name(obj, frame))
+            if name is None or isinstance(obj, ss.State):
+                positional.append(obj)
+            else:
+                members[name] = obj
+        args = positional
+        memo = {key:None for key in owners} | {key:p for key,p in pars.items()} | others # The copies belong to no module yet, and parameters stay shared, e.g. one R0 for several models
+        return sc.dcp((args, members), memo=memo)
+
     def init_graph(self, args, members, pars, kwargs, frame=None):
-        """ Build the graph of declared states and transitions; see `ss.Graph` """
+        """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        declared = (ss.State, ss.Transition, ss.outcome, ss.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        members = sc.mergedicts(sc.dcp(members), kwargs) # Copy class members (together, so they still refer to each other) so instances do not share them
-        self.graph = ss.Graph(self, args, members, init_prev=init_prev, init=init, frame=frame)
+        members = sc.dcp(members) # Copy class members (together, so they still refer to each other) so instances do not share them
+        for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
+            members[key].merge(kwargs.pop(key))
+        members = sc.mergedicts(members, kwargs)
+        args, members = self.reuse(args, members, frame)
+        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, frame=frame)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
@@ -95,23 +145,11 @@ class Disease(ss.Module):
             self.setattribute(name, tf)
         for key in ['rel_sus', 'rel_trans']: # So they can be the target of ss.modify() before the sim exists
             self.setattribute(key, ss.connectors.Target(self, key))
-        self.define_pars(**{name:p.value for name,p in self.graph.pars.items()})
-        for name,p in self.graph.pars.items(): # Hold the parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify(); after the values, so they are not copied
-            dict.__setitem__(self.pars, name, p)
-        if pars:
-            self.set_pars(pars)
-        return
-
-    def set_pars(self, pars=None, **kwargs):
-        """ Set parameter values by name, e.g. `sir.set_pars(beta=0.1)` """
-        for key,val in sc.mergedicts(pars, kwargs).items():
+        self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
+        for key in sc.mergedicts(pars):
             if key not in self.pars:
-                ss.error('E602', f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}; did you mean {ss.transitions.closest(key, self.pars.keys())}?')
-            current = self.pars[key]
-            if isinstance(current, ss.par) and not isinstance(val, ss.par):
-                current.value = val
-            else:
-                self.pars[key] = val
+                raise ss.UnknownParameter(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(key, self.pars.keys())}')
+        self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
     def stratify(self, inplace=True, **kwargs):
@@ -119,9 +157,9 @@ class Disease(ss.Module):
         Stratify the disease by a property of the people in it (age, risk, place, ...), in place, and return it
 
         Args:
-            split (list): the share of the population in each level
+            split (list): the share of the population in each level (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`
-            kind (str): 'age', 'space', 'strain', or 'plain'; inferred from the name if not given
+            kind (str): 'age', 'space', 'strain', or 'plain'; if not given, from the value: 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for `age=`, and otherwise 'plain' (whatever the name)
             states (list): the states the dimension applies to (default: every state that is people; for a strain, every state reached only through infection)
             where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
             mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.gravity()`, `ss.Mobility()`, or a matrix
@@ -136,20 +174,17 @@ class Disease(ss.Module):
             sir.stratify(parity=['0', '1-2', '3+'], where=dict(sex='female')) # Only women have a parity
             ```
         """
-        if self.graph is None:
-            errormsg = f'"{self.name}" has no declared transitions to stratify'
-            raise ValueError(errormsg)
         mod = self if inplace else self.copy()
-        mod.graph.stratify(frame=sys._getframe(1), **kwargs)
-        for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. eligible=~sir.vaccinated
+        mod.graph.stratify(frame=ss.utils.getframe(1), **kwargs)
+        for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
             if not hasattr(mod, strat.name):
-                mod.setattribute(strat.name, ss.Cond('dim', strat.name))
+                mod.setattribute(strat.name, ss.conditions.Cond('dim', strat.name))
         return mod
 
     @property
     def transitions(self):
         """ The table of declared transitions; printing it also shows the matrix of sources by destinations """
-        return None if self.graph is None else self.graph.transitions
+        return self.graph.transitions
 
     def describe(self, output=False):
         """
@@ -158,10 +193,7 @@ class Disease(ss.Module):
         Args:
             output (bool): if True, return the text rather than printing it
         """
-        if self.graph is None:
-            text = f"{type(self).__name__} '{self.name}': written as code (states: {sc.strjoin(self.state_dict.keys())})"
-        else:
-            text = '\n'.join(self.graph.describe(self.sim))
+        text = '\n'.join(self.graph.describe(self.sim))
         return text if output else print(text)
 
     def equations(self, output=False):
@@ -171,9 +203,6 @@ class Disease(ss.Module):
         Args:
             output (bool): if True, return the text rather than printing it
         """
-        if self.graph is None:
-            errormsg = f'"{self.name}" has no declared transitions, so it has no equations to print'
-            raise ValueError(errormsg)
         text = '\n'.join(self.graph.equations(self.engine))
         return text if output else print(text)
 
@@ -196,10 +225,11 @@ class Disease(ss.Module):
             sir.diagram()
             print(sir.diagram('mermaid'))
         """
-        if self.graph is None:
-            errormsg = f'"{self.name}" has no declared transitions, so it has no diagram'
-            raise ValueError(errormsg)
         return self.graph.diagram(format=format, **kwargs)
+
+    def solvers(self, output=False, **kwargs):
+        """ Which solvers can run this disease, before anything runs: see `ss.Sim.solvers()`; keyword arguments go to the sim """
+        return ss.Sim(self, verbose=0, **kwargs).solvers(output=output)
 
     def R0(self, matrix=False):
         """
@@ -224,180 +254,129 @@ class Disease(ss.Module):
             sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
             sir.R0() # 3.0
         """
-        if self.graph is None:
-            errormsg = f'"{self.name}" has no declared transitions, so R0 cannot be worked out from them'
-            raise ValueError(errormsg)
         if self.sim is not None and self.sim.initialized:
-            sim = self.sim.new(solver='ode', verbose=0)
-        else:
-            sim = ss.Sim(sc.dcp(self), solver='ode', verbose=0)
-        ngm = sim.init().diseases[self.name].engine.next_generation()
+            sim = self.sim.new(solver='ode', verbose=0).init()
+            dis = sim.diseases[self.name]
+        else: # This disease alone, whatever the sim names it
+            sim = ss.Sim(sc.dcp(self), solver='ode', verbose=0).init()
+            dis = sim.diseases[0]
+        ngm = dis.engine.next_generation()
         if ngm is None:
             errormsg = f'Nothing in "{self.name}" moves people into an infected state, so it has no R0'
             raise ValueError(errormsg)
         return ngm if matrix else float(np.max(np.abs(np.linalg.eigvals(ngm))))
 
-    def to_json(self, filename=None, **kwargs):
+    def to_spec(self, filename=None, **kwargs):
         """
-        Export the model spec: the states, parameters, and transitions as plain data
+        The model spec: the states, parameters, and transitions as plain data (as `sim.to_spec()` holds it, for `sim.hash()` and `ss.diff()`)
 
         Args:
             filename (str): if provided, save to this file
             kwargs (dict): passed to `sc.savejson()`
         """
-        if self.graph is None:
-            return super().to_json()
         out = self.graph.to_json(self.sim)
         if filename is not None:
             return sc.savejson(filename, out, **kwargs)
         return out
 
-    @ss.required()
+    def to_json(self, filename=None, **kwargs):
+        """ The model spec, as in `sim.to_json()`; see `to_spec()` """
+        return self.to_spec(filename=filename, **kwargs)
+
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
-        if self.graph is not None:
-            self.engine = ss.make_engine(self, sim)
-            self.engine.define()
+        self.engine = ss.solvers.make_engine(self, sim)
+        self.engine.define()
         super().init_pre(sim)
-        if self.graph is not None:
-            self.engine.init_pre()
+        self.engine.init_pre()
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
             self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
         return
 
     def init_post(self):
-        """ Initialize the values of the states, and set the initial conditions of any declared states """
+        """ Initialize the values of the states, and set the initial conditions of the declared states """
         super().init_post()
-        if self.graph is not None:
-            self.engine.init_post()
+        self.engine.init_post()
         return
 
     def start_step(self):
         super().start_step()
-        if self.graph is not None:
-            self.engine.start_step()
+        self.engine.start_step()
         return
 
     def step_state(self):
         """
-        Carry out updates at the start of the timestep (prior to transmission);
-        these are typically state changes. For a disease with declared transitions,
-        these are the transitions that are not contact-mediated.
+        Nothing, for a declared model: all of its transitions are taken together in `step()`, after the
+        interventions, so a delivery sees the same people under every solver (as agents and as compartments)
         """
-        if self.graph is not None:
-            self.engine.step_state()
         return
 
     def step_die(self, uids):
-        """
-        Carry out state changes upon death
-
-        This function is triggered after deaths are resolved, and before analyzers are run.
-        See the SIR example model for a typical use case - deaths are requested as an autonomous
-        update, to take effect after transmission on the same timestep. State changes that occur
-        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
-        allows an intervention to avert a death scheduled on the same timestep, without having
-        to undo any state changes that have already been applied (because they only run via this
-        function if the death actually occurs).
-
-        Unlike other methods during the integration loop, this method is not called directly
-        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
-        the agents who will die.
-
-        Depending on the module and the results it produces, it may or may not be necessary
-        to implement this. A disease with declared states run as agents takes the dead out of every state.
-        """
-        if isinstance(self.engine, ss.Agents):
+        """ Take the agents who died out of every state (as agents; called by `people.step_die()`) """
+        if isinstance(self.engine, ss.solvers.Agents):
             self.engine.die(uids)
         return
 
-    def make_naive(self, uids, skip_states=None):
-        """
-        Reset agents to the state of never having had the disease; used for dynamic rescaling (see `ss.Sim.rescale()`)
+    def not_naive(self):
+        """ The agents who have left the first state (e.g. who are no longer susceptible), for dynamic rescaling (see `ss.Sim.rescale()`) """
+        return (~self[self.graph.first.name]).uids
 
-        By default, this resets every state of the disease to its default value, except
-        `rel_sus` and `rel_trans`, which are often modified by other modules (e.g. vaccines).
-        Override this method if the disease needs something different.
-
-        Args:
-            uids (`ss.uids`): the agents to make naive
-            skip_states (list): names of states not to reset (default `['rel_sus', 'rel_trans']`)
-        """
-        if skip_states is None:
-            skip_states = ['rel_sus', 'rel_trans']
-        skip_states = sc.tolist(skip_states)
-        for state in self.state_list:
-            if state.name not in skip_states:
-                state.set(uids)
+    def make_naive(self, uids):
+        """ Put agents back in the first state, as if they had never had the disease; for dynamic rescaling (see `ss.Sim.rescale()`) """
+        states = self.graph.people_states
+        for state in states:
+            self[state.name][uids] = False
+            self.engine.clear_exit(state.name, uids)
+        self[states[0].name][uids] = True
+        self[f'ti_{states[0].name}'][uids] = self.ti
         return
 
     def step(self):
-        """
-        Handle the main disease updates, e.g. add new cases
-
-        This method is agnostic as to the mechanism by which new cases occur. This
-        could be through transmission (parametrized in different ways, which may or
-        may not use the contact networks) or it may be based on risk factors/seeding,
-        as may be the case for non-communicable diseases.
-
-        It is expected that this method will internally call Disease.set_prognoses()
-        at some point. For a disease with declared transitions, this runs the
-        contact-mediated transitions, followed by any custom functions.
-        """
-        if self.graph is not None:
-            self.engine.step()
-            for func in self.graph.funcs.values():
-                func(self.sim)
+        """ Take the transitions of the step, those that are not contact-mediated and then those that are, followed by any custom functions """
+        self.engine.step_state()
+        self.engine.step()
+        for func in self.graph.funcs.values():
+            func(self.sim)
         return
 
     def update_results(self):
-        if self.graph is not None:
-            self.engine.update_results()
-        else:
-            super().update_results()
+        self.engine.update_results()
         return
 
     def finalize_results(self):
         super().finalize_results()
-        if self.graph is not None:
-            self.engine.finalize_results()
+        self.engine.finalize_results()
         return
 
-    # Ideally would use @ss.required(), but can't since it's not called if no infections occur
-    def set_prognoses(self, uids, sources=None):
-        """
-        Set prognoses upon infection/acquisition
-
-        This function assigns state values upon infection or acquisition of
-        the disease. It would normally be called somewhere towards the end of
-        `Disease.make_new_cases()`. Infections will optionally be added to
-        the log as part of this operation if logging is enabled (in the
-        `Disease` parameters)
-
-        The `sources` are relevant for infectious diseases, but would be left
-        as `None` for NCDs.
-
-        Args:
-            uids (array): UIDs for agents to assign disease prognoses to
-            sources (array): Optionally specify the infecting agent
-        """
-        # Track infections
-        if self.infection_log:
-            self.infection_log.add_entries(uids, sources, self.now)
+    def shrink(self):
+        super().shrink()
+        if self.engine is not None:
+            self.engine.shrink()
         return
 
 
 class Infection(Disease):
     """
-    Base class for infectious diseases used in Starsim
+    Base class for diseases written as code
 
-    This class contains specializations for infectious transmission (i.e., implements network-based
-    transmission with directional beta values) and defines attributes that connectors
-    operate on to capture co-infection
+    A disease written as code defines its own per-agent states (`define_states()`)
+    and how they change (`step_state()`, `step()`, `set_prognoses()`), as for any other
+    module, so it can hold anything an agent can have: a CD4 count, an immunity level
+    that wanes, a time since infection. It runs as agents. This class implements
+    network-based transmission with directional beta values, and defines the attributes
+    (`rel_sus`, `rel_trans`) that other modules act on; a disease that is not transmitted
+    (such as `ss.NCD`) defines no `beta` and its own `step()`.
+
+    A disease that can be written as states and transitions is declared instead, with
+    `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
+    and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
+    conditions such as `hiv.cd4 < 200`, and fitting the values in `pars`.
     """
 
     def __init__(self, pars=None, **kwargs):
-        super().__init__()
+        ss.Module.__init__(self) # Written as code, so there is no graph of declared states to build (see ss.Disease)
+        self.infection_log = None
+        self.engine = None
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
             ss.BoolState('infected', label='Infected'),
@@ -416,9 +395,47 @@ class Infection(Disease):
         self.trans_rng = ss.multi_random('source', 'target')
         return
 
+    @property
+    def transitions(self):
+        """ A disease written as code has no table of declared transitions """
+        return None
+
+    def needs_declared(self, what):
+        """ Raise `E804` for something that needs the structure of a declared disease """
+        raise ss.CapabilityError(f'{what} needs a disease declared from states and transitions, but "{self.name}" ({type(self).__name__}) is written as code.\n'
+                         f'     Declare it with ss.Disease (e.g. ss.SIR, or ss.Disease(infection=ss.transmission("S -> I", beta=0.1), recovery=ss.progression("I -> R", dur=10))).')
+
+    def describe(self, output=False):
+        """ Print a one-line summary: a disease written as code has no declared states and transitions to show """
+        text = f"{type(self).__name__} '{self.name}': written as code (states: {sc.strjoin(self.state_dict.keys())})"
+        return text if output else print(text)
+
+    def equations(self, output=False):
+        return self.needs_declared('equations()')
+
+    def diagram(self, format='plot', **kwargs):
+        return self.needs_declared('diagram()')
+
+    def R0(self, matrix=False):
+        return self.needs_declared('R0()')
+
+    def stratify(self, inplace=True, **kwargs):
+        return self.needs_declared('stratify()')
+
+    def to_json(self, filename=None, **kwargs):
+        out = ss.Module.to_json(self)
+        if filename is not None:
+            return sc.savejson(filename, out, **kwargs)
+        return out
+
+    @ss.required()
     def init_pre(self, sim):
-        super().init_pre(sim)
-        self.validate_beta()
+        """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()` """
+        ss.Module.init_pre(self, sim)
+        if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
+            self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
+        if 'beta' in self.pars: # A disease that is not transmitted, such as ss.NCD, has no beta
+            self.validate_beta()
         self.validate_init_prev()
         return
 
@@ -438,7 +455,7 @@ class Infection(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        super().init_post()
+        ss.Module.init_post(self)
         if self.pars.init_prev is None:
             return
 
@@ -497,12 +514,75 @@ class Infection(Disease):
 
         return betamap
 
+    def start_step(self):
+        ss.Module.start_step(self)
+        return
+
+    def step_state(self):
+        """
+        Carry out updates at the start of the timestep (prior to transmission);
+        these are typically state changes, such as recovery
+        """
+        pass
+
+    def step_die(self, uids):
+        """
+        Carry out state changes upon death
+
+        This function is triggered after deaths are resolved, and before analyzers are run.
+        See `ssl.CodedSIR` for a typical use case - deaths are requested as an autonomous
+        update, to take effect after transmission on the same timestep. State changes that occur
+        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
+        allows an intervention to avert a death scheduled on the same timestep, without having
+        to undo any state changes that have already been applied (because they only run via this
+        function if the death actually occurs).
+
+        Unlike other methods during the integration loop, this method is not called directly
+        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
+        the agents who will die.
+        """
+        pass
+
+    def not_naive(self):
+        """ The agents who have ever been infected, for dynamic rescaling (see `ss.Sim.rescale()`) """
+        return self.ti_infected.notnan.uids
+
+    def make_naive(self, uids, skip_states=None):
+        """
+        Reset agents to the state of never having had the disease; used for dynamic rescaling (see `ss.Sim.rescale()`)
+
+        By default, this resets every state of the disease to its default value, except
+        `rel_sus` and `rel_trans`, which are often modified by other modules (e.g. vaccines).
+        Override this method if the disease needs something different.
+
+        Args:
+            uids (`ss.uids`): the agents to make naive
+            skip_states (list): names of states not to reset (default `['rel_sus', 'rel_trans']`)
+        """
+        if skip_states is None:
+            skip_states = ['rel_sus', 'rel_trans']
+        skip_states = sc.tolist(skip_states)
+        for state in self.state_list:
+            if state.name not in skip_states:
+                state.set(uids)
+        return
+
     def set_prognoses(self, uids, sources=None):
-        """ Make the agents non-susceptible, and record the new infections """
-        super().set_prognoses(uids, sources)
+        """
+        Set prognoses upon infection: make the agents non-susceptible, and record the new infections
+
+        Subclasses extend this to assign state values upon infection (calling `super().set_prognoses()`).
+        Infections are added to the log here if there is an `ss.infection_log` analyzer.
+
+        Args:
+            uids (array): UIDs for agents to assign disease prognoses to
+            sources (array): Optionally specify the infecting agent
+        """
+        if self.infection_log:
+            self.infection_log.add_entries(uids, sources, self.now)
         self.susceptible[uids] = False
         if self.sim.initialized: # Infections seeded by init_post() are prevalent, not incident, so don't count them
-            self.results.new_infections[self.ti] += len(uids) # Count infections when they happen, rather than inferring them from ti_infected
+            self.results.new_infections[self.ti + 1] += len(uids) # Count infections when they happen, rather than inferring them from ti_infected; at the end of the step (self.ti is its start)
         return
 
     def step(self):
@@ -576,8 +656,8 @@ class Infection(Disease):
         # (full-length) arrays. This avoids the gather/scatter, full-length astype copy,
         # and extra wrapper allocations of the Arr math operators; edges only ever index
         # living agents, so stale raw values for inactive agents are never used.
-        rel_trans = self.rel_trans.asnew(self.infectious.raw * self.rel_trans.raw, copy=False)
-        rel_sus   = self.rel_sus.asnew(self.susceptible.raw * self.rel_sus.raw, copy=False)
+        rel_trans = self.rel_trans.asnew(self.infectious.raw * self.modified('rel_trans'), copy=False)
+        rel_sus   = self.rel_sus.asnew(self.susceptible.raw * self.modified('rel_sus'), copy=False)
 
         new_cases = []
         sources = []
@@ -591,13 +671,20 @@ class Infection(Disease):
 
         return self.finalize_infections(new_cases, sources, networks)
 
+    def modified(self, key):
+        """ The raw values of `rel_sus` or `rel_trans`, with any modifiers of them applied (see `ss.modify()`) """
+        arr = self[key]
+        if isinstance(arr, ss.ModifiableArr) and arr.engine is not None:
+            return arr.raw*arr.engine.mult_raw(key)
+        return arr.raw
+
     def infect_route(self, i, route, betas, rel_trans, rel_sus):
         """
         Compute the transmission along a single network (or other route)
 
         Args:
             i (int): the index of the route in `sim.networks`, stored as the network ID of each infection
-            route (`ss.Route`): the network or other route (e.g. a mixing pool)
+            route (`ss.networks.Route`): the network or other route (e.g. a mixing pool)
             betas (list): the pair of betas for the route (p1→p2 and p2→p1); routes other than networks only use the first
             rel_trans (`ss.FloatArr`): the effective transmissibility of each agent (0 if not infectious)
             rel_sus (`ss.FloatArr`): the effective susceptibility of each agent (0 if not susceptible)
@@ -634,14 +721,14 @@ class Infection(Disease):
                         sources.append(source_uids)
 
         # Handle everything else: mixing pools, environmental transmission, etc.
-        elif isinstance(route, ss.Route):
+        elif isinstance(route, ss.networks.Route):
             # Mixing pools are unidirectional, only use the first beta value
             disease_beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.Rate) else betas[0]
             target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
             new_cases.append(target_uids)
             sources.append(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan))
         else:
-            errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
+            errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.networks.Route and define a compute_transmission() method'
             raise TypeError(errormsg)
 
         new_cases = ss.uids.concatenate(new_cases)
@@ -805,7 +892,7 @@ class Infection(Disease):
 
     def update_results(self):
         """ Update prevalence; new_infections is recorded by set_prognoses() as infections happen """
-        super().update_results()
+        ss.Module.update_results(self)
         res = self.results
         ti = self.ti
         res.prevalence[ti] = res.n_infected[ti] / self.sim.people.n_alive
@@ -813,7 +900,7 @@ class Infection(Disease):
 
     def finalize_results(self):
         """ Compute cumulative infections from the new-infections timeseries. """
-        super().finalize_results() # Called first to scale the results
+        ss.Module.finalize_results(self) # Called first to scale the results
         res = self.results
         res.cum_infections[:] = np.cumsum(res.new_infections[:]) # Computed after scaling, since the scale can vary over time (see ss.Sim.rescale())
         return
@@ -976,13 +1063,13 @@ class InfectionLog:
         return graph
 
 
-class NCD(Disease):
+class NCD(Infection):
     """
     Example non-communicable disease
 
     This class implements a basic NCD model with risk of developing a condition
     (e.g., hypertension, diabetes), a state for having the condition, and associated
-    mortality.
+    mortality. It is written as code (see `ss.Infection`), and is not transmitted.
 
     Args:
         initial_risk (float/`ss.bernoulli`): initial prevalence of risk factors
@@ -1003,6 +1090,7 @@ class NCD(Disease):
             ss.BoolState('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),
             ss.FloatArr('ti_dead', label='Time of death'),
+            reset = True, # Not an infection, so without the states of ss.Infection
         )
         return
 
@@ -1030,7 +1118,7 @@ class NCD(Disease):
         self.sim.people.request_death(deaths)
         if self.infection_log:
             self.infection_log.add_data(deaths, died=True)
-        self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
+        self.results.new_deaths[ti + 1] = len(deaths) # Log deaths attributable to this module, at the end of the step (ti is its start)
         return
 
     def step(self):
@@ -1039,14 +1127,15 @@ class NCD(Disease):
         self.affected[new_cases] = True
         dur_prog = self.pars.prognosis.rvs(new_cases, round=True)
         self.ti_dead[new_cases] = ti + dur_prog
-        super().set_prognoses(new_cases)
+        if self.infection_log:
+            self.infection_log.add_entries(new_cases, None, self.now)
         return new_cases
 
     def init_results(self):
         """
-        Initialize results
+        Initialize results (not those of an infection)
         """
-        super().init_results()
+        ss.Module.init_results(self)
         self.define_results(
             ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
             ss.Result('prevalence',    dtype=float, label='Prevalence'),
@@ -1055,299 +1144,148 @@ class NCD(Disease):
         return
 
     def update_results(self):
-        super().update_results()
+        ss.Module.update_results(self)
         ti = self.ti
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
         return
 
+    def finalize_results(self):
+        ss.Module.finalize_results(self)
+        return
 
-class SIR(Infection):
+
+class SIR(Disease):
     """
-    Example SIR model
+    An SIR model: susceptible, infected, and recovered, with deaths from infection
 
-    This class implements a basic SIR model with states for susceptible,
-    infected/infectious, and recovered. It also includes deaths, and basic
-    results.
+    Declared from states and transitions (see `ss.Disease`), so it runs with any
+    solver: as agents over networks, or as compartments. The keywords are Starsim 3's.
 
     Args:
-        beta (float/`ss.prob`): the infectiousness
-        init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
-        p_death (float/`ss.bernoulli`): the probability of death from infection
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
+        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infected for
+        p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection
+        kwargs (dict): passed to `ss.Disease`, e.g. `name`
+
+    The Starsim 3 names `susceptible`, `infected`, and `recovered` are aliases of
+    `S`, `I`, and `R` for this release. Starsim 3's `ss.SIR`, written as code, is
+    `ssl.CodedSIR`.
+
+    **Example**:
+
+        sim = ss.Sim(diseases=ss.SIR(beta=0.1, dur_inf=ss.years(6)), networks='random', n_agents=5000)
+        sim.run().plot()
     """
-    plot_states = ['n_susceptible', 'n_infected', 'n_recovered'] # Which results to show in plot()
+    beta      = ss.par(ss.peryear(0.1))
+    dur_inf   = ss.par(ss.lognorm_ex(mean=ss.years(6)))
+    p_death   = ss.par(0.01)
+    S, I, R   = ss.states('S I R')
+    infection = ss.transmission('S -> I', beta=beta)
+    recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
+    death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
+    standard_results = True
 
-    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            beta = ss.peryear(0.1),
-            init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
-            p_death = ss.bernoulli(p=0.01),
-        )
-        self.update_pars(pars, **kwargs)
-
-        # Example of defining all states, redefining those from ss.Infection, using overwrite=True
-        self.define_states(
-            ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infected'),
-            ss.BoolState('recovered', label='Recovered'),
-            ss.FloatArr('ti_infected', label='Time of infection'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
-            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-            reset = True, # Remove any existing states and aliases (from super().define_states())
-            infectious = 'infected', # Everyone infected is infectious; ss.SEIR replaces this with a state of its own
-        )
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(pars, **library_kwargs(type(self), kwargs))
         return
 
-    def step_state(self):
-        # Progress infectious -> recovered
-        sim = self.sim
-        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
-        self.clear_infection(recovered)
-        self.recovered[recovered] = True
-
-        # Trigger deaths
-        deaths = (self.ti_dead <= self.ti).uids
-        if len(deaths):
-            sim.people.request_death(deaths)
-        return
-
-    def set_prognoses(self, uids, sources=None):
-        """ Set prognoses: infect the agents, then schedule what happens to them """
-        super().set_prognoses(uids, sources)
-        self.set_infection(uids)
-        self.set_progression(uids)
-        return
-
-    def set_infection(self, uids):
-        """ Make the agents infectious, immediately (`ss.SEIR` overrides this to add a latent period) """
-        self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
-        return
-
-    def clear_infection(self, uids):
-        """ Clear the infection states, on recovery or death (`ss.SEIR` overrides this, since its `infected` is derived) """
-        self.infected[uids] = False
-        return
-
-    def set_progression(self, uids):
-        """ Schedule recovery or death, relative to when each agent becomes infectious """
-        p = self.pars
-
-        # Sample duration of infection, being careful to only sample from the
-        # distribution once per timestep.
-        dur_inf = p.dur_inf.rvs(uids)
-
-        # Determine who dies and who recovers and when. In ss.SIR agents are infectious as
-        # soon as they are infected, so the infectious period runs from ti_infected;
-        # ss.SEIR overrides this to run it from ti_infectious instead.
-        will_die = p.p_death.rvs(uids)
-        dead_uids = uids[will_die]
-        rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die] # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die]
-        return
-
-    def step_die(self, uids):
-        """ Reset infected/recovered flags for dead agents """
-        self.susceptible[uids] = False
-        self.clear_infection(uids)
-        self.recovered[uids] = False
-        return
-
-    def plot(self, **kwargs):
-        """ Default plot for SIR model """
-        fig = plt.figure()
-        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
-        res = self.results
-        for rkey in self.plot_states:
-            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
-        plt.legend(frameon=False)
-        plt.xlabel('Time')
-        plt.ylabel('Number of people')
-        plt.ylim(bottom=0)
-        sc.boxoff()
-        sc.commaticks()
-        return ss.return_fig(fig)
+    susceptible = property(lambda self: self.S)
+    infected    = property(lambda self: self.I)
+    recovered   = property(lambda self: self.R)
 
 
-class SEIR(SIR):
+class SEIR(Disease):
     """
-    Example SEIR model
-
-    This class extends `ss.SIR` with an exposed state: agents who are infected but not
-    yet infectious. `exposed` and `infectious` are the literal E and I compartments, and
-    `infected` is derived from them: an agent is infected from the moment it acquires the
-    infection, whether or not it is yet transmitting. So `n_infected` and `prevalence`
-    count E plus I, while transmission depends on `infectious` alone.
-
-    Correspondingly, `ti_exposed` is the time of acquisition and `ti_infectious` is the
-    time of becoming infectious. `ti_infected` is deliberately not defined, since it is
-    too easily confused with `ti_infectious`.
+    An SEIR model: as `ss.SIR`, with an exposed (latent) state before people become infectious
 
     Args:
-        beta (float/`ss.prob`): the infectiousness
-        init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected, who start exposed (or a number of people)
         dur_exp (float/`ss.dur`/`ss.Dist`): how long people are exposed (latent) for
         dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infectious for
-        p_death (float/`ss.bernoulli`): the probability of death from infection
+        p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection
+        kwargs (dict): passed to `ss.Disease`, e.g. `name`
+
+    The Starsim 3 names `susceptible`, `exposed`, `infectious`, and `recovered` are
+    aliases of `S`, `E`, `I`, and `R` for this release, and `infected` is `E | I`.
+    Starsim 3's `ss.SEIR`, written as code, is `ssl.CodedSEIR`.
     """
-    plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']
+    beta      = ss.par(ss.peryear(0.1))
+    dur_exp   = ss.par(ss.lognorm_ex(mean=ss.years(0.5)))
+    dur_inf   = ss.par(ss.lognorm_ex(mean=ss.years(6)))
+    p_death   = ss.par(0.01)
+    S, E, I, R = ss.states('S E I R')
+    infection = ss.transmission('S -> E', beta=beta, source='I')
+    latency   = ss.progression('E -> I', dur=dur_exp)
+    recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
+    death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
+    standard_results = True
 
-    def __init__(self, pars=None, dur_exp=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            dur_exp = ss.lognorm_ex(mean=ss.years(0.5)),
-        )
-        self.update_pars(pars, **kwargs)
-
-        # SIR states are added automatically; here we split I off from "infected", which
-        # becomes E plus I, and drop ti_infected in favor of ti_exposed and ti_infectious
-        self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.BoolState('infectious', label='Infectious'),
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
-            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
-            reset = ['infected', 'infectious', 'ti_infected'],
-            infected = lambda self: self.exposed | self.infectious, # Derived: E and I are both infected
-        )
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(pars, **library_kwargs(type(self), kwargs))
         return
 
-    def set_infection(self, uids):
-        """ Agents are exposed first, and become infectious after the latent period """
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = self.ti
-        self.ti_infectious[uids] = self.ti + self.pars.dur_exp.rvs(uids)
-        return
-
-    def set_progression(self, uids):
-        """ Schedule recovery or death, relative to the end of the latent period """
-        p = self.pars
-        dur_inf = p.dur_inf.rvs(uids)
-
-        # As ss.SIR, except that the infectious period runs from ti_infectious rather than
-        # from the time of acquisition, so the latent period delays it rather than eating into it
-        will_die = p.p_death.rvs(uids)
-        dead_uids = uids[will_die]
-        rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infectious[dead_uids] + dur_inf[will_die]
-        self.ti_recovered[rec_uids] = self.ti_infectious[rec_uids] + dur_inf[~will_die]
-        return
-
-    def clear_infection(self, uids):
-        """ `infected` is derived, so clear the states it is derived from """
-        self.exposed[uids] = False
-        self.infectious[uids] = False
-        return
-
-    def step_state(self):
-        """ Progress exposed -> infectious, then the usual SIR transitions """
-        infectious = (self.exposed & (self.ti_infectious <= self.ti)).uids
-        self.exposed[infectious] = False
-        self.infectious[infectious] = True
-        super().step_state()
-        return
+    susceptible = property(lambda self: self.S)
+    exposed     = property(lambda self: self.E)
+    infectious  = property(lambda self: self.I)
+    recovered   = property(lambda self: self.R)
+    infected    = property(lambda self: self.E | self.I)
 
 
-class SIS(Infection):
+class SIS(Disease):
     """
-    Example SIS model
+    An SIS model: people recover from infection and are susceptible again
 
-    This class implements a basic SIS model with states for susceptible,
-    infected/infectious, and back to susceptible based on waning immunity. There
-    is no death in this case.
+    Declared from states and transitions (see `ss.Disease`), so it runs with any solver.
 
     Args:
-        beta (float/`ss.prob`): the infectiousness
-        init_prev (float/`ss.bernoulli`): the fraction of people to start of being infected
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
-        waning (float/`ss.rate`): how quickly immunity wanes
-        imm_boost (float): how much an infection boosts immunity
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
+        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infected for
+        kwargs (dict): passed to `ss.Disease`, e.g. `name`
+
+    The Starsim 3 names `susceptible` and `infected` are aliases of `S` and `I` for
+    this release. Starsim 3's `ss.SIS` also had a per-agent immunity level, boosted by
+    each infection and waning over time (`waning=`, `imm_boost=`), which has no declared
+    form; that model, written as code, is `ssl.CodedSIS`.
     """
-    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            beta = ss.peryear(0.05),
-            init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.years(10)),
-            waning = ss.peryear(0.05),
-            imm_boost = 1.0,
-        )
-        self.update_pars(pars, **kwargs)
+    beta      = ss.par(ss.peryear(0.05))
+    dur_inf   = ss.par(ss.lognorm_ex(mean=ss.years(10)))
+    S, I      = ss.states('S I')
+    infection = ss.transmission('S -> I', beta=beta)
+    recovery  = ss.progression('I -> S', dur=dur_inf)
+    standard_results = True
 
-        self.define_states(
-            ss.FloatArr('ti_recovered'),
-            ss.FloatArr('immunity', default=0.0),
-        )
+    def __init__(self, pars=None, **kwargs):
+        immunity = [key for key in ['waning', 'imm_boost'] if key in kwargs or key in (pars or {})]
+        if immunity:
+            raise ss.UnknownParameter(f'ss.SIS has no {sc.strjoin(immunity)}: Starsim 3\'s SIS had a per-agent immunity level that waned, which has no declared form.\n'
+                             f'     For that model, written as code, use ssl.CodedSIS({immunity[0]}=...); for immunity as a state, declare an SIRS, e.g. ss.Disease(infection=ss.transmission("S -> I", beta=0.05), recovery=ss.progression("I -> R", dur=10), waning=ss.progression("R -> S", dur=20)).')
+        super().__init__(pars, **library_kwargs(type(self), kwargs))
         return
 
-    def step_state(self):
-        """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
-        self.infected[recovered] = False
-        self.susceptible[recovered] = True
-        self.update_immunity()
-        return
+    susceptible = property(lambda self: self.S)
+    infected    = property(lambda self: self.I)
 
-    def make_naive(self, uids, skip_states=None):
-        """ As `ss.Disease.make_naive()`, but also resets `rel_sus` by default, since SIS sets it from its own immunity """
-        if skip_states is None:
-            skip_states = ['rel_trans']
-        return super().make_naive(uids, skip_states=skip_states)
 
-    def update_immunity(self):
-        """ Apply exponential waning to immunity and update relative susceptibility. """
-        waning = self.pars.waning.to_prob() # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)
-        has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] *= (1-waning)
-        self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
-        return
-
-    def set_prognoses(self, uids, sources=None):
-        """ Set prognoses """
-        super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
-        self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
-        self.immunity[uids] += self.pars.imm_boost
-
-        # Sample duration of infection
-        dur_inf = self.pars.dur_inf.rvs(uids)
-
-        # Determine when people recover
-        self.ti_recovered[uids] = self.ti + dur_inf
-
-        return
-
-    def init_results(self):
-        """ Initialize results """
-        super().init_results()
-        self.define_results(
-            ss.Result('rel_sus', dtype=float, scale=False, label='Relative susceptibility')
-        )
-        return
-
-    @ss.required()
-    def update_results(self):
-        """ Store the population immunity (susceptibility) """
-        super().update_results()
-        self.results['rel_sus'][self.ti] = self.rel_sus.mean()
-        return
-
-    def plot(self, **kwargs):
-        """ Default plot for SIS model """
-        fig = plt.figure()
-        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
-        res = self.results
-        for rkey in ['n_susceptible', 'n_infected']:
-            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
-        plt.legend(frameon=False)
-        plt.xlabel('Time')
-        plt.ylabel('Number of people')
-        plt.ylim(bottom=0)
-        sc.boxoff()
-        sc.commaticks()
-        return ss.return_fig(fig)
+def library_kwargs(cls, kwargs):
+    """
+    The keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR`, as Starsim 3 gave them: 1% start infected unless
+    said otherwise, as a parameter; a probability may be an `ss.bernoulli`; and a number, list, or dict for a duration
+    sets the values of its distribution (e.g. `dur_inf=10` is a lognormal with a mean of 10, as by default)
+    """
+    if 'init' not in kwargs: # A parameter, so it can be set (sir.pars.init_prev = 0.05) or fitted like the others
+        init_prev = kwargs.get('init_prev', 0.01)
+        kwargs['init_prev'] = init_prev if isinstance(init_prev, ss.par) else ss.par(init_prev)
+    if isinstance(kwargs.get('p_death'), ss.bernoulli):
+        kwargs['p_death'] = kwargs['p_death'].pars.p
+    for key in ['dur_inf', 'dur_exp']:
+        val = kwargs.get(key)
+        default = getattr(cls, key, None)
+        if isinstance(default, ss.par) and val is not None and not isinstance(val, (ss.Dist, ss.par)):
+            pars = ss.Pars({key: sc.dcp(default.value)})
+            pars.update({key: val})
+            kwargs[key] = pars[key]
+    return kwargs

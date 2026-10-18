@@ -86,9 +86,9 @@ class TreatSIS(ss.Intervention):
 def make_args():
     """ Make people, HIV, SIS, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
+    mf = ss.MFNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
     hiv = ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
-    sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+    sis = ssl.CodedSIS(name='sis', beta={'mf': [0.1, 0.05]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly
     args = dict(pars=pars, networks=mf, diseases=[hiv, sis])
     return args
 
@@ -153,6 +153,18 @@ def test_connectors(do_plot=False):
         assert results[0][disease].sum() > results[1][disease].sum(), f'{disease.title()} infections should be higher with connector'
         assert results[0][disease].sum() > results[2][disease].sum(), f'{disease.title()} infections should be lower with treatment'
 
+    # The same interaction with v4's modifiers, on the HIV written as code and a declared SIS
+    def run(*connectors):
+        hiv = ssl.diseases.HIV(beta={'mf': [0.008, 0.004]}, init_prev=0.2)
+        sis = ss.SIS(beta={'mf': [ss.peryear(1), ss.peryear(0.5)]}, init_prev=0.05)
+        mods = [make(hiv, sis) for make in connectors]
+        return ss.Sim(n_agents=2000, networks=ss.MFNet(), diseases=[hiv, sis], connectors=mods, start=2000, stop=2020, verbose=0).run().results
+    base = run()
+    stop_hiv = run(lambda hiv, sis: ss.modify(hiv.rel_trans, multiply=0, start=2010)) # A modifier of a coded disease's rel_trans
+    no_sis = run(lambda hiv, sis: ss.modify(sis.rel_sus, multiply=0, where=hiv.cd4 < 1e6)) # A condition on a coded disease's array (everyone's CD4 is below 1e6)
+    after = stop_hiv.timevec > 2010
+    assert base.hiv.new_infections[after].sum() > 0 and stop_hiv.hiv.new_infections[after].sum() == 0 # No HIV transmission after 2010
+    assert base.sis.new_infections.sum() > 0 and no_sis.sis.new_infections.sum() == 0
     return sims
 
 

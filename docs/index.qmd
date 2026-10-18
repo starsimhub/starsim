@@ -4,6 +4,12 @@
 
 ::: {.grid}
 ::: {.g-col-4}
+[**Starsim 4 in ten minutes**](ten_minutes.qmd)
+
+A model, its solvers, interventions, and calibration, on one page.
+:::
+
+::: {.g-col-4}
 [**Tutorials**](tutorials.qmd)
 
 An interactive tour of Starsim's key features.

@@ -26,6 +26,49 @@ class Demographics(ss.Module):
     pass
 
 
+class Flows(Demographics):
+    """
+    Births, deaths, and migration declared for the whole population, as `ss.Sim(demographics=[ss.birth(...), ss.death(...)])` gives them
+
+    Every declared disease's people are born and die by them, once, under every solver: they become
+    transitions of the first declared disease (or the first with the state that births name), whose
+    people are everyone's, since as agents the diseases share the people, and in a compartmental run
+    with several declared diseases, their states are tracked jointly (see `ss.Sim.init_flows()`).
+    With no declared disease, they are run as `ss.Births` and `ss.Deaths`. This class is not usually
+    used directly.
+
+    Args:
+        transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no arrow), and migration (`ss.immigration()`, `ss.emigration()` with no arrow)
+    """
+    compartmental = True
+
+    def __init__(self, transitions, **kwargs):
+        super().__init__(**kwargs)
+        for tr in transitions:
+            if not (tr.inflow or getattr(tr, 'every_state', False)):
+                errormsg = f'demographics= takes births, deaths, and migration of everyone; "{tr.arrow}" is a transition of some people, so it goes in the disease, e.g. ss.SIR(deaths=ss.death("{tr.arrow}", ...))'
+                raise ValueError(errormsg)
+        self.transitions = list(transitions)
+        return
+
+    def step(self):
+        pass # The disease that holds the transitions runs them
+
+    def as_modules(self):
+        """ With no declared disease: the births and deaths as modules of agents (`ss.Births` and `ss.Deaths`, at per-person rates) """
+        out = []
+        for tr in self.transitions:
+            rate = getattr(tr.rate, 'raw', None)
+            if not (tr.per_capita or (tr.every_state and not tr.migration)) or getattr(tr, 'lifetable', None) is not None or not isinstance(rate, ss.TimePar):
+                errormsg = f'"{tr.name or tr.arrow}" in demographics= needs a declared disease (e.g. ss.SIR()) to run; with none, give births and deaths as ss.birth(rate=ss.peryear(...)) and ss.death(rate=ss.peryear(...)), or use ss.Births() and ss.Deaths()'
+                raise ValueError(errormsg)
+            if tr.per_capita:
+                out.append(ss.Births(birth_rate=rate, rate_units=1, name=tr.name or 'births'))
+            else:
+                out.append(ss.Deaths(death_rate=rate, rate_units=1, name=tr.name or 'deaths'))
+        return out
+
+
 class Births(Demographics):
     """
     Create births based on rates, rather than based on pregnancy.
@@ -83,9 +126,9 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
-            ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
+            ss.Result('new',        dtype=int,   scale=True,  kind='flow',  label='New births'),
+            ss.Result('cumulative', dtype=int,   scale=True,  kind='stock', label='Cumulative births'),
+            ss.Result('cbr',        dtype=float, scale=False, kind='ratio', label='Crude birth rate'),
         )
         return
 
@@ -297,9 +340,9 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
-            ss.Result('cmr',        dtype=float, scale=False, summarize_by='mean', label='Crude mortality rate'),
+            ss.Result('new',        dtype=int,   scale=True,  kind='flow',  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cumulative', dtype=int,   scale=True,  kind='stock', label='Cumulative deaths', auto_plot=False),
+            ss.Result('cmr',        dtype=float, scale=False, kind='ratio', label='Crude mortality rate'),
         )
         return
 
@@ -679,18 +722,18 @@ class Pregnancy(Demographics):
         # Define results
         results = sc.autolist()
         results += [
-            ss.Result('pregnancies',     **scaling_kw, label='New pregnancies', summarize_by='sum'),
-            ss.Result('births',          **scaling_kw, label='New births', summarize_by='sum'),
+            ss.Result('pregnancies',     **scaling_kw, label='New pregnancies', kind='flow'),
+            ss.Result('births',          **scaling_kw, label='New births', kind='flow'),
             ss.Result('n_preterm',       **scaling_kw, label='Preterm births', auto_plot=False),
             ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births', auto_plot=False),
-            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
-            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
-            ss.Result('neonatal_deaths', **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
-            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', kind='flow', auto_plot=False),
+            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', kind='flow', auto_plot=False),
+            ss.Result('neonatal_deaths', **scaling_kw, label='Neonatal deaths', kind='flow', auto_plot=False),
+            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', kind='flow', auto_plot=False),
             ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate', auto_plot=False),
-            ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate', auto_plot=False),
-            ss.Result('cbr',             **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
-            ss.Result('tfr',             **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
+            ss.Result('mmr',             **nonscaling_kw, kind='ratio', label='Maternal mortality rate', auto_plot=False),
+            ss.Result('cbr',             **nonscaling_kw, kind='ratio', label='Crude birth rate'),
+            ss.Result('tfr',             **nonscaling_kw, kind='flow',  label='Total fertility rate'),
         ]
         for res in self.derived_results:
             results += ss.Result(res, **scaling_kw)
@@ -874,8 +917,8 @@ class Pregnancy(Demographics):
         """
         maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
-        if 0 <= self.ti < self.t.npts:  # Skip during burn-in (ti < 0)
-            self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
+        if 0 <= self.ti < self.t.npts - 1:  # Skip during burn-in (ti < 0)
+            self.results['maternal_deaths'][self.ti + 1] = len(maternal_deaths) # At the end of the step (self.ti is its start)
         return
 
     def select_conceivers(self, uids=None):
@@ -1150,7 +1193,7 @@ class Pregnancy(Demographics):
         Computes age-specific fertility rates (ASFR). Since this is calculated each timestep,
         the annualized results should compute the sum.
         """
-        new_mother_uids = (self.ti_delivery == self.ti).uids
+        new_mother_uids = (self.ti_delivery == self.ti - 1).uids # Delivered in the step that ends now
         new_mother_ages = self.sim.people.age[new_mother_uids]
         births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins)
         women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins)

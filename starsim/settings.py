@@ -86,8 +86,8 @@ class Options(sc.objdict):
         optdesc = sc.objdict()  # Help for the options
         options = sc.objdict()  # The options
 
-        optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, float)
+        optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
+        options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
 
         optdesc.license = 'Whether to print the license on import'
         options.license = sc.parse_env('STARSIM_LICENSE', False, bool)
@@ -130,6 +130,9 @@ class Options(sc.objdict):
 
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
+
+        optdesc.threads = 'The number of threads that the passes over the agents of a large sim take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
+        options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)

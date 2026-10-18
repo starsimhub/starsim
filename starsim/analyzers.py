@@ -23,7 +23,7 @@ class Analyzer(ss.Module):
 
 
 class infection_log(Analyzer):
-    """ Log infections -- see `ss.InfectionLog` for detail
+    """ Log infections -- see `ss.diseases.InfectionLog` for detail
 
     This analyzer activates an infection log running in each disease. This is
     different than other analyzers, but is required since the information required
@@ -43,7 +43,7 @@ class infection_log(Analyzer):
         return
 
     def step(self):
-        """ Handled by ss.InfectionLog() """
+        """ Handled by ss.diseases.InfectionLog() """
         pass
 
     def finalize_results(self):

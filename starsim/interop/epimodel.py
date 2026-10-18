@@ -22,7 +22,7 @@ from .core import Source, build
 __all__ = ['load_epimodel']
 
 here = os.path.dirname(os.path.abspath(__file__))
-probs = dict(day=ss.probperday, week=ss.probperweek, month=ss.probpermonth, year=ss.probperyear) # A probability per step, by the unit of a step
+probs = {unit:(lambda v, unit=unit: ss.prob(v, unit)) for unit in ['day', 'week', 'month', 'year']} # A probability per step, by the unit of a step
 rates = dict(day=ss.perday, week=ss.perweek, month=ss.permonth, year=ss.peryear)
 known = { # The parameters each built-in model reads; any others are listed
     'netsim': {'inf.prob', 'act.rate', 'rec.rate', 'a.rate', 'ds.rate', 'di.rate', 'dr.rate', 'vital'},

@@ -66,7 +66,7 @@ def test_deepcopy():
 @sc.timer()
 def test_deepcopy_until():
     sc.heading('Testing deepcopy with until')
-    s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small)
+    s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small, start=2000)
     s1.init()
 
     s1.run(until=ss.date(2005))

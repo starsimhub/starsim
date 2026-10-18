@@ -5,9 +5,7 @@ import io
 import sciris as sc
 import starsim as ss
 
-testdir = ss.root/'tests'
-tempdir = testdir/'temp'
-tempdir.mkdir(exist_ok=True)
+tempdir = ss.root/'tests'/'temp' # Where the results go when run as a script; under pytest, each test has its own folder
 
 def get_outputs(p_death):
     outputs = []
@@ -27,25 +25,25 @@ def get_outputs(p_death):
     return outputs
 
 @sc.timer()
-def test_samples_no_identifier():
+def test_samples_no_identifier(tmp_path):
     outputs = get_outputs(0.2)
-    resultsdir = tempdir/'samples_results'
-    resultsdir.mkdir(exist_ok=True)
+    resultsdir = tmp_path/'samples_results'
+    resultsdir.mkdir(parents=True, exist_ok=True)
     s = ss.Samples.new(outputs, folder=resultsdir)
     return s
 
 @sc.timer()
-def test_samples():
+def test_samples(tmp_path):
     outputs = get_outputs(0.2)
-    resultsdir = tempdir/'samples_results'
-    resultsdir.mkdir(exist_ok=True)
+    resultsdir = tmp_path/'samples_results'
+    resultsdir.mkdir(parents=True, exist_ok=True)
     s = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir)
     return s
 
 @sc.timer()
-def test_dataset():
-    resultsdir = tempdir / 'dataset_results'
-    resultsdir.mkdir(exist_ok=True)
+def test_dataset(tmp_path):
+    resultsdir = tmp_path/'dataset_results'
+    resultsdir.mkdir(parents=True, exist_ok=True)
     for p_death in [0.25, 0.5]:
         outputs = get_outputs(p_death)
         ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir)
@@ -53,23 +51,23 @@ def test_dataset():
     return results
 
 @sc.timer()
-def test_verbose():
+def test_verbose(tmp_path):
     outputs = get_outputs(0.2)
-    resultsdir = tempdir/'samples_results'
-    resultsdir.mkdir(exist_ok=True)
+    resultsdir = tmp_path/'samples_results'
+    resultsdir.mkdir(parents=True, exist_ok=True)
     s = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir, verbose=False)
     return s
 
 @sc.timer()
-def test_seed_result():
+def test_seed_result(tmp_path):
     outputs = get_outputs(0.2)
-    resultsdir = tempdir/'samples_results'
-    resultsdir.mkdir(exist_ok=True)
+    resultsdir = tmp_path/'samples_results'
+    resultsdir.mkdir(parents=True, exist_ok=True)
     s = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir, verbose=False)
     return s[0]
 
 @sc.timer()
-def test_samples_bytesio():
+def test_samples_bytesio(tmp_path):
     """ Passing an io.BytesIO as fname should build the zip in-memory rather than on disk """
     outputs = get_outputs(0.2)
     buffer = io.BytesIO()
@@ -80,8 +78,8 @@ def test_samples_bytesio():
     assert len(buffer.getvalue()) > 0
 
     # Data should round-trip identically to a disk-based Samples built from the same outputs
-    resultsdir = tempdir/'samples_results'
-    resultsdir.mkdir(exist_ok=True)
+    resultsdir = tmp_path/'samples_results'
+    resultsdir.mkdir(parents=True, exist_ok=True)
     disk = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir, verbose=False)
     assert list(s.seeds) == list(disk.seeds)
     assert s.id == disk.id
@@ -94,9 +92,9 @@ def test_samples_bytesio():
 
 
 if __name__ == '__main__':
-    samples = test_samples()
-    samples = test_samples_no_identifier()
-    samples = test_verbose()
-    seed_result = test_seed_result()
-    results = test_dataset()
-    samples_mem = test_samples_bytesio()
+    samples = test_samples(tempdir)
+    samples = test_samples_no_identifier(tempdir)
+    samples = test_verbose(tempdir)
+    seed_result = test_seed_result(tempdir)
+    results = test_dataset(tempdir)
+    samples_mem = test_samples_bytesio(tempdir)

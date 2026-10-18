@@ -24,8 +24,10 @@ class Result(ss.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+        kind (str): 'flow' (a number of events in each step, e.g. new infections), 'stock' (a quantity at each time point, e.g. the number infected), or 'ratio' (one quantity divided by another, e.g. prevalence); it decides how the result is summarized, resampled, and compared with data. If not given, it is guessed from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; anything else is treated as a ratio)
+        summarize_by (str): deprecated, use `kind`: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
+        runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
@@ -41,9 +43,24 @@ class Result(ss.BaseArr):
         res['alpha'][4] = 8 # Set one value for timestep 4
         res['alpha'].label # Returns 'new_infections (alpha)'
         ```
+
+    A result across the runs of a MultiSim (`msim.results.sir.n_I`) is the same result with a
+    run axis first: `select()` also takes `run=` (a position), `scenario=`, and the parameters
+    swept; `quantiles()`, `median()`, and `mean()` summarize over the runs of each scenario; and
+    `plot()` draws the median and a 95% interval of each scenario (`lines=True` draws every run).
+
+        ```python
+        msim = sim.run(n_runs=10)
+        n_I = msim.results.sir.n_I # Runs by time points
+        n_I.select(run=3) # One run, as a result of one sim
+        low, mid, high = n_I.quantiles([0.025, 0.5, 0.975])
+        n_I.median().plot()
+        ```
     """
+    runs = None # For a result across the runs of a MultiSim: one row per run (see above)
+
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, columns=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, kind=None, summarize_by=None, columns=None, runs=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -56,8 +73,9 @@ class Result(ss.BaseArr):
         self.dtype = dtype
         self._shape = shape
         self.values = values
-        self.summarize_by = summarize_by
+        self.kind = self.get_kind(name, kind, summarize_by)
         self.columns = columns
+        self.runs = runs
         self.validate_columns()
         self.init_values()
         return
@@ -80,7 +98,8 @@ class Result(ss.BaseArr):
         except:
             valstr = f'{self.values}'
         labelstr = f'{self.key}: ' if label else ''
-        out = f'{cls_name}({labelstr}{valstr})'
+        runstr = f'{self.n_runs} runs, ' if self.runs is not None and 'quantile' not in self.runs else ''
+        out = f'{cls_name}({labelstr}{runstr}{valstr})'
         return out
 
     def to_str(self, label=True):
@@ -136,36 +155,196 @@ class Result(ss.BaseArr):
                 self.values = None
             self.dtype = dtype
             self._shape = shape
-            if self.columns is not None and self.values is not None and self.values.shape[1:] != (len(self.columns),):
+            if self.columns is not None and self.values is not None and self.values.shape[-1] != len(self.columns):
                 errormsg = f'Result "{self.name}" has {len(self.columns)} columns, but values of shape {self.values.shape}'
                 raise ValueError(errormsg)
         return self.values
 
-    def select(self, **dims):
+    def select(self, run=None, **dims):
         """
         Select groups of a stratified result by name: keeps the given levels of each dimension, and sums over the rest
 
+        The values by group are kept at every time point, or, if that would take too much memory, every few steps
+        (see `ss.Sim.group_rows()` and the sim parameter `results`); then the result has a value at the end of each
+        of these periods, which for a flow is its total over the period.
+
+        For a result across the runs of a MultiSim, also select runs: by position (`run=3`, a result of one
+        run), by scenario (`scenario='vaccine'`), or by the value of a parameter swept (`beta=0.3`).
+
         Args:
-            dims (dict): the dimension and the level (or list of levels) to keep, by label or by position, e.g. `age=0` or `risk='high'`
+            run (int/list): for a result across runs, the position of a run (or a list of them)
+            dims (dict): the dimension and the level (or list of levels) to keep, by label or by position, e.g. `age=0` or `risk='high'`; or a scenario or parameter value, for a result across runs
 
         Examples:
             ```python
             res = sim.results.sir
             res.n_I.select(age=0) # The youngest age group
             res.n_I.select(sex='female', risk='high')
+            msim.results.sir.n_I.select(beta=0.3).quantiles() # The runs with beta = 0.3
             ```
         """
-        strats = self._check_strata()
+        out = self
+        if self.runs is not None:
+            named = {str(col).rpartition('.')[2]:col for col in self.runs.columns if '.' in str(col)} # A parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3)
+            dims = {(named[key] if key not in self.runs.columns and key in named else key):val for key,val in dims.items()}
+            coords = {key:val for key,val in dims.items() if key in self.runs.columns}
+            dims = {key:val for key,val in dims.items() if key not in coords}
+            if coords:
+                out = out.take(out.match_runs(coords))
+            if run is not None:
+                out = out.take(run)
+        elif run is not None or 'scenario' in dims:
+            errormsg = f'The result "{self.name}" is of one run, so it has no runs or scenarios to select'
+            raise ValueError(errormsg)
+        if not dims:
+            return out
+        strats = out._check_strata()
         coords = strats[0].sim_coords
-        keep = np.ones(self.strata.shape[1], dtype=bool)
+        keep = np.ones(out.strata.shape[-1], dtype=bool)
         for dim,levels in dims.items():
             names = [strat.name for strat in strats]
-            self._check_dim(dim)
+            out._check_dim(dim)
             d = names.index(dim)
             inds = [strats[d].index(level) for level in sc.tolist(levels)]
             keep &= np.isin(coords[:, d], inds)
-        out = self._substrata(keep)
+        out = out._substrata(keep)
         out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})'
+        return out
+
+    @property
+    def n_runs(self):
+        """ The number of runs, for a result across the runs of a MultiSim; None for a result of one run """
+        return None if self.runs is None else len(self.runs)
+
+    @property
+    def labels(self):
+        """ The scenario of each run, for a result across runs """
+        return None if self.runs is None else list(self.runs['scenario'])
+
+    @property
+    def t_axis(self):
+        """ The axis of the time points: 0, or 1 for a result across runs """
+        return 0 if self.runs is None else 1
+
+    def _check_runs(self, what):
+        if self.runs is None:
+            errormsg = f'{what} is for a result across the runs of a MultiSim; "{self.name}" is the result of one run'
+            raise ValueError(errormsg)
+        elif 'quantile' in self.runs:
+            errormsg = f'{what} is for a result across runs, not for quantiles of one'
+            raise ValueError(errormsg)
+        return
+
+    def scenarios(self):
+        """ The positions of the runs of each scenario, in order """
+        out = {}
+        for i,scenario in enumerate(self.runs['scenario']):
+            out.setdefault(scenario, []).append(i)
+        return out
+
+    def take(self, inds):
+        """ Some of the runs of a result across runs: a result of one run for a position, or across runs for a list of them """
+        one = np.ndim(inds) == 0
+        pick = lambda arr: None if arr is None else np.asarray(arr)[inds]
+        values = pick(self.values)
+        out = self.asnew(values=values, _shape=values.shape, runs=None if one else self.runs.iloc[sc.toarray(inds)].reset_index(drop=True))
+        if getattr(self, 'strata', None) is not None:
+            out.strata, out.denom = pick(self.strata), pick(getattr(self, 'denom', None))
+        return out
+
+    def match_runs(self, coords):
+        """ The positions of the runs with the given scenario or values of the parameters swept, e.g. `dict(beta=0.3)` """
+        keep = np.ones(self.n_runs, dtype=bool)
+        for key,levels in coords.items():
+            col = self.runs[key]
+            levels = sc.tolist(levels)
+            if pd.api.types.is_numeric_dtype(col) and all(sc.isnumber(level) for level in levels): # Values from e.g. np.linspace
+                keep &= np.any([np.isclose(col.to_numpy(dtype=float), level) for level in levels], axis=0)
+            else:
+                keep &= col.isin(levels).to_numpy()
+        if not keep.any():
+            values = {key:sorted(set(self.runs[key])) for key in coords}
+            errormsg = f'No runs of "{self.name}" have {", ".join(f"{k}={v}" for k,v in coords.items())}; the values are {values}'
+            raise KeyError(errormsg)
+        return np.flatnonzero(keep)
+
+    def over_runs(self, func, linear=False):
+        """ Each scenario's runs reduced to one, by a function of an array whose first axis is the runs: a result of one run if there is one scenario """
+        groups = self.scenarios()
+        part = lambda arr: np.stack([func(np.asarray(arr)[inds]) for inds in groups.values()])
+        values = part(self.values)
+        out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(dict(scenario=list(groups))))
+        if getattr(self, 'strata', None) is not None: # A mean keeps the values by group (and a ratio its parts); other summaries do not
+            out.strata = part(self.strata) if linear else None
+            out.denom = part(self.denom) if linear and getattr(self, 'denom', None) is not None else None
+            if not linear:
+                out.no_groups = 'a summary over runs is not kept by group; select the groups first, e.g. res.select(age=0).median()'
+        return out.take(0) if len(groups) == 1 else out
+
+    def quantiles(self, q=(0.025, 0.5, 0.975)):
+        """
+        Quantiles over the runs of each scenario, for a result across the runs of a MultiSim
+
+        Args:
+            q (list): the quantiles
+
+        Returns a result with one row per quantile (and scenario, if there are several), e.g. `low, mid, high = res.quantiles()`.
+        """
+        self._check_runs('quantiles()')
+        q = np.atleast_1d(q).astype(float).tolist()
+        rows = []
+        vals = []
+        for scenario,inds in self.scenarios().items():
+            vals.append(np.quantile(self.values[inds], q, axis=0))
+            rows += [dict(scenario=scenario, quantile=x) for x in q]
+        values = np.concatenate(vals)
+        out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(rows))
+        if getattr(self, 'strata', None) is not None:
+            out.strata = out.denom = None
+            out.no_groups = 'quantiles are not kept by group; select the groups first, e.g. res.select(age=0).quantiles()'
+        return out
+
+    def median(self, *args, **kwargs):
+        """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values """
+        if self.runs is None or args or kwargs:
+            return np.median(self.values, *args, **kwargs)
+        self._check_runs('median()')
+        return self.over_runs(lambda arr: np.median(arr, axis=0))
+
+    def mean(self, *args, **kwargs):
+        """ For a result across runs, the mean over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the mean of the values """
+        if self.runs is None or args or kwargs:
+            return self.values.mean(*args, **kwargs)
+        self._check_runs('mean()')
+        return self.over_runs(lambda arr: arr.mean(axis=0), linear=True)
+
+    def diff(self, baseline):
+        """
+        The difference of each other scenario from the baseline, run by run (the runs are paired by position), for a result across runs
+
+        Args:
+            baseline (str): the label of the baseline scenario
+
+        Returns a dict of results across runs, one per scenario other than the baseline.
+        """
+        self._check_runs('diff()')
+        groups = self.scenarios()
+        if baseline not in groups:
+            errormsg = f'No runs are labelled "{baseline}"; the labels are {list(groups)}'
+            raise KeyError(errormsg)
+        base = self.take(groups[baseline])
+        out = sc.objdict()
+        for label,inds in groups.items():
+            if label != baseline:
+                if len(inds) != len(base.values):
+                    errormsg = f'Cannot compare "{label}" with "{baseline}": they have {len(inds)} and {len(base.values)} runs'
+                    raise ValueError(errormsg)
+                other = self.take(inds)
+                diff = other.asnew(values=other.values - base.values, label=f'{self.label}: difference from {baseline}')
+                if getattr(other, 'strata', None) is not None:
+                    ratio = getattr(other, 'denom', None) is not None
+                    diff.strata, diff.denom = (None, None) if ratio else (other.strata - base.strata, None) # A difference of ratios has no parts
+                out[label] = diff
         return out
 
     def by(self, dim):
@@ -174,8 +353,14 @@ class Result(ss.BaseArr):
 
         Args:
             dim (str): the dimension, e.g. 'age'
+
+        For a result across runs, returns a dict of results across runs instead, one per level.
         """
         strats = self._check_strata()
+        if self.runs is not None:
+            self._check_dim(dim)
+            strat = strats[[strat.name for strat in strats].index(dim)]
+            return sc.objdict({str(label):self.select(**{dim:label}) for label in strat.labels})
         names = [strat.name for strat in strats]
         self._check_dim(dim)
         d = names.index(dim)
@@ -189,13 +374,21 @@ class Result(ss.BaseArr):
         columns = [str(label) for label in strat.labels]
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
             columns = [f'{dim}_{col}' for col in columns]
-        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
-                     values=values, shape=values.shape[0], columns=columns, summarize_by=self.summarize_by)
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
+                     values=values, shape=values.shape[0], columns=columns, kind=self.kind)
         return out
+
+    @property
+    def group_timevec(self):
+        """ The time points of the values by group: every one, or the end of every few steps (see `select()`) """
+        group_ti = getattr(self, 'group_ti', None)
+        return self.timevec if group_ti is None or self.timevec is None else self.timevec[group_ti]
 
     def _check_strata(self):
         if getattr(self, 'strata', None) is None:
             errormsg = f'The result "{self.name}" is not stratified, so there is nothing to select'
+            why = getattr(self, 'no_groups', None)
+            errormsg += f' ({why})' if why else ''
             raise ValueError(errormsg)
         return self.strats
 
@@ -229,16 +422,17 @@ class Result(ss.BaseArr):
         """ A result made of some of the groups of this one """
         strata = self.strata*keep # The groups left out are zero, so the result can be selected from or split again
         denom = getattr(self, 'denom', None)
-        values = strata.sum(axis=1)
+        values = strata.sum(axis=-1)
         if denom is not None: # A ratio: the numerator and denominator are each added up over the groups, then divided
             denom = denom*keep
-            values = np.divide(values, denom.sum(axis=1), out=np.zeros(len(values)), where=denom.sum(axis=1)!=0)
-        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
-                     values=values, shape=strata.shape[0], summarize_by=self.summarize_by)
+            values = np.divide(values, denom.sum(axis=-1), out=np.zeros(values.shape), where=denom.sum(axis=-1)!=0)
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
+                     values=values, kind=self.kind, runs=self.runs)
         out.strata = strata
         out.denom = denom
         out.strats = self.strats
         out.dims = getattr(self, 'dims', None)
+        out.group_ti = None # Its values are at the time points of its rows
         return out
 
     def col(self, col):
@@ -247,10 +441,11 @@ class Result(ss.BaseArr):
         col = self.columns[i]
         label = sc.ifelse(self.label, self.name)
         res = Result(name=f'{self.name}_{col}', label=f'{label} ({col})', dtype=self.dtype, scale=self.scale,
-                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, summarize_by=self.summarize_by or self.summary_method()) # Infer the summary method from the parent's name, not the column's
-        res.values = self.values[:, i] # Set after creation, since init_values() would copy
-        res.low = self.low[:, i] if self.low is not None else None
-        res.high = self.high[:, i] if self.high is not None else None
+                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, kind=self.kind)
+        res.values = self.values[..., i] # Set after creation, since init_values() would copy
+        res.low = self.low[..., i] if self.low is not None else None
+        res.high = self.high[..., i] if self.high is not None else None
+        res.runs = self.runs
         return res
 
     def by_column(self):
@@ -260,7 +455,7 @@ class Result(ss.BaseArr):
     def stack(self, results):
         """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling) """
         def stack_key(key):
-            return None if results[0][key] is None else np.column_stack([res[key] for res in results])
+            return None if results[0][key] is None else np.stack([res[key] for res in results], axis=-1)
         values = stack_key('values')
         return self.asnew(values=values, low=stack_key('low'), high=stack_key('high'), timevec=results[0].timevec, _shape=values.shape)
 
@@ -300,151 +495,200 @@ class Result(ss.BaseArr):
             full = f'{self.module}: {reslabel}'
         return full
 
-    def summary_method(self, die=False):
-        """
-        Infer the summarization method from the result name.
+    kinds = dict(flow='sum', stock='last', ratio='mean') # Each kind of result, and how it is summarized over time
 
-        Heuristic: names containing 'new_' → sum; starting with 'n_' or containing '_n_' → mean;
-        containing 'cum_' → last; otherwise → mean (or raise if die=True).
-        """
-        # If no summarization method is provided, try to figure it out from the name
-        if 'new_' in self.name:  # Not using startswith because msim results are prefixed with the module name
-            summarize_by = 'sum'
-        elif self.name.startswith('n_') or '_n_' in self.name:  # Second option is for msim results
-            summarize_by = 'mean'
-        elif 'cum_' in self.name:
-            summarize_by = 'last'
-        else:
-            if die:
-                raise ValueError(f'Cannot figure out how to summarize {self.name}')
+    @classmethod
+    def get_kind(cls, name, kind=None, summarize_by=None):
+        """ The kind of a result: as given, or from `summarize_by` (deprecated), or else guessed from its name, for results that do not give it (as in Starsim 3) """
+        if kind is None and summarize_by is not None:
+            kind = {v:k for k,v in cls.kinds.items()}.get(summarize_by)
+            if kind is None:
+                errormsg = f'Unrecognized summarize_by="{summarize_by}" for the result "{name}"; use kind="flow", "stock", or "ratio" instead'
+                raise ValueError(errormsg)
+        if kind is None:
+            name = str(name)
+            if 'new_' in name: # Not using startswith because msim results are prefixed with the module name
+                kind = 'flow'
+            elif name.startswith('n_') or '_n_' in name or 'cum_' in name or 'cumulative' in name:
+                kind = 'stock'
             else:
-                summarize_by = 'mean'
-        return summarize_by
+                kind = 'ratio'
+        if kind not in cls.kinds:
+            errormsg = f'The kind of the result "{name}" must be "flow", "stock", or "ratio", not "{kind}"'
+            raise ValueError(errormsg)
+        return kind
 
-    def resample(self, new_unit=None, summarize_by=None, die=False, use_years=False, sep='_'):
+    @property
+    def summarize_by(self):
+        """ Deprecated: how the result is summarized over time, from its kind ('sum' for a flow, 'last' for a stock, 'mean' for a ratio) """
+        return self.kinds[self.kind]
+
+    @summarize_by.setter
+    def summarize_by(self, value):
+        self.kind = self.get_kind(self.name, summarize_by=value)
+        return
+
+    def summarize(self):
+        """ The result over the whole run, by its kind: the total of a flow, the final value of a stock, and the mean of a ratio (over time, of its parts if it has them); one for each run, for a result across runs """
+        t = self.t_axis
+        if self.kind == 'flow':
+            return self.values.sum(axis=t)
+        elif self.kind == 'stock':
+            return np.take(self.values, -1, axis=t)
+        denom = getattr(self, 'denom', None)
+        if denom is not None and self.values.ndim == t + 1:
+            axes = tuple(range(t, denom.ndim)) # Over time and groups
+            num, den = self.strata.sum(axis=axes), denom.sum(axis=axes)
+            return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
+        return self.values.mean(axis=t)
+
+    @property
+    def cum(self):
+        """ The cumulative total of a flow over time, e.g. `sim.results.sir.infection.cum` (a stock; computed when asked for) """
+        if self.kind != 'flow':
+            errormsg = f'Only a flow has a cumulative total, and "{self.name}" is a {self.kind}'
+            raise ValueError(errormsg)
+        t = self.t_axis
+        values = np.cumsum(self.values, axis=t)
+        label = sc.ifelse(self.label, self.name)
+        out = self.asnew(values=values, _shape=values.shape, name=f'cum_{self.name}', label=f'Cumulative {label}', kind='stock', low=None, high=None, auto_plot=False)
+        if getattr(self, 'strata', None) is not None: # Over the rows of the values by group, which for a flow are totals over each row
+            out.strata = np.cumsum(self.strata, axis=t)
+        return out
+
+    def periods(self, new_unit):
         """
-        Resample the result, e.g. from days to years. Leverages the pandas resample method.
-        Accepts all the Starsim units, plus the Pandas ones documented here:
-        https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+        Which period of a longer time unit each time point is in; see `resample()`
+
+        Returns the period of each time point (a non-decreasing array of integers from 0).
+        """
+        tv = self.timevec
+        if tv is None:
+            raise ValueError(f'Cannot resample "{self.name}": it has no time vector')
+        dated = self.has_dates
+        if isinstance(new_unit, str) and new_unit in ['month', 'year'] and dated: # Calendar months and years
+            idx = pd.DatetimeIndex(tv)
+            key = idx.year*12 + idx.month if new_unit == 'month' else idx.year
+            return np.unique(np.asarray(key), return_inverse=True)[1]
+        if isinstance(new_unit, str):
+            if new_unit not in ['day', 'week', 'month', 'year']:
+                errormsg = f'Cannot resample to "{new_unit}"; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
+                raise ValueError(errormsg)
+            new_unit = getattr(ss, new_unit + 's')(1)
+        if not isinstance(new_unit, ss.dur):
+            errormsg = f'Cannot resample to {new_unit}; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
+            raise TypeError(errormsg)
+        if dated and new_unit.base in ['days', 'weeks']: # Periods of a fixed number of days from the start
+            idx = pd.DatetimeIndex(tv)
+            t = np.asarray((idx - idx[0])/pd.Timedelta(days=1), dtype=float)
+            width = new_unit.days
+        else: # In years, which for dates follow the calendar (e.g. a leap year)
+            t = np.asarray(tv.years, dtype=float) if hasattr(tv, 'years') else np.asarray(tv, dtype=float)
+            t = t - t[0]
+            width = new_unit.years if hasattr(tv, 'years') else float(new_unit)
+        step = np.median(np.diff(t)) if len(t) > 1 else width
+        eps = 0.5*min(step, width)/width # Times that are the same up to rounding (e.g. 83.9999999 days from 12 weeks) are the same time point
+        bins = np.ceil(t/width - eps).astype(int) - 1 # A period includes its end and not its start, as for data: a flow at a time point is over the step that ends there
+        return np.maximum(bins, 0) # The start is in the first period
+
+    def resample(self, new_unit=None, kind=None, use_years=False, **kwargs):
+        """
+        Resample the result to a longer time unit, by its kind
+
+        A flow is summed over each period, a stock takes its value at the end of each
+        period, and a ratio sums its numerator and denominator over each period (by group, if
+        it has them) and divides them (one with no parts is averaged over the period). Periods
+        start at the sim's start and include their end, as for data; calendar months and years
+        are used instead for a sim with dates. Each period is labeled by its last time point.
+        The values by group (`select()` and `by()`) are resampled too.
 
         Args:
-            new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
-            summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
-            die (bool): whether to raise an error if the summarization method cannot be determined
-            use_years (bool): whether to use years as the unit of time
+            new_unit (str/dur): the new unit: 'day', 'week', 'month', 'year', or a duration, e.g. `ss.weeks(2)`
+            kind (str): resample as this kind instead of the result's own ('flow', 'stock', or 'ratio')
+            use_years (bool): label the periods by their year (as integers)
 
         Returns:
             Result: a new Result with resampled values
+
+        Examples:
+            ```python
+            res = sim.results.sir
+            res.infection.resample('week') # Weekly totals
+            res.n_I.resample('week') # The number infected at the end of each week
+            ```
         """
-        # Manage timevec
-        if self.timevec is None:
-            raise ValueError('Cannot resample: timevec is not set')
+        if new_unit is None:
+            raise ValueError('new_unit must be specified, e.g. "week", "month", "year", or ss.weeks(2)')
 
         # For 2D results, resample each column separately
         if self.columns is not None:
-            results = [res.resample(new_unit=new_unit, summarize_by=summarize_by, die=die, use_years=use_years, sep=sep) for res in self.by_column().values()]
+            results = [res.resample(new_unit=new_unit, kind=kind, use_years=use_years) for res in self.by_column().values()]
             return self.stack(results)
 
-        # Validate new_unit
-        if new_unit is None:
-            valid_units = ['year', 'month', 'week', 'day'] + ['1YE', '1m', '1w'] # Starsim and pandas units
-            raise ValueError(f'new_unit must be specified; valid options include: {sc.strjoin(valid_units)}')
+        kind = self.get_kind(self.name, kind=sc.ifelse(kind, self.kind))
+        t = self.t_axis
+        if t: # Across runs: resample with the time points first, then put the runs first again
+            tfirst = self.asnew(values=np.moveaxis(self.values, t, 0), runs=None)
+            if getattr(self, 'strata', None) is not None:
+                tfirst.strata = np.moveaxis(self.strata, t, 0)
+                tfirst.denom = None if getattr(self, 'denom', None) is None else np.moveaxis(self.denom, t, 0)
+            out = tfirst.resample(new_unit=new_unit, kind=kind, use_years=use_years)
+            out.values, out.runs = np.moveaxis(out.values, 0, t), self.runs
+            out._shape = out.values.shape
+            if getattr(out, 'strata', None) is not None:
+                out.strata = np.moveaxis(out.strata, 0, t)
+                out.denom = None if getattr(out, 'denom', None) is None else np.moveaxis(out.denom, 0, t)
+            return out
+        bins = self.periods(new_unit)
+        starts = np.flatnonzero(np.diff(bins, prepend=-1)) # The first time point of each period
+        ends = np.append(starts[1:], len(bins)) - 1 # And the last
 
-        # Handle summarization method
-        if summarize_by is None:
-            if self.summarize_by is not None:
-                summarize_by = self.summarize_by
-            else:
-                summarize_by = self.summary_method(die=die)
-        if summarize_by not in ['sum', 'mean', 'last']:
-            raise ValueError(f'Unrecognized summarize_by method: {summarize_by}')
-
-        # Map Starsim units to the ones Pandas understands
-        unit_mapper = dict(week='1w', month='1m', year='1YE')
-        if new_unit in unit_mapper:
-            new_unit = unit_mapper[new_unit]
-
-        # Convert the timevec if needed
-        orig_timevec = self.timevec # TODO: refactor
-        self.timevec = self.convert_timevec(force=True)
-
-        # Convert to a Pandas dataframe then summarize. Note that we use a dataframe
-        # rather than a series so that we can have multiple columns (low/high/value)
-        df = self.to_df(set_date_index=True, sep=sep)
-        if summarize_by == 'sum':
-            df = df.resample(new_unit).sum()
-        elif summarize_by == 'mean':
-            df = df.resample(new_unit).mean()
-        elif summarize_by == 'last':
-            df = df.resample(new_unit).last()
-
-        # Handle years
-        if use_years: df.index = df.index.year
-
-        # Convert back to a Result
-        out = self.from_df(df)
-        self.timevec = orig_timevec
-
-        return out
-
-    def annualize(self):
-        """
-        Fast numpy-based resampling of results to annual values.
-
-        Uses summarize_by if set, otherwise the summary_method() heuristic
-        (new_* → sum, n_* → mean, cum_* → last). Does not modify the original.
-
-        Returns:
-            Result: a new Result with annual timevec and values
-        """
-        # For 2D results, annualize each column separately
-        if self.columns is not None:
-            return self.stack([res.annualize() for res in self.by_column().values()])
-
-        method = self.summarize_by if self.summarize_by else self.summary_method()
-
-        # Group by integer year
-        yearvec = self.timevec.years
-        year_labels = np.floor(yearvec).astype(int)
-        unique_years, inverse = np.unique(year_labels, return_inverse=True)
-        n_groups = len(unique_years)
-
-        # Aggregate an array by year group
-        def _aggregate(arr):
+        def agg(arr, how, bins=bins, starts=starts, ends=ends):
             if arr is None:
                 return None
-            if method == 'sum':
-                return np.bincount(inverse, weights=arr, minlength=n_groups).astype(float)
-            elif method == 'mean':
-                counts = np.bincount(inverse, minlength=n_groups)
-                return np.bincount(inverse, weights=arr, minlength=n_groups) / counts
-            elif method == 'last':
-                out = np.empty(n_groups, dtype=float)
-                for i in range(n_groups):
-                    out[i] = arr[inverse == i][-1]
-                return out
+            arr = np.asarray(arr)
+            if how == 'last':
+                return arr[ends]
+            total = np.add.reduceat(arr, starts, axis=0)
+            if how == 'mean':
+                counts = np.diff(np.append(starts, len(bins))).reshape((-1,) + (1,)*(arr.ndim - 1))
+                return total/counts
+            return total
 
-        # Build the new result
-        new_res = Result(
-            name=self.name, label=self.label, dtype=self.dtype, scale=self.scale,
-            auto_plot=self.auto_plot, module=self.module, summarize_by=self.summarize_by,
-            timevec=ss.DateArray(unique_years.astype(float) + 0.5, unit=ss.years),  # +0.5 centers each year's label at mid-year
-            values=_aggregate(self.values),
-            low=_aggregate(self.low),
-            high=_aggregate(self.high),
-        )
-        return new_res
-
-    def from_df(self, df):
-        """ Make a copy of the result with new values from a dataframe """
-        new_res = sc.dcp(self)
-        new_res.timevec = df.index
-        new_res.values = df.value.values
-        if 'low' in df.columns:
-            new_res.low = df.low.values
-        if 'high' in df.columns:
-            new_res.high = df.high.values
-        return new_res
+        strata = getattr(self, 'strata', None)
+        denom = getattr(self, 'denom', None)
+        group_ti = getattr(self, 'group_ti', None)
+        agg_g = agg # For the values by group
+        no_groups = None
+        if strata is not None and group_ti is not None: # The values by group are kept every few steps: each row goes into the period its last time point is in
+            g_bins = bins[group_ti]
+            g_starts = np.flatnonzero(np.diff(g_bins, prepend=-1))
+            g_ends = np.append(g_starts[1:], len(g_bins)) - 1
+            agg_g = lambda arr, how: agg(arr, how, g_bins, g_starts, g_ends)
+            if len(g_starts) < len(starts):
+                no_groups = f'it is kept by group every {group_ti[1]} steps, so its groups cannot be resampled to a shorter period'
+                strata = denom = None
+        if kind == 'ratio' and denom is not None: # The parts, each summed over the period, then divided
+            new_strata, new_denom = agg_g(strata, 'sum'), agg_g(denom, 'sum')
+            num, den = new_strata.sum(axis=-1), new_denom.sum(axis=-1)
+            values = np.divide(num, den, out=np.zeros(num.shape), where=den!=0)
+            low = high = None
+        else:
+            how = self.kinds[kind]
+            values, low, high = agg(self.values, how), agg(self.low, how), agg(self.high, how)
+            new_strata = agg_g(strata, how)
+            new_denom = None
+        timevec = self.timevec[ends]
+        if use_years:
+            timevec = np.floor(np.asarray(timevec.years if hasattr(timevec, 'years') else timevec, dtype=float) + 1e-9).astype(int)
+        out = self.asnew(values=values, low=low, high=high, timevec=timevec, kind=self.kind, _shape=values.shape)
+        out.group_ti = None # Its values by group, if any, are at its own time points
+        if strata is not None:
+            out.strata, out.denom = new_strata, new_denom
+        elif no_groups:
+            out.strata = out.denom = None
+            out.no_groups = no_groups
+        return out
 
     def to_series(self, set_name=False, resample=None, sep='_', **kwargs):
         """
@@ -463,7 +707,7 @@ class Result(ss.BaseArr):
 
         # Return a resampled version if requested
         if resample is not None:
-            resampled = self.resample(new_unit=resample, sep=sep, **kwargs)
+            resampled = self.resample(new_unit=resample, **kwargs)
             return resampled.to_series(set_name=set_name, sep=sep)
         name = self.name if set_name else None
         timevec = self.convert_timevec()
@@ -475,12 +719,18 @@ class Result(ss.BaseArr):
         if self.timevec is None:
             return None
         if not self.has_dates or force:
+            if not force and len(self.timevec) and sc.isnumber(self.timevec[0]) and not ss.time.assume_cal_year(self.timevec[0]): # Elapsed time (e.g. from year 0), not calendar years, so there are no dates to give
+                return np.asarray(self.timevec)
             return ss.DateArray([ss.date(t) for t in self.timevec])
         return self.timevec
 
-    def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, **kwargs):
+    def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, quantiles=None, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
+
+        For a result across runs, a long dataframe instead: one row per run and time point (columns `run`,
+        `scenario`, any parameters swept, `time`, and `value`), or with `quantiles=`, one row per scenario,
+        quantile, and time point (columns `scenario`, `time`, `quantile`, and `value`).
 
         Args:
             sep (str): separator for the column names
@@ -488,12 +738,25 @@ class Result(ss.BaseArr):
             set_date_index (bool): if True, use the timevec as the index
             bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
             resample (str): if provided, resample the data to this frequency
+            quantiles (list): for a result across runs, the quantiles over the runs of each scenario
             kwargs: passed to the resample method if resample=True
 
         For a 2D result, there is one set of dataframe columns per result column, e.g. `alpha` and `alpha_low`
         (or `new_infections_alpha` and `new_infections_alpha_low` if `col_names='new_infections'`).
         """
         data = dict()
+
+        # Across runs: one row per run (or quantile) and time point
+        if self.runs is not None:
+            res = self.resample(new_unit=resample, **kwargs) if resample is not None else self
+            if quantiles is not None:
+                res = res.quantiles(quantiles)
+            rows = []
+            for i,(row,vals) in enumerate(zip(res.runs.to_dict('records'), res.values)):
+                q = row.pop('quantile', None)
+                head = row if q is not None else dict(run=i, **row)
+                rows.append(pd.DataFrame(dict(**head, time=res.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
+            return pd.concat(rows, ignore_index=True)
 
         # For 2D results, make one set of dataframe columns per result column
         if self.columns is not None:
@@ -547,12 +810,30 @@ class Result(ss.BaseArr):
 
         return df
 
-    def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, **kwargs):
-        """ Plot a single result (with one line per column for a 2D result); kwargs are interpreted as plot_kw """
+    def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, lines=False, **kwargs):
+        """
+        Plot a single result (with one line per column for a 2D result); kwargs are interpreted as plot_kw
+
+        For a result across runs, plot the median and a 95% interval of each scenario, or every run if `lines=True`;
+        for quantiles, the middle one and the interval between the outer ones.
+        """
         # Prepare inputs
         fig_kw = sc.mergedicts(fig_kw)
         plot_kw = sc.mergedicts(dict(lw=3, alpha=0.8), plot_kw, kwargs)
         fill_kw = sc.mergedicts(dict(alpha=0.1), fill_kw)
+
+        if self.runs is not None: # Across runs
+            if ax is None:
+                ax = fig.add_subplot(111) if fig is not None else plt.figure(**fig_kw).add_subplot(111)
+            if self.columns is not None:
+                for col,res in self.by_column().items():
+                    res.plot(ax=ax, lines=lines, fill_kw=fill_kw, **sc.mergedicts(plot_kw, dict(label=col)))
+                ax.legend()
+            else:
+                self.plot_runs(ax, lines, plot_kw, fill_kw)
+            ax.set_title(self.full_label)
+            sc.commaticks(ax)
+            return ss.return_fig(ax.figure)
 
         if fig is None:
             if ax is not None:
@@ -581,6 +862,29 @@ class Result(ss.BaseArr):
         if (self.values.min() >= 0) and (ax.get_ylim()[0]<0): # Don't allow axis to go negative if results don't
             ax.set_ylim(bottom=0)
         return ss.return_fig(fig)
+
+
+    def plot_runs(self, ax, lines=False, plot_kw=None, fill_kw=None):
+        """ Plot a result across runs into an axis: see `plot()` """
+        res = self if lines or 'quantile' in self.runs else self.quantiles()
+        groups = res.scenarios()
+        many = len(groups) > 1
+        label = plot_kw.pop('label', None)
+        for scenario,inds in groups.items():
+            kw = sc.mergedicts(plot_kw, dict(label=scenario if many else label))
+            if 'quantile' in res.runs: # The middle quantile, and the interval between the outer ones
+                q = res.runs['quantile'].to_numpy()[inds]
+                vals = res.values[inds]
+                line, = ax.plot(res.timevec, vals[np.argmin(np.abs(q - 0.5))], **kw)
+                if len(inds) > 1:
+                    ax.fill_between(res.timevec, vals[np.argmin(q)], vals[np.argmax(q)], **sc.mergedicts(dict(alpha=0.3), fill_kw, dict(color=line.get_color())))
+            else: # Every run, in one color for each scenario
+                kw = sc.mergedicts(kw, dict(alpha=0.3, lw=1))
+                drawn = ax.plot(res.timevec, res.values[inds].T, **sc.mergedicts(kw, dict(label=None)))
+                drawn[0].set_label(kw['label'])
+                for line in drawn[1:]:
+                    line.set_color(drawn[0].get_color())
+        return ax
 
 
 class Results(ss.ndict):
@@ -699,21 +1003,19 @@ class Results(ss.ndict):
                 out = sc.objdict({k:v for k,v in out.items() if v.auto_plot})
         return out
 
-    def annualize(self):
-        """ Annualize all results, returning a new Results object """
+    def resample(self, new_unit, **kwargs):
+        """ Resample all the results to a longer time unit (e.g. 'year'), each by its kind, returning a new Results object; see `ss.Result.resample()` """
         new = Results(self._module, strict=False)
         timevec = None
         for key, res in self.items():
-            if isinstance(res, Results):
-                new[key] = res.annualize()
-            elif isinstance(res, Result):
-                new[key] = res.annualize()
-                if timevec is None:
-                    timevec = new[key].timevec # Store the annualized timevec
+            if isinstance(res, (Results, Result)):
+                new[key] = res.resample(new_unit, **kwargs)
+                if isinstance(res, Result) and timevec is None:
+                    timevec = new[key].timevec # Store the resampled timevec
             else:
                 new[key] = res
-        if timevec is not None:
-            new.timevec = timevec # Replace the original timevec with the annualized one
+        if timevec is not None and 'timevec' in self:
+            new.timevec = timevec # Replace the original timevec with the resampled one
         return new
 
     def to_df(self, sep='_', descend=False, **kwargs):

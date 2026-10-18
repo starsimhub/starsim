@@ -52,20 +52,25 @@ class Loop:
         8. sim.interventions: step()           # Run the interventions
         9. sim.diseases:      step()           # Run the diseases, including transmission
         10. people:           step_die()       # Figure out who died on this timestep
-        11. people:           update_results() # Update basic state results
-        12. all modules:      update_results() # Update any results
-        13. sim.analyzers:    step()           # Run the analyzers
-        14. all modules:      finish_step()    # Do any final tidying
-        15. people:           finish_step()    # Clean up dead agents
-        16. sim:              finish_step()    # Increment the timestep
+        11. sim:              advance()        # Move the time to the end of the step
+        12. people:           update_results() # Update basic state results
+        13. all modules:      update_results() # Update any results
+        14. sim.analyzers:    step()           # Run the analyzers
+        15. all modules:      finish_step()    # Do any final tidying
+        16. people:           finish_step()    # Clean up dead agents
+        17. sim:              finish_step()    # Finish the step
 
-    The step at time point ti goes from time point ti-1 to ti, and its results are recorded at ti.
-    At the first time point there is no step: only the start functions, the results (of the start),
-    the analyzers, and the modules' and sim's finish functions are called (see `_before_first_step()`).
+    One time convention holds for every module: during the step from time point k-1 to k,
+    `sim.ti == k-1` and `sim.now` is the start of the step (so the first step has `ti == 0`);
+    `advance()` then moves the time to k, where `update_results()` and the analyzers record
+    the results. At the first time point there is no step: only the results (of the start) are
+    recorded and the analyzers run (`at_start`).
     """
     def __init__(self, sim):
         self.sim = sim
         self.funcs = None
+        self.at_start = None # The functions that also run at the first time point, by function order: those that record the start
+        self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
         self.func_list = []
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
@@ -192,6 +197,15 @@ class Loop:
         # Update people who died -- calls disease.step_die() internally
         self += sim.people.step_die
 
+        # Move the time to the end of the step, where its results are recorded: the sim's time, with that of
+        # the modules on its timeline; a module with a timeline of its own moves its own
+        self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
+        self += sim.advance
+        for mod in sim.modules:
+            if not self._on_sim_time(mod):
+                self += mod.advance
+        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start
+
         # Update results. A module's update_results is skipped only when it is the inherited
         # base method (not overridden anywhere in the MRO) and the module has no auto-generated
         # boolean-state results to count -- i.e. the base loop is provably a no-op. Overrides
@@ -207,14 +221,20 @@ class Loop:
         for ana in sim.analyzers():
             self += ana.step
             self.analyzer_names.add(ana.name)
+        self.at_start = set(range(first, len(self.funcs)))
 
-        # Clean up dead agents, increment the time index, and perform other housekeeping tasks
+        # Clean up dead agents, and perform other housekeeping tasks
         for mod in sim.modules:
             self += mod.finish_step
         self += sim.people.finish_step
         self += sim.finish_step
 
         return self.funcs
+
+    def _on_sim_time(self, mod):
+        """ Whether a module shares the sim's timeline (the usual case), so its time moves with the sim's """
+        t, sim_t = mod.t, self.sim.t
+        return len(t.yearvec) == len(sim_t.yearvec) and t.tvec.unit is sim_t.tvec.unit and np.array_equal(t.yearvec, sim_t.yearvec)
 
     @staticmethod
     def _null_update_results(mod):
@@ -271,11 +291,6 @@ class Loop:
             self.plan = self._make_plan_uniform()
         else:
             self.plan = self._make_plan_sorted()
-        self.plan = [entry for entry in self.plan if not self._before_first_step(entry)]
-        at_start = self._at_start_funcs()
-        for entry in self.plan:
-            if entry.label in at_start:
-                entry.func = at_start[entry.label]
 
         # Replay any user insertions tied to the current loop definition
         for insertion in self.insertions:
@@ -301,7 +316,8 @@ class Loop:
 
         Because all entries at a given tick share one time and the times are strictly
         increasing, this is identical to sorting by (time, func_order); and the tick
-        index equals the sim time index, so no separate ti pass is needed.
+        index equals the sim time index, so no separate ti pass is needed. At the first
+        tick there is no step, so only the functions that record the start are emitted.
         """
         tvec = self.abs_tvecs['sim']
         # Precompute the per-function fields once, rather than rebuilding them per entry
@@ -311,7 +327,8 @@ class Loop:
         for ti in range(len(tvec)):
             t = tvec[ti]
             for func_order, func, label, module, func_name in specs:
-                append(LoopEntry(time=t, ti=ti, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
+                if ti or func_order in self.at_start:
+                    append(LoopEntry(time=t, ti=ti, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
         return plan
 
     def _make_plan_sorted(self):
@@ -334,7 +351,7 @@ class Loop:
             label = f'{module}.{func_name}'
             tvec = self.abs_tvecs[module]
             numvec = self.abs_numvecs[module]
-            for j in range(len(tvec)):
+            for j in range(0 if func_order in self.at_start else 1, len(tvec)): # At its first time point, a module has no step, and only records the start
                 r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
                 t_append(numvec[j])
                 f_append(func_order)
@@ -345,54 +362,14 @@ class Loop:
         order = np.lexsort((func_orders, times_num)) # Last key (times_num) is primary
         plan = [raw[i] for i in order]
 
-        # Calculate the sim time index (ti) by counting sim.start_step boundaries
-        start_step = 'sim.start_step'
-        ti = -1
-        for entry in plan:
-            if entry.label == start_step:
-                ti += 1
-            entry.ti = ti
+        # Calculate the sim time index (ti): that of the last sim time point at or before each entry
+        tis = np.searchsorted(self.abs_numvecs['sim'], times_num[order], side='right') - 1
+        for entry,ti in zip(plan, tis):
+            entry.ti = int(max(ti, 0))
 
         # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
         self._warn_near_identical(times_num[order])
         return plan
-
-    def _at_start_funcs(self):
-        """
-        The step functions that run at the time of the start of the step (see `ss.solvers.interval()`): those of
-        declared models (with any code a subclass adds to them) and of deliveries, by label
-        """
-        def wrap(func, mod):
-            def at_start():
-                with ss.solvers.interval(mod):
-                    func()
-                return
-            return at_start
-        out = {}
-        for mod in self.sim.modules:
-            if isinstance(mod, ss.Disease) and mod.graph is not None:
-                names = ['step_state', 'step']
-            elif isinstance(mod, ss.Delivery):
-                names = ['step']
-            else:
-                continue
-            for name in names:
-                out[f'{mod.name}.{name}'] = wrap(getattr(mod, name), mod)
-        return out
-
-    def _before_first_step(self, entry):
-        """
-        Whether an entry is skipped because it is at the first time point: the step at time point ti goes from ti-1 to ti, so at the first there is no step, and only the results of the start are recorded
-
-        So a result at index ti is the state at time point ti (the start, at 0), and a flow at ti is the number during the step that ends there.
-        """
-        if entry.ti != 0:
-            return False
-        if entry.func_name in ['start_step', 'update_results'] or entry.label in ['sim.finish_step'] or entry.module in self.analyzer_names:
-            return False
-        if entry.func_name == 'finish_step' and entry.module not in ['sim', self.sim.people.__class__.__name__.lower()]: # A module's finish_step advances its own time
-            return False
-        return True
 
     @staticmethod
     def _warn_near_identical(sorted_times):
@@ -456,6 +433,8 @@ class Loop:
         plan = self.plan
         while self.index < len(plan):
             entry = plan[self.index]
+            if until is not None and entry.label == 'sim.start_step' and entry.time > until: # Stop before a step that ends after the time asked for
+                break
             if verbose:
                 now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting
                 print(f'Running t={now}, step={self.index}, {entry.label}()')
@@ -468,8 +447,6 @@ class Loop:
             self.index += 1 # Increment the count
             if self.profile:
                 self.store_time(start)
-            if until is not None and self.sim.now > until: # Terminate if asked to
-                break
 
         # Note: the plan DataFrame is now built lazily by to_df() when requested, not here
         return
@@ -631,7 +608,7 @@ class Loop:
 
     def shrink(self):
         """ Shrink the size of the loop for saving to disk """
-        to_shrink = ['sim', 'funcs', 'plan']
+        to_shrink = ['sim', 'funcs', '_plan'] # Not the plan property, which would make the plan
         ss.shrink(self, to_shrink)
         return
 
@@ -640,7 +617,7 @@ class Loop:
         Plot a diagram of all the events
 
         Args:
-            simplify (bool): if True, skip update_results and finish_step events, which are automatically applied
+            simplify (bool): if True, skip advance, update_results, and finish_step events, which are automatically applied
             max_len (int): maximum number of entries to plot
             fig_kw (dict): passed to `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
@@ -652,7 +629,7 @@ class Loop:
         if df is None:
             df = self.to_df()
         if simplify:
-            filter_out = ['update_results', 'finish_step']
+            filter_out = ['advance', 'update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
         if max_len:
             df = df[:max_len]
@@ -751,7 +728,7 @@ class Loop:
 
         Examples:
             ```python
-            sis = ss.SIS(dt=0.1)
+            sis = ss.library.CodedSIS(dt=0.1) # A module written as code can have a timestep of its own
             net = ss.RandomNet(dt=0.5)
             births = ss.Births(dt=1)
             sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)

@@ -30,149 +30,34 @@ This is the thing to fix, and [population-and-mixing.md](population-and-mixing.m
 
 [MEmilio](../approaches/memilio.md) has `ode_sir`, `ode_seir`, `ode_secir`, `ode_secirvvs`, `ode_secirts`, `ode_seair`, `ode_seirdb`, `ode_seirv`, `ode_mseirs4`: nine ODE model classes, plus IDE, LCT, GLCT, SDE, metapopulation, and ABM families. From its review: "MEmilio is the cost estimate for *not* having a lingua franca… this library is a large, well-funded, multi-year effort, and the paradigm coverage was bought by writing each one separately."
 
-## The proposal
+### What the frameworks make you write
 
-### The textbook SIR
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
-)
-
-sim = ss.Sim(sir, unit='day')
-sim.run()
-```
-
-```text
-solver: ode (every part of this model has a compartmental form)
-mixing: homogeneous (no network given)
-```
-
-No mixing object, no `/N`, no solver. With no network given, mixing is homogeneous with one contact per unit time, so `beta` here is the classical transmission rate. `sir.equations()` prints the system with the parameter names, not their values:
-
-```text
-dS/dt = -beta * S * I / N
-dI/dt =  beta * S * I / N - I / dur
-dR/dt =  I / dur
-```
-
-`equations()` is a method of the disease, not the sim, because a sim may hold several diseases.
-
-When the contact rate should be its own number, give a mixing pool, and `beta` becomes the probability of transmission per contact:
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.03),
-    recovery  = ss.progression('I -> R', dur=10),
-)
-
-sim = ss.Sim(sir, networks=ss.MixingPool(n_contacts=10), unit='day')
-sim.run()
-```
-
-```text
->>> sir.equations()
-dS/dt = -n_contacts * beta * S * I / N
-dI/dt =  n_contacts * beta * S * I / N - I / dur
-dR/dt =  I / dur
-```
-
-Nothing about the disease declaration is ODE-specific. `total_pop=` gives the size of the population represented and scales the compartments. `n_agents=` is the number of simulated agents; giving it is one of the ways to ask for an agent-based run. To run this same model with agents, for example to study elimination, say so: `sim.run(solver='abm')`.
-
-Compare what the frameworks require. **camdl** needs a `transitions` block with hand-written total propensities including `/N`. **odin** needs `deriv()` and `initial()` per compartment. **summer2** needs `add_infection_frequency_flow` versus `add_infection_density_flow`. **[EpiModel](../approaches/epimodel.md)** needs a `deSolve` derivative function whose returned vector is positional and must match the order of `init.dcm()`: "an unchecked coupling between two separate function calls, and a good argument for named transitions."
-
-### What `auto` does
-
-`solver='auto'` is the default. If every part of the model has a compartmental form, it runs as a deterministic ODE. Otherwise it runs with agents. A model becomes agent-based by containing something agent-based (an individual-level network such as `ss.RandomNet`, `n_agents=`, a per-agent function or attribute), or because the user asked for it. `auto` never approximates the mixing and never drops individual-level structure. The one thing it does unasked is represent a non-exponential dwell time with Erlang stages ([below](#dwell-times)), and it says so. The choice and the reason are printed, as above.
-
-Asking for `solver='ode'` explicitly on a model that does not fit exactly is also allowed: the library uses the standard approximation where one exists and says so in one line. See [paradigm-conversion.md](paradigm-conversion.md).
+**camdl** needs a `transitions` block with hand-written total propensities including `/N`. **odin** needs `deriv()` and `initial()` per compartment. **summer2** needs `add_infection_frequency_flow` versus `add_infection_density_flow`. **[EpiModel](../approaches/epimodel.md)** needs a `deSolve` derivative function whose returned vector is positional and must match the order of `init.dcm()`: "an unchecked coupling between two separate function calls, and a good argument for named transitions." None of this is needed once the model is states and transitions and the mixing supplies the `/N`.
 
 ### The model is a graph first
 
-[odin](../approaches/odin.md) topologically sorts the user's equations; [SimInf](../approaches/siminf.md) resolves a dependency graph; [summer2](../approaches/summer2.md) builds a `networkx` DAG and hands it to JAX; camdl lowers the model text to a flat intermediate form. From the summer2 review: "summer2's `networkx` DAG, odin's topological sort, and camdl's IR are three routes to the same requirement. Whatever the lingua franca's surface syntax, the model must become a graph before it becomes a computation."
+[odin](../approaches/odin.md) topologically sorts the user's equations; [SimInf](../approaches/siminf.md) resolves a dependency graph; [summer2](../approaches/summer2.md) builds a `networkx` DAG and hands it to JAX; camdl lowers the model text to a flat intermediate form. From the summer2 review: "summer2's `networkx` DAG, odin's topological sort, and camdl's IR are three routes to the same requirement. Whatever the lingua franca's surface syntax, the model must become a graph before it becomes a computation." A disease made of `ss.State` and `ss.Transition` objects already is that graph, so the right-hand side is generated from it with no separate step.
 
-In the lingua franca this needs no separate step and no new language. A disease is already a set of `ss.State` and `ss.Transition` objects. At build time (`sim.init()`) the library reads them and generates the function that computes the derivatives. It is ordinary Python throughout.
+### Dwell times are assumed exponential
 
-The ODE solver should use JAX for larger models, for the same reason summer2 does: speed, and **automatic differentiation of the whole model with respect to its parameters**, which gives gradient-based [calibration](calibration.md) and sensitivity analysis at no extra effort. For small models plain `scipy.integrate.solve_ivp` is enough, and it is used when there is no gradient to compute. The library picks; `integrator=` names the integration library or scheme (`integrator='scipy'`, `integrator='jax'`) when the user wants to.
+An ODE means exponential dwell times, and, per finding 7 of the [landscape review](../approaches/README.md#cross-cutting-findings), nearly every framework assumes this without saying so. camdl's `via erlang` and MEmilio's entire LCT model family are the explicit alternative, Erlang stages; here they are one keyword (`stages=`). Staging a dwell time that is neither exponential nor Erlang is what a compartmental modeler would do by hand, and the alternative is that one Weibull turns a two-line model into an agent-based one, so `auto` does it, with a note.
 
-### Dwell times
+### Equations, not symbolic analysis
 
-An ODE means exponential dwell times, and, per finding 7 of the [landscape review](../approaches/README.md#cross-cutting-findings), nearly every framework assumes this without saying so.
+[epipack](../approaches/epipack.md) gets the ODE system in LaTeX, the Jacobian, the fixed points, and the eigenvalues at the disease-free state because the model is symbolic data. The part every user benefits from is the system itself, printed with parameter names, as a check that the model written is the model meant. A numeric R0 is useful for teaching and few real models need it. Jacobians and fixed points are, as epipack's own review notes, "tractable for a few compartments and intractable for a stratified model".
 
-```python
-ss.progression('I -> R', dur=ss.days(10))             # exponential, rate 1/10 per day (printed)
-ss.progression('I -> R', dur=ss.days(10), stages=3)   # Erlang: I1, I2, I3 generated
-```
+## The specification
 
-The second is camdl's `via erlang` and [MEmilio](../approaches/memilio.md)'s entire LCT model family, as one keyword. The generated sub-compartments appear in `sir.describe()` and are summed in the results, so `n_I` still means what the user meant.
-
-A distribution that is not exponential or Erlang has no exact ODE form. The library fits Erlang stages to it and says so. This is the one approximation `auto` makes without being asked, because staging a dwell time is what a compartmental modeler would do by hand, and the alternative is that one Weibull turns a two-line model into an agent-based one ([paradigm-conversion.md](paradigm-conversion.md#the-approximation-policy)):
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=ss.weibull(c=1.4, scale=ss.days(8))),
-)
-ss.Sim(sir, unit='day').run()
-```
-
-```text
-solver: ode (every part of this model has a compartmental form)
-  note: 'recovery' has a Weibull dwell time, represented by 2 Erlang stages (mean 7.3 days kept; std 5.2 instead of 5.3 days)
-```
-
-`stages=k` sets the number of stages by hand. `approx=True` silences the note. `approx=False` is for users who want only exact runs: an explicit `solver='ode'` then stops with an error, and `auto` runs the model with agents, where the dwell time is sampled directly.
-
-### Equations, and a numeric R0
-
-[epipack](../approaches/epipack.md) gets the ODE system in LaTeX, the Jacobian, the fixed points, and the eigenvalues at the disease-free state because the model is symbolic data. [EoN](../approaches/eon.md) has `estimate_R0(G, tau, gamma)` from the network side.
-
-We keep the part that every user benefits from:
-
-```python
-sir.equations()   # the ODE system, with parameter names
-sir.R0()          # optional: a numeric R0 from the next-generation matrix, for simple models
-```
-
-`equations()` is how a user checks that the model they wrote is the model they meant, and it works for any model with an ODE form. `R0()` is useful for textbook examples and teaching, and few real disease models need it, so it is a small numeric helper and not a headline feature. The rest of epipack's symbolic analysis (Jacobians, fixed points) is not part of v1; epipack's own review notes that it "is tractable for a few compartments and intractable for a stratified model".
-
-### Branching and the transition table
-
-Branching is a multi-destination arrow ([model-structure.md](model-structure.md)), not [Atomica](../approaches/atomica.md)'s zero-residence-time junction compartment. Three views show the structure of a model:
-
-```python
-sir.transitions   # the table of transitions
-sir.describe()    # the resolved model as text, with every guessed default marked
-sir.diagram()     # the state-transition diagram
-```
-
-Printing `sir.transitions` shows Atomica's transition matrix: a square compartment × compartment grid with the driving parameter in each cell. Its review is right that this "is, at a glance, the flow diagram. It also makes structural errors visible: an empty row is an absorbing state, an empty column is unreachable."
-
-The names `plot()`, `summarize()`, and `to_df()` are kept for results, as in Starsim.
-
-### Counts or proportions
-
-Results are counts by default. A proportion is a result with a denominator, and the denominator is the user's choice, because it is not always the whole population:
-
-```python
-S, I, R   = ss.states(3)
-infection = S >> I @ 0.3 * I
-recovery  = I >> R @ ss.days(10)
-
-sir = ss.Disease(infection, recovery, frac_infected = I / (S + I))   # in a result a bare state is its count; in a rate it is exposure
-```
-
-`I.prev` is the common case, the fraction of the whole population in `I`. This is [MIRA](../approaches/notes.md#askem-model-representation-amr--mira)'s `counts_to_dimensionless`, done as an output option and not as a property of the model: the dynamics are the same either way.
+The disease declaration is in [03-states-and-transitions.md](../design/03-states-and-transitions.md), with dwell times, `stages=`, `equations()`, `R0()`, the transition table, and results that are fractions (`I.frac`, or a ratio declared on the disease, [09-results.md](../design/09-results.md)). What `solver='auto'` does, the ODE and its integrators, Erlang stages for other dwell times, and the approximations an explicit `solver='ode'` makes are in [12-backends.md](../design/12-backends.md). Homogeneous mixing by default and mixing pools are in [06-routes.md](../design/06-routes.md).
 
 ## Trade-offs
 
-- **Individual-level networks have no exact ODE form.** Under `auto` a model with `ss.RandomNet` or `ss.MFNet` runs with agents. Asked for explicitly, `solver='ode'` uses the standard approximation (contact rates between groups) and says so; the result is a coarser model, not the same one. See [paradigm-conversion.md](paradigm-conversion.md). If someone wants the exact network result, they can use agents.
-- **Erlang expansion multiplies compartments**, and stacked with [stratification](stratification.md) it multiplies fast. Report the compartment count.
+- **Individual-level networks have no exact ODE form.** Under `auto` a model with `ss.RandomNet` or `ss.MFNet` runs with agents. Asked for explicitly, `solver='ode'` uses the standard approximation where there is one and says so (`ss.RandomNet` becomes homogeneous mixing at its mean number of contacts); the result is a coarser model, not the same one. `ss.MFNet` has no compartmental approximation yet, so `solver='ode'` raises `ss.CapabilityError`. See [paradigm-conversion.md](paradigm-conversion.md). If someone wants the exact network result, they can use agents.
+- **Erlang expansion multiplies compartments**, and stacked with [stratification](stratification.md) it multiplies fast. A fitted dwell time gets at most 50 stages, so a very narrow distribution keeps its mean but not its variance; the note gives both.
 - **Per-agent continuous heterogeneity has no exact ODE form.** `rel_sus = ss.lognorm_ex(mean=1, std=0.3)` makes the model agent-based under `auto`. Under an explicit `solver='ode'` the mean is used, with a one-line note. To keep the heterogeneity in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`); then it is a stratification and nothing is approximated.
 - **Defaulting to ODE means a user who wanted stochastic agents has to say so.** The printed `solver: ode (...)` line is what makes this visible, and `solver='abm'` or `n_agents=` is the one-keyword fix.
 - **Staging a dwell time under `auto` is an approximation the user did not ask for.** It keeps the mean and comes close on the variance, and the note gives both. A result that depends on the tail of the distribution should be run with agents.
-- **JAX is a heavy dependency** for what is, in the small case, `scipy.integrate.solve_ivp`. Ship both; use SciPy when the model is small and there is no gradient to compute.
+- **JAX is a heavy dependency** for what is, in the small case, a few lines of RK4. So every ODE runs in compiled Numba kernels (`integrator='rk4'`, the default, or `'euler'`), and JAX, which is optional, runs the same steps only for gradients, the log-density, gradient fits, and many runs at once.
 
 ## Rejected
 
@@ -186,7 +71,4 @@ sir = ss.Disease(infection, recovery, frac_infected = I / (S + I))   # in a resu
 
 ## Open questions
 
-- **How many Erlang stages is too many?** A narrow dwell-time distribution needs many stages, and stages multiply with strata. `auto` needs a cap, and a rule for what happens above it; see [paradigm-conversion.md](paradigm-conversion.md).
-- **Where is the line between SciPy and JAX?** Model size, presence of a gradient request, or simply whether JAX is installed.
-
-Three earlier questions are closed. A model with a non-exponential dwell time and nothing else agent-based runs as an ODE with Erlang stages under `auto`, not as agents. A model on a random network that needs the exact network result is run with agents; the ODE form of a network is the standard approximation and nothing finer. Mixing solvers within one run (some transitions as discrete random events inside an ODE) is deferred; see [paradigm-conversion.md](paradigm-conversion.md).
+The open questions are collected in [19-open-questions.md](../design/19-open-questions.md).

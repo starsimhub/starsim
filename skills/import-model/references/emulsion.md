@@ -10,7 +10,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 |---|---|---|
 | A state machine | A disease (several machines are several diseases in one sim) | yes |
 | `rate: expr` | The rate per person, classified (`beta * total_I / total_population` is exposure, `beta * I`) | yes |
-| `proba: p` | `-log(1 - p) / delta_t`, the rate that gives it | yes |
+| `proba: p` | `-log(1 - p)`, the rate that gives it: `p` is per time unit, not per step (EMULSION makes it `1 - (1 - p)**delta_t` for a step) | yes |
 | `duration:` on a state whose only way out is `proba: 1` or `amount-all-but: 0` | A fixed dwell, `ss.constant(ss.days(d))` | yes |
 | `duration:` on a state with other ways out | A minimum stay: a function of the time in the state (see `idioms.md`) | no |
 | `autoremove: yes` (a dead state) | An outflow to `ss.null` | yes |
@@ -23,6 +23,10 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `prototypes`, `initial_conditions` | `init=dict(...)` counts on each disease | yes |
 | `outputs.extra_vars` | Results on the disease, where they are expressions of counts | yes |
 | `aggregation_type` | `solver='binomial'` for `compartment`, `'abm'` for `IBM` and `hybrid` | yes |
+| `productions: {from: A, to: J, rate: b}` (births) | An inflow, `ss.null >> J @ b*A.n`; with several machines, cross them into one disease first, so the newborns enter each machine's state together | no |
+| A level with `aggregation_type: metapopulation` (herds) | A place dimension, `dis.stratify(pop=[...], kind='space')`, with the initial numbers by place (`ss.by(pop=...)`) and movement between places as a route | no |
+| A level or process in a Python add-on (`file:`, `class_name:`) | Custom code, or a declared form if one fits (e.g. a trade register as a route) | no |
+| `total_<level>` (e.g. `total_herd`) | The number of people (in each place, once stratified) | yes |
 
 ## What needs care
 

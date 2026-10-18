@@ -135,6 +135,8 @@ def _getpars(obj):
 
     out = {}
     for key,val in pars.items():
+        if isinstance(val, ss.par): # A declared parameter: its value
+            val = val.value
         valstr = ' '.join(repr(val).split()) # Collapse e.g. multiline array reprs
         valstr = re.sub(r' at 0x[0-9a-f]+', '', valstr) # Remove memory addresses, e.g. from functions, so the output is reproducible
         if type(val).__module__.startswith('starsim') and not valstr.startswith(('ss.', 'ssl.')):

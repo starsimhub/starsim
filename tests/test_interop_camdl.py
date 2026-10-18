@@ -5,16 +5,19 @@ import sys
 import runpy
 import shutil
 import tempfile
+import warnings
 import numpy as np
 import pandas as pd
 import sciris as sc
 import pytest
 import starsim as ss
+import paths
 from starsim.interop.camdl import load_camdl
 
-lfd = sc.path('/home/cliffk/idm/lingua_franca_design') # The examples, with the originals' results, if this folder is here
+lfd = paths.lfd # The examples, with the originals' results, if this folder is here
 camdlc = lfd / '_envs/camdl/bin/camdlc' if (lfd / '_envs/camdl/bin/camdlc').exists() else shutil.which('camdlc') or 'camdlc' # The one built for the examples; another on the PATH may be older
-pycamdl = sc.path('/home/cliffk/idm/camdl/pycamdl')
+pycamdl = paths.camdl/'pycamdl'
+golden = lfd / '_envs/camdl/src/ocaml/golden' # camdl's library of models, as compiled IR
 kw = dict(verbose=False)
 
 def op(name, left, right):
@@ -63,7 +66,7 @@ def test_camdl_ir():
     beta, gamma, rho, k = ss.par(0.4), ss.par(0.15), ss.par(0.6), ss.par(10)
     S, I, R = ss.states(3)
     infection = S >> I @ beta * I
-    cases = ss.outcome(rho * infection, every=ss.weeks(1))
+    cases = ss.outcome(rho * infection)
     sir = ss.Disease(infection, I >> R @ gamma, cases, init=dict(I=10), name='sir')
     ref = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='ode', verbose=0).run()
     for key in ['n_I', 'n_R', 'infection', 'cases']:
@@ -89,7 +92,7 @@ def test_camdl_flat():
     m['observations'] = []
     m['initial_conditions'] = {'S_a': {'deterministic': {'const': 990.0}}, 'S_b': {'deterministic': {'const': 1000.0}}, 'I_a': {'deterministic': {'const': 10.0}}}
     m['interventions'] = [{'name': 'seed', 'kind': 'event', 'fire': {'scheduled': {'at_times': [10.0]}}, 'actions': [{'add': {'compartment': 'I_b', 'count': {'const': 5.0}}}]}]
-    with pytest.warns(RuntimeWarning, match='W1601'):
+    with pytest.warns(ss.ImportIncomplete):
         sim = load_camdl(ir, pars=dict(rho=0.5, k=1), **kw)
     skipped = [name for name,why in sim.imported.incomplete]
     assert 'season' in skipped and 'seed' in skipped, 'the time function and the event should be listed'
@@ -104,13 +107,14 @@ def test_camdl_flat():
         terms[1] = {'cond': {'pred': op('gt', {'binding_ref': 'N_b'}, {'const': 0.0}), 'then': terms[1], 'else': {'const': 0.0}}}
     m['initial_conditions'].pop('S_b')
     m['interventions'] = []
-    with pytest.warns(RuntimeWarning, match='W1601'): # The time function is still there
+    with pytest.warns(ss.ImportIncomplete): # The time function is still there
         sim = load_camdl(ir, pars=dict(rho=0.5, k=1), **kw)
     sim.run()
     assert np.isfinite(sim.results.sir.n_I_a.values).all() and sim.results.sir.n_R_a.values[-1] > 100, 'the empty group should not stop the epidemic'
     return sim
 
 
+@pytest.mark.skipif(not lfd.exists(), reason=paths.no_lfd)
 @pytest.mark.skipif(not sc.path(camdlc).exists(), reason='needs camdlc')
 def test_camdl_file():
     """ A .camdl file, compiled with camdlc, against camdl's own ODE run """
@@ -123,11 +127,34 @@ def test_camdl_file():
         theirs = ref[ref.series == f'ode_{key}'].value.values # Written as whole numbers
         assert np.abs(res[f'n_{key}'].values - theirs).max() <= 0.5, f'{key} should agree with camdl to its rounding'
     theirs = ref[ref.series == 'ode_cases'].value.values
-    assert np.allclose(res.cases.values[7::7], theirs, atol=1e-4), 'the weekly cases should agree with camdl (written to 5 digits)'
+    weekly = res.cases.values[1:].reshape(-1, 7).sum(axis=1) # The cases of each week, as camdl reports them
+    assert np.allclose(weekly, theirs, atol=1e-4), 'the weekly cases should agree with camdl (written to 5 digits)'
     return sim
 
 
-@pytest.mark.skipif(not pycamdl.exists(), reason='needs pycamdl')
+@pytest.mark.skipif(not golden.exists(), reason=f'needs camdl\'s golden models: {golden}')
+def test_camdl_golden():
+    """ camdl's own library of models (its compiler's golden IR): each imports and runs, and what is not translated is listed """
+    sc.heading('Testing camdl\'s golden models')
+    for path in sorted(golden.glob('*.ir.json')):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore') # Most list something in ss.ImportIncomplete
+            sim = load_camdl(str(path), **kw)
+            sim.pars.verbose = 0
+            if path.name == 'phenom_mixing_unchecked.ir.json': # camdl's example of a count used for a share, with its unit check turned off: far too fast for the step, so the run stops rather than give numbers that are not
+                with pytest.raises(ValueError, match='not a number'):
+                    sim.run()
+                continue
+            sim.run()
+        assert sim.complete, f'{path.name} should run'
+        if path.name == 'polio_spatial_5.ir.json': # Its SIAs are off unless the with_sia scenario enables them: listed, not dropped
+            listed = dict(sim.imported.incomplete)
+            assert 'sia_north' in listed and 'with_sia' in listed['sia_north']
+    return sim
+
+
+@pytest.mark.skipif(not lfd.exists(), reason=paths.no_lfd)
+@pytest.mark.skipif(not pycamdl.exists(), reason='needs pycamdl: set STARSIM_CAMDL to where the camdl repo is')
 def test_pycamdl(tmp_path):
     """ A pycamdl model (SEIR by age and patch, with aging and movement), written with dump_pycamdl.py, against pycamdl's own ODE run """
     sc.heading('Testing pycamdl import')
@@ -152,5 +179,6 @@ if __name__ == '__main__':
     sim1 = test_camdl_ir()
     sim2 = test_camdl_flat()
     sim3 = test_camdl_file()
+    sim5 = test_camdl_golden()
     sim4 = test_pycamdl(sc.path(tempfile.mkdtemp()))
     T.toc()

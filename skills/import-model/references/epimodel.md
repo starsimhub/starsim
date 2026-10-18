@@ -19,7 +19,7 @@ Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscr
 | EpiModel | Starsim | Mechanical |
 |---|---|---|
 | `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = 1 - (1 - inf.prob)^act.rate` per partnership per step; `rec.rate` to `S` or `R` | yes |
-| Probabilities per step | `ss.probperday(...)` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
+| Probabilities per step | `ss.prob(..., 'day')` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
 | `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
 | `i.num`, `r.num`; the network's size | `init=dict(S=..., I=..., R=...)`, `n_agents=n`, `solver='abm'` | yes |
 | `nsteps` | `stop=nsteps - 1` (EpiModel's time 1 is the start) | yes |
@@ -37,7 +37,7 @@ Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscr
 | A custom module (`infection.FUN = infect`, `type = NULL`) | Listed, with its R source in `sim.imported.modules` (and other functions in `sim.imported.functions`); a model of custom modules only imports its networks, with the parameters in `sim.imported.pars` | no |
 | A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care='undx -> dx', rate=...)` | no |
 | An attribute's effect on a rate (`rel_trans` on ART) | `adjust=dict(rel_trans=[...], aids=[...])` on the stratification, or `rel_trans=` on a state | no |
-| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(ss.Vaccine(...), coverage=..., eligible=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
+| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(ss.Vaccine(...), coverage=..., where=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
 | `dcm()` with a custom derivative function (`new.mod`) | Listed with its source; pair the outflow of one compartment with the inflow of another into a transition, and classify each by the import rules | no |
 
 ## What needs care
@@ -45,7 +45,7 @@ Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscr
 - **Order within a step.** EpiModel lets people recover in the step in which they are infected and counts after that, so its prevalence is about 5% lower for the same epidemic, and it grows a little more slowly (`icm()` SIS: 460 infected at equilibrium against 487; `netsim()` SIS: 227.5 against 234). Compare new infections a step, which agree (the introduction: 12.0 against 11.7 a step at equilibrium, and the statistical comparison passes; `icm()`: 24.1 against 24.7), or allow for it.
 - **Acts per partnership.** EpiModel's chance over a partnership in a step is `1 - (1 - inf.prob*m)^act.rate`, with `m` the infectiousness multiplier of the infected partner. Starsim multiplies `1 - (1 - inf.prob)^act.rate` by `rel_trans`; the difference is small (0.0374 against 0.0370 for an acute partner). `ss.PartnerNet` has no `acts=`.
 - **The network matches the targets better than EpiModel's own.** EpiModel's simulated network can undershoot its targets (casual mean degree 0.28 against 0.30), so agreement on the targets does not imply agreement on the network. Compare the simulated network's diagnostics (edges, mean degree, concurrency) as series too.
-- **Conditions on the network are a function.** Eligibility such as "two or more partners across both networks, or a partner with HIV" has no declared form; write an `eligible=` function that reads `net.edges.p1`/`p2` and mark it as a workaround.
+- **Conditions on the network are a function.** Eligibility such as "two or more partners across both networks, or a partner with HIV" has no declared form; write a `where=` function that reads `net.edges.p1`/`p2` and mark it as a workaround.
 - **Stopping a product at a rate** is written as waning: `ss.Vaccine(efficacy=0.95, waning=-1/np.log(1 - p_stop))`, a mean duration of protection in steps.
 - **A care cascade is a dimension, not a disease.** EpiModel's separate attributes (stage, care state, ART history) become one disease with a `care` dimension on the infected states; "off ART after being on it" is a level of its own (`off`).
 - **Initial infections.** EpiModel draws who is infected (and, in custom models, their stage) at random; the import gives the expected numbers.
@@ -68,7 +68,7 @@ hiv = ss.Disease(
     chronic    = A >> C @ week(1/12),
     aids       = C >> D @ week(1/520),
     aids_death = D >> ss.null @ week(1/104),
-    departure  = (S | A | C) >> ss.null @ week(0.0005),
+    departure  = S + A + C >> ss.null @ week(0.0005),
     arrival    = ss.birth('-> S', rate=0.00065),
     test       = care('undx -> dx', 0.015, states=['A', 'C']),
     link       = care('dx -> art', 0.1),

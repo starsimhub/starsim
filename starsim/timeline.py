@@ -90,6 +90,7 @@ class Timeline:
         self._rel_start = None # Reference start for relvec, captured at init (None => use this timeline's own start)
         self._rel_dur_class = None # Duration class for relvec, captured at init
         self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
+        self.unitless = False # Whether time is counted in steps, with no unit or calendar (a declared model in which nothing has a unit); then there are no dates
         self.initialized = False # Call self.init(sim) to initialize the object
 
         # Decide whether to initialize: we're asked, a sim is provided, or arguments are supplied directly
@@ -122,6 +123,9 @@ class Timeline:
     @property
     def datevec(self):
         """ Time vector as `ss.date` objects (derived lazily from tvec/yearvec) """
+        if self.unitless:
+            errormsg = 'The sim has no unit of time (nothing in the model has one), so its times are steps, which have no dates. Give it a unit (e.g. unit="day") or dates (start="2020-01-01").'
+            raise ValueError(errormsg)
         if self._datevec is None and self.tvec is not None:
             if isinstance(self.start, ss.date): # Date-based: tvec already holds dates
                 self._datevec = ss.DateArray(self.tvec)
@@ -480,6 +484,7 @@ class Timeline:
 
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
+        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.Sim.init_unit()
 
         # If the sim is provided and matches the current object: copy from the sim
         tvkeys = ['start', 'stop', 'dt']

@@ -3,8 +3,8 @@
 ## Recommendation
 
 1. **Keep Starsim's per-distribution RNG streams.** Adding or reordering a module must not perturb another module's draws.
-2. **Keep common random numbers, and make the CRN contract explicit and checked** rather than documented in comments.
-3. **Give every run an identity**: model, parameters, config, scenario, and seed hashed separately, returned by `sim.hash()`. It is a cheap by-product of the model being data, and it adds to the commit hash; it does not replace it.
+2. **Keep common random numbers, and say where the CRN contract holds** rather than leaving it in comments. Pairing removes most of the noise from a comparison of two scenarios that differ a little, and less once their trajectories diverge, so it should not be oversold. (A report from the library of which draws are outside the guarantee is not built yet.)
+3. **Give every run an identity**: model, parameters, config, scenario, and data hashed separately, with the seed, returned by `sim.hash()`. It is a cheap by-product of the model being data, and it adds to the commit hash; it does not replace it.
 4. **Convergence is a claim to be checked**, not an assumption.
 
 ## Why
@@ -48,76 +48,26 @@ The implication drawn there: "In a language with declared transitions, the condi
 
 > camdl enforces this through a factored run identity: model hash, params hash, config hash, scenario hash, fit hash. A reviewer asking "is this a structural change or a parameter sweep?" reads the level hashes rather than diffing files… Runs are content-addressed by their exact inputs, so an identical re-run is a cache hit rather than a recomputation, and results cannot be silently overwritten.
 
-Its review calls this "a reproducibility mechanism the lingua franca should copy outright". That overstates it for our users. For an analysis that is a script in a repository, the commit (or better, a tag) already says what was run, and a reviewer rarely has to ask whether a change was structural. The hashes earn their place in the cases a commit does not distinguish, which are listed in the proposal.
+Its review calls this "a reproducibility mechanism the lingua franca should copy outright". That overstates it for our users. For an analysis that is a script in a repository, the commit (or better, a tag) already says what was run, and a reviewer rarely has to ask whether a change was structural. The hashes earn their place in the cases a commit does not distinguish.
 
-## The proposal
+What the hashes add to a commit hash:
 
-### Keep the machinery
-
-```python
-sim = ss.Sim(sir, rand_seed=1)
-```
-
-Unchanged from Starsim: one RNG per distribution, seeded by hashing its name, and per-agent CRN by hashing `(seed, draw_index, slot)`. A newborn's slot is drawn from its parent's stream, so the same birth gets the same slot in both scenarios. `ss.options.crn = False` turns CRN off, as it does today.
-
-### Check the contract
-
-Because [transitions are declared](model-structure.md) and every draw goes through an `ss.Dist`, the library knows which draws are per-agent inverse-CDF and which are not:
-
-```text
->>> sim.describe()
-common random numbers: on
-  ✓ infection, recovery, mortality — per-agent, CRN-safe
-  ! network.rewire — samples without replacement; CRN does not hold across scenarios
-    paired differencing will include Monte Carlo noise from this draw
-```
-
-This is [camdl](../approaches/camdl.md)'s capability-check approach applied to CRN: name the limitation rather than leaving it in a comment. Draws made in custom `step()` code are reported the same way, from what the distributions saw during a run.
-
-### Run identity
-
-```python
->>> sim.hash()
-objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='vaccine', seed=1)
-```
-
-Four hashes and the seed, computed from the declared model, the resolved parameter values (including the provenance of any fetched data; see [parameters-and-distributions.md](parameters-and-distributions.md)), the execution configuration, and the scenario. It is a plain `sc.objdict`, so `sim.hash().pars` is a string that can go in a file name or a column of a data frame.
-
-What this adds to a commit hash:
-
-- **Many runs come from one commit.** A sweep or a calibration produces hundreds of runs from the same code. The `pars` hash tells them apart, and a saved result carries the hash of what produced it.
+- **Many runs come from one commit.** A sweep or a calibration produces hundreds of runs from the same code. The `pars` hash tells them apart, and a saved result can carry the hash of what produced it.
 - **Not everything is committed.** Notebooks and exploratory scripts are run with uncommitted changes. The hashes are computed from the model that actually ran.
 - **Two models written differently can be the same model.** The `model` hash is computed from a normalized form, so it is the test for "did these two agents, given the same description, write the same model" ([principles.md](principles.md)).
 
-Comparing two runs:
+### Convergence is a claim to be checked
 
-```text
->>> ss.diff(run_a, run_b)
-model:    same
-pars:     beta 0.05 → 0.08
-config:   same
-scenario: baseline → vaccine
-```
+camdl ships diagnostics that "almost nothing else in the review offers": a Richardson dt-convergence audit distinguishing "it ran" from "it converged", particle-filter health (ESS, τ²), prequential scoring, and convergence gates between fit stages. The one that generalizes most cheaply is halving the timestep and re-running: a discrete-time model whose results move when `dt` halves has not converged (`sim.check_dt()`). For a stochastic model, how many runs a comparison needs is the more commonly needed question and nothing in the review answers it; with common random numbers the number for a paired comparison is often much lower, and saying so concretely would be worth more than a warning in the documentation (`msim.check_runs()` is deferred from v1).
 
-The hashes are always computed, because they cost almost nothing. Starsim already stores its version and git information with a saved sim, and that stays the main record of what code was used. Fitting settings have their own hash ([calibration.md](calibration.md)), so changing the number of trials does not look like a change to the model.
+## The specification
 
-### Convergence is checked
-
-camdl ships diagnostics that "almost nothing else in the review offers": a Richardson dt-convergence audit distinguishing "it ran" from "it converged", particle-filter health (ESS, τ²), prequential scoring, and convergence gates between fit stages.
-
-The two that generalize cheaply:
-
-```python
-sim.check_dt()      # halve dt, re-run, report the change. A discrete-time model that
-                    # moves when dt halves has not converged.
-msim.check_runs()   # is n_runs enough for the quantity being compared?  (deferred from v1; see design/19)
-```
-
-For a stochastic model, `check_runs()` is the more commonly needed one and nothing in the review offers it. With CRN on, the required replicate count for a paired comparison is often an order of magnitude lower, and saying so concretely is worth more than a warning in the documentation.
+[11-random.md](../design/11-random.md) specifies the random number streams (one per distribution, and one per module for a stochastic compartmental run, each seeded from the sim's seed and its name), common random numbers by agent slot (`ss.options.crn`), the run hash (`sim.hash()`: `model`, `pars`, `config`, `scenario`, and `data`, and the seed), `ss.diff()`, and `sim.check_dt()`. The normalized form the model hash is computed from is in [14-model-spec.md](../design/14-model-spec.md).
 
 ## Trade-offs
 
-- **CRN constrains how sampling can be implemented.** Anything not expressible as a per-agent inverse CDF falls outside the guarantee. Accepted, now checked and reported rather than assumed.
+- **CRN constrains how sampling can be implemented.** Anything not expressible as a per-agent inverse CDF falls outside the guarantee. Accepted; checking and reporting it, rather than assuming it, is still to be built.
+- **CRN pairing weakens as runs diverge.** Two scenarios that differ a little keep most of their draws paired; once the epidemics take different courses (an outbreak that dies out in one and not the other), the agents' draws are spent on different events and the paired difference is noisy again. The size of a paired comparison's advantage should be measured, not assumed.
 - **Hashing the model requires a canonical form.** Two models written differently but meaning the same thing should hash the same, which needs a normalizer working on the [model spec](../design/14-model-spec.md). That normalizer is also what makes prose→model determinism testable ([principles.md](principles.md)), so it is not an extra cost.
 
 ## Rejected
@@ -134,6 +84,4 @@ For a stochastic model, `check_runs()` is the more commonly needed one and nothi
 
 ## Open questions
 
-- **What is the CRN guarantee when the population differs between scenarios?** Births, deaths, and migration mean the agent sets diverge over time even from a common start. There is probably a statable guarantee ("agents alive at the divergence point retain their draws") that is worth writing down.
-- **What does CRN mean across solvers?** camdl pairs at the run level for compartmental models; Starsim pairs at the agent level. Comparing an ODE baseline with an agent-based intervention run is not a paired comparison in any useful sense, and `ss.diff` should probably say so.
-- **Deterministic flows inside a stochastic model** — camdl's `deterministic()` and `overdispersed()` annotations, and [Catalyst.jl](../approaches/notes.md#modelingtoolkitjl--catalystjl)'s per-reaction `PhysicalScale`. Per-transition methods are deferred beyond v1 ([paradigm-conversion.md](paradigm-conversion.md)), but the RNG implications (which streams exist, what CRN means) belong here when they arrive.
+The open questions from this document are in [19-open-questions.md](../design/19-open-questions.md).

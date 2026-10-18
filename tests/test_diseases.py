@@ -32,7 +32,7 @@ def test_sir():
     sir = ss.SIR(**sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': ss.freqperyear(0.1)}
+    sir.pars.beta = {'random': ss.time.freq(0.1, 'year')}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -47,9 +47,9 @@ def test_sir():
     res = sim.results
     plt.stackplot(
         sim.timevec,
-        res.sir.n_susceptible,
-        res.sir.n_infected,
-        res.sir.n_recovered,
+        res.sir.n_S,
+        res.sir.n_I,
+        res.sir.n_R,
         res.new_deaths.cumsum(),
     )
     plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
@@ -121,44 +121,33 @@ def test_seir():
         sim.run()
         sims.append(sim)
     short, long = sims
-    print(f'  Peak infectious: {short.results.seir.n_infectious.max():n} (short) vs {long.results.seir.n_infectious.max():n} (long)')
-    assert np.argmax(long.results.seir.n_infectious) > np.argmax(short.results.seir.n_infectious), 'A longer latent period should delay the peak'
+    print(f'  Peak infectious: {short.results.seir.n_I.max():n} (short) vs {long.results.seir.n_I.max():n} (long)')
+    assert np.argmax(long.results.seir.n_I) > np.argmax(short.results.seir.n_I), 'A longer latent period should delay the peak'
 
     # Check the compartments and incidence
     sim = short
     seir = sim.diseases.seir
     res = sim.results.seir
-    assert not (seir.exposed & seir.infectious).any(), 'Agents should not be in both E and I'
-    assert (seir.infected == (seir.exposed | seir.infectious)).all(), 'infected should be derived as E plus I'
-    assert np.array_equal(res.n_infected, res.n_exposed + res.n_infectious), 'n_infected should count both E and I'
-    assert np.allclose(res.prevalence, res.n_infected/sim.results.n_alive), 'prevalence should be computed from E plus I'
-    assert res.prevalence[1] > res.n_infectious[1]/sim.results.n_alive[1], 'prevalence should include exposed agents'
+    assert not (seir.E & seir.I).any(), 'Agents should not be in both E and I'
+    assert (seir.infected == (seir.exposed | seir.infectious)).all(), 'The Starsim 3 name infected should be E plus I'
+    assert np.allclose(res.prevalence, (res.n_E + res.n_I)/sim.results.n_alive), 'prevalence should be computed from E plus I'
     assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
     assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
-
-    # ti_infected is deliberately undefined, since it is ambiguous for an SEIR model
-    with pytest.raises(AttributeError):
-        seir.ti_infected
-
-    # infected is derived, so writing to it would be silently discarded
-    with pytest.raises(ValueError):
-        seir.infected[ss.uids(0)] = False
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
     latent = ss.SEIR(dur_exp=ss.lognorm_ex(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
     nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', dur=ss.days(100), dt=ss.days(1), verbose=0).run()
     assert nosim.results.seir.cum_infections[-1] == 0, 'Exposed agents should not transmit'
 
-    sim.diseases.seir.plot()
     return sims
 
 
 @sc.timer()
 def test_aliases():
-    sc.heading('Testing state aliases')
+    sc.heading('Testing state aliases (of a disease written as code)')
 
     # A string alias points at another state, and a subclass can replace it with a callable
-    class IsolationSIR(ss.SIR):
+    class IsolationSIR(ssl.CodedSIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
@@ -173,7 +162,7 @@ def test_aliases():
             self.isolated[uids] = True # Isolate everyone, so nobody transmits
             return
 
-    sir = ss.SIR()
+    sir = ssl.CodedSIR()
     assert sir.infectious is sir.infected, 'By default, infectious should be an alias of infected'
 
     sim = ss.Sim(n_agents=n_agents, diseases=IsolationSIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
@@ -185,8 +174,12 @@ def test_aliases():
     assert 'n_infectious' in res, 'A derived alias should generate an automatic result'
     assert res.n_infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
+    # Its new infections are recorded at the end of the step they happen in, as the counts of its states are (during a step, self.ti is its start)
+    res = ss.Sim(n_agents=1000, diseases=ssl.CodedSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run().results.codedsir
+    assert np.array_equal(res.new_infections[1:], -np.diff(res.n_susceptible)) # The infections of each step leave S in it
+
     # Aliases can also be defined alongside the states they refer to
-    class AliasSIR(ss.SIR):
+    class AliasSIR(ssl.CodedSIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
@@ -204,7 +197,7 @@ def test_aliases():
         alias_sir.asymptomatic[ss.uids(0)] = True # A callable alias is derived, so it can't be written to
 
     # A state can replace an alias or another state, either with overwrite=True or by resetting it by name
-    class ReplaceSIR(ss.SIR):
+    class ReplaceSIR(ssl.CodedSIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
@@ -222,11 +215,11 @@ def test_aliases():
 
     # An alias that a state would shadow should raise, rather than silently never being consulted
     with pytest.raises(AttributeError):
-        ss.SIR().define_aliases(infected=lambda self: self.susceptible)
+        ssl.CodedSIR().define_aliases(infected=lambda self: self.susceptible)
 
     # Removing something that isn't a state or an alias should raise
     with pytest.raises(AttributeError):
-        ss.SIR().define_states(reset='not_a_state')
+        ssl.CodedSIR().define_states(reset='not_a_state')
 
     # A missing attribute should still raise an AttributeError
     with pytest.raises(AttributeError):
@@ -248,6 +241,12 @@ def test_sis(do_plot=do_plot):
     if do_plot:
         sim.plot()
         sim.diseases.sis.plot()
+
+    # The library SIS is declared, so it has an R0 and runs as an ODE when there is no network
+    sis = ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(5))
+    assert np.isclose(sis.R0(), 2.5) # beta × the mean duration
+    ode = ss.Sim(sis, stop=100).run()
+    assert ode.solver == 'ode' and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
     return sim
 
 
@@ -329,10 +328,12 @@ def test_mtct():
         )
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
-    demographics = ss.Pregnancy(fertility_rate=ss.freqperyear(20))
-    sim = ss.Sim(dt=ss.month, people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    demographics = ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'))
+    sim = ss.Sim(dt=ss.months(1), people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     sim.plot()
+    res = sim.results
+    assert np.array_equal(res.sis.n_S + res.sis.n_I, res.n_alive) # Everyone born is in a state of the declared SIS
     return sim
 
 
@@ -354,10 +355,10 @@ def test_fetal_health(do_plot=do_plot):
     )
     def demog():
         return [
-            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ]
-    sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.dur(6), std=ss.dur(1)), beta=0.1, init_prev=0.1)
+    sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.years(6), std=ss.years(1)), beta=0.1, init_prev=0.1)
 
     def mean_bw(sim):
         bw = sim.results.fetal_health.mean_birth_weight
@@ -390,7 +391,7 @@ def test_fetal_health(do_plot=do_plot):
     # -- 2. Disease only (no treatment) --
     sim_disease = ss.Sim(
         demographics=demog(),
-        diseases=ss.SIR(**sir_kw),
+        diseases=ssl.CodedSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         custom=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
@@ -410,7 +411,7 @@ def test_fetal_health(do_plot=do_plot):
     # -- 3. Disease + treatment --
     sim_treated = ss.Sim(
         demographics=demog(),
-        diseases=ss.SIR(**sir_kw),
+        diseases=ssl.CodedSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir'),
         custom=ssl.mnch.FetalHealth(),
@@ -468,8 +469,8 @@ def test_congenital():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
         dur=ss.years(5),

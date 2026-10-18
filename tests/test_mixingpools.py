@@ -143,7 +143,7 @@ def test_single_sex(do_plot=do_plot):
     if do_plot: sim.plot()
 
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
-    assert(sim.people.male[sim.diseases.sir.ti_infected>0].all()) # All new infections should be in men
+    assert(sim.people.male[sim.diseases.sir.ti_I>0].all()) # All new infections should be in men
     return sim
 
 
@@ -192,6 +192,23 @@ def test_multi(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
+def test_layers():
+    sc.heading('Testing contact layers with a beta for each, under both engines')
+    def run(beta, solver, layers=('home', 'school')):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+        nets = [ss.contacts('Kenya', layer=layer) for layer in layers]
+        sim = ss.Sim(sir, networks=nets, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100, solver=solver, total_pop=10_000, verbose=0, **(dict(n_agents=10_000) if solver == 'abm' else {}))
+        return sim.run().results.sir.infection.cum[-1]
+    ode = run(dict(home=0.03, school=0.02), 'ode') # The spec's layered example, which crashed under both engines
+    assert np.isclose(run(dict(home=0.03, school=0.02), 'abm'), ode, rtol=0.1)
+    assert np.isclose(run(dict(home=0.03, school=0.0), 'ode'), run(0.03, 'ode', layers=['home'])) < 0.9*ode # No transmission at school is home contacts only
+    for bad in [dict(home=0.03, school=0.02, wrok=0.1), dict(home=0.03)]: # A key with no route, and a route with no key
+        with pytest.raises(ss.RouteMismatch):
+            run(bad, 'abm')
+    return ode
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -206,6 +223,7 @@ if __name__ == '__main__':
 
     sim6 = test_multi_defaults(do_plot)
     sim7 = test_multi(do_plot)
+    layers = test_layers()
 
     T.toc()
 

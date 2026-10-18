@@ -723,5 +723,5 @@ def build(src, u0, verbose=None, **kwargs):
     sim.imported = sc.objdict(format=src.format, file=src.file, choices=lines, incomplete=list(src.incomplete))
     if src.incomplete:
         items = '\n'.join(f'  {name}: {why}' for name,why in src.incomplete)
-        ss.warn(f'W1601 ImportIncomplete: {len(src.incomplete)} part(s) of the model were not translated:\n{items}')
+        ss.warn(f'{len(src.incomplete)} part(s) of the model were not translated:\n{items}', ss.ImportIncomplete)
     return sim

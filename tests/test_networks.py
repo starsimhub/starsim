@@ -7,6 +7,7 @@ import pytest
 import warnings
 import sciris as sc
 import numpy as np
+import networkx as nx
 import starsim as ss
 import starsim.library as ssl
 import scipy.stats as sps
@@ -72,22 +73,22 @@ def test_random():
 
 @sc.timer()
 def test_randomfast():
-    sc.heading('Testing the (default, fast) RandomNet vs the exact RandomExactNet')
+    sc.heading("Testing the (default, fast) RandomNet vs method='exact'")
     n_contacts = 10
 
-    s1 = ss.Sim(n_agents=medium, networks=ss.RandomExactNet(n_contacts=n_contacts), rand_seed=1).init()
+    s1 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts, method='exact'), rand_seed=1).init()
     s2 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
     nw1 = s1.networks[0]
     nw2 = s2.networks[0]
 
-    # Same number of edges as RandomExactNet, and the mean degree matches n_contacts
-    assert len(nw1) == len(nw2), 'RandomNet should produce the same number of edges as RandomExactNet'
+    # Same number of edges as method='exact', and the mean degree matches n_contacts
+    assert len(nw1) == len(nw2), "RandomNet should produce the same number of edges as method='exact'"
     deg = np.bincount(np.concatenate([np.asarray(nw2.p1), np.asarray(nw2.p2)]), minlength=medium)
     assert np.isclose(deg.mean(), n_contacts, rtol=0.05), f'Mean degree should be ~{n_contacts}, not {deg.mean()}'
 
-    # The fast version has variable (Poisson-like) degree, unlike RandomExactNet's fixed degree
+    # The fast version has variable (Poisson-like) degree, unlike method='exact''s fixed degree
     deg1 = np.bincount(np.concatenate([np.asarray(nw1.p1), np.asarray(nw1.p2)]), minlength=medium)
-    assert deg1.std() == 0, 'RandomExactNet should have fixed degree'
+    assert deg1.std() == 0, "method='exact' should have fixed degree"
     assert deg.std() > 1, 'RandomNet should have variable degree'
 
     # Reproducible given the same seed
@@ -96,7 +97,7 @@ def test_randomfast():
 
     # With uniform targets, the variance in degree is lower: about n_contacts/2 from the sources plus n_contacts/2 from the targets (as in Covasim v3)
     n = 10_000
-    s4 = ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=ss.poisson(20), uniform_targets=True), rand_seed=1).init()
+    s4 = ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=ss.poisson(20), method='uniform'), rand_seed=1).init()
     nw4 = s4.networks[0]
     deg4 = np.bincount(np.concatenate([np.asarray(nw4.p1), np.asarray(nw4.p2)]), minlength=n)
     assert np.isclose(deg4.mean(), 20, rtol=0.05), f'Mean degree should be ~20, not {deg4.mean()}'
@@ -119,7 +120,7 @@ def test_randomsafe():
 
     # Set up a sim with some small number of births and deaths
     pars = sc.objdict(n_agents=small, dur=5, verbose=False)
-    births = ss.Births(birth_rate=ss.freqperyear(5))
+    births = ss.Births(birth_rate=ss.time.freq(5, 'year'))
     simil = sc.objdict()
 
     # Confirm that non-safe networks diverge immediately
@@ -135,8 +136,8 @@ def test_randomsafe():
     assert simil.rand < 0.5, 'Random networks were more similar than expected'
 
     # Confirm that safe networks don't
-    s3 = ss.Sim(pars, networks='randomsafe', label='safe-nobirths').run()
-    s4 = ss.Sim(pars, networks='randomsafe', label='safe-births', demographics=births).run()
+    s3 = ss.Sim(pars, networks=ssl.RandomSafeNet(), label='safe-nobirths').run()
+    s4 = ss.Sim(pars, networks=ssl.RandomSafeNet(), label='safe-births', demographics=births).run()
 
     n3 = s3.networks[0].to_edgelist()
     n4 = s4.networks[0].to_edgelist()
@@ -148,7 +149,7 @@ def test_randomsafe():
 
     # With many agents, some random numbers are tied; check that these edges don't all go to agent 0
     n = 20_000
-    s5 = ss.Sim(n_agents=n, networks=ss.RandomSafeNet(n_edges=10), rand_seed=1).init()
+    s5 = ss.Sim(n_agents=n, networks=ssl.RandomSafeNet(n_edges=10), rand_seed=1).init()
     nw5 = s5.networks[0]
     deg5 = np.bincount(np.concatenate([np.asarray(nw5.p1), np.asarray(nw5.p2)]), minlength=n)
     assert deg5.max() < 40, f'No agent should have many more than 20 contacts, but agent {deg5.argmax()} has {deg5.max()}'
@@ -177,18 +178,18 @@ def test_random_stratified():
         core = np.mean((group[p1] == 2) & (group[p2] == 2)) # Fraction of edges within the high-risk core
         return degrees, core
 
-    exact_deg, exact_core = measure(ss.RandomExactNet(n_contacts=n_contacts))
+    exact_deg, exact_core = measure(ss.RandomNet(n_contacts=n_contacts, method='exact'))
     fast_deg, fast_core = measure(ss.RandomNet(n_contacts=n_contacts))
     print(f'Requested degrees:      {contacts}')
-    print(f'RandomExactNet degrees: {exact_deg}, core edge fraction: {exact_core:n}')
+    print(f'Exact degrees: {exact_deg}, core edge fraction: {exact_core:n}')
     print(f'RandomNet degrees:      {fast_deg}, core edge fraction: {fast_core:n}')
 
     # The realized degree per risk group must match what was requested, not just on average
     assert np.allclose(fast_deg, contacts, rtol=0.1), f'RandomNet degrees {fast_deg} do not match requested {contacts}'
-    assert np.allclose(fast_deg, exact_deg, rtol=0.1), f'RandomNet degrees {fast_deg} do not match RandomExactNet {exact_deg}'
+    assert np.allclose(fast_deg, exact_deg, rtol=0.1), f'RandomNet degrees {fast_deg} do not match the exact method {exact_deg}'
 
-    # Most edges should involve the high-risk core on both ends, as with RandomExactNet
-    assert np.isclose(fast_core, exact_core, rtol=0.1), f'RandomNet core clustering {fast_core:n} does not match RandomExactNet {exact_core:n}'
+    # Most edges should involve the high-risk core on both ends, as with method='exact'
+    assert np.isclose(fast_core, exact_core, rtol=0.1), f'RandomNet core clustering {fast_core:n} does not match the exact method {exact_core:n}'
 
     o = sc.objdict(exact_deg=exact_deg, fast_deg=fast_deg, exact_core=exact_core, fast_core=fast_core)
     return o
@@ -198,7 +199,7 @@ def test_random_stratified():
 def test_network_uids():
     """ Test that all networks form edges between valid UIDs, not positional indices (issue #1418) """
     sc.heading('Testing that network edges reference valid UIDs')
-    netclasses = [ss.RandomNet, ss.RandomExactNet, ss.RandomSafeNet]
+    netclasses = [ss.RandomNet, lambda: ss.RandomNet(method='exact'), ssl.RandomSafeNet]
     out = sc.objdict()
     for netclass in netclasses:
         name = netclass.__name__
@@ -301,7 +302,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
+    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.time.freq(0.05, unit=ss.years(1)))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -444,7 +445,7 @@ def test_other():
     sc.heading('Other network tests...')
 
     print('Testing MSM network')
-    msm = ss.MSMNet(participation=0.3)
+    msm = ssl.MSMNet(participation=0.3)
     sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=msm, copy_inputs=False)
     sim.run()
 
@@ -505,7 +506,7 @@ def test_dynamic():
 @sc.timer()
 def test_cluster():
     sc.heading('Testing cluster networks')
-    net = ss.ClusterNet(cluster_size=ss.poisson(5), age_range=[18, 65])
+    net = ssl.ClusterNet(cluster_size=ss.poisson(5), age_range=[18, 65])
     sim = ss.Sim(n_agents=medium, networks=net, copy_inputs=False).init()
     ages = sim.people.age
     clusters = net.cluster[net.p1]
@@ -520,7 +521,7 @@ def test_cluster():
 def test_hybrid():
     sc.heading('Testing hybrid networks')
     sis = ss.SIS(beta=dict(h=0.1, s=0.05, w=0.05, c=0.02)) # Per-network beta
-    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ss.HybridNet(contacts=dict(c=10)), verbose=0)
+    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ssl.HybridNet(contacts=dict(c=10)), verbose=0)
     sim.run()
     nets = sim.networks
     assert list(nets.keys()) == ['h', 's', 'w', 'c'] # Expanded into four networks
@@ -529,8 +530,8 @@ def test_hybrid():
     assert nets.c.pars.n_contacts.pars.lam == 10 # Partial update of contacts
 
     # As in Covasim v3, choose the targets of random edges uniformly
-    sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ss.HybridNet(uniform_targets=True), verbose=0).init()
-    assert all(sim2.networks[k].pars.uniform_targets for k in ['s', 'w', 'c'])
+    sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HybridNet(method='uniform'), verbose=0).init()
+    assert all(sim2.networks[k].pars.method == 'uniform' for k in ['s', 'w', 'c'])
     return sim
 
 
@@ -545,18 +546,35 @@ def test_partners():
     res = net.results
     k = np.arange(4)
     assert np.isclose(net.dist_degree @ k, 0.7) and np.isclose(net.dist_degree[2:].sum(), 0.22) # The targets
-    assert np.isclose(res.mean_degree[200:].mean(), 0.7, rtol=0.05) # ... are what the network has
+    assert np.isclose(res.mean_degree[200:].mean(), 0.7, rtol=0.1) # ... are what the network has (partnerships last 50 steps, so 200 steps of 1,000 agents vary by about 5% between seeds)
     assert np.isclose(res.concurrency[200:].mean(), 0.22, rtol=0.1)
     assert net.degrees(sim.people.alive.uids).max() <= 3
     assert sim.results.sis.n_I[-1] > 100 # Infection spreads through the partnerships
     table = net.check(n_runs=2, output=True)
-    assert list(table.index) == ['mean_degree', 'concurrency', 'max_contacts']
+    assert list(table.index) == ['mean_degree', 'concurrency', 'max_contacts', 'dur']
+    assert np.isclose(table.realized.dur, 50, rtol=0.15) # How long partnerships last, from how many there are and how many form
 
-    # Targets that cannot be met together are an error, and a compartmental run uses the mean number of partners
+    # Acts in each partnership (acts=): beta is then per act, so two acts at 0.4 transmit as one partnership at 1 - 0.6**2
+    def prev(acts, beta):
+        S, I = ss.states(2)
+        sis2 = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=I >> S @ ss.prob(0.05), init=dict(I=10), name='sis')
+        return ss.Sim(sis2, networks=ss.PartnerNet(n_contacts=0.7, dur=50, acts=acts), n_agents=medium, stop=200, rand_seed=1, verbose=0).run().results.sis.n_I.values
+    assert np.allclose(prev(2, ss.prob(0.4)), prev(None, ss.prob(1 - 0.6**2)))
+
+    # A number of partners for each level of a property, as EpiModel's nodefactor
+    byrisk = ss.PartnerNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50)
+    sim2 = ss.Sim(sis, networks=byrisk, n_agents=medium, stop=200, verbose=0).stratify(risk=['low', 'high'], split=[0.8, 0.2]).run()
+    level = np.asarray(sim2.networks[0].levels('risk'))[sim2.people.alive.uids]
+    degree = sim2.networks[0].degrees(sim2.people.alive.uids)
+    assert np.isclose(degree[level == 0].mean(), 0.4, rtol=0.25) and np.isclose(degree[level == 1].mean(), 1.6, rtol=0.25)
+
+    # Targets that cannot be met together are an error; partnerships have no compartmental approximation yet, and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
         ss.PartnerNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
-    ode = ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
-    assert ode.results.sis.n_I[-1] > 10
+    with pytest.raises(ss.CapabilityError):
+        ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
+    ring = ss.Sim(sis, networks=ss.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
+    assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
     # With births and deaths, partnerships also end when a partner dies, which is allowed for so the mean holds
     net = ss.PartnerNet(n_contacts=0.5, dur=50, name='main')
@@ -592,7 +610,7 @@ def test_partner_targets():
 
     # A target number of partners at a time between men and women, with concurrency
     duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))
-    mf = ss.MFNet(n_contacts=ss.poisson(0.7), concurrency=0.1, duration=duration, name='mf')
+    mf = ss.MFNet(n_contacts=ss.poisson(0.7), concurrency=0.1, dur=duration, name='mf')
     sim = ss.Sim(diseases=ss.SIS(), networks=mf, n_agents=5000, start=2000, stop=2030, dt=ss.months(1), verbose=0).run()
     res = sim.networks.mf.results
     assert np.isclose(res.mean_degree[60:].mean(), 0.7, rtol=0.03) and np.isclose(res.concurrency[60:].mean(), 0.1, rtol=0.1)
@@ -606,11 +624,13 @@ def test_bare_units():
     sc.heading('Testing the warning for a bare number in another unit than the sim')
     sim = lambda net: ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05), dur_inf=ss.days(10)), networks=net, dt=ss.days(1), stop=ss.days(10), verbose=0)
     with pytest.warns(RuntimeWarning, match='read in years'): # The default duration is in years, but the sim is in days
-        sim(ss.MFNet(duration=5)).init()
+        sim(ss.MFNet(dur=5)).init()
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        sim(ss.MFNet(duration=ss.days(5))).init() # A unit says which is meant
-        ss.Sim(n_agents=200, diseases='sis', networks=ss.MFNet(duration=5), verbose=0).init() # The same unit as the sim
+        sim(ss.MFNet(dur=ss.days(5))).init() # A unit says which is meant
+        ss.Sim(n_agents=200, diseases='sis', networks=ss.MFNet(dur=5), verbose=0).init() # The same unit as the sim
+    with pytest.raises(TypeError): # duration= is dur=, as for every other network
+        ss.MFNet(duration=5)
     return
 
 

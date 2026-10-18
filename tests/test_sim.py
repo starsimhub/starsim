@@ -4,6 +4,7 @@ Test Sim API
 
 import numpy as np
 import starsim as ss
+import starsim.library as ssl
 import sciris as sc
 import matplotlib.pyplot as plt
 import pytest
@@ -16,8 +17,8 @@ sc.options(interactive=False) # Assume not running interactively
 def make_sim_pars():
     pars = sc.objdict(
         n_agents = n_agents,
-        birth_rate = 20,
-        death_rate = 15,
+        start = 2000, # Calendar years, for the interventions below
+        demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.015))],
         networks = sc.objdict(
             type = 'randomnet',
             n_contacts = 4,
@@ -67,6 +68,11 @@ def test_simple(do_plot=do_plot):
     sim.run()
     if do_plot:
         sim.plot()
+
+    # A sim of modules written as code can be built again with other values, as a declared one can
+    coded = ss.Sim(n_agents=n_agents, diseases=ssl.CodedSIS(name='sis'), networks='random', start=2000, stop=2010, verbose=0)
+    again = coded.new(rand_seed=2).run()
+    assert again.summary.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.CodedSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.sis_cum_infections
     return sim
 
 
@@ -124,7 +130,7 @@ def test_complex_api():
     pars1 = dict(
         n_agents = 1000,
         label = 'v1',
-        verbose = 'brief',
+        verbose = 0,
         stop = 2020,
         networks = [
             ss.RandomNet(name='random1', n_contacts=6),
@@ -132,28 +138,28 @@ def test_complex_api():
         ],
         diseases = [
             dict(type='sir',  dur_inf=dict(type='expon', scale=ss.years(6.0))),
-            dict(type='sis', beta=ss.probperyear(0.07), init_prev=0.1),
+            dict(type='sis', beta=ss.prob(0.07, 'year'), init_prev=0.1),
         ],
         demographics = [
-            ss.Births(birth_rate=ss.freqperyear(20)),
-            dict(type='deaths', death_rate=ss.freqperyear(20))
+            ss.Births(birth_rate=ss.time.freq(20, 'year')),
+            dict(type='deaths', death_rate=ss.time.freq(20, 'year'))
         ],
         interventions = jump_age,
     )
 
     # Test with explicit initialization
-    pars2 = ss.SimPars(n_agents=1000, label='v1', verbose='brief', stop=2020)
+    pars2 = ss.SimPars(n_agents=1000, label='v1', verbose=0, stop=2020)
 
     net1 = ss.RandomNet(name='random1', n_contacts=6)
     net2 = ss.RandomNet(name='random2', n_contacts=4)
     networks = ss.ndict(net1, net2)
 
     dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.years(6.0)))
-    dis2 = ss.SIS(beta=ss.probperyear(0.07), init_prev=ss.bernoulli(0.1))
+    dis2 = ss.SIS(beta=ss.prob(0.07, 'year'), init_prev=ss.bernoulli(0.1))
     diseases = ss.ndict(dis1, dis2)
 
-    dem1 = ss.Births(birth_rate=ss.freqperyear(20))
-    dem2 = ss.Deaths(death_rate=ss.freqperyear(20))
+    dem1 = ss.Births(birth_rate=ss.time.freq(20, 'year'))
+    dem2 = ss.Deaths(death_rate=ss.time.freq(20, 'year'))
     demographics = ss.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)
@@ -167,6 +173,8 @@ def test_complex_api():
     s1.run()
     s2.run()
     assert ss.check_sims_match(s1, s2), 'Sims should match'
+    with pytest.raises(ValueError): # verbose is 0, 1, or 2; Starsim 3's fraction of steps is now verbose=1
+        ss.Sim(n_agents=100, verbose=0.1).init()
 
     return s1
 
@@ -179,8 +187,8 @@ def test_simple_vax(do_plot=do_plot):
     sim_base = ss.Sim(pars=pars)
     sim_base.run()
 
-    my_vax = ss.simple_vx(efficacy=0.5)
-    intv = ss.routine_vx(start_year=2015, prob=0.2, product=my_vax)
+    my_vax = ss.Vaccine(efficacy=0.5)
+    intv = ss.vaccinate(my_vax, start=2015, coverage=0.2, interval=ss.years(1)) # Offered each year to 20% of those not yet vaccinated
     sim_intv = ss.Sim(pars=pars, interventions=intv)
     sim_intv.run()
 
@@ -204,9 +212,9 @@ def test_shared_product(do_plot=do_plot):
     sc.heading('Testing sharing a product across interventions...')
 
     # Make interventions
-    vax = ss.simple_vx(efficacy=0.5)
-    routine1 = ss.routine_vx(name='early-small', start_year=2010, prob=0.05, product=vax)
-    routine2 = ss.routine_vx(name='late-big', start_year=2020, prob=0.5, product=vax)
+    vax = ss.Vaccine(efficacy=0.5)
+    routine1 = ss.vaccinate(vax, name='early-small', start=2010, coverage=0.05, interval=ss.years(1))
+    routine2 = ss.vaccinate(vax, name='late-big', start=2020, coverage=0.5, interval=ss.years(1))
 
     # Make and run sims
     pars = make_sim_pars()
@@ -284,7 +292,7 @@ def test_creation_syntax():
     assert isinstance(sim.demographics[0], ss.Demographics)
     assert isinstance(sim.connectors[0], SecondClass)
     assert isinstance(sim.diseases[0], ss.Network)
-    assert isinstance(sim.analyzers[0], ss.Infection)
+    assert isinstance(sim.analyzers[0], ss.Disease)
     
     # Test 2: check that the order is intuited when not specified
     sim2 = ss.Sim(
@@ -298,7 +306,7 @@ def test_creation_syntax():
     assert isinstance(sim2.custom[1], SecondClass)
     assert isinstance(sim2.demographics[0], ss.Demographics)
     assert isinstance(sim2.networks[0], ss.Network)
-    assert isinstance(sim2.diseases[0], ss.Infection)
+    assert isinstance(sim2.diseases[0], ss.Disease)
     
     return sim2
 
@@ -307,17 +315,26 @@ def test_creation_syntax():
 def test_add_module():
     """ Test adding a module to a sim that has been partly run """
     sc.heading('Testing sim.add_module()...')
-    kw = dict(n_agents=n_agents, diseases='sis', networks='random')
+    kw = dict(n_agents=n_agents, diseases='sis', networks='random', start=2000)
     base = ss.Sim(**kw).run()
     sim = ss.Sim(**kw)
     sim.run(until='2010-01-01')
     ti = sim.ti
-    vx = sim.add_module(ss.routine_vx(product=ss.simple_vx(disease='sis'), prob=0.5))
+    vx = sim.add_module(ss.modify('sis.pars.beta', multiply=0.2, name='masks'))
+    with pytest.raises(ss.CapabilityError):
+        sim.add_module(ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5)) # A new product adds a dimension (has_vaccine), which is laid out at init()
     sim.run()
 
-    inf = sim.results.sis.n_infected
-    base_inf = base.results.sis.n_infected
-    assert sim.interventions.routine_vx is vx and vx.ti == sim.ti # It was added, and kept in step with the sim
+    vaccine = ss.Vaccine(efficacy=0.9) # A product the sim already has can be delivered again
+    vsim = ss.Sim(**kw, interventions=ss.vaccinate(vaccine, coverage=0.2, at=[2005]))
+    vsim.run(until='2010-01-01')
+    vsim.add_module(ss.vaccinate(vaccine, coverage=0.5, at=[2012], name='second'))
+    vsim.run()
+    assert vsim.interventions.second.product is vsim.products()[0]
+
+    inf = sim.results.sis.n_I
+    base_inf = base.results.sis.n_I
+    assert sim.connectors.masks is vx and vx.ti == sim.ti # It was added, and kept in step with the sim
     assert np.array_equal(inf[:ti], base_inf[:ti]) # No change before the module was added...
     assert inf[-1] < base_inf[-1] # ...but fewer infections after
     with pytest.raises(ss.AlreadyRunError):

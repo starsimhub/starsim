@@ -9,15 +9,62 @@ As noted on the Model Structure page, the `Sim` is the main object for _doing_ t
 On this page, we explain what happens when you create a `Sim`, and the particular order of steps taken when a `Sim` is run. We then provide a few common examples of how to create and run a `Sim` and when/why you might choose each one.
 
 ## Creating and initializing a Sim
-When you first create a sim, e.g. with `sim = ss.Sim()`, the resulting `Sim` object will be mostly empty with a few pre-set defaults. Most of the initialization is done when `sim.init()` is called. This completes the initialization with the following steps:
+When you first create a sim, e.g. with `sim = ss.Sim(sir)`, the resulting `Sim` object holds what it was given, with a few pre-set defaults. Nothing is computed until `sim.init()` is called, which does the following:
 
-* Validating the parameters;
-* Adding a `Time` module to the sim (stored under `sim.t`), which looks after converting parameters between timesteps;
-* Adding `People` to the `Sim`: if these are not supplied directly, Starsim will automatically add `People` with default age/sex structure;
+* Resolving defaults: names are assigned (states and transitions take theirs from the variables they are bound to), states are inferred from arrow strings, and the sources of infection, initial conditions, dwell-time distributions, the sim's unit of time, and the mixing are filled in where they were not given. Every guess is recorded, so that `describe()` can show it;
+* Checking the model: unknown parameter names, values outside their bounds, shapes that don't match their stratification, and so on are reported here, before the first time step;
+* Adding a timeline (stored under `sim.t`), which looks after converting parameters between time steps;
+* Adding `People` to the `Sim`: if these are not supplied directly, Starsim will automatically add `People` with a default age/sex structure;
 * Adding all the parameters and results from each `Module` to the `Sim`, and adding the states from each `Module` to the `People`;
-* Initializing any distributions contained anywhere within the parameters or states.
+* Initializing any distributions contained anywhere within the parameters or states;
+* Choosing the solver (see below), and printing the choice and the reason for it.
 
-A `Sim` is automatically initialized if `sim.run()` is called.
+A `Sim` is automatically initialized if `sim.run()` is called. The modules given to a sim are copied, so the same disease can be passed to several sims.
+
+## Choosing a solver
+A declared disease can be run in several ways, chosen with the `solver` argument:
+
+| Solver | What it does |
+|--------|--------------|
+| `'auto'` (the default) | An ODE if every part of the model has a compartmental form; agents otherwise |
+| `'ode'` | A deterministic ODE |
+| `'binomial'` | A stochastic compartmental model with binomial draws each time step |
+| `'gillespie'` | The exact continuous-time stochastic simulation algorithm |
+| `'abm'` | Agents |
+
+A sim runs as agents if it contains something that needs individual agents: a contact network (such as `networks='random'`), `n_agents=`, or a module written as code. `sim.solvers()` shows which solvers can run the model, before anything runs:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.3),
+    recovery  = ss.progression('I -> R', dur=10),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sir, stop=100)
+sim.solvers()
+```
+
+`sim.new()` makes a new sim from the same inputs, with whatever is given changed. Here, the same model is run with each solver:
+
+```{python}
+for solver in ['ode', 'binomial', 'gillespie', 'abm']:
+    s = sim.new(solver=solver, verbose=0).run()
+    print(f'{solver:10s} peak infected: {s.results.sir.n_I.max():,.0f}')
+```
+
+The stochastic solvers (`'binomial'`, `'gillespie'`, and `'abm'`) give a different answer on each run, close to the ODE's. `sim.new()` is also the way to change a parameter or the random seed, e.g. `sim.new(pars=dict(beta=0.2))` or `sim.new(rand_seed=2)`.
+
+## Describing the model
+`sim.describe()` prints the model as Starsim has read it: every state and transition, the mixing, the solver and why it was chosen, and the unit of time. Everything that was guessed rather than given is marked:
+
+```{python}
+sim.describe()
+```
+
+Here, nothing in the model has a unit, so time is counted in time steps; giving the sim a unit (`unit='day'`, a typed `dt` such as `dt=ss.days(1)`, or dates for `start` and `stop`) makes `beta` a rate per day.
 
 ## Running a Sim
 ### Order of operations
@@ -35,18 +82,17 @@ An important function of the `Sim` class is that it controls the order in which 
 10. Any `Analyzer` modules have their `step` method called
 11. Calls are made to `finish_step` for the `Modules`, the `People`, and the `Sim`.
 
-If you want to see more details, have a look at `sim.loop.to_df()` (after calling `sim.init()`) and it will show a dataframe of every step in the simulation. You can also use `sim.loop.plot()` to visualize each step.
+If you want to see more details, have a look at `sim.loop.to_df()` (after calling `sim.init()`) and it will show a dataframe of every step in the simulation. You can also use `sim.loop.plot()` to visualize each step. During a step, `sim.ti` is the index of the time point at the start of the step; the results of the step are recorded at the end of it, at `sim.ti + 1`.
 
-Note that there are two separate update calls for diseases, `step_state` and then `step`. The `step_state` method happens _before_ transmission, and the `step` method typically handles transmission. The `step_state` method typically handles disease progression, as in this example from the SIR model:
+Note that there are two separate update calls for diseases, `step_state` and then `step`. The `step_state` method happens _before_ transmission, and the `step` method typically handles transmission. For a declared disease, Starsim does both from the model's transitions. In a disease written as code, `step_state` typically handles disease progression, as in this (simplified) example from Starsim 3's SIR model, which is available as `ssl.CodedSIR`:
 
 
 ```{python}
 def step_state(self):
     """ Progress infectious -> recovered """
     recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
-    self.infected[recovered] = False
-    self.susceptible[recovered] = True
-    self.update_immunity()
+    self.clear_infection(recovered)
+    self.recovered[recovered] = True
     return
 ```
 
@@ -55,7 +101,7 @@ To illustrate the ordering of all these updates, let's consider an example of a 
 There are a few principles that guide the logic about the update ordering. Updating the demographics first makes sense because we want to make sure we capture mother-to-child transmission. Suppose that during one month, a woman became pregnant and also acquired malaria; we want to ensure that the effects of malaria on her pregnancy are captured. Updating the network before disease transmission occurs is fairly arbitrary, but it means that transmission can occur with new partners, which is particularly relevant for sexually transmitted infections, especially when it's an instantaneously-dissolving partnership.
 
 ### Printing progress
-It can be useful to see how the `Sim` is progressing, and the `sim.run()` method accepts a `verbose` argument that controls how frequently to provide updates. With `verbose=1`, you will see updates on progree on every timestep; with `verbose=0.1` you will see updates every 10 timesteps, and so on. If you are running monthly or daily timesteps you can also use verbose=1/12 or 1/365 to avoid having too much printed output in your Python terminal. You can also use `verbose=-1`, which will only print output when the sim is complete.
+It can be useful to see how the `Sim` is progressing, and `ss.Sim()` and `sim.run()` accept a `verbose` argument that controls how much is printed. With `verbose=1` (the default), you will see the solver chosen, any notes on what was assumed or approximated, and the progress about ten times during the run; with `verbose=2`, you will see everything, including each timestep; and with `verbose=0`, nothing is printed. The notes are kept in `sim.notes` whatever the verbosity.
 
 ## Starting and stopping a run
 
@@ -75,9 +121,9 @@ ss.options(jupyter=True)
 # Define custom intervention
 class sis_vaccine(ss.Intervention):
 
-    def __init__(self, start=2040, eff=1.0):
+    def __init__(self, start='2040', eff=1.0):
         super().__init__()
-        self.start = start
+        self.start = ss.date(start)
         self.eff = eff
         return
 
@@ -89,8 +135,8 @@ class sis_vaccine(ss.Intervention):
 
 # Default parameters
 pars = dict(
-    start = 2000,
-    stop = 2050,
+    start = '2000',
+    stop = '2050',
     diseases = 'sis',
     networks = 'random',
     verbose = 0,
@@ -115,7 +161,7 @@ T.toc('Runtime using default')
 #%% Shortcut using "until"
 T = sc.timer()
 sim = ss.Sim(pars, interventions=sis_vaccine())
-sim.run(until=2039)
+sim.run(until='2039')
 sims = []
 
 for eff in effs:
@@ -138,8 +184,8 @@ You can also use this approach to modify the parameters of a simulation before c
 ```{python}
 import starsim as ss
 
-base_sim = ss.Sim(diseases='sis', networks='random', start=2000, stop=2100, verbose=False)
-base_sim.run(until=2030)
+base_sim = ss.Sim(diseases='sis', networks='random', start='2000', stop='2100', verbose=False)
+base_sim.run(until='2030')
 
 sims = []
 betas = [0.01, 0.02, 0.05, 0.10]
@@ -153,20 +199,20 @@ msim = ss.parallel(sims)
 msim.plot()
 ```
 
-Modules are usually supplied when the sim is created, but you can also add one to a partially run sim with `sim.add_module()`. For example, to add a different vaccination intervention to each scenario:
+Modules are usually supplied when the sim is created, but you can also add one to a partially run sim with `sim.add_module()`. For example, to add a measure that reduces transmission by a different amount in each scenario (an `ss.modify()` that multiplies `beta`):
 
 ```{python}
 import starsim as ss
 
-base_sim = ss.Sim(diseases='sis', networks='random', start=2000, stop=2100, verbose=False)
-base_sim.run(until=2030)
+base_sim = ss.Sim(diseases='sis', networks='random', start='2000', stop='2100', verbose=False)
+base_sim.run(until='2030')
 
 sims = []
-probs = [0.0, 0.2, 0.5]
-for prob in probs:
+reductions = [0.0, 0.2, 0.5]
+for reduction in reductions:
     sim = base_sim.copy()
-    sim.add_module(ss.routine_vx(product=ss.simple_vx(disease='sis'), prob=prob))
-    sim.label = f'prob={prob}'
+    sim.add_module(ss.modify('sis.pars.beta', multiply=1-reduction))
+    sim.label = f'reduction={reduction}'
     sims.append(sim)
 
 msim = ss.parallel(sims)

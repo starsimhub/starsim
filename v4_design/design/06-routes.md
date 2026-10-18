@@ -6,6 +6,7 @@ Justified by [best-practices/population-and-mixing.md](../best-practices/populat
 
 ## What a state in a rate means
 
+<!-- fragment -->
 ```python
 S, I, R   = ss.states(3)
 infection = S >> I @ beta * I
@@ -22,9 +23,9 @@ So a bare state is written when people catch the infection from people, and `.n`
 
 - **Several infectious states are a sum of exposures**, each with its own coefficient: `S >> I @ beta * I + beta_vax * I_vax`, or `S >> E @ beta * (I + 0.5 * A)`.
 - **A rate with no state is not transmission.** `S >> I @ beta` is legal and is a constant hazard that does not depend on anyone being infectious (an importation rate, say), exactly as `I >> R @ gamma` is a constant hazard of recovery. In the short form, the word `transmission` in `ss.transmission('S -> I', beta=0.05)` is what stands for `* I`.
-- **A bare state that is not people is an error.** There is no contact with a reservoir to work out, so `beta * W` (with `W` bacteria in water) raises `E211 ExposureToCount`, which says to write `W.n`.
+- **A bare state that is not people is an error.** There is no contact with a reservoir to work out, so `beta * W` (with `W` bacteria in water) raises `ExposureToCount`, which says to write `W.n`.
 
-`describe()` prints every rate with its bare states expanded, for example `infection: S -> I at 0.3 × I.n / N  [homogeneous mixing]`, so what a rate resolved to can always be checked.
+`describe()` prints every rate with its bare states expanded, for example `rate = 0.3 × I.n / N  [homogeneous mixing]` under `infection`, so what a rate resolved to can always be checked.
 
 What `beta` means follows from the mixing:
 
@@ -56,7 +57,7 @@ and the hazard of infection for a person in state `s ∈ from(T)` in group `i` i
 λ[s,i] = rel_sus[s] · Σ_r Σ_j  c[r,i,j] · β[r] · P[j] / D[j]
 ```
 
-where the outer sum is over routes `r`, `c[r,i,j]` is route `r`'s contact rate, and `D[j]` depends on the route's `dependence` option ([below](#frequency-and-density-dependence)) and is `N[j]` by default. With no route given there is one term with `c = 1`, so `λ = β · I / N`. The probability of infection over a step of length `dt` is `1 − exp(−λ · dt)`; if the transition branches, the infected are split across the destinations by the branch probabilities.
+where the outer sum is over routes `r`, `c[r,i,j]` is route `r`'s contact rate, and `D[j] = N[j]`: transmission through the routes is frequency-dependent ([below](#frequency-and-density-dependence)). With no route given there is one term with `c = 1`, so `λ = β · I / N`. The probability of infection over a step of length `dt` is `1 − exp(−λ · dt)`; if the transition branches, the infected are split across the destinations by the branch probabilities.
 
 `rel_sus` and `rel_trans` are the state-level values declared on `ss.State` multiplied by any per-agent or per-group modifiers ([07-effects.md](07-effects.md)).
 
@@ -76,24 +77,27 @@ The product form for `p[v]` MUST be used; adding the per-edge probabilities over
 
 Infectiousness belongs to the disease and contact to the routes, but infectiousness can itself depend on the route: HIV is far more transmissible through a shared needle than through sex, and more from men to women than the reverse. Those are still facts about the pathogen, so they stay on the disease, as one `beta` per network. This is Starsim's existing convention:
 
+<!-- fragment -->
 ```python
 infection = ss.transmission('S -> I', beta=dict(mf=[0.008, 0.004], needles=0.03))
 sim = ss.Sim(hiv, networks=[ss.MFNet(), needles])
 ```
 
 - A single number applies to every route.
-- A dict is keyed by network or layer name. A key that matches no route raises `E403 RouteMismatch`.
+- A dict is keyed by network or layer name, and names every route: a key that matches no route, or a route with no key, raises `RouteMismatch` when the sim is initialized. Under every solver the dict is applied in one place, to the exposure through each route.
+- A route has no `beta` of its own in a declared model (`ss.MixingPool(beta=...)` other than 1 raises `RouteMismatch`; `ss.contacts()` takes none): the `beta` belongs to the transmission.
 - A pair is the two directions of a directed network (for `ss.MFNet`, male to female and then female to male).
 - The operator form takes the same dict as its `beta`.
 
 ### Units
 
-`beta` times the contact rate is a hazard. Bare numbers always work: a bare `beta` with the default mixing is a rate in the sim's unit; with a route it is a probability per contact, and a bare `n_contacts` is contacts per unit time. One of the two may carry a time unit (`beta=ss.perday(0.03)` with `n_contacts=10`, or `beta=0.03` with `n_contacts=ss.freqperday(10)`). If both carry one, the product is not a hazard and `E102 WrongDimension` is raised.
+`beta` times the contact rate is a hazard. Bare numbers always work: a bare `beta` with the default mixing is a rate in the sim's unit; with a route it is a probability per contact, and a bare `n_contacts` is contacts per unit time. One of the two may carry a time unit (`beta=ss.perday(0.03)` with `n_contacts=10`, or `beta=0.03` with `n_contacts=ss.perday(10)`). If both carry one, the product is not a hazard and `WrongDimension` is raised.
 
 ## Counts used literally
 
 `I.n` is the plain number in a state (the same number as the result `n_I`), and `I.frac` is its fraction of the population. A rate may be any arithmetic expression of counts and parameters, and it is then used exactly as written, without going through the routes:
 
+<!-- fragment -->
 ```python
 S >> I @ beta * I                      # exposure to I through the routes (the usual case)
 S >> I @ beta * I.n / N.n              # the same thing written out for homogeneous mixing; N = S + I + R
@@ -105,7 +109,7 @@ This is how environmental and vector-borne transmission are written. There is no
 
 **States that are not people.** The one thing the library needs to know about such a state is that it is not people, because in an agent-based run the people become agents and the other states stay numbers, and because `total_pop`, age, and sex apply only to people.
 
-- **It is worked out from the transitions.** A state is people if transitions connect it to the disease's first state, in either direction. No transition joins `W` to `S`, or `Sv` to `Sh`, so `W` and `Sv` are not people. `describe()` prints this as a guess (`W: not people [guessed]`), and the build notes it once (`W212 StateNotPeople`).
+- **It is worked out from the transitions.** A state is people if transitions connect it to the disease's first state, in either direction. No transition joins `W` to `S`, or `Sv` to `Sh`, so `W` and `Sv` are not people. `describe()` prints this as a guess (`W a count, not people [guessed: no transition connects W to S]`), and the build notes it once (`StateNotPeople`).
 - **`ss.State(people=False)` says it outright.**
 - **A state that is not people holds a plain count.** It is never represented as agents, it is left out of `total_pop` and of `N`, and it is skipped by people dimensions (age, sex, risk) when the model is stratified. It is stratified by `patch`, or by its own dimensions with `states=` ([05-dimensions.md](05-dimensions.md#states-that-are-not-people)).
 - **Inflows and outflows use `ss.null`**, which stands for outside the model: `ss.null >> W @ rate` is an inflow and `W >> ss.null @ rate` an outflow ([03-states-and-transitions.md](03-states-and-transitions.md)). An inflow rate is a total per unit time, not a per-capita hazard.
@@ -114,9 +118,10 @@ In a compartmental run none of this changes anything, because every state is a n
 
 Rules:
 
-- Each term of a rate is either an exposure (it contains one bare state) or literal (it contains only `.n`, `.prev`, parameters, and numbers). A rate may add the two kinds: `S >> I @ beta * I + beta_w * W.n / (W.n + K)` is direct plus environmental transmission. A term containing two bare states has no defined meaning and is an error.
+- Each term of a rate is either an exposure (it contains one bare state) or literal (it contains only `.n`, `.frac`, parameters, and numbers). A rate may add the two kinds: `S >> I @ beta * I + beta_w * W.n / (W.n + K)` is direct plus environmental transmission. A term containing two bare states has no defined meaning and is an error.
 - A sum of states is a sum, not a new state: with `N = S + I + R`, `N.n` is the total, usable as a source or a denominator.
-- In a stratified model, a count is aligned with the person at risk on every dimension the two share and summed over the rest. With cholera and a water reservoir both stratified by `patch`, `W.n` is the reservoir in the susceptible person's own patch; mosquitoes, which are not stratified by age, see `Ih.n` summed over human age groups. `I.n.sum('age')` and `I.n.select(age=...)` override the alignment.
+- In a stratified model, a count is the total, except within a place: with cholera and a water reservoir both stratified by `patch`, `W.n` is the reservoir in the susceptible person's own patch, while on any other dimension (age, risk) `I.n` is summed over its levels. There is no spelling yet for a count at the person's own level of another dimension.
+- A count is used literally even when the model has routes: `S >> I @ beta * I.n / N.n` under `ss.contacts(...)` or a network is homogeneous mixing, not mixing through them. The build notes this once for each transition that uses a count of people while there are routes, and says to write the bare state for exposure through them.
 - A transition whose rate mentions a state is still an infection for the purposes of results and of the infection log when one is recorded ([09-results.md](09-results.md)); the mentioned state is its source.
 
 ### Environmental transmission: cholera
@@ -153,7 +158,7 @@ malaria = ss.Disease(
     emergence  = ss.null >> Sv @ ss.perday(5000),       # a total per unit time
     biting     = Sv >> Ev @ a * c * Ih.n / Nh,
     incubation = Ev >> Iv @ ss.days(10),
-    mortality  = (Sv | Ev | Iv) >> ss.null @ ss.days(14),
+    mortality  = Sv + Ev + Iv >> ss.null @ ss.days(14),
 )
 
 sim = ss.Sim(malaria, n_agents=5_000, unit='day')
@@ -171,8 +176,8 @@ Routes are passed with Starsim's keyword `networks=`, which accepts networks and
 | `ss.MixingPool(n_contacts=c)` | homogeneous mixing, `c` contacts per unit time | exact | exact |
 | `ss.MixingPools(...)`, `ss.contacts('Kenya')` | a contact matrix between groups | exact | exact |
 | `ss.RandomNet(n_contacts=c)` | individual contacts, redrawn or persisting for `dur` | exact | approximated by homogeneous mixing with `c` contacts; exact as the population grows when contacts are redrawn every step |
-| `ss.MFNet(...)` and other sexual networks | partnerships with durations and acts; `beta` is per act | exact | approximated by partner-change rates between sex/risk/age groups |
-| `ss.StaticNet(edges=...)` | a fixed set of contacts | exact | approximated by group-to-group contact rates computed from the edges (homogeneous mixing with the same mean number of contacts if the nodes have no groups) |
+| `ss.MFNet(...)`, `ss.PartnerNet(...)`, and other networks of partnerships | partnerships with durations and acts; `beta` is per act | exact | none yet: `CapabilityError` |
+| `ss.StaticNet(graph=...)` | a fixed set of contacts | exact | approximated by homogeneous mixing with the mean degree of its graph (or, for a random graph made when the sim starts, its mean number of contacts); `CapabilityError` for a graph made by another function |
 | counts used literally (`W.n`, `Iv.n`) | nothing; the rate is the hazard | exact | exact |
 
 There is no `ss.Homogeneous` class. Homogeneous mixing is what happens when no network is given; to set a contact rate use `ss.MixingPool(n_contacts=10)`, which is Starsim's class and is homogeneous when given no groups.
@@ -180,12 +185,12 @@ There is no `ss.Homogeneous` class. Homogeneous mixing is what happens when no n
 How the columns are used follows the approximation policy in [12-backends.md](12-backends.md):
 
 - `solver='auto'` never approximates the mixing. A model with only "exact" compartmental entries runs as an ODE; a model containing an individual-level network runs as agents, and the choice is printed. (The one approximation `auto` may make is Erlang stages for a non-exponential dwell time, which it reports; [12-backends.md](12-backends.md).)
-- When the user asks for a compartmental solver on a model with a network (`solver='ode'`), the library uses the approximation in the table and says so in one line (for example `sexual network 'mf' approximated by partner-change rates between sex and risk groups`). It does not refuse. A network model run as an ODE is a coarser model, and there are many valid ODE models of sexually transmitted infections.
-- `approx=False` turns any approximation into an error (`E804 CapabilityError`), and `approx=True` silences the note. `sir.solvers()` shows this table for the model at hand.
+- When the user asks for a compartmental solver on a model with a network (`solver='ode'`), the library uses the approximation in the table and says so in one line (for example `StaticNet approximated by homogeneous mixing with 2 contacts per day (the mean degree of its graph)`). A network with no approximation in the table raises `CapabilityError`.
+- `approx=False` turns any approximation into an error (`CapabilityError`), and `approx=True` silences the note. `sim.solvers()` shows this table for the sim at hand, with a row for each network (`approx (contact rates)` for `ss.RandomNet`, `no (no approximation)` for `ss.MFNet`).
 
 The table has one approximation per route. A network with strong variation in the number of contacts is approximated by homogeneous mixing with the same mean like any other, which is a poor approximation for it; there is no degree-grouped ODE form ([Rejected](#rejected)), and the agent-based run is the way to keep that variation.
 
-**The sexual-network approximation.** The model is stratified by the attributes the network forms partnerships on (sex, plus risk group and age band where the network uses them), if it is not already. The contact rate `c[i,j]` is the rate at which a person in group `i` starts partnerships with people in group `j`, derived from the network's own parameters (number of partners, duration, acts) so that the user does not supply them twice, and the per-contact probability becomes the probability of transmission over a whole partnership, `1 − (1 − β)^(acts × dur)`. What is lost is concurrency, repeated exposure to the same partner, and variation in partner numbers within a group. The note printed at build time lists the groups and the rates used.
+**Networks of partnerships.** A partnership lasts, so its number of partners is not a number of contacts per unit time, and homogeneous mixing at that rate ignores how long partnerships last (with `ss.PartnerNet`, SIS prevalence 0.71 under an ODE against 0.17 as agents when partnerships last 500 days). Until an approximation is implemented and tested against agents (a partnership formation rate `n/D` per person, with the probability of transmission over a whole partnership, `1 − exp(−β·D)`), these networks raise `CapabilityError` under a compartmental solver and run as agents under `auto`.
 
 Things that need to know who a person's contacts are (contact tracing, partner notification, the transmission tree) only work on routes that keep contacts, and so only in an agent-based run.
 
@@ -193,6 +198,7 @@ Things that need to know who a person's contacts are (contact tracing, partner n
 sir = ss.Disease(
     infection = ss.transmission('S -> I', beta=0.05),
     recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    init_prev = 0.01,
 )
 
 ss.Sim(sir, unit='day').run()                                                   # ODE; beta is a rate per day
@@ -205,13 +211,13 @@ The disease object is the same in all four. The second and fourth MUST agree in 
 
 ### Describing a network
 
-A network is usually described by how it is generated, since that is what modelers know: "0.7 partners on average, partnerships last 50 days". An edge list is accepted (`ss.StaticNet(edges=...)`) but never required.
+A network is usually described by how it is generated, since that is what modelers know: "0.7 partners on average, partnerships last 50 days". A fixed set of contacts is accepted as a NetworkX graph, or a function that makes one (`ss.StaticNet(graph=...)`), but never required.
 
 ```python
 ss.MFNet(
     n_contacts  = ss.poisson(0.7),     # how many partners at a time
-    duration    = ss.days(50),         # how long partnerships last
-    acts        = ss.freqperweek(2),   # how often, within a partnership
+    dur         = ss.days(50),         # how long partnerships last
+    acts        = ss.perweek(2),       # how often, within a partnership
     concurrency = 0.22,                # the share of people with more than one partner at once
 )
 ```
@@ -220,7 +226,7 @@ ss.MFNet(
 - **`n_contacts` takes a distribution.** "0.7 partners" on its own is ambiguous: one partner 70% of the time (`ss.bernoulli(0.7)`) and a Poisson number of partners with mean 0.7 (`ss.poisson(0.7)`) are different networks. A bare number is read as the mean of a Poisson, and `describe()` says so. `n_contacts` is the name Starsim's other networks already use, and it takes a distribution there too.
 - **`n_contacts`, `concurrency`, and `max_contacts` are targets**, as for `ss.PartnerNet` (below): partnerships form between men and women so that the number each person has at a time settles at the target distribution, and anyone left without a partner of the other sex waits for one. Without them, `ss.MFNet` forms partnerships from `participation` and `debut`, as in Starsim v3. `net.check()` reports whether a generated network recovers the targets.
 
-`net.check()` simulates the network alone and reports, for each target statistic it was given, the target, the realized mean, and the spread across replicates (`W402 TargetStatsNotRecovered` if a target is missed). Running it is recommended before trusting results from a fitted network.
+`net.check()` runs the sim again (three times by default) and reports, for each target it was given (the mean number of partners, the share with two or more, the maximum, the share matched, and how long partnerships last), the target, the mean over the second half of each run, and the spread across runs (`TargetStatsNotRecovered` if a target is missed by more than the spread). Running it is recommended before trusting results from a fitted network.
 
 A one-mode network of partnerships is described the same way, by `ss.PartnerNet`, with the targets EpiModel's introductory network is fitted to:
 
@@ -228,22 +234,23 @@ A one-mode network of partnerships is described the same way, by `ss.PartnerNet`
 ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)   # 175 partnerships among 500, 110 people with two or more, nobody with four or more
 ```
 
-The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target. Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`), and `net.check()` reports the share realized. Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
+The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target. Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`), and `net.check()` reports the share realized. `n_contacts` can be given for each level of a property of people (`n_contacts=ss.by(risk=[0.4, 1.6])`, EpiModel's nodefactor), and `acts=` (a number, a distribution, or a rate such as `ss.perweek(2)`) makes `beta` per act, so a partnership transmits with probability `1 − (1 − beta)^acts` in a step (EpiModel's act rate). Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
 
 ## Frequency and density dependence
 
-This is an option on the mixing, not on the transition, and `describe()` prints which is in force:
-
-| `dependence=` | `D[j]` | Meaning |
-|---|---|---|
-| `'frequency'` (default) | `N[j]` | A person's number of contacts is fixed; the fraction of them that are infectious matters |
-| `'density'` | `n_ref` | Contacts scale with population size; `n_ref` is a reference size, by default the initial population (printed) |
+Transmission through the routes is frequency-dependent: a person's number of contacts is fixed, and the fraction of them that are infectious matters (`D[j] = N[j]` above). This is the usual assumption for directly transmitted human infections. There is no option for it on the mixing. A density-dependent rate, where contacts grow with the size of the population, is written with the count itself, which is used literally ([above](#counts-used-literally)):
 
 ```python
-ss.Sim(sir, networks=ss.MixingPool(dependence='density'))
+S, I, R = ss.states(3)
+sir_density = ss.Disease(
+    infection = S >> I @ ss.perday(3e-5) * I.n,    # grows with the number infected, not their share
+    recovery  = I >> R @ ss.days(10),
+    init      = dict(I=10),
+)
+ss.Sim(sir_density, total_pop=10_000, unit='day').run()
 ```
 
-Frequency dependence is the default because it is the usual assumption for directly transmitted human infections. Defining density dependence against a reference size makes the two conventions give the same answer when the population equals `n_ref`, so `beta` keeps the same meaning under both. The option applies to mixing pools; a network's contacts are already explicit.
+The importers write a rate such as `beta * S * I` with no division by the total this way (`beta * I.n`). Since a rate per person that grows with a count of people is often meant as a share (`I.frac`), the build notes it as density-dependent, and says how to write a share.
 
 ## Layers
 
@@ -270,37 +277,42 @@ Age is a property of the people and not of one disease, so it is the sim that is
 Closing schools is a modifier on the school layer's contacts ([07-effects.md](07-effects.md)):
 
 ```python
-closure = ss.modify(school.pars.n_contacts, multiply=0.2, start='2020-03-15', stop='2020-06-01')
-sim = ss.Sim(sir, networks=[home, school, work, community], stratify=dict(age=[0, 5, 18, 65]), interventions=closure)
+closure = ss.modify('school.pars.n_contacts', multiply=0.2, start='2020-03-15', stop='2020-06-01')
+sim = ss.Sim(sir, networks=[home, school, work, community], stratify=dict(age=[0, 5, 18, 65]), interventions=closure, start='2020-01-01', stop='2020-12-31')
 ```
+
+The target is the parameter's path as a string, since `school.pars.n_contacts` itself is a plain value (the matrix). It works under every solver: in a compartmental run the contacts are scaled while the modifier is on, and as agents each contact happens with that probability in a step.
 
 ## Mobility
 
-Space is a dimension ([05-dimensions.md](05-dimensions.md#space)), and mobility is the optional movement between its levels. Without a mobility model, people mix within their own patch and patches do not affect each other.
+Space is a dimension ([05-dimensions.md](05-dimensions.md#space)), and mobility is the optional movement between its levels. Without a mobility model, people mix within their own patch and patches do not affect each other. The routes act within each patch: a contact matrix by age under every solver, and, as agents, a mixing pool of everyone and a random network too, as in a compartmental run (people contact others where they live, or where they commute to).
 
 ```python
 kenya     = ss.geo('Kenya', level=1)
-sir.stratify(patch=kenya, mobility=ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0))
+sir.stratify(patch=kenya, mobility=ss.gravity(away=0.1, a=1.0, b=1.0, c=2.0))
 ```
 
 Movement models are given by name and parameters; a matrix or a data file is also accepted:
 
+<!-- fragment -->
 ```python
-ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0)    # distances and populations come from the geography
+ss.gravity(away=0.1, a=1.0, b=1.0, c=2.0)    # distances and populations come from the geography
 ss.Mobility(matrix=M)                     # a matrix you already have
 ss.Mobility(data='movements.csv')         # a movement register: columns date, from, to, n, [states], [to_states]
 ```
 
-Other named models (radiation, Stouffer, competing destinations, the set LASER ships) are deferred until a vignette needs one ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); a matrix covers them meanwhile. The generators are implemented in the library itself. It does not call LASER's migration module or any other framework's package for them: an outside dependency is harder to keep working than a few lines of code we control. `ss.gravity()` on a dimension with no geography raises `E402 NoGeography`: there are no distances to compute it from, and no reasonable guess. In a movement register, `states` defaults to all disease states, sampled in proportion to how many are in each at the origin; naming states covers selective movement (only healthy animals are sold). `to_states` moves the people chosen from each named state to the matching state of its list, in the same place or another, which is SimInf's shift matrix: `states='S1, I1'`, `to_states='S2, I2'` ages calves into young stock, keeping each one's infection status.
+Other named models (radiation, Stouffer, competing destinations, the set LASER ships) are deferred until a vignette needs one ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)); a matrix covers them meanwhile. The generators are implemented in the library itself. It does not call LASER's migration module or any other framework's package for them: an outside dependency is harder to keep working than a few lines of code we control. `ss.gravity()` on a dimension with no geography raises `NoGeography`: there are no distances to compute it from, and no reasonable guess. In a movement register, `states` defaults to all disease states, sampled in proportion to how many are in each at the origin; naming states covers selective movement (only healthy animals are sold). `to_states` moves the people chosen from each named state to the matching state of its list, in the same place or another, which is SimInf's shift matrix: `states='S1, I1'`, `to_states='S2, I2'` ages calves into young stock, keeping each one's infection status. A row with no `from` adds people to `to` (births, purchases), and one with no `to` removes them (deaths, sales). The events dated at a time point are in the numbers at that time point, in the order of the table.
 
 ### Commuting and migration
 
 ```python
-gravity = ss.gravity(k=0.5, a=1.0, b=1.0, c=2.0)
+gravity = ss.gravity(a=1.0, b=1.0, c=2.0)
 
-ss.Mobility(gravity, kind='commute', away=0.4)   # people keep their home patch; 40% of their time is spent away
-ss.Mobility(gravity, kind='migrate')             # people relocate
+ss.Mobility(gravity, kind='commute', away=0.4)                  # people keep their home patch; 40% of their time is spent away
+ss.Mobility(ss.gravity(k=2e-5, c=2.0), kind='migrate')          # people relocate, at rates scaled by a calibrated k
 ```
+
+The gravity model gives the shape of the movement, and `away=` its amount: the share of their time people spend away, split between the other patches by gravity (10% if neither `away=` nor `k=` is given, which is printed). `k` has units of distance^c / pop^(a+b−1), so no default fits both three towns and a country; it is for a calibrated amount, and for the rates of migration. Without `away=`, nobody can spend more than all their time away, and a warning names how many places hit that cap.
 
 Under `migrate`, a person's patch changes: it is an `ss.transfer` on the spatial dimension at the rates the mobility model gives.
 
@@ -312,23 +324,31 @@ Under `commute`, a person's home patch does not change. They spend a share `away
 
 This is the standard time-share form of a commuting model. It needs no change to the timestep and works under every solver. It does not represent the time of day; a model that needs daytime and nighttime mixing uses a sub-daily `dt` with separate layers.
 
-A third form moves neither people nor time: `kind='force'` moves the force of infection itself, as LASER does. With `M[i,k]` the movement from `i` to `k` (scaled by `away=`), each patch keeps `1 − Σ_k M[i,k]` of its own force of infection and receives `M[k,i]` of each other patch's, unweighted by the patches' sizes. It is less mechanistic than commuting, but it is what LASER models are written in, and the same gravity matrix gives different epidemics under the two forms (in LASER's hub-and-spoke example, 88% infected against 80%).
+Under `visit`, people also keep their home patch and spend a share `away` of their time elsewhere, but visitors are only exposed: they are exposed to the residents of the patches they go to, and do not expose anyone there (as for short trips, where the visitor's own infectiousness away from home is small).
 
-Commuting couples patches without mixing their populations; migration does both. If `kind=` is not given, a gravity model or matrix is treated as `commute` and a movement register as `migrate`, and the choice is printed.
+A third form moves neither people nor time: `kind='force'` moves the force of infection itself, as LASER does. With `M[i,k]` the movement from `i` to `k` (scaled by `away=`), each patch keeps `1 − Σ_k M[i,k]` of its own force of infection and receives `M[k,i]` of each other patch's, unweighted by the patches' sizes. It is less mechanistic than commuting, and is kept as the form LASER models are written in, for importing and comparing them (a model written for Starsim uses `commute`), and the same gravity matrix gives different epidemics under the two forms (in LASER's hub-and-spoke example, 88% infected against 80%).
+
+`kind='visit'` is commuting in which people are exposed to the residents of the places they go to but expose no one there.
+
+`away=` gives every patch the same share by default. `scale='mean'` keeps the differences between patches that the movement model gives and makes `away=` their mean, and `cap=` is the most any patch's share can be, which is how LASER scales its gravity coupling: `ss.Mobility(ss.gravity(a=1, b=0.25, c=1.56), kind='force', away=0.0446, scale='mean', cap=0.2)`.
+
+Commuting couples patches without mixing their populations; migration does both. If `kind=` is not given, a gravity model or matrix is treated as `commute` and a movement register as `migrate`, and `describe()` marks the choice as a guess.
 
 Travelers in transit (in neither their home patch nor their destination) are out of scope for v1. A model that needs them can add a transit patch by hand.
 
 ## Geography
 
+<!-- fragment -->
 ```python
 ss.geo('Kenya', level=1)                       # its 47 counties, bundled
 ss.geo('Kenya', level=1, places=['Nairobi', 'Kiambu'])
 ss.geo(['Kenya', 'Uganda'], level=1)           # several countries, named 'Kenya:Busia' and so on
 ss.geo('USA', level=2, year=2015)              # US counties, populations for 2015: fetched
 ss.geo('districts.csv')                        # the user's own: name, pop, and lat and lon (or x and y)
+ss.geo(names=['a', 'b'], pop=[1e4, 2e4], x=[0, 1], y=[0, 0])    # or given directly (or with distances=)
 ```
 
-A geography supplies names, populations, centroids, distances, and which places share a border (`geo.adjacency`). Levels are numbers, as the boundary sources number them (0 the country, 1 its provinces, states, or counties, 2 the next), since what a level is called differs from country to country. Sources are pluggable, and the source used is recorded in `describe()` and in the `pars` part of `sim.hash()`. Geographic data follows the same policy as the rest of the named data ([04-parameters.md](04-parameters.md#named-data)): what is small and common is bundled, the rest is fetched on demand and cached, each data set is adapted once with its provenance recorded, and nothing depends on another framework's data package. The bundled set MUST include non-US geographies from the first release.
+A geography supplies names, populations, centroids, distances, and which places share a border (`geo.adjacency`). Levels are numbers, as the boundary sources number them (0 the country, 1 its provinces, states, or counties, 2 the next), since what a level is called differs from country to country. The source used is recorded in `describe()`, in the model spec, and in `sim.hash()`. Geographic data follows the same policy as the rest of the named data ([04-parameters.md](04-parameters.md#named-data)): what is small and common is bundled, the rest is fetched on demand and cached, each data set is adapted once with its provenance recorded, and nothing depends on another framework's data package. Every country's first two levels are bundled with `starsim_data` (`pip install starsim[data]`); finer levels and other years are fetched (which needs `pip install starsim_data[spatial]`).
 
 ## Rejected
 
@@ -339,7 +359,8 @@ A geography supplies names, populations, centroids, distances, and which places 
 - **A separate `ss.Homogeneous` class, or a new keyword for mixing.** Homogeneous mixing is the default, and `networks=` takes networks and mixing pools today.
 - **Depending on other frameworks' packages for mobility models or data.** The generators and the data are ours.
 - **Refusing to run a network model as an ODE.** The standard approximation is used and reported.
-- **Frequency versus density as different transition kinds.** It is a property of the mixing.
+- **Frequency versus density as different transition kinds.** The rate says which: a bare state for exposure through the routes, a count for density dependence.
+- **A `dependence=` option on the mixing, with a reference population `n_ref`.** Writing the count (`beta * I.n`) says the same thing in the rate, where it can be read, and is what the importers produce.
 - **Requiring an edge list.** Accept one; never require one.
 - **Sub-step scheduling for commuting.** The time-share form gives the same coupling without it.
 - **Opaque select and shift matrices for movement.** A register with named columns says the same thing.
