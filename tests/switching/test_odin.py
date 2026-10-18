@@ -120,7 +120,7 @@ def test_odin_delay():
     return sim
 
 
-@pytest.mark.xfail(reason='New: a whole-number seed below one agent rounds to zero with no note, so I=ss.by(age=[10, 0, 0, 0]) for 1M people gives no infections with 20,000 agents', strict=False)
+@pytest.mark.xfail(reason='SW8: a seed below one agent rounds to zero (now with a note), so I=ss.by(age=[10, 0, 0, 0]) for 1M people gives no infections with 20,000 agents; whether to round stochastically or raise is open', strict=False)
 def test_odin_agents():
     sc.heading('The same model as agents')
     agents = make_seir().new(solver='abm', n_agents=20_000, dt=1, stop=120).run()

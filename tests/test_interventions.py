@@ -42,6 +42,8 @@ def make_dx():
 @sc.timer()
 def test_products(do_plot=False):
     sc.heading('Testing products')
+    with pytest.raises(TypeError, match='ss.Vaccine'): # The Starsim 3 class, given the arguments of the v4 product (was a TypeError from Timeline)
+        ss.Vx(efficacy=0.9)
 
     pars = sc.objdict(
         n_agents = 5e3,

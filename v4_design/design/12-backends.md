@@ -313,6 +313,21 @@ The agent-based solver is Starsim's, and its architecture is kept: typed per-age
 
 The aim is that **simple models agree across solvers within a stated tolerance**, and this is tested rather than assumed: each simple model of the corpus is run under `ode`, `binomial`, `gillespie`, and `abm` at a fine step, and the stochastic solvers' means must be within a tolerance of the ODE (5%, or a wider one stated with its reason) (`tests/test_contracts.py`; [18-conformance.md](18-conformance.md)). Agents and stepped solvers differ from the ODE by an amount of order `dt`, which is why the step is fine. Entries marked `approx` are not tested for agreement.
 
+How large the difference of order `dt` is, measured on the current solvers against the exact solver (`gillespie` at `dt=0.1`), over 1,000 runs (200 as agents) of models of 1,000 people with daily rates (the stats review's `solvers_vs_gillespie.py`, re-run on 2026-10-18):
+
+| Model | Solver | `dt` = 1 day | `dt` = 7 days |
+|---|---|---|---|
+| SIR, R0 3, mean infectious 10 days | `binomial` | peak +4%, 1.7 days late; final size +1% | peak +32%, 10 days late; final size +5% |
+| | `abm` | peak +2%, 3.4 days late; final size unchanged | peak +12%, 24 days late; final size −0.4% |
+| SEIR, Erlang latent (3 stages, 4 days) and infectious (2 stages, 6 days) periods | `binomial` | peak +3%, 3 days late; final size +1.5% | peak +26%, 21 days late; final size +5% |
+| | `abm` | peak −7%, 3 days late; final size unchanged | peak +22%, 15 days late; final size +4% |
+| SIS that can die out, 200 people, R0 1.5 | `binomial` | extinction within a year 11% (exact: 15%) | extinction 1% |
+| | `abm` | extinction 18% | extinction 23% |
+| SIR by age, contact matrix, peak on day 7 | `binomial` | peak +1%, 2 days late | peak +3%, 14 days late |
+| | `abm` | peak +4%, 2.5 days late | peak +5%, 15 days late |
+
+At `dt=0.1` every difference is within about 1% (peaks a few tenths of a day late). On a seasonal SIRS of 100,000 people (mean `beta` 0.3, amplitude 0.5, 8 days infectious, 60 days immune), `binomial` at a daily step has 19% more infectious on average at monthly points than the daily ODE, up to 53% at one point, and 8.5% more infected-days (between 7.4% and 8.7% over five seeds); with `substeps=4` or `dt=0.25` that falls to 5% on average (15% at most), and `gillespie` is within 1.5%. The `ss.LargeStep` note gives the cause for each transition (`rate × dt`); `sim.check_dt()` measures the effect on the model at hand.
+
 For complex models, exact equivalence between solvers is neither provable nor the aim. An agent-based HIV model and its ODE approximation are expected to differ; what the library guarantees is that it reports what was approximated.
 
 ## Deferred: mixing solvers within one model

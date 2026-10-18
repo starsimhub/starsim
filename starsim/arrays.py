@@ -936,6 +936,27 @@ class ModifiableArr(FloatArr):
         return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
 
 
+class GroupAges(FloatArr):
+    """
+    `people.age` in a compartmental run: one row per group, at the middle of its age group
+
+    Comparing it with an age inside a group (`sim.people.age > 50` with groups [0, 15, 65])
+    raises, since the answer would be the same for everyone in the group; an edge works.
+    """
+    edges = None # The edges of the age groups; set by the sim
+
+    def _boolmath(self, op, other=None, inplace=False):
+        if op not in ['>', '<', '>=', '<='] or not isinstance(other, numbers.Number):
+            return super()._boolmath(op, other, inplace)
+        inside = other > self.edges[0] and other not in self.edges # Not an edge, and above the lowest one
+        if inside:
+            edges = sorted(set(self.edges.tolist() + [other]))
+            edges = [int(e) if e == int(e) else e for e in edges]
+            raise ss.CapabilityError(f'a function compares people.age with {other:n}, but the model\'s age groups are {[int(e) if e == int(e) else e for e in self.edges]} and {other:n} falls inside a group (each group has the age of its middle).\n'
+                                     f'     Fix: add {other:n} as a bin edge, stratify(age={edges}), or run with solver="abm".')
+        return super()._boolmath(op, other, inplace)
+
+
 class IntArr(Arr):
     """ Subclass of `ss.Arr` with defaults for ints.
 

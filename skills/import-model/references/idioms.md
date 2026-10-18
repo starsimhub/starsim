@@ -15,7 +15,7 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | A fixed duration | `Q >> R @ ss.constant(ss.days(30))` |
 | An Erlang or gamma duration, or stages | `ss.progression('E -> I', dur=ss.erlang(k=3, mean=ss.days(10)))`, or `stages=3` on the transition |
 | A lognormal or other distribution | `dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3))` (agents sample it; compartments use Erlang stages, with a note) |
-| "As soon as", probability 1 at the next step | A very high rate (`ss.perday(1e9)`), or a branch with `p=` on the transition into the state if it happens on entry |
+| "As soon as", probability 1 at the next step | If it happens on entry, a branch with `p=` and no rate on the transition into the state (nobody waits in it, under every solver). If it waits on a condition (`where=`), a rate of a few per step, such as `rate=ss.perday(5)` for a daily step (99% leave within the step); not a very high rate such as `ss.perday(1e9)`, since a compartmental solver takes as many substeps as the fastest rate needs, and hangs |
 | A delay that is exact (odin's `delay()`, a lag) | `ss.outcome(source, delay=ss.days(14))` for a reported quantity; for people, a fixed dwell (`ss.constant`), which every solver takes exactly, as a conveyor of whole steps |
 | Rates that change in time | `ss.timeseries({'2020-01-01': 1, '2020-04-01': 0.5})` as the value of a parameter, `ss.seasonal(mean=, amplitude=, peak=)`, or `ss.change(sir.pars.beta, at=[...], by=[...])` |
 | A calendar period (on/off) | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate (`rate * quarantine_period`); or `ss.modify(..., start=, stop=)` |

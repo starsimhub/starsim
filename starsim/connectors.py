@@ -59,7 +59,7 @@ def parse_target(target):
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
     what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
     raise ss.UnmodifiableTarget(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
-                                f'     (A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
+                                f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5). A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
 
 def to_time(sim, val):

@@ -61,7 +61,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 - [x] `ss.Sim(model, ...)`, with modules named from their variables
 - [x] `sim.new()`, `sim.describe()`, `sim.solvers()`, `sim.hash()`
 - [x] `sim.run(n_runs=)` and `ss.parallel(name=sim, n_runs=)`
-- [x] `ss.load()` of a model spec (`ss.from_spec()`), giving the same spec and hash: declared diseases (states, parameters, transitions, outcomes and results, values by group, time series, seasonal values, and functions of NumPy's in rates) and their stratifications, and the run settings. Not yet: networks, modifiers, interventions, Python functions, priors and likelihoods, movement between places, and joint splits, each of which raises `NotImplementedError` saying so
+- [x] `ss.load()` of a model spec (`ss.from_spec()`) (later removed), giving the same spec and hash: declared diseases (states, parameters, transitions, outcomes and results, values by group, time series, seasonal values, and functions of NumPy's in rates) and their stratifications, and the run settings. Not yet: networks, modifiers, interventions, Python functions, priors and likelihoods, movement between places, and joint splits, each of which raises `NotImplementedError` saying so
 - [x] `sim.R0()` and `disease.R0()`, from the next-generation matrix at the disease-free state (with the sim's mixing, stratification, and places; a count that infection depends on, such as a water reservoir, counts as infected)
 - [x] `disease.diagram()`: a Matplotlib figure, or the text of a Mermaid flowchart
 
@@ -259,7 +259,7 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - Sims with no declared states keep Starsim 3's time defaults.
 - The unit of a model's bare numbers comes from the model (`unit=`, else its typed values, else dates, else a typed `dt` or `stop`), as the review's Decision lang 1 recommends, with two departures from that recommendation: a year-like number for `start` or `stop` is still a calendar year (`stop=2020`), since Starsim 3 sims are written that way; and the typed defaults of modules written as code do not set the unit, since they convert themselves and would otherwise disagree with most declared models.
-- Rates are written as strings in the model spec, and the spec is `sim.to_spec()`; `sim.to_json()` is unchanged from Starsim 3. `ss.load()` reads the strings back with a parser that accepts only arithmetic, comparisons, the functions allowed in rates, typed quantities (`perday(0.5)`), and the names the module declares, so loading a spec runs no code from it.
+- Rates are written as strings in the model spec, and the spec is `sim.to_spec()`; `sim.to_json()` is unchanged from Starsim 3. The spec is for reading by people and other tools; it is not loaded back (`ss.load()` of a spec and `ss.from_spec()` were removed).
 - The default ODE integrator is fixed-step RK4 with automatic substeps, in the Numba kernels, with or without gradients being asked for; JAX is used only for `integrator='jax'`, `sim.gradient()`, and gradient-based fitting. `integrator='jax'` takes the same RK4 steps (not an adaptive JAX integrator), so its results are the kernels'.
 - What JAX differentiates is the run, from the numbers in the program and the compartments at the start to the compartments and flows at every step. The steps either side are Python (the parameters to those numbers, and the run to the results, outcomes, and goodness of fit), and are differentiated by central differences along the direction of each parameter. So a gradient is exact to about 1e-10, not to the last bit, and costs two restarts and two runs' worth of results for each parameter.
 - A stratified population has ages from 0 to 100.
@@ -288,17 +288,14 @@ The nine build steps from [examples/README.md](../examples/README.md).
 
 - The kernels are compiled the first time they are used after Starsim is installed or changed, which takes one or two minutes (a line says so); after that they are loaded from a cache.
 - With `sim.run(n_runs=)` in one call to the kernel, only the states and transitions are kept by group (not outcomes or results given as expressions), and reported outcomes are drawn for all the runs at once, so differ (in the draw, not the distribution) from those of a single run with the same seed.
-- A typed quantity that is changed in place during a run (the number inside an `ss.perday`, say) is not seen, since a converted value is kept for as long as the parameter holds the same object; assigning a new value is.
 - A typed rate cannot be used as a plain number in an expression (`1 - ss.peryear(0.008)`); the error says to convert it first (`rate.to_prob(dt)`).
 - A bare number given for a parameter of a module written as code (`ss.MFNet(duration=5)`, `ss.SIS(dur_inf=10)`) keeps the unit of its default, as in Starsim 3, while one in a declared model is in the sim's unit. It warns when the two units differ (`duration` read in years in a sim in days).
 - As agents, a dwell time is sampled when someone enters a state, so an `adjust` on a duration does not follow a person who later moves to another level (through an `ss.transfer`, or by aging). A rate does.
 - A strain's initial share is the split of the dimension (equal by default), which applies to everyone who starts in an infected state.
-- A function of the sim that compares ages with a number that is not a bin edge runs in a compartmental model without complaint (each group has the age of its midpoint); the lazy form (`ppl.age > 70`) is checked.
 - As agents, someone tested on the step they were infected may already have recovered (about `dt/2` of a dwell time), so event-triggered tests find slightly fewer cases than in a compartmental run.
 - An ODE and an agent-based run of the same model differ by an amount of order `dt` (about 6% in the prevalence of an SIS model with a daily step).
 - As agents, people added by a movement register in a step are made at its end, so the other events of the same step cannot choose them; and people who moved into a place in a step are chosen after those who were already there.
 - A movement register cannot add people to a state that splits on entry into branches.
-- A condition on a property of people (`ppl.age < 5`) needs a `ppl` object (`ss.People(1)`) even in a compartmental model, which has none.
 - Arithmetic on stratified results keeps the values by group only for sums, differences, and scaling by a number; for anything else (a ratio), `select()` says the result is not stratified. (A ratio declared on the disease, `prev=I/N`, is stratified: it keeps its numerator and denominator.)
 - With `immunity=` between strains, a compartmental run keeps only each person's last strain (noted), so with partial protection people can go from A to B and back to A; as agents, every strain is kept, but not yet over networks.
 - Code that changes a property of people that a dimension is made from (`people.patch`) has to call `sim.groups_changed(uids)`, or the agents' groups are not worked out again (dimensions binned from a property that changes on its own, such as age, are checked every step).

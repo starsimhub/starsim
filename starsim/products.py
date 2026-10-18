@@ -33,6 +33,8 @@ class Dx(Product):
     Generic class for diagnostics, written as code: test outcomes from a table of probabilities by disease state (for declared models, see `ss.Test`)
     """
     def __init__(self, df=None, hierarchy=None, *args, **kwargs):
+        if df is None:
+            raise TypeError('ss.Dx is the Starsim 3 diagnostic written as code, and needs df=, a table of test outcomes by disease state; for a declared model, use ss.Test(sensitivity=..., specificity=...)')
         super().__init__(*args, **kwargs)
         self.df = df
         self.health_states = df.state.unique()
@@ -98,6 +100,8 @@ class Tx(Product):
         df (DataFrame): treatment specification with columns 'disease', 'state', 'post_state', 'efficacy'
     """
     def __init__(self, df=None, *args, **kwargs):
+        if df is None:
+            raise TypeError('ss.Tx is the Starsim 3 treatment written as code, and needs df=, a table of treatment outcomes by disease state; for a declared model, use ss.Treatment(cure=...)')
         super().__init__(*args, **kwargs)
         self.df = df
         self.diseases = df.disease.unique()
@@ -155,6 +159,8 @@ class Vx(Product):
     Vaccine product, written as code: subclasses implement administer() to apply immunity (for declared models, see `ss.Vaccine`)
     """
     def __init__(self, diseases=None, *args, **kwargs):
+        if 'efficacy' in kwargs:
+            raise TypeError('ss.Vx is the Starsim 3 base class for a vaccine written as code (a subclass implements administer()), and takes no efficacy=; for a declared model, use ss.Vaccine(efficacy=...)')
         super().__init__(*args, **kwargs)
         self.diseases = sc.tolist(diseases)
         return

@@ -583,6 +583,10 @@ class Result(ss.BaseArr):
             axes = tuple(range(t, denom.ndim)) # Over time and groups
             num, den = self.strata.sum(axis=axes), denom.sum(axis=axes)
             return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
+        parts = getattr(self, 'parts', None) # The results a ratio is made from, if it is not by group, e.g. a delivery's coverage, which is 0 between its rounds
+        if parts is not None and self.values.ndim == 1:
+            num, den = [part.values.sum() for part in parts]
+            return num/den if den else 0.0
         return self.values.mean(axis=t)
 
     @property

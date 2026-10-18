@@ -138,6 +138,8 @@ class People:
         if attr in missing:
             raise ss.CapabilityError(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
                                      f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
+        if '_no_groups' in self.__dict__ and not attr.startswith('_'): # A compartmental run, whose people lack what networks and modules written as code add to agents
+            raise AttributeError(f'People object has no attribute "{attr}".\n     In a compartmental run, people are one row per group, without the attributes that networks and modules written as code give agents; if it is one of those, run with solver="abm"')
         raise AttributeError(f'People object has no attribute "{attr}"')
 
     def __getitem__(self, key):

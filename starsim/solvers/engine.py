@@ -24,6 +24,13 @@ def convert(val, unit):
     return val
 
 
+def changed(old, new):
+    """ Whether the number inside a typed quantity differs from the one it was converted from """
+    if isinstance(new, np.ndarray):
+        return not np.array_equal(old, new)
+    return old != new
+
+
 def add_rows(out, rows, tis, vals):
     """ Add values at consecutive time points `tis` (along the first axis of `vals`) into the rows of `out` they belong to: see `ss.Sim.group_rows()` """
     r = rows[tis]
@@ -410,10 +417,11 @@ class Engine:
         elif isinstance(raw, ss.by):
             out = self.by_group(raw)
         else:
-            fixed = self.fixed.get(key) # A plain value is converted once, and reused for as long as the parameter holds the same object
-            if fixed is None or fixed[0] is not raw:
-                fixed = self.fixed[key] = (raw, self.convert(raw))
-            out = fixed[1]
+            fixed = self.fixed.get(key) # A plain value is converted once, and reused for as long as the parameter holds the same object with the same number in it
+            number = raw.value if isinstance(raw, ss.TimePar) else None # A typed quantity's number can be changed in place
+            if fixed is None or fixed[0] is not raw or changed(fixed[1], number):
+                fixed = self.fixed[key] = (raw, np.copy(number) if isinstance(number, np.ndarray) else number, self.convert(raw))
+            out = fixed[2]
         out = self.modified(p, out)
         self.cache[key] = out
         return out

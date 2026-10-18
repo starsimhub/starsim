@@ -97,7 +97,7 @@ The phases are ordered by harm: silent wrong answers first, then what makes unch
 - [x] **A2, R5.** A fit restarted from the best two or three scan points, with disagreement reported as `converged=False` (today it stops at 58.86 against 54.25 and says it converged).
 - [x] **A4.** NUTS chains start from dispersed points (or an optimum, as the spec says), not all from `x0`.
 
-Done by PA. For Cliff: F1 applies D-B among the contact-mediated sources (taken literally it started everyone in a vaccinated or maternal-immunity state), and `ss.Disease(first=...)` names it explicitly; ST9 was done by the fallback (the error points to `define_pars()`), since passing plain values to coded modules changes what `mod.pars` holds; HP4 weights results, but rates (`I.n`) still count agents.
+Done by PA. For Cliff: F1 applies D-B among the contact-mediated sources (taken literally it started everyone in a vaccinated or maternal-immunity state), and `ss.Disease(first=...)` names it explicitly; ST9 was done by the fallback (the error points to `define_pars()`), since passing plain values to coded modules changes what `mod.pars` holds; HP4 weights results, but rates (`I.n`) still count agents. [CK, Oct 18: F1 as applied is right (not everyone in the vaccinated state); the ST9 fallback is fine; HP4 rates: agreed to weight the rates (`I.n`) when the weights differ, and count agents when they are uniform (to do); `ss.CodedDisease`: removed, `ss.Disease` runs as code when it declares nothing, and `ssl.CodedSIR`/`SIS`/`SEIR` become `ssl.AgentSIR`/`AgentSIS`/`AgentSEIR` (PJ).]
 
 ### Phase B: a clear migration that simplifies downstream code (S to M; with A)
 
@@ -154,9 +154,9 @@ Done by PB: after the script and the skill, HPVsim 369 of 373, STIsim 188 of 198
 
 ### Phase I: records and docs (S; any time)
 
-- [ ] Records that contradict the code: decisions item 13 (`sim.people` in a compartmental run is a one-row `People`, not `None`); departure 3 (`ss.load()` of a spec was removed); known issue 13 (fixed); the xfail reasons of `test_odin_agents` and `test_ghana_measles_fit`; the plan's `sde` and X5 rows; CHANGELOG lines on `ss.Vx`/`ss.Dx`/`ss.Tx` and on mixed units, which contradict each other; the import-model idioms page's `ss.perday(1e9)` for "as soon as", which hangs an ODE (ST26 wants a move instead).
-- [ ] The register groups from [reg.md](status_oct18/reg.md) that are small: messages and printing (X18, L38, L26), delivery reporting (D27, D29, D30, D31), error trigger tests and golden `describe()` output (P6, DF27 to DF29), and the standalone bugs X15, KI3, KI8, DF11.
-- [ ] X4: state the coarse-step bias sizes in the docs, after re-running the solver comparison on the current solvers.
+- [x] Records that contradict the code: decisions item 13 (`sim.people` in a compartmental run is a one-row `People`, not `None`); departure 3 (`ss.load()` of a spec was removed); known issue 13 (fixed); the xfail reasons of `test_odin_agents` and `test_ghana_measles_fit`; the plan's `sde` and X5 rows; CHANGELOG lines on `ss.Vx`/`ss.Dx`/`ss.Tx` and on mixed units, which contradict each other; the import-model idioms page's `ss.perday(1e9)` for "as soon as", which hangs an ODE (ST26 wants a move instead).
+- [x] The register groups from [reg.md](status_oct18/reg.md) that are small: messages and printing (X18, L38, L26), delivery reporting (D27, D29, D30, D31), error trigger tests and golden `describe()` output (P6, DF27 to DF29), and the standalone bugs X15, KI3, KI8, DF11. (Done by PI except: L26 `ss.death(p=)` still a plain `TypeError`; D31 waits on decisions 2 and 3; DF28 and DF29 wait for `describe()` and the kernels to settle.)
+- [x] X4: state the coarse-step bias sizes in the docs, after re-running the solver comparison on the current solvers. (Done: table in spec 12, paragraph in the user guide.)
 - [ ] The two planned reviews not yet done ([next-reviews.md](next-reviews.md)): the canon (textbook models against their known answers) and a naive user.
 
 ## Acceptance for this plan

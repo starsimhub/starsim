@@ -357,7 +357,8 @@ def test_screen():
         sis = make_sis()
         test = ss.Test(sensitivity=0.9, specificity=0.95)
         drug = ss.Treatment(cure=0.95)
-        screening = ss.screen(test, coverage=0.4, interval=7, start=30, on_positive=ss.treat(drug, coverage=0.8))
+        treatment = ss.treat(drug, coverage=0.8)
+        screening = ss.screen(test, coverage=0.4, interval=7, start=30, on_positive=treatment)
         return ss.Sim(sis, interventions=screening, **kwargs)
     sims = run_each(rounds)
     for solver,sim in sims.items():
@@ -368,7 +369,9 @@ def test_screen():
         expected = 0.4*(0.9*n_I + 0.05*(50_000 - n_I)) # True positives and false positives
         assert np.isclose(res.screening.delivered[ti], 20_000, rtol=0.03)
         assert np.isclose(res.screening.diagnosed[ti], expected, rtol=rtol)
-        assert np.isclose(res.screening_positive.delivered[ti], 0.8*res.screening.diagnosed[ti], rtol=0.05) # The follow-up is a module of its own
+        assert np.isclose(res.treatment.delivered[ti], 0.8*res.screening.diagnosed[ti], rtol=0.05) # The follow-up is a module of its own, named from its variable (it was screening_positive)
+        assert 'test' not in res and 'drug' not in res # Products have no results of their own
+        assert np.isclose(sim.summarize()['screening_coverage'], 0.4, rtol=0.03) # Over the rounds, not averaged with the steps between them (was 0.06)
     check_close(sims, lambda sim: sim.results.screening.diagnosed.sum())
 
     # Test half of new infections, and cure those found
@@ -397,7 +400,7 @@ def test_screen():
         res = sim.results
         assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.diagnosed)) == [43]
         assert np.isclose(res.slow_positive.delivered[43], res.slow.diagnosed[43])
-        assert np.isclose(res.slow.diagnosed[43] + res.slow_negative.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other
+        assert np.isclose(res.slow.diagnosed[43] + res.on_negative.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other (the follow-up is named from the variable that holds it)
     check_close(sims, lambda sim: sim.results.slow.diagnosed.sum()) # As agents, the prevalence of an SIS model is about 6% lower at a step of a day
 
     # Someone waiting for a result is not tested again, so a test repeated more often than its delay still returns results

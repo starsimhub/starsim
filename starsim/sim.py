@@ -142,7 +142,8 @@ class Sim(ss.Base):
     def _name_modules(frame, *args):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
         for arg in args:
-            for mod in sc.tolist(arg):
+            mods = list(sc.tolist(arg))
+            for mod in mods:
                 named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
@@ -155,6 +156,7 @@ class Sim(ss.Base):
                             obj._default_name = False
                 if isinstance(mod, ss.Delivery):
                     mod.name_product()
+                    mods += [f for f in mod.followups if not any(f is other for other in mods)] # A follow-up (on_positive=) is named from its variable too
         return
 
     @staticmethod
@@ -309,6 +311,8 @@ class Sim(ss.Base):
             for d,strat in enumerate(self.groups.strats):
                 if strat.kind == 'age':
                     self.people.age[self.people.auids] = self.groups.group_vals(d, strat.mids, outside=strat.mids @ strat.split)
+                    self.people.age.__class__ = ss.arrays.GroupAges # So that a function comparing ages with an age inside a group raises
+                    self.people.age.edges = strat.edges
                 elif strat.female is not None: # A sex dimension is people.female
                     self.people.female[self.people.auids] = self.groups.group_vals(d, np.arange(strat.n) == strat.female, outside=False)
         self.init_modules_post() # Initialize the module values
@@ -502,10 +506,15 @@ class Sim(ss.Base):
             errormsg = 'sim.check_dt() is only available for sims with declared states and transitions'
             raise ValueError(errormsg)
         coarse = self if self.results_ready else self.new(verbose=0).run()
-        fine = self.new(dt=coarse.t.dt/factor, verbose=0).run()
-        n = coarse.t.npts - 1
+        fine = self.new(dt=coarse.t.dt/factor, verbose=0)
+        for val in fine.pars.values(): # A module with its own timestep takes a smaller one too
+            for mod in sc.tolist(val):
+                if isinstance(mod, ss.Module) and mod.t.dt is not None:
+                    mod.t.dt = mod.t.dt/factor
+        fine.run()
         rows = []
         for mod in coarse.declared:
+            n = mod.t.npts - 1 # The module's own timeline, which may differ from the sim's
             for key,res in mod.results.items():
                 if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
                     continue
@@ -785,12 +794,13 @@ class Sim(ss.Base):
                 pars.stop = dur_class(pars.stop)
         return
 
-    def describe(self, output=False):
+    def describe(self, output=False, verbose=False):
         """
         Print the resolved model: every state, transition, and default, with each guess marked
 
         Args:
             output (bool): if True, return the text rather than printing it
+            verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
         """
         if not self.initialized:
             self.init()
@@ -881,12 +891,49 @@ class Sim(ss.Base):
         # The schedule: one line per timestep in use
         groups = sc.ddict(list)
         for mod in mods:
+            if isinstance(mod, ss.Product) and mod.name not in self.results: # Given by a delivery, so not run on its own
+                continue
             groups[mod.t.dt.to(self.unit_base).value if self.declared else mod.t.dt.years].append(mod.name)
         for i,(dt,names) in enumerate(sorted(groups.items())):
             every = f'every {unit}' if dt == 1 else f'every {dt:n} {unit}s'
             add('schedule' if i == 0 else '', f'{every}: {", ".join(names)}')
+        if verbose and self.declared:
+            lines += ['', *self.describe_steps()]
         text = '\n'.join(lines)
         return text if output else print(text)
+
+    def describe_steps(self):
+        """ The lines of `describe(verbose=True)`: each rate and dwell time per step of its module """
+        unit = self.unit_name
+        def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
+            if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):
+                return ss.solvers.engine.convert(raw, self.unit_base)
+            return None
+        lines = []
+        for mod in self.declared:
+            dt = mod.t.dt.to(self.unit_base).value
+            lines.append(f"Per step of {mod.name} ({dt:n} {unit}{'s' if dt != 1 else ''}):")
+            for name,tr in mod.graph.transitions.items():
+                if tr.contact: # The rate of each person depends on the others, so only its parameters can be converted
+                    for leaf in tr.rate.leaves:
+                        if isinstance(leaf, ss.transitions.par) and not leaf.literal and (val := plain(leaf.raw)) is not None:
+                            lines.append(f'  {name:12s} {leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
+                    continue
+                dw = mod.engine.dwells.get(name)
+                if dw is None:
+                    continue
+                val = dw.mean if dw.dist is not None else plain(dw.par.raw)
+                if val is None or not np.isfinite(val):
+                    lines.append(f'  {name:12s} varies (by group, by person, or in time)')
+                    continue
+                mean = 1/val if dw.is_rate else val
+                if dw.fixed:
+                    lines.append(f'  {name:12s} a fixed delay of {mean:n} {unit}s = {mean/dt:n} steps')
+                else:
+                    rate = dw.k/mean # The rate of leaving each stage
+                    stages = f' in each of {dw.k} stages' if dw.k > 1 else ''
+                    lines.append(f'  {name:12s} rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
+        return lines
 
     def solvers(self, output=False):
         """
@@ -1399,6 +1446,11 @@ class Sim(ss.Base):
         # With dynamic rescaling, store the scale factor for each timestep
         if self.pars.rescale:
             self.results += ss.Result('pop_scale', label='Population scale factor', scale=False, auto_plot=False, timevec=self.timevec, values=np.ones(self.t.npts))
+
+        # A product with no results of its own (most are only given by a delivery, which keeps the results) is left out
+        for prod in self.products():
+            if not [key for key,res in prod.results.items() if isinstance(res, ss.Result) and key != 'timevec']:
+                self.results.pop(prod.name, None)
 
         # The results named to be kept by group must exist
         if self.pars.results is not None:

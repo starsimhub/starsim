@@ -185,9 +185,28 @@ def test_names():
     with pytest.raises(ss.BadBranchSplit): # A branch out of the model is a transition of its own
         S, I, R = ss.states('S I R')
         ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=10)
+    with pytest.raises(ss.BadBranchSplit): # The same as a weighted destination (it was a raw TypeError)
+        I >> (0.9*R + 0.1*ss.null) @ 0.1
     with pytest.raises(ss.NonlinearExposure):
         S, I = ss.states(2)
         ss.Disease(infection = S >> I @ 0.1 * I * I)
+
+    # The named errors that no other test raises (with these, every error class is raised by some test)
+    seir = lambda source=None: ss.Disease(infection=ss.transmission('S -> E', beta=ss.par(0.3, bounds=[0.1, 0.5]), source=source), latency=ss.progression('E -> I', dur=5), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='seir')
+    with pytest.raises(ss.SourceNeeded): # Infectious in E or in I cannot be guessed
+        ss.Sim(seir(), **kw).init()
+    with pytest.raises(ss.UnknownDisease):
+        ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.5), at=[5], disease='flu'), **kw).init()
+    cyclic = make_sir()
+    late = ss.outcome(cyclic.infection, name='late')
+    early = ss.outcome(late, name='early')
+    late.source = early
+    with pytest.raises(ss.OutcomeCycle):
+        ss.Sim(make_sir(late=late, early=early), **kw).init()
+    with pytest.raises(ss.DataMisaligned): # Entirely after the run
+        ss.Sim(seir(source='I'), data=pd.DataFrame({'time': [500], 'n_I': [10]}), stop=100, **kw).calibrate()
+    with pytest.raises(ss.NothingToFit):
+        ss.Sim(make_sir(), data=pd.DataFrame({'time': [50], 'n_I': [10]}), stop=100, **kw).calibrate()
 
     # Typos in arrow strings, a forgotten beta, and operators that would silently drop something
     with pytest.raises(ss.UnknownState): # "l" for "I": nothing enters it
@@ -590,6 +609,7 @@ def test_describe():
     for string in ['10,000 people [guessed]', 'time is in timesteps', 'inferred from the arrows', 'source is the destination',
                    'rate = 0.05 × I.n / N', 'exponential(mean = 10 steps)', 'homogeneous', 'every step: sir']:
         assert string in text, f'Expected "{string}" in describe()'
+    assert '= 0.0952 per step' in sim.describe(output=True, verbose=True) # The probability of recovering in a step, 1 - exp(-1/10)
     S, I, R = ss.states(3)
     density = ss.Sim(ss.Disease(S >> I @ ss.perday(3e-5)*I.n, I >> R @ ss.days(10), init=dict(I=10)), **kw).init()
     assert 'mixing' not in density.describe(output=True) # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
@@ -1127,6 +1147,7 @@ def test_functions():
     assert by_age.solver == 'ode'
     res = by_age.results.d
     assert res.n_H.select(age='50+').max() > res.n_H.select(age='0-49').max() # Older people are more likely to be hospitalized
+    assert ss.Sim(make(), stop=100, unit='day', stratify=dict(age=[0, 15, 65]), **kw).init().solver == 'abm' # 50 is inside a group, so it runs as agents (it ran as an ODE, giving each group the age of its middle)
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make(), stop=100, unit='day', solver='ode', **kw).run()
     def typo(sim):
@@ -1143,6 +1164,11 @@ def test_functions():
     knocked = ss.Sim(sir(), interventions=knock, stop=60, unit='day', **kw).run()
     assert knocked.solver == 'ode' and 'knock' in knocked.solver_reason # Not 10,000 agents
     assert knocked.results.sir.infection.cum[-1] < 0.7*ss.Sim(sir(), stop=60, unit='day', **kw).run().results.sir.infection.cum[-1] # It still acts
+    def stop_in_place(sim):
+        if sim.ti == 20:
+            sim.diseases.sir.pars.beta.raw.value = 0.0 # The number inside the typed rate, changed in place
+    typed = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+    assert ss.Sim(typed, interventions=stop_in_place, stop=60, unit='day', **kw).run().results.sir.infection[22] == 0 # Seen (it was not)
     def seed(sim): # Per-step behavior that works on groups
         if sim.ti == 3:
             sim.diseases.sir.I.n += 5
@@ -1293,11 +1319,18 @@ def test_time_values():
     df = stepped.check_dt(output=True)
     assert any('rate × dt = 0.25' in note for note in stepped.new().init().notes)
     assert 0.05 < df.change[df.result == 'n_I'].iloc[0] < 0.2
+    slow = ss.Disease(infection=ss.transmission('S -> I', beta=0.6), recovery=ss.progression('I -> R', dur=4), init_prev=0.01, name='slow', dt=ss.days(2))
+    own = ss.Sim(slow, solver='binomial', unit='day', dt=1, stop=60, total_pop=1e6, **kw).check_dt(output=True)
+    assert own.change[own.result == 'n_I'].iloc[0] > 0.05 # A module with its own timestep takes a smaller one too
     smooth = ss.Sim(fast, solver='ode', unit='day', stop=60, total_pop=1e6, **kw)
     assert smooth.check_dt(output=True).change.max() < 1e-3 # An ODE does not depend on the timestep
     assert not smooth.new().init().notes
     quiet = ss.Sim(fast, solver='ode', stop=ss.days(60), verbose=0).init()
     assert any("unit='day'" in note for note in quiet.notes) # Kept, with nothing printed
+    with sc.capture() as txt:
+        ss.Sim(fast, networks=ss.RandomNet(), solver='ode', n_agents=1000, unit='day', stop=5, verbose=1).init()
+    assert txt.index('solver: ode') < txt.index('RandomNet approximated') # The solver line comes before the notes it leads to
+    assert 'n_agents=1000 is not used' in txt # A compartmental run has no agents
     return sim
 
 

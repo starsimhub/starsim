@@ -511,6 +511,10 @@ class dur(TimePar):
                 else:
                     errormsg = f'Cannot change the base of `ss.dur` from {self.base} to {base}. To reinterpret the value in the new base, construct it directly, e.g. ss.{base}({value}); to convert it, use e.g. ss.{self.base}({value}).to({base!r}).'
                     raise AttributeError(errormsg)
+        elif isinstance(value, (ss.transitions.Expr, ss.by)): # E.g. ss.days(ss.par(10)) or ss.days(ss.by(age=[...]))
+            cls = type(self).__name__
+            errormsg = f'ss.{cls}() takes a number or an array, not {type(value).__name__}; put the type inside instead, e.g. ss.par(ss.{cls}(10), bounds=[ss.{cls}(5), ss.{cls}(20)]) or ss.by(age=[ss.{cls}(5), ss.{cls}(10)])'
+            raise TypeError(errormsg)
         else:
             errormsg = f'Expecting scalar, array, or ss.dur as value, not {value}'
             raise TypeError(errormsg)

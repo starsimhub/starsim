@@ -788,6 +788,7 @@ class Delivery(Intervention):
         if isinstance(self.product, ss.Test):
             results += [ss.Result('diagnosed', dtype=float, scale=abm, label='Number diagnosed', summarize_by='sum')]
         self.define_results(*results)
+        self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the share of everyone eligible who received it
         ng = self.sim.groups.n_groups
         self.rows = self.group_ti = None # As for a disease: see ss.Sim.group_rows()
         if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()

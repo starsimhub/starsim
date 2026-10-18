@@ -145,6 +145,12 @@ class Null:
     def __matmul__(self, driver):
         return Transition(dst=self) @ driver
 
+    def __mul__(self, other):
+        errormsg = 'ss.null cannot be part of a weighted destination (e.g. 0.1*ss.null). Write the way out of the model as a transition of its own, each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).'
+        raise ss.BadBranchSplit(errormsg)
+
+    __rmul__ = __mul__
+
     def __repr__(self):
         return 'ss.null'
 

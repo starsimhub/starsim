@@ -107,7 +107,7 @@ Fix and test each, in this order within each group. Items marked with a decision
 - [x] **A distribution on `beta`** (X1, S, Decision exec 7). Sampled per agent under `abm`; agents under `auto`; the mean with a note under an explicit compartmental solver; `E804` under `approx=False`.
 - [x] **A solver asked of a coded model raises** (X2, S).
 - [x] **One random generator per engine** (X3, M, Decision exec 12). Pass an `np.random.Generator` into the kernels, seeded from a hash of `(rand_seed, full module path)`. Stochastic baselines move once.
-- [ ] **`sde`** (X5, S, Decision 8). Cut it; if it stays, split exits in proportion to their hazards. Moved to phase 5, with the solver menu.
+- [x] **`sde`** (X5, S, Decision 8). Cut it; if it stays, split exits in proportion to their hazards. Moved to phase 5, with the solver menu. (Done: `sde` removed with the solver menu; binomial exits `[0.3334, 0.3334, 0.3332]` in the three-exit test.)
 - [x] **Tau-leaping clips per compartment** (X6, S).
 - [x] **A failure on groups is an error, not a change to agents** (N22, X9, S).
 - [x] **Language items, one or two lines each** (S). `@` with a second driver raises (L6). `>>` and `@` copy (L7). `ss.by` level counts are checked (L11). `ss.transmission` requires `beta=` (L12). `ss.Sim(*models, ...)` takes the rest by keyword only (L13). A typo in an arrow string raises (L15).

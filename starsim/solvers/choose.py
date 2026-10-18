@@ -134,6 +134,8 @@ def choose_solver(sim):
         reason = 'requested'
     sim.solver = solver
     sim.solver_reason = reason
+    if pars.verbose: # Before the notes that the solver leads to
+        print(f'solver: {solver} ({reason})')
     sim.init_lifetables()
 
     # The population
@@ -154,6 +156,8 @@ def choose_solver(sim):
                     raise ss.CapabilityError(f'{msg}, which approx=False does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({p.name}=[...]).')
                 else:
                     ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approx else None)
+        if 'n_agents' in sim.given:
+            ss.note(f'n_agents={pars.n_agents:n} is not used, since a compartmental run has one row per group of people; it is used with solver="abm"', sim=sim)
         sim.integrator = sc.ifelse(pars.integrator, 'rk4')
         pars.pop_scale = 1.0
         pars.people_results = False
@@ -201,13 +205,11 @@ def choose_solver(sim):
             if counts:
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
 
-    # Say what was chosen; the notes are kept in sim.notes whatever the verbosity
     for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
         for p in mod.graph.all_pars():
             if isinstance(p.raw, ss.by):
                 p.raw.check(sim)
-    if pars.verbose:
-        print(f'solver: {solver} ({reason})')
+    # The notes on what was chosen, kept in sim.notes whatever the verbosity
     if sim.unit_source:
         ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.UnitInferred, sim=sim)
     for mod in sim.declared:
