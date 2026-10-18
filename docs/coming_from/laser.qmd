@@ -1,0 +1,170 @@
+---
+title: Coming from LASER
+jupyter: python3
+---
+
+This page is for people who build national agent-based models with [LASER](https://github.com/InstituteforDiseaseModeling/laser-core) (`laser-core`, `laser-generic`, `laser-measles`): one agent per person, a `GeoDataFrame` of places, a list of components for each process, gravity coupling between places, and runs of tens of millions of agents on all of a workstation's cores. It shows a LASER model next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet, including what fails. Speed and memory per agent at national scale are where Starsim is furthest behind today.
+
+## The same model in both
+
+LASER's hub-and-spoke example: an SEIR in a city of a million and fifteen smaller places on five spokes, coupled by a gravity model, with 100 infectious people in Town 1 at the start:
+
+```{python}
+#| eval: false
+import geopandas as gpd
+from shapely import Point
+import math
+
+nodes = []
+nodeid = 0
+nodes.append({"name": "Central City", "population": 1_000_000, "geometry": Point(0, 0).buffer(10_000), "nodeid": nodeid})
+nodeid += 1
+NTOWNS  = 5
+for i in range(NTOWNS):
+    angle = (i * 2 * math.pi / NTOWNS)
+    tx = 150_000 * (cos := math.cos(angle))
+    ty = 150_000 * (sin := math.sin(angle))
+    nodes.append({"name": f"Town {i+1}", "population": 100_000, "geometry": Point(tx, ty).buffer(10_000), "nodeid": nodeid})
+    nodeid += 1
+    ix1 = 50_000 * cos
+    iy1 = 50_000 * sin
+    nodes.append({"name": f"Interim {i+1}a", "population": 25_000, "geometry": Point(ix1, iy1).buffer(5_000), "nodeid": nodeid})
+    nodeid += 1
+    ix2 = 100_000 * cos
+    iy2 = 100_000 * sin
+    nodes.append({"name": f"Interim {i+1}b", "population": 25_000, "geometry": Point(ix2, iy2).buffer(5_000), "nodeid": nodeid})
+    nodeid += 1
+
+scenario = gpd.GeoDataFrame(nodes, crs="EPSG:3857")
+
+from laser.core import PropertySet
+from laser.generic import Model
+import laser.generic.SEIR as SEIR
+from laser.core.distributions import normal
+
+exp_mean = 7.0
+exp_stddev = 1.0
+inf_mean = 14.0
+inf_stddev = 2.0
+R0 = 2.0
+beta = R0 / inf_mean
+
+parameters = PropertySet({"nticks": 365, "beta": beta, "gravity_c": 2.5})
+scenario["S"] = scenario.population
+scenario["E"] = 0
+scenario["I"] = 0
+scenario["R"] = 0
+scenario.loc[scenario.name == "Town 1", "S"] -= 100
+scenario.loc[scenario.name == "Town 1", "I"] += 100
+prj = scenario.to_crs(4326)
+model = Model(prj, parameters)
+incubation_distribution = normal(loc=exp_mean, scale=exp_stddev)
+infectious_distribution = normal(loc=inf_mean, scale=inf_stddev)
+model.components = [
+    SEIR.Susceptible(model),
+    SEIR.Recovered(model),
+    SEIR.Infectious(model, infectious_distribution, 1),
+    SEIR.Exposed(model, incubation_distribution, infectious_distribution, 1, 1),
+    SEIR.Transmission(model, incubation_distribution, 1)
+]
+model.run()
+```
+
+In Starsim, the places are a stratification with LASER's gravity coupling of the force of infection, and each process is a transition. Here each of the 175,000 agents stands for ten people; LASER runs one agent per person:
+
+```{python}
+import numpy as np
+import starsim as ss
+ss.options(jupyter=True)
+
+# The places: a city, and on each of five spokes two interim places and a town
+angles = 2*np.pi*np.arange(5)/5
+names  = ['Central City'] + [f'Town {i+1}' for i in range(5)] + [f'Interim {i+1}{ab}' for i in range(5) for ab in 'AB']
+pop    = [1_000_000] + [100_000]*5 + [25_000]*10
+dist   = [0] + [150]*5 + [50, 100]*5 # Distance from the city, in km
+angle  = [0] + list(angles) + list(np.repeat(angles, 2))
+places = ss.geo(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
+
+seir = ss.Disease(
+    infection = ss.transmission('S -> E', beta=ss.perday(2/14), source='I'),
+    onset     = ss.progression('E -> I', dur=ss.normal(7, 1, unit='days')),
+    recovery  = ss.progression('I -> R', dur=ss.normal(14, 2, unit='days')),
+    init      = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
+)
+seir.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))
+sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365), verbose=0)
+sim.run()
+sim.plot()
+```
+
+The same text runs as a stochastic compartmental model with `sim.new(solver='binomial')`, with no agents to build.
+
+## How the results agree
+
+| Model | Agreement |
+|---|---|
+| The hub-and-spoke example (above) | Agree: 1,533,300 recovered at the end against LASER's 1,532,298, and within 2% in each place shown; peaks within 4% in size (11% in the smallest place shown) and 7 days in time (one run of each) |
+| England and Wales measles (53 places within 100 km of Norwich, 668,000 agents, 10 years, births, life-table deaths, importation, seasonality, a 40-stage latent period) | Agree: 104,092 infections over 10 years against 106,639 (means of 5 and 50 runs; four of the five Starsim runs are inside LASER's 5% to 95% range); within 3.8% in each of seven places; 529,399 people at the end against 529,833 |
+
+## Timings
+
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](index.qmd#how-these-numbers-were-made)). LASER's times were recorded on the same machine, on all 20 cores; Starsim runs a sim on one core.
+
+| Model | Lines: LASER | Lines: Starsim | One run: LASER | One run: Starsim | |
+|---|---|---|---|---|---|
+| The hub and spoke | 50 | 15 | 0.78 s for 1,750,000 agents (2.8 s the first time, with compiling) | 1.4 s for 175,000 agents (1.5 s the first time in a new process) | Pass, but with a tenth of the agents |
+| England and Wales, 10 years | 126 | 62 | 3.0 s (4.7 s the first time) | 48 s (45 s the first time) | **Fail** (first run, repeated run) |
+| England and Wales within 150 km of Norwich: 3.3 million agents in 149 places, 2 years | | | 2.75 s on 20 threads, 8.2 s on one; 466 MB | 67.8 s; 1,436 MB | |
+
+The last row was measured on 17 October 2026, on a machine shared with other jobs. At equal size on the hub and spoke (1.75 million agents), LASER took 1.67 s on 20 threads and 5.4 s on one, and Starsim 16.4 s.
+
+## What works and what does not yet
+
+These are from Starsim's switching demo for LASER users (`tests/switching/test_laser.py`), which compares speed and memory per agent with LASER's, and from the review it was built from. "Fails" means the demo's check does not pass today.
+
+| Task | Today |
+|---|---|
+| Speed per agent-step | **Fails**: 30 ns per agent-step on one core, against 1.1 ns for LASER on 20 threads (the demo asks for within 3 times). Starsim makes 10 to 15 passes over the agents each step, on one thread; one fused, threaded pass is planned |
+| Memory per agent | **Fails**: 243 bytes per agent, against LASER's 30 (the demo's target is 50). A run of LASER's full England and Wales (30 million agents) would need about 10 GB, against LASER's 1.2 GB |
+| Life-table deaths | **Works**: `ss.death(lifetable=ss.lifetable(ages, deaths))`, below; as agents each person's age at death is drawn once, and in a compartmental run stratified by age it is a death rate for each age group |
+| Seeding a fixed number of people on a schedule | **Works**: `ss.Delivery(move='S -> I', capacity=3, interval=ss.days(30))`, below |
+| Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: `ss.Mobility(ss.gravity(...), kind='force', away=..., scale='mean', cap=0.2)`, below |
+| The demo's check of life tables and seeding, as agents and as compartments | **Fails**: it is written with spellings that do not exist (`ss.death(age=...)`, `ss.seed()`); the spellings above work as agents |
+| The national model as compartments | **Works**: LASER's full England and Wales (954 places, 30.2 million people, a 40-stage latent period, with a constant death rate and importation as a rate) runs as a chain binomial in 12 s per simulated year |
+| A campaign for children 9 months to 5 years in some regions | **Works**: one `ss.vaccinate(...)` with `where=(ppl.age >= 0.75) & (ppl.age < 5) & measles.district.isin(names)`, which reached exactly those children |
+| Fitting | **Works**: `sim.calibrate()`, with your own loss (`gof=`) if you have one; LASER has no fitting of its own |
+| Places and populations from shapefiles and rasters (`laser-init`) | **Not yet**: `ss.geo()` takes names, populations, and positions or distances |
+
+The England and Wales model in miniature, with the life table, the seeding, and the gravity coupling declared: 20 places and 100,000 agents for a year:
+
+```{python}
+rng = np.random.default_rng(1)
+n = 20
+w = 0.5 + rng.lognormal(0, 0.8, n)
+pop = np.round(100_000*w/w.sum())
+ages = np.arange(89)
+pyramid = np.exp(-0.017*ages) # The stable age pyramid for births of 0.017 a year
+places = ss.geo(names=[f'p{i}' for i in range(n)], pop=pop, x=rng.uniform(0, 300, n), y=rng.uniform(0, 300, n))
+
+measles = ss.Disease(
+    infection = ss.transmission('S -> E', beta=ss.perday(3.9), source='I'),
+    onset     = ss.progression('E -> I', dur=ss.erlang(k=40, mean=ss.days(10))),
+    recovery  = ss.progression('I -> R', dur=ss.normal(7, 2, unit='days')),
+    births    = ss.birth('-> S', rate=ss.peryear(0.017)),
+    deaths    = ss.death(lifetable=ss.lifetable(ages, 0.017*pyramid)), # How many of a cohort die at each age
+    init      = dict(I=ss.by(patch=[3]*n), R=0.95),
+    name      = 'measles',
+)
+measles.stratify(patch=places, mobility=ss.Mobility(ss.gravity(b=0.25, c=1.56), kind='force', away=0.045, scale='mean', cap=0.2))
+seeding = ss.Delivery(move='S -> I', capacity=3, interval=ss.days(30), name='seeding') # 3 people every 30 days
+people = ss.People(int(pop.sum()), age_data=np.array([ages, pyramid]).T)
+sim = ss.Sim(measles, people=people, interventions=seeding, unit='day', stop=365, verbose=0)
+sim.run()
+
+res = sim.results.measles
+print(f'Infections: {res.infection.values.sum():,.0f}; deaths: {res.deaths.values.sum():,.0f}; seeded: {np.nansum(sim.results.seeding.delivered.values):.0f}')
+```
+
+## Bringing your model in
+
+There is no importer for LASER models, since a LASER model is Python code with components rather than a model file. The import-model skill for AI assistants (`skills/import-model/references/laser.md` in the Starsim repository) maps each LASER component to its Starsim form.

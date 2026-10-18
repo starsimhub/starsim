@@ -1,0 +1,115 @@
+---
+title: Coming from the Ghana measles model
+jupyter: python3
+---
+
+This page is for country-team modelers working on measles by district, like the Ghana measles project: a metapopulation model of Ghana's 260 districts kept as a NumPy chain binomial for fitting and as a laser-measles agent model for campaigns, fitted to monthly confirmed cases by district with a loss of its own, and used to compare campaign scenarios (when, where, which ages, what coverage) by cases averted. It shows the project's model in Starsim, how its results agree with the original, how long each takes, and what works and what does not yet, including what fails.
+
+## The model in Starsim
+
+The project's NumPy model (89 lines of model code) is a stochastic SEIR in 260 districts, run daily from 2010 to 2025 with binomial draws: gravity mixing between districts, seasonal transmission, births of whom some are immune through routine vaccination, deaths, importation at a constant rate per person, and reported cases as a fixed share of infections. Its code has no public repository yet, so it is not shown here. In Starsim, with the project's table of districts (`population_2020.csv`, with columns `dotname`, `pop`, `lat`, and `lon`):
+
+```{python}
+#| eval: false
+#| label: starsim-districts
+import numpy as np
+import pandas as pd
+import starsim as ss
+
+districts = pd.read_csv('population_2020.csv')
+pop = districts['pop']*np.exp(-0.02*10) # Projected back from 2020 to 2010
+
+r0 = 14
+immune = 0.833*0.85 # The share of births who are vaccinated and immune
+S, E, I, R = ss.states(4)
+infection   = S >> E @ ss.seasonal(mean=ss.perday(r0/8), amplitude=0.15, peak=59/365) * I
+importation = S >> E @ ss.peryear(0.01/1000) * (S + E + I + R).n / S.n
+onset       = E >> I @ ss.days(6)
+recovery    = I >> R @ ss.days(8)
+births      = ss.birth('-> S', rate=ss.peryear(0.027*(1 - immune)))
+vaccinated  = ss.birth('-> R', rate=ss.peryear(0.027*immune))
+deaths      = ss.death(rate=ss.peryear(0.007))
+cases       = ss.outcome(0.005*onset)
+measles = ss.Disease(infection, importation, onset, recovery, births, vaccinated, deaths, cases, init=dict(R=1 - 1/r0))
+places = ss.geo(names=districts['dotname'], pop=pop, lat=districts['lat'], lon=districts['lon'])
+measles.stratify(district=places, mobility=ss.Mobility(ss.gravity(c=1.5), kind='visit', away=0.01))
+sim = ss.Sim(measles, total_pop=pop.sum(), start='2010-01-01', stop='2025-12-31', unit='day', solver='binomial')
+sim.run()
+sim.plot()
+```
+
+This cell is not run when the docs are built, since it needs the project's data. The districts come in as a table, `ss.geo()` works out the distances between them from their positions, and `ss.Mobility(ss.gravity(c=1.5), kind='visit', away=0.01)` is the project's gravity mixing, with 1% of contacts made outside a person's district. The same text runs as agents with `sim.new(solver='abm', n_agents=...)`.
+
+## How the results agree
+
+| Model | Agreement |
+|---|---|
+| The model above | Agree: over 2010 to 2025, 3,046,095 infections against 3,041,691 and 15,190 reported cases against 15,197 (means of 20 and 50 runs); monthly means correlate at 0.999; infections from 2020 in each of the 16 regions within chance (from −2.6 to +1.7 standard errors). Nothing in the original was missing from Starsim |
+| The project's loss against monthly confirmed cases by district | Consistent: 0.539 for one Starsim run at the default values, at the low edge of the original's range over five seeds (0.542 to 0.597) |
+
+## Timings
+
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](index.qmd#how-these-numbers-were-made)). The original's time was recorded on the same machine, with the data already loaded.
+
+| Model | Lines: original | Lines: Starsim | One run: original | One run: Starsim | |
+|---|---|---|---|---|---|
+| The model above, 2010 to 2025 | 89 | 21 | 0.84 s | 1.8 to 1.9 s to build and run (2.0 s the first time in a new process) | Borderline: **fail** on the repeated run in one of two runs of the script, pass in the other |
+
+The north star fails a time if Starsim is more than 2 times slower and more than 1 s slower. Starsim's 1.8 to 1.9 s is about 1 s more than the original's 0.84 s, so the row passes or fails by a few hundredths of a second from one run of the script to the next.
+
+## What works and what does not yet
+
+These are from Starsim's switching demo for this project (`tests/switching/test_ghana_measles.py`), which runs on 20 synthetic districts, and from the review it was built from. "Fails" means the demo's check does not pass today.
+
+| Task | Today |
+|---|---|
+| Fit `beta`, the share of contacts made outside the district, and the reporting rate with the project's own loss (`sim.calibrate(gof=loss, method='optuna')`) | **Fails**: the share of contacts away cannot be a fitted parameter (`ss.Mobility(away=ss.par(...))` raises `TypeError`), and `calibrate(gof=)` still needs data attached to the sim. Fitting `beta` and the reporting rate with the project's loss works, with data attached (which `gof=` does not use) |
+| Routine MCV1 at 9 months that starts with newborns, as laser-measles gives it | **Works**: `ss.vaccinate(mcv, coverage=0.833, at_age=ss.months(9))`. Without `at_age=`, `where=ppl.age >= 0.75` offers the vaccine to everyone over 9 months the first time they are eligible, which is a catch-up campaign of the whole population on the first day |
+| An all-or-nothing vaccine, as measles vaccines are usually modeled | **Works**: `ss.Vaccine(efficacy=0.85, leaky=False)`; it moves people from `S` to `R`, so it needs no extra dimension in a compartmental run |
+| A campaign for children 9 months to 5 years in the northern regions | **Works**: `where=(ppl.age >= 0.75) & (ppl.age < 5) & measles.S & measles.district.isin(northern)`; in the review it reached 46,454 children, all of them in the right ages and regions |
+| 100 runs with ages and a campaign, kept in memory | **Works**: results by group are kept at a reporting interval, so 100 full-size runs fit in 16 GB |
+| Many runs per scenario, and cases averted with a range | **Works**: `ss.parallel(baseline=..., campaign=..., n_runs=)` and `msim.diff('baseline')`, below |
+| The same model as agents at full size (25 million people, 16 years) | **Slow**: estimated at about 6 hours and 8 to 10 GB from a run of 2.5 million agents (150 ns per agent-step); see [Coming from LASER](laser.qmd) |
+| Maps of results by district | **Not yet** |
+
+Routine MCV1 at 9 months and a campaign in five of 20 synthetic districts, as compartments by age, 10 runs of each scenario paired by seed:
+
+```{python}
+import numpy as np
+import starsim as ss
+ss.options(jupyter=True)
+
+rng = np.random.default_rng(1)
+n = 20
+names = [f'd{i}' for i in range(n)]
+pop = rng.lognormal(np.log(90_000), 0.6, n)
+places = ss.geo(names=names, pop=pop, lat=rng.uniform(5, 11, n), lon=rng.uniform(-3, 1, n))
+
+S, E, I, R = ss.states(4)
+infection   = S >> E @ ss.seasonal(mean=ss.perday(14/8), amplitude=0.15, peak=59/365) * I
+importation = S >> E @ ss.peryear(0.01/1000) * (S + E + I + R).n / S.n
+onset       = E >> I @ ss.days(6)
+recovery    = I >> R @ ss.days(8)
+births      = ss.birth('-> S', rate=ss.peryear(0.027))
+deaths      = ss.death(rate=ss.peryear(0.007))
+cases       = ss.outcome(0.005*onset)
+measles = ss.Disease(infection, importation, onset, recovery, births, deaths, cases, init=dict(R=1 - 1/14))
+measles.stratify(district=places, mobility=ss.Mobility(ss.gravity(c=1.5), kind='visit', away=0.01))
+
+ppl = ss.People(1) # Stands for the people, to write conditions on their age
+mcv = ss.Vaccine(efficacy=0.85, leaky=False) # All-or-nothing
+routine = ss.vaccinate(mcv, coverage=0.8, at_age=ss.months(9), name='routine')
+north = (ppl.age >= 0.75) & (ppl.age < 5) & measles.S & measles.district.isin(names[:5])
+campaign = ss.vaccinate(mcv, at=['2011-06-01'], coverage=0.8, where=north, name='campaign')
+
+kw = dict(total_pop=pop.sum(), start='2010-01-01', stop='2012-12-31', unit='day', solver='binomial', stratify=dict(age=[0, 0.75, 5, 15]), verbose=0)
+msim = ss.parallel(baseline=ss.Sim(measles, interventions=routine, **kw), campaign=ss.Sim(measles, interventions=[routine, campaign], **kw), n_runs=10)
+
+averted = -np.asarray(msim.diff('baseline').campaign.measles.cases.values).sum(axis=1) # Reported cases, paired by run
+low, median, high = np.percentile(averted, [5, 50, 95])
+print(f'Reported cases averted: {median:.0f} (5% to 95%: {low:.0f} to {high:.0f})')
+```
+
+## Bringing your model in
+
+There is no importer for this project's model, which is NumPy code. The import-model skill for AI assistants (`skills/import-model/references/laser.md` in the Starsim repository) maps the Ghana model line by line.

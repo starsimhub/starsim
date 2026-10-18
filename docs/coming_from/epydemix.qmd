@@ -1,0 +1,119 @@
+---
+title: Coming from epydemix
+jupyter: python3
+---
+
+This page is for people who use [epydemix](https://github.com/epistorm/epydemix) in Python: age-structured compartmental models written transition by transition, populations and contact matrices loaded by place name, interventions on one contact setting, fits by ABC with no likelihood, and projections from the posterior for scenario hubs. It shows an epydemix model next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet, including what fails.
+
+## The same model in both
+
+epydemix's tutorial on population data: an SIR in Kenya's population, with contact matrices between five age groups, run 100 times:
+
+```{python}
+#| eval: false
+from epydemix.population import load_epydemix_population
+from epydemix import load_predefined_model
+from epydemix.visualization import plot_quantiles
+
+population = load_epydemix_population("Kenya")
+model = load_predefined_model("SIR", transmission_rate=0.04)
+model.set_population(population)
+
+results = model.run_simulations(start_date="2019-12-01",
+                                end_date="2020-04-01",
+                                percentage_in_agents=10 / model.population.Nk.sum(),
+                                Nsim=100)
+
+df_quantiles_comps = results.get_quantiles_compartments()
+ax = plot_quantiles(df_quantiles_comps, columns=["Infected_total", "Susceptible_total", "Recovered_total"], legend_loc="center right")
+```
+
+In Starsim, `ss.contacts('Kenya')` and `ss.people('Kenya')` are bundled (Prem 2021 contact matrices and UN population estimates), so nothing is downloaded. `solver='binomial'` runs the model as a chain binomial, as epydemix does, and `use_aging=False` keeps people in their age group for the four months:
+
+```{python}
+import numpy as np
+import starsim as ss
+ss.options(jupyter=True)
+
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=0.04),
+    recovery  = ss.progression('I -> R', rate=0.1),
+    init      = dict(I=10),
+)
+sir.stratify(age=[0, 5, 20, 50, 65])
+sim = ss.Sim(sir, networks=ss.contacts('Kenya'), people=ss.people('Kenya', year=2020), start='2019-12-01', stop='2020-04-02',
+             solver='binomial', use_aging=False, verbose=0)
+msim = sim.run(n_runs=100)
+
+res = msim.results.sir
+S, I, R = [np.asarray(res[key].values).mean(axis=0) for key in ['n_S', 'n_I', 'n_R']]
+N = S[0] + I[0] + R[0]
+print(f'Peak: {I.max()/N:.2%} infected on day {I.argmax()} (epydemix: 54.46% on day 40); final size {R[-1]/N:.2%} (99.63%)')
+msim.plot()
+```
+
+`msim.results.sir.n_I.select(age='0-4').quantiles()` gives the quantiles over runs for one age group, as `get_quantiles_compartments()` does.
+
+## How the results agree
+
+| Model | Agreement |
+|---|---|
+| The Kenya tutorial (above) | Agree: the mean of 100 runs peaks at 54.5% to 54.7% of the population on day 39 (in different sets of runs), against epydemix's 54.46% on day 40, and the final size is 99.6% against 99.63%. Starsim's population is the UN's (52.2 million in 2020) and epydemix's is 55.9 million; with epydemix's population, the peak is 54.32%. Imported with `ss.load()` from epydemix's own script, the peak is 54.41% on day 40 |
+| The COVID tutorial (SEIR with an Erlang delay to death, mobility, seasonality, three reopening scenarios) | Agree at fixed values: weekly deaths within 0.9% of the peak, and 10,534 deaths by 2 August against 10,525 (means of 200 runs). This needs `substeps=1`, so that the chain binomial takes whole days as epydemix does; without it, the Erlang delay makes Starsim substep the model, and there are 6,039 deaths. The fitted values are each inside the original's 90% range, but the comparison was of a point estimate against a posterior |
+
+## Timings
+
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](index.qmd#how-these-numbers-were-made)). epydemix 1.4.0's times were recorded on the same machine, in process, without the import or the data download.
+
+| Model | Lines: epydemix | Lines: Starsim | One run: epydemix | One run: Starsim | |
+|---|---|---|---|---|---|
+| The Kenya tutorial | 7 | 13 | 0.0063 s (100 runs: 0.56 s) | 0.014 s to build and run (0.054 s the first time in a new process); 100 runs in about 0.1 to 0.2 s | **Fail** on lines; pass on time |
+| The COVID tutorial, one run of the calibration period | 161 | 33 | 0.037 s | 0.028 s (0.069 s the first time) | Pass |
+
+The Kenya row fails the lines test because the translation the north star measures reads epydemix's downloaded population from a file, which takes 13 lines; the version above, with Starsim's bundled data, is 8 lines (one over 100 characters), against epydemix's 7.
+
+## What works and what does not yet
+
+These are from Starsim's switching demo for epydemix users (`tests/switching/test_epydemix.py`), which checks each task against epydemix's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+
+| Task | Today |
+|---|---|
+| The Kenya tutorial from Starsim's bundled data | **Works**: peak, its day, and the final size as above |
+| A vaccine by age, written on the disease's age groups (`where=sir.age < 5`) | **Works**: 6.9 million under-5s are vaccinated, the number in Kenya in 2020 |
+| Vaccination, testing, and treatment without copying compartments | **Works**: a product and a delivery (`ss.vaccinate(ss.Vaccine(efficacy=0.9), where=...)`), with the disease unchanged |
+| A particle filter on a model whose transmission is a fitted value times a season times a mobility series | **Works**: the log-likelihood peaks at the true value |
+| A posterior with no likelihood (ABC-SMC, with `wmape` as the distance), then projections from it under scenarios, as quantile tables | **Works**: `sim.calibrate(method='abc-smc')`, `fit.project(scenarios, n=)`, and `.to_df(quantiles=)`, below |
+| A posterior with a likelihood | **Works**: particle MCMC for a stochastic model, NUTS for an ODE, with R-hat and ESS |
+| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails**: Starsim's data have 177 countries and no subnational places, so `ss.people('United States:Massachusetts')` raises `UnknownLocation` |
+| Other solvers: the same model as an ODE, by Gillespie's method, or as agents | **Works**: `solver='ode'`, `'gillespie'`, or `'abm'` |
+
+A posterior with no likelihood, then projections from it. Here the model is an SIR in a million people whose transmission is a fitted value `b` times a season times a mobility series, fitted to weekly infections drawn from a run at `b = 0.5`:
+
+```{python}
+import pandas as pd
+
+days = pd.date_range('2020-02-23', '2020-05-31')
+mobility = ss.timeseries(dict(zip(days.strftime('%Y-%m-%d'), np.linspace(1.0, 0.3, len(days)))))
+season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
+
+def make_sim(b, data=None):
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=b*season*mobility), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    return ss.Sim(sir, total_pop=1e6, unit='day', start='2020-02-23', stop='2020-05-31', solver='binomial', data=data, verbose=0)
+
+# The data: weekly new infections from one run at b = 0.5
+truth = make_sim(ss.par(0.5)).run()
+weekly = truth.results.sir.infection.to_series(resample='week')
+data = pd.DataFrame(dict(date=weekly.index, infection=np.round(weekly.values))) # Compared with the result infection
+
+sim = make_sim(ss.par(0.5, bounds=[0.1, 1]), data=data)
+fit = sim.calibrate(method='abc-smc', particles=50, generations=3, rand_seed=1, verbose=0)
+print(f'b: 95% from {np.quantile(fit.samples.b, 0.025):.3f} to {np.quantile(fit.samples.b, 0.975):.3f} (true value 0.5)')
+
+vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(20_000), start='2020-04-01')
+proj = fit.project(dict(baseline=None, vaccine=vaccine), n=20) # One run per posterior draw
+proj.to_df(quantiles=[0.05, 0.5, 0.95]).head()
+```
+
+## Bringing your model in
+
+`ss.load(source, format='epydemix')` reads an epydemix model: either a live `EpiModel` (if epydemix is installed alongside Starsim) or the JSON written by `dump_epydemix.py` (in `starsim/interop/`), which runs your script in epydemix's own environment. Each compartment becomes a state, each mediated transition exposure through the population's contact matrices (summed over the settings, as epydemix does), each spontaneous transition a rate per day, and the population's age groups a stratification. The sim runs as a chain binomial in daily steps (`solver='binomial'`, `substeps=1`), as epydemix does. On the Kenya tutorial, dumping takes about 4 s (it downloads the population), and the import and 100 runs take 0.26 s, with the same results as epydemix; `sim.to_code()` writes a Python file you can keep.

@@ -1,0 +1,61 @@
+---
+title: Coming from another framework
+---
+
+These pages are for people who already model with another framework and want to know what Starsim 4 would mean for their work. Each one shows a model from that framework next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet. The rows that fail are kept: where Starsim is slower, or cannot yet do something, the page says so.
+
+| Framework | Lines of model code | Time for one run | The switching demo's checks | Where Starsim is furthest behind today |
+|---|---|---|---|---|
+| [EpiModel](epimodel.qmd) | Fewer in both models | Faster in both | 2 of 3 pass | No ERGM terms beyond degree by group and one `match=` property; a stochastic fit by default keeps a lucky draw |
+| [SimInf](siminf.qmd) | **More** in both models | **Slower** in both | 2 of 4 pass | Speed on a national register; the particle filter's speed |
+| [odin](odin.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 2 of 4 pass | The particle filter's speed; a fixed delay is many Erlang stages |
+| [epydemix](epydemix.qmd) | **More** in one of two | The same in one, slower in the other, under the limit | 4 of 5 pass | No subnational data (US states) |
+| [MEmilio](memilio.qmd) | Fewer in both | Faster | 4 of 4 pass | No German county data; no `osecirvvs` importer |
+| [flepiMoP](flepimop.qmd) | Fewer in both | Faster | 3 of 3 pass | No cluster batch jobs or R post-processing |
+| [summer2](summer2.qmd) | Fewer in both | Slower per run once summer2 has compiled, faster the first time; under the limit | 2 of 2 pass (1 not run) | No sigmoidal scale-up; a live model cannot be imported in the same process |
+| [Atomica](atomica.qmd) | Fewer in both | Slower per run, but under the limit | 5 of 7 pass | Two library workbooks fail to import; no spreadsheet interface |
+| [camdl](camdl.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 2 of 3 pass | No IF2; the particle filter's speed |
+| [EMULSION](emulsion.qmd) | Fewer in both | Faster | 2 of 5 pass | Newborns by prototype, births between strata, and minimum stays as compartments |
+| [LASER](laser.qmd) | Fewer in both | **Slower** (the other model passes only with a tenth of the agents) | 0 of 3 pass | Speed and memory per agent at national scale |
+| [Ghana measles](ghana_measles.qmd) | Fewer | Borderline | 2 of 3 pass | A fitted share of contacts away; agents at full size |
+| [Starsim 3](starsim3.qmd) | | | 4 of 4 pass | Declared diseases as agents are slower than code |
+
+## How these numbers were made
+
+**The models.** Each framework's examples were taken from its own documentation or repository, run in that framework's own environment, and translated into Starsim by hand. The original, the translation, and a script that compares them are kept in the lingua franca design repository (`examples/` and `vignettes/`), with the original's reference results. These are the models on each page.
+
+**Lines and times.** Starsim's north-star script, `tests/north_star.py`, reads every translation and writes a table of lines of model code and run time, the original against Starsim, with the rows that fail. Starsim's lines are counted from the translation: not counting blank lines, comments, docstrings, imports, or the `if __name__ == '__main__'` block, and counting a line over 100 characters twice. The original's lines are those of its model file (rows of spreadsheets for Atomica, lines of YAML for flepiMoP and EMULSION). Starsim fails on lines if it has more than the original. Time is two numbers: the first run in a new process, and the best of 5 repeated runs, each building and running the sim. A time fails if Starsim is more than 2 times slower and more than 1 s slower. The originals were timed in their own environments (what each time includes, such as starting R or compiling, is said on each page). The script was run twice on 18 October 2026, on a 20-core x86-64 Linux machine shared with other work: once with the originals' recorded times, and once with the originals run again where that could be done.
+
+**What works and what does not yet.** Starsim's switching demos (`tests/switching/`) take each task that a user of that framework does every week, written in that field's terms and scaled down to run in seconds, and check it against the original framework's numbers. Of their 51 checks, 34 pass today, 16 fail, and one needs a framework that cannot be installed alongside Starsim. Each failing check names what blocks it. The demos were built from a review in which an experienced user of each framework tried their routine work in Starsim at their real scale (on 17 October 2026). Numbers on the pages that are not from the demos or the north star are from the translations' own comparisons (13 and 14 October 2026) or from that review; a time from the review is given with its date. Starsim's numbers are for the development version of Starsim 4.
+
+## The north-star table
+
+The second run of the north-star script, with the originals timed again where that could be done; (r) marks an original's time recorded earlier on the same machine.
+
+| Model | Lines: original | Lines: Starsim | First run (s): original | First run (s): Starsim | Repeated run (s): original | Repeated run (s): Starsim | Lines | First run | Repeated run |
+|---|---|---|---|---|---|---|---|---|---|
+| atomica/hiv_dyn | 217 | 67 | 0.005 | 0.16 | 0.0047 | 0.1 | pass | pass | pass |
+| atomica/sir | 62 | 16 | 0.0033 | 0.068 | 0.0025 | 0.014 | pass | pass | pass |
+| camdl/sir | 30 | 13 | 0.012 | 0.059 | 0.0068 | 0.018 | pass | pass | pass |
+| camdl/stratified | 35 | 15 | – | 0.057 | 0.1 (r) | 0.015 | pass | | pass |
+| emulsion/quickstart | 280 | 75 | 1.3 | 0.24 | 1.3 | 0.23 | pass | pass | pass |
+| emulsion/sir | 81 | 7 | 0.98 | 0.057 | 1 | 0.012 | pass | pass | pass |
+| epimodel/hiv | 405 | 59 | – | 4.6 | 54 (r) | 2.9 | pass | | pass |
+| epimodel/sis-network | 13 | 9 | – | 0.48 | 3.9 (r) | 0.44 | pass | | pass |
+| epydemix/covid19 | 161 | 33 | 0.034 | 0.12 | 0.034 | 0.036 | pass | pass | pass |
+| epydemix/sir_kenya | 7 | 13 | 0.0071 | 0.052 | 0.0065 | 0.013 | **fail** | pass | pass |
+| flepimop/seir_2pop | 42 | 14 | 8.6 | 0.06 | 8.1 | 0.016 | pass | pass | pass |
+| flepimop/vaccine_scenarios | 141 | 36 | 96 (r) | 2.1 | 96 (r) | 1.4 | pass | pass | pass |
+| ghana_measles/seir_districts | 89 | 21 | – | 2 | 0.84 (r) | 1.9 | pass | | **fail** |
+| laser/england_wales | 126 | 62 | 4.7 (r) | 53 | 3 (r) | 47 (best of 3) | pass | **fail** | **fail** |
+| laser/hub_spoke_seir | 50 | 15 | 2.8 (r) | 1.6 | 0.78 (r) | 1.3 | pass | pass | pass |
+| memilio/secir | 44 | 14 | 0.62 | 0.065 | 0.61 | 0.019 | pass | pass | pass |
+| memilio/secir_ageres | 45 | 21 | 0.49 | 0.061 | 0.43 | 0.022 | pass | pass | pass |
+| odin/seir_array | 53 | 17 | 1.1 | 1.5 | 1.1 | 1.5 | pass | pass | pass |
+| odin/stochastic_sir_arrays | 27 | 6 | 0.91 | 0.061 | 0.92 | 0.01 | pass | pass | pass |
+| siminf/sir_herds | 12 | 21 | 1.9 | 5.5 | 1.8 | 4.9 | **fail** | **fail** | **fail** |
+| siminf/sise3 | 27 | 40 | 1.9 | 8.7 | 1.9 | 8.9 | **fail** | **fail** | **fail** |
+| summer2/seir-age-clinical | 134 | 15 | 0.0012 | 0.13 | 0.00099 | 0.041 | pass | pass | pass |
+| summer2/sir-age-location | 35 | 11 | 0.00099 | 0.12 | 0.00038 | 0.02 | pass | pass | pass |
+
+Lines: 20 of 23 pass. First run: 16 of 19 pass (four originals have no first-run time). Repeated run: 19 of 23 pass. In the first run of the script, the Ghana measles row passed on the repeated run (1.8 s against 0.84 s), so it is on the edge of the limit. The hub-and-spoke row passes with a tenth of LASER's agents (each Starsim agent stands for ten people); at equal size, Starsim is about 10 times slower than LASER on its threads.
