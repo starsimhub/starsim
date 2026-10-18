@@ -1,0 +1,30 @@
+name: R
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test_r:
+    name: Starsim from R
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+      - uses: actions/setup-python@master
+        with:
+          python-version: '3.14'
+          architecture: x64
+      - name: Install Starsim
+        run: pip install -e .[dev]
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install reticulate
+        run: Rscript -e 'install.packages("reticulate")'
+      - name: Run the R tests
+        working-directory: ./tests
+        run: pytest test_r.py
