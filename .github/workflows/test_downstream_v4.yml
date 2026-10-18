@@ -1,0 +1,74 @@
+# Run the downstream packages' tests against Starsim 4, on the v4 branch.
+#
+# Each package's own v4 branch is checked out. Until a package's v4 branch is ported,
+# the migration script (python -m starsim.migrate) is run on the checkout first, so the
+# job shows what a port with the script gives; set `migrate: false` for a package once
+# its v4 branch is ported. test_downstream.yml runs the default branches against main.
+
+name: Downstream (v4)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v4
+  pull_request:
+    branches:
+      - v4
+
+jobs:
+
+  test_downstream_v4:
+    name: ${{ matrix.model }} tests (v4)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {model: HPVsim,     repo: starsimhub/hpvsim,          ref: v4, dir: hpvsim,     migrate: true, install: 'pip install -e ".[hiv]" -r tests/requirements.txt && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need
+          - {model: STIsim,     repo: starsimhub/stisim,          ref: v4, dir: stisim,     migrate: true, install: pip install -e . -r tests/requirements.txt}
+          - {model: FPsim,      repo: starsimhub/fpsim,           ref: v4, dir: fpsim,      migrate: true, install: pip install -e . -r tests/requirements.txt}
+          - {model: malariasim, repo: Bridenbecker/starsim-ngm,   ref: v4, dir: malariasim, migrate: true, install: 'pip install -e ".[dev]" pytest-xdist'}
+
+    steps:
+      - name: Checkout Starsim
+        uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install Starsim
+        run: pip install -e .
+
+      - name: Check out ${{ matrix.model }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
+          path: ${{ matrix.dir }}
+
+      - name: Install ${{ matrix.model }}
+        working-directory: ./${{ matrix.dir }}
+        run: ${{ matrix.install }}
+
+      - name: Reinstall Starsim # In case the package's requirements pulled in a released Starsim
+        run: pip install --no-deps -e .
+
+      - name: Migrate ${{ matrix.model }} to Starsim 4
+        if: matrix.migrate
+        working-directory: ./${{ matrix.dir }}
+        run: python -m starsim.migrate . && git diff --stat
+
+      - name: Run ${{ matrix.model }} tests
+        working-directory: ./${{ matrix.dir }}/tests
+        env:
+          SCIRIS_BACKEND: agg
+          STARSIM_SHOW: 0
+        run: pytest -n auto --durations=0 --junitxml=results.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test_results_v4-${{ matrix.dir }}
+          path: ${{ matrix.dir }}/tests/results.xml
