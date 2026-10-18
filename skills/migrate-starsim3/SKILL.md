@@ -1,0 +1,94 @@
+---
+name: migrate-starsim3
+description: Upgrade a Starsim 3 model, script, or package (a model built on ss.SIR/SIS/SEIR, ss.Infection, routine_vx, ss.Calibration, and so on) to Starsim 4. Use when someone's Starsim 3 code fails or changes its numbers under Starsim 4, asks what a removed name became, or wants to use Starsim 4's tools (ss.modify, conditions, sim.calibrate, declared diseases) on an existing model. For porting a disease to declared states and transitions, continue with the import-model skill's references/starsim3.md.
+---
+
+# Upgrade a Starsim 3 model to Starsim 4
+
+Starsim 4 keeps Starsim 3's module API: a disease written as code (`ss.Infection` with `define_states()`, `set_prognoses()`, `step_state()`), networks, demographics, interventions, connectors, and analyzers all still work, and are a supported way to write a model, not a legacy one. What changed is that Starsim 4 has one vocabulary: where Starsim 4 has its own way to say something, Starsim 3's duplicate spelling was removed rather than kept beside it. So an upgrade is in three steps: make it run (rename what was removed), check the numbers, then, if wanted, use the new tools or declare one disease at a time.
+
+## Workflow
+
+1. **Run it and fix each error** with the tables below. Every removed name fails loudly (`AttributeError: module 'starsim' has no attribute ...`, or a coded error that names the replacement); nothing removed fails silently.
+2. **Check the behavior changes** (the second table): these run without an error but print different numbers. Go through each one that applies to the model.
+3. **Validate against Starsim 3**: run the model under Starsim 3 (pin `starsim==3.7.2` in a separate environment) and under Starsim 4 with 10 or more seeds each, and compare the means and spreads of the results you care about (see the validate-import skill for the comparison). Expect them to agree statistically, not bit for bit: the random streams differ, and results are indexed one step differently (below).
+4. **Optionally, use the Starsim 4 tools on the unchanged model** (the last section), or port diseases to declared form one at a time (import-model skill, `references/starsim3.md`), validating after each.
+
+## Removed names and their Starsim 4 spellings
+
+| Starsim 3 | Starsim 4 | Notes |
+|---|---|---|
+| `ss.routine_vx(product=ss.simple_vx(efficacy=e), prob=p, start_year=y)` | `ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1))` | Starsim 3's "routine" was a share `p` reached each year. Without `interval=`, Starsim 4's delivery is offered once to each person, when they first become eligible, which is a different and much smaller program |
+| `ss.campaign_vx(product=..., prob=p, years=[y1, y2])` | `ss.vaccinate(ss.Vaccine(...), coverage=p, at=[y1, y2])` | |
+| `ss.simple_vx(efficacy=e)` | `ss.Vaccine(efficacy=e)` | Leaky: everyone vaccinated has their susceptibility times `1 - e` |
+| `ss.simple_vx(efficacy=e, leaky=False)` | `ss.Vaccine(efficacy=1.0)` delivered with `coverage=c*e` | All-or-nothing: a share `e` of those vaccinated are fully protected, which is a perfect vaccine given to `c*e` (the doses delivered differ: count `c` per person reached). A `leaky=False` keyword on `ss.Vaccine` is planned (review finding D40) |
+| `ss.routine_screening(product=ss.Dx(df=...), prob=p, start_year=y)` | `ss.screen(ss.Test(sensitivity=..., specificity=...), coverage=p, start=y, interval=ss.years(1), on_positive=ss.treat(...))` | For a `Dx` table with more than two outcomes, keep `ss.Dx` and compose the delivery: `class routine_screening(ss.BaseScreening, ss.RoutineDelivery): pass` |
+| `ss.campaign_screening(product=..., prob=p, years=[...])` | `ss.screen(ss.Test(...), coverage=p, at=[...])` | Or compose `class campaign_screening(ss.BaseScreening, ss.CampaignDelivery): pass` |
+| `ss.routine_triage(...)`, `ss.campaign_triage(...)` | A follow-up test: `ss.screen(test1, ..., on_positive=ss.screen(test2, ...))` | Or compose `class routine_triage(ss.BaseTriage, ss.RoutineDelivery): pass` (likewise `CampaignDelivery`) |
+| `ss.Vx(efficacy=...)`, `ss.Dx(sensitivity=...)`, `ss.Tx(cure=...)` as short names (an alias in early Starsim 4) | `ss.Vaccine(...)`, `ss.Test(...)`, `ss.Treatment(...)` | `ss.Vx`, `ss.Dx`, `ss.Tx` are now only the Starsim 3 base classes for products written as code |
+| `ss.seasonality(diseases='flu', scale=s, shift=h)` | `ss.modify(flu.rel_trans, multiply=ss.seasonal(amplitude=s, peak=h))`, passed in `connectors=` | `ss.seasonality` overwrote `rel_trans` every step, erasing anything else that set it; a modifier multiplies a base that is never overwritten. For a declared disease, a seasonal beta can also be given directly: `beta=ss.seasonal(mean=0.3, amplitude=s, peak=h)` |
+| `ss.rate(x)`, `ss.time_prob(x)`, `ss.rate_prob(x)` (Starsim 2 names) | `ss.time.freq(x, 'year')`; `ss.prob(x, 'year')`; `ss.peryear(x)` | |
+| `ss.probperday(x)` ... `ss.probperyear(x)` | `ss.prob(x, 'day')` ... `ss.prob(x, 'year')` | The same probability per period; printed as written |
+| `ss.freqperday(x)` ... `ss.freqperyear(x)`, `ss.freq(x, unit)` | `ss.time.freq(x, 'day')` ...; in a declared model, `ss.perday(x)` ... | A count per unit time, for modules written as code; in every declared slot a rate gives the same result |
+| `ss.day`, `ss.week`, `ss.month`, `ss.year` (one unit) | `ss.days(1)` ...; or the unit as a string, e.g. `dt='month'` | |
+| `ss.dur(3)`, `ss.per(2)` with no unit | `ss.dur(3, 'year')` or `ss.years(3)`; `ss.peryear(2)` | A unit is needed; it was years by default |
+| `ss.time.approx_compare()`, `ss.time.warn_deprecation()` | none | Internal, unused |
+| A subclass of `ss.SIR`, `ss.SIS`, or `ss.SEIR` that overrides their methods (`set_prognoses`, `step_state`, ...) or reads `ti_recovered`, `ti_dead`, `immunity` | Subclass `ssl.CodedSIR`, `ssl.CodedSIS`, or `ssl.CodedSEIR` (`import starsim.library as ssl`) | These are Starsim 3's classes, unchanged; `ss.SIR` etc. are now declared (below) |
+| `ss.SIS(waning=..., imm_boost=...)` | `ssl.CodedSIS(waning=..., imm_boost=...)`, or an SIRS: `ss.Disease(infection=ss.transmission('S -> I', beta=b), recovery=ss.progression('I -> R', dur=d), waning=ss.progression('R -> S', dur=w))` | Starsim 3's SIS had a per-agent immunity level that waned; the declared `ss.SIS` has none |
+| `msim.reduce()`, `msim.mean()`, `msim.median()`, then `msim.results.sis_prevalence` (flattened, with `.low` and `.high`) | `msim.results.sis.prevalence`, a result with a run axis first: `.median()`, `.mean()`, or `low, mid, high = res.quantiles([0.1, 0.5, 0.9])` | `msim.plot()` draws the median and a 95% interval of each scenario by itself (`lines=True` draws every run). `msim.results.flatten()` gives the flattened names (`sis_prevalence`), still with a run axis. `msim.reset()` is gone too (there is nothing to undo) |
+| `msim.combine()`, then `msim.results` or `msim.plot()`; `msim.combine(output=True)` | `sim = msim.combine()`, then `sim.results`, `sim.plot()` | It returns the combined sim and leaves the MultiSim as it was |
+| `ss.MultiSim.merge(m1, m2, base=True)` (the reduced sims) | `ss.MultiSim.merge(m1, m2)` | The runs of both; each sim's label is its scenario, so `plot()` shows each with its interval |
+| `ss.multi_run(sim, n_runs=n)`, `ss.multi_run(sim, iterpars=dict(rand_seed=[...]))`, `ss.MultiSim(sim, iterpars=...)` | `ss.parallel(sim, n_runs=n)` (or `sim.run(n_runs=n)`); `iterpars=` is `pars=`, e.g. `ss.parallel(sim, pars=dict(rand_seed=[1, 5, 9]))` | `multi_run` returned a list of sims: it is `ss.parallel(...).sims` |
+| `ss.MultiResult` (a result across runs from `ss.parallel()` in early Starsim 4) | `ss.Result`, with a run axis first | `select(run=3)` returns the result of that run (before, an array) |
+| `res.cum_infection` (the cumulative total of a declared disease's transition, in early Starsim 4) | `res.infection.cum` | Computed when asked for; every transition's flow has it |
+| `class MyDisease(ss.Disease)` written as code (`define_pars`, `define_states`, `step`) | `class MyDisease(ss.Infection)` | `ss.Disease` is now only for declared diseases, and says so (`E804`). Check that the subclass's states and results do not clash with `ss.Infection`'s (`susceptible`, `infected`, `rel_sus`, `rel_trans`, `ti_infected`; `prevalence`, `new_infections`, `cum_infections`); use `define_states(..., reset=True)` to drop Infection's states. A disease with no `beta` is not transmitted |
+| `ss.Sim(birth_rate=20, death_rate=10)` (per 1,000 people per year) | `ss.Sim(demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))])` (per person) | Declared for the population: it runs under every solver (before, the model became agents), and the same people are born into and die from every disease. With a declared disease, the births and deaths are its results (`sim.results.sir.births`); with none, they run as `ss.Births` and `ss.Deaths` (`sim.results.births`). `ss.Births(birth_rate=20)` and `ss.Deaths(death_rate=10)` (per 1,000, agents only) are unchanged |
+| `ss.birth()` and `ss.death()` (of everyone) declared in each of several diseases (early Starsim 4) | Once, in `ss.Sim(demographics=[...])` | Declared in two diseases they would count people twice (as agents, twice the births), so it is an error (`DuplicateDeclaration`) |
+| `ss.Sim(track_writes=True)` (early Starsim 4) | none | `sim.what_modifies(x)` lists the declared modifiers; direct writes are not tracked |
+| `ss.stratify(sir, age=...)` (early Starsim 4) | `sir.stratify(age=...)` | Stratifying again in the same way now does nothing (with a note), rather than raising `DuplicateStructuralDimension` |
+| A delivery's `years=` or `dates=`, `eligible=` (early Starsim 4) | `at=`, `where=` | The same keywords as `ss.change()` and `ss.modify()`: `ss.vaccinate(vx, coverage=0.7, at=[2021, 2025], where=ss.People.age < 5)` |
+| A delivery's `on=` with a state or condition, e.g. `on=sis.I` (early Starsim 4) | `where=sis.I, interval=1` | `on=` is for events: a transition (`on=sir.infection`) or a function of the sim |
+| `ss.transfer(vaccinated=True, coverage=0.7, years=[...])` (early Starsim 4) | `ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[...])` | `ss.transfer()` is movement at a rate (`rate=` or `dur=`), part of the model |
+| `ss.contacts(matrix, age=[0, 15, 65])` (the matrix's own age bands; early Starsim 4) | `ss.contacts(matrix, bands=[0, 15, 65])` | `age=` is now always a matrix over the model's own age groups, `ss.contacts(age=[[5, 1], [1.5, 2]])` |
+| `ss.vaccinate(ss.Vaccine(efficacy=0.9), ...)` | Still works; also `ss.vaccinate(efficacy=0.9, ...)` | A delivery can make its own product from the product's keywords (likewise `ss.treat(cure=...)`, `ss.screen(sensitivity=...)`) |
+| `ss.RandomExactNet(n_contacts=n)` (early Starsim 4) | `ss.RandomNet(n_contacts=n, method='exact')` | |
+| `ss.RandomNet(uniform_targets=True)` (early Starsim 4) | `ss.RandomNet(method='uniform')` | |
+| `ss.RandomSafeNet`, `ss.ClusterNet`, `ss.HybridNet`, `ss.MSMNet` | `ssl.RandomSafeNet`, `ssl.ClusterNet`, `ssl.HybridNet`, `ssl.MSMNet` (`import starsim.library as ssl`) | Moved to the library unchanged (but `ssl.HybridNet(uniform_targets=True)` is `method='uniform'`); the strings `networks='randomsafe'`, `'msm'`, `'cluster'`, `'hybrid'` no longer resolve, so pass the class |
+| `ss.MaternalNet` | `ss.PrenatalNet` | It was an alias |
+| `ss.Route` (the base class of networks and mixing pools) | `ss.networks.Route` | Subclass it for a custom route; most code subclasses `ss.Network` |
+| `(S | I | R) >> D` and `S = ss.states(1)` (early Starsim 4) | `S + I + R >> D`; `S, = ss.states(1)` | `|` on states is a condition, for `where=`; `ss.states()` always returns a list |
+| `ss.Compartmental`, `ss.Agents`, `ss.Engine`, `ss.Crossing`, `ss.Expr`, `ss.Graph`, `ss.Strat`, `ss.Cond`, `ss.InfectionLog`, `ss.MultiResults` (early Starsim 4) | `ss.solvers.Compartmental` (and the others in `ss.solvers`), `ss.transitions.Expr`, `ss.transitions.Graph`, `ss.transitions.Strat`, `ss.conditions.Cond`, `ss.diseases.InfectionLog`, `ss.run.MultiResults` | Internals, reached through their submodule |
+| `ss.MFNet(duration=...)`, `ssl.MSMNet(duration=...)` | `ss.MFNet(dur=...)`, `ssl.MSMNet(dur=...)` | As every other network; code reading `net.pars.duration` reads `net.pars.dur` |
+
+Names that were not removed, because Starsim 4 has no replacement for everything they do or packages built on Starsim subclass them, and are waiting on a decision: `ss.RoutineDelivery`, `ss.CampaignDelivery`, `ss.BaseTest`, `ss.BaseScreening`, `ss.BaseTriage`, `ss.BaseTreatment`, `ss.treat_num` (a treatment queue with a capacity), `ss.BaseVaccination`, `ss.Dx`, `ss.Tx`, `ss.Vx` (products from tables of outcomes by state); `ss.Calibration`, `ss.CalibComponent`, and the likelihoods `ss.Normal`, `ss.Binomial`, `ss.BetaBinomial`, `ss.GammaPoisson`, `ss.DirichletMultinomial` (with `linear_interp`, `linear_accum`, `step_containing`); and `ss.Samples`, `ss.Dataset`. Code that uses them runs unchanged. For new work, `sim.calibrate()` replaces `ss.Calibration` (see below), and the deliveries `ss.vaccinate()`, `ss.screen()`, `ss.treat()` replace the delivery classes.
+
+## Behavior changes that print different numbers
+
+| What | Starsim 3 | Starsim 4 | What to do |
+|---|---|---|---|
+| `ss.SIR`, `ss.SIS`, `ss.SEIR` | Written as code, agents only | Declared from states and transitions: any solver, `describe()`, `equations()`, `R0()`; as agents over networks the results agree with Starsim 3's within noise | Nothing, unless subclassed (above) |
+| Their results | `n_susceptible`, `n_infected`, `n_recovered`; SEIR `n_exposed`, `n_infectious` | `n_S`, `n_I`, `n_R` (SEIR `n_S`, `n_E`, `n_I`, `n_R`), plus a flow per transition (`infection`, `recovery`, `death`, with its cumulative total as `res.infection.cum`); `new_infections`, `cum_infections`, `prevalence` as before (on `ss.SIR`, `ss.SIS`, and `ss.SEIR` only: a disease declared with `ss.Disease(...)` has just the transition's name, and a data column `new_infections` is matched to its transmission). In flattened tables (`sim.to_df()`) names are lower case: `sir_n_i` | Rename. `sir.infected`, `sir.susceptible`, `sir.recovered` (SEIR also `exposed`, `infectious`, and `infected` as E or I) still work as aliases of the states for this release |
+| Their arrays | `sir.ti_infected`, `ti_recovered`, `ti_dead` | `sir.ti_I` (when each agent entered I), `ti_R`, `ti_exit_I` (when they are due to leave) | Rename; deaths from the disease are the flow `sir.results.death` |
+| Their keywords | | Accepted as before: `beta`, `init_prev`, `dur_inf`, `p_death`, `dur_exp`; `dur_inf=10` or `[10, 2]` set the default lognormal's mean (and std); `p_death=ss.bernoulli(p)` is `p`; `init_prev=ss.choose_n(n)` is n agents | `beta` given per network as a dict of bare numbers is a rate per unit time in Starsim 4, but was a probability per step in Starsim 3: for a model with steps shorter than its unit, give `ss.probpermonth(...)` etc. (Starsim 4 warns) |
+| Time when no `start` is given, in a sim whose diseases are all declared (now including `ss.SIR` etc.) | Calendar years 2000 to 2050 | Years 0 to 50 | Give `start=2000` if the script uses calendar years (e.g. an intervention's `start_year=2015`, `run(until='2010-01-01')`); otherwise they fail with "Years must be within simulation start and end dates" |
+| Result index | `n_<state>[0]` after the first step | `n_<state>[0]` is the initial state, a flow at index 0 is 0, and `stop=T` takes one step fewer | Compare by time, not by index |
+| `self.ti` in code | The step's index, in `step()` and `update_results()` alike | In `step()`, the step's start, as before (so `if self.ti == 0` runs on the first step); in `update_results()` and analyzers, the step's end, where its results go | A result written in `step()` goes at `self.ti + 1`; in `update_results()`, an event dated during the step is at `self.ti - 1` (compared with `self.ti`, it is never found, and the count is 0) |
+| A declared disease as agents keeps people in a state one step longer than Starsim 3's code did (a constant 3-year infection lasts 4 yearly steps) | | Under review (finding X13) | At small steps this is negligible; at yearly steps, compare with that in mind |
+| `init_prev=20` | An error (use `ss.choose_n(20)`) | 20 people | |
+| Many runs (`ss.parallel()`, `ss.MultiSim(...).run()`) | `msim.plot()` drew each sim; `len(msim)` the number of sims; `msim.summarize()` and `msim.compare()` from the sims | `msim.results` holds every result with a run axis first, for any sim; `msim.plot()` draws the median and a 95% interval of each scenario (each sim's label), `lines=True` every run; `len(msim)` is the number of runs; `summarize()`, `compare()`, `diff()`, and `extinction()` work from the results. `msim.sims` still has the sims that were run | Label the sims to compare them as scenarios; `msim.plot(lines=True)` for Starsim 3's picture |
+| `ss.MultiSim([s1, s2], n_runs=4)` | `n_runs` ignored for a list of sims | Each sim run 4 times, as `ss.parallel(s1, s2, n_runs=4)` | Drop `n_runs` to run each once. `ss.MultiSim(sim)` with one sim still runs it 4 times |
+
+## Starsim 4 tools on the unchanged model
+
+These work on modules written as code, as agents, alongside any declared ones:
+
+- **Modifiers** of a coded disease's `rel_sus` and `rel_trans`: `ss.modify(hiv.rel_trans, multiply=0.5, start=2025)`. A coded disease's parameters are read by its own code, so they cannot be modified; declare the disease for that.
+- **Conditions** on a coded module's arrays, written before the sim exists: `where=hiv.cd4 < 200`, `where=hiv.infected & ~hiv.on_art`.
+- **Fitting** a coded module's parameter: give it as `ss.par` with bounds, and call `sim.calibrate()` (the sim needs `data=`, with columns named like results, e.g. `hiv.prevalence`): `ssl.HIV(beta=ss.par(0.02, bounds=[0.005, 0.1]))`. The module's code sees the plain value.
+- **`sim.new()`** rebuilds any sim from what it was made with, with other values or a seed: `sim.new(rand_seed=2)`, `sim.new(pars=dict(beta=0.2))`.
+- **Connectors to modifiers**: a Starsim 3 connector that writes `sis.rel_sus[:] = 1.0` and then raises it erases anything else that set `rel_sus` (e.g. the disease's own immunity); `ss.modify(sis.rel_sus, multiply=5, where=hiv.cd4 < 200)` cannot.
+- What needs a declared disease, and says so (`E804`): `equations()`, `diagram()`, `R0()`, `stratify()`, and the compartmental solvers (`solver='ode'` and the others). Every MultiSim has results with a run dimension and `msim.diff()`; `msim.extinction()` needs a declared disease.
+
+## Reporting
+
+Say which names were changed (with the table rows used), which behavior changes applied and how the validation came out (means and spreads, Starsim 3 against Starsim 4), and anything that could not be upgraded.
