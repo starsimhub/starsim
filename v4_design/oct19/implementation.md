@@ -60,7 +60,7 @@ Sizes: S is under a day of agent work, M a few days, L more. **SWA** marks a sil
 ## Stage 1: silent wrong answers (S each unless marked; with Stage 0, in two or three worktrees)
 
 Fitting and results:
-- [ ] **Decision 13**: a fresh seed per point for global, Optuna-style fits of stochastic models. I read Cliff's "yes" as applying to the recommendation, which keeps the same seed for local methods such as Nelder-Mead; confirm. Then rerun `test_epimodel_fit` (23.4% against the 30% target at one run a point with one seed).
+- [ ] **Decision 13**: a fresh seed per point for global, Optuna-style fits of stochastic models. Local methods such as Nelder-Mead keep one seed for now (Cliff, 2026-10-19). Ideally they would run several times, each with its own seed; that is in `deferred.md`. Then rerun `test_epimodel_fit` (23.4% against the 30% target at one run a point with one seed).
 - [ ] **FP3**: `resample('year')` on a dated sim bins by calendar year, so a 3-year sim gives 4 "years" (`results.py:618`).
 - [ ] **FP12**: per-scenario quantiles from a port of `msim.reduce()` come out with low equal to high.
 - [ ] **MA30** (S to M): strata are lost through affine results and `.frac`.
@@ -130,7 +130,7 @@ One agent revises each document in place, keeping what is approved. Each documen
   - Give resistance at drug failure, and a clinic visit, their own natural spellings, not `ss.Delivery`.
   - `on=` takes `|`, `&`, and lists with `operator='any'|'all'`.
   - Add `count_events=True`, and say what choices a user has above a stock target.
-  - **First, a short review of Thanzi la Onse's health system** (its HSI events, appointment footprints, and consumables) to see what a cascade should be able to say. Its source is not on this machine: TLOmodel is on GitHub (UCL), so clone it read-only, or Cliff names a copy.
+  - **Thanzi la Onse's health system** (its HSI events, appointment footprints, and consumables) should inform what a cascade can say. It is cloned at `/home/cliffk/idm/git/TLOmodel`, but don't touch it yet: Cliff is working on it with the lingua franca library first. Until then the draft goes ahead without it, and is revisited once his TLO work is done.
 - [ ] **Family as `ss.Strains`.**
   - Name first.
   - `ss.Strains(hpvsim.genotypes(...))` builds the members, with no list expansion in user code.
@@ -198,7 +198,7 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 ## Stage 8: reviews, tests, and records (any time; some gate the end)
 
-- [ ] **Thanzi la Onse**: a review as part of H0's cascade draft (above).
+- [ ] **Thanzi la Onse**: a review for the cascade, after Cliff's own work on TLO with the lingua franca library (`/home/cliffk/idm/git/TLOmodel`; leave it alone until then).
 - [ ] **Canon**: the 38 short canon models into a docs gallery and `tests/corpus.py`. Move `canon_review/tests/` into `tests/` as each item is fixed. Add a docs line that the book's k-regular network is `ss.StaticNet` over networkx, not `ss.RandomNet`.
 - [ ] **Naive review**: move the remaining strict xfails into `tests/` once fixed. Rerun the benchmark after the docs are rewritten, with the harder tasks listed. Fix `check_notebooks.py` so it can run `coming_from/` (it runs `eval: false` cells and writes `numpy.py` into the folder).
 - [ ] **Real models at full complexity** ([next-reviews.md](../oct17/next-reviews.md) item 5): after Phase H, since it would mostly rediscover the gaps Phase H fills.
@@ -209,16 +209,14 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 ## Waiting on Cliff
 
-1. **Per-act D5**: does `rel_trans` multiply the per-act hazard (0.03 with `rel_trans=10` gives 0.263; never above 1; factors compose), or the per-act probability with a clip at 1 (gives 0.3)? My recommendation is the hazard, with `describe()` printing the resulting per-act probability so the number a user expects is visible.
+1. **Per-act D5**: does `rel_trans` multiply the per-act hazard (0.03 with `rel_trans=10` gives 0.263; never above 1; factors compose), or the per-act probability with a clip at 1 (gives 0.3)? My recommendation is the hazard, with `describe()` printing the resulting per-act probability so the number a user expects is visible. [CK: hazard is ok]
 2. **The counter spelling**, after H0's examples.
-3. **`sim.people` in a compartmental run** ([people_compartmental.md](../oct17/people_compartmental.md), X12): the alternatives are written up and not yet answered.
-4. **Given dwell decision 3** (a whole-step conveyor, not phase-type stages): unanswered; taken as the recommendation.
-5. **Decision 13's scope**: a fresh seed per point for global optimizers only (the recommendation), or for local methods too?
-6. **NR5**: a warning rather than a note when `init_prev=` seeds `E`. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys).
-7. **CR9**: whether to change how Gillespie's automatic tau leap steps.
-8. Older ones still open: **R27** (keep or remove `ss.Samples`/`ss.Dataset`), **L20 / L23** (names without frames; `<transition>.<slot>` names), **DF20** (contact matrices as release assets), **SW8** (round a sub-agent seed stochastically, or raise).
-9. **Thanzi la Onse**: whether there is a local copy, or whether to clone TLOmodel from GitHub.
-10. **Pushing the downstream CI gate.**
+3. **`sim.people` in a compartmental run** ([people_compartmental.md](../oct17/people_compartmental.md), X12): the alternatives are written up and not yet answered. [CK: no, i liked your proposal, i thought i answered that]
+4. **Given dwell decision 3** (a whole-step conveyor, not phase-type stages): unanswered; taken as the recommendation. [CK: ok]
+5. **NR5**: a warning rather than a note when `init_prev=` seeds `E`. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys). [CK: what's wrong with init_prev seeding E?]
+6. **CR9**: whether to change how Gillespie's automatic tau leap steps. [CK: i don't mind, whatever's fastest on average]
+7. Older ones still open: **R27** (keep or remove `ss.Samples`/`ss.Dataset`), **L20 / L23** (names without frames; `<transition>.<slot>` names), **DF20** (contact matrices as release assets), **SW8** (round a sub-agent seed stochastically, or raise). [CK: maybe we could drop ss.Samples for now, and restore it later depending on how things shake out]
+8. **Pushing the downstream CI gate.** [CK: this can wait]
 
 ## Acceptance
 

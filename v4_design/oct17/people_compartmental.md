@@ -1,6 +1,6 @@
 # `sim.people` in a compartmental run: the alternatives
 
-For decision 13 in [decisions_oct18.md](decisions_oct18.md). Cliff: "not sure about one row ... seems like it could be used for compartments, metapopulations, etc. but i would need to see the alternatives in more detail."
+For decision 13 in [decisions_oct18.md](decisions_oct18.md). Cliff: "not sure about one row ... seems like it could be used for compartments, metapopulations, etc. but i would need to see the alternatives in more detail." [CK: yes, i like alternative B, as already implemented -- can close this]
 
 ## What the code does now
 
@@ -16,6 +16,7 @@ sim.groups.strats[0]            # the age stratification, with its levels
 Breaks: conditions on people (`where=ppl.age < 15`) need another object to be written on (`ss.People.age < 15` at class level, or `ss.age`); the try-it rule needs a stand-in anyway; every module that reads `sim.people` in `init_post()` must branch on the solver. Clearest about what is there, but moves the problem rather than removing it.
 
 **B. One row per group (now).** As above.
+
 ```python
 ppl = sim.people; len(ppl)       # 6 groups
 mask = ppl.age < 15              # [True, True, False, False, False, False], a mask over groups
