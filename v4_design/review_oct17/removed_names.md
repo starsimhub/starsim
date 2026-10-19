@@ -30,6 +30,7 @@ The rule: a family of names stays or goes together. The time names are one famil
 | `ss.Cond` | `ss.conditions.Cond` | Internal | none [CK: ok] |
 | `ss.MultiResults` | `ss.run.MultiResults` | Internal | none [CK: ok] |
 | `ss.Engine`, `ss.Compartmental`, `ss.Agents`, `ss.Crossing`, `ss.Mixing`, `ss.CountState`, `ss.make_engine`, `ss.solver_names` | `ss.solvers.Compartmental` and so on | Internals | `Crossing`: tbsim 2 (`v1.0.0`, the Starsim 4 port) [CK: ok] |
+| `ss.CodedDisease` | `ss.Disease` | One class: an `ss.Disease` subclass that declares nothing is written as code, as Starsim 3's `ss.Disease` was (Cliff, 2026-10-18); the library's `ssl.CodedSIR`, `ssl.CodedSIS`, `ssl.CodedSEIR` are now `ssl.AgentSIR`, `ssl.AgentSIS`, `ssl.AgentSEIR`, also never released | none |
 
 ## Keywords removed or renamed
 

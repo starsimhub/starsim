@@ -35,10 +35,10 @@ Usage::
 
 import numpy as np
 import starsim as ss
-from ..diseases.coded import CodedSIR
+from ..diseases.agents import AgentSIR
 
 
-class NeonatalSepsis(CodedSIR):
+class NeonatalSepsis(AgentSIR):
     """
     Minimal neonatal sepsis model.
 

@@ -280,6 +280,9 @@ class Compartmental(Engine):
 
         for tr in graph.inflows:
             add_flow(tr, None, 'inflow')
+        if self.sim.solver != 'ode': # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given, so its sums are as they were)
+            rank = lambda c: (1, '', 0) if c is None else (0, self.comps[c].state.name, self.state_comps[self.comps[c].state.name].index(c))
+            self.flows.sort(key=lambda flow: (*rank(flow.src), flow.tr.name, -1 if flow.strain is None else flow.strain))
 
         for flow in self.flows: # The expression each flow's rate is worked out from, if it is not a dwell time, and whether that can change within a step
             tr = flow.tr
@@ -388,6 +391,15 @@ class Compartmental(Engine):
             if info.stay is not None:
                 info.leaving[:] = 0
         return
+
+    @staticmethod
+    def at_home(share):
+        """ Whether a time share between places (a sparse array) keeps everyone at home, as `np.allclose(share, np.eye(P))` would say, without forming either """
+        coo = share.tocoo()
+        diag = coo.row == coo.col
+        home = np.zeros(share.shape[0])
+        home[coo.row[diag]] = coo.data[diag]
+        return bool(np.all(np.abs(coo.data[~diag]) <= 1e-8) and np.all(np.abs(home - 1) <= 1e-8 + 1e-5))
 
     @staticmethod
     def round_preserving(y):
@@ -758,7 +770,7 @@ class Compartmental(Engine):
 
         place_of = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int)
         pl_starts, pl_groups = by_level(place_of, place_of.max() + 1)
-        self._local_mixing = all(term.kind == 'homogeneous' for term in mixing.terms) and (mixing.space is None or mixing.time_share is None or np.allclose(mixing.time_share, np.eye(len(mixing.time_share))))
+        self._local_mixing = all(term.kind == 'homogeneous' for term in mixing.terms) and (mixing.space is None or mixing.time_share is None or self.at_home(mixing.time_share))
 
         # Exposure: each group is in one cell of each mixing term, and the cells are mixed by the time share between places and the term's matrix between levels (see Mixing.term_exposure())
         nt = len(mixing.terms)
@@ -959,11 +971,13 @@ class Compartmental(Engine):
         return tuple(np.array([r[k] for r in rows]) for k in range(4)), 0
 
     def at_time(self, t):
-        """ Take values that vary in time at a time t (in the sim's unit) into the step """
+        """ Take values that vary in time at a time t (in the sim's unit) into the step: the year worked out as `tables()` does, so that a stepped run takes the same values as a whole one """
         if self.smooth:
-            yearvec = self.mod.t.yearvec
-            per_unit = (yearvec[1] - yearvec[0])/self.dt if len(yearvec) > 1 else 0.0
-            self.offset = t*per_unit
+            years, ti = self.mod.t.yearvec, self.mod.t.ti
+            start = years[ti]
+            end = years[ti+1] if ti + 1 < len(years) else start + (start - years[ti-1] if ti else 0)
+            frac = t/self.dt
+            self.year = None if frac == 0 else (start + end)/2 if frac == 0.5 else end if frac == 1 else start + frac*(end - start)
             self.cache.clear()
         return
 
@@ -1446,11 +1460,11 @@ class Compartmental(Engine):
             if end >= npts - 1:
                 break
             start = end
-        out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti))
+        out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
         out.deliveries = sc.objdict({mod.name:mod.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
 
-    def collect(self, stocks, flows, expected=False, grouped=None):
+    def collect(self, stocks, flows, expected=False, grouped=None, seeds=None):
         """
         The results of many runs, from the number in each state and the flow along each transition and mover
 
@@ -1459,6 +1473,7 @@ class Compartmental(Engine):
             flows (array): runs by steps by transitions and movers by groups (or one)
             expected (bool): whether outcomes of whole events are their expected number, rather than drawn (as a particle filter needs)
             grouped (tuple): from `run_many()`: some states and flows by group instead, as runs by rows by states (or flows) by groups, which states and flows they are, and the time point of each row (or None for every one)
+            seeds (list): the seed of each run, for the draws of the outcomes (see `derived_outcomes()`)
 
         Returns the results as `run_many()` describes them.
         """
@@ -1494,7 +1509,7 @@ class Compartmental(Engine):
         if (by_group or grouped is not None) and group_ti is None and self.outcomes:
             new_g = {name:np.moveaxis(flows_g[:, :, pos[ind], :], -1, 1) for name,ind in self.tr_index.items() if ind in pos} # Runs by groups by steps
             if all(key in new_g or key in self.outcomes for info in self.outcomes.values() for key,_ in info.sources):
-                outs_g = self.derived_outcomes(new_g, expected=expected)
+                outs_g = self.derived_outcomes(new_g, expected=expected, seeds=seeds)
                 for key,vals in outs_g.items():
                     groups[key] = np.moveaxis(vals, 1, -1)
                 outcomes = sc.objdict({key:vals.sum(axis=1) for key,vals in outs_g.items()})
@@ -1510,7 +1525,7 @@ class Compartmental(Engine):
         out.update({name:flows[:, :, ind] for name,ind in self.transfer_index.items()})
         if 'new_infections' in res and 'new_infections' not in graph.transitions:
             out.new_infections = sum(new[tr.name] for tr in graph.transmissions)
-        out.update(self.derived(n, new, outcomes=outcomes is None, expected=expected))
+        out.update(self.derived(n, new, outcomes=outcomes is None, expected=expected, seeds=seeds))
         if outcomes is not None:
             out.update(outcomes)
         if 'cum_infections' in res and 'new_infections' in out:
@@ -1521,7 +1536,7 @@ class Compartmental(Engine):
         self.cache.clear()
         return out
 
-    def derived(self, n, new, outcomes=True, expected=False):
+    def derived(self, n, new, outcomes=True, expected=False, seeds=None):
         """
         The results that are worked out from the number in each state and the flow along each transition
 
@@ -1530,13 +1545,14 @@ class Compartmental(Engine):
             new (dict): the same for the flow along each transition
             outcomes (bool): whether to work out the outcomes
             expected (bool): see `derived_outcomes()`
+            seeds (list): see `derived_outcomes()`
 
         Returns a dict of the outcomes, the prevalence, and the results given as expressions.
         This is what `update_results()` does on each step, for every step at once.
         """
         graph = self.graph
         res = self.mod.results
-        out = self.derived_outcomes(new, expected=expected) if outcomes else sc.objdict()
+        out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.objdict()
         if self.standard and 'prevalence' in res and 'prevalence' not in graph.exprs:
             people = sum(n[s.name] for s in graph.people_states)
             infected = sum(n[s.name] for s in graph.infected)
@@ -1547,10 +1563,17 @@ class Compartmental(Engine):
                 out[name] = ss.transitions.evaluate(expr, ctx)
         return out
 
-    def derived_outcomes(self, new, expected=False, names=None):
-        """ What `step_outcomes()` does on each step, for every step at once (with `expected`, outcomes of whole events are their expected number, rather than drawn); only the outcomes in `names`, if given (with those they are worked out from) """
+    def derived_outcomes(self, new, expected=False, names=None, seeds=None):
+        """ What `step_outcomes()` does on each step, for every step at once (with `expected`, outcomes of whole events are their expected number, rather than drawn); only the outcomes in `names`, if given (with those they are worked out from); for many runs (the first dimension of the flows), each drawn from the random numbers of its seed in `seeds` """
         npts = self.mod.t.npts
         draw = self.integer and not expected
+        if draw and seeds is not None: # Each run drawn as the run on its own draws, rather than all from one generator
+            saved, runs = self.rng, []
+            for r,seed in enumerate(seeds):
+                self.rng = self.make_rng(seed=seed)
+                runs.append(self.derived_outcomes({k:v[r:r+1] for k,v in new.items()}, names=names))
+            self.rng = saved
+            return sc.objdict({k:np.concatenate([run[k] for run in runs]) for k in runs[0]})
         out = sc.objdict()
         for name,info in self.outcomes.items():
             if names is not None and name not in names:

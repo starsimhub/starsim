@@ -23,7 +23,7 @@ root = sc.thispath(__file__).parent
 # Start imports: version and settings
 t('settings') # Slow since importing Numba
 from .version import __version__, __versiondate__, __license__
-from .settings import dtypes, options, style, load_fonts
+from .settings import dtypes, options, style # Also ss.settings.load_fonts
 
 # Optionally print the license
 t('license')
@@ -39,7 +39,7 @@ sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
 # Finish imports
 t('utils')
 from .utils import (
-    ndict, warn, find_contacts, standardize_netkey, parse_age_range, apply_age_range,
+    ndict, warn, standardize_netkey, parse_age_range,
     standardize_data, load, save, shrink, plot_args, show,
     return_fig,
 )
@@ -50,7 +50,7 @@ from .errors import *
 t('debugtools')
 from .debugtools import (
     Profile, Debugger, Diagnostics, check_requires, check_version,
-    metadata, mock_time, mock_sim, mock_people, mock_module,
+    mock_time, mock_sim, mock_people, mock_module,
 )
 
 t('arrays')
@@ -59,11 +59,10 @@ from .arrays import (
 )
 
 t('distributions') # Slow import due to scipy.stats
-from .distributions import (
-    link_dists, make_dist, dist_list, scale_types, Dists, Dist,
-    random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
+from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dist, dist_list, rand_raw
+    Dist, random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
     poisson, nbinom, binom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
-    randint, rand_raw, bernoulli, choose_n, choice, histogram,
+    randint, bernoulli, choose_n, choice, histogram,
     multi_random,
 )
 
@@ -84,14 +83,14 @@ t('timeline')
 from .timeline import Timeline
 
 t('parameters')
-from .parameters import Pars, SimPars, Requires, load_pars, by, timeseries, seasonal
+from .parameters import Pars, SimPars, Requires, by, timeseries, seasonal
 
 t('people')
 from .people import People, Person, people
 
 t('modules')
 from .modules import (
-    module_map, module_types, register_modules, find_modules, required,
+    register_modules, required,
     Base, Module,
 )
 
@@ -104,7 +103,7 @@ from .networks import (
 )
 
 t('results')
-from .results import Result, Results, data, compare, validate_sim_data
+from .results import Result, Results, data, compare
 
 t('demographics')
 from .demographics import (
@@ -145,7 +144,7 @@ t('solvers')
 from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.solvers.Agents
 
 t('diseases')
-from .diseases import Disease, CodedDisease, Infection, NCD, SIR, SEIR, SIS
+from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
 
 t('loop')
 from .loop import Loop
@@ -171,7 +170,6 @@ from .run import MultiSim, single_run, parallel
 t('calibration') # Lazy import to save 500 ms
 from .calibration import (
     Calibration, CalibComponent,
-    linear_interp, linear_accum, step_containing,
     BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
     mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize,
 )
@@ -196,14 +194,14 @@ def _load_fonts(debug=debug):
                 if debug: print('Checking write permissions...')
                 test_file.touch()  # Mark that fonts were installed
                 if debug: print('Rebuilding fonts...')
-                load_fonts(rebuild=True)
+                settings.load_fonts(rebuild=True)
                 if options.verbose:
                     print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
             except Exception as E: # Not writable or something else went wrong; ignore
                 if debug: print(f'File not writable or another error: {E}')
         else:
             if debug: print(f'File {test_file} exists, loading fonts...')
-            load_fonts(rebuild=False)
+            settings.load_fonts(rebuild=False)
     return
 
 # Try loading fonts
@@ -258,6 +256,26 @@ _removed = {
     'CountState':         "ss.solvers.CountState",
     'make_engine':        "ss.solvers.make_engine",
     'solver_names':       "ss.solvers.solver_names",
+    'CodedDisease':       "ss.Disease (a subclass that declares nothing is written as code, as in Starsim 3)",
+    # Internal helpers, now only in their submodules
+    'link_dists':         "ss.distributions.link_dists",
+    'make_dist':          "ss.distributions.make_dist",
+    'dist_list':          "ss.distributions.dist_list",
+    'scale_types':        "ss.distributions.scale_types",
+    'rand_raw':           "ss.distributions.rand_raw",
+    'Dists':              "ss.distributions.Dists",
+    'load_fonts':         "ss.settings.load_fonts",
+    'module_map':         "ss.modules.module_map",
+    'module_types':       "ss.modules.module_types",
+    'find_modules':       "ss.modules.find_modules",
+    'linear_interp':      "ss.calibration.linear_interp",
+    'linear_accum':       "ss.calibration.linear_accum",
+    'step_containing':    "ss.calibration.step_containing",
+    'load_pars':          "ss.parameters.load_pars",
+    'validate_sim_data':  "ss.results.validate_sim_data",
+    'metadata':           "ss.debugtools.metadata",
+    'apply_age_range':    "ss.utils.apply_age_range",
+    'find_contacts':      "ss.utils.find_contacts",
 }
 
 def __getattr__(name):

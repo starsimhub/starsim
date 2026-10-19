@@ -139,7 +139,7 @@ def required(val=True):
 
     Examples:
         ```python
-        class CustomSIS(ss.library.CodedSIS):
+        class CustomSIS(ss.library.AgentSIS):
 
             def step(self):
                 super().step()
@@ -281,7 +281,7 @@ class Module(Base):
 
         # Properties to be added by init_pre()
         self.sim = None
-        self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
+        self.dists = None # Turned into a Dists object by sim._init_dists() if this module has dists
         self.results = ss.Results(self.label)
 
         # Finish initialization
@@ -436,7 +436,7 @@ class Module(Base):
         Args:
             name (str): A string with the name of the module class in lower case, e.g. 'sir'
         """
-        subcls = ss.find_modules(flat=True).get(name)
+        subcls = ss.modules.find_modules(flat=True).get(name)
         if subcls is not None and issubclass(subcls, cls):
             return subcls(*args, **kwargs)
         else:
@@ -701,7 +701,7 @@ class Module(Base):
         """
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
+            ss.distributions.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
@@ -784,7 +784,7 @@ class Module(Base):
         dists = sc.search(obj, type=ss.Dist)
         for i,dist in dists.enumvals():
             dist.trace = f'dist_{i}'
-        ss.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
+        ss.distributions.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
         self.init_post()
         return self
 

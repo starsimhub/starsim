@@ -122,7 +122,7 @@ class Engine:
         self._strain = None # The strain whose force of infection is being worked out
         self._routes = None # For a transmission with a beta for each route, the beta of each term of the mixing: see Compartmental.route_betas()
         self.register = None # The movement register, as arrays for the kernels
-        self.offset = 0.0 # How far into the step (in years) values that vary in time are taken, for the stages of an ODE step
+        self.year = None # The year in the step that values that vary in time are taken at, for its stages (None for its start)
         self.immunity = None # Protection between strains, and the states whose people it applies to: see init_immunity()
         self.immune_states = []
         self.cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
@@ -133,7 +133,7 @@ class Engine:
     def shrink(self):
         """ Drop the sim and the arrays the run worked in, for saving; the results are kept on the module """
         arrays = [key for key,val in vars(self).items() if isinstance(val, np.ndarray) and val.nbytes > 1000]
-        ss.shrink(self, ['sim', 'program', 'register', 'shifts', 'jax_run'] + arrays)
+        ss.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run'] + arrays) # The selector holds the sim, the cache the values per agent, and the series the tables of a compartmental run
         return
 
     def make_rng(self, stream=0, seed=None):
@@ -544,7 +544,7 @@ class Engine:
 
     def by_group(self, by):
         """ Expand a value for each level of one or more dimensions to a value for each group """
-        return by.per_group(self.sim, self.convert, year=self.sim.t.now('year') + self.offset if self.offset else None)
+        return by.per_group(self.sim, self.convert, year=self.year)
 
     def init_adjust(self):
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
@@ -605,8 +605,8 @@ class Engine:
 
     def call(self, func, p=None):
         """ Call a user function of the sim """
-        if self.offset and isinstance(func, ss.transitions.TimeValue) and not ss.solvers.Compartmental.held(func): # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
-            return func.at(self.sim.t.now('year') + self.offset, self.sim)
+        if self.year is not None and isinstance(func, ss.transitions.TimeValue) and not ss.solvers.Compartmental.held(func): # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
+            return func.at(self.year, self.sim)
         nargs = len(inspect.signature(func).parameters)
         if nargs >= 2:
             return self.call_uids(func, p)

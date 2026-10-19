@@ -90,12 +90,12 @@ When a module has a different timestep than the sim, its results use the scale f
 
 Dynamic rescaling needs to know which agents are naive, and to reset agents, which is done by `disease.make_naive(uids)`. A declared disease (such as `ss.SIR`, or one made with `ss.Disease`) does both by itself: an agent who has left the disease's first state is not naive, and `make_naive()` puts them back in it.
 
-A disease written as code (an `ss.Infection` subclass) counts the agents with a `ti_infected` as not naive. By default, its `make_naive()` resets every state of the disease to its default value, except `rel_sus` and `rel_trans`, since these are often modified by other modules (e.g. vaccines). You can change which states are kept via `skip_states`, or override the method if your disease needs something different. For example, `ssl.CodedSIS` (Starsim 3's SIS, written as code) also resets `rel_sus`, since it calculates `rel_sus` from its own immunity:
+A disease written as code (an `ss.Infection` subclass) counts the agents with a `ti_infected` as not naive. By default, its `make_naive()` resets every state of the disease to its default value, except `rel_sus` and `rel_trans`, since these are often modified by other modules (e.g. vaccines). You can change which states are kept via `skip_states`, or override the method if your disease needs something different. For example, `ssl.AgentSIS` (Starsim 3's SIS, written as code) also resets `rel_sus`, since it calculates `rel_sus` from its own immunity:
 
 ```python
 import starsim.library as ssl
 
-class MyDisease(ssl.CodedSIS):
+class MyDisease(ssl.AgentSIS):
     def make_naive(self, uids, skip_states=None):
         super().make_naive(uids, skip_states=['rel_trans']) # Reset rel_sus too
         self.my_custom_state[uids] = 0 # And reset anything not stored as a state

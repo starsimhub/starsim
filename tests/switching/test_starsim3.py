@@ -1,8 +1,8 @@
 """
 Switching demo for the Starsim 3 seat: their HIV and SIS model unchanged, then v4 verbs on it, then one disease redeclared.
 
-Passes when: v4 verbs work on the coded model; the port matches within seed noise.
-Still open: N9, N10, N29, the migration page (D23 and N19, the verbs on the coded model, are done).
+Passes when: v4 verbs work on the model written as code; the port matches within seed noise.
+Still open: N9, N10, N29, the migration page (D23 and N19, the verbs on the model written as code, are done).
 
 Scaled down to 1,000 to 5,000 agents over 10 to 15 years. N9 and N10 (routine delivery, the one-step shift) are
 for the migration page, and N29 (declared agents 1.4x slower than code) is checked by the north-star script (phase 6).
@@ -32,8 +32,8 @@ def make_hiv_sis(*interventions, where=None):
 
 
 def test_starsim3_unchanged():
-    sc.heading('Starsim 3: the v3 SIS, as code (ssl.CodedSIS, one changed name), gives the v3 answer')
-    sis = ssl.CodedSIS(name='sis', beta=dict(randomnet=0.05), dur_inf=ss.years(1), init_prev=0.01, waning=ss.peryear(1e6))
+    sc.heading('Starsim 3: the v3 SIS, as code (ssl.AgentSIS, one changed name), gives the v3 answer')
+    sis = ssl.AgentSIS(name='sis', beta=dict(randomnet=0.05), dur_inf=ss.years(1), init_prev=0.01, waning=ss.peryear(1e6))
     sim = ss.Sim(diseases=sis, dt=1/12, rand_seed=1, **kw()).run()
     infections = sim.results.sis.cum_infections[-1]
     assert np.isclose(infections, ref_v3_sis_dict, rtol=ref_seed_noise), f'Unchanged v3 code gave {infections:n} infections, not about {ref_v3_sis_dict:n}'
@@ -41,7 +41,7 @@ def test_starsim3_unchanged():
 
 
 def test_starsim3_verbs():
-    sc.heading('Starsim 3: v4 verbs on the coded HIV module')
+    sc.heading('Starsim 3: v4 verbs on the HIV module written as code')
     halve = lambda hiv: ss.modify(hiv.rel_trans, multiply=0.5, start=2005) # A v4 verb on the v3 disease
     msim = ss.parallel(baseline=make_hiv_sis(), prep=make_hiv_sis(halve), n_runs=2)
     averted = -msim.diff('baseline').prep.hiv.cum_infections.values[:, -1].mean()
@@ -58,11 +58,11 @@ def test_starsim3_fit():
     beta = fit.pars.beta.value
     assert np.isclose(beta, 0.2, rtol=0.3), f'The fitted beta, {beta:.3f}, should be near the true 0.2'
 
-    # The same for the SIS written as code: bounds on a parameter of a coded module are fitted too
-    coded = ssl.CodedSIS(name='sis', beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]), waning=ss.peryear(1e6))
-    fit = ss.Sim(diseases=coded, data=data, **kw()).calibrate(trials=10, rand_seed=1)
+    # The same for the SIS written as code: bounds on a parameter of a module written as code are fitted too
+    agents = ssl.AgentSIS(name='sis', beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]), waning=ss.peryear(1e6))
+    fit = ss.Sim(diseases=agents, data=data, **kw()).calibrate(trials=10, rand_seed=1)
     beta = fit.pars.beta.value
-    assert np.isclose(beta, 0.2, rtol=0.3), f'The fitted beta of the coded SIS, {beta:.3f}, should be near the true 0.2'
+    assert np.isclose(beta, 0.2, rtol=0.3), f'The fitted beta of the SIS written as code, {beta:.3f}, should be near the true 0.2'
     return fit
 
 

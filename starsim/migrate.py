@@ -9,8 +9,8 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
 
 The changes made are the renames (e.g. `ss.MaternalNet` to `ss.PrenatalNet`, and the
 network's name with it), a fractional `verbose` (now `verbose=1`), `res.annualize()`
-(now `res.resample('year')`), subclasses of Starsim 3's coded diseases (`ss.SIS` to
-`ssl.CodedSIS`, a coded `ss.Disease` to `ss.Infection`), and the time index: in
+(now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
+(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), and the time index: in
 `update_results()` and in analyzers, `self.ti` is the end of the step, so an event dated
 during the step is at `self.ti - 1`; and a result written in `step()` goes at `self.ti + 1`.
 Read the diff afterwards: each change is listed with its line.
@@ -38,11 +38,25 @@ renames = [
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
 ]
 
+# Internal helpers that are now only in their submodules, by submodule
+moved = dict(
+    distributions = 'link_dists make_dist dist_list scale_types rand_raw Dists',
+    settings      = 'load_fonts',
+    modules       = 'module_map module_types find_modules',
+    calibration   = 'linear_interp linear_accum step_containing',
+    parameters    = 'load_pars',
+    results       = 'validate_sim_data',
+    debugtools    = 'metadata',
+    utils         = 'apply_age_range find_contacts',
+)
+for submodule, names in moved.items():
+    renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))
+
 # What needs a person: a regular expression, and what to write instead
 flags = [
     (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, a follow-up ss.screen() in on_positive= for triage"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
-    (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.CodedSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
+    (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'\bss\.seasonality\b', 'ss.modify(dis.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), in connectors='),
     (r'\bss\.multi_run\(', 'ss.parallel(sim, n_runs=n).sims (iterpars= is pars=)'),
     (r'\bss\.rate\(', 'ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time)'),
@@ -52,7 +66,7 @@ flags = [
     (r'\bfloat\([^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
 ]
 
-coded_bases = {'SIR': 'ssl.CodedSIR', 'SIS': 'ssl.CodedSIS', 'SEIR': 'ssl.CodedSEIR', 'Disease': 'ss.CodedDisease'}
+agent_bases = {'SIR': 'ssl.AgentSIR', 'SIS': 'ssl.AgentSIS', 'SEIR': 'ssl.AgentSEIR'} # Starsim 3's diseases written as code, which are declared in Starsim 4
 ti_names = {'ti'} # A bare name, or an attribute ending in .ti (self.ti, sim.ti, self.sim.ti, self.t.ti)
 
 
@@ -120,7 +134,7 @@ def find_analyzers(texts):
 
 
 def migrate_ast(text, analyzers=None):
-    """ The changes that need the structure of the code: coded bases and the time index """
+    """ The changes that need the structure of the code: the bases of diseases written as code, and the time index """
     tree = ast.parse(text)
     edits = Edits(text)
     found = [] # (line, message) for a person
@@ -157,10 +171,10 @@ def migrate_ast(text, analyzers=None):
         names = [base_name(b) for b in cls.bases]
         analyzer = cls.name in (analyzers or set()) or 'Analyzer' in names
         for b, name in zip(cls.bases, names):
-            if name in coded_bases and not is_declared(cls):
-                new = coded_bases[name]
-                uses_ssl |= new.startswith('ssl.')
-                edits.add(b, new, f'Starsim 3\'s coded ss.{name} is {new} (ss.{name} is now declared)')
+            if name in agent_bases and not is_declared(cls):
+                new = agent_bases[name]
+                uses_ssl = True
+                edits.add(b, new, f'Starsim 3\'s ss.{name}, written as code, is {new} (ss.{name} is now declared)')
         for stmt in cls.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit_func(stmt, analyzer)
@@ -168,11 +182,11 @@ def migrate_ast(text, analyzers=None):
     if analyzer_steps:
         found.append((analyzer_steps[0], f'an analyzer\'s step() (line{"s" if len(analyzer_steps) > 1 else ""} {sc.strjoin(analyzer_steps)}) also runs at the first time point (self.ti == 0), before any step, to record the start: if it reads something that the first step creates, return early there'))
 
-    # Calls to the coded base's methods, e.g. ss.SIS.set_prognoses(self, ...)
+    # Calls to the methods of the base written as code, e.g. ss.SIS.set_prognoses(self, ...)
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and base_name(node.value) in ['SIR', 'SIS', 'SEIR'] and isinstance(node.ctx, ast.Load):
             name = base_name(node.value)
-            edits.add(node.value, coded_bases[name], f'Starsim 3\'s coded ss.{name} is {coded_bases[name]}')
+            edits.add(node.value, agent_bases[name], f'Starsim 3\'s ss.{name}, written as code, is {agent_bases[name]}')
             uses_ssl = True
 
     text, notes = edits.apply()

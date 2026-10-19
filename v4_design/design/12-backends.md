@@ -80,7 +80,7 @@ For simple models the solver is a free choice made when the sim is built. For co
 ss.Sim(sir, solver='auto')        # the default
 ss.Sim(sir, solver='ode')         # deterministic compartmental
 ss.Sim(sir, solver='binomial')    # chain-binomial, discrete time
-ss.Sim(sir, solver='gillespie')   # exact stochastic, continuous time; tau-leaping, with a note, for a run of too many events
+ss.Sim(sir, solver='gillespie')   # exact stochastic, continuous time; tau-leaping, with a note, for a run that would take too long one event at a time
 ss.Sim(sir, solver='abm')         # agent-based
 ```
 
@@ -91,13 +91,13 @@ The model object is the same in every case, and whatever the solver, a sim is on
 | Solver | Time | State | Good for | Loses accuracy when |
 |---|---|---|---|---|
 | `ode` | continuous | real-valued | large populations, fast fitting | counts are small or extinction matters |
-| `gillespie` | continuous | integer | exact stochastic dynamics (for rates that are constant within each quarter of a step) | values vary quickly within a step; above about a million events it takes tau leaps, which lose accuracy when rates change quickly within a leap |
+| `gillespie` | continuous | integer | exact stochastic dynamics (for rates that are constant within each quarter of a step) | values vary quickly within a step; for a run that would take more than about a second one event at a time, it takes tau leaps, which lose accuracy when rates change quickly within a leap |
 | `binomial` | discrete | integer | simple stochastic models on a fixed step | `rate * dt` is large |
 | `abm` | discrete | individuals | networks, heterogeneity, histories | `rate * dt` is large; cost grows with `n_agents` |
 
 Some of these conditions are checked and reported as one-line notes, each naming the quantity involved and what would not have the problem: after an ODE run, `ss.SmallCounts` (it starts with only a few infected) and `ss.ExtinctionPossible` (the number infected falls below one and rises again); at `init()`, for a solver that takes whole steps (`binomial`, `abm`), `ss.LargeStep` (a transition's `rate * dt` is large), which also says how far whole steps can be from the ODE and to run `sim.check_dt()`. They are notes, not errors: the run goes ahead and the user is told.
 
-`'gillespie'` counts the events a run would take from an ODE run at `sim.init()` (milliseconds), and takes them one at a time below about a million; above, it takes tau leaps and says so:
+`'gillespie'` counts the events a run would take from an ODE run at `sim.init()` (milliseconds) and estimates how long taking them one at a time would take: about 0.1 µs an event for one group, and about 0.05·n^1.5 µs for n groups that affect each other (strata that mix, or places that people commute between), since each event changes the rates of the groups the mixing takes it to. Below about a second it takes them one at a time; above, it takes tau leaps and says so. Places that do not affect each other within a step are run by place, which is always exact, since it is faster than tau leaps (SimInf's 16,000 herds and 4.7 million events take 2 to 3 s):
 
 ```text
 >>> ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=100).run()
@@ -106,8 +106,8 @@ solver: gillespie (exact; an ODE run gives about 1,900 events)
 
 ```text
 >>> ss.Sim(sir, total_pop=10_000_000, solver='gillespie', unit='day', stop=100).run()
-  note: solver="gillespie" takes tau leaps: an ODE run gives about 1.9e+07 events, more than 1e+06; approx=False keeps it exact
-solver: tau (tau-leaping for solver="gillespie": an ODE run gives about 1.9e+07 events)
+  note: solver="gillespie" takes tau leaps: an ODE run gives about 1.9e+07 events, which would take about 2.8 s one at a time, more than 1 s; approx=False keeps it exact
+solver: tau (tau-leaping for solver="gillespie": an ODE run gives about 1.9e+07 events, about 2.8 s one at a time)
 ```
 
 Small counts, where extinction questions arise, are runs of few events, so they get the exact solver. `approx=False` keeps the exact solver however long it takes. `sim.solver` records which solver produced the result (`'tau'` when it took tau leaps). The tau leaps choose their own size from the rates, so a step that is large for them needs no note of its own.
@@ -149,7 +149,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 | A function in a `rate=`, `p=`, `where=`, or `when=` slot | compartmental | nothing: it is evaluated on groups instead of agents, if it can be ([Functions](#functions-try-it)) | only if it fails |
 | `n_agents < total_pop` | `abm` | scaling: each agent stands for `total_pop / n_agents` people and count results are multiplied up | the scale factor |
 | A compartmental model with nothing agent-based | `abm` | nothing needed: agents are sampled into the states, with homogeneous mixing | `n_agents` if defaulted |
-| A very large population | `gillespie` | tau-leaping, above about a million events estimated by an ODE run; `approx=False` keeps the exact solver | the estimated number of events |
+| A very large population | `gillespie` | tau-leaping, when the events estimated by an ODE run would take more than about a second one at a time (never by place); `approx=False` keeps the exact solver | the estimated number of events and time |
 | A value that varies smoothly in time (`ss.seasonal`, `ss.timeseries`) | `gillespie` | held for a quarter of a step at a time, at its middle; `approx=False` makes it an error | that it is held |
 
 "Explicit" means the user named the solver. Under `'auto'` only the dwell-time row applies; the other rows make the model agent-based instead.

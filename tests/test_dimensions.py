@@ -6,6 +6,7 @@ Test dimensions that are more than a property of people: states with dimensions 
 import pytest
 import numpy as np
 import pandas as pd
+import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
 import corpus
@@ -314,6 +315,15 @@ def test_space():
         for solver in ['ode', 'abm']:
             attack = run(sir, solver, total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert attack[0] > 5000 and (attack[1] > 5000) == reached, f'Expected b to be reached: {reached}, with {solver}, not {attack}'
+
+    # A movement matrix may be sparse, for many places; the time share is kept sparse either way, with the same run
+    finals = []
+    for matrix in [[[0, 0.1], [0.05, 0]], sps.csr_array([[0, 0.1], [0.05, 0]])]:
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(place=[10, 0])), name='sir')
+        sim = run(sir.stratify(place=['a', 'b'], kind='space', mobility=ss.Mobility(matrix=matrix, kind='commute')), 'ode', total_pop=20_000, unit='day', stop=100)
+        assert sps.issparse(sim.mixing.time_share)
+        finals.append(sim.results.sir.infection.cum.by('place').values[-1])
+    assert np.array_equal(*finals) and finals[0][1] > 1000 # The same with either
 
     # A count has one value per place, and a count in a rate is the count in the same place
     S, I, R, W = ss.states(4)

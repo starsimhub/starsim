@@ -58,6 +58,11 @@ def test_parallel():
     s1, s2 = sims.sims
     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
 
+    # Workers started by forkserver, as they are once Numba's or JAX's threads have started here, give the same runs, with a lambda in the sim
+    make = lambda: [ss.Sim(make_sim_pars(interventions=lambda sim: None), rand_seed=i) for i in range(2)]
+    fork, server = [ss.parallel(make(), par_args=dict(start_method=method)).sims for method in [None, 'forkserver']]
+    assert all(np.array_equal(a.results.sis.prevalence, b.results.sis.prevalence) for a,b in zip(fork, server)) # The same either way
+
     return s1, s2
 
 

@@ -78,7 +78,7 @@ Real files rarely arrive with matching headers, so `ss.data()` renames columns o
 
 ## Calibrating
 
-Now we attach the data to the sim, and calibrate. Since the model runs as agents, the fit uses Optuna, scoring each set of values by the mean of several runs with the same random seeds (common random numbers), so that the score changes only with the values.
+Now we attach the data to the sim, and calibrate. Since the model runs as agents, the fit uses Optuna, scoring each set of values by the mean of the errors of ten runs (`n_runs=` changes it) with the same random seeds (common random numbers), so that the score changes only with the values.
 
 ```{python}
 sim = make_sim(data=data)
@@ -217,7 +217,7 @@ The draws are in `fit.samples`, one row per draw. The fitting method can be chos
 | The sim | The default method | It gives |
 |---|---|---|
 | Deterministic (an ODE), every data series with a likelihood | `'nuts'` (the No-U-Turn sampler) | a posterior |
-| Deterministic, otherwise | `'l-bfgs-b'`, with gradients from JAX (`'nelder-mead'` if JAX cannot run the model) | a best fit |
+| Deterministic, otherwise | `'l-bfgs-b'`, with gradients from JAX (`'nelder-mead'` if JAX cannot run the model, or for one or two fitted parameters, where it is faster) | a best fit |
 | Stochastic compartmental (`solver='binomial'` or `'gillespie'`), every data series with a likelihood | `'pmcmc'` (particle MCMC) | a posterior |
 | Stochastic, otherwise, including agent-based sims | `'optuna'` (`trials=` sets how many) | a best fit |
 

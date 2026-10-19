@@ -261,7 +261,7 @@ def poisson_weekly(**kwargs):
 
 
 def starsim3(**kwargs):
-    """ The Starsim 3 pattern: a coded SIR over a random network """
+    """ The Starsim 3 pattern: an SIR written as code over a random network """
     return make_sim(None, kwargs, diseases=ss.SIR(beta=ss.perday(0.1), init_prev=0.01), networks=ss.RandomNet(n_contacts=4), n_agents=5_000, start=2000, stop=2002)
 
 

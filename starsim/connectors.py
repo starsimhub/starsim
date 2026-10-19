@@ -140,7 +140,7 @@ def combine(mods, value, engine):
     return value
 
 
-class CodedModifiers:
+class AgentModifiers:
     """
     Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own
 
@@ -170,7 +170,7 @@ class CodedModifiers:
         if not isinstance(arr, ss.ModifiableArr):
             arr.__class__ = ss.ModifiableArr # The same array and values, with .effective
         if arr.engine is None:
-            arr.engine = CodedModifiers(mod, sim)
+            arr.engine = AgentModifiers(mod, sim)
         return
 
 
@@ -261,7 +261,7 @@ class modify(Connector):
             if kind not in ['rel_sus', 'rel_trans']:
                 raise ss.CapabilityError(f'the target of the modifier "{self.name}", {self.target}, is a parameter of "{modname}", which is written as code ({type(coded[modname]).__name__}), so its own code reads the value and a modifier cannot change it.\n'
                                  f'     Modify its rel_sus or rel_trans (e.g. ss.modify({modname}.rel_trans, multiply=0.5)), or declare the disease (see ss.Disease) to modify its parameters and transitions.')
-            CodedModifiers.attach(coded[modname], kind, sim)
+            AgentModifiers.attach(coded[modname], kind, sim)
             found = True
         elif modname in mods:
             graph = mods[modname].graph

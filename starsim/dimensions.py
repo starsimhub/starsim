@@ -671,14 +671,17 @@ class Groups:
         levels = []
         changed = False
         def level_of(strat, raw): # As 32-bit integers, to save memory
-            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw)).astype(np.int32)
+            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw)).astype(np.int32, copy=False)
         mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]
         n = len(people.uid.raw)
-        rebuild = '' not in kept or len(kept['']) != n # The last, for a sim with no dimensions whose people have grown
+        rebuild = '' not in kept or len(kept['']) > n
+        n0 = n if rebuild else len(kept['']) # Fewer than n if the people have grown since: the new agents' levels are added to what is kept, rather than all worked out again
         updates = [] # For each dimension whose values changed for some agents: who, their old level, and their new one
         for strat,mult in zip(self.strats, mults):
             raw = people[strat.attr].raw
             old = kept.get(strat.name)
+            if old is not None and n0 < n and len(old[0]) == n0:
+                old = kept[strat.name] = (np.concatenate([old[0], raw[n0:]]), np.concatenate([old[1], level_of(strat, raw[n0:])]))
             if old is None or len(old[0]) != len(raw):
                 old = kept[strat.name] = (raw.copy(), level_of(strat, raw))
                 rebuild = True
@@ -697,8 +700,13 @@ class Groups:
             for level,mult in zip(levels, mults):
                 out += level*int(mult)
             kept[''] = out
-        elif updates:
+        else:
             out = kept['']
+            if n0 < n:
+                tail = np.zeros(n - n0, dtype=np.int32)
+                for level,mult in zip(levels, mults):
+                    tail += level[n0:]*int(mult)
+                out = np.concatenate([out, tail])
             for idx,before,after,mult in updates:
                 out[idx] += (after - before)*mult
             kept[''] = out

@@ -205,7 +205,8 @@ class Calibration(sc.prettyobj):
     def run_workers(self):
         """ Run multiple workers in parallel """
         if self.run_args.n_workers > 1 and not self.run_args.debug: # Normal use case: run in parallel
-            output = sc.parallelize(functools.partial(ss.kernels.one_thread, self.worker), iterarg=self.run_args.n_workers) # The workers share the cores, so each takes one thread
+            with ss.kernels.one_blas_thread():
+                output = sc.parallelize(functools.partial(ss.kernels.one_thread, self.worker), iterarg=self.run_args.n_workers, start_method=ss.kernels.start_method()) # The workers share the cores, so each takes one thread
         else: # Special case: just run one
             output = [self.worker()]
         return output
@@ -1856,7 +1857,8 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, seed=No
         if verbose:
             print('Particle MCMC: running the chains one after another, since JAX has been started in this process')
     if parallel and chains > 1:
-        results = sc.parallelize(functools.partial(ss.kernels.one_thread, one_chain), iterarg=list(seeds))
+        with ss.kernels.one_blas_thread():
+            results = sc.parallelize(functools.partial(ss.kernels.one_thread, one_chain), iterarg=list(seeds), start_method=ss.kernels.start_method())
     else:
         results = [one_chain(chain_seed) for chain_seed in seeds]
     out, logdens, accepted, n = [np.array(v) for v in zip(*results)]
@@ -2584,7 +2586,7 @@ def check_gof(gof):
     return
 
 
-def default_method(sim, use_lik, posterior=True, no_grad=None):
+def default_method(sim, use_lik, posterior=True, no_grad=None, n_pars=None):
     """
     The fitting method that suits a sim, and why: see `ss.fit()`
 
@@ -2593,19 +2595,25 @@ def default_method(sim, use_lik, posterior=True, no_grad=None):
         use_lik (bool): whether every data series has a likelihood
         posterior (bool): whether a posterior can be the default (if not, a point estimate)
         no_grad (str): why there are no gradients, if the fit knows a reason the sim does not (e.g. a parameter that sets contact rates)
+        n_pars (int): the number of fitted parameters; a point estimate of one or two uses Nelder-Mead even with gradients, since it is faster there
     """
     no_grad = no_grad or ss.gradients.reason(sim)
+    few = n_pars is not None and n_pars <= 2
     if sim.solver != 'ode':
         if posterior and use_lik and ParticleFilter.reason(sim) is None:
             return 'pmcmc', 'a stochastic compartmental sim whose data series all have a likelihood, so a posterior, from particle MCMC'
         return 'optuna', 'a stochastic sim'
     elif no_grad:
         return 'nelder-mead', f'no gradients, since {no_grad}'
-    elif posterior and use_lik:
-        if importlib.util.find_spec('blackjax') is None:
-            return 'l-bfgs-b', 'gradients by automatic differentiation; for a posterior from NUTS, pip install blackjax'
+    elif posterior and use_lik and importlib.util.find_spec('blackjax') is not None:
         return 'nuts', 'every data series has a likelihood, so a posterior, with gradients by automatic differentiation'
-    return 'l-bfgs-b', 'gradients by automatic differentiation'
+    elif few:
+        why = f'{n_pars} fitted parameter{"s" if n_pars != 1 else ""}, for which it is faster than gradients'
+    else:
+        why = 'gradients by automatic differentiation'
+    if posterior and use_lik:
+        why += '; for a posterior from NUTS, pip install blackjax'
+    return ('nelder-mead' if few else 'l-bfgs-b'), why
 
 
 class Problem:
@@ -2680,7 +2688,7 @@ class Problem:
 
         # How it is run and scored
         self.stochastic = probe.solver not in ['ode']
-        self.n_runs = sc.ifelse(n_runs, 4 if self.stochastic else 1) # A stochastic sim is scored over several runs, so the fit is not to one draw of chance
+        self.n_runs = sc.ifelse(n_runs, 10 if probe.solver == 'abm' else 4 if self.stochastic else 1) # A stochastic sim is scored over several runs, so the fit is not to one draw of chance (ten for agents, whose runs vary most)
         self.seeds = [sc.ifelse(base.pars.rand_seed, 1) + i for i in range(self.n_runs)] # The same seeds at every point (common random numbers), so the score changes only with the values
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
@@ -2693,7 +2701,7 @@ class Problem:
         """ The fitting method: the one given, checked against what the sim allows, or the default (see `default_method()`) """
         verbose = self.verbose
         if method is None:
-            method, why = default_method(self.runner, self.use_lik, no_grad=self.no_grad)
+            method, why = default_method(self.runner, self.use_lik, no_grad=self.no_grad, n_pars=len(self.fitted))
             if verbose:
                 print(f'Fitting by {method} ({why}; override with method=)')
         self.use_map = self.use_lik and any(self.priors) and method not in sampling_methods and method != 'if2' # A posterior method uses the priors itself, and IF2 finds the maximum likelihood
@@ -3135,9 +3143,9 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         weights (dict): the relative weight of each data series (default: equal)
         likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
-        method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with each chain started from one of the best points of a scan over the bounds that are apart; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, 'pmcmc' (particle MCMC, the default for a stochastic compartmental sim whose data series all have a likelihood: a posterior, from a random-walk Metropolis sampler with the likelihood estimated by a particle filter; see `ss.ParticleFilter`), 'if2' (iterated filtering, for the same sims: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `Swarm`), or 'optuna' (the default for other stochastic sims, including agent-based ones: a best fit, not a posterior)
+        method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with each chain started from one of the best points of a scan over the bounds that are apart; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run, and for a point estimate of one or two parameters, where it is faster than gradients), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, 'pmcmc' (particle MCMC, the default for a stochastic compartmental sim whose data series all have a likelihood: a posterior, from a random-walk Metropolis sampler with the likelihood estimated by a particle filter; see `ss.ParticleFilter`), 'if2' (iterated filtering, for the same sims: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `Swarm`), or 'optuna' (the default for other stochastic sims, including agent-based ones: a best fit, not a posterior)
         scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy), each NUTS chain from one of the best that are apart, and particle MCMC from the best
-        n_runs (int): runs per evaluation, for a stochastic sim (default 4, and 1 for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), and `fit.mismatch` is that score at the best fit
+        n_runs (int): runs per evaluation, for a stochastic sim (default 10 for agents, 4 for a stochastic compartmental sim, and 1 for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), and `fit.mismatch` is that score at the best fit
         rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
         verbose (bool): whether to print progress
         kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.calibration.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)

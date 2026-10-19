@@ -378,7 +378,7 @@ def test_to_dt():
 def test_link_timepars():
     sc.heading('Test that module durations and rates are linked to the module dt')
 
-    sim = ss.Sim(n_agents=100, start=2000, stop=2002, dt=ss.months(1), diseases=ssl.CodedSIS(name='sis'), # Written as code, whose parameters are linked to its timestep
+    sim = ss.Sim(n_agents=100, start=2000, stop=2002, dt=ss.months(1), diseases=ssl.AgentSIS(name='sis'), # Written as code, whose parameters are linked to its timestep
                  networks=ss.RandomNet(), verbose=0)
     sim.init()
     sis = sim.diseases.sis

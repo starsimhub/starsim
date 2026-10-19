@@ -132,16 +132,15 @@ vocabulary = {
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar Fit', 'Fit'),
 }
 
-# The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr)
+# The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr, ss.distributions.link_dists)
 code_names = """
-AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr BoolState
-BreastfeedingNet CalibComponent Calibration CampaignDelivery CodedDisease Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dists Dx
+AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr
+BoolState BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dx
 DynamicNetwork FloatArr GammaPoisson IndexArr IntArr ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
-Pregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx apply_age_range beta_dist
-beta_mean check_requires check_sims_match check_version choose_n compare demo diff_sims dist_list dtypes dynamics_by_age find_contacts find_modules fit
-histogram infection_log linear_accum linear_interp link_dists load_fonts load_pars loglik make_dist metadata mismatch mock_module mock_people mock_sim
-mock_time module_map module_types multi_random ndict note parse_age_range plot_args rand_raw randint random register_modules required return_fig root
-scale_types show shrink single_run standardize_data standardize_netkey step_containing style to_code treat_num uids validate_sim_data warn
+Pregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
+check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
+mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
+show shrink single_run standardize_data standardize_netkey style to_code treat_num uids warn
 """.split()
 
 

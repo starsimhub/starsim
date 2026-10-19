@@ -105,7 +105,7 @@ def test_factored_mixing():
     sim = ss.Sim(make(), **pars, **kw).init()
     mixing = sim.mixing
     term = mixing.terms[0]
-    pre, post = np.kron(mixing.time_share, np.eye(3)), np.kron(mixing.time_share, term.matrix) # The whole matrix between towns by ages, which is not formed
+    pre, post = np.kron(mixing.time_share.toarray(), np.eye(3)), np.kron(mixing.time_share.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
     rng = np.random.default_rng(1)
     infectious, n = rng.random(sim.n_groups), 1 + rng.random(sim.n_groups)
     num, den = [np.bincount(term.cells, weights=v, minlength=9) @ pre for v in [infectious, n]]
@@ -155,6 +155,24 @@ def test_stochastic():
         out[how] = (y, flows, min(times))
     assert np.array_equal(out.sparse[0], out.dense[0]) and np.array_equal(out.sparse[1], out.dense[1]) # The same events
     assert out.sparse[2] < out.dense[2]/3 # About 60 times faster here
+
+    # Strata that mix are stepped by the exact solver following only what each event changes: the same epidemic as one group, and a cost per event that does not grow with the number of strata
+    def strata(K, **pars):
+        sir = make_plain(ss.perday(0.3), init=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
+        return ss.Sim(sir, solver='gillespie', unit='day', stop=100, total_pop=200*K, **pars, **kw)
+    one = ss.Sim(make_plain(ss.perday(0.3), init=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.n_R.values[:, -1]
+    ten = strata(10).run(n_runs=60).results.sir.n_R.values[:, -1]
+    assert abs(one.mean() - ten.mean()) < 3*np.hypot(one.std(), ten.std())/np.sqrt(60) # The same final size
+    cost = {}
+    for K in [30, 300]:
+        times = []
+        for rep in range(3):
+            sim = strata(K, rand_seed=rep).init()
+            T = sc.timer()
+            res = sim.run().results.sir
+            times.append(T.toc(output=True)/(res.infection.values.sum() + res.recovery.values.sum()))
+        cost[K] = min(times)
+    assert cost[300] < 3*cost[30] # About the same per event (it was 6.5 times as much)
     return sims
 
 
@@ -284,8 +302,10 @@ def test_restart():
 
     # How often a small outbreak dies out
     small = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2), name='small')
-    ext = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50).extinction(output=True)
+    msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
+    ext = msim_small.extinction(output=True)
     assert 0.3 < ext.share[0] < 0.9 and ext.runs[0] == 50
+    assert msim_small.summarize().small_extinction.mean == ext.share[0] # Reported by summarize() too, since some runs died out
 
     # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, when=lambda sim: sim.ti >= 20)

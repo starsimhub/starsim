@@ -88,7 +88,7 @@ def make_args():
     pars = dict(n_agents=2000, verbose=0)
     mf = ss.MFNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
     hiv = ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
-    sis = ssl.CodedSIS(name='sis', beta={'mf': [0.1, 0.05]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly
+    sis = ssl.AgentSIS(name='sis', beta={'mf': [0.1, 0.05]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly
     args = dict(pars=pars, networks=mf, diseases=[hiv, sis])
     return args
 
@@ -160,8 +160,8 @@ def test_connectors(do_plot=False):
         mods = [make(hiv, sis) for make in connectors]
         return ss.Sim(n_agents=2000, networks=ss.MFNet(), diseases=[hiv, sis], connectors=mods, start=2000, stop=2020, verbose=0).run().results
     base = run()
-    stop_hiv = run(lambda hiv, sis: ss.modify(hiv.rel_trans, multiply=0, start=2010)) # A modifier of a coded disease's rel_trans
-    no_sis = run(lambda hiv, sis: ss.modify(sis.rel_sus, multiply=0, where=hiv.cd4 < 1e6)) # A condition on a coded disease's array (everyone's CD4 is below 1e6)
+    stop_hiv = run(lambda hiv, sis: ss.modify(hiv.rel_trans, multiply=0, start=2010)) # A modifier of the rel_trans of a disease written as code
+    no_sis = run(lambda hiv, sis: ss.modify(sis.rel_sus, multiply=0, where=hiv.cd4 < 1e6)) # A condition on an array of a disease written as code (everyone's CD4 is below 1e6)
     after = stop_hiv.timevec > 2010
     assert base.hiv.new_infections[after].sum() > 0 and stop_hiv.hiv.new_infections[after].sum() == 0 # No HIV transmission after 2010
     assert base.sis.new_infections.sum() > 0 and no_sis.sis.new_infections.sum() == 0

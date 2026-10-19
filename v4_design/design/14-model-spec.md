@@ -279,7 +279,7 @@ Each part is a plain string or number, so `sim.hash().pars` can go in a file nam
 
 ## Saved forms
 
-A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). What `to_code()` cannot write (the attached data, priors written as text, a contact matrix given as numbers rather than by name) it lists in the code, for adding by hand. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`. There is no third form: the spec itself is not read back.
+A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). What `to_code()` cannot write (the attached data, a network of agents, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand; deliveries with their products, contact matrices (by name or as numbers), transfers, and priors that are distributions are written. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`. There is no third form: the spec itself is not read back.
 
 ## Export to other formats
 
@@ -302,4 +302,4 @@ Because the model is data with a fixed shape, two descriptions of the same model
 
 - Whether a people property stratified on the only disease in a sim (`sir.stratify(age=...)`) and the same stratification on the sim (`sim.stratify(age=...)`) should normalize to one document. They are the same model; as written they are recorded where they were applied and hash differently.
 - Whether the spec should optionally write out the expanded strata and sub-stages. The exporters expand the model from the engine, not from the spec, so nothing needs it now.
-- The grammar of the spec is not rewritten for the saved form, and priors are written as text (`"ss.normal(loc=0.3, scale=0.1)"`); see `deferred.md` (review R29).
+- The grammar of the spec is not rewritten for the saved form; see `deferred.md` (review R29). A prior that is a distribution is written as one (`{"dist": "normal", "loc": 0.3, "scale": 0.1}`), and any other prior as text.

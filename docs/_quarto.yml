@@ -97,7 +97,7 @@ website:
             - coming_from/camdl.qmd
             - coming_from/emulsion.qmd
             - coming_from/laser.qmd
-            - coming_from/ghana_measles.qmd
+            - coming_from/numpy.qmd
             - coming_from/starsim3.qmd
         - href: whatsnew.qmd
           text: "**What's new**"

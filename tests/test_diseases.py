@@ -147,7 +147,7 @@ def test_aliases():
     sc.heading('Testing state aliases (of a disease written as code)')
 
     # A string alias points at another state, and a subclass can replace it with a callable
-    class IsolationSIR(ssl.CodedSIR):
+    class IsolationSIR(ssl.AgentSIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
@@ -162,7 +162,7 @@ def test_aliases():
             self.isolated[uids] = True # Isolate everyone, so nobody transmits
             return
 
-    sir = ssl.CodedSIR()
+    sir = ssl.AgentSIR()
     assert sir.infectious is sir.infected, 'By default, infectious should be an alias of infected'
 
     sim = ss.Sim(n_agents=n_agents, diseases=IsolationSIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
@@ -175,11 +175,13 @@ def test_aliases():
     assert res.n_infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
     # Its new infections are recorded at the end of the step they happen in, as the counts of its states are (during a step, self.ti is its start)
-    res = ss.Sim(n_agents=1000, diseases=ssl.CodedSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run().results.codedsir
+    sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run()
+    res = sim.results.agentsir
     assert np.array_equal(res.new_infections[1:], -np.diff(res.n_susceptible)) # The infections of each step leave S in it
+    assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.new_infections[10] # And are dated there too, as a declared disease dates ti_I
 
     # Aliases can also be defined alongside the states they refer to
-    class AliasSIR(ssl.CodedSIR):
+    class AliasSIR(ssl.AgentSIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
@@ -197,7 +199,7 @@ def test_aliases():
         alias_sir.asymptomatic[ss.uids(0)] = True # A callable alias is derived, so it can't be written to
 
     # A state can replace an alias or another state, either with overwrite=True or by resetting it by name
-    class ReplaceSIR(ssl.CodedSIR):
+    class ReplaceSIR(ssl.AgentSIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
@@ -215,11 +217,11 @@ def test_aliases():
 
     # An alias that a state would shadow should raise, rather than silently never being consulted
     with pytest.raises(AttributeError):
-        ssl.CodedSIR().define_aliases(infected=lambda self: self.susceptible)
+        ssl.AgentSIR().define_aliases(infected=lambda self: self.susceptible)
 
     # Removing something that isn't a state or an alias should raise
     with pytest.raises(AttributeError):
-        ssl.CodedSIR().define_states(reset='not_a_state')
+        ssl.AgentSIR().define_states(reset='not_a_state')
 
     # A missing attribute should still raise an AttributeError
     with pytest.raises(AttributeError):
@@ -278,8 +280,8 @@ def test_ncd():
     plt.xlabel('Year')
     plt.title('NCD')
 
-    # A disease written as code with no states of its own (Starsim 3's ss.Disease), and an infection with no beta
-    class Anemia(ss.CodedDisease):
+    # A disease written as code with no states of its own (as Starsim 3's ss.Disease), and an infection with no beta
+    class Anemia(ss.Disease):
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.bernoulli(0.1))
@@ -295,8 +297,9 @@ def test_ncd():
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
     assert sim2.results.anemia.n_anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
-    with pytest.raises(ss.CapabilityError): # A coded ss.Disease subclass is told to subclass ss.CodedDisease
-        type('Old', (ss.Disease,), {})()
+    assert Anemia().transitions is None # Written as code, since it declares nothing
+    with pytest.raises(ss.CapabilityError): # A disease that declares nothing and defines no states or step()
+        ss.Sim(diseases=type('Empty', (ss.Disease,), {})(), verbose=0).init()
     return sim
 
 
@@ -411,7 +414,7 @@ def test_fetal_health(do_plot=do_plot):
     # -- 2. Disease only (no treatment) --
     sim_disease = ss.Sim(
         demographics=demog(),
-        diseases=ssl.CodedSIR(name='sir', **sir_kw),
+        diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         custom=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
@@ -431,7 +434,7 @@ def test_fetal_health(do_plot=do_plot):
     # -- 3. Disease + treatment --
     sim_treated = ss.Sim(
         demographics=demog(),
-        diseases=ssl.CodedSIR(name='sir', **sir_kw),
+        diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir'),
         custom=ssl.mnch.FetalHealth(),

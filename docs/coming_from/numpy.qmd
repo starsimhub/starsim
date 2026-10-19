@@ -1,0 +1,86 @@
+---
+title: Coming from NumPy
+jupyter: python3
+---
+
+This page is for people who write their own models as a loop in NumPy: a compartment per variable, a binomial draw per flow each step (a chain binomial), `1 - np.exp(-rate*dt)` to turn a rate into a probability, an array axis for each age group or place, and a loop of runs over seeds. It shows such a model next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet.
+
+## The same model in both
+
+A stochastic SEIR in daily steps, for a million people, written as a NumPy loop:
+
+```{python}
+import numpy as np
+
+def run_numpy(seed=0, N=1_000_000, I0=10, beta=0.3, sigma=0.2, gamma=0.1, days=365):
+    rng = np.random.default_rng(seed)
+    S, E, I, R = N - I0, 0, I0, 0
+    out = np.zeros((days+1, 4))
+    out[0] = S, E, I, R
+    for t in range(days):
+        n_SE = rng.binomial(S, 1 - np.exp(-beta*I/N))
+        n_EI = rng.binomial(E, 1 - np.exp(-sigma))
+        n_IR = rng.binomial(I, 1 - np.exp(-gamma))
+        S, E, I, R = S - n_SE, E + n_SE - n_EI, I + n_EI - n_IR, R + n_IR
+        out[t+1] = S, E, I, R
+    return out
+
+runs = np.array([run_numpy(seed) for seed in range(200)])
+print(f'NumPy, 200 runs: mean peak of I {runs[:,:,2].max(axis=1).mean():,.0f}, mean final R {runs[:,-1,3].mean():,.0f}')
+```
+
+In Starsim, each flow is one line, with its rate; the conversion of rates to probabilities, the bookkeeping of who leaves and enters each state, and the results are done for you. `solver='binomial'` runs it as a chain binomial, as the loop above does:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, E, I, R = ss.states(4)
+seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init=dict(I=10))
+sim = ss.Sim(seir, total_pop=1_000_000, unit='day', stop=365, solver='binomial', verbose=0)
+
+msim = sim.run(n_runs=200)
+I_runs = np.asarray(msim.results.seir.n_I.values)
+R_runs = np.asarray(msim.results.seir.n_R.values)
+print(f'Starsim, 200 runs: mean peak of I {I_runs.max(axis=1).mean():,.0f}, mean final R {R_runs[:,-1].mean():,.0f}')
+msim.plot()
+```
+
+The same model runs as an ODE with `sim.new(solver='ode')`, and as agents with `sim.new(solver='abm', n_agents=100_000)`, with no change to the model.
+
+## How the results agree
+
+| Model | Agreement |
+|---|---|
+| The SEIR above, as a chain binomial | Agree: over 200 runs each, the mean peak of `I` is 205,513 in Starsim against 205,568 in NumPy (0.03%), and the mean final `R` is 949,921 against 949,914 (within one standard error, about 22); the mean of `I` peaks on day 128 in both |
+| The same model as an ODE (`solver='ode'`) | As expected: a peak of 196,388 on day 120 and a final `R` of 940,480, the deterministic counterpart of the chain binomial (which has a higher peak since its steps are a day long) |
+| The same model as 100,000 agents (`solver='abm'`), each standing for 10 people | Agree when the epidemic takes off: peaks of 216,760 and 216,570 and final sizes of 950,530 and 948,720 in two seeds. The 10 initial infections are one agent, so in two of four seeds the epidemic dies out at once, as it should for one case with R0 = 3 |
+
+These numbers are from runs on 18 October 2026, on a 20-core x86-64 Linux machine shared with other work.
+
+## Timings
+
+Lines are lines of model code (not counting blank lines, comments, imports, printing, or plotting, and counting a line over 100 characters twice); times are for one run, on the same machine as above.
+
+| Model | Lines: NumPy | Lines: Starsim | One run: NumPy | One run: Starsim | |
+|---|---|---|---|---|---|
+| The SEIR above, a year in daily steps | 13 | 4 | 0.7 ms | 13 ms to build and run (70 ms the first time in a new process); 100 runs in 0.11 s | Pass: the north star fails a time only if Starsim is more than 2 times slower and more than 1 s slower |
+
+A NumPy loop of a few compartments is hard to beat for speed, since it does nothing but the draws. Starsim's time goes into building the sim (checking the model, choosing the solver, making the results); the run itself is in compiled kernels, so the difference shrinks as the model grows in states, groups, and steps, and many runs are run on all cores by `sim.run(n_runs=)`.
+
+## What works and what does not yet
+
+There is no switching demo for NumPy users, since a NumPy model is whatever its author wrote. These are the tasks a NumPy loop is usually written for, and where each stands today.
+
+| Task | Today |
+|---|---|
+| A chain binomial, an ODE, or agents from one model | **Works**: `solver='binomial'`, `'ode'`, `'gillespie'`, or `'abm'`, above |
+| An array axis for age or place, with a contact matrix or mixing between places | **Works**: `seir.stratify(age=[0, 5, 18, 65])` and `ss.contacts()`, or `ss.geo()` and `ss.Mobility()` for places; see [Coming from odin](odin.qmd) and [Coming from LASER](laser.qmd) |
+| Many runs over seeds, with ranges | **Works**: `sim.run(n_runs=)` runs them in parallel; `msim.results` has a run axis first, and `res.quantiles()` gives the ranges |
+| Fitting to data | **Works**: `sim.calibrate()` chooses the method from the model (by gradients for an ODE, by particle MCMC or by simulation for a stochastic model) |
+| Anything the loop does that is not a flow between states (a running maximum, a rule in Python) | **Works** for a count set each step from the model (`ss.update()`); anything else is a module written as code, with a `step()` in Python |
+| Speed for a small model run once | **Slower**: 13 ms against 0.7 ms (above), which is under the north star's limit but 18 times slower |
+
+## Bringing your model in
+
+There is no importer for NumPy code, since a loop can do anything. An AI assistant with Starsim's import-model skill (`skills/import-model/` in the Starsim repository) can translate one, following the mapping above: each binomial draw is a flow (`S >> E @ rate`), its probability's rate is the flow's rate, and each array axis is a stratification.

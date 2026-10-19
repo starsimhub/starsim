@@ -95,7 +95,7 @@ def test_mock_objects():
     assert o.ppl.age.mean() > 15, 'People did not have the expected age'
 
     # Initializing Modules
-    o.mod = ssl.CodedSIS().init_mock() # Written as code, so it can be stepped on its own
+    o.mod = ssl.AgentSIS().init_mock() # Written as code, so it can be stepped on its own
     for i in range(5):
         o.mod.step()
         o.mod.set_outcomes(ss.uids([i])) # Manually "infect" people

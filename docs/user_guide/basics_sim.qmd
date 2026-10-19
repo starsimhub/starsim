@@ -84,7 +84,7 @@ An important function of the `Sim` class is that it controls the order in which 
 
 If you want to see more details, have a look at `sim.loop.to_df()` (after calling `sim.init()`) and it will show a dataframe of every step in the simulation. You can also use `sim.loop.plot()` to visualize each step. During a step, `sim.ti` is the index of the time point at the start of the step; the results of the step are recorded at the end of it, at `sim.ti + 1`.
 
-Note that there are two separate update calls for diseases, `step_state` and then `step`. The `step_state` method happens _before_ transmission, and the `step` method typically handles transmission. For a declared disease, Starsim does both from the model's transitions. In a disease written as code, `step_state` typically handles disease progression, as in this (simplified) example from Starsim 3's SIR model, which is available as `ssl.CodedSIR`:
+Note that there are two separate update calls for diseases, `step_state` and then `step`. The `step_state` method happens _before_ transmission, and the `step` method typically handles transmission. For a declared disease, Starsim does both from the model's transitions. In a disease written as code, `step_state` typically handles disease progression, as in this (simplified) example from Starsim 3's SIR model, which is available as `ssl.AgentSIR`:
 
 
 ```{python}

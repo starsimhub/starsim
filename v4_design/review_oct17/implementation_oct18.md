@@ -97,7 +97,7 @@ The phases are ordered by harm: silent wrong answers first, then what makes unch
 - [x] **A2, R5.** A fit restarted from the best two or three scan points, with disagreement reported as `converged=False` (today it stops at 58.86 against 54.25 and says it converged).
 - [x] **A4.** NUTS chains start from dispersed points (or an optimum, as the spec says), not all from `x0`.
 
-Done by PA. For Cliff: F1 applies D-B among the contact-mediated sources (taken literally it started everyone in a vaccinated or maternal-immunity state), and `ss.Disease(first=...)` names it explicitly; ST9 was done by the fallback (the error points to `define_pars()`), since passing plain values to coded modules changes what `mod.pars` holds; HP4 weights results, but rates (`I.n`) still count agents. [CK, Oct 18: F1 as applied is right (not everyone in the vaccinated state); the ST9 fallback is fine; HP4 rates: agreed to weight the rates (`I.n`) when the weights differ, and count agents when they are uniform (to do); `ss.CodedDisease`: removed, `ss.Disease` runs as code when it declares nothing, and `ssl.CodedSIR`/`SIS`/`SEIR` become `ssl.AgentSIR`/`AgentSIS`/`AgentSEIR` (PJ).]
+Done by PA. For Cliff: F1 applies D-B among the contact-mediated sources (taken literally it started everyone in a vaccinated or maternal-immunity state), and `ss.Disease(first=...)` names it explicitly; ST9 was done by the fallback (the error points to `define_pars()`), since passing plain values to coded modules changes what `mod.pars` holds; HP4 weights results, but rates (`I.n`) still count agents. [CK, Oct 18: F1 as applied is right (not everyone in the vaccinated state); the ST9 fallback is fine; HP4 rates: agreed to weight the rates (`I.n`) when the weights differ, and count agents when they are uniform (to do); `ss.CodedDisease`: removed, `ss.Disease` runs as code when it declares nothing, and `ssl.CodedSIR`/`SIS`/`SEIR` became `ssl.AgentSIR`/`AgentSIS`/`AgentSEIR` (done by PJ).]
 
 ### Phase B: a clear migration that simplifies downstream code (S to M; with A)
 
@@ -133,16 +133,16 @@ Done by PB: after the script and the skill, HPVsim 369 of 373, STIsim 188 of 198
 
 ### Phase F: the saved form and random streams (M)
 
-- [ ] One pass over `to_code()`'s writers (C06, C07, C09a, C09b, R10, R24, R29): times as `ss.days(...)` or numbers, a writer for deliveries and `ss.contacts`, the declaration order (with F1b), and priors in the spec; one round-trip test over the corpus and the fuzzer (build, `to_code`, exec, compare hash and results, save and load), plus the 1% size check in `save()` (C16).
-- [ ] X3's remaining parts (C12a, C12c, C19): one stream per transition in the compartmental engines; the same draws on the whole-run and stepped paths; each run's outcome draws from its own generator in `ss.parallel`.
-- [ ] **L16, R14.** `ss.Sim(pars=...)`: model parameters by name, sim settings only by their own names, unknown keys raise.
+- [x] One pass over `to_code()`'s writers (C06, C07, C09a, C09b, R10, R24, R29): times as `ss.days(...)` or numbers, a writer for deliveries and `ss.contacts`, the declaration order (with F1b), and priors in the spec; one round-trip test over the corpus and the fuzzer (build, `to_code`, exec, compare hash and results, save and load), plus the 1% size check in `save()` (C16). (Done by PF, plus three silent writer bugs found by a corpus round trip (transfers missing from the spec, unitless durations, `start` in years); `test_round_trip`; save after run fixed (C16). R24 had no repro.)
+- [x] X3's remaining parts (C12a, C12c, C19): one stream per transition in the compartmental engines; the same draws on the whole-run and stepped paths; each run's outcome draws from its own generator in `ss.parallel`. (Done by PF: flows sorted by name at build, stepped and whole runs take the same rate values, each run's outcomes from its own seed. Deferred: deliveries taken in Python when stepped or with several diseases, and outcomes drawn after a whole run, still draw differently from a stepped run; both need design changes.)
+- [x] **L16, R14.** `ss.Sim(pars=...)`: model parameters by name, sim settings only by their own names, unknown keys raise. (Done by PF; a model parameter wins over a sim setting of the same name.)
 
 ### Phase G: scale (M to L)
 
-- [ ] Sparse place-by-place arrays from `Mobility` onward (SC1) and one BLAS thread in workers (SC4), with W17 (workers by `forkserver` once JAX or Numba threads exist).
-- [ ] A propensity tree or dependency graph for exact Gillespie with interacting groups (SC6), then the tau-leap rule from D-E.
+- [x] Sparse place-by-place arrays from `Mobility` onward (SC1) and one BLAS thread in workers (SC4), with W17 (workers by `forkserver` once JAX or Numba threads exist). (Done by PG. The multi-threaded-fork warning remains, from OpenBLAS's idle pools; silencing it needs forkserver everywhere, DC23.)
+- [x] A propensity tree or dependency graph for exact Gillespie with interacting groups (SC6), then the tau-leap rule from D-E. (Done by PG for the trees: flat cost per event, 0.2 µs at 300 strata, 4 µs at 300 places; the tau-leap rule waits on D-E.)
 - [ ] Memory per agent (N25), after decisions item 21; the lean path for small declared models (N29).
-- [ ] Crossings whose places mix within a step (CROSS's deferred item), and the ODE's repeated sums of exposures in a crossing.
+- [ ] Crossings whose places mix within a step (CROSS's deferred item), and the ODE's repeated sums of exposures in a crossing. (The ODE's repeated sums are done by PG with HP29: three HPV genotypes in 9 s, from 383 s, bit for bit.)
 
 ### Phase H: design passes (L; after D-F)
 
@@ -158,6 +158,14 @@ Done by PB: after the script and the skill, HPVsim 369 of 373, STIsim 188 of 198
 - [x] The register groups from [reg.md](status_oct18/reg.md) that are small: messages and printing (X18, L38, L26), delivery reporting (D27, D29, D30, D31), error trigger tests and golden `describe()` output (P6, DF27 to DF29), and the standalone bugs X15, KI3, KI8, DF11. (Done by PI except: L26 `ss.death(p=)` still a plain `TypeError`; D31 waits on decisions 2 and 3; DF28 and DF29 wait for `describe()` and the kernels to settle.)
 - [x] X4: state the coarse-step bias sizes in the docs, after re-running the solver comparison on the current solvers. (Done: table in spec 12, paragraph in the user guide.)
 - [ ] The two planned reviews not yet done ([next-reviews.md](next-reviews.md)): the canon (textbook models against their known answers) and a naive user.
+
+### Phase K: Cliff's answers in decisions_oct18.md (S to M)
+
+The `[CK:]` answers in [decisions_oct18.md](decisions_oct18.md), by item number there.
+
+- [x] Behavior (PK): 12, a declared disease and one written as code both date entry into a state at the end of the step; 14, `ss.Births`/`Deaths`/`Pregnancy` with `unit=None` by default (per 1,000 above 1, per person below 1, a warning when ambiguous and `unit` not given), documented; 18, an exponential `dur=` as agents realized as a hazard each step (D-A's second part); 19, Nelder-Mead up to two parameters; 20 (W13, D-G), ten runs a point for agent fits; 30, `msim.summarize()` reports extinction when at least one run died out; HP4's rates weighted by `people.scale` when the weights differ. (Done by PK except 18, reverted for Cliff: sampling an exponential `dur=` as a hazard drawn at the start of a step moves agents away from the ODE (SIR peak at a daily step from +4.8% to -9.8%); the exit chance `r·dt/(1+r·dt)` for both `dur=` and `rate=` fits the ODE within about 1%, but changes every agent model with `rate=` exits. Patch at `wt/scratch-pk/agents_with_item18.diff`. `test_epimodel_fit` now passes with ten runs a point.)
+- [x] Namespace and downstream (PL): 3, keep every intervention class a current downstream package uses; 7, move the second tier (`code_names`) out of `ss.`; 8, make the `init_*` phases private unless downstream models override them; 10, check that `ssl.AgentSIS` is Starsim 3's SIS with waning (if so, item 10 is done); 27, the Ghana "Coming from" page becomes "Coming from NumPy"; 13, a short write-up of the alternatives to a one-row `People` in a compartmental run, for Cliff. (Done by PL: 3 and 10 needed no change; 7 moved 18 helpers; 8 kept 4 phases that downstream overrides, made 11 private; 13 is [people_compartmental.md](people_compartmental.md), for Cliff.)
+- [x] Memory and the tau-leap rule (PM): 21 (N25), 16-bit timers and `ti_X` as step numbers with fast, obvious conversions; 17 (D-E), the recommendation: no switch for independent places, and for interacting groups a rule from the cost per event after SC6. (Done by PM: 142 to 114 bytes per agent at the peak, speed unchanged; the rest of the way to 50 needs People-level changes, for Cliff. Tau leaps above an estimated 1 s of exact run (`ss.solvers.max_seconds`); independent places always exact. Exact Gillespie with every place reaching every other still grows as about n^1.5.)
 
 ## Acceptance for this plan
 

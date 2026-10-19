@@ -60,8 +60,8 @@ def test_custom_dists(n=n, do_plot=False):
     dists = sc.objdict()
     rvs   = sc.objdict()
     times = sc.objdict()
-    for name in ss.dist_list:
-        dist_class = getattr(ss, name)
+    for name in ss.distributions.dist_list:
+        dist_class = getattr(ss.distributions, name)
         dist = dist_class(name='test', strict=False)
         dist.init()
         dists[name] = dist
@@ -93,7 +93,7 @@ def test_dists(n=n, do_plot=False):
         obj.a = sc.objdict()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(v=0.3))
-        dists = ss.Dists(obj).init(sim=make_sim())
+        dists = ss.distributions.Dists(obj).init(sim=make_sim())
 
         # Call each distribution twice
         for j in range(2):

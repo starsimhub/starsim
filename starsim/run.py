@@ -365,6 +365,8 @@ class MultiSim:
             method (str): one of 'mean' (default: the mean, standard deviation, and standard error over the runs), 'median' (quantiles over the runs), or 'all' (the value of each run)
             quantiles (dict/list): if method='median', the quantiles (default: median, min, max, q25, and q75)
             how (str/dict): how to summarize each result over each run: as for `sim.summarize()`
+
+        If any run of a declared disease died out (see `msim.extinction()`), the summary also has `<disease>_extinction`: 1 for each run that died out and 0 otherwise, so its mean is the share of runs that died out.
         """
         self.check_run('summarize')
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda vals: vals[-1])
@@ -393,6 +395,17 @@ class MultiSim:
             else:
                 errormsg = f'Unknown method "{method}"; use "mean", "median", or "all"'
                 raise ValueError(errormsg)
+
+        for name,(first,n) in self._infected().items(): # Whether each run died out (see extinction()), only if one did
+            over = ((n[:, -1] <= 0) & (n[:, 0] > 0)).astype(float)
+            if over.any():
+                key = f'{name}_extinction'
+                if method == 'all':
+                    summary[key] = over
+                elif method == 'mean':
+                    summary[key] = sc.objdict({'mean':over.mean(), 'std':over.std(), 'sem':sc.sem(over)})
+                else:
+                    summary[key] = {q: np.quantile(over, v) for q, v in quantiles.items()}
 
         self.summary = summary
         return summary
@@ -508,6 +521,17 @@ class MultiSim:
                     rows.append(pd.DataFrame(dict(target=target, location=str(place), target_end_date=ends, output_type='quantile', quantile=q, value=qvals)))
         return pd.concat(rows, ignore_index=True)
 
+    def _infected(self):
+        """ For each declared disease with infected states: its first infected state's result, and the number infected, runs by steps (see `extinction()`) """
+        out = {}
+        for dis in getattr(self.sims[0], 'declared', []):
+            infected = [s for s in dis.graph.infected if s.people]
+            if not infected or dis.name not in self.results:
+                continue
+            res = self.results[dis.name]
+            out[dis.name] = (res[f'n_{infected[0].name}'], sum(res[f'n_{s.name}'].values for s in infected))
+        return out
+
     def extinction(self, output=False):
         """
         How often each declared disease died out: the share of runs in which nobody was infected by the end, and the median time it happened
@@ -527,19 +551,13 @@ class MultiSim:
         self.check_run('extinction')
         base = self.sims[0]
         rows = []
-        for dis in getattr(base, 'declared', []):
-            infected = [s for s in dis.graph.infected if s.people]
-            if not infected or dis.name not in self.results:
-                continue
-            res = self.results[dis.name]
-            first = res[f'n_{infected[0].name}']
-            n = sum(res[f'n_{s.name}'].values for s in infected) # Runs by steps
+        for name,(first,n) in self._infected().items():
             for label,inds in first.scenarios().items():
                 runs = n[inds]
                 over = (runs[:, -1] <= 0) & (runs[:, 0] > 0)
                 times = [first.timevec[len(row) - np.argmax(row[::-1] > 0)] for row in runs[over]] if over.any() else [] # The step after the last with anyone infected
                 scenario = label if len(first.scenarios()) > 1 else None
-                rows.append(dict(disease=dis.name, scenario=scenario, runs=len(runs), share=over.mean(), median_time=float(np.median(times)) if times else None))
+                rows.append(dict(disease=name, scenario=scenario, runs=len(runs), share=over.mean(), median_time=float(np.median(times)) if times else None))
         df = sc.dataframe(rows)
         if output:
             return df
@@ -762,8 +780,9 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
     """
     kwargs = dict(reseed=False, verbose=verbose, shrink=shrink, run_args=run_args)
     if parallel:
-        par_args = sc.mergedicts({'ncpus': n_cpus}, par_args)
-        return sc.parallelize(ft.partial(ss.kernels.one_thread, single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+        par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method()}, par_args)
+        with ss.kernels.one_blas_thread():
+            return sc.parallelize(ft.partial(ss.kernels.one_thread, single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
     return [single_run(sim, ind=i, copy_sim=True, **kwargs) for i,sim in enumerate(sims)] # A fresh sim, as pickling gives when running in parallel
 
 

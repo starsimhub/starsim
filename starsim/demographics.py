@@ -12,6 +12,39 @@ _ = None
 
 
 
+def infer_rate_units(units, rates, name):
+    """
+    What the rates of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` are per, as a factor to multiply them by: 1e-3 for per 1,000 people, 1 for per person
+
+    With `rate_units=None` (the default), it is worked out from the largest rate: above 1, per 1,000 (e.g.
+    `ss.Births(birth_rate=35)`); otherwise per person (e.g. `ss.Births(birth_rate=0.035)`). A warning says
+    which was assumed when the largest rate could be either (from 0.1 to 1, or above 1,000); give `rate_units`
+    to say which, and silence it.
+
+    Args:
+        units (float): `rate_units` as given: None to work it out, 1000 or 1e-3 for per 1,000, 1 for per person
+        rates (number/rate/dataframe): the rates, or rate data
+        name (str): what the rates are, for the warning (e.g. "birth_rate")
+    """
+    if units is not None:
+        return 1/units if units > 1 else units # rate_units=1000 means per 1,000, as rate_units=1e-3 does
+    if isinstance(rates, (pd.Series, pd.DataFrame)):
+        values = rates.values
+    elif isinstance(rates, ss.TimePar):
+        values = rates.value
+    else:
+        values = rates
+    try:
+        largest = np.nanmax(np.asarray(values, dtype=float))
+    except (TypeError, ValueError): # E.g. a distribution, which is not scaled by units in a way that can be checked
+        return 1e-3
+    units = 1e-3 if largest > 1 else 1.0
+    if 0.1 <= largest <= 1 or largest > 1000:
+        what = 'per 1,000 people' if units == 1e-3 else 'per person'
+        ss.warn(f'{name} has rates up to {largest:n}, which could be per person or per 1,000 people; assuming {what}. Give rate_units=1000 (per 1,000) or rate_units=1 (per person) to say which.')
+    return units
+
+
 class Demographics(ss.Module):
     """
     Base class for demographic modules.
@@ -33,7 +66,7 @@ class Flows(Demographics):
     Every declared disease's people are born and die by them, once, under every solver: they become
     transitions of the first declared disease (or the first with the state that births name), whose
     people are everyone's, since as agents the diseases share the people, and in a compartmental run
-    with several declared diseases, their states are tracked jointly (see `ss.Sim.init_flows()`).
+    with several declared diseases, their states are tracked jointly (see `ss.Sim._init_flows()`).
     With no declared disease, they are run as `ss.Births` and `ss.Deaths`. This class is not usually
     used directly.
 
@@ -80,8 +113,15 @@ class Births(Demographics):
     Args:
         birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
         rel_birth (float): constant used to scale all birth rates
-        rate_units (float): units for birth rates (default assumes per 1000)
+        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude birth rate result (`cbr`) is in the same units.
         metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
+
+    Examples:
+        ```python
+        ss.Births(birth_rate=35) # 35 per 1,000 people per year
+        ss.Births(birth_rate=0.035) # The same, per person
+        ss.Births(birth_rate=0.5, rate_units=1000) # 0.5 per 1,000, which needs rate_units to say so
+        ```
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
 
@@ -89,7 +129,7 @@ class Births(Demographics):
         self.define_pars(
             birth_rate = ss.peryear(20),
             rel_birth = 1,
-            rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
+            rate_units = None,  # Per 1,000 if the rates are above 1, otherwise per person; see ss.demographics.infer_rate_units()
         )
         self.update_pars(pars, **kwargs)
 
@@ -103,6 +143,7 @@ class Births(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
+        self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.pars.birth_rate, 'birth_rate')
         self.n_births_this_step = 0 # For results tracking
         self.dist = ss.bernoulli(p=0) # Per-agent birth draw (CRN path); set to the birth rate each step
         # Count-based birth draw, used only on the non-CRN fast path (ss.options.crn=False):
@@ -244,7 +285,7 @@ class Deaths(Demographics):
         pars: dict with arguments including:
             rel_death: constant used to scale all death rates
             death_rate: float, dict, or pandas dataframe/series containing mortality data
-            rate_units: units for death rates (see in-line comment on par dict below)
+            rate_units: what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude mortality rate result (`cmr`) is in the same units.
 
         metadata: data about the data contained within the data input.
             "data_cols" is is a dictionary mapping standard keys, like "year" to the
@@ -255,7 +296,7 @@ class Deaths(Demographics):
         self.define_pars(
             rel_death = 1,
             death_rate = ss.peryear(10),  # Default = a fixed rate of 1%/year (10 per 1000), overwritten if data provided
-            rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
+            rate_units = None,  # Per 1,000 if the rates are above 1, otherwise per person; see ss.demographics.infer_rate_units()
         )
         self.update_pars(pars, **kwargs)
 
@@ -271,6 +312,7 @@ class Deaths(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
+        self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.death_rate_data, 'death_rate')
         self._p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
         self.n_deaths = 0 # For results tracking
         return
@@ -385,7 +427,7 @@ class PregnancyPars(ss.Pars):
         self.p_infertile = ss.bernoulli(p=0)  # Primary infertility
         self.min_age = 15  # Minimum age to become pregnant
         self.max_age = 50  # Maximum age to become pregnant
-        self.rate_units = 1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+        self.rate_units = None  # Per 1,000 if the rates are above 1, otherwise per person; see ss.demographics.infer_rate_units()
 
         # Parameters related to pregnancy duration
         # Gestational age distribution at birth (32-42 weeks); probabilities approximate CDC/WHO preterm birth data
@@ -437,7 +479,7 @@ class Pregnancy(Demographics):
         p_infertile (bernoulli): probability of primary infertility (default 0)
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
-        rate_units (float): units for fertility rates (default assumes per 1000)
+        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 women, 1 for per woman; by default, per 1,000 if the largest rate is above 1, otherwise per woman, with a warning if it could be either (see `ss.demographics.infer_rate_units()`)
         dur_pregnancy (float/dur/Dist): duration of pregnancy; a number is interpreted as weeks (default: drawn from choice distribution, 32-42 weeks)
         dur_breastfeed (float/dur): duration of breastfeeding (default: drawn from lognormal distribution, 9±6 months)
 
@@ -674,6 +716,7 @@ class Pregnancy(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         if self.pars.fertility_rate is not None:
             self.fertility_rate_data = self.standardize_fertility_data()
+            self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.fertility_rate_data, 'fertility_rate')
 
         low = sim.pars.n_agents + 1
         high = int(self.pars.slot_scale*sim.pars.n_agents)

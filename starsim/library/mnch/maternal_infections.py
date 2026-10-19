@@ -53,10 +53,10 @@ Usage::
 import numpy as np
 import sciris as sc
 import starsim as ss
-from ..diseases.coded import CodedSIR
+from ..diseases.agents import AgentSIR
 
 
-class CongenitalDisease(CodedSIR):
+class CongenitalDisease(AgentSIR):
     """
     Simple disease with congenital outcomes via the generic framework.
 

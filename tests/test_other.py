@@ -105,7 +105,7 @@ def test_custom_imports():
 
     # A method of a disease written as code, on a declared one, would never be called (before, it was silently ignored)
     with pytest.raises(ss.CapabilityError):
-        class CodedHook(ss.SIS):
+        class Hook(ss.SIS):
             def set_prognoses(self, uids, sources=None):
                 pass
 
@@ -146,12 +146,13 @@ class Counter(ss.Module):
                 sim.run()
         assert sim.results.counter.seen.sum() == seen
 
-    # Renames, the network's name, a fractional verbose, and Starsim 3's coded bases
+    # Renames, the network's name, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
     text, changes, todo = migrate_text("net = ss.MaternalNet(); key = 'maternal'; pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass", network_rename=True)
-    assert text == "net = ss.PrenatalNet(); key = 'prenatal'; pars = dict(verbose=1)\nclass MySIS(ssl.CodedSIS): pass\nclass MyNCD(ss.CodedDisease): pass"
+    assert text == "net = ss.PrenatalNet(); key = 'prenatal'; pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
+    assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
-    class Quiet(ssl.CodedSIS):
+    class Quiet(ssl.AgentSIS):
         def set_prognoses(self, uids, sources=None):
             self.susceptible[uids] = False
             self.infected[uids] = True

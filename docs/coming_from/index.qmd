@@ -17,7 +17,7 @@ These pages are for people who already model with another framework and want to 
 | [camdl](camdl.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 3 of 3 pass | The interventions (SIAs) of an imported model are not translated |
 | [EMULSION](emulsion.qmd) | Fewer in both | Faster | 2 of 5 pass | Newborns by prototype, births between strata, and minimum stays as compartments |
 | [LASER](laser.qmd) | Fewer in both | **Slower** (the other model passes only with a tenth of the agents) | 0 of 3 pass | Speed and memory per agent at national scale |
-| [Ghana measles](ghana_measles.qmd) | Fewer | Borderline | 2 of 3 pass | A fitted share of contacts away; agents at full size |
+| [NumPy](numpy.qmd) | Fewer | **Slower**, under the limit | No demo | Speed for a small model run once |
 | [Starsim 3](starsim3.qmd) | | | 4 of 4 pass | Declared diseases as agents are slower than code |
 
 ## How these numbers were made
@@ -26,7 +26,7 @@ These pages are for people who already model with another framework and want to 
 
 **Lines and times.** Starsim's north-star script, `tests/north_star.py`, reads every translation and writes a table of lines of model code and run time, the original against Starsim, with the rows that fail. Starsim's lines are counted from the translation: not counting blank lines, comments, docstrings, imports, or the `if __name__ == '__main__'` block, and counting a line over 100 characters twice. The original's lines are those of its model file (rows of spreadsheets for Atomica, lines of YAML for flepiMoP and EMULSION). Starsim fails on lines if it has more than the original. Time is two numbers: the first run in a new process, and the best of 5 repeated runs, each building and running the sim. A time fails if Starsim is more than 2 times slower and more than 1 s slower. The originals were timed in their own environments (what each time includes, such as starting R or compiling, is said on each page). The script was run twice on 18 October 2026, on a 20-core x86-64 Linux machine shared with other work: once with the originals' recorded times, and once with the originals run again where that could be done.
 
-**What works and what does not yet.** Starsim's switching demos (`tests/switching/`) take each task that a user of that framework does every week, written in that field's terms and scaled down to run in seconds, and check it against the original framework's numbers. Of their 51 checks, 34 pass today, 16 fail, and one needs a framework that cannot be installed alongside Starsim. Each failing check names what blocks it. The demos were built from a review in which an experienced user of each framework tried their routine work in Starsim at their real scale (on 17 October 2026). Numbers on the pages that are not from the demos or the north star are from the translations' own comparisons (13 and 14 October 2026) or from that review; a time from the review is given with its date. Starsim's numbers are for the development version of Starsim 4.
+**What works and what does not yet.** Starsim's switching demos (`tests/switching/`) take each task that a user of that framework does every week, written in that field's terms and scaled down to run in seconds, and check it against the original framework's numbers. Of their 51 checks, 34 pass today, 16 fail, and one needs a framework that cannot be installed alongside Starsim. Each failing check names what blocks it. The demos were built from a review in which an experienced user of each framework tried their routine work in Starsim at their real scale (on 17 October 2026). Numbers on the pages that are not from the demos or the north star are from the translations' own comparisons (13 and 14 October 2026) or from that review; a time from the review is given with its date. The NumPy page has no translation or demo: its numbers are from its own code, which is run when the docs are built. Starsim's numbers are for the development version of Starsim 4.
 
 ## The north-star table
 
@@ -46,7 +46,6 @@ The second run of the north-star script, with the originals timed again where th
 | epydemix/sir_kenya | 7 | 13 | 0.0071 | 0.052 | 0.0065 | 0.013 | **fail** | pass | pass |
 | flepimop/seir_2pop | 42 | 14 | 8.6 | 0.06 | 8.1 | 0.016 | pass | pass | pass |
 | flepimop/vaccine_scenarios | 141 | 36 | 96 (r) | 2.1 | 96 (r) | 1.4 | pass | pass | pass |
-| ghana_measles/seir_districts | 89 | 21 | – | 2 | 0.84 (r) | 1.9 | pass | | **fail** |
 | laser/england_wales | 126 | 62 | 4.7 (r) | 53 | 3 (r) | 47 (best of 3) | pass | **fail** | **fail** |
 | laser/hub_spoke_seir | 50 | 15 | 2.8 (r) | 1.6 | 0.78 (r) | 1.3 | pass | pass | pass |
 | memilio/secir | 44 | 14 | 0.62 | 0.065 | 0.61 | 0.019 | pass | pass | pass |
@@ -58,4 +57,4 @@ The second run of the north-star script, with the originals timed again where th
 | summer2/seir-age-clinical | 134 | 15 | 0.0012 | 0.13 | 0.00099 | 0.041 | pass | pass | pass |
 | summer2/sir-age-location | 35 | 11 | 0.00099 | 0.12 | 0.00038 | 0.02 | pass | pass | pass |
 
-Lines: 20 of 23 pass. First run: 16 of 19 pass (four originals have no first-run time). Repeated run: 19 of 23 pass. In the first run of the script, the Ghana measles row passed on the repeated run (1.8 s against 0.84 s), so it is on the edge of the limit. The hub-and-spoke row passes with a tenth of LASER's agents (each Starsim agent stands for ten people); at equal size, Starsim is about 10 times slower than LASER on its threads.
+Lines: 19 of 22 pass. First run: 16 of 19 pass (three originals have no first-run time). Repeated run: 19 of 22 pass. The hub-and-spoke row passes with a tenth of LASER's agents (each Starsim agent stands for ten people); at equal size, Starsim is about 10 times slower than LASER on its threads.

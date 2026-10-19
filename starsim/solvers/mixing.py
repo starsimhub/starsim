@@ -38,7 +38,7 @@ class Mixing:
             errormsg = f'The model has more than one spatial dimension ({sc.strjoin(sim.groups.strats[d].name for d in spaces)}); a person is in one place at a time, so combine them into one'
             raise ValueError(errormsg)
         self.space = spaces[0] if spaces else None # The position of the spatial dimension
-        self.time_share = None # For commuting and visiting: the share of their time that people from each place spend in each place; for a moving force of infection, the share of each place's force that each place receives
+        self.time_share = None # For commuting and visiting: the share of their time that people from each place spend in each place; for a moving force of infection, the share of each place's force that each place receives (a sparse array)
         self.present = False # Whether the time share also changes who is present in each place (for commuting)
         self.migration = None # For migration: the rate of moving from each place to each place
         self.register = None # For a movement register: the mobility that holds it; its events are worked out once the sim has a timeline
@@ -58,7 +58,9 @@ class Mixing:
                 self.register = mobility
             elif mobility is not None:
                 self.migration = mobility.matrix(strat)
-        self.share = None if self.time_share is None else sps.csr_array(self.time_share) # As a sparse matrix, since most pairs of places share no one
+                if sps.issparse(self.migration):
+                    self.migration = self.migration.toarray()
+        self.share = self.time_share # Sparse, since most pairs of places share no one
         return
 
     def spread(self, v, block=1, by_columns=False):

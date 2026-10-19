@@ -9,7 +9,7 @@ Starsim can include detailed population dynamics through its demographics module
 Demographics are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics. There are two ways to add them:
 
 - **Births and deaths declared for the population** (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`), at per-person rates. They run under every solver, including as an ODE, and add and remove the same people from every disease. `demographics=True` declares them at default rates.
-- **Demographics modules** (`ss.Births`, `ss.Deaths`, `ss.Pregnancy`), written as code, with rates per 1,000 people. They support rates that vary by age, sex, and year, pregnancy, and maternal transmission, and run as agents.
+- **Demographics modules** (`ss.Births`, `ss.Deaths`, `ss.Pregnancy`), written as code, with rates per 1,000 people if they are above 1 and per person otherwise (`rate_units=1000` or `rate_units=1` says which, and a rate that could be either gives a warning). They support rates that vary by age, sex, and year, pregnancy, and maternal transmission, and run as agents.
 
 ## Simple usage
 
@@ -68,7 +68,7 @@ births = ss.Births(birth_rate=birth_data)
 # Create a pregnancy module with custom parameters
 pregnancy = ss.Pregnancy(
     fertility_rate = fertility_data,
-    rel_fertility = 1000,                                   # Whether data are per person or per 1000
+    rate_units = 1,                                         # The data are per woman (rates up to 0.2 could be either)
     p_maternal_death = ss.bernoulli(0.001),                  # 0.1% maternal mortality
     p_survive_maternal_death = ss.bernoulli(0.98),           # 98% chance unborn survives if mother dies
     dur_breastfeed = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.25)),  # Breastfeeding duration

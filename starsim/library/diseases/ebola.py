@@ -7,14 +7,14 @@ Original version by @domdelport and @RomeshA
 
 import numpy as np
 import starsim as ss
-from .coded import CodedSEIR
+from .agents import AgentSEIR
 
 
-class Ebola(CodedSEIR):
+class Ebola(AgentSEIR):
     """
     Ebola, including severe disease and transmission from unburied bodies.
 
-    Extends `ssl.CodedSEIR` with severe and buried states. Exposed agents become
+    Extends `ssl.AgentSEIR` with severe and buried states. Exposed agents become
     infectious, a fraction progress to severe disease, and a fraction of those
     die; everyone else recovers. Severe agents are more infectious
     (`sev_factor`), and dead agents remain infectious until buried
@@ -96,7 +96,7 @@ class Ebola(CodedSEIR):
         p = self.pars
         ti = self.ti
 
-        # Progress exposed -> infectious (as in ssl.CodedSEIR; super() isn't called since it would remove bodies before burial)
+        # Progress exposed -> infectious (as in ssl.AgentSEIR; super() isn't called since it would remove bodies before burial)
         infectious = (self.exposed & (self.ti_infectious <= ti)).uids
         self.exposed[infectious] = False
         self.infectious[infectious] = True

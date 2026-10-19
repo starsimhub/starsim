@@ -23,7 +23,7 @@ class lazy_attr:
 
 
 class AgentScale(ss.FloatArr):
-    """ The number of people each agent stands for relative to the others (`people.scale`); setting it other than 1 makes results add up the agents' weights """
+    """ The number of people each agent stands for relative to the others (`people.scale`); setting it other than 1 makes results, and the counts in a declared model's rates (`I.n`, `I.frac`, and the share infectious in a transmission), add up the agents' weights """
     weighted = False # Set once any agent's scale is set other than 1, so that results are worked out as before until then
 
     def __setitem__(self, key, value):
@@ -292,7 +292,7 @@ class People:
             errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
-        ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
+        ss.distributions.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
     @property

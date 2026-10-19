@@ -8,7 +8,7 @@ import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents
 
-__all__ = ['solver_names', 'removed', 'integrators', 'max_events', 'make_engine', 'choose_solver', 'init_crossings', 'init_capabilities', 'auto_reasons', 'try_capabilities', 'count_events', 'tried_error']
+__all__ = ['solver_names', 'removed', 'integrators', 'max_seconds', 'make_engine', 'choose_solver', 'init_crossings', 'init_capabilities', 'auto_reasons', 'try_capabilities', 'count_events', 'exact_seconds', 'tried_error']
 
 
 solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'abm'] # The solvers that can be asked for
@@ -19,7 +19,7 @@ removed = dict( # Solvers of earlier versions, and what to use instead
     ctmc       = 'solver="ctmc" has been removed; use solver="gillespie"',
 )
 integrators = ['rk4', 'euler'] # The schemes of the ODE
-max_events = 1e6 # The most events (estimated by an ODE run) that solver="gillespie" takes one at a time; above it, it takes tau leaps
+max_seconds = 1.0 # The longest that solver="gillespie" takes events one at a time, as estimated by exact_seconds(); above it, it takes tau leaps (except by place, which is always exact)
 
 
 def make_engine(module, sim):
@@ -40,7 +40,7 @@ def choose_solver(sim):
     solvers = ss.solvers
     modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
-    sim.init_flows()
+    sim._init_flows()
     for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
         for name,tr in mod.graph.transitions.items():
             where = getattr(tr, 'where', None)
@@ -73,7 +73,7 @@ def choose_solver(sim):
         errormsg = f'Unknown integrator "{pars.integrator}"; integrator= is the scheme of the ODE, {sc.strjoin(solvers.integrators)}'
         raise ValueError(errormsg)
     sim.unit = None # e.g. 'day'; None means time is counted in timesteps
-    sim.unitless = False # Whether time is counted in timesteps, with no unit: set in init_unit()
+    sim.unitless = False # Whether time is counted in timesteps, with no unit: set in _init_unit()
     sim.unit_base = 'year' # The unit that bare numbers are in; with no unit, this is whatever the timestep is
     sim.unit_source = None
     sim.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), ss.change(), and the efficacy of products
@@ -86,7 +86,7 @@ def choose_solver(sim):
             sim.par_values = sc.mergedicts(sim.par_values, {key:pars.pop(key)})
     sim.set_par_values()
     sim.check_par_values() # Not on a restart, so a fit can probe values at its bounds
-    sim.init_named_people()
+    sim._init_named_people()
     sim.groups.init()
     sim.mixing = solvers.Mixing(sim)
     if not sim.declared:
@@ -110,7 +110,7 @@ def choose_solver(sim):
                                       f'     If it is meant to start empty, declare the states (S, I, R = ss.states("S I R")) or give it a value, e.g. init=dict({state.name}=0).')
 
     # The unit
-    sim.init_unit()
+    sim._init_unit()
 
     # The solver
     init_capabilities(sim, modules)
@@ -124,10 +124,12 @@ def choose_solver(sim):
         else:
             solver, reason = 'ode', 'every part of the model has a compartmental form' + (f'; {sc.strjoin(tried)} {"was" if len(tried) == 1 else "were"} tried on groups' if tried else '')
     elif solver == 'gillespie' and pars.approx is not False: # One event at a time, unless that would take too long
-        n_events = count_events(sim)
-        if n_events > solvers.max_events:
-            solver, reason = 'tau', f'tau-leaping for solver="gillespie": an ODE run gives about {n_events:.1e} events'
-            ss.note(f'solver="gillespie" takes tau leaps: an ODE run gives about {n_events:.1e} events, more than {solvers.max_events:.0e}; approx=False keeps it exact', sim=sim, verbose=0 if pars.approx else None)
+        n_events, seconds = exact_seconds(sim)
+        if seconds > solvers.max_seconds:
+            solver, reason = 'tau', f'tau-leaping for solver="gillespie": an ODE run gives about {n_events:.1e} events, about {seconds:.2g} s one at a time'
+            ss.note(f'solver="gillespie" takes tau leaps: an ODE run gives about {n_events:.1e} events, which would take about {seconds:.2g} s one at a time, more than {solvers.max_seconds:n} s; approx=False keeps it exact', sim=sim, verbose=0 if pars.approx else None)
+        elif n_events is None:
+            reason = 'exact, by place'
         else:
             reason = f'exact; an ODE run gives about {sc.sigfig(n_events, 2, sep=",")} events'
     else:
@@ -136,7 +138,7 @@ def choose_solver(sim):
     sim.solver_reason = reason
     if pars.verbose: # Before the notes that the solver leads to
         print(f'solver: {solver} ({reason})')
-    sim.init_lifetables()
+    sim._init_lifetables()
 
     # The population
     if solver == 'abm':
@@ -221,7 +223,7 @@ def choose_solver(sim):
 
 def init_crossings(sim):
     """
-    In a compartmental run: track jointly the states of diseases when a condition in one refers to a state of another, or when people are born or die (see `init_flows()`)
+    In a compartmental run: track jointly the states of diseases when a condition in one refers to a state of another, or when people are born or die (see `Sim._init_flows()`)
 
     For example, `ss.modify(hiv.rel_trans, multiply=3, where=syph.I)` needs the number of people with
     HIV who also have syphilis. Each disease in a crossing becomes a dimension of the sim, whose levels
@@ -230,7 +232,7 @@ def init_crossings(sim):
     """
     names = [mod.name for mod in sim.declared]
     links = {name:{name} for name in names}
-    if any(sim.flows_of(mod) for mod in sim.declared): # People born or dying, who are born or die once in every disease: see init_flows()
+    if any(sim.flows_of(mod) for mod in sim.declared): # People born or dying, who are born or die once in every disease: see Sim._init_flows()
         links = {name:set(names) for name in names}
     for mod in list(sim.pars.connectors.values()) + list(sim.pars.interventions.values()):
         home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) # The disease whose engine evaluates the conditions
@@ -423,19 +425,52 @@ def try_capabilities(sim):
     return
 
 
-def count_events(sim):
-    """ The number of events that solver="gillespie" would take, from an ODE run: people moved along each transition, once for each stage of its dwell time """
-    if not hasattr(sim, 'inputs'):
-        return 0
-    ode = sim.new(solver='ode', verbose=0, approx=True).run()
+def count_events(sim, mod=None):
+    """ The number of events that solver="gillespie" would take, from an ODE run (or of one module of a sim that has been run as an ODE): people moved along each transition, once for each stage of its dwell time """
+    if mod is None:
+        if not hasattr(sim, 'inputs'):
+            return 0
+        ode = sim.new(solver='ode', verbose=0, approx=True).run()
+        return sum(count_events(ode, mod) for mod in ode.declared)
     n = 0
-    for mod in ode.declared:
-        dwells = mod.engine.dwells
-        for name,tr in mod.graph.transitions.items():
-            if tr.people:
-                k = dwells[name].k if name in dwells else 1
-                n += k*np.sum(mod.results[name].values)
+    dwells = mod.engine.dwells
+    for name,tr in mod.graph.transitions.items():
+        if tr.people:
+            k = dwells[name].k if name in dwells else 1
+            n += k*np.sum(mod.results[name].values)
     return n
+
+
+def exact_seconds(sim):
+    """
+    The number of events that solver="gillespie" would take (from an ODE run), and about how long it would take them one at a time
+
+    An event costs about 0.1 µs for one group, and more for groups that affect each other (strata
+    that mix, or places that people commute between), since each event changes the rates of the
+    groups the mixing takes it to: about 0.05·n^1.5 µs for n groups, from timings of the exact
+    solver on an SIR (October 2026: 1 µs for 8 places linked by commuting, 4 µs for 16, 40 µs for
+    80, 170 µs for 150; up to twice that for commuting, half for a force of infection shared between
+    places). Places that do not affect each other are run by place, which is always exact (it is
+    faster than tau leaps), so they count for no time; if every module is run by place, the ODE is
+    not run, and the number of events is None.
+    """
+    if not hasattr(sim, 'inputs'):
+        return 0, 0.0
+    ode = sim.new(solver='ode', verbose=0, approx=True).init()
+    def by_place(mod):
+        engine = mod.engine
+        if getattr(engine, 'cross', None) is not None:
+            return False
+        if engine.program is None:
+            engine.init_program()
+        return engine.program.local and engine.program.n_places > 1
+    timed = [mod for mod in ode.declared if not by_place(mod)]
+    if not timed:
+        return None, 0.0
+    ode.run()
+    n_events = sum(count_events(ode, mod) for mod in ode.declared)
+    seconds = sum(count_events(ode, mod) for mod in timed)*(0.1 + 0.05*ode.groups.n_groups**1.5)*1e-6
+    return n_events, seconds
 
 
 def tried_error(what, E):

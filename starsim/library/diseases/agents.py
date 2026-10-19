@@ -4,19 +4,20 @@ Diseases written as code: Starsim 3's SIR, SEIR, and SIS
 These are the Starsim 3 library models, written as `ss.Infection` subclasses with
 per-agent states and methods. They are examples of writing a disease as code, and
 base classes for the library diseases that add per-agent behavior. The core `ss.SIR`,
-`ss.SIS`, and `ss.SEIR` are declared from states and transitions instead.
+`ss.SIS`, and `ss.SEIR` are declared from states and transitions instead. Written as
+code, these run only as agents, hence their names (`ssl.AgentSIR` and the others).
 """
 import numpy as np
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['CodedSIR', 'CodedSEIR', 'CodedSIS']
+__all__ = ['AgentSIR', 'AgentSEIR', 'AgentSIS']
 
 _ = None # For function signatures
 
 
-class CodedSIR(ss.Infection):
+class AgentSIR(ss.Infection):
     """
     An SIR model written as code: Starsim 3's `ss.SIR`
 
@@ -57,7 +58,7 @@ class CodedSIR(ss.Infection):
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             reset = True, # Remove any existing states and aliases (from super().define_states())
-            infectious = 'infected', # Everyone infected is infectious; CodedSEIR replaces this with a state of its own
+            infectious = 'infected', # Everyone infected is infectious; AgentSEIR replaces this with a state of its own
         )
         return
 
@@ -82,13 +83,13 @@ class CodedSIR(ss.Infection):
         return
 
     def set_infection(self, uids):
-        """ Make the agents infectious, immediately (`CodedSEIR` overrides this to add a latent period) """
+        """ Make the agents infectious, immediately (`AgentSEIR` overrides this to add a latent period) """
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
+        self.ti_infected[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
         return
 
     def clear_infection(self, uids):
-        """ Clear the infection states, on recovery or death (`CodedSEIR` overrides this, since its `infected` is derived) """
+        """ Clear the infection states, on recovery or death (`AgentSEIR` overrides this, since its `infected` is derived) """
         self.infected[uids] = False
         return
 
@@ -100,9 +101,9 @@ class CodedSIR(ss.Infection):
         # distribution once per timestep.
         dur_inf = p.dur_inf.rvs(uids)
 
-        # Determine who dies and who recovers and when. In CodedSIR agents are infectious as
+        # Determine who dies and who recovers and when. In AgentSIR agents are infectious as
         # soon as they are infected, so the infectious period runs from ti_infected;
-        # CodedSEIR overrides this to run it from ti_infectious instead.
+        # AgentSEIR overrides this to run it from ti_infectious instead.
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
@@ -133,11 +134,11 @@ class CodedSIR(ss.Infection):
         return ss.return_fig(fig)
 
 
-class CodedSEIR(CodedSIR):
+class AgentSEIR(AgentSIR):
     """
-    An SEIR model written as code: Starsim 3's `ss.SEIR` (see `ssl.CodedSIR`); for an SEIR model, use `ss.SEIR`
+    An SEIR model written as code: Starsim 3's `ss.SEIR` (see `ssl.AgentSIR`); for an SEIR model, use `ss.SEIR`
 
-    This class extends `CodedSIR` with an exposed state: agents who are infected but not
+    This class extends `AgentSIR` with an exposed state: agents who are infected but not
     yet infectious. `exposed` and `infectious` are the literal E and I compartments, and
     `infected` is derived from them: an agent is infected from the moment it acquires the
     infection, whether or not it is yet transmitting. So `n_infected` and `prevalence`
@@ -178,8 +179,8 @@ class CodedSEIR(CodedSIR):
     def set_infection(self, uids):
         """ Agents are exposed first, and become infectious after the latent period """
         self.exposed[uids] = True
-        self.ti_exposed[uids] = self.ti
-        self.ti_infectious[uids] = self.ti + self.pars.dur_exp.rvs(uids)
+        self.ti_exposed[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
+        self.ti_infectious[uids] = self.ti_exposed[uids] + self.pars.dur_exp.rvs(uids)
         return
 
     def set_progression(self, uids):
@@ -187,7 +188,7 @@ class CodedSEIR(CodedSIR):
         p = self.pars
         dur_inf = p.dur_inf.rvs(uids)
 
-        # As CodedSIR, except that the infectious period runs from ti_infectious rather than
+        # As AgentSIR, except that the infectious period runs from ti_infectious rather than
         # from the time of acquisition, so the latent period delays it rather than eating into it
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
@@ -211,9 +212,9 @@ class CodedSEIR(CodedSIR):
         return
 
 
-class CodedSIS(ss.Infection):
+class AgentSIS(ss.Infection):
     """
-    An SIS model with waning immunity, written as code: Starsim 3's `ss.SIS` (see `ssl.CodedSIR`)
+    An SIS model with waning immunity, written as code: Starsim 3's `ss.SIS` (see `ssl.AgentSIR`)
 
     This class implements a basic SIS model with states for susceptible,
     infected/infectious, and back to susceptible, with a per-agent immunity level
@@ -271,14 +272,14 @@ class CodedSIS(ss.Infection):
         """ Set prognoses """
         super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
+        self.ti_infected[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = self.ti + dur_inf
+        self.ti_recovered[uids] = self.ti_infected[uids] + dur_inf
 
         return
 

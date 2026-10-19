@@ -22,8 +22,8 @@ def test_export():
     sc.heading('Testing results export and plotting')
 
     # Make a sim with 2 SIS models with varying units and dt
-    d1 = ssl.CodedSIS(dt=ss.years(1/12), name='sis1') # Written as code, since a declared disease cannot yet have a timestep of its own
-    d2 = ssl.CodedSIS(dt=ss.years(0.5), name='sis2')
+    d1 = ssl.AgentSIS(dt=ss.years(1/12), name='sis1') # Written as code, since a declared disease cannot yet have a timestep of its own
+    d2 = ssl.AgentSIS(dt=ss.years(0.5), name='sis2')
     sim = ss.Sim(n_agents=medium, diseases=[d1, d2], networks='random')
 
     # Run sim and pull out disease results

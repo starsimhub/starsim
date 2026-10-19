@@ -167,7 +167,7 @@ def code_value(val):
             args = ', '.join(f'{k}={code_value(v)}' for k,v in val.items() if k != 'dist')
             return f'ss.{val["dist"]}({args})'
         elif 'timeseries' in val:
-            items = ', '.join(f'{k!r}: {code_value(v)}' for k,v in val['timeseries'].items())
+            items = ', '.join(f'{time_code(k)}: {code_value(v)}' for k,v in val['timeseries'].items())
             period = f', period={code_value(val["period"])}' if 'period' in val else ''
             return f"ss.timeseries({{{items}}}, mode={val['mode']!r}{period})"
         elif 'by' in val:
@@ -186,6 +186,18 @@ def code_value(val):
     elif isinstance(val, list):
         return '[' + ', '.join(code_value(v) for v in val) + ']'
     return repr(val)
+
+
+def time_code(text):
+    """ The Python for a time written as text in the model spec (a key of a time series, or the start of a modifier): a number, a duration (e.g. "days(5)", or "day" for one), or a date """
+    try:
+        return repr(ast.literal_eval(text))
+    except (ValueError, SyntaxError):
+        pass
+    unit, _, value = text.partition('(')
+    if unit.removesuffix('s') in ['day', 'week', 'month', 'year']:
+        return f"ss.{unit.removesuffix('s')}s({value.removesuffix(')') or 1})"
+    return repr(text)
 
 
 def code_expr(text):
@@ -237,6 +249,11 @@ def operand(text):
     return text if simple(node) else f'({text})'
 
 
+def unitless_dur(val):
+    """ Whether a value in the model spec is a duration with no unit, which is written as a plain number """
+    return isinstance(val, dict) and val.get('type') == 'dur' and val['unit'] is None
+
+
 def disease_code(spec, lines, left):
     """ The Python for one declared disease; returns the name of its variable """
     if spec['type'] != 'Disease':
@@ -251,9 +268,11 @@ def disease_code(spec, lines, left):
     if pars:
         add('# Parameters')
     for p in spec['pars']:
-        if p['prior'] is not None:
-            left.append(f'the prior of {p["name"]} ({p["prior"]})')
         extra = ''.join(f', {k}={p[k]!r}' for k in ['bounds', 'source', 'doc'] if p[k] is not None)
+        if isinstance(p['prior'], dict): # A distribution
+            extra += f', prior={code_value(p["prior"])}'
+        elif p['prior'] is not None:
+            left.append(f'the prior of {p["name"]} ({p["prior"]})')
         add(f'{p["name"]} = ss.par({code_value(p["value"])}{extra})')
     if pars:
         add('')
@@ -311,7 +330,8 @@ def disease_code(spec, lines, left):
                 held = [p for p in spec['pars'] if p['value'] == d]
                 dur = held[0]['name'] if held else code_value(d)
         src, dst = endpoint(t['src']), endpoint(t['dst'])
-        simple = len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None
+        untyped = dur in pars and unitless_dur(pars[dur]['value']) # Written as a number, which @ would read as a rate
+        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None
         if simple:
             members.append((t['name'], f'{src} >> {dst} @ {operand(rate if rate is not None else dur)}'))
         else:
@@ -354,7 +374,9 @@ def disease_code(spec, lines, left):
     inits = {s['name']:s['init'] for s in spec['states'] if s['init'] is not None and not isinstance(s['init'], str)}
     if inits:
         kwargs.append(('init', 'dict(' + ', '.join(f'{k}={code_value(v)}' for k,v in inits.items()) + ')'))
-    if spec['init_prev']:
+    if spec['init_prev'] and 'init_prev' in pars: # A parameter, e.g. of ss.SIR
+        kwargs.append(('init_prev', 'init_prev'))
+    elif spec['init_prev']:
         kwargs.append(('init_prev', code_value(spec['init_prev'])))
     if spec.get('first') and any(s['people'] for s in spec['states']): # Written, so that the model does not depend on the rule that finds it
         kwargs.append(('first', repr(spec['first'])))
@@ -378,14 +400,37 @@ def disease_code(spec, lines, left):
     for k,v in kwargs:
         add(f'    {k:{width}s} = {v},')
     add(')')
-    for strat in spec['stratifications']:
-        add(f'{var}.stratify({kwargs_code(movable(strat, left))})')
+    transfers = spec.get('transfers', [])
+    dims = [strat['name'] for strat in spec['stratifications']]
+    for strat in spec['stratifications']: # Each with the transfers along it
+        own = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] == strat['name']}
+        add(f'{var}.stratify({kwargs_code({**movable(strat, left), **own})})')
+    rest = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] not in dims}
+    if rest: # Along a dimension of the sim
+        add(f'{var}.stratify({kwargs_code(rest)})')
     add('')
     return var
 
 
+def transfer_code(tf):
+    """ The Python for a transfer in the model spec """
+    target = tf['dst'] if tf['src'] is None else f"{tf['src']} -> {tf['dst']}"
+    args = [f"{tf['dim']}={target!r}"] + [f'{k}={code_expr(tf[k])}' for k in ['rate', 'dur'] if tf[k] is not None]
+    args += [f'{k}={tf[k]!r}' for k in ['states', 'label'] if tf[k] is not None]
+    return f"ss.transfer({', '.join(args)})"
+
+
 def contacts_code(net):
-    """ A named contact matrix as the call that looks it up (or None if the network is not one) """
+    """ A contact matrix as the call that makes it, or a named one as the call that looks it up (or None if the network is not one) """
+    if net.get('contacts') is not None:
+        pars = net['pars']
+        if pars.get('beta') != 1.0 or pars.get('diseases') is not None: # Not arguments of ss.contacts()
+            return None
+        mats = net['contacts']
+        args = [f'{mats["matrix"]!r}, bands={mats["bands"]!r}'] if 'bands' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
+        if net.get('name') != 'contacts':
+            args.append(f'name={net["name"]!r}')
+        return f"ss.contacts({', '.join(args)})"
     ref = net.get('data')
     if not ref or ref.get('layer') is None:
         return None
@@ -440,12 +485,67 @@ def kwargs_code(kwargs):
     return ', '.join(f'{k}={code_value(v)}' for k,v in kwargs.items() if v is not None)
 
 
-def modify_code(mod):
-    """ An ss.modify as Python, with a function in it as the name of its definition (see `with_functions()`) """
+def modify_code(mod, mods):
+    """ An ss.modify as Python, with a function in it as the name of its definition (see `with_functions()`), and a condition as in `cond_code()` """
     write = lambda val: str(val) if isinstance(val, Code) else repr(val)
-    keys = ['multiply', 'add', 'set', 'start', 'stop', 'when'] + (['where'] if isinstance(mod.get('where'), Code) else [])
+    mod = dict(mod, **{k:Code(time_code(mod[k])) for k in ['start', 'stop'] if mod.get(k) is not None}) # Written with str()
+    if isinstance(mod.get('where'), str) and not isinstance(mod['where'], Code):
+        mod['where'] = Code(cond_code(mod['where'], mods))
+    keys = ['multiply', 'add', 'set', 'start', 'stop', 'when', 'where']
     args = [repr(mod['target'])] + [f'{k}={write(mod[k])}' for k in keys if mod.get(k) is not None]
     return f"ss.modify({', '.join(args)}, name={mod['name']!r})"
+
+
+delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen']
+delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'on_positive', 'on_negative', 'disease']
+cond_keys = ['where', 'on', 'detects']
+
+
+def owners(spec):
+    """ The variable of each declared disease in the code (see `disease_code()`), with the names in it that a condition can use: its states, transitions, and stratifications """
+    out = {}
+    for mod in spec['modules']:
+        var = mod['name'] if mod['name'].isidentifier() else 'disease'
+        out[mod['name']] = (var, {s['name'] for s in mod['states']} | {t['name'] for t in mod['transitions']} | {g['name'] for g in mod['stratifications']})
+    return out
+
+
+def cond_code(text, mods):
+    """ A condition written as text in the model spec (e.g. "(people.age < 5)") as Python: an attribute of people from ss.People, and a state, transition, or stratification from its disease """
+    class Names(ast.NodeTransformer):
+        def visit_Attribute(self, node):
+            if isinstance(node.value, ast.Name) and node.value.id == 'people':
+                return ast.Attribute(ast.Attribute(ast.Name('ss'), 'People'), node.attr)
+            elif isinstance(node.value, ast.Name) and node.value.id in mods:
+                return ast.Attribute(ast.Name(mods[node.value.id][0]), node.attr)
+            return self.generic_visit(node)
+        def visit_Name(self, node):
+            having = [var for var,names in mods.values() if node.id in names]
+            if having:
+                return ast.Attribute(ast.Name(having[0]), node.id)
+            return ast.parse(f"ss.conditions.Cond('dim', {node.id!r})", mode='eval').body # A stratification of the sim
+    return ast.unparse(Names().visit(ast.parse(text, mode='eval').body))
+
+
+def delivery_code(iv, byname, mods):
+    """ A delivery in the model spec as Python, with its product, and with each delivery that follows it written in it """
+    def value(key, val):
+        if key in cond_keys and isinstance(val, str) and not isinstance(val, Code):
+            return cond_code(val, mods)
+        elif key in ['on_positive', 'on_negative'] and val in byname:
+            return delivery_code(byname[val], byname, mods)
+        return code_value(val)
+    args = []
+    prod = iv.get('product_spec')
+    if prod is not None:
+        kwargs = [f'{k}={value(k, v)}' for k,v in prod.items() if k not in ['type', 'name']]
+        kwargs.append(f'name={prod["name"]!r}')
+        args.append(f"ss.{prod['type']}({', '.join(kwargs)})")
+    if iv.get('move') is not None:
+        args.append(f'move={iv["move"]!r}')
+    args += [f'{k}={value(k, iv[k])}' for k in delivery_keys if iv.get(k) is not None]
+    args.append(f'name={iv["name"]!r}')
+    return f"ss.{iv['type']}({', '.join(args)})"
 
 
 def to_code(spec, filename=None, header=None, footer=None, code=None, missing=None):
@@ -454,9 +554,9 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
 
     The diseases are written in the operator form (`S >> I @ beta * I`), with each
     parameter and state declared first, and each function used in the model defined
-    before them (from its source). What cannot be written (networks other than named
-    contact matrices, interventions other than `ss.modify`, movement between places,
-    priors, likelihoods, and functions whose source is not a plain definition) is listed
+    before them (from its source). What cannot be written (networks other than contact
+    matrices, interventions other than `ss.modify` and the deliveries, movement between places
+    from data, likelihoods other than a distribution, and functions whose source is not a plain definition) is listed
     in comments at the end, and in a warning (`ss.LossyExport`), since the code then
     builds a different model until it is added by hand.
 
@@ -483,14 +583,21 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
             extra[simkey] = code.get(simkey, code.get(key))
             continue
         mods = with_functions(spec.get(key) or [], funcs, left)
-        written = [modify_code(m) for m in mods if m.get('type') == 'modify'] + [contacts_code(m) for m in mods if contacts_code(m)]
+        byname = {m.get('name'):m for m in mods}
+        followups = {m[k] for m in mods for k in ['on_positive', 'on_negative'] if isinstance(m.get(k), str)} # Written in the delivery they follow
+        written = []
+        for mod in mods: # In the order given
+            if mod.get('type') == 'modify':
+                written.append(modify_code(mod, owners(spec)))
+            elif contacts_code(mod):
+                written.append(contacts_code(mod))
+            elif mod.get('type') in delivery_types:
+                if mod['name'] not in followups:
+                    written.append(delivery_code(mod, byname, owners(spec)))
+            else:
+                left.append(f'{key[:-1]} "{mod.get("name", "?")}" ({mod.get("type", "?")}): add it to ss.Sim({simkey}=...)')
         if written:
             extra[simkey] = '[' + ', '.join(written) + ']'
-        for mod in mods:
-            if mod.get('type') != 'modify' and not contacts_code(mod):
-                left.append(f'{key[:-1]} "{mod.get("name", "?")}" ({mod.get("type", "?")}): add it to ss.Sim({simkey}=...)')
-            elif mod.get('type') == 'modify' and mod.get('where') is not None and not isinstance(mod['where'], Code):
-                left.append(f'where={mod["where"]} of the modifier "{mod.get("name", "?")}": add it to its ss.modify()')
     lines = []
     if header:
         lines += ['"""', *header.strip().splitlines(), '"""']

@@ -310,6 +310,18 @@ def test_time():
     assert ss.Sim(ss.Disease(recovery=ss.progression('I -> R', rate=0), init=dict(I=1.0)), stop=10, n_agents=100, **kw).run().diseases[0].results.n_I[-1] == 100
     assert ss.Sim(make_sir(), people=ss.People(1000, age_data=ss.uniform(20, 30)), stop=2, **kw).init().people.age.min() >= 20
 
+    # Times of entering a state are step numbers, kept as 16-bit integers when the run fits; read, they are steps as floats, NaN if never
+    sir = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, **kw).run().diseases[0]
+    assert sir.ti_I.raw.dtype == np.int16 and sir.exit_I.raw.dtype == np.int8 # 2 bytes and 1, not 4 and 4
+    infected = sir.ti_I.notnan.uids
+    assert np.isnan(sir.ti_I[sir.S.uids]).all() and (sir.ti_I[infected] <= sir.ti).all() # Never infected is NaN, not a large negative number
+    assert np.allclose(sir.ti_I.years[infected], sir.t.yearvec[sir.ti_I.raw[infected]])
+    S, I, R = ss.states('S I R')
+    seeded = ss.Sim(ss.Disease(S >> I @ 0*I, I >> R @ ss.days(5), name='seeded'), stop=30, unit='day', n_agents=100, **kw).init()
+    seeded.diseases.seeded.S[ss.uids(np.arange(10))] = False
+    seeded.diseases.seeded.I[ss.uids(np.arange(10))] = True
+    assert seeded.run().results.seeded.n_I[-1] == 0 # Put in a state with no time of entering, they enter it now and leave it (they stayed for ever before)
+
     # With no unit, a probability is per step
     c = ss.Disease(recovery=ss.progression('I -> R', rate=ss.prob(0.05)), init=dict(I=1.0))
     assert np.isclose(ss.Sim(c, stop=10, **kw).run().diseases[0].results.n_I[10], 10_000*0.95**10) # After ten steps
@@ -368,6 +380,11 @@ def test_solvers(do_plot=False):
     big = ss.Sim(make_sir(), total_pop=1e8, solver='gillespie', **kw).init()
     assert big.solver == 'tau' and any('tau leaps' in note for note in big.notes)
     assert ss.Sim(make_sir(), total_pop=1e8, solver='gillespie', approx=False, **kw).init().solver == 'gillespie'
+    places = ss.geo(names=[f'p{i}' for i in range(40)], pop=np.ones(40), x=np.arange(40), y=np.zeros(40))
+    assert ss.Sim(make_sir().stratify(patch=places), total_pop=1e8, solver='gillespie', **kw).init().solver == 'gillespie' # By place it is always exact, which is faster than tau leaps
+    assert ss.Sim(make_sir(), total_pop=1e6, solver='gillespie', **kw).init().solver == 'gillespie' # 1.7 million events take about 0.2 s
+    commute = make_sir().stratify(patch=places, mobility=ss.Mobility(ss.gravity(), away=0.1))
+    assert ss.Sim(commute, total_pop=1e6, solver='gillespie', **kw).init().solver == 'tau' # The same events cost 50 times more, between 40 places that people commute between
     for old in ['tau', 'sde', 'stochastic', 'ctmc']: # Solvers that have gone, and the scheme of the ODE only
         with pytest.raises(ValueError, match='gillespie'):
             ss.Sim(make_sir(), solver=old, **kw).init()
@@ -429,7 +446,7 @@ def test_auto():
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make_sir(), demographics=ss.Births(), solver='ode', start=2000, stop=2010, **kw).init()
     with pytest.raises(ss.CapabilityError): # Nor can a model with nothing declared
-        ss.Sim(diseases=ss.library.CodedSIR(), networks='random', solver='ode', **kw).init()
+        ss.Sim(diseases=ss.library.AgentSIR(), networks='random', solver='ode', **kw).init()
     return sim
 
 
@@ -896,6 +913,8 @@ def test_outcomes():
     assert np.isclose(sim.new().init().diseases.sir.pars.beta.value, 0.15) # The original is not changed
     refit = ss.Sim(make(0.15), pars=fit.pars, **pars).run() # The best-fit values can be passed to another sim
     assert np.allclose(refit.results.sir.n_I, fit.sim.results.sir.n_I)
+    named = ss.Sim(make(0.3), pars=dict(dur=ss.days(5), rand_seed=2), **pars).run() # A parameter named like a sim setting is the model's; a sim setting is the sim's
+    assert named.results.sir.n_I.max() < 0.5*res.n_I.max() and named.pars.rand_seed == 2 # Before, dur= was taken as the sim's duration, and changed nothing
 
     short = ss.Sim(make(0.3), data=df, **(pars | dict(stop='2020-03-01'))).init()
     assert any('outside the simulated period' in note for note in short.notes) # Data that the comparison leaves out is noted

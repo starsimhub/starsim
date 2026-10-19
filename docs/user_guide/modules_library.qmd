@@ -8,7 +8,7 @@ Core Starsim (`import starsim as ss`) provides the framework and its generic bui
 The library is shipped with Starsim but is deliberately held to a lower bar than the core package. Library modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and the APIs may change between versions. Treat them as starting points to copy and adapt, not as off-the-shelf models for a particular setting.
 
 ::: {.callout-note}
-The library is where most modules that used to live in core Starsim ended up. If you are migrating older code, `ss.Measles` is now `ssl.Measles`, `ss.HIV` is now `ssl.HIV`, and so on. In Starsim 4, `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases (states and transitions, which run under any solver); Starsim 3's versions, written as code, are in the library as `ssl.CodedSIR`, `ssl.CodedSIS`, and `ssl.CodedSEIR`, and are what the library's diseases build on.
+The library is where most modules that used to live in core Starsim ended up. If you are migrating older code, `ss.Measles` is now `ssl.Measles`, `ss.HIV` is now `ssl.HIV`, and so on. In Starsim 4, `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases (states and transitions, which run under any solver); Starsim 3's versions, written as code, are in the library as `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`, and are what the library's diseases build on.
 :::
 
 ## Importing and using library modules
@@ -44,13 +44,13 @@ The library includes four example diseases, spanning a range of complexity, and 
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `ssl.Measles` | `ssl.CodedSEIR` | Measles as an SEIR model, with CDC natural history parameters |
-| `ssl.Ebola` | `ssl.CodedSEIR` | Ebola with severe disease and continued transmission from unburied bodies |
-| `ssl.Cholera` | `ssl.CodedSEIR` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
+| `ssl.Measles` | `ssl.AgentSEIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `ssl.Ebola` | `ssl.AgentSEIR` | Ebola with severe disease and continued transmission from unburied bodies |
+| `ssl.Cholera` | `ssl.AgentSEIR` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
 | `ssl.HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
-| `ssl.CodedSIR`, `ssl.CodedSIS`, `ssl.CodedSEIR` | `ss.Infection` | Starsim 3's SIR, SIS (with waning immunity), and SEIR, written as code: the classes to subclass for a disease that overrides `set_prognoses()`, `step_state()`, and so on |
+| `ssl.AgentSIR`, `ssl.AgentSIS`, `ssl.AgentSEIR` | `ss.Infection` | Starsim 3's SIR, SIS (with waning immunity), and SEIR, written as code: the classes to subclass for a disease that overrides `set_prognoses()`, `step_state()`, and so on |
 
-All three latent-period models subclass `ssl.CodedSEIR`, which owns the S→E→I→R lifecycle as code. `Measles` supplies only parameter values. `Ebola` and `Cholera` additionally override `set_progression()` for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. `Cholera` also extends `infect()` to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
+All three latent-period models subclass `ssl.AgentSEIR`, which owns the S→E→I→R lifecycle as code. `Measles` supplies only parameter values. `Ebola` and `Cholera` additionally override `set_progression()` for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. `Cholera` also extends `infect()` to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
 
 ```{python}
 sim = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(), **outbreak)
@@ -150,8 +150,8 @@ The `ssl.mnch` submodule contains examples of vertical transmission and birth ou
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `ssl.mnch.CongenitalDisease` | `ssl.CodedSIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic congenital framework |
-| `ssl.mnch.NeonatalSepsis` | `ssl.CodedSIR` | Infects newborns at birth and kills some within days |
+| `ssl.mnch.CongenitalDisease` | `ssl.AgentSIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic congenital framework |
+| `ssl.mnch.NeonatalSepsis` | `ssl.AgentSIR` | Infects newborns at birth and kills some within days |
 | `ssl.mnch.FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA) |
 | `ssl.mnch.fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes |
 | `ssl.mnch.treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses fetal damage |
@@ -200,11 +200,11 @@ print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
 
 `FetalHealth` is deliberately disease-agnostic: it tracks a baseline fetal weight percentile per pregnancy and exposes two levers that other modules pull — bringing delivery forward (preterm risk) and accumulating growth restriction (low birth weight). At delivery it computes `birth_weight` and classifies newborns as LBW, VLBW, or SGA.
 
-The `fetal_infection` connector pulls those levers when a pregnant woman is infected, and the `treat_pregnant` intervention partially reverses the damage when she is treated. Both are written as code against an SIR written as code, so the disease here is `ssl.CodedSIR`, named `'sir'`. Note that `FetalHealth` is passed via `custom`, since it is not a disease, network, demographic, or intervention:
+The `fetal_infection` connector pulls those levers when a pregnant woman is infected, and the `treat_pregnant` intervention partially reverses the damage when she is treated. Both are written as code against an SIR written as code, so the disease here is `ssl.AgentSIR`, named `'sir'`. Note that `FetalHealth` is passed via `custom`, since it is not a disease, network, demographic, or intervention:
 
 ```{python}
 sim = ss.Sim(
-    diseases      = ssl.CodedSIR(beta=ss.peryear(20), name='sir'),
+    diseases      = ssl.AgentSIR(beta=ss.peryear(20), name='sir'),
     demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     connectors    = ssl.mnch.fetal_infection(),
     interventions = ssl.mnch.treat_pregnant(disease='sir', start_year=2005),

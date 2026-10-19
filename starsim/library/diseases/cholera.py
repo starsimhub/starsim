@@ -7,10 +7,10 @@ Original version by Dom Delport 2024
 
 import numpy as np
 import starsim as ss
-from .coded import CodedSEIR
+from .agents import AgentSEIR
 
 
-class Cholera(CodedSEIR):
+class Cholera(AgentSEIR):
     """
     Cholera, with both direct and environmental (waterborne) transmission.
 

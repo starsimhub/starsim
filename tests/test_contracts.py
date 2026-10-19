@@ -118,6 +118,32 @@ def test_streams(solver):
     # Two identical diseases whose names are anagrams have their own streams
     ab = two_sirs(('ab', 'ba'), solver=solver, **agents).run().results
     assert not np.array_equal(ab.ab.n_I.values, ab.ba.n_I.values), 'Two modules got the same stream'
+
+    if solver != 'abm':
+        # The order the states are declared in does not change the draws (C12a)
+        def declared(order):
+            states = dict(zip(order.split(), ss.states(order)))
+            S, I, R, V = [states[name] for name in 'SIRV']
+            sir = ss.Disease(infection=S >> I @ ss.perday(0.42) * I, recovery=I >> R @ ss.perday(0.09), vax=S >> V @ ss.perday(0.011), breakthrough=V >> I @ ss.perday(0.17) * I, init=dict(I=25), name='sir')
+            return ss.Sim(sir, total_pop=10_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0).run().results.sir.n_I.values
+        siv, svi = declared('S I R V'), declared('S V I R')
+        assert np.array_equal(siv, svi), f'Declaring the states in another order changed n_I by up to {np.abs(siv - svi).max():n}' # 155 under binomial before
+
+        # A rate that varies in time takes the same values in a run stepped from Python as in a whole one, so the same draws (C12c)
+        def seasonal(solver):
+            S, I, R, V = ss.states('S I R V')
+            sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init=dict(I=25), name='sir')
+            return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0)
+        for s in [solver, 'ode']:
+            whole, stepped = [seasonal(s).run(profile=profile).results.sir.vax.values for profile in [False, True]]
+            assert np.array_equal(whole, stepped), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}' # 61 under binomial before
+
+        # Each run of several draws its outcomes from its own seed, as it would on its own (C19)
+        sim = corpus.outcomes(solver=solver, rand_seed=5)
+        runs = sim.run(n_runs=3).results.sir.cases.values
+        for i in range(3):
+            one = corpus.outcomes(solver=solver, rand_seed=5 + i).run().results.sir.cases.values
+            assert np.array_equal(runs[i], one), f'Run {i} of three drew its outcomes differently from the same run on its own'
     return alone
 
 

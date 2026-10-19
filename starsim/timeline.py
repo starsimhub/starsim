@@ -484,7 +484,7 @@ class Timeline:
 
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
-        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.Sim.init_unit()
+        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.Sim._init_unit()
 
         # If the sim is provided and matches the current object: copy from the sim
         tvkeys = ['start', 'stop', 'dt']

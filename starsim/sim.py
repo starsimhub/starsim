@@ -24,8 +24,8 @@ class Sim(ss.Base):
     Args:
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`.
             Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
-        pars (dict): either the sim parameters (as for the first argument), or the values of model parameters by name,
-            e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; these apply to modules with declared parameters (see `ss.par`)
+        pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`), and of sim
+            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises `ss.UnknownParameter`
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
         demographics (str/Demographics/list/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, for every solver), or modules (e.g. `ss.Births()`, `ss.Pregnancy()`), or a list; True for births and deaths at default rates
@@ -62,6 +62,18 @@ class Sim(ss.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
+    _private_phases = ['init_solver', 'init_unit', 'init_named_people', 'init_flows', 'init_lifetables', 'init_time', 'init_modules_pre',
+                       'init_rescale', 'init_dists', 'init_people_vals', 'init_modules_post'] # Private since Starsim 4 (as _init_time() etc.); no package overrides them
+
+    def __init_subclass__(cls, **kwargs):
+        """ An override of a phase of init() by its old, public name would be silently ignored """
+        super().__init_subclass__(**kwargs)
+        old = [name for name in cls._private_phases if name in vars(cls)]
+        if old:
+            errormsg = f'{cls.__name__} defines {sc.strjoin(old)}, which Sim.init() no longer calls: these phases are private (_{old[0]}() etc.). A module (e.g. an analyzer with init_pre()) is usually the better place.'
+            raise TypeError(errormsg)
+        return
+
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)
         if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
@@ -90,9 +102,13 @@ class Sim(ss.Base):
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
         if isinstance(pars, (str, os.PathLike)): # A file of values by name
-            pars = ss.load_pars(pars)
-        if isinstance(pars, dict) and len(pars) and not any(key in self.pars for key in pars):
-            self.par_values, pars = dict(pars), None
+            pars = ss.parameters.load_pars(pars)
+        if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur)
+            given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
+            names = {name for mod in given for name in mod.pars.keys()}
+            settings = [key for key in pars if key in self.pars and key not in names]
+            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.UnknownParameter when the sim is initialized
+            self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
@@ -108,8 +124,8 @@ class Sim(ss.Base):
         # Set attributes; see also sim.init() for more
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
-        self.metadata = ss.metadata()
-        self.dists = ss.Dists(obj=self) # Initialize the random number generator container
+        self.metadata = ss.debugtools.metadata()
+        self.dists = ss.distributions.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='Sim')  # For storing results
         self.data = data # For storing input data
@@ -209,7 +225,7 @@ class Sim(ss.Base):
                 timestr = f'{self.pars.start}—{self.pars.stop}'
 
             moddict = {}
-            for modkey in ss.module_map().keys():
+            for modkey in ss.modules.module_map().keys():
                 if hasattr(self, modkey):
                     thismodtype = self[modkey]
                 elif modkey in self.pars:
@@ -294,17 +310,17 @@ class Sim(ss.Base):
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
-        self.init_solver() # Choose the unit and the solver
-        self.init_time() # Initialize time
+        self._init_solver() # Choose the unit and the solver
+        self._init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
-        self.init_modules_pre()
+        self._init_modules_pre()
 
         # Final initializations -- this is "post"
         if self.pars.rescale:
-            self.init_rescale()
-        self.init_dists() # Initialize distributions
-        self.init_people_vals() # Initialize the values in all the states and networks
+            self._init_rescale()
+        self._init_dists() # Initialize distributions
+        self._init_people_vals() # Initialize the values in all the states and networks
         if self.solver == 'abm' and self.groups.strats:
             self.groups.init_vals()
         elif self.solver != 'abm' and self.groups.strats: # One row per group: age is the middle of the group
@@ -315,7 +331,7 @@ class Sim(ss.Base):
                     self.people.age.edges = strat.edges
                 elif strat.female is not None: # A sex dimension is people.female
                     self.people.female[self.people.auids] = self.groups.group_vals(d, np.arange(strat.n) == strat.female, outside=False)
-        self.init_modules_post() # Initialize the module values
+        self._init_modules_post() # Initialize the module values
         for crossing in self.crossings: # Once every disease in it has its initial conditions
             crossing.init()
         self.init_results() # Initialize the results
@@ -399,11 +415,11 @@ class Sim(ss.Base):
             vals[labels.index(label)] = val
         return ss.by(**{raw.dim:vals})
 
-    def init_solver(self):
+    def _init_solver(self):
         """ Work out the sim's unit and solver: see `ss.solvers.choose_solver()` """
         return ss.solvers.choose_solver(self)
 
-    def init_lifetables(self):
+    def _init_lifetables(self):
         """ In a compartmental run, a life table (`ss.death(lifetable=)`) is a death rate for each age group; as agents, each person's age at death is drawn (see `ss.solvers.Agents.step_lifetables()`) """
         for mod in self.declared:
             for name,tr in mod.graph.transitions.items():
@@ -631,7 +647,7 @@ class Sim(ss.Base):
         """ The transitions of a declared disease that are births, arrivals, or deaths of everyone, so are the population's """
         return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people) or getattr(tr, 'every_state', False)]
 
-    def init_flows(self):
+    def _init_flows(self):
         """
         Births, deaths, and migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`): see `ss.demographics.Flows`
 
@@ -678,7 +694,7 @@ class Sim(ss.Base):
             raise KeyError(errormsg)
         return mods[name]
 
-    def init_named_people(self):
+    def _init_named_people(self):
         """
         A named population (`ss.people('Kenya')`): looked up for the year the sim starts, at the sim's number of agents, and the population size taken from it
 
@@ -728,7 +744,7 @@ class Sim(ss.Base):
             self.pop_from = 'people'
         return
 
-    def init_unit(self):
+    def _init_unit(self):
         """
         Work out the sim's unit, which is the unit of the model's bare numbers: from unit=, then the typed
         values in the model, then calendar dates (days), then a typed dt, start, or stop; else time is in timesteps
@@ -1099,9 +1115,15 @@ class Sim(ss.Base):
                 out.data = sc.jsonify(ref)
             else:
                 out.pars = {k:parspec(v) for k,v in mod.pars.items()}
+            if getattr(mod, 'dims', None) is not None: # A matrix over each of the model's stratifications, from ss.contacts(); only then, so that the hash of every other model is as it was
+                out.contacts = {dim:mat.tolist() for dim,mat in mod.dims.items()}
+            elif getattr(mod, 'bands', None) is not None: # A matrix with its own age bands
+                out.contacts = dict(matrix=mod.pars.n_contacts.T.tolist(), bands=mod.bands)
             return out
         def tstr(val):
-            if isinstance(val, ss.dur):
+            if isinstance(val, ss.dur) and type(val).base != self.unit_base + 's': # A duration in another unit than the sim's (e.g. start=2000 in years, with rates per day) is written with its unit
+                return ss.transitions.quantity_json(val, 'dur', None)
+            elif isinstance(val, ss.dur):
                 return float(val.value)
             return val.strftime('%Y-%m-%d') if isinstance(val, ss.date) and val == val.normalize() else str(val) # Dates as ISO 8601
         out = sc.objdict()
@@ -1181,7 +1203,7 @@ class Sim(ss.Base):
         # Figure out the type of module, and make sure the name is unique
         if key is None:
             key = 'custom'
-            for modkey, modclass in ss.module_map().items():
+            for modkey, modclass in ss.modules.module_map().items():
                 if isinstance(module, modclass):
                     key = modkey
                     break
@@ -1298,7 +1320,7 @@ class Sim(ss.Base):
                     matches.append(mod)
         return matches
 
-    def init_time(self):
+    def _init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
         self.t = ss.Timeline(name='sim')
         self.t.init(self)
@@ -1401,13 +1423,13 @@ class Sim(ss.Base):
             mod.pars.lock(locked)
         return
 
-    def init_modules_pre(self):
+    def _init_modules_pre(self):
         """ Initialize all the modules with the sim """
         for mod in self.modules:
             mod.init_pre(self)
         return
 
-    def init_dists(self):
+    def _init_dists(self):
         """ Initialize the distributions """
         # Initialize all distributions now that everything else is in place
         self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
@@ -1417,12 +1439,12 @@ class Sim(ss.Base):
             self.dists.copy_to_module(mod)
         return
 
-    def init_people_vals(self):
+    def _init_people_vals(self):
         """ Initialize the People states with actual values """
         self.people.init_vals()
         return
 
-    def init_modules_post(self):
+    def _init_modules_post(self):
         """ Initialize values in other modules, including networks and time parameters, and do any other post-processing """
         for mod in self.modules:
             mod.init_post()
@@ -1528,7 +1550,7 @@ class Sim(ss.Base):
             scale = scale[np.maximum(inds, 0)]
         return scale
 
-    def init_rescale(self):
+    def _init_rescale(self):
         """ Check that the diseases support dynamic rescaling, and create the distribution for it """
         for disease in self.diseases():
             if disease.graph is None and not hasattr(disease, 'ti_infected'):
@@ -1572,7 +1594,7 @@ class Sim(ss.Base):
             data = data.load(self)
         elif isinstance(data, (str, os.PathLike)):
             data = ss.data(data).load(self)
-        self.data = ss.validate_sim_data(data)
+        self.data = ss.results.validate_sim_data(data)
         if self.data is not None and self.groups.strats:
             self.data = ss.results.widen_data(self, self.data)
         if self.data is not None and getattr(self, 'declared', None):
@@ -2034,8 +2056,9 @@ class Sim(ss.Base):
                     max_size = size_limit*(base_size + npts) # Maximum size in KB: size_limit scales both the fixed base and the per-timestep allowance
                     for mod in sim.modules:
                         size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
+                        size -= sc.checkmem(mod.results, descend=0).bytesize[0]/1e3 # Not counting its results, which grow with its stratifications as well as with time
                         if size > max_size:
-                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB (= {size_limit:n} KB/timestep × ({base_size:n} base + {npts} timesteps)); use die=False to turn this message into a warning, or increase base_size/size_limit'
+                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB, not counting its results, > {max_size:n} KB (= {size_limit:n} KB/timestep × ({base_size:n} base + {npts} timesteps)); use die=False to turn this message into a warning, or increase base_size/size_limit'
                             if die:
                                 raise RuntimeError(errormsg)
                             else:

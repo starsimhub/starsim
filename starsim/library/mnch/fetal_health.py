@@ -23,7 +23,7 @@ Usage::
     import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=ssl.CodedSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
+        diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
         demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2025),
@@ -442,9 +442,9 @@ class fetal_infection(ss.Connector):
     1. At conception, if the mother is already infected (via a conception callback
        registered with FetalHealth).
     2. During pregnancy, when a new infection occurs (detected in `step()`
-       by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
+       by checking `ti_infected == self.ti`: an infection in the previous step is dated at its end, which is this step's start).
 
-    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.CodedSIR(name="sir")`) in `diseases`.
+    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
 
     Args:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)
@@ -527,9 +527,9 @@ class fetal_infection(ss.Connector):
         if not preg.pregnant.any():
             return
 
-        # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception)
+        # Find pregnant women infected on the previous timestep (since transmission happens after connectors; dated at its end, see ss.Disease.ti_entry), excluding new pregnancies (handled at conception)
         pregnant_uids  = preg.pregnant.uids
-        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_pregnant < self.ti)
+        newly_infected = (sim.diseases.sir.ti_infected == self.ti) & (preg.ti_pregnant < self.ti)
         affected = pregnant_uids[newly_infected[pregnant_uids]]
         if len(affected):
             self.fh.n_exposures[affected] += 1

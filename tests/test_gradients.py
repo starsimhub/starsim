@@ -78,6 +78,7 @@ def test_fit():
     print(fit.table)
     assert fit.method == 'l-bfgs-b'
     assert np.allclose(fit.table.best, [0.5, 6, 0.002], rtol=1e-2)
+    assert ss.calibration.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
     return fit
 
 
@@ -154,6 +155,12 @@ def test_crossing():
         for key in ['hiv', 'syph']:
             assert np.allclose(other.results[key].n_I, sim.results[key].n_I, rtol=1e-9)
     assert sim.results.hiv.move[1:].sum() > 0 # The transfer's flow is recorded
+
+    # Each flow of three diseases tracked jointly takes the exposure summed over the others' compartments as one number, worked out once (adding it up in each flow took 513 operations here, and three HPV genotypes 383 s instead of 9 s)
+    ds = [ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=5), waning=ss.progression('R -> S', dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
+    mods = [ss.modify(ds[i].rel_sus, multiply=0.5, where=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
+    three = ss.Sim(diseases=ds, connectors=mods, unit='day', stop=100, total_pop=10_000, solver='ode', **kw).run()
+    assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.n_I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
 
     # The diseases are one model, so every flow is worked out from the people at the start of the step (each disease in turn, before, was 1% off a fine step)
     fine = make_coinfection(dt=0.025).run()

@@ -136,7 +136,7 @@ def make_dist(pars=None, **kwargs):
     if dist_type not in dist_list:
         errormsg = f'"{dist_type}" is not a valid distribution; valid types are {dist_list}'
         raise AttributeError(errormsg)
-    dist_class = getattr(ss, dist_type)
+    dist_class = globals()[dist_type] # Not ss., since rand_raw is only here
     dist = dist_class(**pars) # Actually create the distribution
     return dist
 
@@ -334,7 +334,7 @@ class Dist:
     Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
 
-    See `ss.dist_list` for a full list of supported distributions. Parameter inputs
+    See `ss.distributions.dist_list` for a full list of supported distributions. Parameter inputs
     tend to follow SciPy's, rather than NumPy's, definitions (although in most
     cases they're the same). See also `ss.distributions.scale_types` for more information
     on how different distributions scale by time.
@@ -1308,6 +1308,7 @@ class Dist:
         to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
         ss.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
+        self._static = None # The cache of processed parameters, which can refer to per-agent arrays
         shrunk = ss.shrink()
         for key, val in self.pars.items():
             if isinstance(val, np.ndarray) and val.size > max_arr_size:

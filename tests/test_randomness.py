@@ -22,7 +22,7 @@ def make_dists(**kwargs):
     """ Make a Dists object with two distributions in it """
     sim = ss.Sim(n_agents=100).init() # Need an empty sim to initialize properly
     distlist = [make_dist(), make_dist()]
-    dists = ss.Dists(distlist)
+    dists = ss.distributions.Dists(distlist)
     dists.init(sim=sim)
     return dists
 
@@ -44,7 +44,7 @@ def test_seed():
     # Re-initializing the sim's dists should not change their names or seeds
     sim = ss.Sim(n_agents=100, diseases='sis', networks='random', demographics=True).init()
     seeds = {k:d.seed for k,d in sim.dists.dists.items()}
-    sim.init_dists()
+    sim._init_dists()
     assert seeds == {k:d.seed for k,d in sim.dists.dists.items()} # Previously found the dists again via sim.dists
     return dist0, dist1
 
@@ -205,7 +205,7 @@ def test_worlds(do_plot=False):
         stop = 2100,
         n_agents = 200,
         verbose = 1,
-        diseases = ssl.CodedSIR( # Written as code, since OneMore sets its prognoses directly
+        diseases = ssl.AgentSIR( # Written as code, since OneMore sets its prognoses directly
             name = 'sir',
             init_prev = 0.1,
             beta = 1.0,
@@ -347,7 +347,7 @@ def test_crn_option():
     """ The opt-in non-CRN fast path (ss.options.crn=False) for transmission """
     def run(crn, seed=1):
         with ss.options.context(crn=crn):
-            sim = ss.Sim(diseases=ssl.CodedSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.Infection
+            sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.Infection
                          n_agents=2000, dur=30, rand_seed=seed, verbose=0)
             sim.run()
         return sim.results['sis']['n_infected'].values

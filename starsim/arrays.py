@@ -936,6 +936,113 @@ class ModifiableArr(FloatArr):
         return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
 
 
+class StepArr(Arr):
+    """
+    Step numbers (time indices), stored compactly: a declared disease's `ti_X` and `ti_exit_X`, as agents
+
+    The values are stored as 16-bit integers when the module's run has fewer than
+    32,000 steps (and 32-bit otherwise), which is a quarter of the memory of a
+    float time and half of a float32. Reading them gives float32 step numbers, with
+    NaN for "never" (not set) and `inf` for a time after the end of the run, so
+    `ti_I == sim.ti`, `ti_I > 0`, and `(sim.ti - ti_I)*sim.t.dt` all give the right
+    answer. A time between two steps is stored as the first step at or after it.
+    `.years` converts them to years; `.raw` has the stored integers, where `.nan`
+    means not set and `.never` means after the end of the run.
+
+    Example:
+        ```python
+        sim = ss.Sim(ss.SIR(), unit='day', stop=100).run()
+        sir = sim.diseases.sir
+        infected_today = (sir.ti_I == sim.ti).uids
+        years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
+        ```
+    """
+    def __init__(self, name=None, dtype=np.int32, **kwargs):
+        super().__init__(name=name, dtype=dtype, nan=np.iinfo(dtype).min, **kwargs)
+        self.never = np.iinfo(dtype).max
+        self.nan_eq = False # Read as floats, so NaN is found with np.isnan()
+        self.t = None # The module's timeline, for .years; set by the engine
+        return
+
+    def fit(self, t):
+        """ Use 16-bit integers if the module's run (on timeline `t`) fits in them """
+        self.t = t
+        dtype = np.int16 if t.npts < 32_000 else np.int32
+        if dtype != self.dtype:
+            nan = self.raw == self.nan
+            self.dtype, self.nan, self.never = dtype, np.iinfo(dtype).min, np.iinfo(dtype).max
+            self.raw = self.raw.astype(dtype)
+            self.raw[nan] = self.nan
+        return
+
+    def to_float(self, vals):
+        """ Convert stored step numbers to float32: NaN where not set, and inf after the end of the run """
+        vals = np.asarray(vals)
+        out = vals.astype(ss_float)
+        out[vals == self.nan] = np.nan
+        out[vals == self.never] = np.inf
+        return out if out.ndim else out[()]
+
+    def from_float(self, vals):
+        """ Convert step numbers to the stored integers: NaN to not set, a time between steps to the next step, and inf (or beyond the integers) to after the end of the run """
+        if isinstance(vals, numbers.Integral): # The usual case, e.g. the step now
+            return min(max(int(vals), self.nan + 1), self.never)
+        elif isinstance(vals, float) and vals != vals: # NaN, e.g. a scheduled exit forgotten
+            return self.nan
+        vals = np.asarray(vals)
+        if vals.dtype.kind in 'iub':
+            return np.clip(vals, self.nan + 1, self.never)
+        out = np.ceil(vals, out=np.empty(vals.shape)) # An array, even for one value
+        np.clip(out, self.nan + 1, self.never, out=out) # NaN stays NaN here
+        out[np.isnan(out)] = self.nan
+        return out.astype(self.dtype)
+
+    def floats(self):
+        """ The values as a `FloatArr` of step numbers, for arithmetic and comparisons """
+        new = self.asnew(self.to_float(self.raw), cls=FloatArr)
+        new.dtype, new.nan, new.nan_eq = ss_float, np.nan, False
+        return new
+
+    @property
+    def years(self):
+        """ The values as years (e.g. 2020.5), with NaN where not set """
+        steps = self.to_float(self.values).astype(float)
+        return self.t.yearvec[0] + steps*self.t.dt_year
+
+    def __getitem__(self, key):
+        return self.to_float(super().__getitem__(key))
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, self.from_float(value))
+        return
+
+    @property
+    def values(self):
+        return self.to_float(super().values)
+
+    def set(self, uids, new_vals=None):
+        new_vals = self.nan if new_vals is None and self.default is None else self.from_float(new_vals if new_vals is not None else self.default)
+        self.raw[uids] = new_vals
+        return new_vals
+
+    def _boolmath(self, op, other=None, inplace=False):
+        if inplace:
+            errormsg = f'"{self.name}" holds step numbers, which cannot be changed in place by a comparison'
+            raise TypeError(errormsg)
+        if not self.initialized:
+            return super()._boolmath(op, other)
+        return self.floats()._boolmath(op, other)
+
+    def _math(self, op, other, reverse=False, inplace=False):
+        if not self.initialized and not inplace:
+            return super()._math(op, other, reverse=reverse)
+        result = self.floats()._math(op, other, reverse=reverse)
+        if inplace:
+            self.raw[:] = self.from_float(result.raw)
+            return self
+        return result
+
+
 class GroupAges(FloatArr):
     """
     `people.age` in a compartmental run: one row per group, at the middle of its age group

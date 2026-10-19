@@ -313,6 +313,19 @@ class Crossing:
                     KC.append(L.cols[o_sus] if split else np.zeros(R, dtype=np.int64))
                 return positions[id(exposures)][key]
 
+            def exposure_sum(e, o_sus):
+                """ The exposure from the infectious in every combination of the others' compartments, added up: an exposure whose set is minus the number of those before it that it adds up (see `ss.kernels.Program`), so each flow takes it once """
+                key = (k, int(e), 'sum', o_sus if split else None)
+                if key not in exposures:
+                    for j in range(O):
+                        exposure(e, j, o_sus)
+                    add(exposures, key, -O)
+                    XI.append(e)
+                    XC.append(L.cols[0])
+                    KI.append(e if p.contacts.shape[0] > 1 else 0)
+                    KC.append(L.cols[o_sus] if split else np.zeros(R, dtype=np.int64))
+                return positions[id(exposures)][key]
+
             for f in range(len(p.src)):
                 for o in range(O):
                     s = p.src[f]
@@ -333,12 +346,8 @@ class Crossing:
                             ops.append(op)
                             args.append(add(sets, tuple(sorted(L.rowmap[comps].ravel()))))
                         elif op == kn.EXPOSURE: # The exposure from the infectious in each combination of the others' compartments, added up
-                            for j in range(O):
-                                ops.append(op)
-                                args.append(exposure(arg, j, o))
-                                if j:
-                                    ops.append(kn.ADD)
-                                    args.append(0)
+                            ops.append(op)
+                            args.append(exposure_sum(arg, o))
                         else:
                             ops.append(op)
                             args.append(arg)
@@ -728,7 +737,7 @@ class Crossing:
         for k,engine in enumerate(engines):
             states = range(len(engine.graph.states))
             by_group = (self.engine_stocks(k, stocks_g), self.engine_flows(k, flows_g), states, range(engine.n_trans + len(engine.movers)), group_ti) if grouped else None
-            out = engine.collect(self.engine_stocks(k, stocks, by_group=False), self.engine_flows(k, flows, by_group=False), grouped=by_group)
+            out = engine.collect(self.engine_stocks(k, stocks, by_group=False), self.engine_flows(k, flows, by_group=False), grouped=by_group, seeds=seeds)
             out.deliveries = sc.objdict()
             outs.append((engine.mod.name, out))
         return outs

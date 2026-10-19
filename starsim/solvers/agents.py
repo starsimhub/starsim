@@ -39,6 +39,7 @@ class Agents(Engine):
         self.live_total = None # The number alive in each group, likewise
         self.n_counted = 0 # The agents (by UID) that the number alive has been kept for: see alive_counts()
         self.start = None # The number in each state by group at the start of the step
+        self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility'),
@@ -47,10 +48,10 @@ class Agents(Engine):
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name),
-                     ss.FloatArr(f'ti_{name}', label=f'Time of entering {name}')]
+                     ss.arrays.StepArr(f'ti_{name}', label=f'Time of entering {name}')] # Step numbers, as 16-bit integers if the run fits
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
-                arrs += [ss.FloatArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
-                         ss.FloatArr(f'exit_{name}', label=f'Scheduled exit from {name}')]
+                arrs += [ss.arrays.StepArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
+                         ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
                 if any(isinstance(m, ss.modify) for m in list(self.sim.interventions()) + list(self.sim.connectors())): # Only needed if a modifier can change a rate after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Multiplier on the rate of the scheduled exit from {name}, when it was scheduled'))
         if any(getattr(strat, 'immunity', None) is not None for strat in list(graph.strats) + list(self.sim.groups.strats)):
@@ -122,6 +123,9 @@ class Agents(Engine):
         self.init_adjust()
         self.init_results()
         self.note_steps()
+        for arr in self.mod.state_list:
+            if isinstance(arr, ss.arrays.StepArr):
+                arr.fit(self.mod.t) # 16-bit step numbers if the run fits
         return
 
     def groups(self, uids, state=None):
@@ -405,10 +409,19 @@ class Agents(Engine):
 
     def count(self, states, total=True):
         out = 0.0
+        weighted = self.sim.people.scale.weighted # Agents of different weights are each counted by their weight, so a rate means the same whatever the weights
         counts = self.start if self._members is not None else self.live # At the start of the step, while its rates are worked out (see step_state()), or now
+        if weighted:
+            counts = self.start_weighted if self._members is not None else None
         for state in states:
             if state.people:
-                out += (counts[state.name].sum() if counts is not None else np.count_nonzero(self.mod[state.name]))*self.scale
+                if counts is not None:
+                    n = counts[state.name].sum()
+                elif weighted:
+                    n = self.weighted_count(state).sum()
+                else:
+                    n = np.count_nonzero(self.mod[state.name])
+                out += n*self.scale
             else:
                 out += self.counts[state.name].sum() if total else self.counts[state.name]
         return out
@@ -433,13 +446,20 @@ class Agents(Engine):
             uids, share = uids[share > 0], share[share > 0]
         infectious = mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans*share
         mixing = self.sim.mixing
+        people = self.sim.people
+        weighted = people.scale.weighted
+        if weighted: # Each agent counted by its weight, as in count()
+            infectious = infectious*people.scale.raw[uids]
         if mixing.space is None:
-            return infectious.sum()/max(len(self.sim.people), 1)
+            if weighted:
+                total = people.scale.raw[people.auids].sum()
+                return infectious.sum()/total if total > 0 else 0.0
+            return infectious.sum()/max(len(people), 1)
         places = self.place_raw() # People mix within their own place, so there is one value per agent
         n_places = self.sim.groups.strats[mixing.space].n
         if 'place_sizes' not in self.cache:
-            sizes = self.by_place(self.alive_counts())
-            self.cache['place_sizes'] = sizes if sizes is not None else np.bincount(places[self.sim.people.auids], minlength=n_places).astype(float)
+            sizes = self.by_place(self.alive_counts()) if not weighted else None
+            self.cache['place_sizes'] = sizes if sizes is not None else np.bincount(places[people.auids], weights=people.scale.raw[people.auids] if weighted else None, minlength=n_places).astype(float)
         num = np.bincount(places[uids], weights=infectious, minlength=n_places)
         prev = mixing.by_place(np.arange(n_places), num, self.cache['place_sizes'], n_places)
         return prev[mixing.places] if self._by_group else prev[places[self._uids]] # For each group, or for the agents the rate is being worked out for
@@ -458,11 +478,13 @@ class Agents(Engine):
         out = np.zeros(n_places)
         members = self._members
         counts = self.start if members is not None else self.live_counts() # At the start of the step, while its rates are worked out, or now
+        weights = self.sim.people.scale.raw if self.sim.people.scale.weighted else None # Agents of different weights: each counted by its weight, as in count()
         for state in states:
             if state.people:
-                placed = self.by_place(counts[state.name])
-                if placed is None: # Counted from the agents themselves (who were all listed by the census, if this is the start of the step)
-                    placed = np.bincount(places[members[state.name] if members is not None else self.members(state)], minlength=n_places)
+                placed = self.by_place(counts[state.name]) if weights is None else None
+                if placed is None: # Counted from the agents themselves (who were all listed by the census, if this is the start of the step; a state that is not listed has had nobody leave it yet)
+                    uids = members[state.name] if members is not None and state.name in members else self.members(state)
+                    placed = np.bincount(places[uids], weights=None if weights is None else weights[uids], minlength=n_places)
                 out += placed*self.scale
             else:
                 out += np.bincount(mixing.places, weights=self.counts[state.name], minlength=n_places)
@@ -536,8 +558,8 @@ class Agents(Engine):
 
         Args:
             ti (int): the time of entry: the start of the step for the transitions that are not contact-mediated, and its end for infections, which
-                have happened by then (so an infected person transmits over their whole dwell time, as in the ODE, though they are counted in their state
-                one step longer than in Starsim 3's code, whose infections were dated at the start)
+                have happened by then (so an infected person transmits over their whole dwell time, as in the ODE); a disease written as code dates
+                infections the same way (`ss.Disease.ti_entry`), though Starsim 3's code dated them at the start
         """
         mod = self.mod
         moved = self._moved
@@ -621,12 +643,16 @@ class Agents(Engine):
         if not candidates:
             return
         ti_exit = mod[f'ti_exit_{name}']
-        new = members[np.isnan(ti_exit.raw[members])]
+        new = members[ti_exit.raw[members] == ti_exit.nan]
         if not len(new):
             return
         entered = mod[f'ti_{name}'][new]
+        undated = np.isnan(entered) # Put in the state directly (e.g. sir.I[uids] = True), with no time of entering: they entered it now
+        if undated.any():
+            entered[undated] = mod.ti
+            mod[f'ti_{name}'][new[undated]] = mod.ti
         best = np.full(len(new), np.inf)
-        which = np.full(len(new), np.nan)
+        which = np.full(len(new), -1, dtype=np.int8)
 
         branches = exits.branches + sc.tolist(exits.remainder)
         if branches: # Split on entry
@@ -731,6 +757,7 @@ class Agents(Engine):
         else: # Counted already: only the states that are stepped through are listed
             members = {name:ss.uids(ss.kernels.flatnonzero(mod[name].raw)) for name in self.listed}
         self.start = {name:vals.copy() for name,vals in self.live.items()}
+        self.start_weighted = {state.name:self.weighted_count(state) for state in graph.people_states} if sim.people.scale.weighted else None
         self._members = members # So counts in rates are the same for every transition this step, whatever order they are taken in
         self._updates = self.update_values()
         for state in graph.people_states:
@@ -748,7 +775,7 @@ class Agents(Engine):
             candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
             if candidates: # Scheduled exits that are due
                 self.rescale_exits(state, uids)
-                due = mod[f'ti_exit_{name}'][uids] <= ti
+                due = mod[f'ti_exit_{name}'].raw[uids] <= ti # Everyone here has been scheduled, so none is .nan
                 which = mod[f'exit_{name}'][uids]
                 for i,tr in enumerate(candidates):
                     self.move(tr, state, uids[due & (which == i)])
@@ -791,7 +818,7 @@ class Agents(Engine):
         before = None if getattr(tr, 'before', None) is None else float(self.convert(tr.before))
         if not after and before is None:
             return 1.0
-        stay = (self.mod.ti - self.mod[f'ti_{state.name}'].raw[uids])*self.dt
+        stay = (self.mod.ti - self.mod[f'ti_{state.name}'][uids])*self.dt
         out = stay >= after - 1e-9
         if before is not None:
             out &= stay < before - 1e-9
@@ -1272,7 +1299,7 @@ class Agents(Engine):
             found = trgs[inds] == uids
             sources[found] = srcs[first[inds[found]]]
             networks[found] = nets[first[inds[found]]]
-        self.mod.infection_log.add_entries(uids, sources, self.mod.now, network=networks)
+        self.mod.infection_log.add_entries(uids, sources, self.mod.now_entry, network=networks) # At the end of the step, as ti_I is (seeds at the start)
         return
 
     def same_in_group(self, tr):

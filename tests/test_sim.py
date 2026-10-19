@@ -70,9 +70,9 @@ def test_simple(do_plot=do_plot):
         sim.plot()
 
     # A sim of modules written as code can be built again with other values, as a declared one can
-    coded = ss.Sim(n_agents=n_agents, diseases=ssl.CodedSIS(name='sis'), networks='random', start=2000, stop=2010, verbose=0)
-    again = coded.new(rand_seed=2).run()
-    assert again.summary.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.CodedSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.sis_cum_infections
+    agentsim = ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, verbose=0)
+    again = agentsim.new(rand_seed=2).run()
+    assert again.summary.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.sis_cum_infections
 
     # So can a subclass that adds its modules after Sim.__init__() (as FPsim's does), and settings changed after the sim was made are kept (before, both were lost)
     class MySim(ss.Sim):
@@ -86,8 +86,8 @@ def test_simple(do_plot=do_plot):
     assert type(new) is MySim and new.pars.stop == 2005 and isinstance(new.pars.diseases, ss.SIS) # Was a plain ss.Sim with no modules, to 2010
     new = ss.parallel(mysim.run(), n_runs=2, parallel=False).sims[1] # Built again with new(), since it has run
     assert type(new) is MySim and new.t.npts == 6 and 'sis' in new.results
-    coded.pars.stop = 2005
-    assert coded.new().pars.stop == 2005 # And for ss.Sim itself
+    agentsim.pars.stop = 2005
+    assert agentsim.new().pars.stop == 2005 # And for ss.Sim itself
     return sim
 
 
@@ -127,6 +127,11 @@ def test_api():
     # Check that Bernoulli distributions can't be changed
     with pytest.raises(TypeError):
         ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).init()
+
+    # An override of a private phase of init() by its old name would be silently ignored
+    with pytest.raises(TypeError):
+        class MySim(ss.Sim):
+            def init_time(self): pass
 
     return s1
 

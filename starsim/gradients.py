@@ -172,6 +172,13 @@ class Run:
         local_n = n if self.simple else self.place.T @ (self.place @ n) # ... and in the same place as each group
         exposures = []
         for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term
+            s = p.exp_set[e]
+            if s < 0: # The sum of the -s exposures before it, in order
+                expo = exposures[e+s]
+                for x in range(e+s+1, e):
+                    expo = expo + exposures[x]
+                exposures.append(expo)
+                continue
             infectious = (ys[self.sets[p.exp_set[e]]]*rel_trans[e]).sum(axis=0)
             expo = 0.0
             if self.simple and not p.use[0].any() and not p.use[2].any(): # One group, mixing with itself

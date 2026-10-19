@@ -40,7 +40,7 @@ pars = dict(
 sim = ss.Sim(pars)
 ```
 
-In an agent-based model, births and deaths can also be demographic modules, which add and remove agents, and which take data by year (and, for deaths, by age and sex; below). Their rates are per 1,000 people:
+In an agent-based model, births and deaths can also be demographic modules, which add and remove agents, and which take data by year (and, for deaths, by age and sex; below). A rate above 1 is read as per 1,000 people, as crude birth and death rates usually are, and a rate below 1 as per person, so `ss.Births(birth_rate=20)` and `ss.Births(birth_rate=0.02)` are the same. A rate that could be either (from 0.1 to 1, or above 1,000) gives a warning saying which was assumed; `rate_units=1000` (per 1,000) or `rate_units=1` (per person) says which, and silences it:
 
 ```{python}
 demographics = [
@@ -112,7 +112,7 @@ plt.show()
 
 If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting.
 
-*Note*: In the code block above, we set the units of the mortality data to 1, as opposed to 1/1000. If your data come in the form of deaths per 1000 people, set units to 1/1000. Note also that as per standard definitions, `fertility_rate` is defined per *woman*, whereas `birth_rate` is defined per *person*.
+*Note*: In the code block above, the mortality data are per person, which we say with `rate_units=1`: the oldest ages have rates above 0.1, which could otherwise be read either way. If your data come in the form of deaths per 1,000 people, set `rate_units=1000`. Note also that as per standard definitions, `fertility_rate` is defined per *woman*, whereas `birth_rate` is defined per *person*.
 
 ## Exercises
 1. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with a total population of 24 million in 2020, how many people will there be in 2040? (You do not need to include any diseases in your model.)

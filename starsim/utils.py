@@ -411,7 +411,7 @@ def apply_age_range(age_string, arr):
 
         >>> import numpy as np
         >>> ages = np.array([14, 15, 20, 24, 25])
-        >>> ss.apply_age_range('[15,25)', ages)
+        >>> ss.utils.apply_age_range('[15,25)', ages)
         array([False,  True,  True,  True, False])
 
     Args:
@@ -596,7 +596,7 @@ def combine_rands(a, b):
     the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
 
     Args:
-        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.distributions.rand_raw()
         b (array): ditto, same size as a
 
     Returns:
@@ -605,7 +605,7 @@ def combine_rands(a, b):
     a_dtype = getattr(a, 'dtype', type(a).__name__)
     b_dtype = getattr(b, 'dtype', type(b).__name__)
     if a_dtype != np.uint64 or b_dtype != np.uint64:
-        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.distributions.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
         raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max

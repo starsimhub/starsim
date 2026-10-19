@@ -9,7 +9,7 @@ Each Starsim module can have its own results, which get added to the full list o
 
 ## When analyzers run
 
-An analyzer runs once when the sim is initialized, and then at the end of each step, after the step's results have been recorded. So in an analyzer (and in a module's `update_results()`), `self.ti` (and `sim.ti`) is the time point at the *end* of the step, where its results go: the results so far are `res[:self.ti + 1]`. Events that happened during the step were dated by modules written as code at the step's *start*, `self.ti - 1`, since during a step `self.ti` is the time point it starts from; an analyzer that looks for this step's events by comparing with `self.ti` finds none. A declared disease is different: it dates entry into a state (`ti_I`) at the step's *end*, so this step's new infections are `sir.ti_I == self.ti`.
+An analyzer runs once when the sim is initialized, and then at the end of each step, after the step's results have been recorded. So in an analyzer (and in a module's `update_results()`), `self.ti` (and `sim.ti`) is the time point at the *end* of the step, where its results go: the results so far are `res[:self.ti + 1]`. Infections are dated at the step's *end*, by a declared disease (`ti_I`) and by the library's diseases written as code (`ti_infected`, set to `self.ti_entry`) alike, since they have happened by then: this step's new infections are `sir.ti_I == self.ti`. Other events that a module written as code dates with `self.ti` during a step are at the step's *start*, `self.ti - 1`, since during a step `self.ti` is the time point it starts from; an analyzer that looks for them by comparing with `self.ti` finds none.
 
 ## Simple usage
 
@@ -78,7 +78,7 @@ class HIV_preg(ss.Analyzer):
         ti = self.ti # The end of the step that has just run, where its results go
         hiv = sim.diseases.hiv
         pregnant = sim.demographics.pregnancy.pregnant
-        newly_infected = hiv.ti_infected == ti - 1 # Infections during the step are dated at its start
+        newly_infected = hiv.ti_infected == ti # Infections during the step are dated at its end
         self.results['new_infections_pregnancy'][ti] = len((newly_infected & pregnant).uids)
         return
 
@@ -141,12 +141,12 @@ If you want a NetworkX graph instead (e.g. to analyze transmission chains), use 
 
 Modules can also record extra data for each infection. A disease that records its own infections (e.g. one with multiple variants) can pass extra data when creating entries, e.g. `log.add_entries(uids, sources, time, variant=variants)`, while `log.add_data(uids, ...)` adds data to each agent's most recent infection, which is useful for recording outcomes that happen later (e.g. diagnosis or death). For example, to record the age of each agent when they were infected:
 
-Since this overrides a method, it is a disease written as code, here Starsim 3's SIR (`ssl.CodedSIR`):
+Since this overrides a method, it is a disease written as code, here Starsim 3's SIR (`ssl.AgentSIR`):
 
 ```{python}
 import starsim.library as ssl
 
-class AgeSIR(ssl.CodedSIR):
+class AgeSIR(ssl.AgentSIR):
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources)
         if self.infection_log: # The log only exists if the infection_log analyzer is used

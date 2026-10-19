@@ -318,7 +318,10 @@ class Presentation:
         out.states = [dict(name=s.name, people=bool(s.people), init=s.init if s.init is None or sc.isnumber(s.init) else quantity_json(s.init, None, unit), infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
 
         def par_json(p, kind):
-            return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=None if p.prior is None else str(p.prior), source=p.source, doc=p.doc)
+            prior = None if p.prior is None else str(p.prior)
+            if isinstance(p.prior, ss.Dist): # A distribution of the value, as data (so that ss.to_code() can write it)
+                prior = dict(dist=type(p.prior).__name__) | {k:quantity_json(v, None, None) for k,v in p.prior.pars.items()}
+            return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=prior, source=p.source, doc=p.doc)
 
         transitions = []
         for name,tr in self.transitions.items(): # In the order given (sim.hash() sorts them)
@@ -350,6 +353,9 @@ class Presentation:
         results += [oc.to_json(unit) for oc in self.outcomes.values()]
         out.results = sorted(results, key=lambda r: r['name'])
         out.functions = sorted([dict(name=name, source=func_source(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
+        if self.transfers: # Likewise
+            expr = lambda e: None if e is None else format_expr(e, exact=True)
+            out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label) for name,tf in self.transfers.items()]
         if self.updates: # Only when there are any, so that other specs are unchanged
             out.updates = [dict(name=name, state=self.updates[name].state.name, value=format_expr(self.updates[name].value, exact=True)) for name in sorted(self.updates.keys())]
         guessed = list(self.guessed.keys())

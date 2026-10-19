@@ -20,7 +20,7 @@ do_plot = True
 #%% Helper functions
 
 def make_sim():
-    sir = ssl.CodedSIR( # Starsim 3's SIR, written as code, for the Starsim 3 calibration (ss.Calibration)
+    sir = ssl.AgentSIR( # Starsim 3's SIR, written as code, for the Starsim 3 calibration (ss.Calibration)
         name = 'sir',
         beta = ss.peryear(0.075),
         init_prev = ss.bernoulli(0.02),
@@ -371,7 +371,8 @@ def test_particle_mcmc():
 
     # A best fit scores each point by the mean of several runs with the same seeds, and reports the score it minimized
     best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
-    assert len(best.scores) == 4 # The default for a stochastic sim
+    assert len(best.scores) == 4 # The default for a stochastic compartmental sim
+    assert ss.calibration.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 10 # And for agents, whose runs vary more
     assert np.isclose(best.mismatch, best.trials.objective.min())
     return fit
 

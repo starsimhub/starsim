@@ -9,6 +9,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import paths
+import corpus
 
 kw = dict(verbose=0)
 
@@ -217,6 +218,45 @@ def test_to_code(tmp_path):
     return code
 
 
+def test_round_trip(tmp_path):
+    sc.heading('Testing the round trip of every corpus model: to_code(), then save() and load()')
+    def results(sim):
+        return {k:np.asarray(v.values, dtype=float) for k,v in sim.results.flatten().items() if isinstance(v, ss.Result)}
+
+    def check(name, sim):
+        fn = tmp_path/f'{name}.py'
+        sim.to_code(fn)
+        new = runpy.run_path(fn)['sim'] # From a file, so that the functions in it have their source
+        assert new.hash() == sim.hash(), f'{name}: {ss.diff(sim, new, output=True)}'
+        a, b = results(sim.run()), results(new.run())
+        assert all(np.allclose(a[k], b[k]) for k in a), f'{name}: the code gives different results'
+        sim.save(tmp_path/f'{name}.sim') # After a run, so that every module shrinks
+        loaded = results(ss.load(tmp_path/f'{name}.sim'))
+        assert all(np.allclose(a[k], loaded[k]) for k in a), f'{name}: the loaded sim has different results'
+        return
+
+    # Every corpus model that to_code() can write in full: deliveries, contact matrices, transfers, a duration with no unit
+    lossy = ['coinfection', 'network', 'threshold', 'starsim3', 'poisson_weekly'] # Networks of agents, a lambda, and data
+    for name,make in corpus.models.items():
+        if name in lossy:
+            with pytest.warns(ss.LossyExport):
+                make().to_code()
+        else:
+            check(name, make())
+
+    # What the fuzzer found: time series keys and a modifier's times as numbers (not dates), conditions, a matrix with its own age bands, and a start in years; and a prior
+    S, I, R = ss.states('S I R')
+    beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}), name='beta')
+    dur = ss.par(ss.days(10), bounds=[5, 15], prior=ss.uniform(5, 15), name='dur')
+    sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
+    mixing = ss.contacts([[3, 1], [1, 2]], bands=[0, 15])
+    distancing = ss.modify(sir.pars.beta, multiply=0.5, start=12.5, stop=30, where=sir.risk == 'hi')
+    vaccine = ss.vaccinate(efficacy=0.8, waning=ss.days(50), coverage=0.3, interval=ss.days(7), start=5, where=ss.People.age < 15)
+    check('fuzzed', ss.Sim(sir, networks=mixing, interventions=[distancing, vaccine], stratify=dict(age=[0, 15]), unit='day', stop=60, total_pop=10_000, **kw))
+    check('years', ss.Sim(corpus.make_sir(beta=ss.perday(0.3), dur=ss.days(10)), start=2000, stop=2001, total_pop=10_000, **kw)) # Rates per day, so the unit is days and 2000 is in years
+    return
+
+
 clearance_rate = 0.2
 def clearance(sim):
     """ A rate given as a function, for test_to_code() """
@@ -267,6 +307,7 @@ if __name__ == '__main__':
     test_rates()
     test_emulsion(folder)
     test_to_code(folder)
+    test_round_trip(folder)
     test_diff(folder)
     test_no_disease()
     T.toc()

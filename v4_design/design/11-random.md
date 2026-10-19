@@ -6,12 +6,12 @@ Justified by [best-practices/stochasticity-and-reproducibility.md](../best-pract
 
 ## Streams
 
-**Every distribution has its own random number stream**, seeded from the sim's `rand_seed` and the distribution's full name (a hash of the two together). In a stochastic compartmental run (`binomial`, `gillespie`), each module draws from a generator of its own, seeded from the sim's `rand_seed` and the module's name.
+**Every distribution has its own random number stream**, seeded from the sim's `rand_seed` and the distribution's full name (a hash of the two together). In a stochastic compartmental run (`binomial`, `gillespie`), each module draws from a generator of its own, seeded from the sim's `rand_seed` and the module's name, and draws its flows in an order set by the names of their states and transitions, so the order the states are declared in does not change the draws. Each of several runs (`sim.run(n_runs=)`, `ss.parallel()`) draws everything, its outcomes included, from its own seed, as it would on its own.
 
 Consequences:
 
 - Adding a module does not change any other module's draws, under `abm`, `binomial`, and `gillespie`.
-- A stochastic compartmental run gives the same draws whether it is taken in one call to the kernels or a step at a time, and whatever other sims run in between.
+- A stochastic compartmental run gives the same draws whether it is taken in one call to the kernels or a step at a time, and whatever other sims run in between. Two exceptions remain: a delivery that the kernels take in a whole run is taken in Python when the run is stepped (or when the sim has several diseases), and a whole run draws its outcomes after the run rather than a step at a time; the distributions are the same, the draws are not.
 - Reordering modules does not change which random numbers each distribution receives. (It can still change results, because a module may act on different state; see [10-execution.md](10-execution.md).)
 - Distributions can be drawn from in any order without becoming correlated.
 - The runs of a MultiSim are identical whether they are run in parallel or in serial.

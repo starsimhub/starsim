@@ -27,6 +27,14 @@ class Product(ss.Module):
         """ Administer a Product - implemented by derived classes """
         raise NotImplementedError
 
+    spec_keys = [] # The keywords that make the product, for the model spec
+
+    def spec(self):
+        """ The product as plain data, for the model spec of its delivery: its type, its name, and the keywords that make it """
+        out = dict(type=type(self).__name__, name=self.name)
+        out.update({key:ss.interventions.spec_value(getattr(self, key)) for key in self.spec_keys if getattr(self, key) is not None})
+        return out
+
 
 class Dx(Product):
     """
@@ -392,6 +400,14 @@ class Vaccine(Held):
         self.take = take
         return
 
+    spec_keys = ['efficacy', 'waning', 'cost']
+
+    def spec(self):
+        out = super().spec()
+        if self.take is not None: # All or nothing
+            out.update(efficacy=self.take, leaky=False)
+        return out
+
     def describe(self):
         out = super().describe()
         return out if self.take is None else f'{out}; all or nothing: {self.take:n} of those who receive it are fully protected'
@@ -435,6 +451,8 @@ class Treatment(Held):
         both = ss.Treatment(cure=0.3, efficacy=dict(transmission=0.9))
         ```
     """
+    spec_keys = ['cure', 'efficacy', 'transition', 'to', 'waning', 'cost']
+
     def __init__(self, cure=None, efficacy=None, transition=None, to=None, **kwargs):
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
@@ -526,6 +544,7 @@ class Test(Product):
     compartmental = True
     holds = False
     waning = None
+    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
     __test__ = False # So pytest does not collect it
 
     def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):

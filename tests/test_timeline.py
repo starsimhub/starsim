@@ -281,7 +281,7 @@ def test_multi_timestep(do_plot=False):
 @sc.timer()
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
-    SIS = ssl.CodedSIS # Written as code, since a declared disease cannot yet have a timestep of its own
+    SIS = ssl.AgentSIS # Written as code, since a declared disease cannot yet have a timestep of its own
 
     siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
     kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
@@ -319,7 +319,7 @@ def test_mixed_timesteps():
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
-    sis = ssl.CodedSIS( # Starsim 3's SIS, with waning immunity
+    sis = ssl.AgentSIS( # Starsim 3's SIS, with waning immunity
         name = 'sis',
         beta = ss.prob(0.05, 'day'),
         init_prev = ss.bernoulli(p=0.1),

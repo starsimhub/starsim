@@ -7,6 +7,7 @@ import functools
 import numpy as np
 import numba as nb
 import scipy.stats as sps
+import scipy.sparse as spsp
 import scipy.optimize as spo
 import sciris as sc
 import starsim as ss
@@ -470,7 +471,7 @@ class Network(Route):
         - p2 = [2,3,1,4]
         Then find_edges([1,3]) would return {1,2,3}
         """
-        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
+        contact_inds = ss.utils.find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
         return contact_inds
 
     def add_pairs(self):
@@ -772,6 +773,22 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
 
+    @staticmethod
+    def draw_places(share, home, u):
+        """ The place of each contact, from the time share between places (a sparse array, by rows) of the home of each, and a uniform number for each: the first place where the cumulative share reaches it """
+        out = np.full(len(home), share.shape[1] - 1)
+        order = np.argsort(home, kind='stable')
+        counts = np.bincount(home, minlength=share.shape[0])
+        ends = np.cumsum(counts)
+        for r in np.flatnonzero(counts):
+            these = order[ends[r]-counts[r]:ends[r]]
+            cols, cum = share.indices[share.indptr[r]:share.indptr[r+1]], np.cumsum(share.data[share.indptr[r]:share.indptr[r+1]])
+            k = np.searchsorted(cum, u[these], side='left')
+            found = k < len(cols)
+            out[these[found]] = cols[k[found]]
+        out[u <= 0] = 0 # As the cumulative share of the first place, which can be 0
+        return out
+
     def pair(self, inds, n_contacts):
         """
         Find edges (see `get_edges()`); in a model with places, within each place, as a compartmental run takes it to be
@@ -786,8 +803,7 @@ class RandomNet(DynamicNetwork):
         place = self.sim.groups.level_raw(mixing.space)[stubs]
         mobility = self.sim.groups.strats[mixing.space].mobility
         if mobility is not None and mobility.kind in ['commute', 'visit']:
-            cum = np.cumsum(mixing.time_share, axis=1)[place]
-            place = np.minimum((cum < self.dist.rng.random(len(stubs))[:, None]).sum(axis=1), cum.shape[1] - 1)
+            place = self.draw_places(mixing.time_share, place, self.dist.rng.random(len(stubs)))
             self.dist.jump()
         order = np.argsort(place, kind='stable')
         ends = np.cumsum(np.bincount(place, minlength=self.sim.groups.strats[mixing.space].n))
@@ -1794,6 +1810,7 @@ class MixingPool(Route):
         self.diseases = shrunk
         self.src_uids = shrunk
         self.dst_uids = shrunk
+        self.setattribute('t', shrunk) # Its own copy of the timeline, for each of what can be many pools
         return
 
     def __len__(self):
@@ -1980,6 +1997,7 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
     out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, **kwargs) # ss.MixingPools is indexed [source, destination]
     out.constant = True # Everyone in a group has the same number of contacts
     out.ref = ref # Where a named matrix came from, for the model spec
+    out.bands = None if ref is not None else np.asarray(bands).tolist() # A matrix given with its own age bands, for the model spec (as given, since they name the groups)
     return out
 
 
@@ -2140,7 +2158,7 @@ class Mobility:
 
     Args:
         model (gravity): a movement model (instead of `matrix`)
-        matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there
+        matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there (a SciPy sparse array for many places, most pairs of which share no one)
         data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
         kind (str): 'commute', 'visit', 'migrate', or 'force'; by default 'migrate' for a register and 'commute' otherwise
         away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that leaves it); the movement is rescaled to give it
@@ -2179,7 +2197,7 @@ class Mobility:
                 away = 0.1
                 self.guessed = '10% of time away, since neither away= nor k= was given'
         self.model = model
-        self.given = None if matrix is None else np.array(matrix, dtype=float)
+        self.given = None if matrix is None else spsp.csr_array(matrix, dtype=float) if spsp.issparse(matrix) else np.array(matrix, dtype=float)
         self.data = None if data is None else self.load(data)
         if scale not in ['each', 'mean']:
             errormsg = f'scale= of ss.Mobility() is "each" (every place has the share given by away=) or "mean" (the places have it on average), not "{scale}"'
@@ -2301,13 +2319,17 @@ class Mobility:
         out = self.model.matrix(strat) if self.model is not None else self.given.copy()
         if out.shape != (strat.n, strat.n):
             raise ss.ShapeError(f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
-        np.fill_diagonal(out, 0)
+        if spsp.issparse(out):
+            out = spsp.csr_array(out - spsp.diags_array(out.diagonal()))
+            out.eliminate_zeros()
+        else:
+            np.fill_diagonal(out, 0)
         return out
 
     def time_share(self, strat):
-        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1 """
+        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1. A sparse array, since most pairs of places share no one """
         out = self.matrix(strat)
-        total = out.sum(axis=1)
+        total = np.asarray(out.sum(axis=1)).ravel()
         if self.away is not None and self.scale == 'mean':
             scale = np.full(strat.n, self.away/total.mean() if total.mean() > 0 else 0.0)
         elif self.away is not None:
@@ -2319,12 +2341,19 @@ class Mobility:
             scale = 1/np.maximum(total, 1)
         if self.cap is not None: # No place over the cap
             scale = np.minimum(scale, np.divide(self.cap, total, out=np.zeros(strat.n), where=total>0))
-        out = out*scale[:, None]
-        np.fill_diagonal(out, np.maximum(1 - out.sum(axis=1), 0))
+        if spsp.issparse(out):
+            out = spsp.csr_array(out.multiply(scale[:, None]))
+            out = spsp.csr_array(out + spsp.diags_array(np.maximum(1 - np.asarray(out.sum(axis=1)).ravel(), 0)))
+        else:
+            out = out*scale[:, None]
+            np.fill_diagonal(out, np.maximum(1 - out.sum(axis=1), 0))
+            out = spsp.csr_array(out)
+        out.eliminate_zeros()
+        out.sort_indices()
         return out
 
     def coupling(self, strat):
-        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives """
-        share = self.time_share(strat)
-        moved = share - np.diag(np.diag(share)) # The share of each place's force that goes to each other place
-        return moved.T + np.diag(np.diag(share))
+        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives, as a sparse array """
+        out = spsp.csr_array(self.time_share(strat).T) # Each place keeps its own share, and receives what each other place's force sends it
+        out.sort_indices()
+        return out

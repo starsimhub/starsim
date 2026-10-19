@@ -80,7 +80,7 @@ def test_geo():
     assert 'starsim_data' in sim.describe(output=True)
 
     # Gravity gives the shape of the movement and away= its amount (10% if not given); a k that sends people away more than all their time warns
-    home = lambda mob: np.diag(ss.Sim(make_sir().stratify(patch=kenya, mobility=mob), unit='day', stop=60, **kw).init().mixing.time_share)
+    home = lambda mob: ss.Sim(make_sir().stratify(patch=kenya, mobility=mob), unit='day', stop=60, **kw).init().mixing.time_share.diagonal()
     assert np.allclose(home(ss.gravity()), 0.9) and np.allclose(home(ss.gravity(away=0.2)), 0.8)
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.pop.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):

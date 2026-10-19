@@ -11,7 +11,12 @@ or anything that uses `I.n`) is stored as a short list of operations on a stack,
 value per group. Everything else is a number per group that Python sets once a step.
 """
 
+import os
+import sys
+import ctypes
+import contextlib
 import collections
+import multiprocessing as mp
 import numpy as np
 import numba as nb
 import starsim as ss
@@ -49,7 +54,7 @@ fields = [
     'places',     # The place of each group (all zero if the model has none)
     'n_places',
     # Exposure to each infectious state
-    'exp_set',    # The set of compartments that are the state
+    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.Crossing)
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in
     'sizes',      # The number of cells in each term
@@ -398,6 +403,15 @@ def draw(rng, y, p, w, dt, flows, tau):
     return
 
 
+@nb.jit(nopython=True, cache=True, inline='always')
+def sum_exposures(expo, e, s):
+    """ The sum of the -s exposures before exposure e, added in order (an exposure whose set is negative, see `Program`) """
+    v = expo[e+s]
+    for x in range(e+s+1, e):
+        v += expo[x]
+    return v
+
+
 @jit
 def place_rates(ys, p, a, b, rates, stack, expo):
     """
@@ -414,6 +428,9 @@ def place_rates(ys, p, a, b, rates, stack, expo):
             n += ys[c, g]
     for e in range(len(p.exp_set)):
         s = p.exp_set[e]
+        if s < 0:
+            expo[e] = sum_exposures(expo, e, s)
+            continue
         num = 0.0
         for j in range(a, b):
             g = p.pl_groups[j]
@@ -594,13 +611,15 @@ def sparse_maps(p, nc):
             fill[c] += 1
     se_starts = np.zeros(n_sets + 1, dtype=np.int64)
     for e in range(len(p.exp_set)):
-        se_starts[p.exp_set[e] + 1] += 1
+        if p.exp_set[e] >= 0: # Not a sum of others
+            se_starts[p.exp_set[e] + 1] += 1
     se_starts = np.cumsum(se_starts)
-    se_exps = np.empty(len(p.exp_set), dtype=np.int64)
+    se_exps = np.empty(se_starts[-1], dtype=np.int64)
     fill = se_starts[:-1].copy()
     for e in range(len(p.exp_set)):
-        se_exps[fill[p.exp_set[e]]] = e
-        fill[p.exp_set[e]] += 1
+        if p.exp_set[e] >= 0:
+            se_exps[fill[p.exp_set[e]]] = e
+            fill[p.exp_set[e]] += 1
     cf_starts = np.zeros(nc + 1, dtype=np.int64) # The flows that are events (see settle()), by the compartment they leave
     n_in = 0
     for f in range(len(p.src)):
@@ -737,6 +756,9 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                         e = se_exps[q]
                         num[e] += v*p.rel_trans[e, g]
             for e in range(len(p.exp_set)):
+                if p.exp_set[e] < 0:
+                    expo[e] = sum_exposures(expo, e, p.exp_set[e])
+                    continue
                 prev = num[e]/n if n > 0 else 0.0
                 expo[e] = 0.0
                 for tt in range(len(p.sizes)):
@@ -1095,6 +1117,576 @@ def event(rng, y, p, w, dt, flows):
     return wait
 
 
+#%% The exact solver for groups that affect each other: see gillespie_groups()
+
+min_coupled = 8 # The fewest groups for which the exact solver follows only what each event changes; with fewer, working out every rate again after each event costs less
+
+
+@jit
+def coupled(p, ng):
+    """ Whether the exact solver can step a program by `gillespie_groups()`: enough groups, events that stay in their group, and rates worked out from counts by place and exposures by cell (no reservoir, conveyor, update, count in every place, contacts by group, or sum of exposures) """
+    if ng < min_coupled or p.has_det or len(p.starts) - len(p.src) - 1 > 0:
+        return False
+    if p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1:
+        return False
+    for k in range(len(p.ops)):
+        if p.ops[k] == TOTAL:
+            return False
+    for f in range(len(p.src)):
+        if p.record[f] >= 0:
+            return False
+        if p.src[f] < 0:
+            for g in range(ng):
+                if p.inflow[f, g] < 0:
+                    return False
+    for k in range(len(p.tgt_map)):
+        if p.tgt_map[k] >= 0:
+            return False
+    for e in range(len(p.exp_set)):
+        if p.exp_set[e] < 0:
+            return False
+    return True
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def group_order(p, g, h, counts):
+    """ -1, 0, or 1 as the numbers that group g's rates are worked out from sort before, are the same as, or sort after group h's: the cells they are in, their place (if a rate has a count in it), and the program's values for them """
+    for t in range(len(p.sizes)):
+        if p.levels[t, g] != p.levels[t, h]:
+            return -1 if p.levels[t, g] < p.levels[t, h] else 1
+    if counts and p.places[g] != p.places[h]:
+        return -1 if p.places[g] < p.places[h] else 1
+    for f in range(len(p.src)):
+        if p.fixed[f, g] != p.fixed[f, h]:
+            return -1 if p.fixed[f, g] < p.fixed[f, h] else 1
+        if p.mult[f, g] != p.mult[f, h]:
+            return -1 if p.mult[f, g] < p.mult[f, h] else 1
+    for k in range(len(p.consts)):
+        if p.consts[k, g] != p.consts[k, h]:
+            return -1 if p.consts[k, g] < p.consts[k, h] else 1
+    return 0
+
+
+@jit
+def sort_groups(p, ng, counts):
+    """ The groups in the order of `group_order()`, keeping their own order where it is the same (a merge sort) """
+    order = np.arange(ng)
+    tmp = np.empty(ng, dtype=np.int64)
+    width = 1
+    while width < ng:
+        for a in range(0, ng, 2*width):
+            m, b = min(a + width, ng), min(a + 2*width, ng)
+            i, j, k = a, m, a
+            while i < m and j < b:
+                if group_order(p, order[j], order[i], counts) < 0:
+                    tmp[k] = order[j]
+                    j += 1
+                else:
+                    tmp[k] = order[i]
+                    i += 1
+                k += 1
+            while i < m:
+                tmp[k] = order[i]
+                i += 1
+                k += 1
+            while j < b:
+                tmp[k] = order[j]
+                j += 1
+                k += 1
+        order, tmp = tmp, order
+        width *= 2
+    return order
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def fen_add(tree, c, i, d):
+    """ Add d to entry i of row c of a Fenwick tree, which keeps sums of the entries before each position, each in log steps """
+    i += 1
+    while i < tree.shape[1]:
+        tree[c, i] += d
+        i += i & (-i)
+    return
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def fen_sum(tree, c, i):
+    """ The sum of entries 0 to i-1 of row c of a Fenwick tree """
+    out = 0.0
+    while i > 0:
+        out += tree[c, i]
+        i -= i & (-i)
+    return out
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def fen_find(tree, c, v, top):
+    """ The first entry of row c of a Fenwick tree at which the sum up to and including it is more than v (`top`: the largest power of 2 not over the number of entries) """
+    pos = 0
+    while top > 0:
+        if pos + top < tree.shape[1] and tree[c, pos + top] <= v:
+            pos += top
+            v -= tree[c, pos]
+        top >>= 1
+    return pos
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def seg_set(tree, size, i, v):
+    """ Set leaf i of a tree of sums (`size` leaves, a power of 2), and the sums above it """
+    j = size + i
+    tree[j] = v
+    j >>= 1
+    while j >= 1:
+        tree[j] = tree[2*j] + tree[2*j+1]
+        j >>= 1
+    return
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def pick(rng, a, b, weights, g, whole):
+    """ Which target (or transition also counted) of a flow one event in group g goes to, as `split()` shares one: -1 for none (`whole`: whether the weights add up to 1 in every group, so rounding goes to the last) """
+    total = 0.0
+    for k in range(a, b):
+        total += weights[k, g]
+    for k in range(a, b):
+        prob = weights[k, g]/total if total > 0 else 0.0
+        if prob >= 1 or (prob > 0 and rng.random() < prob):
+            return k
+        total -= weights[k, g]
+    return b - 1 if whole and b > a else -1
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def class_values(p, C, g, expo, rate, post, cnt, npl, stack):
+    """ The exposures of class C (whose first group is g), from the exposure of each cell (`post`), and the rate of each flow, as `step()` works them out """
+    for e in range(len(p.exp_set)):
+        expo[e, C] = 0.0
+        for t in range(len(p.sizes)):
+            expo[e, C] += p.contacts[0, t, 0]*post[e, t, p.levels[t, g]]
+    pl = p.places[g]
+    for f in range(len(p.src)):
+        rate[f, C] = p.fixed[f, g]
+        top = -1
+        for k in range(p.starts[f], p.starts[f+1]):
+            op = p.ops[k]
+            arg = p.args[k]
+            if op == CONST:
+                top += 1
+                stack[top] = p.consts[arg, g]
+            elif op == EXPOSURE:
+                top += 1
+                stack[top] = expo[arg, C]
+            elif op == COUNT or op == FRAC:
+                top += 1
+                stack[top] = cnt[arg, pl]/npl[pl] if op == FRAC else cnt[arg, pl]
+            elif op >= EXP:
+                a = stack[top]
+                if   op == EXP:  stack[top] = np.exp(a)
+                elif op == LOG:  stack[top] = np.log(a)
+                elif op == SQRT: stack[top] = np.sqrt(a)
+                elif op == ABS:  stack[top] = abs(a)
+                elif op == SIN:  stack[top] = np.sin(a)
+                else:            stack[top] = np.cos(a)
+            else:
+                top -= 1
+                a = stack[top]
+                b = stack[top+1]
+                if   op == ADD: stack[top] = a + b
+                elif op == SUB: stack[top] = a - b
+                elif op == MUL: stack[top] = a * b
+                elif op == DIV: stack[top] = a / b if a != 0 else 0.0
+                elif op == POW: stack[top] = a ** b
+                elif op == MIN: stack[top] = min(a, b)
+                elif op == MAX: stack[top] = max(a, b)
+                elif op == LT:  stack[top] = 1.0 if a < b else 0.0
+                elif op == LE:  stack[top] = 1.0 if a <= b else 0.0
+                elif op == GT:  stack[top] = 1.0 if a > b else 0.0
+                else:           stack[top] = 1.0 if a >= b else 0.0
+        if top >= 0:
+            rate[f, C] = stack[0]*p.mult[f, g]
+    return
+
+
+@nb.jit(nopython=True, cache=True, inline='always')
+def pair_rate(src, f, C, rate, ysum, isum):
+    """ The rate at which events of flow f happen in class C: its rate per member of the source compartment times their number in the class, or in total for an inflow """
+    r = max(rate[f, C], 0.0)
+    return r*ysum[src[f], C] if src[f] >= 0 else r*isum[f, C]
+
+
+@jit
+def gillespie_groups(rng, y, p, dt, flows):
+    """
+    The exact solver over a time dt, for groups that affect each other (strata that mix, or places that people commute between), following only what each event changes
+
+    Groups whose rates are always the same (they are in the same cells of each mixing term, and the same
+    place if a rate has a count in it, with the same values; e.g. strata that differ only in who is in them)
+    are a class, whose rates are worked out once, and whose events happen in proportion to the number in
+    each flow's source compartment summed over the class. An event changes the people of one group, so the
+    exposures are worked out again only for the cells that the mixing takes the change to (through the time
+    share between places and the matrix of each place), and the rates only for the classes in those cells.
+    The flow and class of each event are drawn from a tree of their rates, and the group from a tree of the
+    counts in the source compartment by group, so the cost of an event grows with how far the mixing takes
+    it rather than with the number of groups. The events are those of `event()` in distribution, though not
+    draw for draw. See `coupled()` for the programs it takes.
+    """
+    nc, ng = y.shape
+    nf, nt, ne = len(p.src), len(p.sizes), len(p.exp_set)
+    counts = False
+    for k in range(len(p.ops)):
+        counts = counts or p.ops[k] == COUNT or p.ops[k] == FRAC
+
+    # The classes, and the groups in each (in a row, in `order`)
+    order = sort_groups(p, ng, counts)
+    cls = np.empty(ng, dtype=np.int64)
+    pos_of = np.empty(ng, dtype=np.int64)
+    cstart = np.empty(ng + 1, dtype=np.int64)
+    nC = 0
+    for i in range(ng):
+        if i == 0 or group_order(p, order[i-1], order[i], counts) != 0:
+            cstart[nC] = i
+            nC += 1
+        cls[order[i]] = nC - 1
+        pos_of[order[i]] = i
+    cstart[nC] = ng
+    rep = np.empty(nC, dtype=np.int64)
+    for C in range(nC):
+        rep[C] = order[cstart[C]]
+
+    # The number in each compartment by class, and by group (a Fenwick tree in class order); the inflows, likewise
+    top = 1
+    while 2*top <= ng:
+        top *= 2
+    fen = np.zeros((nc, ng + 1))
+    ysum = np.zeros((nc, nC))
+    for c in range(nc):
+        for i in range(ng):
+            ysum[c, cls[order[i]]] += y[c, order[i]]
+            fen[c, i+1] = y[c, order[i]]
+        for i in range(1, ng + 1): # Each entry adds its sum to the next that covers it
+            j = i + (i & (-i))
+            if j <= ng:
+                fen[c, j] += fen[c, i]
+    isum = np.zeros((nf, nC))
+    icum = np.zeros((nf, ng + 1))
+    whole = np.zeros(nf, dtype=np.bool_)
+    for f in range(nf):
+        if p.src[f] < 0:
+            for i in range(ng):
+                isum[f, cls[order[i]]] += p.inflow[f, order[i]]
+                icum[f, i+1] = icum[f, i] + p.inflow[f, order[i]]
+        whole[f] = True
+        for g in range(ng):
+            total = 0.0
+            for k in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                total += p.tgt_w[k, g]
+            whole[f] = whole[f] and abs(total - 1) < 1e-9
+
+    # The counts by place, and the people
+    cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total = sparse_maps(p, nc)
+    npl = np.zeros(p.n_places)
+    cnt = np.zeros((len(p.set_starts) - 1, p.n_places))
+    for g in range(ng):
+        for c in range(nc):
+            if people[c]:
+                npl[p.places[g]] += y[c, g]
+            for k in range(cs_starts[c], cs_starts[c+1]):
+                cnt[cs_sets[k], p.places[g]] += y[c, g]
+
+    # The exposure of each cell of each mixing term, by its stages (see step()): the infectious (and how many, so that none is exactly none) and the people in it, those present after the time share, prevalence, mixed by the matrix, and shared between places
+    S = p.sizes.max()
+    num, icnt, an, prev, mx, post = np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S))
+    den, ad = np.zeros((nt, S)), np.zeros((nt, S))
+    for g in range(ng):
+        n = 0.0
+        for c in p.people:
+            n += y[c, g]
+        for t in range(nt):
+            den[t, p.levels[t, g]] += n
+        for e in range(ne):
+            s = p.exp_set[e]
+            v, m = 0.0, 0.0
+            for k in range(p.set_starts[s], p.set_starts[s+1]):
+                v += y[p.set_comps[k], g]*p.rel_trans[e, g]
+                m += y[p.set_comps[k], g]
+            for t in range(nt):
+                num[e, t, p.levels[t, g]] += v
+                icnt[e, t, p.levels[t, g]] += m
+    for t in range(nt):
+        size, block = p.sizes[t], p.block[t]
+        if p.use[0, t]:
+            share(p.sh_pair, p.sh_val, den[t], size, block, ad[t], True)
+        else:
+            ad[t, :size] = den[t, :size]
+        for e in range(ne):
+            if p.use[0, t]:
+                share(p.sh_pair, p.sh_val, num[e, t], size, block, an[e, t], True)
+            else:
+                an[e, t, :size] = num[e, t, :size]
+            for i in range(size):
+                prev[e, t, i] = an[e, t, i]/ad[t, i] if ad[t, i] > 0 else 0.0
+            if p.use[1, t] and block == size:
+                mix(p.mat[t], prev[e, t], size, mx[e, t])
+            elif p.use[1, t]:
+                by_block(p.mat[t], prev[e, t], size, block, mx[e, t])
+            else:
+                mx[e, t, :size] = prev[e, t, :size]
+            if p.use[2, t]:
+                share(p.sh_pair, p.sh_val, mx[e, t], size, block, post[e, t], False)
+            else:
+                post[e, t, :size] = mx[e, t, :size]
+
+    # The entries of the time share by the place they are from (rows) and to (columns), the classes in each cell of each term, and in each place
+    nnz = len(p.sh_val)
+    n_rows = p.n_places
+    for k in range(nnz):
+        n_rows = max(n_rows, p.sh_pair[0, k] + 1, p.sh_pair[1, k] + 1)
+    rstart, cstart_sh = np.zeros(n_rows + 1, dtype=np.int64), np.zeros(n_rows + 1, dtype=np.int64)
+    for k in range(nnz):
+        rstart[p.sh_pair[0, k] + 1] += 1
+        cstart_sh[p.sh_pair[1, k] + 1] += 1
+    rstart, cstart_sh = np.cumsum(rstart), np.cumsum(cstart_sh)
+    rk, ck = np.empty(nnz, dtype=np.int64), np.empty(nnz, dtype=np.int64)
+    rfill, cfill = rstart[:-1].copy(), cstart_sh[:-1].copy()
+    for k in range(nnz):
+        rk[rfill[p.sh_pair[0, k]]] = k
+        rfill[p.sh_pair[0, k]] += 1
+        ck[cfill[p.sh_pair[1, k]]] = k
+        cfill[p.sh_pair[1, k]] += 1
+    ccs_start = np.zeros((nt, S + 1), dtype=np.int64)
+    ccs = np.empty((nt, nC), dtype=np.int64)
+    for t in range(nt):
+        for C in range(nC):
+            ccs_start[t, p.levels[t, rep[C]] + 1] += 1
+        for i in range(S):
+            ccs_start[t, i+1] += ccs_start[t, i]
+        fill = ccs_start[t, :-1].copy()
+        for C in range(nC):
+            cell = p.levels[t, rep[C]]
+            ccs[t, fill[cell]] = C
+            fill[cell] += 1
+    pcs_start = np.zeros(p.n_places + 1, dtype=np.int64)
+    pcs = np.empty(nC, dtype=np.int64)
+    for C in range(nC):
+        pcs_start[p.places[rep[C]] + 1] += 1
+    pcs_start = np.cumsum(pcs_start)
+    fill = pcs_start[:-1].copy()
+    for C in range(nC):
+        pcs[fill[p.places[rep[C]]]] = C
+        fill[p.places[rep[C]]] += 1
+
+    # The rates of each class, and the tree of the rate of each flow in each class
+    expo = np.zeros((max(ne, 1), nC))
+    rate = np.zeros((nf, nC))
+    stack = np.empty(max(p.depth, 1))
+    for C in range(nC):
+        class_values(p, C, rep[C], expo, rate, post, cnt, npl, stack)
+    n_pairs = nf*nC
+    size = 1
+    while size < n_pairs:
+        size *= 2
+    tree = np.zeros(2*size)
+    for f in range(nf):
+        for C in range(nC):
+            tree[size + f*nC + C] = pair_rate(p.src, f, C, rate, ysum, isum)
+    for j in range(size - 1, 0, -1):
+        tree[j] = tree[2*j] + tree[2*j+1]
+
+    # The events
+    stamp = np.zeros(nC, dtype=np.int64) # The last event that marked each class to be worked out again, and each cell and place
+    cell_stamp = np.zeros((nt, S), dtype=np.int64)
+    place_stamp = np.zeros((nt, n_rows), dtype=np.int64)
+    marked = np.empty(nC, dtype=np.int64)
+    d1, d2, d3 = np.empty(S, dtype=np.int64), np.empty(S, dtype=np.int64), np.empty(S, dtype=np.int64)
+    chc, chd = np.empty(2, dtype=np.int64), np.empty(2)
+    elapsed = 0.0
+    tick = 0
+    while True:
+        total = tree[1]
+        if total <= 0:
+            break
+        elapsed += rng.exponential(1/total)
+        if elapsed > dt:
+            break
+        tick += 1
+
+        # Which flow and class, then which group
+        v = rng.random()*total
+        j = 1
+        while j < size:
+            if v < tree[2*j]:
+                j = 2*j
+            else:
+                v -= tree[2*j]
+                j = 2*j + 1
+        leaf = j - size
+        while leaf >= n_pairs or tree[size + leaf] <= 0: # Rounding at the end: the last with any chance
+            leaf -= 1
+        f, C = leaf//nC, leaf % nC
+        s = p.src[f]
+        a, b = cstart[C], cstart[C+1]
+        if s >= 0:
+            i = min(max(fen_find(fen, s, fen_sum(fen, s, a) + rng.random()*ysum[s, C], top), a), b - 1)
+            while y[s, order[i]] <= 0 and i > a:
+                i -= 1
+        else:
+            i = min(a + np.searchsorted(icum[f, a+1:b+1], icum[f, a] + rng.random()*isum[f, C], side='right'), b - 1)
+            while p.inflow[f, order[i]] <= 0 and i > a:
+                i -= 1
+        g = order[i]
+
+        # The event, as event() takes it
+        nch = 0
+        if s >= 0:
+            chc[nch], chd[nch] = s, -1.0
+            nch += 1
+        if p.named[f]:
+            flows[p.index[f], g] += 1
+        k = pick(rng, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, g, whole[f])
+        if k >= 0:
+            chc[nch], chd[nch] = p.tgt_comp[k], 1.0
+            nch += 1
+        k = pick(rng, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, g, False)
+        if k >= 0:
+            flows[p.crd_index[k], g] += 1
+
+        # What it changes: the counts of its group, and its class, place, and cells
+        C0, pl = cls[g], p.places[g]
+        dn = 0.0
+        moved = False
+        counted = False
+        for q in range(nch):
+            c, d = chc[q], chd[q]
+            y[c, g] += d
+            ysum[c, C0] += d
+            fen_add(fen, c, pos_of[g], d)
+            if people[c]:
+                dn += d
+            for kk in range(cs_starts[c], cs_starts[c+1]):
+                st = cs_sets[kk]
+                cnt[st, pl] += d
+                counted = True
+                for qq in range(se_starts[st], se_starts[st+1]):
+                    e = se_exps[qq]
+                    moved = True
+                    for t in range(nt):
+                        cell = p.levels[t, g]
+                        icnt[e, t, cell] += d
+                        num[e, t, cell] = num[e, t, cell] + d*p.rel_trans[e, g] if icnt[e, t, cell] != 0 else 0.0
+        if dn != 0:
+            npl[pl] += dn
+            counted = True
+            moved = True
+            for t in range(nt):
+                den[t, p.levels[t, g]] += dn
+        nm = 0
+        stamp[C0] = tick
+        marked[nm] = C0
+        nm += 1
+        if counted and counts:
+            for kk in range(pcs_start[pl], pcs_start[pl+1]):
+                if stamp[pcs[kk]] != tick:
+                    stamp[pcs[kk]] = tick
+                    marked[nm] = pcs[kk]
+                    nm += 1
+        for t in range(nt if moved else 0):
+            size_t, block = p.sizes[t], p.block[t]
+            i0 = p.levels[t, g]
+            n1 = 0 # The cells where who is present changes
+            if p.use[0, t]:
+                l = i0 % block
+                for kk in range(rstart[i0//block], rstart[i0//block + 1]):
+                    pb = p.sh_pair[1, rk[kk]]
+                    cell = pb*block + l
+                    d1[n1] = cell
+                    n1 += 1
+                    ad[t, cell] = 0.0
+                    for e in range(ne):
+                        an[e, t, cell] = 0.0
+                    for q in range(cstart_sh[pb], cstart_sh[pb+1]):
+                        x = ck[q]
+                        src_cell = p.sh_pair[0, x]*block + l
+                        ad[t, cell] += p.sh_val[x]*den[t, src_cell]
+                        for e in range(ne):
+                            an[e, t, cell] += p.sh_val[x]*num[e, t, src_cell]
+            else:
+                d1[0] = i0
+                n1 = 1
+                ad[t, i0] = den[t, i0]
+                for e in range(ne):
+                    an[e, t, i0] = num[e, t, i0]
+            for q in range(n1):
+                cell = d1[q]
+                for e in range(ne):
+                    prev[e, t, cell] = an[e, t, cell]/ad[t, cell] if ad[t, cell] > 0 else 0.0
+            n2 = 0 # The cells whose mixed prevalence changes
+            if p.use[1, t] and block == size_t:
+                for e in range(ne):
+                    mix(p.mat[t], prev[e, t], size_t, mx[e, t])
+                for cell in range(size_t):
+                    d2[cell] = cell
+                n2 = size_t
+            elif p.use[1, t]:
+                for q in range(n1):
+                    pb = d1[q]//block
+                    if place_stamp[t, pb] == tick:
+                        continue
+                    place_stamp[t, pb] = tick
+                    for ii in range(block):
+                        for e in range(ne):
+                            acc = 0.0
+                            for jj in range(block):
+                                acc += p.mat[t, ii, jj]*prev[e, t, pb*block + jj]
+                            mx[e, t, pb*block + ii] = acc
+                        d2[n2] = pb*block + ii
+                        n2 += 1
+            else:
+                for q in range(n1):
+                    d2[q] = d1[q]
+                    for e in range(ne):
+                        mx[e, t, d1[q]] = prev[e, t, d1[q]]
+                n2 = n1
+            n3 = 0 # The cells whose exposure changes
+            if p.use[2, t]:
+                for q in range(n2):
+                    pb, l = d2[q]//block, d2[q] % block
+                    for kk in range(cstart_sh[pb], cstart_sh[pb+1]):
+                        pa = p.sh_pair[0, ck[kk]]
+                        cell = pa*block + l
+                        if cell_stamp[t, cell] == tick:
+                            continue
+                        cell_stamp[t, cell] = tick
+                        for e in range(ne):
+                            acc = 0.0
+                            for r in range(rstart[pa], rstart[pa+1]):
+                                x = rk[r]
+                                acc += p.sh_val[x]*mx[e, t, p.sh_pair[1, x]*block + l]
+                            post[e, t, cell] = acc
+                        d3[n3] = cell
+                        n3 += 1
+            else:
+                for q in range(n2):
+                    d3[q] = d2[q]
+                    for e in range(ne):
+                        post[e, t, d2[q]] = mx[e, t, d2[q]]
+                n3 = n2
+            for q in range(n3):
+                cell = d3[q]
+                for kk in range(ccs_start[t, cell], ccs_start[t, cell+1]):
+                    if stamp[ccs[t, kk]] != tick:
+                        stamp[ccs[t, kk]] = tick
+                        marked[nm] = ccs[t, kk]
+                        nm += 1
+
+        # The rates of the classes it changes
+        for q in range(nm):
+            C = marked[q]
+            class_values(p, C, rep[C], expo, rate, post, cnt, npl, stack)
+            for ff in range(nf):
+                seg_set(tree, size, ff*nC + C, pair_rate(p.src, ff, C, rate, ysum, isum))
+    return
+
+
 @jit
 def mix(matrix, v, size, out):
     """ The product of the first `size` rows and columns of a mixing matrix with a vector (`matrix @ v`), into out; by BLAS when the whole matrix is used (so is contiguous) and is large enough that the call costs less than the loop """
@@ -1355,7 +1947,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     stages = 4 if solver == 0 else 1
     h = dt
     timed = solver == 3 or solver == 4 # Tau-leaping and the exact solver take steps of their own length
-    by_place = solver == 4 and p.local # The exact solver by place, where each place works out its own rates (see gillespie_places())
+    by_groups = solver == 4 and (not p.local or p.n_places == 1) and coupled(p, ng) # The exact solver for groups that affect each other (or are all in one place), following only what each event changes (see gillespie_groups())
+    by_place = solver == 4 and p.local and not by_groups # The exact solver by place, where each place works out its own rates (see gillespie_places())
     elapsed = 0.0 # For these: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
@@ -1393,6 +1986,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
 
                 for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term: see ss.solvers.Mixing.exposure()
                     s = p.exp_set[e]
+                    if s < 0: # The sum of the -s exposures before it, in order
+                        for g in range(ng):
+                            exposures[e, g] = exposures[e+s, g]
+                            for x in range(e+s+1, e):
+                                exposures[e, g] += exposures[x, g]
+                        continue
                     for g in range(ng):
                         exposures[e, g] = 0
                         infectious[g] = 0
@@ -1529,6 +2128,9 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                     for k in range(4):
                         varying = varying or len(tables[k]) > 1
                     gillespie_places(rng, y, p, w, end - elapsed, flows, varying)
+                    h = end - elapsed
+                elif by_groups: # The same for groups that affect each other
+                    gillespie_groups(rng, y, p, end - elapsed, flows)
                     h = end - elapsed
                 elif solver == 4: # The exact solver: up to the next event
                     h = event(rng, y, p, w, end - elapsed, flows)
@@ -1991,7 +2593,7 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 @jit
 def levels(raw):
     """ The level of each agent in a dimension, as whole numbers (0 for an agent with none) """
-    out = np.zeros(len(raw), dtype=np.int64)
+    out = np.zeros(len(raw), dtype=np.int32) # 32-bit, as the groups are kept
     for i in range(len(raw)):
         if raw[i] == raw[i]: # Not NaN
             out[i] = int(raw[i])
@@ -2063,6 +2665,65 @@ def one_thread(func, *args, **kwargs):
     ss.options.threads = 1
     nb.set_num_threads(1)
     return func(*args, **kwargs)
+
+
+blas_threads = [('openblas_set_num_threads', 'openblas_get_num_threads'), ('openblas_set_num_threads64_', 'openblas_get_num_threads64_'), ('scipy_openblas_set_num_threads', 'scipy_openblas_get_num_threads'),
+                ('scipy_openblas_set_num_threads64_', 'scipy_openblas_get_num_threads64_'), ('MKL_Set_Num_Threads', 'MKL_Get_Max_Threads')] # How each BLAS library sets and gives its number of threads
+blas_env = ['OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS']
+
+@contextlib.contextmanager
+def one_blas_thread():
+    """
+    One thread for NumPy's BLAS (OpenBLAS or MKL) while the workers of `ss.parallel()` or of a calibration are started, as
+    threadpoolctl's `threadpool_limits(1)` would: in the kernels, a dense mixing matrix of more than 16 levels is a matrix
+    product, which would otherwise take every core in each worker. It is set here, before the workers are forked (who
+    keep it), since setting it in a forked worker starts OpenBLAS's threads again there, which made each run twice as
+    long; workers started afresh take it from the environment. The libraries are found among those loaded, on Linux;
+    elsewhere (e.g. Accelerate on a Mac) only the environment is set. Restored afterwards.
+    """
+    libs = []
+    if os.path.exists('/proc/self/maps'):
+        with open('/proc/self/maps') as f:
+            paths = {line.split()[-1] for line in f if 'blas' in line.lower() or 'libmkl_rt' in line.lower()}
+        for path in sorted(paths):
+            try:
+                lib = ctypes.CDLL(path)
+            except OSError:
+                continue
+            libs += [(getattr(lib, setter), getattr(lib, getter)) for setter,getter in blas_threads if hasattr(lib, setter) and hasattr(lib, getter)]
+    env = {key:os.environ.get(key) for key in blas_env}
+    before = [getter() for setter,getter in libs]
+    try:
+        os.environ.update({key:'1' for key in blas_env})
+        for setter,getter in libs:
+            setter(1)
+        yield
+    finally:
+        for (setter,getter),n in zip(libs, before):
+            setter(n)
+        for key,val in env.items():
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+    return
+
+
+def start_method():
+    """
+    How to start the workers of `ss.parallel()` and of a calibration: as the platform does (on Linux, by fork, the
+    fastest), unless this process has started threads that a fork can deadlock on (Numba's, for the passes over a
+    large population, or JAX's); then by forkserver, whose workers start clean (W17)
+    """
+    if mp.get_all_start_methods()[0] != 'fork': # The first is the platform's default
+        return None
+    threads = 'jax' in sys.modules
+    try:
+        nb.threading_layer() # Only once Numba has started its threads
+        threads = True
+    except ValueError:
+        pass
+    return 'forkserver' if threads else None
 
 
 def compile_drivers(make):

@@ -245,7 +245,7 @@ class Pars(sc.objdict):
                     errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {newtype} is invalid"
                     raise TypeError(errormsg)
                 else:
-                    dist = ss.make_dist(new)
+                    dist = ss.distributions.make_dist(new)
                     self[key] = dist
 
         # It's a function, treat it like a number
@@ -416,7 +416,7 @@ class SimPars(Pars):
     def validate_agents(self):
         """ Check that n_agents is supplied and convert to an integer """
         named = getattr(self.people, 'named', None)
-        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see sim.init_named_people()
+        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see sim._init_named_people()
             self.n_agents = int(self.n_agents)
         elif self.people is not None:
             len_people = len(self.people)
@@ -455,7 +455,7 @@ class SimPars(Pars):
         self.validate_demographics()
 
         # Get all modules into a consistent list format
-        modmap = ss.module_map()
+        modmap = ss.modules.module_map()
         for modkey in modmap.keys():
             if not isinstance(self[modkey], ss.ndict):
                 self[modkey] = sc.tolist(self[modkey])
@@ -563,10 +563,10 @@ class SimPars(Pars):
         """
 
         out = []
-        modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
+        modmap = ss.modules.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modmap['modules'] = ss.Module # Enable passing in modules of any type via `Pars(modules=[...])`
         modmap['custom'] = ss.Module # Enable passing in modules of any type via `Pars(custom=[...])`
-        supported_modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
+        supported_modules = ss.modules.find_modules() # Each individual module class option, e.g. ss.SIR
         supported_modules['modules'] = sc.objdict({k:v for vv in supported_modules.values() for k,v in vv.items()})
         supported_modules['custom'] = supported_modules['modules']
 

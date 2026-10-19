@@ -117,7 +117,7 @@ class HIV(ss.Infection):
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
+        self.ti_infected[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
         return
 
     def set_congenital(self, uids, sources):

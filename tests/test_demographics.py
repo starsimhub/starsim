@@ -436,6 +436,12 @@ def test_count_based_births():
         ss.options.crn = orig_crn
 
     print(f'  Per-agent mean: {per_agent.mean():.0f}, count-based mean: {count_based.mean():.0f} ({rel_diff*100:.2f}% difference)')
+
+    # A bare rate above 1 is per 1,000 people, and below 1 per person, unless rate_units says
+    births = [ss.Births(birth_rate=rate, rate_units=units).pars.rate_units for rate,units in [(30, None), (0.03, None), (0.5, 1000), (0.5, 1)]]
+    assert births == [1e-3, 1, 1e-3, 1]
+    with pytest.warns(RuntimeWarning): # Could be either
+        ss.Deaths(death_rate=0.5)
     return per_agent, count_based
 
 

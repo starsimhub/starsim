@@ -52,6 +52,12 @@ def test_people():
     assert sim.results.n_alive[-1] == weights.sum() == 505
     assert np.isclose(sim.results.sis.n_I[-1], weights[sim.diseases.sis.I.raw[sim.people.auids]].sum())
 
+    # And in a declared model's rates: here infected agents who stand for 0.01 people each make I.frac 0.01, not 0.5
+    sis = ss.Disease(S, I, infection=S >> I @ ss.peryear(2)*I.frac, recovery=I >> S @ ss.years(1000), init=dict(I=0.5), name='sis')
+    sim = ss.Sim(sis, n_agents=1000, start=2000, stop=2001, verbose=0).init()
+    sim.people.scale[sim.diseases.sis.I.uids] = 0.01
+    assert sim.run().results.sis.infection[-1] < 50 # About 10 (unweighted, about 316)
+
     return ppl
 
 

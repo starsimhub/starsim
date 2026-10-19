@@ -1312,14 +1312,31 @@ class Delivery(Intervention):
         out.pop('pars', None)
         move = f'{self.move_states[0]} -> {self.move_states[1]}' if self.move_states is not None else self.move
         out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=move, disease=self.disease)
+        if self.product is not None: # What makes it, so that ss.to_code() can write it
+            out['product_spec'] = self.product.spec()
         if self.at_age is not None:
-            out['at_age'] = str(self.at_age)
+            out['at_age'] = spec_value(self.at_age)
         for key in delivery_keys + ['on_positive', 'on_negative']:
             val = getattr(self, dict(at='rounds', where='eligible').get(key, key))
             if val is None or (key == 'at' and not val):
                 continue
-            out[key] = val if sc.isnumber(val) else val.name if isinstance(val, Delivery) else str(getattr(val, '__name__', val))
+            out[key] = spec_value(val)
         return out
+
+
+def spec_value(val):
+    """ A value of a delivery or its product as plain data, for the model spec: typed values as in the rest of the spec, a function with its source, a module (e.g. a follow-up) by name, and a condition as text """
+    if val is None or isinstance(val, (bool, str)):
+        return val
+    elif isinstance(val, ss.Module):
+        return val.name
+    elif isinstance(val, (ss.conditions.Cond, ss.date)):
+        return str(val)
+    elif isinstance(val, (list, tuple)):
+        return [spec_value(v) for v in val]
+    elif isinstance(val, dict):
+        return {k:spec_value(v) for k,v in val.items()}
+    return ss.presentation.quantity_json(val, None, None)
 
 
 class vaccinate(Delivery):

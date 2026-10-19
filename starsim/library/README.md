@@ -23,13 +23,13 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `Cholera` | `CodedSEIR` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir |
-| `CodedSIR`, `CodedSEIR`, `CodedSIS` | `ss.Infection` | Starsim 3's SIR, SEIR, and SIS (with waning immunity), written as code: examples of a disease written as code, and base classes for the diseases here (the core `ss.SIR`, `ss.SEIR`, and `ss.SIS` are declared) |
-| `Ebola` | `CodedSEIR` | Ebola with severe disease and continued transmission from unburied bodies |
+| `Cholera` | `AgentSEIR` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir |
+| `AgentSIR`, `AgentSEIR`, `AgentSIS` | `ss.Infection` | Starsim 3's SIR, SEIR, and SIS (with waning immunity), written as code: examples of a disease written as code, and base classes for the diseases here (the core `ss.SIR`, `ss.SEIR`, and `ss.SIS` are declared) |
+| `Ebola` | `AgentSEIR` | Ebola with severe disease and continued transmission from unburied bodies |
 | `HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
 | `ART` | `ss.Intervention` | Scales up antiretroviral therapy over time; requires `HIV` |
 | `CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every timestep |
-| `Measles` | `CodedSEIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `Measles` | `AgentSEIR` | Measles as an SEIR model, with CDC natural history parameters |
 
 ### Networks (`networks/`)
 
@@ -46,8 +46,8 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `CongenitalDisease` | `CodedSIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic `set_congenital()`/`step_congenital()` framework |
-| `NeonatalSepsis` | `CodedSIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
+| `CongenitalDisease` | `AgentSIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic `set_congenital()`/`step_congenital()` framework |
+| `NeonatalSepsis` | `AgentSIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
 | `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via callbacks |
 | `fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes: preterm risk via delivery timing shifts, low birth weight via growth restriction |
 | `treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses accumulated fetal damage |

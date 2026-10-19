@@ -81,7 +81,7 @@ def test_siminf_scale():
     sc.heading('SimInf\'s herds and events ten times over: 16,000 herds and 4.7 million events, for four years')
     u0, register = read_register(paths.lfd/'examples'/'siminf'/'sir_herds'/'reference', copies=10) # Reading and converting the data is not timed, as in SimInf
     T = sc.timer()
-    sim = make_herds(u0, register, stop=1460, approx=False).init() # Exact, as SimInf: an ODE run gives about 6 million events, over the number at which solver="gillespie" takes tau leaps
+    sim = make_herds(u0, register, stop=1460).init() # Exact, as SimInf (about 6 million events): herds that do not affect each other are always run exactly
     build = T.toc(output=True)
     sim.run()
     run = T.toc(output=True) - build
