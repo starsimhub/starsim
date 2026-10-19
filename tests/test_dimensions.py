@@ -632,6 +632,25 @@ def test_ragged():
     return sims
 
 
+def test_sex():
+    """ As agents, a dimension of sex is people.female, for everyone including newborns """
+    sc.heading('Testing sex as a dimension of agents')
+    for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex=['female', 'male'], split=[0.7, 0.3])]:
+        si = ss.Disease(infection=ss.transmission('S -> I', beta=0.01), init_prev=0.05, name='si')
+        sim = ss.Sim(si, networks=ss.MFNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
+        if 'split' in kw:
+            assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
+        sim.run()
+        ppl = sim.people
+        strat = sim.strats[0]
+        women = ppl[strat.attr].raw[ppl.auids] == strat.female
+        assert np.array_equal(women, ppl.female.raw[ppl.auids]), f'{kw}: the levels of sex disagree with people.female'
+        assert sim.results.si.n_S.select(**{strat.name: strat.labels[strat.female]})[-1] == (ppl.female & sim.diseases.si.S).sum()
+    with pytest.raises(ValueError, match='people.female'):
+        ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.01), name='si'), n_agents=100, stratify=dict(sex=['a', 'b']), verbose=0).init()
+    return
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -640,3 +659,4 @@ if __name__ == '__main__':
     space   = test_space()
     register = test_register()
     ragged  = test_ragged()
+    sex     = test_sex()
