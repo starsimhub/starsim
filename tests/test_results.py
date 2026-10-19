@@ -162,6 +162,14 @@ def test_flow_ratios():
                 assert np.allclose(weekly.select(age='0-49') + weekly.select(age='50+'), weekly) and np.isclose(weekly[1], res.infection[8:15].sum())
                 assert res.n_S.resample('week')[1] == res.n_S[14] # A stock at the end of each week
                 assert np.isclose(res.incidence.resample('week')[1], res.infection[8:15].sum()/res.n_S[8:15].sum()) # A ratio of the sums of its parts
+
+    # A ratio with nobody in its denominator is 0 (nothing divided by anything), not an error
+    for solver in ['ode', 'abm']:
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), share=R/R, init=dict(I=0.01), name='sir')
+        res = ss.Sim(sir, unit='day', stop=10, total_pop=10_000, n_agents=small*10, solver=solver, verbose=0).run().results.sir
+        assert res.share[0] == 0 and res.share[-1] == 1
+
     return sim
 
 
