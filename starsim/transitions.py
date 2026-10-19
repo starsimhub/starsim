@@ -303,6 +303,7 @@ class Transition(Nameable):
         offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
+        undriven (bool): declare that it has no rate, duration, p=, or trigger on purpose, so only products, deliveries, or code move people along it; a sim with none of them does not warn (`ss.UndrivenUnused`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -310,6 +311,7 @@ class Transition(Nameable):
         ```python
         S, I, R = ss.states(3)
         infection = ss.Transition(S, I, rate=0.05 * I)
+        cure      = ss.Transition(I, S, undriven=True) # Only by treatment
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
         selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
@@ -319,12 +321,16 @@ class Transition(Nameable):
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False):
         if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
             rate, on = None, rate
         if sum(x is not None for x in [rate, dur, on]) > 1:
             errormsg = 'A transition takes one of rate=, dur=, or on='
             raise ValueError(errormsg)
+        if undriven and any(x is not None for x in [rate, dur, on, p, beta]):
+            errormsg = 'undriven=True is for a transition with no rate=, dur=, p=, or on=; it was given one'
+            raise ValueError(errormsg)
+        self.intended = bool(undriven) # Declared undriven on purpose, so not warned about (ss.UndrivenUnused)
         if stages is not None and rate is not None:
             errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
             raise ValueError(errormsg)
@@ -646,7 +652,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -664,11 +670,12 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
         on (Cond/Event/func): a trigger, the same as `rate=ss.on(...)` (see `ss.on`)
         acquisition (bool): whether it is an acquisition of the disease (see `ss.Transition`), e.g. `ss.progression('S -> V', rate=..., acquisition=False)` for a vaccination
+        undriven (bool): no driver on purpose: only products, deliveries, or code move people along it (see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, undriven=undriven, name=name, label=label)
 
 
 class Per:

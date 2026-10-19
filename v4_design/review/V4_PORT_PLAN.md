@@ -232,3 +232,5 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 70 | 31e7089c | 263bae4b | preg.attr() is an ss.attr on a pregnancy transition; Recorded removed (expressions.py, engine, agents). |
 | 71 | ac5ef437 | b7c6ad23 | CLAUDE.md: the two Pregnancy lines only. Ruling: dropped the commit's stray LLM preamble and ```markdown fence around the file (a mistake in v4-rs). |
 | 72 | 331b4013 | 5ee7265c | Trimester UIDs and rel_ptb/set_ptb on ss.Pregnancy: applied cleanly. |
+| 73 | 3704190c | 8340789d | Ruling: v4 wins on condoms — protection is ss.modify(infection, efficacy=, share=lambda net: net.edges.condoms, route=) (v4 graph steers eff_condom there), so no eff_condom in net_beta. Kept: condoms edge column with edge_defaults on SexualNetwork, Disease.value(). Test rewritten to the modifier. |
+| — | 5b1a2a62 | — | Superseded by v4: an age stratification with no split takes the named world population's ages (or the people given: split_from='people'); v4-rs's uniform-0-60 People default would contradict it. Log only. |

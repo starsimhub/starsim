@@ -59,6 +59,13 @@ def test_undriven():
         assert np.isclose(res.sis.cure.sum(), 0.9*res.tx.delivered.sum(), rtol=0.05)
         assert res.sis.cure.sum() > 0
 
+    # Declared undriven on purpose (moved only by treatment, which this sim has none of): not warned about
+    for form in [lambda S, I: ss.Transition(I, S, undriven=True), lambda S, I: ss.progression('I -> S', undriven=True)]:
+        sis = make_sis(form)
+        assert sis.cure.undriven and not w209(ss.Sim(sis, stop=10, **kw))
+    with pytest.raises(ValueError, match='undriven'): # It cannot also have a driver
+        ss.progression('I -> S', rate=0.1, undriven=True)
+
     with pytest.raises(ss.UndrivenTransition): # An inflow still needs a rate
         ss.Disease(births=ss.Transition(ss.null, 'S'), infection=ss.transmission('S -> I', beta=0.3))
     return sim

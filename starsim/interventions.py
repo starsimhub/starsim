@@ -760,7 +760,7 @@ def check_undriven(sim):
     """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.UndrivenUnused`) """
     for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
-            if tr.undriven and not movers(sim, mod.name, name):
+            if tr.undriven and not getattr(tr, 'intended', False) and not movers(sim, mod.name, name):
                 ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.UndrivenUnused)
     return
 
