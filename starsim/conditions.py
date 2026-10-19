@@ -267,7 +267,8 @@ class Event(Cond):
         """ The agents the event happened to, in a running sim """
         engine = getattr(self.module, 'engine', None)
         if engine is None:
-            errormsg = f'{self.label} has no agents yet: .uids is for a module in a sim that has been initialized'
+            how = ' (a module given by name, as in ss.state(), is found by the sim: use the event as a condition or in on=)' if isinstance(self.module, str) else ''
+            errormsg = f'{self.label} has no agents yet: .uids is for a module in a sim that has been initialized{how}'
             raise ValueError(errormsg)
         if not isinstance(engine, ss.solvers.Agents):
             raise ss.CapabilityError(f'{self.label}.uids is a list of agents, which exist only with solver="abm".')
@@ -380,18 +381,42 @@ def clock(within, bins=None):
     return ss.expressions.Clock(states, bins=bins)
 
 
+class StatePath(Cond):
+    """ `ss.state('mod.X')`: a condition, with the events of entering and leaving the state """
+    __hash__ = Cond.__hash__
+
+    @property
+    def enter(self):
+        """ The event of entering the state, e.g. `on=ss.state('ng.C').enter` """
+        return Event('enter', [tuple(self.args)])
+
+    @property
+    def exit(self):
+        """ The event of leaving the state """
+        return Event('exit', [tuple(self.args)])
+
+
 def state(path):
     """
     A state of a module by its path, resolved when the condition is evaluated: for a module made before the others exist
 
+    It is a condition (the people in the state), and `.enter` and `.exit` are its events, as for a declared state.
+    A path to a transition (`'ng.cure'`) is the condition of having gone through it.
+
     Args:
         path (str): the module and the state, e.g. `'hpv18.X'`
+
+    Examples:
+        ```python
+        cancelled = (S | P | C | L) >> Z @ ss.on(ss.any(ss.state(f'{g}.X') for g in others))
+        seek = ss.treat(drug, on=ss.state('ng.C').enter) # For a module made from a string
+        ```
     """
     parts = path.split('.') if isinstance(path, str) else []
     if len(parts) != 2 or not all(parts):
         errormsg = f'ss.state() takes a path "module.state", e.g. "hpv18.X", not {path!r}'
         raise ValueError(errormsg)
-    return Cond('state', *parts)
+    return StatePath('state', *parts)
 
 
 def any_(items):
@@ -467,6 +492,11 @@ def state_refs(obj):
         if cond.op == 'state':
             if modname(cond.args[0]) is not None:
                 out.append((modname(cond.args[0]), cond.args[1]))
+        elif isinstance(cond, Event) and not isinstance(cond, Child): # The transition, or the states entered or left
+            kind, obj, dst = cond.args
+            name = modname(cond.module)
+            if name is not None:
+                out.extend([(name, obj.name)] if kind in ['tr', 'to'] else [(name, n) for n in cond.names])
         elif cond.op not in leaves:
             for arg in cond.args:
                 if isinstance(arg, Cond):

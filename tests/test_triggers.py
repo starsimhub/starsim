@@ -98,6 +98,19 @@ def test_on_event():
         assert res.b.flag.sum() > 100
         assert res.b.flag.sum() <= res.a.sa.sum() # Only those infected (and in S of b at the time)
         assert np.isclose(res.b.flag[1:].sum(), res.a.sa[1:].sum(), rtol=0.25)
+
+    # The events of a state by path, for modules made from strings: the same as the state's own
+    def by_path(path):
+        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+        S, F, G = ss.states('S F G')
+        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.state('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
+        on = [ss.state('a.I').exit] if path else [a.I.exit] # A transition by path (ss.state('a.sa')) is not known to be an event when the delivery is made, so is not an on=
+        dx = [ss.screen(ss.Diagnostic(), on=x, name=f'dx{i}') for i,x in enumerate(on)]
+        return ss.Sim([a, b], interventions=dx, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run().results
+    direct, path = by_path(False), by_path(True)
+    assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
+    assert path.dx0.delivered.sum() > 100 and np.array_equal(path.dx0.delivered.values, direct.dx0.delivered.values)
+
     with pytest.raises(ss.CapabilityError): # Not yet as compartments
         a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
         b = ss.Disease(flag=ss.progression('S -> F', on=a.sa), name='b')

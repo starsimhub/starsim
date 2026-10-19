@@ -238,3 +238,4 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 75 | b35d005c | 26283a09 | Remapped to v4: follow-ups are cascade steps/on_fail steps (_add_steps), so ss.Sim also applies _add_steps to interventions given in pars= (before the copy; at validation the copies break identity). Test: a SubSim passing a cascade in pars. The order-of-list half is v4's order_steps already. |
 | — | e924ee52 | — | B2 (synchronized flows: ss.on(other.tr) as compartments): deferred |
 | — | ab75d5ad | — | B2 (synchronized flows for moves by an intervention, compartments): deferred |
+| 76 | dc83aea1 | a4f087f4 | Remapped to v4's indexing: seeds that move on at the start (from a junction) are counted in the flows at the start (index 0) rather than zeroed, and their events are dated just before step 0 (key ti-1) so deliveries see them once — v4 delivered them twice (index 0 and 1) with a 0 flow. The dur=0 case already matched. |
