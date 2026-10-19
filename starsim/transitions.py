@@ -283,7 +283,7 @@ class Transition(Nameable):
         return ss.conditions.Cond('incidence', self, over, by) # The transition itself, since it may be named and given its module later
 
     def _set_src(self, src):
-        self.src = [] if src is null else [s for s in sc.tolist(src)]
+        self.src = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
         return self
 
     def _set_dst(self, dst):

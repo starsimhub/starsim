@@ -109,6 +109,12 @@ def test_forms():
     with ss.options.context(crn=False):
         assert make(0.05).hash().config != config
     assert base.hash().data is None and make(0.05, data=pd.DataFrame(dict(t=[10], n_I=[5]))).hash().data is not None
+    # Several sources as a sum of states, in the explicit form
+    S, I, R, D = ss.states(4)
+    death = ss.Transition(I + R, D, rate=0.01, name='death')
+    assert death.src == [I, R]
+    many = ss.Disease(S >> I @ 0.05*I, I >> R @ 10, death, name='sir')
+    assert [s.name for s in many.graph.transitions.death.src] == ['I', 'R']
     return forms
 
 
