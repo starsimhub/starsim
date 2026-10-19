@@ -91,6 +91,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.FloatArr('parity', label='Parity', default=0),
             ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
             ss.BoolState('fetal', label='A fetus, as an agent'),
+            ss.FloatArr('rel_ptb_base', default=1.0, label='Starsim 3: baseline relative risk of preterm birth (not used: see set_ptb())'),
+            ss.FloatArr('rel_ptb', default=1.0, label='Starsim 3: relative risk of preterm birth (not used: see set_ptb())'),
         )
         self.rng_md = ss.random() # For a plain number as p_maternal_death
         self.fetus = fetus # Whether fetuses are agents, from conception: see init_fetus()
@@ -317,6 +319,44 @@ class Pregnancy(ss.Demographics, ss.Disease):
         """ Starsim 3: whether breastfeeding (`lactation.L`) """
         lact = self.lactation
         return lact.L if lact is not None else None
+
+    def _trimester(self, i):
+        """ Starsim 3: the UIDs of women in a trimester (0, 1, 2), by `pars.trimesters` """
+        uids = self.P.uids
+        ga = ss.years((self.ti - self.ti_P[uids])*self.t.dt_year)
+        lo, hi = ([None] + list(self.pars.trimesters) + [None])[i:i+2]
+        keep = np.ones(len(uids), dtype=bool)
+        if lo is not None: keep &= ga >= lo
+        if hi is not None: keep &= ga < hi
+        return uids[keep]
+
+    @property
+    def tri1_uids(self):
+        """ Starsim 3: the UIDs of women in their first trimester """
+        return self._trimester(0)
+
+    @property
+    def tri2_uids(self):
+        """ Starsim 3: the UIDs of women in their second trimester """
+        return self._trimester(1)
+
+    @property
+    def tri3_uids(self):
+        """ Starsim 3: the UIDs of women in their third trimester """
+        return self._trimester(2)
+
+    def set_ptb(self):
+        """
+        Starsim 3: reset `rel_ptb` to `rel_ptb_base` times the risk by maternal age (`pars.rr_ptb_age`). The declared
+        pregnancy has no preterm births yet, so `rel_ptb` changes nothing; use ss.LegacyPregnancy for them
+        """
+        if not getattr(self, '_warned_ptb', False):
+            ss.warn('ss.Pregnancy has no preterm births yet: rel_ptb is kept but changes nothing. Use ss.LegacyPregnancy for preterm births.')
+            self._warned_ptb = True
+        bins, rr = self.pars.rr_ptb_age
+        age_ind = np.searchsorted(np.asarray(bins).astype(int), self.sim.people.age, side='left')
+        self.rel_ptb[:] = self.rel_ptb_base[:]*np.asarray(rr)[age_ind]
+        return
 
     def find_unborn_children(self, parent_uids):
         """ Starsim 3: the fetuses (as agents) of some mothers """

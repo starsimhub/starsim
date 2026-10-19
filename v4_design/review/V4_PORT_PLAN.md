@@ -230,3 +230,4 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | — | fc7c8bd5 | — | B (ss.spread as compartments): deferred; its agents test went in with 69, ODE half strict xfail |
 | — | 584b4373 | — | B6 (HPV antibodies as levels, ODE vs agents) + implementation.md: deferred |
 | 70 | 31e7089c | 263bae4b | preg.attr() is an ss.attr on a pregnancy transition; Recorded removed (expressions.py, engine, agents). |
+| 71 | ac5ef437 | b7c6ad23 | CLAUDE.md: the two Pregnancy lines only. Ruling: dropped the commit's stray LLM preamble and ```markdown fence around the file (a mistake in v4-rs). |

@@ -225,6 +225,12 @@ def test_legacy():
         assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
         assert np.all(p.pregnant[p.pregnant.uids]) and np.all(p.ti_delivery[p.pregnant.uids] >= p.ti - 1) # Within a step: ss.LegacyPregnancy keeps fractional due times
         assert np.nanmax(p.gestation[p.pregnant.uids]) < 45 and np.all(p.parity >= 0)
+        tris = [p.tri1_uids, p.tri2_uids, p.tri3_uids] # Starsim 3 names read by STIsim (e.g. BV, PMTCT)
+        assert all(len(t) for t in tris) and sum(len(t) for t in tris) == len(p.pregnant.uids)
+        if cls is ss.Pregnancy:
+            with pytest.warns(RuntimeWarning): # No preterm births yet: rel_ptb is kept for code that writes it
+                p.set_ptb()
+            assert np.all(p.rel_ptb[p.pregnant.uids] >= 1)
     a, b = out.Pregnancy.pregnancy, out.LegacyPregnancy.pregnancy
     for key in ['pregnancies', 'births']:
         assert np.isclose(a[key].sum(), b[key].sum(), rtol=0.15), key
