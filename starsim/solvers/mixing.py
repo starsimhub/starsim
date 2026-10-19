@@ -257,6 +257,20 @@ class Mixing:
                                                      f'     Fix: leave out states= to stratify every state, or use contacts that do not depend on "{strat.name}".')
         return
 
+    def check_reciprocal(self, net, strat, mat):
+        """ Say if a contact matrix is not reciprocal for the dimension's split: the contacts of the people in level i with level j should equal those of j with i, N_i·C_ij = N_j·C_ji """
+        split = getattr(strat, 'split', None)
+        if split is None or np.ndim(split) != 1 or len(split) != len(mat):
+            return
+        flows = np.asarray(split, dtype=float)[:, None]*mat # Contacts from level i to level j, per person in the population
+        scale = np.maximum(np.maximum(flows, flows.T), 1e-300)
+        gap = np.abs(flows - flows.T)/scale
+        if np.max(gap[scale > 1e-12*flows.max()], initial=0) > 0.05:
+            i, j = np.unravel_index(np.argmax(np.where(scale > 1e-12*flows.max(), gap, 0)), gap.shape)
+            ss.note(f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
+                    f'but {strat.labels[j]} have {mat[j, i]:.3g} each with {strat.labels[i]} ({flows[j, i]:.3g}); it is used as given, with rows as the contacts of a person in each level', sim=self.sim)
+        return
+
     def dim_matrices(self, net, beta):
         """ A contact matrix for each of one or more of the model's dimensions: the contacts between two groups are the product of the entries """
         sim = self.sim
@@ -270,6 +284,7 @@ class Mixing:
             if len(mat) != strat.n:
                 raise ss.ShapeError(f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
             self.check_ragged(names.index(dim), net)
+            self.check_reciprocal(net, strat, np.asarray(mat, dtype=float))
             cells = cells*strat.n + sim.groups.group_coords[:, names.index(dim)]
             matrix = np.kron(matrix, mat)
         return sc.objdict(kind='matrix', cells=cells, matrix=matrix*beta, name=net.name, dim=names.index(list(net.dims)[0]), dims=[names.index(dim) for dim in net.dims])

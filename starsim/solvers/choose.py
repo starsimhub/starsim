@@ -145,6 +145,8 @@ def choose_solver(sim):
         if 'n_agents' not in sim.given and ('people' not in sim.given or sim.named_unsized) and 'total_pop' in sim.given:
             pars.n_agents = int(min(pars.total_pop, pars.n_agents))
             pars.pop_scale = pars.total_pop/pars.n_agents
+            if pars.pop_scale > 1000 and 'solver' not in sim.given: # Chosen for the user, at a scale they did not choose either
+                ss.note(f'running as agents ({reason}), with the default {pars.n_agents:n} agents for total_pop={pars.total_pop:n}, so each agent stands for {pars.pop_scale:n} people; give n_agents= for more, since small numbers (a seed, a fade-out) are coarse at this scale', sim=sim)
         sim.mixing.init_pools()
     else:
         for cap in sim.capabilities:

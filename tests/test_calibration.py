@@ -369,11 +369,12 @@ def test_particle_mcmc():
     with pytest.raises(ss.NoPosterior): # A posterior needs a likelihood
         make(data=data).calibrate(method='pmcmc', gof='nae')
 
-    # A best fit scores each point by the mean of several runs with the same seeds, and reports the score it minimized
+    # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
     best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
     assert len(best.scores) == 4 # The default for a stochastic compartmental sim
     assert ss.calibration.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
-    assert np.isclose(best.mismatch, best.trials.objective.min())
+    assert np.isclose(best.mismatch, np.mean(best.scores))
+    assert best.trials.objective.nunique() == len(best.trials) # Fresh seeds, so no two trials share their chance
     return fit
 
 

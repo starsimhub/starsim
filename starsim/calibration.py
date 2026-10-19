@@ -2694,6 +2694,7 @@ class Problem:
         self.stochastic = probe.solver not in ['ode']
         self.n_runs = sc.ifelse(n_runs, 4 if self.stochastic and probe.solver != 'abm' else 1) # A stochastic compartmental sim is scored over several runs, so the fit is not to one draw of chance; agents, whose runs are slow, by one run a point, as Optuna's search averages over nearby points
         self.seeds = [sc.ifelse(base.pars.rand_seed, 1) + i for i in range(self.n_runs)] # The same seeds at every point (common random numbers), so the score changes only with the values
+        self.fresh = False # Whether each evaluation takes seeds of its own; see choose()
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
         self.can_restart = runner.init().kernel_only() and not contacts # The mixing is worked out when the sim is built, so a new value needs a new sim
@@ -2709,8 +2710,11 @@ class Problem:
             if verbose:
                 print(f'Fitting by {method} ({why}; override with method=)')
         self.use_map = self.use_lik and any(self.priors) and method not in sampling_methods and method != 'if2' # A posterior method uses the priors itself, and IF2 finds the maximum likelihood
+        self.fresh = self.stochastic and method == 'optuna' # Optuna's search learns from nearby points, so with fresh seeds at each it averages over chance, rather than fitting one seed's realization; a local method needs the same seeds, or its steps follow the noise
         if verbose and self.stochastic and method not in ['pmcmc', 'abc-smc', 'if2']: # Which take a run of their own for each point
-            print(f'Scoring each point by the mean of {self.n_runs} runs, with the same seeds at every point (override with n_runs=)' if self.n_runs > 1 else 'Scoring each point by one run, with the same seed at every point (override with n_runs=)')
+            runs = f'the mean of {self.n_runs} runs' if self.n_runs > 1 else 'one run'
+            seeds = 'fresh seeds at each point' if self.fresh else ('the same seeds at every point' if self.n_runs > 1 else 'the same seed at every point')
+            print(f'Scoring each point by {runs}, with {seeds} (override with n_runs=)')
         if verbose and self.use_map:
             print(f'Minimizing the negative log-posterior, since {sc.strjoin(np.array(self.names)[self.priors])} {"has a prior" if sum(self.priors) == 1 else "have priors"}')
         filtered = ParticleFilter.reason(self.runner)
@@ -2759,7 +2763,10 @@ class Problem:
 
     def objective(self, x):
         """ What an optimizer minimizes: the mean score over the runs (plus the penalty of the priors); each evaluation is recorded """
-        values = [self.measure(self.run(x, seed=seed)) for seed in self.seeds]
+        seeds = self.seeds
+        if self.fresh: # Seeds of this evaluation's own, after those of the evaluations before it
+            seeds = [seed + self.n_runs*len(self.trials) for seed in seeds]
+        values = [self.measure(self.run(x, seed=seed)) for seed in seeds]
         value = float(np.mean(values)) + self.penalty(x)
         self.trials.append(dict(zip(self.names, x), objective=value))
         return value
@@ -2978,6 +2985,22 @@ def fit_asd(problem, scan=None, stepsize=0.1, **kwargs):
     return sc.objdict(best=p.decode(result.x), converged=converged, why=result.exitreason)
 
 
+def smoothed_best(zs, values):
+    """
+    The index of the point whose neighbors score lowest: each score is replaced by
+    the mean of all scores weighted by a Gaussian kernel of the distance between
+    points, on the scale searched on, with a width for each parameter by Scott's
+    rule. For scores from fresh random seeds, whose lowest value picks out chance
+    as much as the values.
+    """
+    n, d = zs.shape
+    width = np.maximum(zs.std(axis=0), 1e-6)*n**(-1/(d + 4)) # Scott's rule, for each parameter
+    dists = (((zs[:,None,:] - zs[None,:,:])/width)**2).sum(axis=-1)
+    weights = np.exp(-0.5*dists)
+    smoothed = (weights*values[None,:]).sum(axis=1)/weights.sum(axis=1)
+    return int(np.argmin(smoothed))
+
+
 def fit_optuna(problem, trials=None, n_trials=100, scan=None, **kwargs): # The search starts from the initial values, not from a scan
     """ Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials """
     import optuna
@@ -2995,6 +3018,9 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, **kwargs): # The s
         raise TypeError(errormsg)
     study.optimize(trial_objective, n_trials=sc.ifelse(trials, n_trials), **kwargs) # Optuna's own name works too
     best = np.array([study.best_params[name] for name in p.names])
+    if p.fresh and len(p.trials) >= 10: # With fresh seeds the lowest trial is the luckiest, which favors values whose runs vary most, so take the trial whose neighbors score lowest
+        tried = pd.DataFrame(p.trials)
+        best = tried[p.names].values[smoothed_best(p.encode(tried[p.names].values), tried.objective.values)]
     values = np.array([t.value for t in study.trials if t.value is not None])
     early = values[:max(1, int(np.ceil(0.75*len(values))))].min() # The best before the last quarter of the trials
     gain = (early - values.min())/max(abs(early), 1e-12)
@@ -3163,7 +3189,7 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
         method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with each chain started from one of the best points of a scan over the bounds that are apart; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run, and for a point estimate of one or two parameters, where it is faster than gradients), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, 'pmcmc' (particle MCMC, the default for a stochastic compartmental sim whose data series all have a likelihood: a posterior, from a random-walk Metropolis sampler with the likelihood estimated by a particle filter; see `ss.ParticleFilter`), 'if2' (iterated filtering, for the same sims: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `Swarm`), or 'optuna' (the default for other stochastic sims, including agent-based ones: a best fit, not a posterior)
         scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy), each NUTS chain from one of the best that are apart, and particle MCMC from the best
-        n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), and `fit.mismatch` is that score at the best fit
+        n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance; `fit.mismatch` is the score at the best fit over the first seeds
         rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
         verbose (bool): whether to print progress
         kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.calibration.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)

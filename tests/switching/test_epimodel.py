@@ -52,7 +52,6 @@ def test_epimodel_risk_groups():
     return prevs
 
 
-@pytest.mark.xfail(reason='W13: an agent fit scores each point by one run (Cliff, Oct 19), and 40 trials of 300 agents leave fresh runs at the fitted beta at 23.4% prevalence against the 30% fitted to (33.8% with n_runs=4, 27.2% with n_runs=10)', strict=False)
 def test_epimodel_fit():
     sc.heading('EpiModel: fit the transmission probability to observed prevalence')
     data = pd.DataFrame(dict(t=[50, 62, 75, 87, 100], prevalence=ref_target))

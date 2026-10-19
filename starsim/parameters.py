@@ -1113,7 +1113,7 @@ class seasonal(TimeValue):
     Args:
         mean (any): the mean over the year: a number or a typed quantity
         amplitude (float): the size of the cycle relative to the mean (0.3 means from 70% to 130% of it)
-        peak (str/float): when the value is highest: a month (its middle is used), or a fraction of the year
+        peak (str/float/dur): when the value is highest: a month (its middle is used), a fraction of the year (0 to 1), or a time of year (e.g. `ss.days(142)`)
 
     Examples:
         ```python
@@ -1135,7 +1135,13 @@ class seasonal(TimeValue):
                 raise ValueError(errormsg)
             self.peak_frac = (matches[0] + 0.5)/12
         else:
-            self.peak_frac = float(peak)
+            if isinstance(peak, ss.dur): # A time of year, e.g. ss.days(142)
+                self.peak_frac = float(peak.years) % 1
+            else:
+                self.peak_frac = float(peak)
+                if sc.isnumber(peak) and not 0 <= self.peak_frac <= 1:
+                    errormsg = f'The peak of ss.seasonal() is a month (e.g. "May") or a fraction of the year from 0 to 1, not {peak}; for a day of the year, give ss.days({peak}) or {peak}/365'
+                    raise ValueError(errormsg)
         return
 
     def __repr__(self):

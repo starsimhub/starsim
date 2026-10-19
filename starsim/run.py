@@ -122,7 +122,7 @@ class MultiSim:
         return
 
     _removed = { # Starsim 3 methods, with what to write instead
-        'reduce': "msim.results.<module>.<result>, which has a run axis first: .median(), .mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]); msim.plot() draws the median and an interval of each scenario",
+        'reduce': "msim.results.<module>.<result>, which has a run axis first: .median(), .mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]) pool every run, as reduce() did, and .select(scenario=...) keeps one scenario; msim.plot() draws the median and an interval of each scenario",
         'mean':   "msim.results.<module>.<result>.mean() (each result has a run axis first); msim.plot() draws the scenarios",
         'median': "msim.results.<module>.<result>.median() (each result has a run axis first); msim.plot() draws the scenarios",
         'reset':  "nothing (the results across runs are kept beside the sims, so there is nothing to undo)",

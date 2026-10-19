@@ -451,7 +451,7 @@ def test_other():
 
     print('Testing MF network relative participation')
     mf = ss.Sim(n_agents=1000, networks=ss.MFNet(rel_part_rates=0.5), verbose=0).init().networks.mfnet
-    assert 0.35 < mf.participant.mean() < 0.55 # Default participation is 0.9, so expect ~0.45
+    assert 0.35 < mf.participant[mf.decided].mean() < 0.55 # Default participation is 0.9, so expect ~0.45 among those past their debut (the rest are decided at it)
 
     print('Testing other network methods')
     msm.validate()
@@ -616,6 +616,14 @@ def test_partner_targets():
     assert np.isclose(res.mean_degree[60:].mean(), 0.7, rtol=0.03) and np.isclose(res.concurrency[60:].mean(), 0.1, rtol=0.1)
     with pytest.raises(ValueError, match='n_contacts'):
         ss.Sim(diseases=ss.SIS(), networks=ss.MFNet(concurrency=0.1), n_agents=500, verbose=0).init()
+
+    # In an open population with long partnerships, newcomers join and the target holds (HP9 to HP11: before, 0.65 against 0.87, and nobody born in the run took part)
+    mf = ss.MFNet(n_contacts=0.87, dur=ss.lognorm_ex(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
+    sim = ss.Sim(diseases=ss.SIS(), networks=mf, demographics=[ss.Births(birth_rate=35), ss.Deaths(death_rate=15)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
+    ppl, mf = sim.people, sim.networks.mf
+    born = (ppl.alive & (ppl.age >= 18) & (ppl.age < 40)).uids # All born during the run, when the probability at birth was 0
+    assert np.isclose(mf.participant[born].mean(), 0.9, atol=0.04)
+    assert np.isclose(mf.results.mean_degree[-10:].mean(), 0.87, rtol=0.05)
     return sim
 
 

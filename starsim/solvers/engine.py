@@ -574,6 +574,7 @@ class Engine:
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
         sim = self.sim
         self.adjust = sc.objdict({name:None for name in self.graph.transitions})
+        self.adjust_dims = sc.objdict({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by
         self.strain_adjust = sc.objdict({name:None for name in self.graph.transitions}) # For a transmission: a multiplier for each strain, which is the strain of the person it comes from
         self.rel_adjust = dict(rel_trans=[], rel_sus=[]) # Multipliers on infectiousness and susceptibility, as (dimension, value for each level), for the states the dimension applies to
         for strat in self.graph.strats + [s for s in sim.groups.sim_strats if s not in self.graph.strats]:
@@ -600,6 +601,7 @@ class Engine:
                     else:
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*sim.groups.group_vals(d, vals)
+                        self.adjust_dims[name].add(d)
         for name,tr in self.graph.transitions.items(): # A value by level of a dimension that the states moved have no level of: there is no level to take (it took the first)
             ends = tr.src or tr.dst or []
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
@@ -894,6 +896,10 @@ class Engine:
                 first = graph.first.name
                 unset = [s.name for s in graph.people_states if s.init is None]
                 where = f'Say where the rest start, e.g. {unset[-1]}={np.max(rest):.4g}' if unset else 'Give initial values that sum to 1'
+                apart = [s.name for s in graph.count_states if isinstance(s.init, (int, float)) and 0 < s.init < 1] # Given a share of the population, but not connected to the people
+                if apart:
+                    where = (f'{sc.strjoin(apart)} {"is" if len(apart) == 1 else "are"} given a share of the population but no transition connects {"it" if len(apart) == 1 else "them"} to {first}, so {"it is a count" if len(apart) == 1 else "they are counts"}, not people. '
+                             f'If they are people (e.g. a second risk group), declare them with ss.State(people=True)')
                 errormsg = (f'The initial values of "{self.mod.name}" sum to {np.min(total):n}, not 1, and it is not clear where the rest start: {first} is given a value, which is kept, '
                             f'and {"no other state is left without one" if not unset else f"{sc.strjoin(unset)} are not given one"}.\n'
                             f'     {where}.')
@@ -963,6 +969,9 @@ class Engine:
         for name,tf in graph.transfers.items():
             results += ss.Result(name, dtype=float, scale=abm, label=tf.label or name, kind='flow')
             self.flowcounts[name] = 0.0
+            dur = getattr(tf.dur, 'raw', tf.dur)
+            if isinstance(dur, ss.Dist) and not isinstance(dur, ss.expon): # A transfer is a rate, so its people leave at a constant rate whatever the distribution
+                ss.note(f'the transfer "{name}" moves people at a constant rate, one over the mean of its dur= ({type(dur).__name__}), so the time before it is exponential, not that distribution', sim=self.sim)
         mod.define_results(*results)
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()

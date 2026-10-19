@@ -369,7 +369,9 @@ def test_space():
         data = sc.dataframe(date=truth.timevec, **{f'infection[patch={p}]': truth.select(patch=p) for p in 'abc'})
         away = ss.par(0.1, bounds=[0.002, 0.3])
         fit = ss.Sim(commuters(away), data=data, solver=solver, **pars).calibrate(verbose=0)
-        assert np.isclose(fit.pars.away, 0.02, rtol=0.05), f'Expected to recover away=0.02 with {solver}, not {fit.pars.away}' # Before, a TypeError at init
+        rtol = 0.05 if solver == 'ode' else 0.2 # A stochastic fit takes fresh seeds at each point, so it does not reproduce the data's own draws
+        assert np.isclose(fit.pars.away, 0.02, rtol=rtol), f'Expected to recover away=0.02 with {solver}, not {fit.pars.away}' # Before, a TypeError at init
+    assert 'away=away' in ss.Sim(commuters(away), **pars).to_code() # The saved form keeps the fitted parameter, with its bounds, not its value
     sim = ss.Sim(commuters(away), n_agents=3000, solver='abm', **pars).init()
     shares = [sim.new(pars=dict(away=val)).init().mixing.time_share.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
     assert np.allclose(shares[0], 0.99) and np.allclose(shares[1], 0.8)

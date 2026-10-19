@@ -214,7 +214,7 @@ class Strat:
         if getattr(self, 'split_from', None): # A split taken from a named population (ss.people)
             named['split_from'] = self.split_from
         return dict(**named, name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
-                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
+                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else self.mobility.away.name if isinstance(self.mobility.away, ss.par) and self.mobility.away.name else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property
     def mids(self):
@@ -416,6 +416,9 @@ class Groups:
                     raise ss.DuplicateStructuralDimension(f'the sim is already stratified by "{strat.name}".')
                 strats[strat.name] = strat
                 self.sim_strats.append(strat)
+        if self.sim_strats and not sim.declared: # Only modules written as code, which keep their own results
+            names = sc.strjoin(strat.name for strat in self.sim_strats)
+            ss.note(f'the sim is stratified by {names}, but none of its modules is declared, so no results are by group; modules written as code can read the levels as people.{self.sim_strats[0].attr}', sim=sim)
         for mod in sim.declared:
             for strat in mod.graph.strats:
                 if strat.name in strats:

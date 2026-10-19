@@ -49,58 +49,56 @@ Sizes: S is under a day of agent work, M a few days, L more. **SWA** marks a sil
 
 ## Stage 0: close what decision 16 settled, and fix the records (S; first, one agent)
 
-- [ ] Spec 12 (line 329 still calls item 18 "an open question") and the user guide: say that the methods differ by design, and give the sizes from the canon review (KR 6.3 at a daily step: agents peak 25% low and 9 days late, binomial 23% high) and from PB's set (contact and count SIRs, an SEIR, cholera, a capped rate, a fixed dwell). Give the W102 note a size. The natural home for this is D-T3's recorded table of solver differences.
-- [ ] Check that the agents engine has no leftover half-convention. A `dur=` dwell is drawn at entry; a `rate=` exit is `1 − exp(−r·dt)` each step; transmission entry is dated like progression entry. Close `test_entry_kinds` as not to be added.
-- [ ] Turn the canon xfails for CR7 (agents and network) into documented tolerances. Close ST4 the same way: it counts one more step in results, while people act for the right dwell.
-- [ ] `deferred.md`: move item 18 (B′, C) and ST4 to "Won't do", with the reason. Move the two-parameter NUTS coverage there (decision 14). Move N20's `away=` and R6's all-zero series to `implementation.md` as done.
-- [ ] Clear the stale items in `admin/implementation.md`: line 366 (IF2, `away=`) and line 371 (N25 to N27 "being built in").
-- [ ] Fix the CHANGELOG where it contradicts itself. Line 100 says ten runs a point for agent fits, but line 51 says one. Line 109 says `ss.SIR` keeps lognormal durations, against line 50. Lines 23 and 30 list the removed `'tau'`/`'sde'` solvers. Line 24 says `ss.load()` reads a spec back, which was removed.
-- [ ] FP4: a CHANGELOG line and a migration row saying that resampled stocks are now year-end values, not annual means.
+- [x] Spec 12 (line 329 still calls item 18 "an open question") and the user guide: say that the methods differ by design, and give the sizes from the canon review (KR 6.3 at a daily step: agents peak 25% low and 9 days late, binomial 23% high) and from PB's set (contact and count SIRs, an SEIR, cholera, a capped rate, a fixed dwell). Give the W102 note a size. The natural home for this is D-T3's recorded table of solver differences.
+- [x] Check that the agents engine has no leftover half-convention. A `dur=` dwell is drawn at entry; a `rate=` exit is `1 − exp(−r·dt)` each step; transmission entry is dated like progression entry. Close `test_entry_kinds` as not to be added.
+- [x] Turn the canon xfails for CR7 (agents and network) into documented tolerances. Close ST4 the same way: it counts one more step in results, while people act for the right dwell.
+- [x] `deferred.md`: move item 18 (B′, C) and ST4 to "Won't do", with the reason. Move the two-parameter NUTS coverage there (decision 14). Move N20's `away=` and R6's all-zero series to `implementation.md` as done.
+- [x] Clear the stale items in `admin/implementation.md`: line 366 (IF2, `away=`) and line 371 (N25 to N27 "being built in").
+- [x] Fix the CHANGELOG where it contradicts itself. Line 100 says ten runs a point for agent fits, but line 51 says one. Line 109 says `ss.SIR` keeps lognormal durations, against line 50. Lines 23 and 30 list the removed `'tau'`/`'sde'` solvers. Line 24 says `ss.load()` reads a spec back, which was removed.
+- [x] FP4: a CHANGELOG line and a migration row saying that resampled stocks are now year-end values, not annual means.
 
 ## Stage 1: silent wrong answers (S each unless marked; with Stage 0, in two or three worktrees)
 
 Fitting and results:
-- [ ] **Decision 13**: a fresh seed per point for global, Optuna-style fits of stochastic models. Local methods such as Nelder-Mead keep one seed for now (Cliff, 2026-10-19). Ideally they would run several times, each with its own seed; that is in `deferred.md`. Then rerun `test_epimodel_fit` (23.4% against the 30% target at one run a point with one seed).
-- [ ] **FP3**: `resample('year')` on a dated sim bins by calendar year, so a 3-year sim gives 4 "years" (`results.py:618`).
-- [ ] **FP12**: per-scenario quantiles from a port of `msim.reduce()` come out with low equal to high.
-- [ ] **MA30** (S to M): strata are lost through affine results and `.frac`.
-- [ ] **FP2**: what `finish_step()` records never reaches `update_results()` (100 against 105 births a step). The end-of-run warning should catch this case too.
-- [ ] **`away=` in `to_code()`**: it writes the fitted value, not the `ss.par`, so a round trip loses the bounds.
+- [x] **Decision 13**: a fresh seed per point for global, Optuna-style fits of stochastic models. Local methods such as Nelder-Mead keep one seed for now (Cliff, 2026-10-19). Ideally they would run several times, each with its own seed; that is in `deferred.md`. Then rerun `test_epimodel_fit` (23.4% against the 30% target at one run a point with one seed).
+- [x] **FP3**: `resample('year')` on a dated sim bins by calendar year, so a 3-year sim gives 4 "years" (`results.py:618`).
+- [x] **FP12**: not a bug: `msim.results.<mod>.<res>.quantiles()` pools every run, as `reduce()` did, and a scenario of one run has no spread; the `reduce` error message now says so.
+- [~] **FP2**: what `finish_step()` records never reaches `update_results()` (100 against 105 births a step). The end-of-run warning should catch this case too. (Left as documented: the migration skill has the row (`SKILL.md:79`); catching it generically would mean comparing every coded result before and after `finish_step()` on every step.)
+- [x] **`away=` in `to_code()`**: it writes the fitted value, not the `ss.par`, so a round trip loses the bounds.
 
 Timing, seeding, and branches:
-- [ ] **CR4 / L14** (M): a seeded case with a fixed one-step stay stays two steps under every solver, so Reed-Frost and Greenwood fail (the chance of no further case is 0.013 against the exact 0.131). This is seeding, not decision 16's bias, since the ODE shows it too.
-- [ ] **CR3 / L4** (M): disconnected risk groups written as plain states become counts (9,000 infected against 1,003, with only a note). Anchor on the transmission's source, and warn on a disconnected population.
-- [ ] **HP2**: an immediate junction holds agents one step (the ODE holds them none).
-- [ ] **FP15**: a remainder next to a time-series branch becomes a competing exit (0.153 where 0.30 is expected).
-- [ ] **L14 remainder**: `dur=10` on a branch silently takes the 0.9 remainder, while `rate=0.1` raises.
-- [ ] **The `after=` conveyor in the ODE** (S to M): its last slot is exempt from competing exits. It may have MA7's half step (5,279 against 5,020), so measure it first.
-- [ ] **X1 transfer**: a `dur=` distribution on a transfer is replaced by its mean (0.521 against about 0.99).
-- [ ] **KI6** (M): check whether C17's rescaling covers a person who moves between levels under an `adjust=` on a duration.
-- [ ] **A strain's initial share**: `I=ss.by(strain=[0.01, 0.01])` seeds 0.5% in each strain, but with `risk=` the share is of each group. Check it against the spec.
-- [ ] **NR5**: `init_prev=` on an SEIR seeds `E`, with only a note at `verbose=1`. Make it a warning (see "Waiting on Cliff").
+- [x] **CR4 / L14** (M): a seeded case with a fixed one-step stay stays two steps under every solver, so Reed-Frost and Greenwood fail (the chance of no further case is 0.013 against the exact 0.131). This is seeding, not decision 16's bias, since the ODE shows it too.
+- [x] **CR3 / L4** (M): disconnected risk groups written as plain states become counts (9,000 infected against 1,003, with only a note). Anchor on the transmission's source, and warn on a disconnected population. (Done as an error: it already raised, since the people's values sum to 0.2; the error now names the states given a share but not connected to the first state, and says to declare them `ss.State(people=True)`. Making any group seeded with a fraction into people was not done: mosquitoes given a fraction would become people, MA5's problem.)
+- [x] **HP2**: an immediate junction holds agents one step (the ODE holds them none).
+- [x] **FP15**: a remainder next to a time-series branch becomes a competing exit (0.153 where 0.30 is expected). (Already fixed: the review's probe, with its `init=dict(A=1.0)` removed (1.0 is now one person), gives B 0 then 0.19, C 0.30, D 0.70 then 0.51.)
+- [x] **L14 remainder**: `dur=10` on a branch silently takes the 0.9 remainder, while `rate=0.1` raises. (Not silent and by the rule: one timed exit with no `p=` takes the rest, marked as guessed in `describe()`; a `rate=` exit competes with the branches. The error for the rate case now says so and how to write either.)
+- [x] **The `after=` conveyor in the ODE** (S to M): its last slot is exempt from competing exits. It may have MA7's half step (5,279 against 5,020), so measure it first. (Measured: not affected. A 12-day minimum stay then a rate of 0.5 a day, with a competing death rate of 0.1 a day: the share reaching I is 0.2510 under the ODE at `dt` 1 and 0.5 against the exact 0.2510; binomial 0.2521, agents 0.2488.)
+- [~] **X1 transfer**: a `dur=` distribution on a transfer is replaced by its mean (0.521 against about 0.99). (A note now says so at init. Drawing each person's time per the distribution needs a per-agent time of entering the source level and a scheduled move (M): Stage 4.)
+- [x] **KI6** (M): check whether C17's rescaling covers a person who moves between levels under an `adjust=` on a duration.
+- [x] **A strain's initial share**: `I=ss.by(strain=[0.01, 0.01])` seeds 0.5% in each strain, but with `risk=` the share is of each group. Check it against the spec. (Not a bug: as for any dimension, a value by level is the share of that level's people, and a strain's levels split everyone evenly by default, so `[0.01, 0.01]` is 500 and 500 of 100,000, as `risk=` is; the same under ode and abm.)
+- [x] **NR5**: closed by Cliff's answer: `init_prev=` seeding `E` is right; remove the strict xfail `test_nr5_seir_init_prev_seeds_or_warns`. (Its strict xfail is in the untracked `naive_review/tests/`, left for Cliff to remove.)
 
 Networks:
-- [ ] **HP8**: `ss.MFNet`'s `mean_degree` and `concurrency` results are scaled by `pop_scale` (0.551 becomes 110.1).
-- [ ] **HP9, HP10**: `MFNet` newcomers at any age, and people born during the run, never get debut or participation (557 immigrants and 2,671 people born in the run, all at 0).
-- [ ] **HP11**: `MFNet` misses its degree target in an open population with long partnerships (0.664 against 0.87).
-- [ ] **N15**: `PartnerNet(match=)` on its own drops the risk structure with no message.
-- [ ] **NR13**: a contact matrix that is not reciprocal is accepted without a note.
+- [x] **HP8**: `ss.MFNet`'s `mean_degree` and `concurrency` results are scaled by `pop_scale` (0.551 becomes 110.1).
+- [x] **HP9, HP10**: `MFNet` newcomers at any age, and people born during the run, never get debut or participation (557 immigrants and 2,671 people born in the run, all at 0).
+- [ ] **`ssl.MSMNet`**: the same newcomer bug as HP9 (it sets debut and participation only for people younger than one step); give it MFNet's `set_network_states()`.
+- [x] **HP11**: `MFNet` misses its degree target in an open population with long partnerships (0.664 against 0.87).
+- [x] **N15**: `PartnerNet(match=)` on its own drops the risk structure with no message. (Done as a note: matching says nothing about how many partners each level has.)
+- [x] **NR13**: a contact matrix that is not reciprocal is accepted without a note. (Done as a note at build, from the dimension's split; it is used as given.)
 
 Demography and units:
-- [ ] **FP18**: `offspring=` doesn't turn aging on, and newborns get no parent.
-- [ ] **MA19**: `ss.Births` reads a rate as a probability, while `ss.birth` reads it as a rate. The import reference still says "Exact".
+- [x] **FP18**: `offspring=` doesn't turn aging on, and newborns get no parent.
+- [~] **MA19**: `ss.Births` reads a rate as a probability, while `ss.birth` reads it as a rate. The import reference still says "Exact". (Measured: 20 years at 3.5% a year from 20,000 agents, 4 seeds: `ss.Births` 39,629 and `ss.birth` 39,870, against 39,796 compounded each year (0.6% apart, within about 2.5 seeds' spread); both draw r·dt·N a step. Left: the import reference's "Exact".)
 - [ ] **MA21**: ODE aging at `1/width` drifts a non-flat pyramid (N −1.7% after 20 years).
 - [ ] **MA16**: ODE waning uses a fixed 10 levels and is 6.2% off at day 729 (0.7% with 40). Choose the number of levels from the waning curve.
-- [ ] **MA15**: a product whose waning is a function can't be re-dosed (600 delivered in round 2 against 3,237 in round 1).
-- [ ] **D2, L1**: a bare-number time in `ss.timeseries` is in years with `start=2000` but in days with `start=0`. `unit='day', start=2000, stop=2002` gives 3 points (a note now; make it right).
-- [ ] **DF10f**: an initial number below 1 is always read as a fraction.
-- [ ] **T6a**: `ss.seasonal(peak=142)` is accepted and taken mod 1.
-- [ ] **N22**: `auto` silently runs 10,000 agents for 80 million people; warn about scale.
-- [ ] **NR13 timevec**: with `unit='week'`, `timevec` runs to 365 in days.
+- [ ] **D2, L1** (with behavior step 2, whose decision 8 sets the unit of bare numbers): a bare-number time in `ss.timeseries` is in years with `start=2000` but in days with `start=0`. `unit='day', start=2000, stop=2002` gives 3 points (a note now; make it right).
+- [x] **T6a**: `ss.seasonal(peak=142)` is accepted and taken mod 1. (A number outside 0 to 1 raises, naming `ss.days(142)`, which now works.)
+- [x] **N22**: `auto` silently runs 10,000 agents for 80 million people; warn about scale. (A note when `auto` chooses agents and each agent stands for more than 1,000 people.)
+- [x] **NR13 timevec**: with `unit='week'`, `timevec` runs to 365 in days. (Already fixed: in weeks for `stop=52`, `ss.weeks(52)`, `ss.years(1)`, or `ss.days(365)`; only float rounding (0.99999999) is left.)
 
 Coded modules:
-- [ ] **D23** (S to M): `stratify=` on `fp.Sim` silently makes nothing (0 of 72 results have dimensions). Raise, or make it work.
-- [ ] **R8** (S to M): `sim.hash()` doesn't see a `NodeGrid` held by a coded connector (EIR 10 and 100 hash the same).
+- [x] **D23** (S to M): `stratify=` on `fp.Sim` silently makes nothing (0 of 72 results have dimensions). Raise, or make it work. (A note: a stratified sim with no declared module has no results by group; the levels are still on people for coded modules.)
+- [~] **R8** (S to M): `sim.hash()` doesn't see a `NodeGrid` held by a coded connector (EIR 10 and 100 hash the same). (Documented in `sim.hash()`: a coded module is seen through its parameters, so a value kept elsewhere should be given with `define_pars()`. Hashing arbitrary attributes would include arrays and random states.)
 - [ ] **FP14** (M): a function that reads a parameter sees its base value, so `ss.change` does nothing to it. The behavior design fixes this for regressions written as expressions; a plain function needs `ss.change` to reach the value the function reads, or an error.
 
 The approved design steps that fix silent answers:
@@ -114,6 +112,8 @@ The approved design steps that fix silent answers:
 - [ ] Conditions: **L24 / DF10b** (`where=Q.n < 20`, and a current flow inside a rate), **DC29** (Cliff approved an error pointing to `sim.all_networks()`, which is missing).
 - [ ] Results: **MA13** (`.n` against `.count()` by solver, and N is 0 in `init_post()`), **MA31** (`by('patch')` on msim results returns an `objdict`), **R2** (a sweep labels its runs as scenario `''`).
 - [ ] Coded code: **ST8** (a guard or a clear error when `update_results()` runs before any `step()`), **ST11** (a public `disease.move()`/`cure()` for coded code), **HP30** (cache the module lookup in lazy conditions, about 10 lines; it is most of the declared HPV port's slowdown), **FP8** (recheck `calibrate()` on `fp.Sim` after FP7's fix).
+- [ ] **`sim.people` in a compartmental run** (X12): `people.n` as each group's live size from the compartments, read when asked, and `repr()` as `People(6 groups; ...)`.
+- [ ] **R27**: remove `ss.Samples` (count downstream uses first), with a `deferred.md` entry to restore it if needed.
 - [ ] **HP33**: named WPP rates (`ss.Births(birth_rate='nigeria')`) are in spec 04 but not in the code. Add a loader, or strike them from the spec.
 - [ ] **FP29** (M): `ss.transfer` with `p=` and `dur=` over several destinations, as the spec says. **MA20** (M): death-rate ages tied to the age dimension.
 
@@ -163,12 +163,14 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 ## Stage 4: other missing capabilities (M each; after the Phase H pieces they lean on)
 
+- [ ] **X1 transfer, exact** (M): draw a transfer's `dur=` distribution per person on entering its source level, and move them when it is up, as dwells are; a compartmental form as a conveyor or stages.
 - [ ] **ST24**: several non-exponential exits per state when the exits are disjoint (by sex), and `ss.lognorm_ex(mean=ss.by(...))`.
 - [ ] **ST18**: an exact dwell until an external event (`after=preg.delivery`), and a warning that `dur=fn` is exponential.
 - [ ] **HP28**: hyperexponential dwells (CV above 1) under the compartmental solvers, beyond what given dwell covers. With D-A2 (conveyors for lognormal or Weibull dwells), and Cliff's unanswered question "would it add a lot of code?" (DF35), which this item should answer.
 - [ ] **HP14**: a strain dimension with `immunity=` over a network as agents.
 - [ ] **HP19**: a general per-person write on events (a running maximum, frozen at entry), agents only where needed (Cliff: "some things will be agent only and that's fine").
 - [ ] **Vector models**: standard `prevalence`/`new_infections` from the acquisitions, not only from a transmission (about 8 sites in `compartmental.py`). MA11 (weighted counts), MA12 (per-node EIR from coded modules under both solvers), MA14 (a product's coverage in a rate), MA33 (a neutral held product, and several wanings).
+- [ ] **MA15** (moved from Stage 1; needs a spelling, e.g. `redose=`, with the products work): a product whose waning is a function is held for good, so a second round reaches nobody who had the first (600 against 3,237).
 - [ ] **Demography**: FP33 (life tables by year and sex; `ss.Deaths(lifetable=)`), N11/SW3 (births from one stratum into another), SW2 (`offspring=` by prototype).
 - [ ] **Mixing**: rebuild the mixing inside `restart()`, so PMCMC, IF2, `run(n_runs=)`, and gradients work with a fitted `away=` (they raise today). CR14: commuting with finite leave and return rates (`ss.Mobility(kind='commute', back=...)`). PL4: `PartnerNet` with several `match=` properties.
 - [ ] **NR2**: `msim.outbreaks(threshold=)`, about 15 lines, or close the xfail.
@@ -180,7 +182,7 @@ One agent revises each document in place, keeping what is approved. Each documen
 - [ ] Re-measure, then fix where still slow: **FP34** (declared deaths by age and year, 30× slower than `fp.Deaths` before MA17), **ST27** (`calibrate()` at 4.5 s an evaluation on a 0.6 s ODE), **HP28**'s 480-group SEIS.
 - [ ] **D-P5**: the particle filter on outcomes, now unblocked by N27. **MA26**: a deterministic coded ODE fitted with a deterministic optimizer.
 - [ ] **SC6 residual** (exact Gillespie with every place reaching every other, n^1.5), **W16** (crossings whose places mix within a step), **DF7** (thinning for time-varying rates under Gillespie), **DF2**, **DF3**, **D-P6**, **W17** (`forkserver` everywhere to silence the fork warning).
-- [ ] **CR9**: Gillespie's automatic tau leaps are biased at 10 million people (peak +0.74%, about 4 sd). A smaller leap, or a midpoint leap, would change what the solver means, so this needs Cliff.
+- [x] **CR9**: Gillespie's automatic tau leaps are biased at 10 million people (peak +0.74%, about 4 sd). Cliff: whatever is fastest on average, which is today's rule; kept, with the note.
 - [ ] Internals: **X27 / PL12** (the four skipped compartmental-engine refactors), **PL11** (results creation out of `solvers/`).
 
 ## Stage 6: inference, the saved form, and random streams (S to M)
@@ -188,10 +190,12 @@ One agent revises each document in place, keeping what is approved. Each documen
 - [ ] **X26** (`sim.gradient()` as `jacfwd`), **DF15** (fitting a product of parameters), **DF26** (IF2 for observation and initial-value parameters), **R16** (date columns and data outside the run), **KI21** (fittable `rel_sus`/`rel_trans` on a state), **N20 remainder** (`capacity=` as an expression, `ss.par` inside `ss.seasonal`, data as averages).
 - [ ] **DF22 / R29** (priors and likelihoods in the spec, and the grammar rewrite), **DF30** (operand order for hashes; it changes every hash once, so do it with R29), **R23** (a stratification exported as species), **DF38** (exact delay exports), **PL10** (fold `ss.diff_sims` into `ss.diff`).
 - [ ] **C12c remainder** (outcomes drawn after a whole run differ from a stepped run; the delivery part goes with the cascade's step 9), **X19** (`sim.crn_report()`).
+- [ ] **MA30** (M; moved from Stage 1, since it is not silent: the totals are right and `.by()` raises): results that are an affine function of a ratio (`98.6 + 4*I/(S + I)`), or `I.frac`, are not kept by group; `ss.by(patch=...)*I/(S + I)` as a result crashes (agents: `_uids`; ODE: a broadcast error). Keep a ratio's parts by group and apply the outer arithmetic after selecting.
 - [ ] Results and printing: **KI14** (arithmetic on stratified results), **DF14 / R17** (a sim-level outcome across modules), **DF12** (the size of a stratified model, and equations by group), **FP38**'s rest and **D-F4** (`describe(verbose=True)`), **X10** (say at run time when a run leaves the whole-run kernel).
 
 ## Stage 7: importers and interop (lowest priority; L in all)
 
+- [ ] **DF10f** (moved from Stage 1): an initial number below 1 is a fraction by the spec's rule, so the camdl importer should write its counts below one person as counts (or the spec needs a way to say so).
 - [ ] **SW1 / N13** (Atomica TB: 81 parts untranslated), **SW10 / N12** (EMULSION: 13 parts), **PL5**, **PL9**, **R34** (duplicated interop internals), **DF10a** (a declared network condition), **DF10d** (ERGM terms), **DF10h/i/j** (MEmilio's damping, weighted counts, and per-state group parameters), **DF10e** (EpiModel's within-step order), **DF36**, **DF37**, **SW8** (a seed below one agent).
 - [ ] **R22 / PL14**: the importers as a companion package in this repo (approved), with the `dump_*` scripts moved out of the core. **SW11 / PL8** (US states and German level 2 in `starsim_data`), and **P14** (`starsim_data` on PyPI, then a dependency).
 - [ ] **DF8** (triangles as an ERGM target) and **DF9** (WorldMove, licensing) wait for a real need.
@@ -209,14 +213,19 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 ## Waiting on Cliff
 
-1. **Per-act D5**: does `rel_trans` multiply the per-act hazard (0.03 with `rel_trans=10` gives 0.263; never above 1; factors compose), or the per-act probability with a clip at 1 (gives 0.3)? My recommendation is the hazard, with `describe()` printing the resulting per-act probability so the number a user expects is visible. [CK: hazard is ok]
-2. **The counter spelling**, after H0's examples.
-3. **`sim.people` in a compartmental run** ([people_compartmental.md](../oct17/people_compartmental.md), X12): the alternatives are written up and not yet answered. [CK: no, i liked your proposal, i thought i answered that]
-4. **Given dwell decision 3** (a whole-step conveyor, not phase-type stages): unanswered; taken as the recommendation. [CK: ok]
-5. **NR5**: a warning rather than a note when `init_prev=` seeds `E`. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys). [CK: what's wrong with init_prev seeding E?]
-6. **CR9**: whether to change how Gillespie's automatic tau leap steps. [CK: i don't mind, whatever's fastest on average]
-7. Older ones still open: **R27** (keep or remove `ss.Samples`/`ss.Dataset`), **L20 / L23** (names without frames; `<transition>.<slot>` names), **DF20** (contact matrices as release assets), **SW8** (round a sub-agent seed stochastically, or raise). [CK: maybe we could drop ss.Samples for now, and restore it later depending on how things shake out]
-8. **Pushing the downstream CI gate.** [CK: this can wait]
+Answered on 2026-10-19 (his `[CK:]` notes, folded in):
+- **Per-act D5**: the hazard (`rel_trans` multiplies the per-act hazard). H0 and per-act step 2 use it.
+- **`sim.people` in a compartmental run**: the recommendation in [people_compartmental.md](../oct17/people_compartmental.md), B plus two changes: `people.n` gives each group's live size from the compartments when read, and `repr()` says `People(6 groups; ...)`. Now a Stage 2 item.
+- **Given dwell decision 3**: the whole-step conveyor.
+- **NR5**: Cliff asked what is wrong with `init_prev=` seeding `E`. Nothing is wrong in the model: `E` is infected, so seeding it is the literal reading of "the share infected". The naive user expected infectious people (`I`), so the first SEIR peaked 4 days later than they expected (83 against 79), and nothing told them which state was seeded unless `verbose=1`. With the note kept and the docs showing `init=dict(I=...)`, this is closed: no warning, and the strict xfail goes.
+- **CR9**: whatever is fastest on average, which is today's rule, so it stays as is, with the note.
+- **R27**: drop `ss.Samples` for now (restore it later if needed): Stage 2, with a `deferred.md` entry. `ss.Dataset` was not mentioned, so it stays until asked.
+- **The downstream CI gate**: waits.
+
+Still open:
+1. **The counter spelling**, after H0's examples.
+2. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys).
+3. Older ones: **L20 / L23** (names without frames; `<transition>.<slot>` names), **DF20** (contact matrices as release assets), **SW8** (round a sub-agent seed stochastically, or raise).
 
 ## Acceptance
 

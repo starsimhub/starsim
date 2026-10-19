@@ -615,8 +615,11 @@ class Result(ss.BaseArr):
         dated = self.has_dates
         if isinstance(new_unit, str) and new_unit in ['month', 'year'] and dated: # Calendar months and years
             idx = pd.DatetimeIndex(tv)
-            key = idx.year*12 + idx.month if new_unit == 'month' else idx.year
-            return np.unique(np.asarray(key), return_inverse=True)[1]
+            if len(idx) > 1: # A time point is in the period of the step that ends there, so 1 January is in the year before, as for data; the start is in the first period
+                idx = idx - (idx[1:] - idx[:-1]).min()/2
+            key = np.asarray(idx.year*12 + idx.month if new_unit == 'month' else idx.year)
+            key[0] = key[1:2].max(initial=key[0])
+            return np.unique(key, return_inverse=True)[1]
         if isinstance(new_unit, str):
             if new_unit not in ['day', 'week', 'month', 'year']:
                 errormsg = f'Cannot resample to "{new_unit}"; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
@@ -727,7 +730,10 @@ class Result(ss.BaseArr):
             new_denom = None
         timevec = self.timevec[ends]
         if use_years:
-            timevec = np.floor(np.asarray(timevec.years if hasattr(timevec, 'years') else timevec, dtype=float) + 1e-9).astype(int)
+            years = np.asarray(timevec.years if hasattr(timevec, 'years') else timevec, dtype=float)
+            if self.has_dates and len(self.timevec) > 1: # Labeled by the calendar year each period covers, so the one ending on 1 January 2001 is 2000
+                years = years - 0.5*np.min(np.diff(np.asarray(self.timevec.years, dtype=float)))
+            timevec = np.floor(years + 1e-9).astype(int)
         out = self.asnew(values=values, low=low, high=high, timevec=timevec, kind=self.kind, _shape=values.shape)
         out.group_ti = None # Its values by group, if any, are at its own time points
         if strata is not None:

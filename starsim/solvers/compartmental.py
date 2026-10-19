@@ -366,10 +366,11 @@ class Compartmental(Engine):
         if first in amounts and len(amounts) > 1: # The first state has the rest of the people in each of its groups (which, for a dimension it does not have, take in every level)
             others = np.broadcast_to(sum(val for name,val in amounts.items() if name != first), (self.n_groups,))
             amounts[first] = np.maximum(self.total_pop*self.state_split[first] - np.bincount(self.collapse[first], weights=others, minlength=self.n_groups), 0)
+        infected = {state.name for tr in self.graph.acquisitions for state in tr.dst} # Where an infection puts people
         for name,amount in amounts.items():
-            self.arrive(name, amount, self.y)
+            self.arrive(name, amount, self.y, before=name in infected)
         for name,count in counts.items():
-            self.arrive(name, count*self.state_split[name], self.y)
+            self.arrive(name, count*self.state_split[name], self.y, before=name in infected)
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
         if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
@@ -616,10 +617,11 @@ class Compartmental(Engine):
                 self.pack_targets()
         return
 
-    def arrive(self, name, amount, y):
-        """ Add an amount to a state, split between its tracks """
+    def arrive(self, name, amount, y, before=False):
+        """ Add an amount to a state, split between its tracks; with before=True, as if they arrived a step before (people infectious at the start, who have been so for the first step, as agents date them), so one slot along a conveyor """
+        along = {conv.slots[0]:conv.slots[1] for conv in self.conveyors if len(conv.slots) > 1} if before else {}
         for ind,w in self.entry[name][0]:
-            y[ind] += amount*w
+            y[along.get(ind, ind)] += amount*w
         return
 
     def flow_base(self, flow):

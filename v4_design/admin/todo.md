@@ -1,7 +1,5 @@
 # Todo
 
-
-
 ## CK
 
 - [x] Review reviews
@@ -34,9 +32,13 @@
 - [x] Update docs
 - [x] Write remaining import/export/usage skills
 - [x] Write do/don't/how migration guide for each switching example
-- [ ] Rewrite/retake Starsim exam
-- [ ] Write AI chat/pipelines
-- [ ] Turn disease models into natural language write-ups and back again
 - [ ] Decide on and implement library examples (camdl's, Keeling & Rohani, others)
 - [ ] Show example of pure NumPy and then stages of implementation moving to pure Starsim
 - [ ] Figure out why sc.asd() doesn't work better for ODE models
+
+## AI
+
+- [ ] Rewrite/retake Starsim exam
+- [ ] Write AI chat/pipelines
+- [ ] Turn disease models into natural language write-ups and back again
+- [ ] Test AI parts on open weight models

@@ -42,11 +42,15 @@ class Agents(Engine):
         self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
+        self._junctions = None # The states passed through at once: see junctions
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
         self.init_dwells()
         rescalable = any(isinstance(m, ss.modify) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
+        strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
+        adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
+        rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
         read = mod.times_read(self.sim) # The times of entering a state that code in the sim reads (None for all); the engine reads those of the states it schedules exits from, or whose exits have after= or before=
         unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
         for state in graph.people_states:
@@ -234,6 +238,7 @@ class Agents(Engine):
             uids = people.auids
             rvs = self.dists.init.rvs(uids)
             names = list(fracs.keys())
+            infected_dsts = {state.name for tr in self.graph.acquisitions for state in tr.dst} # Where an infection puts people
             groups = self.groups(uids) if any(np.ndim(frac) for frac in fracs.values()) else np.zeros(len(uids), dtype=int) # Fractions can differ between groups
             wanted, placed = np.zeros(len(names)), np.zeros(len(names))
             for g in np.unique(groups):
@@ -246,14 +251,14 @@ class Agents(Engine):
                 for i,name in enumerate(names):
                     chosen = inds[edges[i]:edges[i+1]]
                     mod[name][chosen] = True
-                    mod[f'ti_{name}'][chosen] = 0
+                    mod[f'ti_{name}'][chosen] = -1 if name in infected_dsts else 0 # Someone infectious at the start has been so for the first step, as if infected in the step before: an infection is dated at the end of its step
             seed = self.seed_dist()
             if seed is not None:
                 first, dst = self.graph.first.name, self.graph.transmissions[0].dst[0].name
                 chosen = seed.filter(self.members(self.graph.first))
                 mod[first][chosen] = False
                 mod[dst][chosen] = True
-                mod[f'ti_{dst}'][chosen] = 0
+                mod[f'ti_{dst}'][chosen] = -1
             if mod.infection_log is not None: # Whoever starts where a new infection goes is a seed
                 infected = [name for name in names if any(state.name == name for tr in self.graph.transmissions for state in tr.dst)]
                 for name in infected:
@@ -580,6 +585,7 @@ class Agents(Engine):
         mod = self.mod
         moved = self._moved
         self._moved = []
+        arrived = sc.ddict(list) # Who arrived in a state they pass through at once
         by_tr = sc.ddict(list)
         srcs = sc.ddict(list)
         trs = dict()
@@ -615,7 +621,29 @@ class Agents(Engine):
                     self.sim.groups.groups_changed(inds)
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
+                if len(inds) and dst.name in self.junctions:
+                    arrived[dst.name].append(inds)
+        if arrived: # A state left only by branches with no wait is passed through at once, as in the ODE, rather than held for a step
+            for name,uidlist in arrived.items():
+                state = self.graph.states[name]
+                uids = ss.uids.concatenate(uidlist)
+                self.schedule(state, uids)
+                which = mod[f'exit_{name}'][uids]
+                for i,tr in enumerate(self.graph.exits[name].branches + sc.tolist(self.graph.exits[name].remainder)):
+                    self.move(tr, state, uids[which == i])
+            self.finish_moves(ti)
         return
+
+    @property
+    def junctions(self):
+        """ The states left only by branches that nobody waits in (no dwell time and no minimum stay) """
+        if self._junctions is None:
+            self._junctions = set()
+            for name,exits in self.graph.exits.items():
+                branches = exits.branches + sc.tolist(exits.remainder)
+                if branches and not exits.timed and not self.competing.get(name) and all(tr.name not in self.dwells and not self.after_of(tr) for tr in branches):
+                    self._junctions.add(name)
+        return self._junctions
 
     def add_offspring(self, tr, uids, ti):
         """ Newborns for the people who went through a transition with `offspring=`: in its state, and in each parent's place """
@@ -629,6 +657,9 @@ class Agents(Engine):
         new = self.add_people([(place, (state,), int(k)) for place,k in enumerate(counts) if k], ti, f'born_{tr.name}')
         if not any(strat.kind == 'age' for strat in sim.groups.strats):
             sim.people.age[new] = 0
+        parents = np.concatenate([np.repeat(uids[places == place], n) for place,k in enumerate(counts) if k]) if len(new) else [] # In the order they were made: by place, then each parent's
+        if len(new) == len(parents):
+            sim.people.parent[new] = parents
         return new
 
     def enter_dims(self, tr, srcs, uidlist, dst, uids):
@@ -719,7 +750,23 @@ class Agents(Engine):
         """ Whether what is left of a transition's dwell times is rescaled when its speed changes: if it has modifiers, or a duration or rate that can change (see `varies()`) """
         if tr.name not in self.dwells:
             return False
-        return bool(self.sim.modifiers.get((self.mod.name, 'transition', tr.name))) or self.varies(self.dwells[tr.name])
+        return bool(self.sim.modifiers.get((self.mod.name, 'transition', tr.name))) or self.varies(self.dwells[tr.name]) or bool(self.adjust_dims[tr.name] & self.changing_dims)
+
+    @property
+    def changing_dims(self):
+        """ The dimensions whose level a person can change during the run: by age, a transfer, a move= on a transition, or migration between places (worked out once the mixing is known) """
+        if getattr(self, '_changing_dims', None) is not None:
+            return self._changing_dims
+        sim = self.sim
+        out = {d for d,strat in enumerate(sim.groups.strats) if strat.kind == 'age'}
+        for mod in sim.declared:
+            out |= {sim.groups.dim_index(tf.dim) for tf in mod.graph.transfers.values()}
+        out |= {d for tr in self.graph.transitions.values() for d,level in (self.moves(tr) or ())}
+        if getattr(sim.mixing, 'migration', None) is not None:
+            out.add(sim.mixing.space)
+        if getattr(sim, 'initialized', False):
+            self._changing_dims = out
+        return out
 
     def varies(self, dw):
         """ Whether the mean of a dwell time can change during the run: a duration or rate that is a function or varies in time, or a parameter with modifiers """
@@ -749,17 +796,19 @@ class Agents(Engine):
         modified = [i for i,tr in enumerate(candidates) if self.rescaled(tr)]
         if not modified or not len(uids) or f'mult_{name}' not in mod.__dict__:
             return
-        which = mod[f'exit_{name}'][uids]
+        which = mod[f'exit_{name}'].raw[uids]
         ti = mod.ti
         for i in modified:
-            sel = uids[which == i]
+            sel = uids[which == i] if len(modified) > 1 or len(candidates) > 1 else uids
             if not len(sel):
                 continue
             raw = self.speed(candidates[i], sel)
             now = np.maximum(raw, 1e-9)
-            before = mod[f'mult_{name}'][sel]
+            before = mod[f'mult_{name}'].raw[sel]
             stalled = before <= 0 # Their rate was 0 when they entered (e.g. outside a where=), so none of their dwell has passed
-            changed = np.where(stalled, raw > 0, ~np.isclose(now, before, rtol=1e-6)) # Not exactly, since the speed is kept in single precision
+            changed = np.abs(now - before) > 1e-6*np.abs(before) # Not exactly, since the speed is kept in single precision
+            if stalled.any():
+                changed = np.where(stalled, raw > 0, changed)
             if changed.any():
                 sel, now, before, stalled = sel[changed], now[changed], before[changed], stalled[changed]
                 ti_exit = mod[f'ti_exit_{name}'][sel]

@@ -589,8 +589,9 @@ class Graph(Presentation):
                         exits.remainder = exits.timed.pop()
                         exits.remainder.guessed['p'] = f'{1 - total:n}'
                     else:
+                        why = f' {sc.strjoin(tr.name for tr in exits.hazards)} {"has" if len(exits.hazards) == 1 else "have"} a rate and no p=, so {"it competes" if len(exits.hazards) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and exits.hazards and not exits.timed else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
-                                                f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).')
+                                                f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).{why}')
         return
 
     def check(self):

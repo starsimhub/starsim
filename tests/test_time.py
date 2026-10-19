@@ -326,19 +326,6 @@ def test_years_conversion():
     tl.ti = 500 # Deliberately past the end, to hit the extrapolation branch
     assert np.isclose(tl.now('yearvec'), 500/365), 'now("yearvec") should be in years, not days'
 
-    # ss.MFNet compares the timestep against agent ages, which are in years, so a
-    # monthly timestep must be passed as 1/12 of a year rather than as the bare 1
-    class SpyNet(ss.MFNet):
-        def set_network_states(self, upper_age=None):
-            self.spied_upper_age = upper_age
-            return super().set_network_states(upper_age=upper_age)
-
-    sim = ss.Sim(n_agents=200, start=2000, stop=2002, dt=ss.months(1), diseases=ss.SIS(),
-                 networks=SpyNet(), verbose=0)
-    sim.run()
-    upper_age = sim.networks[0].spied_upper_age
-    assert np.isclose(upper_age, 1/12), f'Expected 1/12 of a year, not {upper_age}'
-
     return
 
 

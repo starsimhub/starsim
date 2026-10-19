@@ -324,7 +324,9 @@ def test_time():
     assert sir.ti_I.raw.dtype == np.int16 and sir.exit_I.raw.dtype == np.int8 # 2 bytes and 1, not 4 and 4
     infected = sir.ti_I.notnan.uids
     assert np.isnan(sir.ti_I[sir.S.uids]).all() and (sir.ti_I[infected] <= sir.ti).all() # Never infected is NaN, not a large negative number
-    assert np.allclose(sir.ti_I.years[infected], sir.t.yearvec[sir.ti_I.raw[infected]])
+    later = infected[sir.ti_I.raw[infected] >= 0] # Those infected at the start are dated a step before it, as if infected in the step before, as infections are dated by their step
+    assert np.allclose(sir.ti_I.years[later], sir.t.yearvec[sir.ti_I.raw[later]])
+    assert (sir.ti_I[infected] >= -1).all() and (sir.ti_I[infected] == -1).sum() == sir.results.n_I[0]
     with pytest.raises(ss.TimeNotKept): # Nothing in the sim read ti_R, so it was not kept
         sir.ti_R.notnan
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, so it is kept
@@ -1602,6 +1604,61 @@ def test_anchor_order():
     assert make(first='V').run().results.sir.n_V[0] == 9900 # Or given
     return
 
+
+@sc.timer()
+def test_seeded_stay():
+    sc.heading('Testing that people infectious at the start have been so for the first step, as if infected in the step before')
+    for solver in ['ode', 'binomial', 'abm']: # A seeded case with a fixed stay of one step leaves after it, as in the Reed-Frost model (CR4: before, it stayed and infected for two)
+        S, I, R = ss.states(3)
+        rf = ss.Disease(infection=S >> I @ ss.perday(0.0)*I.n, recovery=I >> R @ ss.constant(ss.days(1)), init=dict(I=10), name='rf')
+        sim = ss.Sim(rf, unit='day', stop=5, total_pop=100, n_agents=100, solver=solver, verbose=0).run()
+        assert sim.results.rf.n_I[0] == 10 and sim.results.rf.n_I[1] == 0
+    for solver in ['binomial', 'abm']: # So the seeds infect for one generation, as the people they infect do
+        S, I, R = ss.states(3)
+        rf = ss.Disease(infection=S >> I @ ss.perday(0.001)*I.n, recovery=I >> R @ ss.constant(ss.days(1)), init=dict(I=100), name='rf')
+        res = ss.Sim(rf, unit='day', stop=2, total_pop=10_000, n_agents=10_000, solver=solver, verbose=0).run().results.rf
+        assert res.n_I[1] == res.infection[1] # Only the new cases are left after the first step
+    return
+
+
+@sc.timer()
+def test_disconnected_groups():
+    sc.heading('Testing two risk groups written as separate states, with no transition between them')
+    def make(people=None):
+        SH, IH = ss.states(2)
+        SL, IL = ss.State(people=people, name='SL'), ss.State(people=people, name='IL')
+        sis = ss.Disease(inf_H=SH >> IH @ ss.perday(10)*IH.frac + ss.perday(0.1)*IL.frac, inf_L=SL >> IL @ ss.perday(0.1)*IH.frac + ss.perday(1)*IL.frac,
+                         rec_H=IH >> SH @ ss.perday(1), rec_L=IL >> SL @ ss.perday(1), init=dict(SH=0.2-1e-5, IH=1e-5, SL=0.8-1e-3, IL=1e-3), name='sis')
+        return ss.Sim(sis, unit='day', stop=30, total_pop=10_000, verbose=0)
+    with pytest.raises(ValueError, match='people=True'): # They are counts unless said otherwise, and the error says so (CR3: before, 9,000 infected with only a note)
+        make().run()
+    assert np.isclose(make(people=True).run().results.sis.n_IH[-1], 1003.3, atol=1) # Keeling and Rohani's program 3.1
+    return
+
+
+@sc.timer()
+def test_junction():
+    sc.heading('Testing that a state left only by branches with no wait is passed through at once')
+    for solver in ['ode', 'abm']: # As agents, people were held in J for a step (HP2)
+        S, J, A, B = ss.states('S J A B')
+        d = ss.Disease(go=S >> J @ ss.perday(0.1), a=ss.Transition(J, A, p=0.3), b=ss.Transition(J, B, p=0.7), name='d')
+        res = ss.Sim(d, unit='day', stop=5, total_pop=1000, n_agents=1000, solver=solver, verbose=0).run().results.d
+        assert res.n_J.sum() == 0 and res.n_A[1] > 0
+    return
+
+
+@sc.timer()
+def test_level_change_dwell():
+    sc.heading('Testing that a dwell drawn at one level follows a person who moves to another, where the transition runs at a different speed')
+    out = {}
+    for solver in ['ode', 'abm']: # Recovery is ten times slower in b, and people move there at once; as agents they kept the dwell drawn in a (KI6: 0.37 still infected at day 20 against 0.83)
+        I, R = ss.states('I R')
+        d = ss.Disease(rec=I >> R @ ss.days(20), name='d')
+        d.stratify(level=['a', 'b'], split=[1, 0], adjust=dict(rec=[1, 0.1]), move=ss.transfer(level='b', rate=ss.perday(0.5)))
+        out[solver] = ss.Sim(d, unit='day', dt=0.25, stop=20, total_pop=20_000, n_agents=20_000, solver=solver, verbose=0).run().results.d.n_I[-1]/20_000
+    assert np.isclose(out['abm'], out['ode'], atol=0.03)
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1627,3 +1684,7 @@ if __name__ == '__main__':
     docs  = test_found_by_docs()
     cross = test_cross_disease_rate()
     order = test_anchor_order()
+    seed  = test_seeded_stay()
+    disc  = test_disconnected_groups()
+    junc  = test_junction()
+    level = test_level_change_dwell()

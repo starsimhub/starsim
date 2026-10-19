@@ -98,7 +98,7 @@ def test_2d_results():
     assert res.shape == (sim.t.npts, 2) # One column per sex
     assert np.array_equal(res.sum(axis=1), sim.results.sis.n_I) # Scaled the same as 1D results
     assert np.array_equal(res.male, res[:,1]) and res['male'].label == 'Infected (male)' # Each column is a 1D result
-    assert res.resample('year').shape == (len(np.unique(res.timevec.years.astype(int))), 2) # Resampled along time only
+    assert res.resample('year').shape == (len(np.unique(res.timevec.years.astype(int))) - 1, 2) # Resampled along time only: each point after the start closes the year before it
     assert res.to_df().columns.tolist() == ['timevec', 'female', 'male']
     assert 'bysex_n_infected_male' in sim.to_df().columns # Dataframe columns for each result column
     assert sim.summary.bysex_n_infected_male == res['male'][-1] # Summarized by column, a stock by its last value

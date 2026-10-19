@@ -460,7 +460,7 @@ def movable(strat, left):
     if mob is None:
         return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
-        args = ', '.join(f'{k}={v!r}' for k,v in mob.items() if v is not None)
+        args = ', '.join(f'{k}={v if k == "away" and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name
         out['mobility'] = Code(f'ss.Mobility({args})')
     else:
         left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.Mobility(...) in stratify()')

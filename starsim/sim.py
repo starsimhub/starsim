@@ -641,8 +641,8 @@ class Sim(ss.Base):
         return 'step' if dt is None or dt == 1 else 'unit'
 
     def has_demography(self):
-        """ Whether people are born or die other than of a disease: demographics modules, or a declared birth, arrival, or death from every state """
-        return bool(self.pars.demographics) or any(self.flows_of(mod) for mod in self.declared)
+        """ Whether people are born or die other than of a disease: demographics modules, a declared birth, arrival, or death from every state, or newborns from a transition (offspring=) """
+        return bool(self.pars.demographics) or any(self.flows_of(mod) or any(getattr(tr, 'offspring', None) is not None for tr in mod.graph.transitions.values()) for mod in self.declared)
 
     @staticmethod
     def flows_of(mod):
@@ -1057,6 +1057,9 @@ class Sim(ss.Base):
         attached for fitting. This tells apart the many runs that come from one script
         (a sweep, a calibration), and tests whether two models written differently are
         the same model. A sim that is not initialized is hashed without initializing it.
+        A module written as code is seen through its parameters: a value it keeps
+        elsewhere (e.g. a grid set in its `__init__()` as `self.grid`) is not, so give it
+        with `define_pars()` for the hash to tell two such sims apart.
         """
         if not self.initialized: # A copy, so that this sim is not changed
             return sc.dcp(self).init().hash()

@@ -363,12 +363,12 @@ The work from [the review's plan](../review_oct17/implementation.md), by phase. 
 - [x] Inference: see above; also vector parameters (`ss.par(ss.by(patch=...), bounds=)`, fitted level by level, `pars={'beta[a]': ...}`), a modifier's amount as an `ss.par`, typed bounds, `calibrate(gof=fn)` without data, and `sim.log_density()` (reverse-mode gradients).
 - [x] `ss.optimize()` over spending, and the Atomica importer's program books (Atomica's baseline exactly, and its optimum within 0.014%); `.total` counts over every place.
 - [x] `ss.modify(hold=)` and `tr.incidence(over=, by=)` (MEmilio's dynamic NPIs, matched exactly); `PartnerNet(n_contacts=ss.by(...), acts=)` and the duration in `net.check()`; `ss.Mobility(scale='mean', cap=)`; `ss.death(lifetable=)`; seeding as a delivery with `move=` and `capacity=`; `ss.Vaccine(leaky=False)`; `at_age=`; `after=`, `before=`, and `offspring=` on transitions (agents); a thin R layer in rstarsim (`R/declare.R`).
-- [ ] Not done: the importers as a companion package (for Cliff), odin's fixed delay, IF2 (deferred), the data for US states and German districts (written up in `starsim_data_issues.md`), a fittable `away=` (deferred), offspring by prototype, and a declared `ss.program()`.
+- [ ] Not done: the importers as a companion package (for Cliff), odin's fixed delay, the data for US states and German districts (written up in `starsim_data_issues.md`), offspring by prototype, and a declared `ss.program()`. (IF2 and a fittable `away=` were done later, by N27 and PD2.)
 
 ### Phase 8: performance
 
 - [x] N23 (factored mixing within places with commuting; sparse movers), N24 (results by group at a reporting interval, `ss.Sim(results=[...])`), N28 (`ss.contacts()` as numbers), by agent P.
-- [x] N25 and N26 prototyped: both targets reachable. [ ] N25, N26, N27 (and IF2) being built in.
+- [x] N25 and N26 prototyped: both targets reachable. [x] N25, N26, N27 (and IF2) built in (memory at 48 bytes per agent, per-event Gillespie by place, particles in the kernels, IF2); agent speed at LASER's scale is still open (`v4_design/oct19/implementation.md`, Stage 5).
 
 ### Phase 9: surface and structure
 

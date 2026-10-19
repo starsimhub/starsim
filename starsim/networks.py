@@ -944,8 +944,8 @@ class DegreeTargets:
 
     def define_degree_results(self):
         self.define_results(
-            ss.Result('mean_degree', label='Mean number of partners', auto_plot=False),
-            ss.Result('concurrency', label='Share with two or more partners', auto_plot=False),
+            ss.Result('mean_degree', label='Mean number of partners', scale=False, auto_plot=False), # Per person, so not scaled by the population
+            ss.Result('concurrency', label='Share with two or more partners', scale=False, auto_plot=False),
         )
         return
 
@@ -1098,6 +1098,9 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
         if p.match is not None and len(p.match) != 1:
             errormsg = f'match= of "{self.name}" takes one property of people and the share of partnerships at the same level of it, e.g. dict(risk=0.8), not {p.match}'
             raise ValueError(errormsg)
+        if p.match is not None and self.by_level is None: # Who partners whom, but not how many: a common slip when porting a model with more partners at some levels (EpiModel's degree by risk)
+            key = list(p.match.keys())[0]
+            ss.note(f'"{self.name}" matches partners by {key}, but everyone has the same number of partners whatever their {key}; for more at some levels, give n_contacts=ss.by({key}=[...])', sim=sim)
         mean_dur = self.mean_dur if self.mean_dur is not None else self.dwell_mean()
         if self.by_level is not None: # Seeking probabilities for each level
             self.p_seeks = []
@@ -1272,8 +1275,11 @@ class MFNet(DegreeTargets, SexualNetwork):
     instead, as for `ss.PartnerNet`: partnerships end when their duration is up, and
     people look for new ones at a rate that depends on how many they have, so the
     distribution of the number of partners (among people who take part, after their
-    debut) stays at the target. The network then starts at the target, and its results
-    and `net.check()` say how close it is.
+    debut) stays at the target. In an open population, where partners die and newcomers
+    start with none, people look more (or less) often by a factor that keeps the mean
+    number of partners at the target; with partnerships much longer than people's time
+    in the network, it takes a few decades to settle. The network then starts at the
+    target, and its results and `net.check()` say how close it is.
 
     Args:
         dur (`ss.Dist`): the duration of each partnership; can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
@@ -1308,6 +1314,8 @@ class MFNet(DegreeTargets, SexualNetwork):
         # Finish initialization
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         self.rel_part = ss.bernoulli(p=1.0) # Set p later, in case rel_part_rates is modified
+        self.debut = ss.FloatArr('debut') # Drawn for each person on their first step in the sim, whether born, arrived, or there at the start
+        self.decided = ss.BoolArr('decided') # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
         if self.targeted: # Only then, so the random numbers of a network without targets are unchanged
             self.rng_degree = ss.random() # The number of partners each person starts with
             self.rng_seek   = ss.random() # Whether each person looks for a partner on this step
@@ -1326,7 +1334,9 @@ class MFNet(DegreeTargets, SexualNetwork):
         if self.targeted:
             self.dist_degree = self.degree_dist(p.n_contacts, p.concurrency, p.max_contacts)
             mean = ss.transitions.dwell_stats(p.dur, lambda v: ss.solvers.convert(v, sim.unit_base))[0]
-            self.init_seek(mean/self.t.dt.to(sim.unit_base).value) # In steps
+            self.mean_steps = mean/self.t.dt.to(sim.unit_base).value
+            self.init_seek(self.mean_steps)
+            self.boost = 1.0 # How much more (or less) often people look than in a closed population, adjusted as the run goes: see add_pairs()
         elif p.concurrency is not None or p.max_contacts is not None:
             errormsg = f'concurrency= and max_contacts= of "{self.name}" are targets for the number of partners at a time, so need n_contacts= as well'
             raise ValueError(errormsg)
@@ -1381,29 +1391,29 @@ class MFNet(DegreeTargets, SexualNetwork):
             self.append(p1=p1, p2=p2, beta=np.ones(len(p1)), dur=dur, acts=self.pars.acts.rvs(len(p1)))
         return len(p1)
 
-    def set_network_states(self, upper_age=None):
-        """ Set network states including age of entry into network and participation rates """
-        self.set_debut(upper_age=upper_age)
-        self.set_participation(upper_age=upper_age)
+    def set_network_states(self):
+        """ Draw the age of debut of anyone who has none (newborns, and people who arrive at any age), and whether each person takes part, when they reach their debut """
+        self.set_debut()
+        self.set_participation()
         return
 
-    def set_participation(self, upper_age=None):
-        """ Set people who will participate in the network at some point """
+    def set_participation(self):
+        """ Draw whether each person who has reached their debut and has not been decided takes part, so that a probability by age is read at the age of debut """
         people = self.sim.people
-        if upper_age is None: uids = people.auids
-        else: uids = (people.age < upper_age).uids
+        uids = (people.alive & ~self.decided & (people.age >= self.debut)).uids
         participant = self.pars.participation.rvs(uids)
         if self.pars.rel_part_rates != 1: # Scale the probability of participating
             self.rel_part.set(p=self.pars.rel_part_rates)
             participant &= self.rel_part.rvs(uids)
         self.participant[uids] = participant
+        self.decided[uids] = True
         return
 
-    def set_debut(self, upper_age=None):
-        """ Set debut age """
+
+    def set_debut(self):
+        """ Draw the age of debut of each person who has none """
         people = self.sim.people
-        if upper_age is None: uids = people.auids
-        else: uids = (people.age < upper_age).uids
+        uids = (people.alive & self.debut.isnan).uids
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
@@ -1417,7 +1427,14 @@ class MFNet(DegreeTargets, SexualNetwork):
             waiting = waiting[self.p_seek[np.minimum(self.degrees(waiting), len(self.p_seek) - 1)] > 0] # Unless they have as many partners as anyone can now
             seekers = ss.uids.concatenate([seekers, waiting]).unique()
             p1, p2 = self.pair_sexes(seekers, self.rng_order.rvs(seekers))
-            return self.add(p1, p2)
+            n = self.add(p1, p2)
+            if len(active): # In an open population, partners leave and newcomers start with none, so people look more (or less) often, by as much as keeps the mean number of partners at the target (a factor adjusted by a fifth of the gap each step, on a log scale)
+                target = self.dist_degree @ np.arange(len(self.dist_degree))
+                mean = self.degrees(active).mean()
+                gap = target/max(mean, 1e-3*target)
+                self.boost = np.clip(self.boost*gap**0.5, 0.01, 1000.0)
+                self.init_seek(self.mean_steps/(self.boost*gap)) # The gap itself too, which damps the swings of the slow adjustment
+            return n
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -1455,7 +1472,7 @@ class MFNet(DegreeTargets, SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.t.dt.years) # Assign debut age and participation to agents born since the last step, i.e. those younger than one timestep; ages are in years, so the timestep must be too
+        self.set_network_states() # Debut for anyone new, and participation for anyone who has reached their debut
         self.add_pairs()
         return
 

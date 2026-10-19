@@ -112,7 +112,7 @@ def test_single_age(do_plot=do_plot):
     )
     mp = ss.MixingPool(**mp_pars)
 
-    sir = ss.SIR()
+    sir = ss.SIR(init_prev=0.1) # Enough seeds under 15 that some infect
     sim = ss.Sim(pars, diseases=sir, networks=mp, label=test_name)
     sim.run()
 
