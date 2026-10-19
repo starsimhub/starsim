@@ -155,3 +155,16 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | # | Old | New | Notes |
 |---|---|---|---|
 | docs | c327d2a1, 3458ebee | 5721ecf6, a839ee7b | Review docs and handoff |
+| 1 | 6e10bfe1 | 22510ed3 | Test only: v4 already places newborns |
+| 2 | 7b9a8397 | f9478d4c | Typed beta on acts networks keeps v4's conversion (no E102); flag to Cliff |
+| 3 | 70f4bee8 | 0c47a03d | Test only: v4 binds sex; no `female=` dimension |
+| 4 | a32a1dda | 55c08019 | Test only: v4 has state.mod |
+| 5 | 8b07bc44 | 8316aa51 | Ported |
+| 6 | 882a2306 | 781ddf9f | Ported; E205/E209 as BadBranchSplit/UndrivenTransition |
+| 7 | b685c5b4 | d1f2c19b | Test only: v4 gives 0 (deliberate, for gradients), not NaN |
+| 8 | 3d447991 | 5cf62a1e | Class-body results ported; set of states as a result dropped (v4: | is a condition) |
+| 9 | 064babf8 | baa76950 | Ported as a sum (I + R), v4's spelling of several sources |
+| 10 | 7c7ab0ed | 57f58b4f | Ported; test uses cure= and at= (v4 names) |
+| 11 | 9570bc05 | ab2d6082 | Ported |
+| 12 | d15a4780 | — | Dropped: v4 reads start=2000 with unit="day" as days, with a note (test_transitions::test_time) |
+| 13 | b4f6086e | 7b7eaf38 | Ported to all of v4's call sites; test uses cure=, where= |
