@@ -100,6 +100,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.lactation_opt = lactation # Whether to add an ss.Lactation: see add_lactation()
         self._callbacks = sc.objdict(conception=[], delivery=[]) # Starsim 3: see add_conception_callback()
         self._nnd = 0 # Neonatal deaths in the step
+        self._mothers = [] # The ages of the women who delivered in the step, for the ASFR (agents)
+        self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
+        self.asfr_width = self.asfr_bins[1] - self.asfr_bins[0]
+        self.asfr = None # Age-specific fertility rates per 1000 women, by bin and time point (rolling annual sums once finalized), as in Starsim 3
         self.fetus_reason = None
         return
 
@@ -300,6 +304,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
             if isinstance(net, ss.PostnatalNet) and not isinstance(net, ss.BreastfeedingNet):
                 net.add_pairs(ppl.parent.raw[new], new)
         moms = ss.uids(np.unique(ppl.parent.raw[new]))
+        self._mothers.append(ppl.age.raw[parents])
         self.ti_live_birth[moms] = ti
         engine.record_event('live_birth', moms)
         p_md = self.pars.p_maternal_death # At delivery, as in Starsim 3 (agents only)
@@ -408,13 +413,50 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.Result('maternal_deaths', label='Maternal deaths', summarize_by='sum', auto_plot=False, **kw),
             ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', summarize_by='sum', auto_plot=False, **kw),
             ss.Result('cbr', label='Crude birth rate', summarize_by='mean', **kw),
+            ss.Result('tfr', label='Total fertility rate', summarize_by='sum', **kw),
         )
+        self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
         return
 
     def update_results(self):
         super().update_results()
         self.results.neonatal_deaths[self.ti] = self._nnd*self.sim._current_scale if self.abm else 0
         self._nnd = 0
+        self.compute_asfr()
+        return
+
+    def compute_asfr(self):
+        """
+        The age-specific fertility rates of the step (per 1000 women: deliveries by the mother's age, over the women of
+        that age), and the TFR from them, as in Starsim 3. As compartments, by the age of each group, so it needs an age
+        stratification (otherwise NaN)
+        """
+        ti = self.ti
+        sim = self.sim
+        bins = self.asfr_bins
+        ppl = sim.people
+        if self.abm:
+            ages = np.concatenate(self._mothers) if self._mothers else np.zeros(0)
+            births = np.histogram(ages, bins=bins)[0]
+            auids = ppl.auids
+            women = np.histogram(ppl.age.raw[auids][ppl.female.raw[auids]], bins=bins)[0]
+        elif any(strat.kind == 'age' and strat.edges is not None for strat in sim.strats): # The rate of each age group, for each bin within it
+            ng = sim.n_groups
+            engine = self.engine
+            d = next(i for i,strat in enumerate(sim.strats) if strat.kind == 'age' and strat.edges is not None)
+            strat = sim.strats[d]
+            level = sim.group_coords[:, d]
+            female = np.broadcast_to(engine.selector.select(ss.people.female)[0], (ng,))
+            delivered = np.broadcast_to(engine.flow_groups.get('delivery', 0.0), (ng,))
+            pop = np.broadcast_to(sum(engine.stock_groups.get(s.name, 0.0) for s in self.graph.people_states), (ng,))
+            by_group = np.divide(np.bincount(level, weights=delivered, minlength=strat.n), np.bincount(level, weights=pop*female, minlength=strat.n), out=np.zeros(strat.n), where=np.bincount(level, weights=pop*female, minlength=strat.n) > 0)
+            mids = (bins[:-1] + bins[1:])/2
+            births, women = by_group[np.clip(np.searchsorted(strat.edges, mids, side='right') - 1, 0, strat.n - 1)], np.ones(len(mids))
+        else:
+            births, women = np.full(len(bins) - 1, np.nan), np.ones(len(bins) - 1)
+        self._mothers = []
+        self.asfr[:, ti] = np.divide(births, women, out=np.zeros(len(births)), where=women > 0)*1000
+        self.results.tfr[ti] = self.asfr[:, ti].sum()*self.asfr_width/1000
         return
 
     def finalize_results(self):
@@ -426,6 +468,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
         inds = self.match_time_inds()
         units = self.pars.rate_units*self.t.dt_year
         res.cbr[:] = sc.safedivide(res.birth[:], self.sim.results.n_alive[inds], default=0)/units if 'n_alive' in self.sim.results else 0
+        tdim = min(int(1/self.t.dt_year), self.t.npts) # The ASFR as rolling annual sums, as in Starsim 3
+        cs = np.cumsum(self.asfr, axis=1)
+        asfr = np.zeros_like(self.asfr)
+        asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((len(cs), 1)), cs[:, :-tdim]])
+        self.asfr = asfr
         return
 
 
