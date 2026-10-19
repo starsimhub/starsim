@@ -799,7 +799,7 @@ class Delivery(Intervention):
             strat = sim.groups.strats[d]
             if isinstance(level, str) and ('->' in level or '>>' in level):
                 src, dst = ss.transitions.parse_arrow(level)
-                self.sources[d] = strat.index(src[0])
+                self.sources[d] = strat.index(sc.tolist(src)[0])
                 level = dst[0]
             self.changes[d] = strat.index(level)
         return

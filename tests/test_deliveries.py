@@ -315,6 +315,11 @@ def test_transfer():
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # What is left after the campaign depends on how far the epidemic had got, which varies by about 10% between agent-based runs
     with pytest.raises(TypeError): # ss.transfer() is movement at a rate, never a delivery
         ss.transfer(vaccinated=True, coverage=0.7, at=[5])
+
+    # From one level to another, given as an arrow
+    sir = make_sir().stratify(risk=['low', 'high'], split=[1, 0])
+    sim = ss.Sim(sir, interventions=ss.Delivery(move=dict(risk='low -> high'), coverage=0.4, at=[5], name='riskier'), solver='ode', stop=10, **kw).run()
+    assert np.isclose(sim.results.riskier.delivered[5], 0.4*kw['total_pop'], rtol=0.01)
     return sims
 
 
