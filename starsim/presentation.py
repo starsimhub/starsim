@@ -46,9 +46,10 @@ class Presentation:
         inits = {s.name:s.init for s in self.states.values() if s.init is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
-        guesses = [self.guessed[key] for key in ['init', 'first'] if key in self.guessed]
+        guesses = [self.guessed[key] for key in ['init', 'first', 'rest'] if key in self.guessed]
         if inits:
-            add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + f'; the rest in {self.first.name}', f'guessed: {"; ".join(guesses)}' if guesses else None)
+            rest = f'; the rest in {self.rest.name}' if self.rest is not None else ''
+            add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'guessed: {"; ".join(guesses)}' if guesses else None)
         else:
             add('', f'init: {self.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
         lines.append('')
@@ -63,12 +64,12 @@ class Presentation:
                         add('', f'{leaf.name} = {quantity_str(leaf.raw, "rate" if leaf.slot == "rate" else None, unit)}') # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
                 terms = getattr(getattr(sim, 'mixing', None), 'terms', [])
                 if sim is None or (not len(sim.pars.networks) and all(term.kind == 'homogeneous' for term in terms)):
-                    expanded = format_expr(tr.rate, values='number', bare=lambda s: f'{s.name}.n / N', mul='×')
+                    expanded = format_expr(tr.rate, values='number', unit=unit, bare=lambda s: f'{s.name}.n / N', mul='×')
                     add('', f'rate = {expanded}', 'homogeneous mixing')
                 elif not len(sim.pars.networks):
-                    add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}', 'exposure through the contact matrices')
+                    add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'exposure through the contact matrices')
                 else:
-                    add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}', 'exposure through the networks')
+                    add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'exposure through the networks')
             else:
                 guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
                 kind = 'spontaneous'
@@ -99,7 +100,7 @@ class Presentation:
                             text = f'dwell ~ Erlang({tr.stages} stages, mean = {quantity_str(raw, "dur", unit)})'
                     add('', text, 'guessed: scalar duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else stages)
                 elif tr.rate is not None:
-                    add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}')
+                    add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}')
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
@@ -112,7 +113,7 @@ class Presentation:
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
         for name,upd in self.updates.items():
-            add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", mul="×")}, set at the end of each step')
+            add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", unit=unit, mul="×")}, set at the end of each step')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle
             midpoint = getattr(p, 'midpoint', None)
             if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
@@ -384,6 +385,8 @@ class Presentation:
 def quantity_str(raw, kind, unit):
     """ Write a rate or a duration with its unit, e.g. "0.05 per day" or "10 days" """
     unit = unit or 'step'
+    if isinstance(raw, ss.seasonal):
+        return seasonal_str(raw, quantity_str(raw.mean, kind, unit)) + ', t in years'
     if isinstance(raw, ss.dur):
         base = type(raw).base
         return f'{raw.value:n} {base if raw.value != 1 else base.removesuffix("s")}'
@@ -395,6 +398,11 @@ def quantity_str(raw, kind, unit):
     elif sc.isnumber(raw) and kind == 'dur':
         return f'{raw:n} {unit}{"s" if raw != 1 else ""}'
     return value_str(raw) # A plain number, e.g. one factor of a rate
+
+
+def seasonal_str(raw, mean):
+    """ An `ss.seasonal` as the textbooks write it, e.g. "1.3 per day × (1 + 0.1 cos(2π(t − 0.25)))", given its mean as text """
+    return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g})))'
 
 
 def quantity_json(raw, kind, unit):

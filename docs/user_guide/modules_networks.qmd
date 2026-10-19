@@ -71,6 +71,20 @@ sim = ss.Sim(sir_age, networks=contacts, total_pop=1e6, stop=ss.days(120), verbo
 sim.results.sir_age.infection.by('age').plot()
 ```
 
+The share of people in each group is `split=`; without it, age groups are sized from the world's ages, and other groups are equal. Groups need not be ages: a list of names makes named groups, and `ss.contacts()` then takes a matrix over the model's own groups by the name of the stratification. Here 20% of people are at high risk, and they have four times as many contacts with each other as people at low risk have:
+
+```{python}
+S, I = ss.states(2)
+sis = ss.Disease(S >> I @ 0.05 * I, I >> S @ ss.days(10), init_prev=0.01, name='sis')
+sis.stratify(risk=['low', 'high'], split=[0.8, 0.2])
+mixing = ss.contacts(risk=[[2, 1], [1, 8]])
+sim = ss.Sim(sis, networks=mixing, total_pop=1e5, stop=ss.days(200), verbose=0).run()
+res = sim.results.sis.n_I
+print(f'Infected at the end: {res.select(risk="low")[-1]:,.0f} at low risk, {res.select(risk="high")[-1]:,.0f} at high risk')
+```
+
+`split=` works for ages too, e.g. `sir_age.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1])`, and so does a matrix over the model's age groups, `ss.contacts(age=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])`. Shares of people by age give a compartmental model its age groups; to give agents ages from data, use `ss.People(n_agents, age_data=df)`, with columns `age` (the lower edge of each bin) and `value`.
+
 ### Beta by network
 
 Infectiousness belongs to the disease and contact to the network, but transmission can differ by route (HIV is far more transmissible through a shared needle than through sex, and more from men to women than the reverse). The disease then gives one `beta` per network, keyed by the network's name; a pair is the two directions of a directed network (for `ss.MFNet`, male to female and then female to male):

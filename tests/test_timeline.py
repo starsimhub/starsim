@@ -32,6 +32,8 @@ def test_timeline_lengths():
     t2 = ss.Timeline(ss.date('2000-01-01'), ss.date('2000-01-10'), ss.days(0.25)).init()
     assert len(t2) == 37
     assert np.allclose(t2.tvec.days_since('2000-01-01'), np.arange(37)*0.25)
+    with pytest.warns(RuntimeWarning, match='max_steps'): # More steps than ss.options.max_steps
+        ss.Timeline(ss.years(0), ss.years(200), ss.days(1)).init()
 
     return t
 

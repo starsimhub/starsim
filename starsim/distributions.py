@@ -809,7 +809,10 @@ class Dist:
                     if self.slots is None:
                         errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
                         raise ValueError(errormsg)
-                    slots = ss.Arr.__getitem__(self.slots, uids) if isinstance(self.slots, ss.IndexArr) else self.slots[uids] # The slots as stored (32-bit), rather than as UIDs
+                    if isinstance(self.slots, ss.IndexArr) and isinstance(self.slots.shared, ss.arrays.UIDArr): # The usual case: the slots are still the UIDs (see ss.People.make_uids())
+                        slots = uids.view(np.ndarray)
+                    else:
+                        slots = ss.Arr.__getitem__(self.slots, uids) if isinstance(self.slots, ss.IndexArr) else self.slots[uids] # The slots as stored (32-bit), rather than as UIDs
                     if len(slots): # Handle case where uids is boolean
                         size = slots.max() + 1
                     else:
@@ -1235,7 +1238,7 @@ class Dist:
             statestr = f"state {pre_state}→{post_state}"
             print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
-        self._uids = self._slots = None # So a draw for every agent does not keep their slots after it
+        self._n = self._uids = self._slots = None # So a draw for every agent does not keep their UIDs or slots after it
 
         return rvs
 

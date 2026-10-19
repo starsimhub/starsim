@@ -78,7 +78,7 @@ Real files rarely arrive with matching headers, so `ss.data()` renames columns o
 
 ## Calibrating
 
-Now we attach the data to the sim, and calibrate. Since the model runs as agents, the fit uses Optuna, scoring each set of values by the mean of the errors of ten runs (`n_runs=` changes it) with the same random seeds (common random numbers), so that the score changes only with the values.
+Now we attach the data to the sim, and calibrate. Since the model runs as agents, the fit uses Optuna, scoring each set of values by one run (`n_runs=` gives the mean of several) with the same random seed (common random numbers), so that the score changes only with the values; Optuna's search learns from the points near each one, which averages out much of the chance.
 
 ```{python}
 sim = make_sim(data=data)

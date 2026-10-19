@@ -34,7 +34,7 @@ def test_sir():
     # Change pars after creating the SIR instance
     sir.pars.beta = {'random': ss.time.freq(0.1, 'year')}
 
-    # You can also change the parameters of the default lognormal distribution directly
+    # You can also change the parameters of the distribution directly
     sir.pars.dur_inf.set(loc=5)
 
     # Or use a function, here a lambda that makes the mean for each agent equal to their age divided by 10
@@ -55,6 +55,18 @@ def test_sir():
     plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
     plt.xlabel('Year')
     plt.title('SIR')
+
+    # The textbook SIR: a duration is the mean of an exponential, and nobody dies (Starsim 3's lognormal and deaths are ssl.AgentSIR's)
+    kw = dict(total_pop=1e6, stop=ss.days(365), solver='ode', verbose=0)
+    def closed(sir):
+        cl = ss.modify(sir.pars.beta, multiply=0.6, start=ss.days(30), stop=ss.days(90))
+        return ss.Sim(sir, interventions=cl, **kw).run().results.sir
+    a = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.days(7), init=dict(I=100)))
+    b = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.expon(scale=ss.days(7)), init=dict(I=100)))
+    assert abs(a.infection.sum() - b.infection.sum())/b.infection.sum() < 0.01 # 714,770 each; 785,847 with Starsim 3's lognormal
+    assert a.death.sum() == 0
+    agent = ssl.AgentSIR()
+    assert isinstance(agent.pars.dur_inf, ss.lognorm_ex) and agent.pars.p_death.pars.p == 0.01 # Starsim 3's defaults
     return sim
 
 

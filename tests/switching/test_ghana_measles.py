@@ -1,12 +1,11 @@
 """
 Switching demo for the Ghana measles seat: fit, then routine MCV1 at 9 months plus a targeted campaign, 100 runs by district.
 
-Passes when: routine starts with newborns; 100 runs fit in memory.
-Blocked today by: a fittable `away=`, N21.
+Passes when: the fit (with a fittable `away=`) improves the loss; routine starts with newborns; 100 runs fit in memory.
+Blocked today by: N21.
 Scaled down to 20 synthetic districts (Ghana has 260) and two years (the original runs 2010 to 2028); results memory is projected to full size from the memory per group per step.
 """
 import numpy as np
-import pytest
 import sciris as sc
 import starsim as ss
 
@@ -51,7 +50,6 @@ def monthly(sim):
     return np.add.reduceat(by.values[1:], np.arange(0, len(by.values) - 1, 30), axis=0)
 
 
-@pytest.mark.xfail(reason='N20: a fittable away= (ss.Mobility(away=ss.par(...))) raises TypeError in Mobility.time_share() at init (deferred: the mixing is worked out once at init)', strict=False)
 def test_ghana_measles_fit():
     sc.heading('Ghana measles: fit beta, the share of contacts away, and the reporting rate to cases by district and month, with a loss of their own')
     d = make_districts()

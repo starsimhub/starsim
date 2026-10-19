@@ -66,7 +66,7 @@ print('Infections in the last step:', res.infection[-1])
 print('Infections so far:', res.infection.cum[-1], 'or', res.cum_infections[-1])
 ```
 
-Results follow the convention of other modeling frameworks: a result has one value for each time point of the sim, from `start` to `stop`. `n_I[0]` is the number infected at the start, before any step, and a flow at index 0 is 0, since no step has ended yet; `n_I[ti]` and `infection[ti]` are the number infected at time point `ti` and the number of infections during the step that ends there. A sim with `stop=T` therefore ends at `T`. (This is one step later than in Starsim 3, where index 0 was the end of the first step.)
+Results follow the convention of other modeling frameworks: a result has one value for each time point of the sim, from `start` to `stop`. `n_I[0]` is the number infected at the start, before any step, and a flow at index 0 is 0, since no step has ended yet; `n_I[ti]` and `infection[ti]` are the number infected at time point `ti` and the number of infections during the step that ends there. A sim with `stop=T` therefore ends at `T`. (This is one step later than in Starsim 3, where index 0 was the end of the first step.) A flow is dated at the end of its step: with a daily step from `2025-01-01`, the infections dated `2025-02-23` are those during the day that starts on `2025-02-22`, so the peak day of incidence is the day before the date of the largest flow.
 
 ```{python}
 print('Infected at the start:', res.n_I[0])

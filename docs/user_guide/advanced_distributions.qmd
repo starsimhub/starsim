@@ -140,8 +140,8 @@ A distribution is accepted wherever a value of the same kind is. For example, th
 | Parameter  | Meaning | Default value |
 |------------|---------|------|
 | `init_prev`  | Initial prevalence of infection | `0.01` |
-| `dur_inf`    | Duration of infection | `ss.lognorm_ex(mean=ss.years(6))` |
-| `p_death`    | Probability of death at the end of an infection | `0.01` |
+| `dur_inf`    | Duration of infection (the mean of an exponential, unless a distribution is given) | `ss.years(6)` |
+| `p_death`    | Probability of death at the end of an infection | `0` |
 
 A number for `init_prev` is the chance that each agent starts infected; an `ss.bernoulli` (or `ss.choose_n`, below) can be given instead. A distribution for `dur_inf` gives each agent their own duration of infection. You can change these parameters away from their defaults when the disease is made, or by setting them afterwards:
 

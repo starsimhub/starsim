@@ -47,10 +47,13 @@ class Agents(Engine):
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
         self.init_dwells()
         rescalable = any(isinstance(m, ss.modify) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
+        read = mod.times_read(self.sim) # The times of entering a state that code in the sim reads (None for all); the engine reads those of the states it schedules exits from, or whose exits have after= or before=
+        unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
         for state in graph.people_states:
             name = state.name
-            arrs += [ss.BoolState(name, label=state.label or name),
-                     ss.arrays.StepArr(f'ti_{name}', label=f'Time of entering {name}')] # Step numbers, as 16-bit integers if the run fits
+            arrs += [ss.BoolState(name, label=state.label or name)]
+            if name not in unkept: # Only if something reads it, to save memory
+                arrs.append(ss.arrays.StepArr(f'ti_{name}', label=f'Time of entering {name}')) # Step numbers, as 16-bit integers if the run fits
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
                 arrs += [ss.arrays.StepArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
@@ -63,6 +66,8 @@ class Agents(Engine):
             self.spread[id(p)] = f'par_{p.name}'
             arrs.append(ss.FloatArr(f'par_{p.name}', default=ss.transitions.numeric_dist(p.raw, self.convert), label=f'Value of {p.name}'))
         mod.define_states(*arrs, overwrite=True) # Overwrite, since in the class form the declarations are class attributes
+        for name in unkept: # Setting it does nothing, and reading it says how to keep it
+            mod.setattribute(f'ti_{name}', ss.arrays.Unkept(f'ti_{name}', mod))
         for state in graph.people_states: # Each change to who is in a state is counted: see wrote()
             mod[state.name].watch = ss.arrays.Watch(self)
         for key in ['rel_sus', 'rel_trans']: # So .effective can apply the modifiers
@@ -1150,7 +1155,7 @@ class Agents(Engine):
         ordered = uids[order]
         bounds = np.searchsorted(levels[order], np.arange(sim.groups.strats[d].n + 1))
         moved_in = sc.ddict(list) # People who moved into each place in this step, who can be chosen after those who were there
-        removed = np.zeros(len(people.uid.raw), dtype=bool)
+        removed = np.zeros(people.uid.len_tot, dtype=bool)
         masks = dict() # Who is in each set of states
         scale = self.scale
         carry = getattr(self, '_carry', 0.0) # The fraction of an agent left over from rounding
@@ -1170,7 +1175,7 @@ class Agents(Engine):
             ok = (place.raw[cand] == src) & ~removed[cand]
             if states is not None:
                 if states not in masks:
-                    masks[states] = np.zeros(len(people.uid.raw), dtype=bool)
+                    masks[states] = np.zeros(people.uid.len_tot, dtype=bool)
                     for mod in sim.declared:
                         for name in states:
                             if name in mod.graph.states and mod.graph.states[name].people:
@@ -1414,7 +1419,7 @@ class Agents(Engine):
         key = dist.crn_key()
         if key is not None: # The usual case: the draws are made in the same pass, so only the agents infected are listed
             uids = ss.kernels.infect(mod[src.name].raw, sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw, float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float),
-                                     float(self.mult_raw('rel_sus')), self.dt, sim.people.slot.raw, *key)
+                                     float(self.mult_raw('rel_sus')), self.dt, sim.people.slot_raw(), *key)
             return ss.uids(uids)
         uids, probs = ss.kernels.infection_probs(mod[src.name].raw, sim.people.auids.view(np.ndarray), sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw,
                                                  float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float), float(self.mult_raw('rel_sus')), self.dt)

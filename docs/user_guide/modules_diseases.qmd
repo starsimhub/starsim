@@ -90,7 +90,13 @@ print(sim.results.sir.keys())
 sim.results.sir.plot()
 ```
 
-Their states are `S`, `I`, `R` (and `E` for SEIR), with the Starsim 3 names `susceptible`, `infected`, and `recovered` as aliases. Starsim 3's versions of these diseases, written as code, are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` (below).
+Their states are `S`, `I`, `R` (and `E` for SEIR), with the Starsim 3 names `susceptible`, `infected`, and `recovered` as aliases. Starsim 3's versions of these diseases, written as code, are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` (below): they keep Starsim 3's defaults (a lognormal `dur_inf` and `p_death=0.01`).
+
+They are the textbook models, as a disease you declare yourself is:
+
+- A duration (`dur_inf=ss.days(7)`, or a number, in years) is the mean of an exponential. For another shape, give the distribution: `dur_inf=ss.lognorm_ex(mean=ss.days(7), std=ss.days(2))`.
+- Nobody dies of the infection unless `p_death` is given (e.g. `p_death=0.01`).
+- `init_prev=` seeds the state a new infection enters: `I`, but `E` in an SEIR, so an SEIR seeded that way starts with nobody infectious. To start people infectious, give `init=dict(I=100)` instead.
 
 ### Dwell times
 
@@ -375,7 +381,7 @@ sim.run()
 sim.diseases.myseir.plot()
 ```
 
-(The same model declared is `ss.SEIR(dur_exp=ss.lognorm_ex(ss.years(0.5)), dur_inf=ss.lognorm_ex(ss.years(1.0)), init_prev=0.05)`, which also runs as an ODE.)
+(The same model declared is `ss.SEIR(dur_exp=ss.lognorm_ex(ss.years(0.5)), dur_inf=ss.lognorm_ex(ss.years(1.0)), p_death=0.01, init_prev=0.05)`, which also runs as an ODE.)
 
 For a richer natural history, `ssl.AgentSIR.set_prognoses()` splits into two methods you can override separately:
 

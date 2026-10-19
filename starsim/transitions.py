@@ -567,7 +567,7 @@ class lifetable:
         return np.array(out)
 
 
-def death(arrow=None, rate=None, dur=None, lifetable=None, name=None, label=None):
+def death(arrow=None, rate=None, dur=None, lifetable=None, name=None, label=None, **kwargs):
     """
     An outflow of people, e.g. `ss.death('I ->', rate=ss.peryear(0.1))`
 
@@ -579,6 +579,14 @@ def death(arrow=None, rate=None, dur=None, lifetable=None, name=None, label=None
         name (str): the name of the transition
         label (str): a human-readable name
     """
+    if 'p' in kwargs: # A share who die is a branch of the way out of a state, not a death rate
+        errormsg = (f'ss.death() takes a rate (rate= or dur=), not p=. For a share of the people leaving a state who die, make it a branch of that exit, e.g. '
+                    f'ss.progression(\'I -> null\', dur=ss.days(10), p={kwargs["p"]}) alongside ss.progression(\'I -> R\', dur=ss.days(10)), which takes the rest')
+        raise TypeError(errormsg)
+    elif kwargs:
+        key = list(kwargs)[0]
+        errormsg = f'ss.death() takes an arrow, rate=, dur=, lifetable=, name=, and label=, not {key}={did_you_mean(key, ["rate", "dur", "lifetable", "name", "label"])}'
+        raise TypeError(errormsg)
     if lifetable is not None:
         if rate is not None or dur is not None or arrow is not None:
             errormsg = 'ss.death(lifetable=) is the deaths of everyone, from a life table; it takes no arrow, rate=, or dur='

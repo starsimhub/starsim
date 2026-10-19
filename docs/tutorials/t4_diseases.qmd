@@ -29,9 +29,9 @@ sim.run().plot()
 ```
 
 Notice how we modified several key parameters:
-- `dur_inf=10`: How long people stay infectious (10 years, since the sim's unit is a year)
+- `dur_inf=10`: How long people stay infectious (10 years on average, since the sim's unit is a year, exponentially distributed, as any duration in a declared disease is)
 - `beta=0.2`: Transmission rate per contact
-- `init_prev=0.4`: Starting with 40% of the population infected
+- `init_prev=0.4`: Starting with 40% of the population infected (in the state a new infection enters: `I` here, but `E` in an SEIR; `init=dict(I=800)` starts people in a state by name)
 - `p_death=0.2`: 20% of infected people die
 
 We already saw that this model creates results that are stored in `sim.results.sir`: a count for each state (`n_S`, `n_I`, `n_R`), and a flow for each transition (`infection`, `recovery`, and `death`). The sim works on its own copy of the disease, so the disease that ran is `sim.diseases.sir` (not the `sir` we made), and its results can also be accessed via `sim.diseases.sir.results`:

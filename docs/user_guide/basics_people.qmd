@@ -106,7 +106,7 @@ sim.run()
 print(f'Number of infected people: {sim.people.sis.I.sum()}')
 ```
 
-When states or arrays are added by modules, they are stored as dictionaries under the name of that module. A declared disease such as `ss.SIS` adds one boolean state for each of its disease states (`S`, `I`), along with the time each agent entered it (`ti_I`) and is due to leave it (`ti_exit_I`), and the multipliers `rel_sus` and `rel_trans`.
+When states or arrays are added by modules, they are stored as dictionaries under the name of that module. A declared disease such as `ss.SIS` adds one boolean state for each of its disease states (`S`, `I`), along with the time each agent entered it (`ti_I`) and is due to leave it (`ti_exit_I`), and the multipliers `rel_sus` and `rel_trans`. To save memory, the time of entering a state is kept only if something reads it: the disease itself (for a state that people leave after a time), or the code of a module in the sim that names it (e.g. an analyzer that reads `sis.ti_S`). Reading one that was not kept, e.g. in a script after the run, raises `ss.TimeNotKept`; set `ss.options.keep_times = True` before the sim is initialized to keep them all. `people.uid` takes no memory either, since each agent's UID is its index.
 
 Note that the Starsim `Arr` class can be used like a Numpy array, with all the standard arithmetic operations like sums, mean, counting, etc.
 

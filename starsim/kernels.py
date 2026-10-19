@@ -1754,8 +1754,9 @@ def convey(rng, y, p, w, flows, release):
     agents leave at the start of the step their dwell time ends in, and Gillespie and
     tau-leaping at its middle (`release=True`); the ODE lets them leave at a constant rate
     over the step (see `step()`), which is exact at each time point for a delay of whole steps.
-    The other exits of the state act on every slot but the last. A place with people in a
-    conveyor is stepped by the exact solver by place, since the people in it move.
+    The other exits of the state act on every slot, the last until its people leave it (for
+    the ODE, see `release_rates()`). A place with people in a conveyor is stepped by the exact
+    solver by place, since the people in it move.
 
     Each conveyor is a set of operations after the flows' (see `Program.starts`), all CONVEY:
     the first one's argument is the flow the last slot leaves by, and the others' are its
@@ -1902,6 +1903,36 @@ def step_start(y, p, w, dt, solver):
 
 
 @jit
+def release_rates(y, p, rates, dt):
+    """
+    For the ODE, in a program with conveyors: the rate at which the people due to leave each conveyor leave it over the step, once the rates of the step are worked out
+
+    They leave at a constant rate (see `step_start()`), and the other exits of the state act on them
+    until they do, so the rate is lowered for the slot to be empty at the end of the step: with a
+    total rate h of those exits, to a share ψ(h·dt) = h·dt/(exp(h·dt) - 1) of the people in it. With
+    those arriving in the first slot over a step, of whom a share (1 - exp(-h·dt))/(h·dt) are left at
+    its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a share
+    exp(-h·K·dt), where leaving the last slot by itself kept exp(-h·(K - 1/2)·dt).
+    """
+    nf = len(p.src)
+    ng = y.shape[1]
+    for i in range(len(p.starts) - nf - 1):
+        a, b = p.starts[nf+i], p.starts[nf+i+1]
+        if p.ops[a] != CONVEY:
+            continue
+        last = p.args[b-1]
+        f_out = p.args[a]
+        for g in range(ng):
+            x = 0.0
+            for f in range(nf):
+                if p.src[f] == last:
+                    x += max(rates[f, g], 0.0)*dt
+            if x > 1e-12:
+                p.inflow[f_out, g] *= x/np.expm1(x)
+    return
+
+
+@jit
 def step_end(rng, y, p, w, flows):
     """ For `step()`, in a program with conveyors or updates: everyone in a conveyor moves along one slot, and the counts that are updated are set (see `step_start()`) """
     nf = len(p.src)
@@ -1932,7 +1963,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
         p (Program): the flows
         w (tuple): the arrays to work in: see `workspace()`
         dt (float): the timestep
-        n_sub (int): the number of substeps; if 0, for the ODE, enough that no compartment turns over by more than a quarter in one (tau-leaping and the exact solver choose their own)
+        n_sub (int): the number of substeps; if 0, for the ODE, enough that no compartment turns over, or grows through its inflows, by more than a quarter in one, chosen at the start of each step (tau-leaping and the exact solver choose their own)
         solver (int): which of `solvers` to use
         flows (array): filled in with the total of each transition and mover over the step
         tables (tuple): the fixed, mult, consts, and rel_trans tables (see `run()`), with three rows per step
@@ -1949,6 +1980,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     timed = solver == 3 or solver == 4 # Tau-leaping and the exact solver take steps of their own length
     by_groups = solver == 4 and (not p.local or p.n_places == 1) and coupled(p, ng) # The exact solver for groups that affect each other (or are all in one place), following only what each event changes (see gillespie_groups())
     by_place = solver == 4 and p.local and not by_groups # The exact solver by place, where each place works out its own rates (see gillespie_places())
+    auto = solver < 2 and n_sub <= 0 # The ODE, with as many substeps as the step needs
     elapsed = 0.0 # For these: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
@@ -2119,6 +2151,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                 for f in range(nflows):
                     for g in range(ng):
                         flows[f, g] = 0
+                if extra and solver < 2:
+                    release_rates(y, p, rates, dt)
             if solver >= 2: # The stochastic solvers take it from here
                 end = dt if row < 0 else min(int((elapsed + 1e-12)*pieces/dt) + 1, pieces)*dt/pieces # The end of the piece of the step that values which vary in time are held for; events are exact within it, since the rates are held
                 if pending and timed: # The people due to leave a conveyor leave at the middle of the step
@@ -2202,6 +2236,20 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                     dy[stage, p.tgt_comp[k], j] += amount*p.tgt_w[k, g]*p.maps[p.tgt_map[k], g, j]
                         for k in range(p.crd_starts[f], p.crd_starts[f+1]):
                             df[stage, p.crd_index[k], g] += amount*p.crd_w[k, g]
+
+            if auto and sub == 0 and stage == 0: # ... nor grows by more than a quarter in one, through its inflows (an epidemic's infected, growing much faster than they recover)
+                growing = 0.0
+                for g in range(ng):
+                    total = 0.0
+                    for c in range(nc):
+                        total += y[c, g]
+                    for c in range(nc):
+                        if dy[0, c, g] > 0 and y[c, g] > 1e-12*total: # Not a compartment that is only starting to fill, whose growth follows another's
+                            growing = max(growing, dy[0, c, g]/y[c, g])
+                more = int(np.ceil(growing*dt/0.25))
+                if more > n_sub:
+                    n_sub = more
+                    h = dt/n_sub
 
             if stage < stages - 1: # Where the next stage is worked out
                 ahead = h if stage == 2 else h/2
@@ -2949,6 +2997,7 @@ def infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, m
     gs = groups[a:b]
     rs = rel_sus[a:b]
     sl = slots[a:b]
+    by_uid = len(slots) == 0 # The slots are the UIDs
     hs = hit[a:b]
     m = 0
     for i in range(len(sus)):
@@ -2960,7 +3009,7 @@ def infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, m
             else:
                 prob = -np.expm1(-max(rate[g]*rs[i]*state_sus*adjust[g]*mult, 0.0)*dt) # As in infection_probs()
             if prob > 0:
-                got = crn_uniform(key, sl[i], shift, scale) < prob
+                got = crn_uniform(key, a + i if by_uid else sl[i], shift, scale) < prob
         hs[i] = got
         m += got
     return m
@@ -3000,7 +3049,7 @@ def infect(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slot
         susceptible (array): whether each agent is in the state, by UID
         groups (array): the group of each agent, by UID (or an empty array if there is one group)
         rate, rel_sus, state_sus, adjust, mult, dt: as for `infection_probs()`
-        slots (array): the slot of each agent, by UID
+        slots (array): the slot of each agent, by UID, or None if they are the UIDs (see `ss.People.slot_raw()`)
         seed, ind (int): the seed and index of the distribution's call
         dtype (dtype): the dtype of its uniforms
 
@@ -3008,6 +3057,8 @@ def infect(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slot
     """
     shift, scale = crn_bits(dtype)
     nchunks = n_chunks(len(susceptible))
+    if slots is None:
+        slots = np.empty(0, dtype=np.int32)
     func = infect_threaded if nchunks > 1 else infect_serial
     return func(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slots, seed, ind, shift, scale, nchunks)
 

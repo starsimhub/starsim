@@ -121,10 +121,12 @@ Done by PC (round 15): D-A documented (one transition with several destinations 
 ### Phase D: inference (S to M)
 
 - [x] **A1.** The JAX density's substep cap set from the fastest rate over the bounds, or the density rebuilt when a draw hits it (37 log-likelihood units off today).
-- [ ] **W13** (after D-G), and the scale of an all-zero series (SW4, DF21).
-- [ ] The two coverage checks the stats agent could not re-run (two-parameter NUTS, PMCMC), and X8.
+- [x] **W13** (after D-G), and the scale of an all-zero series (SW4, DF21).
+- [x] The two coverage checks the stats agent could not re-run (two-parameter NUTS, PMCMC), and X8.
 - [x] `ss.perday(...) * ss.timeseries(...)` accepted in either order.
-- [ ] **Mixing parameters fittable** (DF34, `away=`): rebuild mixing when a fitted parameter changes it.
+- [x] **Mixing parameters fittable** (DF34, `away=`): rebuild mixing when a fitted parameter changes it.
+
+Done by PD2 (round 15): W13 per Cliff (one run a point for agent fits, four for stochastic compartmental); DF21 (an all-zero series scaled by the model's mean); DF34 (`away=`, `cap=`, gravity parameters fittable; a fit recovers `away=0.02` under ode, binomial, agents); X8 (no change: one kernel build covers every solver, 56 to 60 s cold); PMCMC coverage 0.950 ± 0.022; two-parameter NUTS 0.907/0.917 ± 0.011 after fixing chains trapped in a worse mode (1.75% of fits), the rest unexplained (exact grid posteriors under-cover b by about 2.5 SE too); L26's message.
 
 ### Phase E: vector-borne models and counts (M; after D-C)
 
@@ -145,10 +147,12 @@ Done by PE (round 15): acquisition by D-C (MA1 to MA5; `test_contracts.py::test_
 
 - [x] Sparse place-by-place arrays from `Mobility` onward (SC1) and one BLAS thread in workers (SC4), with W17 (workers by `forkserver` once JAX or Numba threads exist). (Done by PG. The multi-threaded-fork warning remains, from OpenBLAS's idle pools; silencing it needs forkserver everywhere, DC23.)
 - [x] A propensity tree or dependency graph for exact Gillespie with interacting groups (SC6), then the tau-leap rule from D-E. (Done by PG for the trees: flat cost per event, 0.2 µs at 300 strata, 4 µs at 300 places; the tau-leap rule waits on D-E.)
-- [~] Memory per agent (N25), after decisions item 21; the lean path for small declared models (N29). (Memory done by PM, round 15: 117 to 81 bytes per agent at the peak, results identical, speed unchanged; the rest of the way to 50 is for Cliff: group arrays as int16 and shared, about 19 to 5 bytes; dropping `people.uid`, 4.8; entry times only when read, 2.4 each. N29 open.)
+- [~] Memory per agent (N25), after decisions item 21; the lean path for small declared models (N29). (Memory done by PM, round 15: 117 to 81 bytes per agent at the peak, results identical, speed unchanged; then 81 to 48 by PMEM (round 15, Cliff's item 9: int16 group arrays, no stored `people.uid`, entry times only when read); previously for Cliff: group arrays as int16 and shared, about 19 to 5 bytes; dropping `people.uid`, 4.8; entry times only when read, 2.4 each. N29 open.)
 - [ ] Crossings whose places mix within a step (CROSS's deferred item), and the ODE's repeated sums of exposures in a crossing. (The ODE's repeated sums are done by PG with HP29: three HPV genotypes in 9 s, from 383 s, bit for bit.)
 
 ### Phase H: design passes (L; after D-F)
+
+Designs written (round 15), in [designs/](designs/README.md), with the decisions for Cliff and where the four documents disagree; code waits on his answers.
 
 - [ ] **The care cascade** (ST12 to ST16, ST20, HP24, HP26, D27, D29): events (`test.positive`, `tx.failed`), remembered results per person, `on=` over several events, stock targets with a priority, and stratified results; deliveries in the kernels (DF1, PL2, PL3, PL7) as part of it.
 - [ ] **A family of diseases** (HP22, HP23, HP15, HP29): cross-immunity with a combination rule, union results, joint seeding, and the size of the crossing.

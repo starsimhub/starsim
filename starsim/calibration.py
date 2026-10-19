@@ -1180,6 +1180,8 @@ def mismatch(sim, df=None, weights=None, gof=None):
 
     By default, for each data series, the normalized absolute error: the mean of
     |model − data| divided by the mean of the data; the series are then averaged.
+    A series whose data are all zero is divided by the mean of the model instead,
+    so it adds at most 1 (not raw counts, which would swamp the other series).
 
     Args:
         sim (`ss.Sim`): a sim that has been run
@@ -1193,7 +1195,7 @@ def mismatch(sim, df=None, weights=None, gof=None):
     total = 0.0
     wsum = 0.0
     for col,(expected,model) in compare(sim, df).items():
-        scale = np.abs(expected).mean() or np.ptp(expected) or 1.0
+        scale = np.abs(expected).mean() or np.abs(model).mean() or 1.0 # An all-zero series by the model's own size, so it cannot swamp the others
         diff = model - expected
         value = np.sqrt(np.mean(diff**2))/scale if gof == 'rmse' else np.mean(np.abs(diff))/scale
         weight = series_weight(weights, col)
@@ -2436,7 +2438,7 @@ def bounded_pars(probe, pars=None, unused=()):
         pars (list): the names to take (default: all with bounds)
         unused (set): the ids of parameters to leave out (those of likelihoods not used)
 
-    Returns the parameters by name, and the names of those of networks that a compartmental run turns into contact rates (which are set when the sim is built).
+    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of the movement between places, and of networks that a compartmental run turns into contact rates.
     """
     fitted = sc.objdict()
     for mod in probe.declared:
@@ -2449,6 +2451,8 @@ def bounded_pars(probe, pars=None, unused=()):
                 fitted[key] = p
     mixed = getattr(probe, 'mixed', []) if probe.solver != 'abm' else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
+    moving = [id(p) for mod in probe.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
+    contacts += [key for key,p in fitted.items() if id(p) in moving] # And those of the movement between places, which set the mixing then too
     for mod in list(probe.modules) + mixed: # A parameter of a module written as code, given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
         if getattr(mod, 'graph', None) is None and isinstance(mod.pars, ss.Pars):
             for name,p in mod.pars.bounded().items():
@@ -2688,12 +2692,12 @@ class Problem:
 
         # How it is run and scored
         self.stochastic = probe.solver not in ['ode']
-        self.n_runs = sc.ifelse(n_runs, 10 if probe.solver == 'abm' else 4 if self.stochastic else 1) # A stochastic sim is scored over several runs, so the fit is not to one draw of chance (ten for agents, whose runs vary most)
+        self.n_runs = sc.ifelse(n_runs, 4 if self.stochastic and probe.solver != 'abm' else 1) # A stochastic compartmental sim is scored over several runs, so the fit is not to one draw of chance; agents, whose runs are slow, by one run a point, as Optuna's search averages over nearby points
         self.seeds = [sc.ifelse(base.pars.rand_seed, 1) + i for i in range(self.n_runs)] # The same seeds at every point (common random numbers), so the score changes only with the values
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
-        self.can_restart = runner.init().kernel_only() and not contacts # Contact rates are worked out when the sim is built, so a new value needs a new sim
-        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else None) or (f'{contacts[0]} sets contact rates when the sim is built' if contacts else None) # Why there are no gradients, if there are not
+        self.can_restart = runner.init().kernel_only() and not contacts # The mixing is worked out when the sim is built, so a new value needs a new sim
+        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else None) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         return
 
@@ -2706,7 +2710,7 @@ class Problem:
                 print(f'Fitting by {method} ({why}; override with method=)')
         self.use_map = self.use_lik and any(self.priors) and method not in sampling_methods and method != 'if2' # A posterior method uses the priors itself, and IF2 finds the maximum likelihood
         if verbose and self.stochastic and method not in ['pmcmc', 'abc-smc', 'if2']: # Which take a run of their own for each point
-            print(f'Scoring each point by the mean of {self.n_runs} run{"s" if self.n_runs != 1 else ""}, with the same seeds at every point (override with n_runs=)')
+            print(f'Scoring each point by the mean of {self.n_runs} runs, with the same seeds at every point (override with n_runs=)' if self.n_runs > 1 else 'Scoring each point by one run, with the same seed at every point (override with n_runs=)')
         if verbose and self.use_map:
             print(f'Minimizing the negative log-posterior, since {sc.strjoin(np.array(self.names)[self.priors])} {"has a prior" if sum(self.priors) == 1 else "have priors"}')
         filtered = ParticleFilter.reason(self.runner)
@@ -2953,12 +2957,15 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=3, **options):
     if len(results) == 1: # Nothing to compare it with, so SciPy's own stopping rule
         return sc.objdict(best=p.decode(result.x), converged=bool(result.success), why=f'{result.message} ({evals} evaluations)')
     tol = 0.1 if p.use_lik else max(1e-3*abs(result.fun), 1e-6) # A tenth of a unit of log-likelihood, or 0.1% of a goodness of fit (which can be 0)
-    ends = sc.strjoin([f'{res.fun:.4g}' for res in results])
+    at = lambda res: f' at {sc.strjoin([f"{name}={val:.4g}" for name,val in zip(p.names, p.decode(res.x))])}' if len(p.names) <= 3 else '' # Where each search ended, if that is short
+    ends = sc.strjoin([f'{res.fun:.4g}{at(res)}' for res in results], sep='; ')
     converged = bool(results[1].fun - result.fun <= tol)
     if converged:
-        why = f'the best two of {len(results)} searches, from points of the scan that are apart, ended within {tol:.2g} of each other ({ends}; {evals} evaluations)'
+        why = f'the best two of {len(results)} searches, from points of the scan that are apart, ended within {tol:.2g} of each other (objective values {ends}; {evals} evaluations)'
     else:
-        why = f'the {len(results)} searches, from points of the scan that are apart, ended at different values ({ends}; {evals} evaluations), so the best may be a local optimum; try a larger scan (scan=) or more searches (restarts=)'
+        why = f'the {len(results)} searches, from points of the scan that are apart, ended at different objective values ({ends}; {evals} evaluations), so the best may be a local optimum; try a larger scan (scan=) or more searches (restarts=)'
+        if not p.use_lik and 0 <= result.fun < results[1].fun/10:
+            why += '. The best is far below the others, which may have stalled where the fit is flat (e.g. where there is no epidemic), so it is likely the best there is'
     return sc.objdict(best=p.decode(result.x), converged=converged, why=why)
 
 
@@ -3078,12 +3085,23 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
 
 
 def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
-    """ The No-U-Turn sampler, each chain from one of the best points of a scan that are apart (so that chains caught in different modes disagree), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop """
+    """ The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop """
     p = problem
     sampling = dict(draws=draws, warmup=warmup, chains=chains)
     logs, span, base_lows = p.logs, p.span, p.base_lows
-    starts = p.scan(scan, top=chains)
-    z0 = np.array([p.to_z(starts[c % len(starts)]) for c in range(chains)]) # Fewer points than chains if the scan is small
+    import scipy.optimize as spo
+    bounds = list(zip(p.encode(p.lows), p.encode(p.highs)))
+    def fun(z): # Minus the log-likelihood and its gradient, on the scale searched on (as in fit_scipy())
+        x = p.decode(z)
+        value, grad = p.with_gradient(x)
+        return value, grad*np.where(p.logs, x, 1.0)
+    optima = [p.decode(spo.minimize(fun, p.encode(x), method='l-bfgs-b', jac=True, bounds=bounds).x) for x in p.scan(scan, top=max(chains, 3))] # The optimum near each of the best points of the scan that are apart
+    scores = np.array([p.objective(x) - p.logprior(x) for x in optima]) # Minus the log of the posterior density at each
+    starts = []
+    for i in np.argsort(scores, kind='stable'): # The chains start at the best optimum, and at others only if they are nearly as good, so they cannot all sit in a mode far below the best (A4), while chains in modes that compete disagree
+        if scores[i] - scores.min() <= 5 and all(np.abs(p.share_of(optima[i]) - p.share_of(x)).max() >= 0.01 for x in starts):
+            starts.append(optima[i])
+    z0 = np.array([p.to_z(starts[c % len(starts)]) for c in range(chains)])
 
     def logpost(z):
         x, share = p.to_x(z)
@@ -3145,7 +3163,7 @@ def fit(sim, pars=None, data=None, weights=None, likelihood=None, gof=None, meth
         gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
         method (str): 'nuts' (the default for a deterministic sim with gradients whose data series all have a likelihood: a posterior, from the No-U-Turn sampler, with each chain started from one of the best points of a scan over the bounds that are apart; the priors are the parameters' `prior=`, or uniform over their bounds), 'l-bfgs-b' (the default for other deterministic sims, with gradients from JAX; see `ss.gradients`), 'nelder-mead' (the default for one that JAX cannot run, and for a point estimate of one or two parameters, where it is faster than gradients), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, 'pmcmc' (particle MCMC, the default for a stochastic compartmental sim whose data series all have a likelihood: a posterior, from a random-walk Metropolis sampler with the likelihood estimated by a particle filter; see `ss.ParticleFilter`), 'if2' (iterated filtering, for the same sims: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `Swarm`), or 'optuna' (the default for other stochastic sims, including agent-based ones: a best fit, not a posterior)
         scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy), each NUTS chain from one of the best that are apart, and particle MCMC from the best
-        n_runs (int): runs per evaluation, for a stochastic sim (default 10 for agents, 4 for a stochastic compartmental sim, and 1 for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), and `fit.mismatch` is that score at the best fit
+        n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), and `fit.mismatch` is that score at the best fit
         rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
         verbose (bool): whether to print progress
         kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.calibration.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)

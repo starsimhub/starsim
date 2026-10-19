@@ -137,7 +137,10 @@ def test_streams(solver):
             return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0)
         for s in [solver, 'ode']:
             whole, stepped = [seasonal(s).run(profile=profile).results.sir.vax.values for profile in [False, True]]
-            assert np.array_equal(whole, stepped), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}' # 61 under binomial before
+            if s == 'ode': # With more than one substep, the kernel compiled into a whole run and the one called from Python round differently, by about 1e-16
+                assert np.allclose(whole, stepped, rtol=1e-12, atol=0), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}'
+            else:
+                assert np.array_equal(whole, stepped), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}' # 61 under binomial before
 
         # Each run of several draws its outcomes from its own seed, as it would on its own (C19)
         sim = corpus.outcomes(solver=solver, rand_seed=5)
@@ -208,7 +211,7 @@ def test_exit_order(solver):
         I = ss.State(name='I')
         dests = {key:ss.State(name=key.upper()) for key in 'abc'}
         exits = {key:I >> dests[key] @ ss.perday(1.0) for key in order} # Three equal exits, fast compared with the step
-        dis = ss.Disease(I, *dests.values(), **exits, init=dict(I=1.0), name='exits')
+        dis = ss.Disease(I, *dests.values(), **exits, name='exits')
         agents = dict(n_agents=20_000) if solver == 'abm' else {}
         pars = dict(solver='gillespie', total_pop=1e8) if solver == 'tau' else dict(solver=solver, total_pop=100_000) # Tau-leaping is gillespie's way with a run of too many events
         sim = ss.Sim(dis, unit='day', stop=5, verbose=0, **pars, **agents).run()
@@ -235,7 +238,7 @@ def test_dwell_forms():
     )
     def run(form, solver):
         I, R, D = ss.states('I R D')
-        dis = ss.Disease(I, R, D, **forms[form](I, R, D), init=dict(I=1.0), name='cohort')
+        dis = ss.Disease(I, R, D, **forms[form](I, R, D), name='cohort')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         res = ss.Sim(dis, unit='day', dt=0.05, stop=15, solver=solver, rand_seed=1, verbose=0, **size).run().results.cohort
         return np.array([res.n_I.values.mean(), res.n_R[-1], res.n_D[-1]])/20_000 # Time infected, and where people end up

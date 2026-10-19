@@ -12,9 +12,8 @@
 - [x] Implement merged review recommendations
 - [x] Run additional reviews 1-2 (fuzz, stats)
 - [x] Implement additional review 1-2 findings
-- [ ] Run additional review "textbook cannon"
-- [ ] Run additional review "naive user"
-- [ ] Run additional review "complex findings"
+- [x] Run additional review "textbook cannon"
+- [x] Run additional review "naive user"
 - [ ] Implement additional review findings
 
 ## New use cases
@@ -27,6 +26,8 @@
 - [ ] More complex applications from other models included in the survey
 - [ ] Auto-import for EMOD (HIV?)
 - [ ] New TB model ensemble
+- [ ] Thanzi la Onse
+- [ ] Atomica applications
 
 ## Other
 
@@ -35,4 +36,6 @@
 - [x] Write do/don't/how migration guide for each switching example
 - [ ] Rewrite/retake Starsim exam
 - [ ] Write AI chat/pipelines
+- [ ] Turn disease models into natural language write-ups and back again
 - [ ] Decide on and implement library examples (camdl's, Keeling & Rohani, others)
+- [ ] Show example of pure NumPy and then stages of implementation moving to pure Starsim

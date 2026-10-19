@@ -5,6 +5,8 @@ Passes when: within 2 to 3x of LASER threaded, at about 50 bytes per agent.
 Blocked today by: N25.
 Scaled down to 100,000 and 400,000 agents over 149 synthetic places; speed and memory are compared per agent-step and per agent, which do not depend on the size.
 """
+import sys
+import subprocess
 import tracemalloc
 import numpy as np
 import pytest
@@ -68,7 +70,12 @@ def test_laser_declared():
     return agents, comps
 
 
-def peak_memory(total):
+def peak_memory(total, fresh=True):
+    """ The peak memory of a run, in a fresh process so that earlier tests in the same process do not change it """
+    if fresh:
+        code = f'import sciris as sc; print(sc.importbypath({__file__!r}).peak_memory({total}, fresh=False))'
+        out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True).stdout
+        return float(out.split()[-1])
     sim = make_sim(total)
     tracemalloc.start()
     sim.init().run()
@@ -77,7 +84,7 @@ def peak_memory(total):
     return peak
 
 
-@pytest.mark.xfail(reason='N25: about 81 bytes per agent at the peak here (117 before 32-bit active UIDs, 16-bit death times, and no memory for arrays nothing sets; 142 before 16-bit step numbers): the People arrays (26 bytes: 32-bit auids and uid, age, patch, alive, female, 16-bit ti_dead and ti_removed), the disease (22: four states, their 16-bit times, the scheduled exits), the groups kept (14: patch as floats, its levels, and the groups), all with a fifth more room for births, and the temporaries of a step', strict=False)
+# About 48 bytes per agent at the peak (81 before the groups were kept as 16-bit integers in the property itself, people.uid became the index with no array, and only the entry times something reads were kept): the People arrays (age, alive, female, the 32-bit auids, the 16-bit patch, ti_dead, and ti_removed), the disease's four states, the times of entering E and I and leaving them, and the scheduled exits, all with a fifth more room for births, and the temporaries of growing the arrays
 def test_laser_memory():
     sc.heading('LASER: memory per agent')
     n1, n2 = 50_000, 200_000

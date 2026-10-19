@@ -393,6 +393,7 @@ class Graph(Presentation):
         self.people_states = [s for s in states if s.people]
         self.count_states = [s for s in states if not s.people]
         self.first = first
+        self.resolve_rest()
 
         # Now that the people are known, fill in the things that depend on them
         for name,tr in self.transitions.items():
@@ -404,6 +405,25 @@ class Graph(Presentation):
                                              f'     A bare state means contact with people in that state, and there is no contact with a count.\n'
                                              f'     Write {state.name}.n for the number itself. If {state.name} is people, declare it with ss.State(people=True).')
             tr.people = all(s.people for s in (tr.src or []) + (tr.dst or []))
+        return
+
+    def resolve_rest(self):
+        """
+        Work out where the people not given an initial state start: the first state, unless it is given an initial value of
+        its own, which is then kept (`init=dict(S=0.1, I=1e-4)` starts 10% susceptible). Then it is the one state of people
+        with no initial value, with a note in `guessed`; with none or several, there is no such state, and the initial values
+        must sum to 1 (see `Engine.init_fractions()`)
+        """
+        self.rest = self.first
+        if self.first.init is None:
+            return
+        seeded = {id(st) for tr in self.transitions.values() if tr.contact for st in tr.dst or []} if self.init_prev is not None else set() # Where init_prev puts people
+        unset = [s for s in self.people_states if s.init is None and id(s) not in seeded]
+        if len(unset) == 1:
+            self.rest = unset[0]
+            self.guessed['rest'] = f'{self.rest.name}, the only state with no initial value, since {self.first.name} has one'
+        else:
+            self.rest = None
         return
 
     def resolve_acquisition(self):
@@ -453,7 +473,11 @@ class Graph(Presentation):
     def set_keywords(self):
         """ A value given as a keyword sets the parameter of that name; there is nothing else for it to be """
         for name,value in self._keywords.items():
-            if name not in self.pars:
+            if name not in self.pars and name.startswith(('init', 'seed')): # e.g. init_infected=100
+                state = self.infectious[0].name if self.infectious else 'I'
+                raise ss.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}".\n'
+                                          f'     To start with people in a state, use init=dict({state}={value!r}); init_prev= seeds the state a new infection enters (by default 1% of people), as a share or a number of people.')
+            elif name not in self.pars:
                 raise ss.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
                                           f'     If another module reads it from this disease (as STIsim\'s networks read disease.pars.eff_condom), add it after making the disease: {self.module.name}.define_pars({name}={value!r}).')
@@ -611,6 +635,10 @@ class Graph(Presentation):
             if strat.name in old:
                 raise ss.DuplicateStructuralDimension(f'"{self.module.name}" is already stratified by "{strat.name}", in another way. stratify() works in place, so the stratification can be given once; to change it, build the model again.')
             self.strats.append(strat)
+            for key,leaf in ({} if strat.mobility is None else strat.mobility.fitted()).items(): # A parameter of the movement between places, e.g. ss.Mobility(..., away=ss.par(0.1, bounds=[0.01, 0.5])), so it can be fitted
+                if not any(p is leaf for p in self.pars.values()):
+                    self._add_par(leaf, name=leaf.name or find_name(leaf, frame) or key)
+                    self.module.define_pars(**{leaf.name:leaf})
         for name,tf in transfers.items():
             tf.name = name
             tf.module = self.module

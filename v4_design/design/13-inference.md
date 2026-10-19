@@ -90,7 +90,7 @@ fit = sim.calibrate(
     likelihood = None,   # dict of result name -> distribution, if not given on the result
     gof        = None,   # the goodness of fit: 'nae' (the default, normalized absolute error), 'rmse', or a function of the sim; any other name is an error
     method     = None,   # the fitting method; overrides the automatic choice; a list runs several in sequence
-    n_runs     = None,   # runs per evaluation: 4 for a stochastic sim (the same seeds at every point), 1 for a deterministic one
+    n_runs     = None,   # runs per evaluation: 4 for a stochastic compartmental sim (the same seeds at every point), 1 for agents and for a deterministic one
     rand_seed  = None,
     **kwargs,            # passed to the fitting method (e.g. trials=500, draws=2000)
 )
@@ -100,7 +100,7 @@ fit = sim.calibrate(
 
 A parameter's `prior=`, if it has one, is used whenever every data series has a likelihood: the posterior methods sample the posterior, and the methods that find a best fit minimize the negative log-posterior (the most probable values), which is printed. A parameter with no prior is uniform over its bounds. Without likelihoods, priors are not used. A parameter whose bounds are positive and span a factor of ten or more is searched on a log scale, and this is printed.
 
-A stochastic sim is scored at each point by the mean of the scores of `n_runs` runs (4 by default; not the score of their mean trajectory), with the same seeds at every point (common random numbers), so that chance does not differ between points; the number of runs is printed. The pairing is close for small changes in the values and weak once the runs' trajectories diverge (an epidemic that takes off in one run and not in another), so the score of a stochastic sim is still noisy, and more runs make it less so. Particle MCMC and ABC-SMC take a run of their own for each point instead. `fit.mismatch` is that same score at the best values, so it is the score that was minimized, and `fit.scores` holds the score of each run; `fit.sim` is the run with the first seed, for plotting.
+A stochastic sim is scored at each point by the mean of the scores of `n_runs` runs (4 by default for a stochastic compartmental sim, and 1 for agents, whose runs are slow and whose search, by Optuna, already averages over nearby points; not the score of their mean trajectory), with the same seeds at every point (common random numbers), so that chance does not differ between points; the number of runs is printed. The pairing is close for small changes in the values and weak once the runs' trajectories diverge (an epidemic that takes off in one run and not in another), so the score of a stochastic sim is still noisy, and more runs make it less so. Particle MCMC and ABC-SMC take a run of their own for each point instead. `fit.mismatch` is that same score at the best values, so it is the score that was minimized, and `fit.scores` holds the score of each run; `fit.sim` is the run with the first seed, for plotting.
 
 ## Data
 
@@ -123,6 +123,8 @@ sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.data(...)
 The default is deliberately simple:
 
 > **For each data series, the normalized absolute error: the mean of |model − data|, divided by the mean of the data. The series are combined as a weighted average, with equal weights unless `weights=` says otherwise.**
+
+A series whose data are all zero (deaths early in an epidemic, a stratum with no cases) has no mean to divide by; it is divided by the mean of the model instead, so it adds 1 when the model has any of it and 0 when the model has none, and cannot swamp the other series in raw counts. To push a fit toward zero more strongly, give that series a likelihood or a weight.
 
 <!-- fragment -->
 ```python

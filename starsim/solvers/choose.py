@@ -122,12 +122,12 @@ def choose_solver(sim):
         if reasons:
             solver, reason = 'abm', reasons[0]
         else:
-            solver, reason = 'ode', 'every part of the model has a compartmental form' + (f'; {sc.strjoin(tried)} {"was" if len(tried) == 1 else "were"} tried on groups' if tried else '')
+            solver, reason = 'ode', 'every part of the model has a compartmental form' + (f', as running {sc.strjoin(tried)} on groups showed' if tried else '')
     elif solver == 'gillespie' and pars.approx is not False: # One event at a time, unless that would take too long
         n_events, seconds = exact_seconds(sim)
         if seconds > solvers.max_seconds:
             solver, reason = 'tau', f'tau-leaping for solver="gillespie": an ODE run gives about {n_events:.1e} events, about {seconds:.2g} s one at a time'
-            ss.note(f'solver="gillespie" takes tau leaps: an ODE run gives about {n_events:.1e} events, which would take about {seconds:.2g} s one at a time, more than {solvers.max_seconds:n} s; approx=False keeps it exact', sim=sim, verbose=0 if pars.approx else None)
+            ss.note(f'solver="gillespie" takes tau leaps: an ODE run gives about {n_events:.1e} events, which would take about {seconds:.2g} s one at a time, more than {solvers.max_seconds:n} s; tau leaps are close but biased (in 1e7 people, the peak about 0.7% high, several times the run-to-run spread), and approx=False keeps it exact', sim=sim, verbose=0 if pars.approx else None)
         elif n_events is None:
             reason = 'exact, by place'
         else:
@@ -159,7 +159,10 @@ def choose_solver(sim):
                 else:
                     ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approx else None)
         if 'n_agents' in sim.given:
-            ss.note(f'n_agents={pars.n_agents:n} is not used, since a compartmental run has one row per group of people; it is used with solver="abm"', sim=sim)
+            if 'total_pop' in sim.given:
+                ss.note(f'n_agents={pars.n_agents:n} is not used, since a compartmental run has one row per group of people rather than agents; the population is total_pop={pars.total_pop:n}', sim=sim)
+            else:
+                ss.note(f'n_agents={pars.n_agents:n} is used as the population (total_pop), since a compartmental run has one row per group of people rather than agents; total_pop= is the usual way to give it', sim=sim)
         sim.integrator = sc.ifelse(pars.integrator, 'rk4')
         pars.pop_scale = 1.0
         pars.people_results = False
@@ -200,9 +203,11 @@ def choose_solver(sim):
             if not (sc.isnumber(beta) and beta == 1):
                 raise ss.RouteMismatch(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. ss.transmission("S -> I", beta=dict({net.name}=...)).')
 
-    # A count of people in a rate is literal, so the routes do not apply to it
+    # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure)
     for mod in sim.declared if routes else []:
         for name,tr in mod.graph.transitions.items():
+            if tr.inflow:
+                continue
             counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.transitions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
             if counts:
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
@@ -459,7 +464,10 @@ def exact_seconds(sim):
     """
     if not hasattr(sim, 'inputs'):
         return 0, 0.0
-    ode = sim.new(solver='ode', verbose=0, approx=True).init()
+    try:
+        ode = sim.new(solver='ode', verbose=0, approx=True).init()
+    except ss.CapabilityError: # Then the model cannot run on groups at all, which the sim itself says, naming the solver it was asked for
+        return 0, 0.0
     def by_place(mod):
         engine = mod.engine
         if getattr(engine, 'cross', None) is not None:

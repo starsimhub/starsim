@@ -17,7 +17,7 @@ Starsim contains _products_, which can be thought of as the actual test, treatme
 
 Starsim includes three products:
 
-- `ss.Vaccine(efficacy=...)`, which protects people from infection (and optionally from transmitting it, or from severe disease)
+- `ss.Vaccine(efficacy=...)`, which protects people from infection (and optionally from transmitting it, or from severe disease); by default it is leaky (everyone vaccinated is partly protected), and `leaky=False` makes it all-or-nothing (a share `efficacy` of those vaccinated are fully protected)
 - `ss.Test(sensitivity=..., specificity=...)`, which tells infected people apart from uninfected ones, with some errors
 - `ss.Treatment(cure=...)`, which clears an infection with some probability
 

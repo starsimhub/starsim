@@ -13,6 +13,11 @@ from .transitions import parse_arrow
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
 
 
+def level_dtype(n):
+    """ The integers that levels or groups are kept as, n of them: 16-bit if they fit, to save memory """
+    return np.int16 if n < 2**15 else np.int32
+
+
 #%% Stratifications
 
 hints = dict(patch='space', node='space', region='space', district='space', county='space', place='space', location='space', province='space',
@@ -195,6 +200,12 @@ class Strat:
         """ The name of the property of people that holds each agent's level; a dimension with labels that is named like something people already have (age) is kept apart from it """
         return f'{self.name}_group' if (self.name == 'age' and self.edges is None) else self.name
 
+    def people_arr(self):
+        """ The property of people that holds each agent's level, when they do not have it already: for a dimension with labels, the level itself, as 16-bit integers (so with one dimension it is also the group: see `Groups.group_raw()`); for a binned one, floats """
+        if self.edges is None:
+            return ss.Arr(self.attr, dtype=level_dtype(self.n), default=0, nan=-1, label=self.name)
+        return ss.FloatArr(self.attr, default=0, label=self.name)
+
     @property
     def spec(self):
         """ The stratification as it is written in the model spec """
@@ -203,7 +214,7 @@ class Strat:
         if getattr(self, 'split_from', None): # A split taken from a named population (ss.people)
             named['split_from'] = self.split_from
         return dict(**named, name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
-                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away, **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=self.mobility.cap)), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
+                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property
     def mids(self):
@@ -637,12 +648,17 @@ class Groups:
         """
         sim = self.sim
         cache = getattr(self, '_group_cache', None)
-        n = len(sim.people.uid.raw)
+        n = sim.people.uid.len_tot
         binned = any(strat.edges is not None for strat in self.strats)
         if cache is not None and (cache[0] == sim.ti or not binned) and len(cache[1]) == n:
             return cache[1]
         dirty = getattr(self, '_group_dirty', None)
         self._group_dirty = None
+        if len(self.strats) == 1 and not binned and self.group_fold is None and sim.people[self.strats[0].attr].raw.dtype.kind in 'iu': # One dimension, whose property is the level (see Strat.people_arr()): it is the group too, so nothing is kept
+            raw = sim.people[self.strats[0].attr].raw
+            self._group_cache = (sim.ti, raw, [raw])
+            return raw
+        shared = len(self.strats) == 1 # With one dimension, the groups are its levels: one array is kept for both
         kept = getattr(self, '_level_cache', None)
         if isinstance(dirty, list) and not binned and kept is not None and '' in kept and len(kept['']) == n: # Only some agents have changed, and we know which: work out their groups alone
             uids = np.unique(np.concatenate(dirty))
@@ -659,7 +675,8 @@ class Groups:
                     after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw[uids])
                     old_level[uids] = after
                     old_raw[uids] = raw[uids]
-                    out[uids] += (after - before)*int(mult)
+                    if not shared:
+                        out[uids] += (after - before)*int(mult)
                 levels.append(kept[strat.name][1])
             kept[''] = out
             self._group_cache = (sim.ti, self.folded(out), levels)
@@ -670,10 +687,11 @@ class Groups:
             kept = self._level_cache = dict()
         levels = []
         changed = False
-        def level_of(strat, raw): # As 32-bit integers, to save memory
-            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw)).astype(np.int32, copy=False)
+        def level_of(strat, raw): # As 16-bit integers if they fit, to save memory
+            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw)).astype(level_dtype(strat.n), copy=False)
+        dtype = level_dtype(self.n_groups)
         mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]
-        n = len(people.uid.raw)
+        n = people.uid.len_tot
         rebuild = '' not in kept or len(kept['']) > n
         n0 = n if rebuild else len(kept['']) # Fewer than n if the people have grown since: the new agents' levels are added to what is kept, rather than all worked out again
         updates = [] # For each dimension whose values changed for some agents: who, their old level, and their new one
@@ -695,15 +713,17 @@ class Groups:
                     old = kept[strat.name] = (old[0], levels_new)
                     updates.append((idx, before, levels_new[idx], int(mult)))
             levels.append(old[1])
-        if rebuild:
-            out = np.zeros(n, dtype=np.int32)
+        if shared:
+            kept[''] = levels[0] # Already up to date
+        elif rebuild:
+            out = np.zeros(n, dtype=dtype)
             for level,mult in zip(levels, mults):
                 out += level*int(mult)
             kept[''] = out
         else:
             out = kept['']
             if n0 < n:
-                tail = np.zeros(n - n0, dtype=np.int32)
+                tail = np.zeros(n - n0, dtype=dtype)
                 for level,mult in zip(levels, mults):
                     tail += level[n0:]*int(mult)
                 out = np.concatenate([out, tail])
@@ -732,10 +752,10 @@ class Groups:
             if strat.female is not None and d not in joint and strat.cond is None: # A sex dimension is people.female, whose share is the split: see init_people()
                 self.set_sex(uids)
             elif strat.kind != 'age' and d not in joint and strat.cond is None: # Exactly the split, rounded to whole agents, in a random order
-                rvs = getattr(sim, f'rng_strat_{strat.name}').rvs(uids)
+                order = np.argsort(getattr(sim, f'rng_strat_{strat.name}').rvs(uids), kind='stable')
                 counts = ss.solvers.Compartmental.round_preserving(strat.split*len(uids)).astype(int)
-                levels = np.repeat(np.arange(strat.n), counts)
-                people[strat.attr][uids[np.argsort(rvs, kind='stable')]] = levels
+                levels = np.repeat(np.arange(strat.n, dtype=level_dtype(strat.n)), counts) # As they are kept, to save memory
+                people[strat.attr][uids[order]] = levels
         if joint: # The levels of a joint split, together, given the age group if age is one of them
             ds, grid = self.joint
             ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']

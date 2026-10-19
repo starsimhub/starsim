@@ -200,6 +200,14 @@ class CapabilityError(CodedError):
     would fix it
     """
 
+class TimeNotKept(CodedError):
+    """
+    A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times
+    something reads: the engine (for scheduled exits and `after=`/`before=`), or code in the sim's modules (see
+    `ss.Disease.times_read()`). Raised when code that was not found reads one of the others, e.g. a script after the run;
+    names the array and says to set `ss.options.keep_times = True`
+    """
+
 class TimeOutsideSim(CodedError):
     """
     A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is

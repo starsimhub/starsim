@@ -6,7 +6,7 @@ Design pass for Phase H, second bullet of [implementation_oct18.md](../implement
 
 **The problem.** HPV genotypes are co-circulating infections, each with its own natural history, that a person can carry several of at once, and that protect against each other. In v4 today each genotype is its own `ss.Disease`, and everything that ties them together is missing or slow. Cross-immunity at 4 genotypes takes 88 `ss.modify` calls, and v4's combination rule (`base × Πmultiply + Σadd`) gives 0.2 where HPVsim's `(1 − clip(Σ)) × (1 − vax)` gives 0.35; since Phase A, `add=` on `rel_sus` raises, so the review's port fails at `init()` (HP22). "Infected with any genotype" has no form: a sum counts the co-infected (4 to 7% of women) twice, and the workaround is a 41-line analyzer (HP23). There is no joint seeding: HPVsim seeds one genotype per infected person, and the port does it by hand after `sim.init()`, outside common random numbers (HP15). As an ODE, the cross-genotype conditions cross the genotypes' compartments: about 20 compartments per genotype, so 8,000 at 2 genotypes and 160,000 at 3 (9.4 s now, from 383 s); 4 would be 3.2 million, and the 9 genotypes of the nonavalent vaccine or the 14 high-risk ones cannot be built at all (HP29). And a vaccine delivered for two genotypes protects against only the first (10,009 and 4,977 delivered; the only effect is on `hpv16`) (HP7). HPVsim's Starsim 3 code for all this is 402 lines; the v4 port's workarounds are 95.
 
-**The proposal.** One container, `ss.Diseases`, whose members are ordinary declared diseases, plus one small object, `ss.immunity`, for protection with a combination rule. The family resolves references between its members by name (so they need not exist when each member is written), gives union results and conditions (`hpv.infected` is "infected with any genotype"), seeds jointly, and is the dimension along which values differ by member (`ss.by(hpv=...)`, `res.by('hpv')`). As agents everything is exact. Under the compartmental solvers the members run side by side, not crossed, and the couplings use each member's shares by group (an independence approximation, marked `approx`); the crossing stays available, exact, for anyone who writes the couplings as explicit `ss.modify(..., where=)`.
+**The proposal.** One container, `ss.Diseases` [CK: i prefer `ss.Strains`], whose members are ordinary declared diseases, plus one small object, `ss.immunity`, for protection with a combination rule. The family resolves references between its members by name (so they need not exist when each member is written), gives union results and conditions (`hpv.infected` is "infected with any genotype"), seeds jointly, and is the dimension along which values differ by member (`ss.by(hpv=...)`, `res.by('hpv')`). As agents everything is exact. Under the compartmental solvers the members run side by side, not crossed, and the couplings use each member's shares by group (an independence approximation, marked `approx`); the crossing stays available, exact, for anyone who writes the couplings as explicit `ss.modify(..., where=)`.
 
 ```python
 import starsim as ss
@@ -19,13 +19,13 @@ def genotype(name, beta, p_cin, ...):                      # One natural history
         infected = M + In + Ic + Qa + Qn,                  # A named sum of states, as now
         nab      = Rs,                                      # Who has neutralizing antibodies to this genotype
         cleared  = R + Rs,                                  # Who has cleared it (cell-mediated immunity)
-        name = name,
+        name = name, # [CK: i think generally the name should go first]
     )
 
 hpv = ss.Diseases(
-    *[genotype(**pars) for pars in hpvsim.genotypes('hpv16 hpv18 hi5 ohr')],
+    *[genotype(**pars) for pars in hpvsim.genotypes('hpv16 hpv18 hi5 ohr')], # [CK: don't love this, where does this come from? in general i don't like magical list expansions, except for defining states. also, why can't this whole line just be hpvsim.genotypes('hpv16 hpv18 hi5 ohr'), and the ss.Diseases/ss.Strains class does the expansion?]
     name = 'hpv',
-    immunity = [
+    immunity = [ # [CK: what does 'of' mean? not sure i understand this block]
         ss.immunity(m_sus, of='nab', combine='sum'),                       # rel_sus of each genotype × (1 − clip(Σ_k m_sus[k, g]·nab_k))
         ss.immunity(m_sev, of='cleared', on=['In', 'Ic'], combine='sum'),  # Time in In and Ic × (1 − clip(Σ ...)): severity immunity
     ],
@@ -38,19 +38,20 @@ sim = ss.Sim(diseases=hpv, interventions=ss.vaccinate(vx, disease=hpv, ...), ...
 sim.results.hpv.infected            # Infected with any genotype (a union)
 sim.results.hpv.cancer              # New cancers, any genotype (a sum of flows)
 sim.results.hpv16.infected          # Each member, as now
+# [CK: this last block is nice]
 ```
 
 **Decisions for Cliff.**
 
 | | Decision | Options | Recommendation |
 |---|---|---|---|
-| D1 | What a family is | (a) `ss.Diseases`, a container of ordinary declared diseases; (b) a "replicated" dimension (`stratify(genotype=[...], independent=True)`), each person holding a state in every level; (c) no new object: fix the combination rule and add `ss.any()`, leaving 88 modifiers | (a). A dimension gives each person one coordinate, and every dimension feature (split, transfers, `move=`, mixing by level) would need an exception for one that does not; (c) leaves HP15, HP29, and the mutual references unsolved |
-| D2 | The combination rule for protection from several sources | `combine='max'` (the strongest; the strain dimension's rule today), `'sum'` (added, clipped at 1; HPVsim), `'multiply'` (independent: escapes multiply, `1 − Π(1 − p)`); default `'max'` or no default | Offer all three, default `'max'`, the same in the strain dimension's `immunity=`, so the two become one mechanism (19-open-questions asks for this) |
-| D3 | What the compartmental solvers do with a family's couplings | (a) always side by side, couplings from shares (independence; `approx`); (b) the exact crossing up to a size, side by side beyond it; (c) the crossing only, refusing beyond a size | (a): results never change in kind because a genotype was added. The crossing stays available, exact, by writing the couplings as `ss.modify(where=)`, and it prints its size before building |
-| D4 | Joint seeding | (a) the family's `init_prev=` (share with any member) and `split=` (shares by member), one member per seeded person; (b) also allow independent seeding by each member's own `init_prev` (today's behavior) | (a) when given; (b) is what happens when the family has no `init_prev=`. Giving both raises |
-| D5 | One course at a time in some state (HPVsim's one cancer per person) | (a) `exclusive='Ca'` on the family; (b) leave it to each member's transition with `where=hpv.others.Ca` and an immediate move (ST26) | (a): one word, and it needs no "as soon as" rate, which hangs an ODE today |
-| D6 | Where `of=` immunity comes from | (a) a state or a named sum of states of each member only; (b) also a per-person value a member keeps (HPVsim's running maximum of draws), agents only | (a) now; (b) when the behavior vocabulary (h4) gives a declared per-person value, which `of=` then takes as is |
-| D7 | Fix now, independent of this design | The compartmental solvers freeze an expression-valued `multiply=` at its value at the start (found here, below) | Fix in Phase A style (S): it is a silent wrong answer, and the side-by-side solver depends on it |
+| D1 | What a family is | (a) `ss.Diseases`, a container of ordinary declared diseases; (b) a "replicated" dimension (`stratify(genotype=[...], independent=True)`), each person holding a state in every level; (c) no new object: fix the combination rule and add `ss.any()`, leaving 88 modifiers | (a). A dimension gives each person one coordinate, and every dimension feature (split, transfers, `move=`, mixing by level) would need an exception for one that does not; (c) leaves HP15, HP29, and the mutual references unsolved [CK: ok, but as above, i think Strains rather than Diseases] |
+| D2 | The combination rule for protection from several sources | `combine='max'` (the strongest; the strain dimension's rule today), `'sum'` (added, clipped at 1; HPVsim), `'multiply'` (independent: escapes multiply, `1 − Π(1 − p)`); default `'max'` or no default | Offer all three, default `'max'`, the same in the strain dimension's `immunity=`, so the two become one mechanism (19-open-questions asks for this) [CK: ok, plus allow a custom lambda function for more complex options, obvs not differentiable] |
+| D3 | What the compartmental solvers do with a family's couplings | (a) always side by side, couplings from shares (independence; `approx`); (b) the exact crossing up to a size, side by side beyond it; (c) the crossing only, refusing beyond a size | (a): results never change in kind because a genotype was added. The crossing stays available, exact, by writing the couplings as `ss.modify(where=)`, and it prints its size before building [CK: ok] |
+| D4 | Joint seeding | (a) the family's `init_prev=` (share with any member) and `split=` (shares by member), one member per seeded person; (b) also allow independent seeding by each member's own `init_prev` (today's behavior) | (a) when given; (b) is what happens when the family has no `init_prev=`. Giving both raises [CK: ok] |
+| D5 | One course at a time in some state (HPVsim's one cancer per person) | (a) `exclusive='Ca'` on the family; (b) leave it to each member's transition with `where=hpv.others.Ca` and an immediate move (ST26) | (a): one word, and it needs no "as soon as" rate, which hangs an ODE today [CK: ok] |
+| D6 | Where `of=` immunity comes from | (a) a state or a named sum of states of each member only; (b) also a per-person value a member keeps (HPVsim's running maximum of draws), agents only | (a) now; (b) when the behavior vocabulary (h4) gives a declared per-person value, which `of=` then takes as is [CK: ok, but i don't like 'of', i don't know what it means] |
+| D7 | Fix now, independent of this design | The compartmental solvers freeze an expression-valued `multiply=` at its value at the start (found here, below) | Fix in Phase A style (S): it is a silent wrong answer, and the side-by-side solver depends on it [CK: ok] |
 
 ## The use cases
 
@@ -125,7 +126,7 @@ The alternatives, for the record, with their sizes at `c` compartments per genot
 | Each genotype crossed with the others' immunity, one bit each (D13's history dimension) | `k·c·2^(k−1)` | 640 | 46,000 | 2.3 million | No: the others' states other than the bit are independent |
 | The same with HPV's two kinds (nab, cleared: three values) | `k·c·3^(k−1)` | 2,160 | 1.2 million | 450 million | No |
 | Side by side (proposed) | `k·c` | 80 | 180 | 280 | No: independent given shares |
-| Agents | linear in `k` and people | 0.2 s per genotype per 10,000 people for 160 steps (toy); the HPV port 13.5 s at 4 genotypes against HPVsim's 8.7 s | | | Yes |
+| Agents | linear in `k` and people | 0.2 s per genotype per 10,000 people for 160 steps (toy); the HPV port 13.5 s at 4 genotypes against HPVsim's 8.7 s [CK: i thought the port was faster?] | | | Yes |
 
 The history form is the next step if the side-by-side error matters for someone's calibration; it needs no new user vocabulary (the same family, a solver choice), so it can come later.
 

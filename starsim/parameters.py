@@ -338,7 +338,7 @@ class SimPars(Pars):
         self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (which switches to tau-leaping for a run of too many events), or 'abm'
         self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
-        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over by more than a quarter in one), and the 'binomial' solver (default: 1, so each step is taken whole; the chain-binomial solver moves people through as many stages of a dwell time as they pass in a step)
+        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: 1, so each step is taken whole; the chain-binomial solver moves people through as many stages of a dwell time as they pass in a step)
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
         self.results    = None   # The results to keep by group, by name, e.g. ['n_I', 'cases'] or ['sir.n_I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.Sim.group_rows())
 
@@ -355,10 +355,11 @@ class SimPars(Pars):
 
     _names = None # The names of the sim parameters: see names()
 
-    removed = dict( # Sim parameters that have been removed, and what replaces them
+    removed = dict( # Sim parameters that have been removed (or that are often guessed), and what replaces them
         track_writes = 'track_writes= has been removed: sim.what_modifies() lists the modifiers on a quantity, which are declared; code that assigns rel_sus or rel_trans directly is not tracked',
         birth_rate = 'birth_rate= (births per 1,000 people per year) has been removed: declare births for the population, per person, e.g. ss.Sim(..., demographics=[ss.birth(rate=ss.peryear(0.02))]) for 20 per 1,000, which runs under every solver; or use ss.Births(birth_rate=...) for data by year',
         death_rate = 'death_rate= (deaths per 1,000 people per year) has been removed: declare deaths for the population, per person, e.g. ss.Sim(..., demographics=[ss.death(rate=ss.peryear(0.01))]) for 10 per 1,000, which runs under every solver; or use ss.Deaths(death_rate=...) for data by year, age, and sex',
+        age_dist = 'age_dist= is not a sim parameter: for age groups with given shares, stratify the disease, e.g. sir.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1]), which runs under every solver; for the ages of agents, use ss.Sim(..., people=ss.People(n_agents, age_data=df)), with columns age and value',
     )
 
     def check_key_mismatch(self, pars):
@@ -519,7 +520,9 @@ class SimPars(Pars):
         if name in names:
             if mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
-                if not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
+                if isinstance(mod, ss.Product): # e.g. vaccine = ss.vaccinate(ss.Vaccine(...)), where the delivery takes the name of its variable
+                    ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. ss.Vaccine(..., name="{name}_product")')
+                elif not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
                     ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
             else:
                 errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'

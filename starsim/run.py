@@ -1,6 +1,7 @@
 """
 Running many sims: ss.parallel() and ss.MultiSim
 """
+import collections.abc as cabc
 import functools as ft
 import numpy as np
 import pandas as pd
@@ -198,7 +199,7 @@ class MultiSim:
 
     def resolve(self, n_runs=None, pars=None, priors=False):
         """ The sims to run, how many times to run each, and the sets of values to run them with """
-        sims = [self.base_sim] if self.sims is None else list(self.sims)
+        sims = [self.base_sim] if self.sims is None else list(getattr(self.sims, 'runners', self.sims)) # Sims restarted for their runs are run again from the sim of each scenario
         if self.sims is None and n_runs is None and pars is None and not priors:
             n_runs = 4 # A single sim given to a MultiSim is run four times by default
         if len(sims) > 1: # Different sims are different scenarios
@@ -307,7 +308,8 @@ class MultiSim:
             kwargs (dict): passed to sim.shrink() for each sim
         """
         self.base_sim.shrink(**kwargs)
-        for sim in self.sims:
+        sims = self.sims.made.values() if isinstance(self.sims, RestartedSims) else self.sims # Of sims restarted for their runs, only those that have been made
+        for sim in sims:
             sim.shrink(**kwargs)
         return
 
@@ -538,6 +540,12 @@ class MultiSim:
 
         Reported for each scenario, if there are several. Runs that start with nobody infected are not counted as dying out.
 
+        This is not the chance of a major outbreak. A disease that nobody can catch again
+        (an SIR, with no births or imports) dies out in every run that runs long enough,
+        after a major outbreak as after a minor one, so this gives 100%. For the share
+        of runs with a major outbreak, count the runs whose final size passes a threshold,
+        e.g. `(msim.results.sir.infection.values.sum(axis=1) > 100).mean()` (each result has a run axis first).
+
         Args:
             output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
 
@@ -565,7 +573,8 @@ class MultiSim:
             scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
             unit = f' {base.unit}s' if getattr(base, 'unit', None) else ''
             when = f' (median time {row["median_time"]:n}{unit})' if row['median_time'] is not None else ''
-            print(f'{row["disease"]}{scenario}: died out in {row["share"]:.0%} of {row["runs"]} runs{when}')
+            every = '; every run ended with nobody infected, as an epidemic that nobody can catch again always does, so this does not say how often there was a major outbreak (see help(msim.extinction))' if row['share'] == 1 else ''
+            print(f'{row["disease"]}{scenario}: died out in {row["share"]:.0%} of {row["runs"]} runs{when}{every}')
         return
 
     def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):
@@ -918,14 +927,54 @@ def par_sets(pars):
 
 jax_runs = 300 # The number of runs of an ODE with different values from which ss.parallel() takes them in one call to JAX: about 0.5 s to set up, then faster than the kernels (a three-state model crosses over at about 300 runs)
 
+class RestartedSims(cabc.Sequence):
+    """
+    The sim of each run of sims that were restarted for their runs (see `restart_runs()`), made when it is first asked for
+
+    The runs are kept as results, so the sim of a run is made again only when it is
+    asked for: a copy of its scenario's sim, restarted with the run's seed and values
+    and run. `runners` are the sims (one per scenario) that were restarted.
+    """
+    def __init__(self, runners, sets, n_runs):
+        self.runners = runners
+        self.sets = sets
+        self.n_runs = n_runs
+        self.made = {}
+        return
+
+    def __len__(self):
+        return len(self.runners)*len(self.sets)*self.n_runs
+
+    def __getitem__(self, ind):
+        if isinstance(ind, slice):
+            return [self[i] for i in range(*ind.indices(len(self)))]
+        ind = range(len(self))[ind] # Raises an IndexError if out of range, and handles negative indices
+        if ind not in self.made:
+            runner = self.runners[ind // (len(self.sets)*self.n_runs)]
+            p = self.sets[(ind // self.n_runs) % len(self.sets)]
+            seed = runner.pars.rand_seed - (self.n_runs - 1) + ind % self.n_runs # The runner was left as its last run, with the last seed
+            sim = sc.dcp(runner)
+            self.made[ind] = sim.restart(pars=p, rand_seed=seed).run()
+        return self.made[ind]
+
+    def __add__(self, other):
+        return list(self) + list(other)
+
+    def __radd__(self, other):
+        return list(other) + list(self)
+
+    def __repr__(self):
+        return f'<{len(self)} sims, one per run, made when asked for>'
+
+
 def restart_runs(sims, n_runs, pars=None):
     """
     Run each sim a number of times, each with its own seed, by building it once and restarting it
 
     Only for sims that are nothing but compartments (see `ss.Sim.restart()`), where this
     is many times faster than running copies. Returns None if any of the sims is not.
-    Otherwise returns the sims (one for each that was given, as it was after its last run),
-    the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
+    Otherwise returns the sim of each run (`RestartedSims`, which makes each one when it is
+    asked for), the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
 
     With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times. An ODE
     with at least `jax_runs` runs (and JAX installed) takes them all in one call to JAX
@@ -988,7 +1037,7 @@ def restart_runs(sims, n_runs, pars=None):
             strata, denom = [join(d[modname, key]) if (modname, key) in d else None for d in [groups, denoms]]
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
-    return runners, MultiResults.build(arrays, runs), runs
+    return RestartedSims(runners, sets, n_runs), MultiResults.build(arrays, runs), runs
 
 
 def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):

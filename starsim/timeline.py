@@ -475,7 +475,7 @@ class Timeline:
 
         return
 
-    def init(self, sim=None, max_steps=20_000, force=False):
+    def init(self, sim=None, max_steps=None, force=False):
         """ Initialize all vectors """
 
         # Don't re-initialize if already initialized
@@ -539,10 +539,10 @@ class Timeline:
         n_steps = self.npts
 
         # Warn if the number of steps is very large
-        if n_steps > max_steps and ss.options.warn_convert:
-            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
-            warnmsg += f'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
-            warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
+        max_steps = sc.ifelse(max_steps, ss.options.max_steps)
+        if max_steps and n_steps > max_steps:
+            warnmsg = f'start={self.start!r}, stop={self.stop!r}, and dt={self.dt!r} give {n_steps:n} timesteps, more than {max_steps:n}, which is valid but can be slow. '
+            warnmsg += 'Use a larger dt if a step that small is not needed, or set ss.options.max_steps = 0 to turn off this warning.'
             ss.warn(warnmsg)
 
         # Capture the reference start and duration class so the lazy relvec property can be

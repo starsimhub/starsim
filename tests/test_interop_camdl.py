@@ -68,7 +68,7 @@ def test_camdl_ir():
     infection = S >> I @ beta * I
     cases = ss.outcome(rho * infection)
     sir = ss.Disease(infection, I >> R @ gamma, cases, init=dict(I=10), name='sir')
-    ref = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='ode', verbose=0).run()
+    ref = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='ode', substeps=1, verbose=0).run() # One RK4 step a day, as camdl takes
     for key in ['n_I', 'n_R', 'infection', 'cases']:
         assert np.allclose(sim.results.sir[key].values, ref.results.sir[key].values, rtol=1e-10), f'{key} should match the model written by hand'
 

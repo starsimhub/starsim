@@ -294,6 +294,8 @@ def test_space():
                 assert attack[0] > 0.9 and np.allclose(attack[1:], 0)
             else:
                 assert np.all(attack > 0.85), f'Expected the epidemic to reach every town with {key} and {solver}, not {attack}'
+            if solver == 'abm': # Each agent's place is its group too: one 16-bit array, not three
+                assert sim.people.patch.raw.dtype == np.int16 and sim.groups.group_raw() is sim.people.patch.raw
             peaks[f'{key}_{solver}'] = res.n_I.by('patch').values.argmax(axis=0)
     assert peaks.gravity_ode[0] < peaks.gravity_ode[1] < peaks.gravity_ode[2] # The nearer town is reached first
     assert np.ptp(peaks.away_ode) < 3 < np.ptp(peaks.gravity_ode) # The more time people spend away, the closer together the towns peak
@@ -356,6 +358,23 @@ def test_space():
         ss.kernels.min_threaded, ss.kernels.chunk_size = defaults
     infections = [sim.results.sir.infection.values for sim in sims]
     assert infections[0].sum() > 0 and np.array_equal(*infections) # The same people infected, with threads or without
+
+    # The share of time away can be fitted: the mixing is worked out again for each value tried
+    def commuters(away):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
+        return sir.stratify(patch=ss.geo(names=['a', 'b', 'c'], pop=[1e5, 1e5, 1e5], x=[0, 100, 200], y=[0, 0, 0]), mobility=ss.Mobility(ss.gravity(), away=away))
+    pars = dict(total_pop=3e5, unit='day', stop=150, **kw)
+    for solver in ['ode', 'binomial']:
+        truth = ss.Sim(commuters(0.02), solver=solver, **pars).run().results.sir.infection
+        data = sc.dataframe(date=truth.timevec, **{f'infection[patch={p}]': truth.select(patch=p) for p in 'abc'})
+        away = ss.par(0.1, bounds=[0.002, 0.3])
+        fit = ss.Sim(commuters(away), data=data, solver=solver, **pars).calibrate(verbose=0)
+        assert np.isclose(fit.pars.away, 0.02, rtol=0.05), f'Expected to recover away=0.02 with {solver}, not {fit.pars.away}' # Before, a TypeError at init
+    sim = ss.Sim(commuters(away), n_agents=3000, solver='abm', **pars).init()
+    shares = [sim.new(pars=dict(away=val)).init().mixing.time_share.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
+    assert np.allclose(shares[0], 0.99) and np.allclose(shares[1], 0.8)
+    with pytest.raises(ValueError, match='sim.new'): # Rather than restarting with the old mixing
+        ss.Sim(commuters(away), **pars).restart(pars=dict(away=0.05))
 
     # A gravity model needs a geography
     with pytest.raises(ss.NoGeography):
@@ -423,7 +442,7 @@ def test_register():
     for other_first in [False, True]:
         with pytest.warns(RuntimeWarning):
             res = crossed(other_first).run().results.sir
-        assert np.allclose(res.n_I.values, sims.ode.results.sir.n_I.values)
+        assert np.allclose(res.n_I.values, sims.ode.results.sir.n_I.values, rtol=1e-4) # To the ODE's accuracy: the other disease's growth can give the joint run more substeps
 
     # Mistakes
     with pytest.raises(KeyError, match='not a level'):
@@ -471,7 +490,8 @@ def test_mixing():
     res = sims.ode.results.sir
     assert sims.ode.strats[0].kind == 'plain'
     attack = {(a,l):res.n_R.select(age=a, location=l)[-1]/res.n_S.select(age=a, location=l)[0] for a in ['young', 'old'] for l in ['urban', 'rural']}
-    assert attack['old', 'urban'] > attack['young', 'urban'] > attack['young', 'rural'] # Old people have more contacts, and most contacts are with one's own kind of place
+    assert attack['old', 'urban'] > attack['young', 'urban'] # Old people have more contacts
+    assert np.isclose(attack['young', 'urban'], attack['young', 'rural']) # The two kinds of place mix alike and are seeded as their people are split, so they end alike (before, a strict > held by a rounding error)
     for solver in ['binomial', 'abm']:
         assert np.isclose(sims[solver].results.sir.n_R[-1], res.n_R[-1], rtol=0.1), f'Expected {solver} to match the ODE'
     assert sims.abm.results.sir.n_I[0] <= 10 # As agents, the number who start in each state is exact (less anyone who has already recovered)

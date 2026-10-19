@@ -372,7 +372,7 @@ def test_particle_mcmc():
     # A best fit scores each point by the mean of several runs with the same seeds, and reports the score it minimized
     best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
     assert len(best.scores) == 4 # The default for a stochastic compartmental sim
-    assert ss.calibration.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 10 # And for agents, whose runs vary more
+    assert ss.calibration.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
     assert np.isclose(best.mismatch, best.trials.objective.min())
     return fit
 

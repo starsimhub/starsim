@@ -99,6 +99,9 @@ class Options(sc.objdict):
         optdesc.warn_convert = 'Whether to warn about automatic time conversions'
         options.warn_convert = sc.parse_env('STARSIM_WARN_CONVERT', True, bool)
 
+        optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
+        options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
+
         optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
 
@@ -137,6 +140,9 @@ class Options(sc.objdict):
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
+
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those that something in the sim reads, to save memory (see ss.Disease.times_read())'
+        options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
 
         optdesc.jax_cache = 'The folder where JAX keeps what it compiles (e.g. for a posterior from NUTS), so that it need not compile it again in a later session; "" for none. Set before Starsim first uses JAX'
         options.jax_cache = sc.parse_env('STARSIM_JAX_CACHE', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'), str)

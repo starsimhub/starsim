@@ -293,7 +293,7 @@ def test_diff(tmp_path):
 def test_no_disease():
     sc.heading('Testing what an import of networks only gives')
     S = ss.State(init=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
-    sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', stop=10, verbose=0).run()
+    sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
     assert np.ptp(sim.results.d.n_S.values) == 0
     sim = ss.Sim(networks=ss.PartnerNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
     assert "unit='week'" in sim.to_code()

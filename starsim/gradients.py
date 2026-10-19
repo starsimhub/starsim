@@ -82,7 +82,7 @@ class Run:
         dt (float): the timestep
         npts (int): the number of steps
         solver (int): 0 for RK4, 1 for Euler (see `ss.kernels.solvers`)
-        n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over by more than a quarter in one
+        n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over, or grows through its inflows, by more than a quarter in one
         per_step (int): the rows of the tables for each step (see `ss.solvers.Compartmental.per_step()`)
         n_max (int): the most substeps a step can take; a run that needs more is taken again with more
     """
@@ -147,6 +147,7 @@ class Run:
         self.cv_last = np.array([s[-1] for s in slots], dtype=int)
         self.cv_prev = np.array([c for s in slots for c in s[:-1]], dtype=int)
         self.cv_next = np.array([c for s in slots for c in s[1:]], dtype=int)
+        self.cv_exits = (p.src[None, :] == self.cv_last[:, None]).astype(float) # The other exits of the last slot of each conveyor, which act on the people there until they leave (see ss.kernels.release_rates())
         self.comp_mats = {}
         return
 
@@ -331,22 +332,31 @@ class Run:
             return [at(X[name], ti, th) for name in table_fields] + [X]
 
         def step(y, ti):
-            if self.n_sub:
-                n = self.n_sub
-            else: # Enough substeps that no compartment turns over by more than a quarter in one
-                rates0 = self.rates(y, vals(ti, 0.0))
-                fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
-                if len(self.p.mov_rate):
-                    fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
-                n = jnp.maximum(jnp.ceil(lax.stop_gradient(fastest)*dt/0.25), 1)
-                if clamp:
-                    n = jnp.minimum(n, n_max)
-            h = dt/n
             due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
             if len(self.updates): # Counts set to a value at the end of the step, worked out from the start
                 values = self.update_values(y, at(X['consts'], ti, 0.0))
 
-            Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt)) if len(self.cv_flow) else X # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1)
+            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
+                x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti, 0.0)), 0.0)*dt
+                small = x < 1e-12
+                share = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
+                Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt*share))
+            else:
+                Xs = X
+            if self.n_sub:
+                n = self.n_sub
+            else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.kernels.step())
+                rates0 = self.rates(y, vals(ti, 0.0))
+                fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
+                if len(self.p.mov_rate):
+                    fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
+                dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
+                filling = (dy0 > 0) & (y > 1e-12*y.sum(axis=0)) # Not a compartment that is only starting to fill
+                growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))
+                n = jnp.maximum(jnp.ceil(lax.stop_gradient(jnp.maximum(fastest, growing))*dt/0.25), 1)
+                if clamp:
+                    n = jnp.minimum(n, n_max)
+            h = dt/n
 
             def derivs(ys, th):
                 return self.derivs(ys, self.rates(ys, vals(ti, th)), Xs, h)

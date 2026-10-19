@@ -792,13 +792,18 @@ class Engine:
         approx = sim.pars.approx
         unit = f' {sim.unit_name}s'
         std = dw.mean/np.sqrt(dw.k)
-        what = f'{dw.k} Erlang stage{"s" if dw.k > 1 else ""} (mean {dw.mean:n}{unit} kept; std {std:.3g} instead of {dw.std:.3g}{unit})'
+        if f'{std:.3g}' == f'{dw.std:.3g}':
+            kept = f'mean {dw.mean:n}{unit} and std {std:.3g}{unit}, as given'
+        else:
+            kept = f'mean {dw.mean:n}{unit} kept; std {std:.3g}{unit}, against {dw.std:.3g}{unit} given'
+        what = f'{dw.k} Erlang stage{"s" if dw.k > 1 else ""} ({kept})'
         if approx is False:
             raise ss.CapabilityError(f'"{name}" cannot run with solver="{sim.solver}" and approx=False.\n'
                                      f'     It has a {dw.family} dwell time, which would be approximated by {what}.\n'
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
-            ss.note(f'{name} has a {dw.family} dwell time, approximated by {what}', ss.StagesUnderAuto, sim=sim, verbose=0 if approx else None)
+            fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
+            ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', ss.StagesUnderAuto, sim=sim, verbose=0 if approx else None)
         return
 
     def dwell_mean(self, name):
@@ -866,6 +871,9 @@ class Engine:
                 errormsg = f'"{self.mod.name}" has no contact-mediated transition to seed init_prev through; use init= on a state instead'
                 raise ValueError(errormsg)
             dst = trs[0].dst
+            if graph.infectious and not any(state.infectious for state in dst): # e.g. E in an SEIR
+                seeded = sc.strjoin(state.name for state in dst)
+                ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...)', sim=self.sim)
             ps = self.branch_probs(trs[0])
             for state,p in zip(dst, ps):
                 fracs[state.name] += init_prev*np.mean(p)
@@ -874,14 +882,26 @@ class Engine:
             if not np.all(np.isfinite(val)) or np.any(np.asarray(val) < 0):
                 raise ss.OutOfBounds(f'the initial value of "{name}" in "{self.mod.name}" is {val}; an initial value must be finite and not negative.')
 
-        # Whatever is left over goes to the first state
-        first = graph.first.name if graph.people_states else None
+        # Whatever is left over goes to the first state, or, if that is given a value, to the one state that is not (see Graph.resolve_rest())
         total = sum(fracs.values())
         if np.max(total) > 1 + 1e-9:
             errormsg = f'The initial fractions of "{self.mod.name}" sum to {np.max(total):n}, which is more than 1: {dict(fracs)}'
             raise ValueError(errormsg)
-        if first is not None:
-            fracs[first] += 1 - total
+        if graph.people_states:
+            rest = 1 - total
+            left = np.max(np.abs(rest)) > 1e-9
+            if graph.rest is None and left:
+                first = graph.first.name
+                unset = [s.name for s in graph.people_states if s.init is None]
+                where = f'Say where the rest start, e.g. {unset[-1]}={np.max(rest):.4g}' if unset else 'Give initial values that sum to 1'
+                errormsg = (f'The initial values of "{self.mod.name}" sum to {np.min(total):n}, not 1, and it is not clear where the rest start: {first} is given a value, which is kept, '
+                            f'and {"no other state is left without one" if not unset else f"{sc.strjoin(unset)} are not given one"}.\n'
+                            f'     {where}.')
+                raise ValueError(errormsg)
+            if graph.rest is not None:
+                fracs[graph.rest.name] += rest
+            if left and graph.rest is not graph.first:
+                ss.note(f'the initial value of {graph.first.name} in "{self.mod.name}" is kept, and the rest ({np.max(rest):.3g}) start in {graph.rest.name}, the only state not given one', sim=self.sim)
         return fracs, counts
 
     def seed_dist(self):
@@ -1218,8 +1238,9 @@ class Engine:
         low = np.flatnonzero((n > 0) & (n < 1))
         if len(low) and n[low[0]:].max() > 10:
             when = res[f'n_{infected[0].name}'].timevec[low[0]]
+            when = f'{sim.unit_name} {float(when):.4g}' if sc.isnumber(when) else when # e.g. day 125, not 124.99999984
             ss.note(f'the number infected in "{name}" falls to {n[low[0]]:.2g} (at {when}) and then rises to {n[low[0]:].max():,.0f}; a stochastic run would usually die out there. '
-                    f'solver="gillespie" with ss.parallel(n_runs=...) and msim.extinction() shows how often', ss.ExtinctionPossible, sim=sim)
+                    f'solver="gillespie" with ss.parallel(n_runs=...) shows how often, in the runs of msim.results.{name}.n_{infected[0].name} after that point', ss.ExtinctionPossible, sim=sim)
         return
 
     def finalize_results(self):

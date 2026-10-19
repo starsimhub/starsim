@@ -46,7 +46,7 @@ class People:
 
     Args:
         n_agents (int): the initial number of agents in the model
-        age_data (dataframe): a dataframe of years and population sizes, if available
+        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages. This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1])` instead
         extra_states (list): non-default states to initialize
         p_female (float): the share of agents who are female
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
@@ -112,13 +112,17 @@ class People:
         """
         uids = ss.uids(np.arange(int(self.n_agents_init)))
         self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as 32-bit integers
-        self.uid    = ss.IndexArr('uid')  # This variable tracks all UIDs
+        self.uid    = ss.arrays.UIDArr('uid')  # This variable tracks all UIDs; it takes no memory, since a UID is the agent's index
         self.slot   = ss.IndexArr('slot', shared=self.uid) # A slot is a special state managed internally to generate random numbers
         self.parent = ss.IndexArr('parent', label='UID of parent', shared=True)  # UID of parent, if any (used with pregnancy)
         for state in [self.uid, self.slot, self.parent]:
             state.people = self # Manually link to people since we need to set these up before using state.link_people()
             state.grow(new_uids=uids, new_vals=uids if state is self.uid else None)
         return
+
+    def slot_raw(self):
+        """ The slot of every agent, by UID, for a kernel; or None while the slots are the UIDs (see `make_uids()`), which have no array of their own """
+        return None if isinstance(self.slot.shared, ss.arrays.UIDArr) else self.slot.raw
 
     def _link_state(self, state, die=True):
         """

@@ -279,6 +279,11 @@ def test_two_optima():
     fit = make([12, 47, 35, 42, 24, 16, 17, 12, 15, 20, 16, 5, 10, 4, 5, 10, 5]).calibrate(method='nuts', draws=200, warmup=200, chains=2, rand_seed=23)
     table = fit.table.set_index('par')
     assert table.lower.b < 0.116 < table.upper.b # The chains start from points of the scan that are apart
+
+    # Both chains started from the best two points of the scan, and agreed on a mode 13 log-likelihood units below the best (b = 0.96, dur = 2.9), with R-hat 1.03
+    fit = make([416, 18586, 25939, 2792, 40, 4, 5, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]).calibrate(method='nuts', draws=200, warmup=200, chains=2, rand_seed=69)
+    table = fit.table.set_index('par')
+    assert table.lower.b < 0.656 < table.upper.b # The chains start from the optima found from the scan's points, so at the best (b = 0.646, dur = 18.5)
     return fit
 
 

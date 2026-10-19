@@ -72,12 +72,11 @@ def test_camdl_units():
             ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0).init()
             print(f'Not caught: {key}')
 
-    # A count for a share is density-dependent transmission, which is a model of its own, so it is a note; at this size it is far too fast for the step, which stops the run
+    # A count for a share is density-dependent transmission, which is a model of its own, so it is a note; at this size everyone is infected within the first day (before, the substeps did not follow the growth and the run stopped on a NaN)
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ ss.perday(0.4) * I.n, recovery=I >> R @ ss.perday(0.15), init=dict(I=10), name='sir')
-    sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0)
-    with pytest.raises(ValueError, match='not a number'):
-        sim.run()
+    sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0).run()
+    assert np.isclose(sim.results.sir.n_I[1], 10_000*np.exp(-0.15), rtol=1e-3) # Everyone infected at once, then a day of recovery
     assert any('density-dependent' in str(note) for note in sim.notes)
     return slips
 

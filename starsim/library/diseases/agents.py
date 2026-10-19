@@ -29,6 +29,10 @@ class AgentSIR(ss.Infection):
     every solver. A Starsim 3 subclass of `ss.SIR` that overrides its methods can
     subclass this class instead, unchanged.
 
+    Its defaults are Starsim 3's: a lognormal `dur_inf` (a mean of 6 years, std 1 year)
+    and `p_death=0.01`, where the declared `ss.SIR` is the textbook SIR, with an
+    exponential `dur_inf` and no deaths. Use it to keep a Starsim 3 model as it was.
+
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
@@ -136,7 +140,7 @@ class AgentSIR(ss.Infection):
 
 class AgentSEIR(AgentSIR):
     """
-    An SEIR model written as code: Starsim 3's `ss.SEIR` (see `ssl.AgentSIR`); for an SEIR model, use `ss.SEIR`
+    An SEIR model written as code: Starsim 3's `ss.SEIR` (see `ssl.AgentSIR`), with its lognormal `dur_exp` and `dur_inf` and `p_death=0.01`; for an SEIR model, use `ss.SEIR`
 
     This class extends `AgentSIR` with an exposed state: agents who are infected but not
     yet infectious. `exposed` and `infectious` are the literal E and I compartments, and
@@ -214,7 +218,7 @@ class AgentSEIR(AgentSIR):
 
 class AgentSIS(ss.Infection):
     """
-    An SIS model with waning immunity, written as code: Starsim 3's `ss.SIS` (see `ssl.AgentSIR`)
+    An SIS model with waning immunity, written as code: Starsim 3's `ss.SIS` (see `ssl.AgentSIR`), with its lognormal `dur_inf`
 
     This class implements a basic SIS model with states for susceptible,
     infected/infectious, and back to susceptible, with a per-agent immunity level

@@ -213,7 +213,7 @@ def value_str(val):
     """ String representation of a parameter value """
     if isinstance(val, float): return f'{val:n}'
     elif isinstance(val, ss.parameters.TimeValue): return repr(val)
-    elif callable(val) and not isinstance(val, ss.Dist): return getattr(val, '__name__', 'function')
+    elif callable(val) and not isinstance(val, ss.Dist): return getattr(val, '__name__', 'function').replace('<lambda>', 'a lambda function')
     elif isinstance(val, ss.TimePar): return repr(val)
     return str(val)
 
@@ -446,7 +446,7 @@ def dimension(expr):
     return None # A state, a count, or a function of them (a comparison is 1 or 0)
 
 
-def format_expr(expr, values=False, bare=None, mul='*', exact=False):
+def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
     """
     Write an expression as text
 
@@ -456,6 +456,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False):
         bare (func): how to write a bare state (a function of the state, returning a string); by default, its name
         mul (str): the multiplication sign
         exact (bool): write numbers at full precision (for the model spec, so its hash and code are exact), rather than to six significant figures
+        unit (str): with `values='number'`, the unit the numbers are read in (e.g. 'day'): a rate written in another unit keeps its own (`0.02 per year`)
     """
     def fmt(e):
         if isinstance(e, BinOp):
@@ -468,6 +469,10 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False):
             if e.name and not e.literal and not values:
                 return e.name
             raw = e.raw
+            if values == 'number' and isinstance(raw, ss.seasonal):
+                return ss.presentation.seasonal_str(raw, value_str(float(getattr(raw.mean, 'value', raw.mean))))
+            if values == 'number' and unit is not None and isinstance(raw, ss.Rate) and raw.unit is not None and type(raw.unit).base.removesuffix('s') != unit:
+                return ss.presentation.quantity_str(raw, 'rate', unit)
             text = value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)
             if exact and isinstance(raw, float) and float(text) != raw: # E.g. 1 + 1e-9, which is "1" to six figures
                 text = repr(float(raw))

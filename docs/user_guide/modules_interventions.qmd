@@ -33,6 +33,8 @@ msim = ss.parallel(
 msim.plot('sis.prevalence')
 ```
 
+A vaccine is leaky by default: `efficacy=0.9` cuts the chance of infection of everyone vaccinated by 90%. For an all-or-nothing vaccine, which fully protects 90% of those vaccinated and does nothing for the rest, give `ss.Vaccine(efficacy=0.9, leaky=False)` (see [Products](modules_products.qmd)).
+
 ## Simple cases that need no product
 
 **A change to a parameter over time** is `ss.change()`. It takes a list of times, and the multipliers (`by=`, relative to the baseline value) or values (`to=`) that hold from each time until the next:

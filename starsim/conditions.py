@@ -244,7 +244,7 @@ class Selector:
     @property
     def shape(self):
         """ The shape of a selection: agents, or states by groups """
-        return (len(self.sim.people.uid.raw),) if self.abm else (max(len(self.states), 1), self.sim.groups.n_groups)
+        return (self.sim.people.uid.len_tot,) if self.abm else (max(len(self.states), 1), self.sim.groups.n_groups)
 
     def everyone(self):
         return np.ones(self.shape, dtype=bool if self.abm else float)

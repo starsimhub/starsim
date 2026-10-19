@@ -1281,6 +1281,11 @@ class data:
         self.ignore_extra = ignore_extra
         return
 
+    def __repr__(self):
+        source = repr(self.source) if isinstance(self.source, (str, os.PathLike)) else f'a {type(self.source).__name__} of {len(self.source)} rows'
+        aliases = f', aliases={self.aliases}' if self.aliases else ''
+        return f'ss.data({source}{aliases}); data.load() gives the dataframe'
+
     def load(self, sim=None):
         """ Load the data and rename the columns """
         if isinstance(self.source, (str, os.PathLike)): # Separated by commas, tabs, or semicolons, whichever the file uses

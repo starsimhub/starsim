@@ -54,6 +54,12 @@ def make_commute():
     return make_towns().stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
 
 
+def make_delay():
+    """ A fixed latent period, a conveyor, with a death rate acting on it as well """
+    return ss.Disease(infection=ss.transmission('S -> E', beta=0.4, source='I'), latency=ss.progression('E -> I', dur=ss.constant(ss.days(5))),
+                      recovery=ss.progression('I -> R', dur=ss.days(8)), death=ss.death('E | I ->', rate=ss.perday(0.02)), init_prev=0.01, name='delay')
+
+
 models = sc.objdict(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
@@ -62,6 +68,7 @@ models = sc.objdict(
     commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, use_aging=True, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
+    delay   = (make_delay,   dict(unit='day', stop=150)),
 )
 
 
@@ -138,7 +145,8 @@ def test_stochastic():
         assert largest_diff(sim, one) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
-    sim = ss.Sim([ss.SIR(), ss.SIS()], demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
+    lognormal = [ss.SIR(dur_inf=ss.lognorm_ex(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
+    sim = ss.Sim(lognormal, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
     for ti in range(5):
         sim.run_one_step()
     kn, cross = ss.kernels, sim.crossings[0]
@@ -197,7 +205,7 @@ def test_stages():
 
     # Through the stages in whole steps, with another way out: the same as the ODE
     def cohort(solver):
-        sim = ss.Sim(ss.Disease(onset=ss.progression('E -> I', dur=ss.normal(7, 1)), death=ss.progression('E -> D', dur=20), init=dict(E=1.0), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
+        sim = ss.Sim(ss.Disease(onset=ss.progression('E -> I', dur=ss.normal(7, 1)), death=ss.progression('E -> D', dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
     ode = cohort('ode')
     for res in [cohort('binomial')]:
@@ -255,7 +263,7 @@ def test_restart():
     msim = base.run(n_runs=20)
     res = msim.results.sir.n_I
     assert res.values.shape == (20, base.new().init().t.npts)
-    assert len(msim.sims) == 1 and not base.initialized # One sim was built, and the one that was given is untouched
+    assert len(msim.sims.runners) == 1 and len(msim.sims) == 20 and not base.initialized # One sim was built (the sim of each run is made when asked for), and the one that was given is untouched
     assert len(np.unique(res.values.max(axis=1))) > 10 # Each has its own seed
     one = base.new(rand_seed=base.pars.rand_seed + 7).run() # Each is the run that a sim with that seed gives
     for key,multi in msim.results.sir.items():
@@ -265,7 +273,7 @@ def test_restart():
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.infection.cum.values[:, -1].mean() - 0.6) < 0.05
     base.pars.rand_seed += 7 # A seed set after the sim was made is used, as is an option of running in parallel
     later = ss.parallel(base, n_runs=2, verbose=0)
-    assert len(later.sims) == 1 and np.allclose(later.results.sir.n_I.values[0], msim.results.sir.n_I.values[7])
+    assert len(later.sims.runners) == 1 and np.allclose(later.results.sir.n_I.values[0], msim.results.sir.n_I.values[7])
 
     # A sim that has been initialized gives the same distinct runs as one that has not, restarted or copied
     for solver,agents in dict(binomial={}, abm=dict(n_agents=2000)).items():

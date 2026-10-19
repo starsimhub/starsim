@@ -648,7 +648,7 @@ class Pregnancy(Demographics):
             raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
 
         # Initialize rate as an array the length of raw UIDs, so we can index it with UIDs
-        fertility_rate = np.zeros(len(ppl.uid.raw), dtype=ss_float)
+        fertility_rate = np.zeros(ppl.uid.len_tot, dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))

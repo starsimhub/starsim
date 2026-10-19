@@ -150,6 +150,7 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
+    assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

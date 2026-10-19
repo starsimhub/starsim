@@ -104,20 +104,20 @@ def test_api():
 
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
-    d1 = ss.lognorm_ex(10) # Create a distribution with an argument
     d2 = ss.lognorm_ex(mean=10, std=2) # Create a distribution with kwargs
     d3 = ss.normal(loc=10) # Create a different type of distribution
 
-    # Check specifying dist with a scalar
+    # Check specifying a duration with a scalar, which is in years, as the default
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
-    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=d1), **kw).run() # Supply as a distribution
+    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
     ss.check_sims_match(s4, s5), 'Sims should match'
 
-    # Check specifying dist with a list and dict
-    s6 = ss.Sim(diseases=dict(type='sir', dur_inf=[10,2]), **kw).run() # Supply values as a list
-    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(mean=10, std=2)), **kw).run() # Supply values as a dict
+    # Check specifying dist with a dict
+    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='lognorm_ex', mean=10, std=2)), **kw).run() # Supply values as a dict
     s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
-    ss.check_sims_match(s6, s7, s8), 'Sims should match'
+    ss.check_sims_match(s7, s8), 'Sims should match'
+    with pytest.raises(TypeError):
+        ss.SIR(dur_inf=[10, 2]) # Starsim 3's values of its default lognormal
 
     # Check changing dist type
     s9  = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='normal', loc=10)), **kw).run() # Supply values as a dict
@@ -384,7 +384,7 @@ def test_save():
     f = sc.objdict() # Filenames
     f.sim  = 'temp.sim'
     f.json = 'sim.json'
-    sim = ss.Sim(n_agents=n_agents, diseases='sis', networks='random').run()
+    sim = ss.Sim(n_agents=n_agents, diseases=ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10))), networks='random').run()
 
     # Run the methods
     sim.save(filename=f.sim)

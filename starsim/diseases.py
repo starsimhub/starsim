@@ -1,6 +1,8 @@
 """
 Base classes for diseases
 """
+import re
+import inspect
 import numpy as np
 import numba as nb
 import pandas as pd
@@ -391,6 +393,32 @@ class Disease(ss.Module):
         if self.graph is None:
             return ss.uids()
         return (~self[self.graph.first.name]).uids
+
+    def times_read(self, sim=None):
+        """
+        The states whose time of entering (`ti_X`) code in the sim reads, for a declared disease run as agents: a set of names, or None for all
+
+        The code of the sim's modules, other than Starsim's own, and of this disease's class is
+        searched for `ti_X` (e.g. a Starsim 3-style analyzer that reads `sir.ti_R`). A name made
+        from pieces (e.g. `f'ti_{state}'`), or code whose source cannot be found, counts as reading
+        them all, as does `ss.options.keep_times`. The engine keeps these, as well as the ones it
+        needs itself (see `ss.solvers.Agents.define()`); the others are `ss.arrays.Unkept`.
+        """
+        if ss.options.keep_times:
+            return None
+        names = set()
+        for mod in (sim or self.sim).modules:
+            code = [cls for cls in type(mod).__mro__ if cls.__module__.split('.')[0] not in ['starsim', 'sciris', 'builtins']] # Starsim's own modules read none
+            code += [f for f in vars(mod).values() if inspect.isfunction(f) or inspect.ismethod(f)] # E.g. a function as an analyzer (see ss.Module.from_func())
+            for obj in code:
+                try:
+                    source = inspect.getsource(obj)
+                except (OSError, TypeError): # E.g. defined at the prompt
+                    return None
+                if re.search(r"""ti_\{|['"]ti_['"]""", source): # A name made from pieces
+                    return None
+                names.update(re.findall(r'\bti_(\w+)', source))
+        return names
 
     @property
     def ti_entry(self):
@@ -1220,21 +1248,23 @@ class NCD(Infection):
 
 class SIR(Disease):
     """
-    An SIR model: susceptible, infected, and recovered, with deaths from infection
+    An SIR model: susceptible, infected, and recovered, optionally with deaths from infection
 
     Declared from states and transitions (see `ss.Disease`), so it runs with any
-    solver: as agents over networks, or as compartments. The keywords are Starsim 3's.
+    solver: as agents over networks, or as compartments. It is the textbook SIR: the
+    infectious period is exponential, as any declared duration is, and nobody dies of
+    the infection unless `p_death` is given. The keywords are Starsim 3's.
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infected for
-        p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection
+        dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 6 years; a number is in years), as an exponential; give a distribution (e.g. `ss.lognorm_ex(mean=ss.years(6))`) for another shape
+        p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
 
     The Starsim 3 names `susceptible`, `infected`, and `recovered` are aliases of
-    `S`, `I`, and `R` for this release. Starsim 3's `ss.SIR`, written as code, is
-    `ssl.AgentSIR`.
+    `S`, `I`, and `R` for this release. Starsim 3's `ss.SIR`, with its lognormal
+    `dur_inf` and `p_death=0.01`, is `ssl.AgentSIR`, written as code.
 
     **Example**:
 
@@ -1242,8 +1272,8 @@ class SIR(Disease):
         sim.run().plot()
     """
     beta      = ss.par(ss.peryear(0.1))
-    dur_inf   = ss.par(ss.lognorm_ex(mean=ss.years(6)))
-    p_death   = ss.par(0.01)
+    dur_inf   = ss.par(ss.years(6))
+    p_death   = ss.par(0.0)
     S, I, R   = ss.states('S I R')
     infection = ss.transmission('S -> I', beta=beta)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
@@ -1265,20 +1295,24 @@ class SEIR(Disease):
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
-        init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected, who start exposed (or a number of people)
-        dur_exp (float/`ss.dur`/`ss.Dist`): how long people are exposed (latent) for
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infectious for
-        p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection
+        init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected, who start exposed, in `E` (or a number of people); to start people infectious, give `init=dict(I=10)` instead
+        dur_exp (float/`ss.dur`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in years), as an exponential
+        dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
+        p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
+
+    As in `ss.SIR`, each duration is exponential unless a distribution is given, and
+    nobody dies of the infection unless `p_death` is given.
 
     The Starsim 3 names `susceptible`, `exposed`, `infectious`, and `recovered` are
     aliases of `S`, `E`, `I`, and `R` for this release, and `infected` is `E | I`.
-    Starsim 3's `ss.SEIR`, written as code, is `ssl.AgentSEIR`.
+    Starsim 3's `ss.SEIR`, with its lognormal durations and `p_death=0.01`, is
+    `ssl.AgentSEIR`, written as code.
     """
     beta      = ss.par(ss.peryear(0.1))
-    dur_exp   = ss.par(ss.lognorm_ex(mean=ss.years(0.5)))
-    dur_inf   = ss.par(ss.lognorm_ex(mean=ss.years(6)))
-    p_death   = ss.par(0.01)
+    dur_exp   = ss.par(ss.years(0.5))
+    dur_inf   = ss.par(ss.years(6))
+    p_death   = ss.par(0.0)
     S, E, I, R = ss.states('S E I R')
     infection = ss.transmission('S -> E', beta=beta, source='I')
     latency   = ss.progression('E -> I', dur=dur_exp)
@@ -1306,16 +1340,17 @@ class SIS(Disease):
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infected for
+        dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 10 years; a number is in years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
 
     The Starsim 3 names `susceptible` and `infected` are aliases of `S` and `I` for
-    this release. Starsim 3's `ss.SIS` also had a per-agent immunity level, boosted by
-    each infection and waning over time (`waning=`, `imm_boost=`), which has no declared
-    form; that model, written as code, is `ssl.AgentSIS`.
+    this release. Starsim 3's `ss.SIS` had a lognormal `dur_inf` and a per-agent
+    immunity level, boosted by each infection and waning over time (`waning=`,
+    `imm_boost=`), which has no declared form; that model, written as code, is
+    `ssl.AgentSIS`.
     """
     beta      = ss.par(ss.peryear(0.05))
-    dur_inf   = ss.par(ss.lognorm_ex(mean=ss.years(10)))
+    dur_inf   = ss.par(ss.years(10))
     S, I      = ss.states('S I')
     infection = ss.transmission('S -> I', beta=beta)
     recovery  = ss.progression('I -> S', dur=dur_inf)
@@ -1336,8 +1371,9 @@ class SIS(Disease):
 def library_kwargs(cls, kwargs):
     """
     The keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR`, as Starsim 3 gave them: 1% start infected unless
-    said otherwise, as a parameter; a probability may be an `ss.bernoulli`; and a number, list, or dict for a duration
-    sets the values of its distribution (e.g. `dur_inf=10` is a lognormal with a mean of 10, as by default)
+    said otherwise, as a parameter; a probability may be an `ss.bernoulli`; a number for a duration is in the
+    unit of its default (e.g. `dur_inf=10` is 10 years, as the default of 6 years is); and a dict with a `type`
+    is a distribution (e.g. `dur_inf=dict(type='expon', scale=ss.years(6))`)
     """
     if 'init' not in kwargs: # A parameter, so it can be set (sir.pars.init_prev = 0.05) or fitted like the others
         init_prev = kwargs.get('init_prev', 0.01)
@@ -1347,8 +1383,13 @@ def library_kwargs(cls, kwargs):
     for key in ['dur_inf', 'dur_exp']:
         val = kwargs.get(key)
         default = getattr(cls, key, None)
-        if isinstance(default, ss.par) and val is not None and not isinstance(val, (ss.Dist, ss.par)):
+        if isinstance(default, ss.par) and sc.isnumber(val):
             pars = ss.Pars({key: sc.dcp(default.value)})
             pars.update({key: val})
             kwargs[key] = pars[key]
+        elif isinstance(val, dict) and 'type' in val:
+            kwargs[key] = ss.distributions.make_dist(val)
+        elif isinstance(val, (list, dict)): # Starsim 3's values of its default lognormal, e.g. dur_inf=[10, 2]
+            raise TypeError(f'{key}={val} set the values of the lognormal that was Starsim 3\'s default; {key} is now the mean of an exponential.\n'
+                            f'     Give a number (in years) for that, or the distribution, e.g. {key}=ss.lognorm_ex(mean=ss.years(10), std=ss.years(2)); ssl.Agent{cls.__name__} is Starsim 3\'s model')
     return kwargs

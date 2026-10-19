@@ -1309,6 +1309,14 @@ class Delivery(Intervention):
         """ A line saying what is delivered and how """
         what = f'move {self.move_states[0]} -> {self.move_states[1]}' if self.move_states is not None else 'transfer' if self.product is None else self.product.describe()
         how = 'follow-up' if self.triggered else 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else 'on an event' if self.on is not None else 'routine (each person is offered it once, when first eligible)'
+        sim = getattr(self, 'sim', None)
+        unit = sim.unit_name if sim is not None else None
+        if self.interval is not None and not self.triggered: # When the rounds are, and how many they reach
+            how += f' every {ss.presentation.quantity_str(self.interval, "dur", unit)}'
+            if self.start is not None:
+                how += f' from {unit or "step"} {self.start:n}' if sc.isnumber(self.start) else f' from {self.start}'
+        if self.coverage is not None and not callable(self.coverage):
+            how += f', coverage {ss.expressions.value_str(self.coverage)}'
         dims = [strat.name for strat in self.dims(getattr(self, 'sim', None))]
         added = f'; adds {sc.strjoin(dims)} as {"a property" if len(dims) == 1 else "properties"} of people' if dims else ''
         waiting = '; nobody waiting for a result is tested again' if self.waits else ''

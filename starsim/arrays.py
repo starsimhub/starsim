@@ -729,8 +729,8 @@ class Arr(BaseArr):
         raw = np.array(self.raw) # A copy, which can be written
         if self.shared is True: # The space for agents not yet made is NaN, as for any array
             raw[self.len_used:] = self.nan
-        self.raw = raw
         self.shared = None
+        self.raw = raw
         return
 
     @property
@@ -864,6 +864,7 @@ class Arr(BaseArr):
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
         new.shared = None # It has values of its own
+        new.raw = self.raw # Stored, if it was made when read (see IndexArr.raw)
         if copy:
             new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
             new.raw[new.auids] = arr
@@ -884,6 +885,7 @@ class Arr(BaseArr):
         # Create the new object
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
+        new.raw = self.raw # Stored, if it was made when read (see IndexArr.raw)
 
         # Reset Arr properties
         tmp = cls() # dtype and nan are only defined on instances
@@ -1089,6 +1091,38 @@ class StepArr(Arr):
             self.raw[:] = self.from_float(result.raw)
             return self
         return result
+
+
+class Unkept(BaseArr):
+    """
+    A declared disease's time of entering a state (`ti_X`) that is not kept, since nothing in the sim reads it (see `ss.Disease.times_read()`)
+
+    Setting it does nothing, and reading it raises `ss.TimeNotKept`, which says how to keep it.
+    It takes no memory, and is not one of the module's states.
+    """
+    def __init__(self, name, mod):
+        self.name = name
+        self.mod = mod
+        return
+
+    @property
+    def values(self):
+        errormsg = (f'{self.mod.name}.{self.name} is not kept, since nothing in the sim read it when it was initialized (to save memory).\n'
+                    f'     Set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
+        raise ss.TimeNotKept(errormsg)
+
+    raw = values
+
+    def __getattr__(self, attr):
+        if attr.startswith('_'): # E.g. __deepcopy__ or __array__, which are looked for
+            raise AttributeError(attr)
+        return self.values
+
+    def __setitem__(self, key, value):
+        return # Not kept
+
+    def __repr__(self):
+        return f'<{self.name}: not kept>'
 
 
 class GroupAges(FloatArr):
@@ -1363,6 +1397,21 @@ class IndexArr(Arr):
         super().__init__(name=name, dtype=np.int32, default=None, nan=-1, label=label, skip_init=True, shared=shared)
         return
 
+    @property
+    def raw(self):
+        """ The stored values; while they are those of `people.uid` (see `shared` in `ss.Arr`), the UIDs, made when read """
+        if isinstance(self.shared, UIDArr):
+            return self.shared.raw
+        return self._raw
+
+    @raw.setter
+    def raw(self, raw):
+        self._raw = None if isinstance(self.shared, UIDArr) else raw
+        return
+
+    def shared_raw(self):
+        return None if isinstance(self.shared, UIDArr) else super().shared_raw() # Nothing to store: see raw
+
     def __getitem__(self, key):
         out = super().__getitem__(key)
         return uids(out) if isinstance(out, np.ndarray) else ss_int(out)
@@ -1385,6 +1434,39 @@ class IndexArr(Arr):
             errormsg = f'"{self.name}" is stored as 32-bit integers, so it cannot hold {np.max(new_vals):n}: there can be at most 2^31 agents'
             raise ValueError(errormsg)
         super().grow(new_uids=new_uids, new_vals=new_vals)
+        return
+
+
+class UIDArr(IndexArr):
+    """
+    The UIDs of all agents (`people.uid`), which take no memory: a UID is the agent's index, so `raw` is made when read
+
+    It is `np.arange()` up to the number of agents made, and -1 (not set) in the room for
+    agents not yet made, as a stored `IndexArr` would be. Code that only needs its length
+    reads `len_used` or `len_tot` instead.
+    """
+    @property
+    def raw(self):
+        raw = np.arange(self.len_tot, dtype=np.int32)
+        raw[self.len_used:] = self.nan
+        raw.flags.writeable = False # Nothing is stored, so nothing can be set
+        return raw
+
+    @raw.setter
+    def raw(self, raw):
+        return # Nothing is stored
+
+    def grow(self, new_uids=None, new_vals=None):
+        """ Add new agents, whose UIDs are the next ones """
+        if new_uids is None:
+            new_uids = new_vals
+        n_new = len(new_uids)
+        if self.len_used + n_new >= 2**31:
+            errormsg = f'"{self.name}" is stored as 32-bit integers, so there can be at most 2^31 agents'
+            raise ValueError(errormsg)
+        self.len_used += n_new
+        if self.len_used > self.len_tot:
+            self.len_tot += max(n_new, self.len_tot//5) # The same room as the other arrays: see Arr.grow()
         return
 
 

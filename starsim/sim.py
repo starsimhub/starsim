@@ -38,7 +38,7 @@ class Sim(ss.Base):
         modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
         solver (str): how to run modules with declared states and transitions (see `ss.Disease`): 'auto' (the default: an ODE if
             every part of the model has a compartmental form, otherwise agents), 'ode', 'binomial' (chain-binomial), 'gillespie' (exact,
-            switching to tau-leaping, with a note, when an ODE run estimates more than a million events; `approx=False` keeps it exact), or 'abm'
+            switching to tau-leaping, with a note, when an ODE run estimates that taking the events one at a time would take more than a second (about ten million events in one group, fewer in groups that mix); `approx=False` keeps it exact), or 'abm'
         integrator (str): the scheme of the ODE: 'rk4' (the default) or 'euler'
         unit (str): the unit of bare numbers in declared transitions, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
         approx (bool): by default, each approximation a solver makes is noted in one line (kept in `sim.notes`, and printed unless `verbose=0`); True does not print them, and False makes them errors
@@ -358,7 +358,9 @@ class Sim(ss.Base):
                         ngm = None
                     if ngm is not None:
                         R0 = float(np.max(np.abs(np.linalg.eigvals(ngm))))
-                        print(f'{dis.name}: R0 = {R0:.3g}, with {float(dis.engine.count(dis.graph.infectious)):,.0f} infectious at the start')
+                        count = float(dis.engine.count(dis.graph.infectious))
+                        shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
+                        print(f'{dis.name}: R0 = {R0:.3g}, with {shown} infectious at the start')
         if timer:
             self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
@@ -1350,7 +1352,7 @@ class Sim(ss.Base):
         # If people have not been supplied, make them -- typical use case
         if people is None:
             if self.solver == 'abm' and self.groups.strats: # Properties that people are stratified by, other than age
-                extra = [ss.FloatArr(strat.attr, default=0, label=strat.name) for strat in self.groups.strats if strat.kind != 'age']
+                extra = [strat.people_arr() for strat in self.groups.strats if strat.kind != 'age']
                 kwargs['extra_states'] = sc.mergelists(kwargs.get('extra_states'), extra)
                 for strat in self.groups.strats: # Ages follow the split of the age groups, so every solver starts from the same population
                     if strat.kind == 'age' and strat.edges is not None and 'age_data' not in kwargs and (self.pyramid(strat) is None or strat.edges[0] > 0): # (Nobody is younger than the first group)
@@ -1364,7 +1366,7 @@ class Sim(ss.Base):
         elif self.solver == 'abm':
             for strat in self.groups.strats:
                 if strat.attr not in people.states:
-                    state = ss.FloatArr(strat.attr, default=0, label=strat.name)
+                    state = strat.people_arr()
                     people.states.append(state)
                     setattr(people, strat.attr, state)
                     state.link_people(people)
@@ -1866,8 +1868,14 @@ class Sim(ss.Base):
             if any(isinstance(val, ss.Dist) for val in pars.values()):
                 errormsg = 'A sim cannot be restarted with a new distribution, since its compartments were laid out for the old one; use sim.new(pars=...) instead'
                 raise ValueError(errormsg)
+            moving = [p for mod in self.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
+            before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
             self.set_par_values()
+            changed = [p.name for p,val in zip(moving, before) if float(p) != val]
+            if changed: # The mixing between places was worked out when the sim was built
+                errormsg = f'This sim cannot be restarted with a new value of "{changed[0]}", since it sets the movement between places, which is worked out when the sim is built; use sim.new(pars=...) instead'
+                raise ValueError(errormsg)
             varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
                 timed = getattr(mod.engine, 'time_pars', None)

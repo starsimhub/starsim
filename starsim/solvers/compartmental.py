@@ -264,7 +264,8 @@ class Compartmental(Engine):
                 k = 0 if fixed else dwell.k if dwell is not None else 1
                 inds = [add_comp(state, j, i) for i in range(k)]
                 track.first = (slots + inds)[0]
-                for i,ind in enumerate(slots[:-1]): # The last slot is left by the people due to leave in the next step, and by nothing else
+                acting = slots if (fixed and self.sim.solver == 'ode') else slots[:-1] # The last slot is left by the people due to leave in the next step: in the ODE, over the step, with the other exits acting on them until they do (see ss.kernels.release_rates()); the stochastic solvers release them at a point in the step (see ss.kernels.convey()), which already keeps the delay's exits exact
+                for i,ind in enumerate(acting):
                     add_exits(ind, state, exits, competing, stays, slot=i)
                 if slots:
                     add_flow(tr if fixed else self.graph.transitions[next(iter(stays))], slots[-1], 'conveyor', named=fixed, to=None if fixed else inds[0])
@@ -295,7 +296,7 @@ class Compartmental(Engine):
         self.n_trans = len(self.tr_index)
         self.people_comps = [i for i,comp in enumerate(self.comps) if comp.state.people]
         self.y = np.zeros((self.n_comps, self.n_groups))
-        self.leaving = {cv.slots[-1] for cv in self.conveyors} # The last slot of each conveyor, which nothing else acts on
+        self.leaving = {cv.slots[-1] for cv in self.conveyors} # The last slot of each conveyor, whose people leave it over the next step
         self.by_src = sc.ddict(list) # The flows out of each compartment, for the stochastic solvers (which release the last slot of a conveyor by itself)
         for flow in self.flows:
             if flow.kind != 'conveyor':

@@ -41,7 +41,7 @@ df = sim.people.to_df()
 print(df)
 ```
 
-When a module is added to a sim, it can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. A declared disease adds one boolean array per state (`S`, `I`, `R`), with the time each person entered it (`ti_I`) and is due to leave it (`ti_exit_I`):
+When a module is added to a sim, it can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. A declared disease adds one boolean array per state (`S`, `I`, `R`), with the time each person entered it (`ti_I`, for the states whose times something reads: see [People](basics_people.qmd)) and is due to leave it (`ti_exit_I`):
 
 ```{python}
 sim = ss.Sim(n_agents=20, diseases=ss.SIS(init_prev=0.2), networks='random', verbose=0)

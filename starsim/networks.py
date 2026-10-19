@@ -2137,8 +2137,9 @@ class gravity:
             raise ss.NoGeography(f'ss.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
                                  f'     Give the places with ss.geo(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.Mobility(matrix=...).')
         pop, dist = place.pop, place.distances
+        k, a, b, c = [float(v) for v in [sc.ifelse(self.k, 1.0), self.a, self.b, self.c]] # Any can be a fitted ss.par
         with np.errstate(divide='ignore'):
-            out = sc.ifelse(self.k, 1.0)*pop[:, None]**(self.a - 1)*pop[None, :]**self.b/dist**self.c # Without k, only the shape matters: see Mobility.time_share()
+            out = k*pop[:, None]**(a - 1)*pop[None, :]**b/dist**c # Without k, only the shape matters: see Mobility.time_share()
         np.fill_diagonal(out, 0)
         return out
 
@@ -2220,8 +2221,20 @@ class Mobility:
         self.cap = cap
         return
 
+    def fitted(self):
+        """ The parameters (`ss.par`) in the movement, by attribute (`away`, `cap`, and the gravity model's `k`, `a`, `b`, `c`), which set the mixing when a sim is built """
+        objs = dict(away=self, cap=self) | ({key:self.model for key in ['k', 'a', 'b', 'c']} if isinstance(self.model, gravity) else {})
+        return {key:getattr(obj, key) for key,obj in objs.items() if isinstance(getattr(obj, key), ss.par)}
+
     def __repr__(self):
-        what = self.model if self.model is not None else 'matrix' if self.data is None else f'register of {len(self.data):n} events'
+        if self.model is not None:
+            what = self.model
+        elif self.data is not None:
+            what = f'register of {len(self.data):n} events'
+        elif self.given.shape[0] <= 4 and not spsp.issparse(self.given): # A small matrix is shown, as the textbooks write it
+            what = 'matrix=[' + ', '.join('[' + ', '.join(f'{v:n}' for v in row) + ']' for row in self.given) + ']'
+        else:
+            what = f'a {self.given.shape[0]}×{self.given.shape[1]} matrix'
         away = f', away={self.away}' if self.away is not None else ''
         away += f', scale={self.scale!r}' if self.scale != 'each' else ''
         away += f', cap={self.cap}' if self.cap is not None else ''
@@ -2339,17 +2352,18 @@ class Mobility:
         """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1. A sparse array, since most pairs of places share no one """
         out = self.matrix(strat)
         total = np.asarray(out.sum(axis=1)).ravel()
-        if self.away is not None and self.scale == 'mean':
-            scale = np.full(strat.n, self.away/total.mean() if total.mean() > 0 else 0.0)
-        elif self.away is not None:
-            scale = np.divide(self.away, total, out=np.zeros(strat.n), where=total>0)
+        away = None if self.away is None else float(self.away) # A fitted ss.par, as its value
+        if away is not None and self.scale == 'mean':
+            scale = np.full(strat.n, away/total.mean() if total.mean() > 0 else 0.0)
+        elif away is not None:
+            scale = np.divide(away, total, out=np.zeros(strat.n), where=total>0)
         else: # Nobody can spend more than all their time away
             capped = (total > 1).sum()
             if capped:
                 ss.warn(f'The movement for "{strat.name}" would have the people of {capped:n} of its {strat.n:n} places spend more than all their time away, so it was capped at all of it (nobody is ever at home there). Give the share of time away with away= instead.')
             scale = 1/np.maximum(total, 1)
         if self.cap is not None: # No place over the cap
-            scale = np.minimum(scale, np.divide(self.cap, total, out=np.zeros(strat.n), where=total>0))
+            scale = np.minimum(scale, np.divide(float(self.cap), total, out=np.zeros(strat.n), where=total>0))
         if spsp.issparse(out):
             out = spsp.csr_array(out.multiply(scale[:, None]))
             out = spsp.csr_array(out + spsp.diags_array(np.maximum(1 - np.asarray(out.sum(axis=1)).ravel(), 0)))

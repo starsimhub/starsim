@@ -796,6 +796,8 @@ def test_trace():
     sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
     with pytest.raises(ss.CapabilityError):
         ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.infection, trace='net'), solver='ode', **kw).init()
+    with pytest.raises(ss.CapabilityError, match='solver="gillespie"'): # The solver asked for, not the ODE that estimates its cost
+        ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.infection, trace='net'), solver='gillespie', **kw).init()
     with pytest.raises(ValueError, match='on='):
         ss.Sim(sir, networks=ss.RandomNet(name='net'), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), trace='net'), solver='abm', n_agents=1000, **kw).init()
     with pytest.raises(TypeError): # on= is an event; the people in a state are where=sir.I, interval=1
@@ -834,7 +836,7 @@ def test_branch_modifiers():
         sB = ss.par(0.2, name='sB')
         trs = dict(leave=ss.Transition('A', ['B', 'C'], dur=ss.years(1), p=[sB, 1 - sB])) if multi else dict(a_to_B=ss.Transition('A', 'B', dur=ss.years(1), p=sB), a_to_C=ss.Transition('A', 'C', dur=ss.years(1), p=1 - sB))
         for solver in solvers:
-            d = ss.Disease(**trs, back=ss.Transition(['B', 'C'], 'A', rate=ss.peryear(4)), init=dict(A=1.0), name='d')
+            d = ss.Disease(**trs, back=ss.Transition(['B', 'C'], 'A', rate=ss.peryear(4)), name='d')
             size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
             r = ss.Sim(d, interventions=ss.change('d.pars.sB', at=2005, to=0.8), start=2000, stop=2012, dt=ss.months(1), solver=solver, verbose=0, **size).run().results.d
             assert np.isclose(r.n_B[-1]/(r.n_B[-1] + r.n_C[-1]), 0.8, atol=0.05), solver
@@ -842,7 +844,7 @@ def test_branch_modifiers():
     # An efficacy on one destination of a transition with several halves its probability, without changing the dwell time
     for solver in ['ode', 'abm']:
         P, C, R = ss.states('P C R')
-        hpv = ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[0.2, 0.8], dur=ss.years(2)), init=dict(P=1.0), name='hpv')
+        hpv = ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[0.2, 0.8], dur=ss.years(2)), name='hpv')
         txvx = ss.vaccinate(ss.Vaccine(efficacy={'precin.C': 0.5}), coverage=0.5, at=[2000], name='txvx')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         res = ss.Sim(hpv, interventions=txvx, start=2000, stop=2012, dt=ss.years(0.25), solver=solver, verbose=0, **size).run().results.hpv
