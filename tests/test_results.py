@@ -210,6 +210,28 @@ def test_groups_kept(monkeypatch):
     return sim
 
 
+def test_result_exprs():
+    sc.heading('Testing results declared in a class body')
+    class SIR(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        R = ss.State()
+        infection = S >> I @ 0.3*I
+        recovery = I >> R @ ss.days(10)
+        prev = I / (S + I + R)
+        n_ever = I + R
+    S, I, R = ss.states(3)
+    plain = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), n_ir=I + R, init=dict(I=0.01), name='sir')
+    for solver in ['ode', 'abm']:
+        for sir in [SIR(init=dict(I=0.01), name='sir'), plain]:
+            res = ss.Sim(sir, unit='day', stop=30, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
+            if 'prev' in res:
+                assert np.allclose(res.prev, res.n_I/(res.n_S + res.n_I + res.n_R)) and np.allclose(res.n_ever, res.n_I + res.n_R)
+            else:
+                assert np.allclose(res.n_ir, res.n_I + res.n_R)
+    return res
+
+
 # %% Run as a script
 def test_time_points():
     sc.heading('Testing results by time point: the start, then the end of each step')
@@ -251,6 +273,7 @@ if __name__ == '__main__':
     sim4 = test_declared_scale()
     sim4b = test_flow_ratios()
     sim5 = test_time_points()
+    res6 = test_result_exprs()
 
     sc.toc(T)
     plt.show()

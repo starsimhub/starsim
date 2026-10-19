@@ -880,11 +880,11 @@ def find_name(obj, frame):
 
 
 def class_members(cls):
-    """ Collect the states, transitions, parameters, and outcomes declared in a class body, in definition order """
+    """ Collect the states, transitions, parameters, outcomes, and results declared in a class body, in definition order """
     members = dict()
     for base in reversed(cls.__mro__):
         for key,val in base.__dict__.items():
-            if isinstance(val, (State, Transition, par, outcome)):
+            if isinstance(val, (Expr, Transition, outcome, FlowSum)): # Including results that are sums or ratios of states
                 members[key] = val
             elif key in members: # Rebound to something else in a subclass
                 del members[key]
