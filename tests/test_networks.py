@@ -643,6 +643,20 @@ def test_bare_units():
 
 
 # %% Run as a script
+def test_per_act_beta():
+    """ A bare beta on a network with acts is a probability per act, so it does not depend on dt or the unit """
+    sc.heading('Testing per-act beta on a sexual network')
+    def run(dt, unit='year', beta=0.003):
+        si = ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0.05, name='si')
+        mf = ss.MFNet(acts=ss.constant(ss.freqperyear(96)))
+        sim = ss.Sim(si, networks=mf, n_agents=3000, start='2000-01-01', stop='2005-01-01', unit=unit, dt=dt, verbose=0, rand_seed=1).run()
+        return sim.results.si.infection.sum()
+    weekly, monthly, quarterly = [run(dt) for dt in [ss.weeks(1), ss.months(1), ss.months(3)]]
+    assert monthly == run(ss.months(1), unit='month'), 'Infections should not depend on the unit'
+    assert max(weekly, monthly, quarterly) < 1.3*min(weekly, monthly, quarterly), f'Infections should not depend on dt: {weekly}, {monthly}, {quarterly}'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -670,5 +684,6 @@ if __name__ == '__main__':
     part = test_partners()
     targ = test_partner_targets()
     bare = test_bare_units()
+    acts = test_per_act_beta()
 
     T.toc()

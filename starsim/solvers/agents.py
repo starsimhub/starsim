@@ -84,6 +84,7 @@ class Agents(Engine):
         # Distributions: each is called at most once per step
         self.dists = sc.objdict()
         self.by_groups = dict() # Whether the rate of each transmission is the same for everyone in a group: see same_in_group()
+        self.typed = dict() # Whether the beta of each transmission over each network carries a time unit: see typed_beta()
         def add(key, dist):
             dist.name = f'rng_{key}'
             mod.setattribute(f'rng_{key}', dist)
@@ -1345,6 +1346,7 @@ class Agents(Engine):
             if ref <= 0:
                 continue
             contacts = self.contact_mult(route.name) # The share of its contacts that happen, from the modifiers of its n_contacts
+            per_act = isinstance(route, ss.Network) and 'acts' in route.meta and not self.typed_beta(tr, nkey) # A bare beta on a network with acts per step is the probability per act, compounded over them in net_beta()
             factors = None
             for d in range(2):
                 if [c[d]/ref for c in coefs.values()] != factors: # Worked out again only if it differs between the directions
@@ -1353,7 +1355,7 @@ class Agents(Engine):
                     for state,c in coefs.items():
                         weights = weights + mod[state.name].raw*(c[d]/ref)*state.rel_trans
                     rel_trans = mod.rel_trans.asnew(weights*mod.rel_trans.raw*self.mult_raw('rel_trans')*by_strain, copy=False)
-                beta = -np.expm1(-ref*dt)
+                beta = ref if per_act else -np.expm1(-ref*dt) # Otherwise a hazard per contact per unit time (see 06-routes.md)
                 if isinstance(route, ss.Network):
                     if not len(route):
                         break
@@ -1512,6 +1514,20 @@ class Agents(Engine):
         for i in range(len(self.immunity)):
             best = np.where((had >> i) & 1, np.maximum(best, self.immunity[i, strain]), best)
         return 1 - best
+
+    def typed_beta(self, tr, nkey):
+        """ Whether the beta of a transmission over a network carries a time unit """
+        key = (tr.name, nkey)
+        if key not in self.typed:
+            out = False
+            for coef in tr.terms.values():
+                for leaf in coef.leaves:
+                    raw = leaf.raw if isinstance(leaf, ss.par) else None
+                    if isinstance(raw, dict):
+                        raw = {ss.standardize_netkey(k):v for k,v in raw.items()}.get(ss.standardize_netkey(nkey))
+                    out = out or any(isinstance(v, ss.TimePar) for v in sc.tolist(raw))
+            self.typed[key] = out
+        return self.typed[key]
 
     def route_beta(self, coef, nkey):
         """ The transmission rate over one network, in each direction """
