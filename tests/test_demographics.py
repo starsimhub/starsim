@@ -494,6 +494,26 @@ def test_birth_data_cols():
     return
 
 
+@sc.timer()
+def test_declared_newborns():
+    """ Agents added by ss.Births and ss.Pregnancy (including the unborn) enter a declared disease, with a level of each dimension """
+    sc.heading('Testing newborns in a declared disease')
+    for dem in [ss.Births(birth_rate=40), ss.Pregnancy(fertility_rate=40)]:
+        sis = ss.Disease(infection=ss.transmission('S -> I', beta=2), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
+        sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
+        sim.run()
+        r = sim.results
+        n_states = r.sis.n_S[-1] + r.sis.n_I[-1]
+        assert np.isclose(n_states, r.n_alive[-1]), f'{dem.name}: {n_states} in states but {r.n_alive[-1]} alive'
+        new = sim.people.auids[sim.people.auids >= 2000]
+        assert len(new) > 100
+        share = sim.people.risk[new].mean()
+        assert 0.7 < share < 0.9, f'{dem.name}: {share:.2f} of newborns are high risk, not 0.8'
+        assert sim.diseases.sis.I[new].any() # Newborns can be infected
+    print('✓ (newborns in declared states)')
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
 
@@ -508,5 +528,6 @@ if __name__ == '__main__':
     s9 = test_nnd()
     s10 = test_count_based_births()
     s11 = test_birth_data_cols()
+    s12 = test_declared_newborns()
 
     T.toc()
