@@ -149,7 +149,8 @@ from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
 from .strains import immunity, Strains
 
 t('pregnancy')
-from .pregnancy import Pregnancy
+from . import pregnancy
+from .pregnancy import Pregnancy, Lactation
 
 t('loop')
 from .loop import Loop

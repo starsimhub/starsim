@@ -729,7 +729,7 @@ class Graph(Presentation):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr.check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1)):
+            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1 and not tr.stays)): # A split with ss.stay is a split, though ss.stay is not a destination
                 raise ss.BadBranchSplit(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell

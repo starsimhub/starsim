@@ -1828,11 +1828,9 @@ class BreastfeedingNet(PostnatalNet):
     def init_pre(self, sim):
         # Connect the pregnancy module to this network; do this here rather than in init_post() since deliveries during the pregnancy burn-in call add_pairs()
         super().init_pre(sim)
-        for mod in self.sim.modules:
-            if isinstance(mod, ss.LegacyPregnancy):
-                self.pregnancy = mod
-                break
-        else:
+        self.pregnancy = next((mod for mod in self.sim.modules if isinstance(mod, ss.LegacyPregnancy)), None)
+        self.lactation = next((mod for mod in self.sim.modules if isinstance(mod, ss.Lactation)), None) # With the declared ss.Pregnancy, which pairs newborns itself
+        if self.pregnancy is None and self.lactation is None:
             raise RuntimeError('BreastfeedingNet requires a Pregnancy module in the simulation to track breastfeeding status')
         return
 
@@ -1840,14 +1838,14 @@ class BreastfeedingNet(PostnatalNet):
         """
         Add pairs upon delivery if the mother is breastfeeding the newborn - called via Pregnancy.process_delivery()
         """
-        if mother_uids is not None:
+        if mother_uids is not None and self.pregnancy is not None:
             mask = self.pregnancy.breastfeeding[mother_uids] & self.pregnancy.breastfed[newborn_uids]
             super().add_pairs(mother_uids[mask], newborn_uids[mask])
         return
 
     def end_pairs(self):
         """Remove edges for mothers whose breastfeeding status has changed in the Pregnancy module"""
-        active = self.pregnancy.breastfeeding[self.p1]
+        active = self.pregnancy.breastfeeding[self.p1] if self.pregnancy is not None else self.lactation.L[self.p1] # Until the mother leaves L
         for k in self.meta_keys():
             self.edges[k] = self.edges[k][active]
         return np.count_nonzero(active)

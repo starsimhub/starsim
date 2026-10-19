@@ -61,6 +61,7 @@ def choose_solver(sim):
     """
     pars = sim.pars
     solvers = ss.solvers
+    ss.pregnancy.add_lactation(sim)
     modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
     sim._init_flows()

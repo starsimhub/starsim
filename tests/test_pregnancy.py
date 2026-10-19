@@ -172,10 +172,45 @@ def test_fetus():
     return sim
 
 
+@sc.timer()
+def test_lactation():
+    sc.heading('Testing ss.Lactation: started by live births, ended by weaning or an infant death; BreastfeedingNet; LAM')
+    def make(lam=False):
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150))
+        S, I = ss.states('S I')
+        d = ss.Disease(S, I,
+            infection = ss.transmission('S -> I', beta=dict(maternalnet=0.3, breastfeedingnet=0.5)),
+            death     = ss.Transition(I, ss.null, rate=ss.peryear(2), where=ss.ppl.age < 1), # Infant deaths end breastfeeding
+            init=dict(I=0.3), name='d')
+        mods = []
+        if lam:
+            lact = ss.Lactation()
+            mods.append(ss.modify(preg.conception, multiply=0.1, where=lact.L & (preg.since_birth < ss.months(6))))
+            return dict(demographics=[preg, lact], diseases=d, connectors=mods, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+        return dict(demographics=preg, diseases=d, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+    checked = sc.objdict(n=0)
+    def check(sim):
+        lact, net = sim.demographics.lactation, sim.networks.breastfeedingnet
+        assert np.all(lact.L[net.p1]), 'every breastfeeding pair has a lactating mother'
+        checked.n += len(net)
+    sim = ss.Sim(**make(), analyzers=check, n_agents=10_000, **kw).run()
+    r, ppl, hiv = sim.results, sim.people, sim.diseases.d
+    assert 'lactation' in sim.demographics # lactation='auto': there is a BreastfeedingNet
+    assert np.isclose(r.lactation.start.sum() + r.lactation.restart.sum(), r.pregnancy.birth.sum(), rtol=0.05) # p_breastfeed=1
+    assert r.lactation.wean.sum() > 500 and r.lactation.stop.sum() > 10 and checked.n > 0
+    kids = ppl.parent.notnan.uids
+    infected = kids[hiv.I[kids]]
+    assert len(infected) > 50 # In utero and by breastfeeding
+    lam = ss.Sim(**make(lam=True), n_agents=10_000, **kw).run()
+    assert lam.results.pregnancy.conception.sum() < 0.99*r.pregnancy.conception.sum() # Few conceive within 6 months of a birth anyway
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
     births = test_births()
     events = test_events()
     fetus = test_fetus()
+    lact = test_lactation()
     T.toc()

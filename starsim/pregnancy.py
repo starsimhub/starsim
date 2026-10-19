@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Pregnancy']
+__all__ = ['Pregnancy', 'Lactation']
 
 
 class Pregnancy(ss.Demographics, ss.Disease):
@@ -59,7 +59,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time is gestational age
     birth       = ss.birth('-> NP', per=delivery, n=ss.PregnancyPars().embryos_per_pregnancy) # Children, linked to the mother (agents only, for now)
 
-    def __init__(self, pars=None, fetus='auto', metadata=None, **kwargs):
+    def __init__(self, pars=None, fetus='auto', lactation='auto', metadata=None, **kwargs):
         v3 = ss.PregnancyPars()
         declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in v3 or k in declared and not isinstance(kwargs[k], ss.par)})
@@ -94,6 +94,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         )
         self.attrs = sc.objdict() # Values drawn at an event: see attr()
         self.fetus = fetus # Whether fetuses are agents, from conception: see init_fetus()
+        self.lactation_opt = lactation # Whether to add an ss.Lactation: see add_lactation()
         self.fetus_reason = None
         return
 
@@ -212,10 +213,24 @@ class Pregnancy(ss.Demographics, ss.Disease):
                 net.add_pairs(self.sim.people.parent.raw[new], new)
         return
 
+    @property
+    def lactation(self):
+        """ The sim's ss.Lactation, if it has one """
+        return next((m for m in self.sim.demographics() if isinstance(m, Lactation)), None) if self.sim is not None else None
+
     def react(self):
-        """ As agents, once for each event: make the fetuses of new pregnancies, and draw the values recorded at events (see attr()) """
+        """ As agents, once for each event: make the fetuses of new pregnancies, pair newborns with breastfeeding mothers, and draw the values recorded at events (see attr()) """
         if not self.abm:
             return
+        nets = [net for net in self.sim.networks.values() if isinstance(net, ss.BreastfeedingNet)]
+        lact = self.lactation
+        if nets and lact is not None:
+            kids = self.engine.fresh('breastfed', 'birth') # After ss.Lactation has started on preg.live_birth
+            if len(kids):
+                moms = self.sim.people.parent.raw[kids]
+                fed = lact.L.raw[moms]
+                for net in nets:
+                    ss.PostnatalNet.add_pairs(net, ss.uids(moms[fed]), kids[fed])
         if self.fetus:
             new = self.engine.fresh('fetus', 'conception')
             if len(new):
@@ -343,3 +358,67 @@ class Pregnancy(ss.Demographics, ss.Disease):
             else:
                 rate = vals[bins]*scale*np.divide(n_np + n_p, n_np, out=np.zeros(len(age)), where=n_np > 0)
         return ss.peryear(np.where(fertile, rate, 0)*(fertile if not self.abm else 1))
+
+
+def _preg(name):
+    """ An event of the sim's pregnancy module (named "pregnancy"), for a module declared before it exists """
+    return ss.conditions.Event('tr', ss.conditions.Named('pregnancy', name))
+
+
+class Lactation(ss.Demographics, ss.Disease):
+    """
+    Lactation, as declared states: `N` (not breastfeeding) and `L` (breastfeeding)
+
+    A sibling of `ss.Pregnancy` (named "pregnancy"), since lactation overlaps the next pregnancy. A live birth starts it
+    (with `p_breastfeed`), or restarts it for a woman breastfeeding already; it ends after `dur_breastfeed`, or at once
+    if a child of hers dies before the age of 1. A `BreastfeedingNet` pairs each newborn with a mother who is in `L`
+    and ends the pair when she leaves it. Added by `ss.Pregnancy` when the sim has a `BreastfeedingNet`
+    (`lactation='auto'`). Agents only for now, since it is triggered by the pregnancy's events.
+
+    Args:
+        p_breastfeed (float): chance a mother breastfeeds a newborn
+        dur_breastfeed (dur/Dist): duration of breastfeeding
+
+    Examples:
+        ```python
+        preg, lact = ss.Pregnancy(fertility_rate=ss.freqperyear(80)), ss.Lactation()
+        lam = ss.modify(preg.conception, multiply=0.1, where=lact.L & (preg.since_birth < ss.months(6)))
+        ```
+    """
+    N, L = ss.states('N L')
+    p_breastfeed   = ss.par(1.0, doc='Chance a mother breastfeeds a newborn')
+    dur_breastfeed = ss.par(ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)), doc='Duration of breastfeeding')
+
+    start   = ss.Transition(N, [L, ss.stay], p=[p_breastfeed, None], on=_preg('live_birth'))
+    restart = ss.Transition(L, [L, N], p=[p_breastfeed, None], on=_preg('live_birth')) # A new child: L.time starts again
+    wean    = ss.Transition(L, N, dur=dur_breastfeed)
+    stop    = ss.Transition(L, N, on=_preg('infant_death'))
+
+    def __init__(self, pars=None, **kwargs):
+        declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
+        given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in declared and not isinstance(kwargs[k], ss.par)})
+        if isinstance(given.get('p_breastfeed'), ss.bernoulli): # As in Starsim 3
+            given['p_breastfeed'] = given['p_breastfeed'].pars.p
+        kwargs.setdefault('name', 'lactation')
+        super().__init__(**kwargs)
+        self.pars.update(given)
+        return
+
+    def step(self):
+        ss.Disease.step_state(self)
+        ss.Disease.step(self)
+        return
+
+
+def add_lactation(sim):
+    """ `lactation='auto'`: add an `ss.Lactation` to a sim whose `ss.Pregnancy` has none, if it has a `BreastfeedingNet` (or `lactation=True`), with the pregnancy's breastfeeding parameters """
+    pars = sim.pars
+    mods = list(pars.demographics.values())
+    if any(isinstance(m, Lactation) for m in mods):
+        return
+    for preg in mods:
+        if isinstance(preg, Pregnancy) and preg.lactation_opt is not False:
+            if preg.lactation_opt is True or any(isinstance(net, ss.BreastfeedingNet) for net in pars.networks.values()):
+                pars.demographics.append(Lactation(p_breastfeed=preg.pars.p_breastfeed, dur_breastfeed=preg.pars.dur_breastfeed))
+            return
+    return
