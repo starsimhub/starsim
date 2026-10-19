@@ -229,3 +229,4 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 69 | 1341164c | 361371c7 | ss.spread as agents (back-dated seeds run forward by natural history) in expressions.py; Agents.backfill reuses schedule/draw_competing(key=)/finish_moves rather than a step_exits refactor; reset people can be chosen again (else pool exhausted: 985/1000); compartmental raises CapabilityError (B). Test from fc7c8bd5: agents half; ODE half strict xfail. |
 | — | fc7c8bd5 | — | B (ss.spread as compartments): deferred; its agents test went in with 69, ODE half strict xfail |
 | — | 584b4373 | — | B6 (HPV antibodies as levels, ODE vs agents) + implementation.md: deferred |
+| 70 | 31e7089c | 263bae4b | preg.attr() is an ss.attr on a pregnancy transition; Recorded removed (expressions.py, engine, agents). |

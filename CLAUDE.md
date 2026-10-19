@@ -18,6 +18,7 @@ The framework follows a modular design with these key components:
 - **Diseases**: Models disease transmission and progression (`starsim/diseases.py`)
 - **Interventions**: Implements prevention/treatment strategies (`starsim/interventions.py`)
 - **Demographics**: Handles population dynamics like births/deaths (`starsim/demographics.py`)
+- **Pregnancy**: Pregnancy as declared states and transitions (Demographics+Disease hybrid) that provides events/states for other modules (`starsim/pregnancy.py`)
 - **Connectors**: Modules that link other modules, e.g. disease interactions (`starsim/connectors.py`)
 - **Analyzers**: Custom result collection and analysis (`starsim/analyzers.py`)
 - **Results**: Stores simulation outputs (`starsim/results.py`)
@@ -87,6 +88,7 @@ uv add starsim[dev]  # With dev dependencies
 - `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
 - `presentation.py`: How a declared model is shown: `describe()`, `diagram()`, `equations()`, and its model spec
 - `products.py`: Vaccine and treatment deployment
+- `pregnancy.py`: Pregnancy as declared states and transitions; provides events (`conception`, `delivery`) and states (`P`) for other modules
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `samples.py`: Storage for large-scale simulation results
 - `settings.py`: Global options (`ss.options`) and plotting style
