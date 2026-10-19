@@ -1029,6 +1029,30 @@ def test_contacts_dims():
         run(ss.contacts(np.ones((6, 6)), dims=['sex', 'risk']))
     return
 
+def test_init_prev_by_agent():
+    """ Initial prevalence by a property of agents that is not a stratification: a function of the sim (or of the sim and uids) """
+    sc.heading('Testing initial prevalence for each agent')
+    def make(init_prev):
+        return ss.Disease(infection=ss.transmission('S -> I | J', beta=0.0, p=[0.25, 0.75]), recovery=ss.progression('I -> S', dur=ss.years(10)), init_prev=init_prev, name='d')
+    women = lambda sim: np.where(sim.people.female, 0.4, 0.0)
+    by_uids = lambda sim, uids: np.where(sim.people.age[uids] < 20, 0.5, 0.0)
+    for func in [women, by_uids]:
+        sim = ss.Sim(make(func), n_agents=20_000, stop=2001, rand_seed=1, **kw).init()
+        d, ppl = sim.diseases.d, sim.people
+        seeded = d.I | d.J
+        if func is women:
+            assert not np.any(seeded[ppl.male.uids]) and np.isclose(seeded[ppl.female.uids].mean(), 0.4, atol=0.02)
+        else:
+            assert not np.any(seeded[(ppl.age >= 20).uids]) and np.isclose(seeded[(ppl.age < 20).uids].mean(), 0.5, atol=0.03)
+        assert np.isclose(d.I.count()/seeded.sum(), 0.25, atol=0.03), 'Seeds start wherever a new infection starts'
+    with pytest.raises(ss.CapabilityError): # As compartments, only a stratification has a value for each group
+        ss.Sim(make(by_uids), solver='ode', **kw).init()
+    by_sex = ss.Sim(make(lambda sim: np.where(sim.people.female, 0.4, 0.0)), solver='ode', stratify=dict(sex=['female', 'male']), stop=2001, **kw).init() # A function of a stratification: one value for each group
+    n = ss.Sim(make(0.0), solver='ode', stratify=dict(sex=['female', 'male']), stop=2001, **kw).run().results.d.n_S[0]
+    assert np.isclose(by_sex.run().results.d.n_I.select(sex='female')[0] + by_sex.results.d.n_J.select(sex='female')[0], 0.4*n/2)
+    return sim
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
