@@ -1155,6 +1155,11 @@ class Engine:
                 fracs[graph.rest.name] += rest
             if left and graph.rest is not graph.first:
                 ss.note(f'the initial value of {graph.first.name} in "{self.mod.name}" is kept, and the rest ({np.max(rest):.3g}) start in {graph.rest.name}, the only state not given one', sim=self.sim)
+        burnin = getattr(self.mod, 'burnin_spread', None) # People who start part way through, from a module's own rule (e.g. ss.Pregnancy's burnin=)
+        if burnin is not None:
+            sp = burnin(self)
+            if sp is not None:
+                self.spreads.append(sp)
         return fracs, counts
 
     def seed_dist(self):

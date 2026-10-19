@@ -34,6 +34,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         p_loss (float/bernoulli): chance of a spontaneous loss per week of pregnancy (a number, or a bernoulli of one); a typed probability for another unit, e.g. `ss.probpermonth(0.04)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
+        burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_spread()`); agents only for now
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
 
     Examples:
@@ -164,8 +165,32 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.init_fetus()
         return
 
+    def burnin_spread(self, engine):
+        """
+        `burnin=True` (the default): women pregnant at the start. Each woman who could conceive has the chance of
+        having conceived in the mean duration of a pregnancy before the start, at her conception hazard then
+        (`1 - exp(-h*dur)`), at a step uniform over it, and is run forward by the pregnancy's own transitions
+        (abortion, losses, and delivery, with no births), so the start has the gestational ages and the first steps
+        their deliveries. Starsim 3 ran the module's steps before the start instead. Agents only for now.
+        """
+        if not self.pars.burnin:
+            return None
+        dt = engine.dt
+        steps = max(1, int(round(ss.solvers.convert(ss.years(self.mean_dur_pregnancy), engine.sim.unit_base)/dt)))
+        def share():
+            rate = np.asarray(engine.convert(self.conception_rate(engine.sim)), dtype=float)
+            return -np.expm1(-rate*dt*steps)
+        def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman
+            if 'parity' in before:
+                self.parity[kept] += np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0)
+        note = f'{self.name}: women pregnant at the start, conceived over the {steps} steps before it (burnin=True)'
+        return sc.objdict(spread=None, share=share, steps=steps, entry=None, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
+
     def step(self):
         """ The pregnancy's transitions, at the start of the step, before the diseases' """
+        if self.ti == 0 and self.abm and self.fetus: # Women pregnant at the start (burnin=) carry fetuses too
+            moms = self.P.uids
+            self.conceive(moms[~np.isin(moms, self.sim.people.parent.raw[self.unborn(moms)])], 0)
         ss.Disease.step_state(self)
         self.react()
         ss.Disease.step(self)

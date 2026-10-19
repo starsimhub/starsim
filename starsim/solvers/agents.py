@@ -1796,6 +1796,29 @@ class Agents(Engine):
         rng = np.random.default_rng([int(sim.pars.rand_seed or 0), sum(ord(c) for c in mod.name), 7])
         used = np.zeros(len(mod.rel_sus.raw), dtype=bool)
         for sp in self.spreads:
+            if sp.get('share') is not None: # Each agent of the first state with their own chance of having entered, evenly over the steps before the start (see ss.Pregnancy.burnin_spread())
+                share = np.asarray(sp.share(), dtype=float)
+                pool = self.members(first)
+                pool = pool[~used[pool]]
+                p = share[pool] if share.ndim else np.full(len(pool), share)
+                chosen = ss.uids(pool[rng.random(len(pool)) < p])
+                used[chosen] = True
+                t0 = -rng.integers(0, sp.steps, size=len(chosen)) - 1
+                levels = {strat.attr:people[strat.attr].raw[chosen].copy() for strat in sim.groups.strats if strat.attr in people.states} # A counter moved (e.g. parity) is undone for those reset
+                self.backfill(chosen, sp, t0)
+                inside = np.zeros(len(chosen), dtype=bool)
+                for name in sp.target:
+                    inside |= mod[name].raw[chosen]
+                back = ~inside & self.alive_in_states(chosen)
+                self.reset_people(chosen[back]) # Left before the start, e.g. delivered: as if never there
+                if sp.get('after') is not None: # The module's own records of what happened before the start to those kept, e.g. ss.Pregnancy's parity
+                    sp.after(chosen[~back], {attr:vals[~back] for attr,vals in levels.items()})
+                if levels and back.any():
+                    for attr,vals in levels.items():
+                        people[attr][chosen[back]] = vals[back]
+                    sim.groups.groups_changed(chosen[back])
+                ss.note(sp.note, sim=sim)
+                continue
             x = sp.spread.value
             want = int(round(x*len(people) if x <= 1 else x/self.scale))
             window = sp.spread.window(self.convert)

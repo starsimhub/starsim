@@ -523,6 +523,9 @@ class Compartmental(Engine):
     def init_post(self):
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
+        if any(sp.get('share') is not None for sp in self.spreads): # Phase B: a module's own burn-in (ss.Pregnancy's burnin=) as compartments
+            ss.note(f'{self.mod.name}: burnin= has no compartmental form yet, so nobody starts part way through (as agents they do)', sim=self.sim)
+            self.spreads = [sp for sp in self.spreads if sp.get('share') is None]
         if self.spreads: # Phase B: the natural history fed a constant inflow over the window, stepped to the start
             raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}" has no compartmental form yet. Run with solver="abm".')
         self.update_targets()

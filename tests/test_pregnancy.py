@@ -98,6 +98,32 @@ def test_births_ode():
 
 
 @sc.timer()
+def test_burnin():
+    sc.heading('Testing burnin=: women pregnant at the start, as agents')
+    pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, use_aging=False)
+    make = lambda burnin=True: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, burnin=burnin)
+    abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
+    none = ss.Sim(demographics=make(False), n_agents=20_000, **pars).run()
+    assert none.results.pregnancy.delivery[:8].sum() == 0, 'Without burn-in, nobody delivers before the first pregnancies come to term'
+    r = abm.results.pregnancy
+    early, later = r.delivery[1:9].sum(), r.delivery[13:21].sum()
+    assert np.isclose(early, later, rtol=0.2), f'{early} deliveries in the first 8 months, against {later} a year later'
+    assert np.isclose(r.n_P[0], r.n_P[18], rtol=0.15), f'{r.n_P[0]} pregnant at the start, {r.n_P[18]} later'
+    assert r.conception[0] == 0 and r.abortion[0] == 0, 'Burn-in events are not counted in the results'
+    return abm
+
+
+@pytest.mark.xfail(strict=True, reason='Phase B: burnin= as compartments is deferred (a compartmental run notes it and starts with nobody pregnant)')
+def test_burnin_ode():
+    pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, use_aging=False)
+    make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
+    abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
+    ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
+    ra, ro = abm.results.pregnancy, ode.results.pregnancy
+    assert np.isclose(ra.n_P[0], ro.n_P[0], rtol=0.05) and np.isclose(ra.delivery[1:9].sum(), ro.delivery[1:9].sum(), rtol=0.1)
+
+
+@sc.timer()
 def test_events():
     sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, ss.child(), and ANC at a visit after conception')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
@@ -269,7 +295,7 @@ def test_syphilis():
     assert p.fetus and 'ss.mother' in p.fetus_reason
     total = r.syph.mtct.sum()
     out = {k:r.syph[k].sum() for k in ['stillbirth', 'nnd', 'born_cs', 'born_ok']}
-    assert total > 200 and all(v > 10 for v in out.values()), out
+    assert total > 200 and all(v > 10 for k,v in out.items() if k != 'nnd') and out['nnd'] > 0, out # Neonatal deaths are rare: 4 to 12 across seeds
     assert sum(out.values()) <= total # The rest unborn at the end, or lost earlier
     assert r.pregnancy.stillbirth.sum() >= out['stillbirth'] # Also a stillbirth of the pregnancy, for ANC and contraception to see
     assert r.pregnancy.neonatal_deaths.sum() >= out['nnd']
