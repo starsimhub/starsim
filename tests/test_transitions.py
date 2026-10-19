@@ -1752,7 +1752,7 @@ def test_schedule():
     )
     sim = ss.Sim(d, n_agents=5000, unit='day', stop=40, **kw).run()
     res = sim.results.d
-    assert res.severe.sum() == res.n_A[0] + res.infection[1:6].sum() + res.relapse[1:6].sum()
+    assert res.severe.sum() == res.severe[0] + res.n_A[0] + res.infection[1:6].sum() + res.relapse[1:6].sum() # Seeds whose dwell rounds to no steps leave at the start, counted at 0
 
     # Where= on a branch that is closed to everyone at entry: they wait until it opens (FPsim review)
     A, B = ss.states('A B')
@@ -1817,6 +1817,14 @@ def test_cascade():
         into = res.infection[1:] + res.entry[1:]
         assert np.allclose((res.split_P + res.split_A)[1:], into) # In the same step as whatever brought them
         assert np.isclose(res.onward.sum(), 0.3*(res.split_P.sum() + res.split_A.sum()), rtol=0.1)
+
+    # As agents, seeds that move on at the start are events seen in the first step (on=), and are counted in its flows
+    for onset in [ss.Transition('E', 'C', p=1.0), ss.progression('E -> C', dur=0)]: # Before the start (E is a junction), or in the first step
+        ng = ss.Disease(infection=ss.transmission('S -> E', beta=0.0), onset=onset, recovery=ss.progression('C -> S', dur=ss.days(300)), init_prev=0.1, name='ng')
+        seek = ss.treat(ss.Treatment(cure=0.0), on=ng.C.enter, name='seek')
+        res = ss.Sim(ng, interventions=seek, n_agents=1000, unit='day', stop=10, **kw).run().results
+        assert res.seek.delivered.sum() == 100, 'Each seed is news to the deliveries once'
+        assert np.array_equal(res.ng.onset.values, res.seek.delivered.values), 'The flow should count the moves the deliveries saw, when they saw them'
 
     # A dwell time competing with a hazard, for people who enter during the run (FPsim review: the hazard missed a step per entrant)
     S, A, B, C = ss.states('S A B C')

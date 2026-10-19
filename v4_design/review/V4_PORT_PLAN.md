@@ -235,3 +235,6 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 73 | 3704190c | 8340789d | Ruling: v4 wins on condoms — protection is ss.modify(infection, efficacy=, share=lambda net: net.edges.condoms, route=) (v4 graph steers eff_condom there), so no eff_condom in net_beta. Kept: condoms edge column with edge_defaults on SexualNetwork, Disease.value(). Test rewritten to the modifier. |
 | — | 5b1a2a62 | — | Superseded by v4: an age stratification with no split takes the named world population's ages (or the people given: split_from='people'); v4-rs's uniform-0-60 People default would contradict it. Log only. |
 | 74 | 182944f6 | a66434e6 | undriven=True on ss.Transition/ss.progression silences v4's ss.UndrivenUnused (was W209); re-applied by hand onto v4's signature. |
+| 75 | b35d005c | 26283a09 | Remapped to v4: follow-ups are cascade steps/on_fail steps (_add_steps), so ss.Sim also applies _add_steps to interventions given in pars= (before the copy; at validation the copies break identity). Test: a SubSim passing a cascade in pars. The order-of-list half is v4's order_steps already. |
+| — | e924ee52 | — | B2 (synchronized flows: ss.on(other.tr) as compartments): deferred |
+| — | ab75d5ad | — | B2 (synchronized flows for moves by an intervention, compartments): deferred |

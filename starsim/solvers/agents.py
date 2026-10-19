@@ -1408,6 +1408,7 @@ class Agents(Engine):
         moved = False
         self._moved = []
         self._started = True
+        n_batches = len(self.batches)
         for state in self.graph.people_states:
             if state.name not in self.junctions:
                 continue
@@ -1422,11 +1423,10 @@ class Agents(Engine):
             moved = True
         if self.triggers: # Seeds a trigger holds for move on before the start
             moved = moved or bool(self.triggered())
-        if moved:
+        if moved: # Counted at the start (the results at the first time point), and news to the deliveries of the first step only
             self.finish_moves(mod.ti)
-            for name in self.flowcounts:
-                self.flowcounts[name] = 0.0
-            self.flow_groups = sc.objdict()
+            for b in self.batches[n_batches:]:
+                b.key = (mod.ti - 1, 0)
             self.events = dict()
             self.live = None # Counted again
             self.record_stocks()
