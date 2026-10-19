@@ -149,6 +149,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
             p_loss = ss.probperweek(p_loss)
         if np.any(np.asarray(p_loss.value) > 0): # Before the engine lays out the clocks, which depend on it
             self.pars.update(loss_rate=p_loss)
+        if 'parity' in [strat.name for strat in sim.strats] and self.graph.transitions.delivery.increment is None: # Parity as a counter: up one at each delivery
+            self.graph.transitions.delivery.increment = dict(parity=1)
         dist = self.graph.pars.dur_pregnancy.raw
         self.mean_dur_pregnancy = ss.transitions.dwell_stats(dist, lambda v: ss.solvers.convert(v, 'year'))[0]
         super().init_pre(sim)

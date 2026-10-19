@@ -238,6 +238,73 @@ def test_legacy():
     return sim
 
 
+@sc.timer()
+def test_syphilis():
+    sc.heading('Port: syphilis congenital outcomes by maternal stage, with ss.mother() and ss.on(preg.delivery/birth) (03 §4.2)')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
+    S, E, S2, EL, LL, Cnnd, Cstill, Ccs, Cnorm, CS = ss.states('S E S2 EL LL Cnnd Cstill Ccs Cnorm CS')
+    active, late = E | S2, LL
+    def by_stage(a, e, l): # v3 birth_outcomes, by the mother's stage at infection
+        return a*ss.mother(active) + e*ss.mother(EL) + l*ss.mother(late)
+    syph = ss.Disease(S, E, S2, EL, LL, Cnnd, Cstill, Ccs, Cnorm, CS,
+        infection  = S >> E @ ss.peryear(0.02),
+        secondary  = E >> S2 @ ss.months(2),
+        latent     = S2 >> EL @ ss.months(4),
+        to_late    = EL >> LL @ ss.years(2),
+        mtct       = ss.Transition(S, [Cnnd, Cstill, Ccs, Cnorm], rate=ss.peryear(0.9)*ss.mother(S2 | EL | LL),
+                                   p=[by_stage(.25, .05, 0), by_stage(.25, .10, .10), by_stage(.45, .40, .10), None]),
+        stillbirth = Cstill >> ss.null @ ss.on(preg.delivery), # Fetal removal at delivery: a stillbirth for the mother
+        nnd        = Cnnd >> ss.null @ ss.on(preg.birth), # Born, then dies: a neonatal death
+        born_cs    = Ccs >> CS @ ss.on(preg.birth),
+        born_ok    = Cnorm >> S @ ss.on(preg.birth),
+        init=dict(S2=0.03, EL=0.05, LL=0.1), name='syph')
+    sim = ss.Sim(demographics=preg, diseases=syph, n_agents=20_000, **kw).run()
+    r, p = sim.results, sim.demographics.pregnancy
+    assert p.fetus and 'ss.mother' in p.fetus_reason
+    total = r.syph.mtct.sum()
+    out = {k:r.syph[k].sum() for k in ['stillbirth', 'nnd', 'born_cs', 'born_ok']}
+    assert total > 200 and all(v > 10 for v in out.values()), out
+    assert sum(out.values()) <= total # The rest unborn at the end, or lost earlier
+    assert r.pregnancy.stillbirth.sum() >= out['stillbirth'] # Also a stillbirth of the pregnancy, for ANC and contraception to see
+    assert r.pregnancy.neonatal_deaths.sum() >= out['nnd']
+    assert np.isclose(r.pregnancy.birth.sum(), r.pregnancy.delivery.sum() - out['stillbirth'], rtol=0.01)
+    return sim
+
+
+def make_postpartum():
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150), p_loss=ss.bernoulli(0.02))
+    preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
+    return preg
+
+
+@sc.timer()
+def test_postpartum():
+    sc.heading('Port: FPsim postpartum, the time since the last birth surviving later losses, and parity as a counter moved on delivery')
+    seen = sc.objdict(n=0)
+    def check(sim): # Every loss after a birth leaves the time since it running
+        p = sim.demographics.pregnancy
+        lost = p.loss.uids
+        sb = p.engine.eval_for(p.since_birth, lost)
+        had = np.isfinite(sb)
+        seen.n += had.sum()
+        assert np.all(sb[had] > 0)
+    abm = ss.Sim(demographics=make_postpartum(), analyzers=check, n_agents=20_000, stratify=strat, use_aging=False, **kw).run()
+    assert seen.n > 20
+    p, ppl = abm.demographics.pregnancy, abm.people
+    women = (ppl.female & (ppl.age >= 15)).uids
+    assert np.all(ppl.parity[women] == np.minimum(p.parity[women], 3)) # The dimension, capped, as the counter
+    return abm
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B1: clocks (P.time) as compartments are deferred, so this pregnancy cannot run with solver="ode"')
+def test_postpartum_ode():
+    by = lambda sim: sum(np.asarray(sim.results.pregnancy[k].select(sex='female').by('parity').values)[-1] for k in ['n_NP', 'n_P'])
+    abm = ss.Sim(demographics=make_postpartum(), n_agents=20_000, stratify=strat, use_aging=False, **kw).run()
+    ode = ss.Sim(demographics=make_postpartum(), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
+    a, o = by(abm), by(ode)
+    assert np.allclose(a[1:], o[1:], rtol=0.1), (a, o)
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
@@ -246,4 +313,6 @@ if __name__ == '__main__':
     fetus = test_fetus()
     lact = test_lactation()
     legacy = test_legacy()
+    syph = test_syphilis()
+    pp = test_postpartum()
     T.toc()
