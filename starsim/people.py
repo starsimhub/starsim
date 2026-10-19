@@ -769,7 +769,7 @@ class People:
     def unborn_uids(self):
         """ The active agents not yet born: those made at conception by `ss.Pregnancy`, with a negative age, who are not counted among the people (e.g. in `n_alive`) """
         sim = self.sim
-        if sim.solver != 'abm' or not any(isinstance(mod, ss.LegacyPregnancy) for mod in sim.demographics()):
+        if sim.solver != 'abm' or not any(isinstance(mod, ss.LegacyPregnancy) or getattr(mod, 'fetus', False) is True for mod in sim.demographics()): # Made at conception by ss.LegacyPregnancy, or by ss.Pregnancy with fetuses as agents
             return ss.uids()
         auids = self.auids
         return auids[self.age.raw[auids] < 0]

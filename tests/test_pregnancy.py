@@ -136,9 +136,46 @@ def test_events():
     return sim
 
 
+@sc.timer()
+def test_fetus():
+    sc.heading('Testing fetuses as agents (fetus="auto"), ss.mother(), and fetal removals as losses')
+    def make():
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
+        S, I, C, Cs = ss.states('S I C Cs')
+        d = ss.Disease(S, I, C, Cs,
+            infection = S >> I @ ss.peryear(0.1),
+            mtct      = ss.Transition(S, [C, Cs], rate=ss.peryear(3)*ss.mother(I), p=[0.6, None]), # In utero, from the mother's state
+            fetal     = C >> ss.null @ ss.peryear(4), # A fetal death before delivery: a loss for the mother, by gestational age
+            still     = Cs >> ss.null @ ss.on(preg.delivery), # At delivery, before birth: a stillbirth
+            born      = Cs >> S @ ss.on(preg.birth),
+            name='d')
+        return preg, d
+    preg, d = make()
+    sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=10_000, **kw).run()
+    p, ppl, r = sim.demographics.pregnancy, sim.people, sim.results
+    assert p.fetus and 'ss.mother in d.mtct' in p.fetus_reason
+    assert r.d.mtct.sum() > 200 and r.d.still.sum() > 50
+    assert r.pregnancy.stillbirth.sum() >= r.d.still.sum() and r.pregnancy.miscarriage.sum() > 50
+    assert r.pregnancy.birth.sum() == r.pregnancy.delivery.sum() - r.d.still.sum() # A stillborn fetus is not born
+    fetal = (p.fetal & ppl.alive).uids
+    assert np.all(p.P[ppl.parent[fetal]]) and np.all(ppl.age[fetal] < 0) # Every fetus has a pregnant mother, and is lost with her
+    assert len(sim.networks.maternalnet) == len(fetal)
+    born, unborn = (ppl.alive & (ppl.age >= 0)).sum(), (ppl.alive & (ppl.age < 0)).sum()
+    assert np.isclose(r.d.n_S[-1] + r.d.n_I[-1] + r.d.n_C[-1] + r.d.n_Cs[-1], born + unborn, rtol=0.01) and np.isclose(r.n_alive[-1], born, rtol=0.01) # The unborn are in the disease's states (so they can be infected before birth), though not among the people (as in test_mtct)
+
+    # Nothing reads fetuses: children are made at delivery
+    plain = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, **kw).init()
+    assert not plain.demographics.pregnancy.fetus
+    preg, d = make()
+    with pytest.raises(ss.CapabilityError):
+        ss.Sim(demographics=preg, diseases=d, solver='ode', total_pop=1000, stratify=strat, **kw).run()
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
     births = test_births()
     events = test_events()
+    fetus = test_fetus()
     T.toc()

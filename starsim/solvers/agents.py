@@ -1303,24 +1303,32 @@ class Agents(Engine):
             n = n(self.sim, parents)
         return np.broadcast_to(np.asarray(n, dtype=int), len(parents))
 
-    def grow_children(self, tr, parents, ti):
-        """ Make the children of some parents, linked to them, in their parent's place, and in each declared module's state for them (see `into()`) """
+    def grow_children(self, tr, parents, ti, counts=None, age=0.0, into=None):
+        """
+        Make the children of some parents (`counts` of each, default `n_children()`), linked to them, in their parent's place,
+        and in each declared module's state for them (see `into()`), or (`into=False`) each module's first state, as for fetuses
+        """
         sim = self.sim
         people = sim.people
-        counts = self.n_children(tr, parents)
+        counts = self.n_children(tr, parents) if counts is None else counts
         moms = np.repeat(np.asarray(parents), counts)
         if not len(moms):
             return ss.uids()
         places = self.place_raw()[moms] if sim.mixing.space is not None else np.zeros(len(moms), dtype=int)
-        states = tuple(self.into(tr))
+        states = () if into is False else tuple(self.into(tr))
+        born = np.all(np.asarray(age) >= 0) # Or fetuses, aged below 0
         npl = np.bincount(places, minlength=1)
-        new = self.add_people([(place, states, int(k)) for place,k in enumerate(npl) if k], ti, f'born_{tr.name}')
+        new = self.add_people([(place, states, int(k)) for place,k in enumerate(npl) if k], ti, f'born_{tr.name}', newborn=born)
         order = np.concatenate([moms[places == place] for place,k in enumerate(npl) if k]) # In the order they were made: by place, then each parent's
         people.parent[new] = order
         if f'sex_{tr.name}' in self.dists:
             people.female[new] = self.dists[f'sex_{tr.name}'].rvs(new)
             sim.groups.groups_changed(new)
-        if not any(strat.kind == 'age' for strat in sim.groups.strats):
+        if not born: # Fetuses, so that they are born at 0
+            byplace = np.concatenate([np.flatnonzero(places == place) for place,k in enumerate(npl) if k])
+            people.age[new] = np.broadcast_to(age, len(moms))[byplace]
+            sim.groups.groups_changed(new)
+        elif not any(strat.kind == 'age' for strat in sim.groups.strats):
             people.age[new] = 0
         return new
 
@@ -1337,7 +1345,7 @@ class Agents(Engine):
     def fresh(self, key, tr):
         """ The agents who went through a transition (or a recorded event) of this module since `key` last asked: for code that reacts to events once each """
         seen = self._seen.get(key, {})
-        fresh = [b for b in self.batches if id(b) not in seen]
+        fresh = [b for b in self.batches if id(b) not in seen and not b.get('also', False)] # Those the event happened to themselves
         self._seen[key] = {id(b):b for b in self.batches}
         return self.event_uids(tr, batches=fresh) if fresh else ss.uids()
 
@@ -1543,6 +1551,11 @@ class Agents(Engine):
         phase = self._phase[1] if self._phase[0] == ti else -1 # Moved by another module before this one's step: see start_phase()
         self.batches.append(sc.objdict(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase)))
         self._news = True
+        also = getattr(self.mod, 'also_happened', None) # Others an event also happens to, e.g. the fetuses of a mother at a delivery
+        if tr is not None and also is not None:
+            others = also(tr.name, uids)
+            if others is not None and len(others):
+                self.batches.append(sc.objdict(tr=tr.name, uids=others, src=-1, dst=-1, key=(ti, phase), also=True))
         return
 
     def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None):

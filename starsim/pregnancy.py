@@ -59,9 +59,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
     delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time is gestational age
     birth       = ss.birth('-> NP', per=delivery, n=ss.PregnancyPars().embryos_per_pregnancy) # Children, linked to the mother (agents only, for now)
 
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, fetus='auto', metadata=None, **kwargs):
         v3 = ss.PregnancyPars()
-        given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in v3 or k == 'p_abortion'})
+        declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
+        given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in v3 or k in declared and not isinstance(kwargs[k], ss.par)})
         kwargs.setdefault('name', 'pregnancy')
         super().__init__(**kwargs)
         own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph, which conception_rate() reads
@@ -89,8 +90,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.BoolState('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
             ss.FloatArr('parity', label='Parity', default=0),
             ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
+            ss.BoolState('fetal', label='A fetus, as an agent'),
         )
         self.attrs = sc.objdict() # Values drawn at an event: see attr()
+        self.fetus = fetus # Whether fetuses are agents, from conception: see init_fetus()
+        self.fetus_reason = None
         return
 
     # Events the pregnancy records on the mother, besides its transitions (agents only)
@@ -144,6 +148,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         dist = self.graph.pars.dur_pregnancy.raw
         self.mean_dur_pregnancy = ss.transitions.dwell_stats(dist, lambda v: ss.solvers.convert(v, 'year'))[0]
         super().init_pre(sim)
+        self.init_fetus()
         for name,a in self.attrs.items(): # Durations in the sim's unit
             self.setattribute(f'rng_{name}', ss.transitions.numeric_dist(a.dist, lambda v: ss.solvers.convert(v, sim.unit_base)))
         return
@@ -156,10 +161,65 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.react()
         return
 
+    def init_fetus(self):
+        """
+        Whether fetuses are agents from conception (`fetus='auto'`): if something reads them, i.e. a prenatal network,
+        or `ss.mother()` in a module; otherwise children are made at delivery. Agents only.
+        """
+        sim = self.sim
+        reasons = []
+        if self.fetus == 'auto' and self.abm:
+            reasons += [f'{name} is a prenatal network' for name,net in sim.pars.networks.items() if isinstance(net, ss.PrenatalNet)]
+            for mod in sim.declared:
+                for name,tr in mod.graph.transitions.items():
+                    if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p)):
+                        reasons.append(f'ss.mother in {mod.name}.{name}')
+            for key in ['interventions', 'connectors']:
+                for mod in sim.pars[key].values():
+                    if ss.expressions.mothers_in([v for k,v in vars(mod).items() if k not in ['sim', 'pars']]):
+                        reasons.append(f'ss.mother in {mod.name}')
+        self.fetus = bool(reasons) if self.fetus == 'auto' else bool(self.fetus)
+        if self.fetus and not self.abm:
+            raise ss.CapabilityError(f'"{self.name}" cannot have fetuses as agents with solver="{sim.solver}": the fetal levels of the mother\'s compartments are not built yet. Run with solver="abm".')
+        self.fetus_reason = sc.strjoin(reasons) if reasons else None
+        return
+
+    def unborn(self, moms):
+        """ The living fetuses of some mothers (not those already due to die) """
+        ppl = self.sim.people
+        auids = ppl.auids
+        keep = self.fetal.raw[auids] & np.isin(ppl.parent.raw[auids], moms) & ~(ppl.ti_dead.raw[auids] <= self.sim.ti)
+        return ss.uids(auids[keep])
+
+    def also_happened(self, name, uids):
+        """ A delivery happens to the fetuses as well as the mother, before they are born, so ss.on(preg.delivery) can remove a fetus as a stillbirth """
+        return self.unborn(uids) if self.fetus and name == 'delivery' else None
+
+    def conceive(self, moms, ti):
+        """ As agents, with fetuses as agents: the embryos of new pregnancies, in each module's first state, aged so they are born at 0 """
+        engine = self.engine
+        tr = self.graph.transitions.birth
+        moms = moms[self.P.raw[moms]] # Not those who had an abortion at once
+        if not len(moms):
+            return
+        steps = np.ceil(np.asarray(self.ti_exit_P.raw[moms], dtype=float)) - ti # To the delivery, as scheduled
+        counts = engine.n_children(tr, moms)
+        age = -np.repeat((steps + 0.5)*self.t.dt_year, counts) # Still below 0 at the delivery, when it is set to 0
+        new = engine.grow_children(tr, moms, ti, counts=counts, age=age, into=False)
+        self.fetal[new] = True
+        for net in self.sim.networks.values():
+            if isinstance(net, ss.PrenatalNet):
+                net.add_pairs(self.sim.people.parent.raw[new], new)
+        return
+
     def react(self):
-        """ As agents, once for each event: draw the values recorded at it (see attr()) """
+        """ As agents, once for each event: make the fetuses of new pregnancies, and draw the values recorded at events (see attr()) """
         if not self.abm:
             return
+        if self.fetus:
+            new = self.engine.fresh('fetus', 'conception')
+            if len(new):
+                self.conceive(new, self.ti)
         for name,a in self.attrs.items():
             uids = self.engine.fresh(('attr', name), a.on)
             if len(uids):
@@ -169,23 +229,74 @@ class Pregnancy(ss.Demographics, ss.Disease):
     def make_children(self, tr, parents, ti):
         """ As agents, at a delivery: the children of the mothers (see `ss.solvers.Agents.step_per()`), and the events on the mothers """
         engine = self.engine
-        new = engine.grow_children(tr, parents, ti)
-        self.parity[parents] += 1
         ppl = self.sim.people
+        self.parity[parents] += 1
+        if self.fetus: # Born; a mother whose fetuses were all removed at the delivery (ss.on(preg.delivery)) had a stillbirth
+            new = self.unborn(parents)
+            ppl.age[new] = 0
+            self.sim.groups.groups_changed(new)
+            self.fetal[new] = False
+            for net in self.sim.networks.values():
+                if isinstance(net, ss.PrenatalNet):
+                    net.remove_uids(new)
+            still = parents[~np.isin(parents, ppl.parent.raw[new])]
+            if len(still):
+                engine.flowcounts['stillbirth'] += engine.n_of(still)
+                engine.record_event('stillbirth', still)
+        else:
+            new = engine.grow_children(tr, parents, ti)
+        for net in self.sim.networks.values():
+            if isinstance(net, ss.PostnatalNet) and not isinstance(net, ss.BreastfeedingNet):
+                net.add_pairs(ppl.parent.raw[new], new)
         moms = ss.uids(np.unique(ppl.parent.raw[new]))
         self.ti_live_birth[moms] = ti
         engine.record_event('live_birth', moms)
         return new
 
     def step_die(self, uids):
-        """ As agents: take the dead out of the states, and a death before the age of 1 is an infant death for the mother """
+        """
+        As agents: take the dead out of the states. The death of the last fetus of a pregnancy is a miscarriage or a
+        stillbirth for the mother, by gestational age; a mother who dies while pregnant loses her fetuses, counted the
+        same way; and a death before the age of 1 is an infant death for the mother.
+        """
+        if not self.abm or not len(uids):
+            return super().step_die(uids)
+        ppl = self.sim.people
+        engine = self.engine
+        ti = self.ti
+        orphans = self.unborn(uids) if self.fetus else ss.uids() # The fetuses of mothers who die while pregnant (who may have left P by antepartum already)
+        pregnant = ss.uids(np.unique(ppl.parent.raw[orphans]))
+        moms = ss.uids()
+        if self.fetus: # The fetuses of mothers whose last fetus died, before the deaths are taken out of the states
+            parent = ppl.parent.raw[uids]
+            moms = ss.uids(np.unique(parent[self.fetal.raw[uids]]))
+            moms = moms[self.P.raw[moms] & ppl.alive.raw[moms]]
+            moms = moms[~np.isin(moms, ppl.parent.raw[self.unborn(moms)])]
         super().step_die(uids)
-        if self.abm and len(uids):
-            ppl = self.sim.people
-            age, parent = ppl.age.raw[uids], ppl.parent.raw[uids]
-            infant = (age >= 0) & (age < 1) & (parent != ppl.parent.nan)
-            moms = ss.uids(np.unique(parent[infant]))
-            self.engine.record_event('infant_death', moms[ppl.alive.raw[moms]])
+        thr = ss.solvers.convert(self.graph.pars.loss_threshold.raw, self.sim.unit_base)
+        def lose(moms, force):
+            ga = (ti - np.asarray(self.ti_P.raw[moms], dtype=float))*engine.dt
+            late = ga >= thr
+            for name,sel in [('stillbirth', late), ('miscarriage', ~late)]:
+                these = moms[sel]
+                if not len(these):
+                    continue
+                if force: # Back to NP, along the transition, so it is an event like any other
+                    engine.force(these, self.graph.transitions[name], self.graph.states.NP)
+                else:
+                    engine.flowcounts[name] += engine.n_of(these)
+                    engine.record_event(name, these)
+            return
+        if self.fetus:
+            if len(pregnant):
+                ppl.request_death(orphans)
+                lose(pregnant, force=False)
+            if len(moms):
+                lose(moms, force=True)
+        age, parent = ppl.age.raw[uids], ppl.parent.raw[uids]
+        infant = (age >= 0) & (age < 1) & (parent != ppl.parent.nan) & ~self.fetal.raw[uids]
+        moms = ss.uids(np.unique(parent[infant]))
+        engine.record_event('infant_death', moms[ppl.alive.raw[moms]])
         return
 
     @property
