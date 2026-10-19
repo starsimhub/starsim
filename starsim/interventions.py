@@ -1056,12 +1056,27 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Whether people hold what is delivered """
         return self.product is not None and self.product.holds
 
+    def typed_function(self):
+        """ Whether the coverage is a function of the sim that gives a typed rate (e.g. `lambda sim: ss.peryear(4)`): worked out the first time it can be called """
+        cov = self.coverage
+        if not callable(cov) or isinstance(cov, (ss.TimePar, ss.Dist, ss.conditions.Cond, ss.expressions.Expr, ss.by)):
+            return False
+        if getattr(self, '_typed_coverage', None) is None:
+            sim = getattr(self, 'sim', None)
+            if sim is None:
+                return False
+            try:
+                self._typed_coverage = isinstance(cov(sim), ss.TimePar)
+            except Exception: # Not callable yet, e.g. it reads results that do not exist before the run
+                return False
+        return self._typed_coverage
+
     @property
     def remembers(self):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good """
         full = self.coverage is None and self.capacity is None and self.when is None
         lost = self.holds and self.product.loses # Once lost, they would be eligible again, and given it again at the next step
-        rate = isinstance(self.coverage, ss.TimePar) # Typed coverage is a rate among those eligible, offered at every step
+        rate = isinstance(self.coverage, ss.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
         return self.routine and not rate and self.target is None and (self.by_age or not ((self.holds or self.move) and full and not lost))
 
     @property

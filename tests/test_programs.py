@@ -232,6 +232,16 @@ def test_memory():
     check_close(sims, lambda sim: sim.results.recent.delivered.sum(), rtol=0.05)
     assert 'since_screening' in [s.name for s in sims.ode.groups.strats] and 'since_screening' not in [s.name for s in sims.abm.groups.strats]
 
+    # Coverage as a function that gives a typed rate is a rate at every step too, as the typed rate itself is
+    def typed(func=False, **kwargs):
+        rate = ss.peryear(4)
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), coverage=(lambda sim: rate) if func else rate, name='screening')
+        return ss.Sim(make_sir(), interventions=screening, **kwargs)
+    for solver in ['ode', 'abm']:
+        direct, func = [run_both(typed, stop=60, func=f)[solver].results.screening.delivered for f in [False, True]]
+        assert np.allclose(func, direct), f'{solver}: a function giving a typed rate should be the rate, not a routine delivery once per spell'
+        assert func[30:].sum() > 0.5*func[:30].sum()
+
     return sims
 
 
