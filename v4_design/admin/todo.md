@@ -39,3 +39,4 @@
 - [ ] Turn disease models into natural language write-ups and back again
 - [ ] Decide on and implement library examples (camdl's, Keeling & Rohani, others)
 - [ ] Show example of pure NumPy and then stages of implementation moving to pure Starsim
+- [ ] Figure out why sc.asd() doesn't work better for ODE models
