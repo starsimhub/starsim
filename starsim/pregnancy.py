@@ -93,8 +93,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.BoolState('fetal', label='A fetus, as an agent'),
         )
         self.attrs = sc.objdict() # Values drawn at an event: see attr()
+        self.rng_md = ss.random() # For a plain number as p_maternal_death
         self.fetus = fetus # Whether fetuses are agents, from conception: see init_fetus()
         self.lactation_opt = lactation # Whether to add an ss.Lactation: see add_lactation()
+        self._callbacks = sc.objdict(conception=[], delivery=[]) # Starsim 3: see add_conception_callback()
+        self._nnd = 0 # Neonatal deaths in the step
         self.fetus_reason = None
         return
 
@@ -170,7 +173,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         sim = self.sim
         reasons = []
         if self.fetus == 'auto' and self.abm:
-            reasons += [f'{name} is a prenatal network' for name,net in sim.pars.networks.items() if isinstance(net, ss.PrenatalNet)]
+            nets = {**dict(sim.pars.networks), **dict(getattr(sim, 'networks', None) or {})} # Wherever they are in the sim's initialization
+            reasons += [f'{name} is a prenatal network' for name,net in nets.items() if isinstance(net, ss.PrenatalNet)]
             for mod in sim.declared:
                 for name,tr in mod.graph.transitions.items():
                     if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p)):
@@ -235,6 +239,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
             new = self.engine.fresh('fetus', 'conception')
             if len(new):
                 self.conceive(new, self.ti)
+        if self._callbacks.conception:
+            new = self.engine.fresh('callbacks', 'conception')
+            for fn in self._callbacks.conception:
+                fn(new)
         for name,a in self.attrs.items():
             uids = self.engine.fresh(('attr', name), a.on)
             if len(uids):
@@ -266,7 +274,94 @@ class Pregnancy(ss.Demographics, ss.Disease):
         moms = ss.uids(np.unique(ppl.parent.raw[new]))
         self.ti_live_birth[moms] = ti
         engine.record_event('live_birth', moms)
+        p_md = self.pars.p_maternal_death # At delivery, as in Starsim 3 (agents only)
+        if not isinstance(p_md, ss.bernoulli) or np.any(np.asarray(p_md.pars.p) > 0):
+            dead = p_md.filter(parents) if isinstance(p_md, ss.bernoulli) else parents[self.rng_md.rvs(parents) < p_md]
+            ppl.request_death(dead)
+            self.results.maternal_deaths[ti] += len(dead)*self.sim._current_scale
+        for fn in self._callbacks.delivery:
+            fn(ss.uids(ppl.parent.raw[new]), new)
         return new
+
+    #%% Starsim 3 attributes, read by code written for ss.LegacyPregnancy (agents only)
+
+    @property
+    def pregnant(self):
+        """ Starsim 3: whether pregnant (`P`) """
+        return self.P
+
+    @property
+    def ti_pregnant(self):
+        """ Starsim 3: the step the pregnancy began (`ti_P`) """
+        return self.ti_P
+
+    @property
+    def ti_delivery(self):
+        """ Starsim 3: the step of the scheduled delivery (a copy: the exit of `P` by `delivery` is the engine's) """
+        due = np.where(self.P.raw & (self.exit_P.raw >= 0), np.ceil(self.ti_exit_P.raw), np.nan)
+        out = self.ti_exit_P.asnew(due.astype(ss.dtypes.float), cls=ss.FloatArr)
+        out.nan = np.nan
+        return out
+
+    @property
+    def gestation(self):
+        """ Starsim 3: weeks into the pregnancy (NaN if not pregnant) """
+        ga = np.where(self.P.raw, (self.ti - self.ti_P.raw)*self.t.dt.weeks, np.nan)
+        out = self.ti_P.asnew(ga.astype(ss.dtypes.float), cls=ss.FloatArr)
+        out.nan = np.nan
+        return out
+
+    @property
+    def breastfeeding(self):
+        """ Starsim 3: whether breastfeeding (`lactation.L`) """
+        lact = self.lactation
+        return lact.L if lact is not None else None
+
+    def find_unborn_children(self, parent_uids):
+        """ Starsim 3: the fetuses (as agents) of some mothers """
+        return self.unborn(parent_uids) if self.fetus else ss.uids()
+
+    def add_conception_callback(self, fn):
+        """ Starsim 3: call `fn(uids)` at conceptions; deprecated, use ss.on(preg.conception) or on=preg.conception """
+        ss.warn('add_conception_callback() is deprecated: use ss.on(preg.conception), or on=preg.conception on a delivery', FutureWarning)
+        self._callbacks.conception.append(fn)
+        return
+
+    def add_delivery_callback(self, fn):
+        """ Starsim 3: call `fn(mother_uids, newborn_uids)` at deliveries; deprecated, use ss.on(preg.birth) or on=preg.delivery """
+        ss.warn('add_delivery_callback() is deprecated: use ss.on(preg.birth), or on=preg.delivery on a delivery', FutureWarning)
+        self._callbacks.delivery.append(fn)
+        return
+
+    v3_results = dict(pregnancies='conception', births='birth', miscarriages='miscarriage', stillbirths='stillbirth', abortions='abortion') # Starsim 3 names, as aliases of flows
+
+    def init_results(self):
+        super().init_results()
+        kw = dict(dtype=float, scale=False)
+        self.define_results(*[ss.Result(k, label=f'{k.capitalize()} (= {v})', summarize_by='sum', auto_plot=False, **kw) for k,v in self.v3_results.items()],
+            ss.Result('maternal_deaths', label='Maternal deaths', summarize_by='sum', auto_plot=False, **kw),
+            ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', summarize_by='sum', auto_plot=False, **kw),
+            ss.Result('cbr', label='Crude birth rate', summarize_by='mean', **kw),
+        )
+        return
+
+    def update_results(self):
+        super().update_results()
+        self.results.neonatal_deaths[self.ti] = self._nnd*self.sim._current_scale if self.abm else 0
+        self._nnd = 0
+        return
+
+    def finalize_results(self):
+        super().finalize_results()
+        res = self.results
+        for k,v in self.v3_results.items():
+            res[k][:] = res[v][:]
+        res.maternal_deaths[:] += res.antepartum[:]
+        inds = self.match_time_inds()
+        units = self.pars.rate_units*self.t.dt_year
+        res.cbr[:] = sc.safedivide(res.birth[:], self.sim.results.n_alive[inds], default=0)/units if 'n_alive' in self.sim.results else 0
+        return
+
 
     def step_die(self, uids):
         """
@@ -309,6 +404,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
             if len(moms):
                 lose(moms, force=True)
         age, parent = ppl.age.raw[uids], ppl.parent.raw[uids]
+        self._nnd += np.count_nonzero((age >= 0) & (age <= 28/365) & ~self.fetal.raw[uids])
         infant = (age >= 0) & (age < 1) & (parent != ppl.parent.nan) & ~self.fetal.raw[uids]
         moms = ss.uids(np.unique(parent[infant]))
         engine.record_event('infant_death', moms[ppl.alive.raw[moms]])

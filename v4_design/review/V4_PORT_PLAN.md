@@ -217,3 +217,7 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 59 | 2e9fc5fc | 707c1d5f | Agents half: ss.birth(per=) kept as v4-rs's declared form, built on v4's add_people and parent links (per held by reference, so it survives copying); another module's ss.birth(per=) only places the children, so it is not a second birth of everyone; compartments are a CapabilityError (B4), test_births_ode a strict xfail |
 | 60 | 820932c0 | ae12efcc | Tests only, as strict xfails: its interventions.py changes (routine held products over untracked diseases) go with the delivery re-ports |
 | 61 | b5b0a17f | — | implementation.md only: merged in Task 6 |
+| 62 | 1f2f77f9 | 1fb9c159 | Ported as on v4-rs (preg.attr kept as its Recorded form; Since/Recorded live in expressions.py); flow-driven births are now recorded as events, so ss.child(preg.birth) and on=preg.birth see them; the test in v4's spelling |
+| 63 | 82057114 | — | ss.attr as compartments: Phase B (B6) |
+| 64 | c856e39b | 12bfb7f4 | Ported onto v4's add_people (fetuses in each module's first state, aged below 0); the unborn are in a declared disease's states and not among the people, as v4 decided (test_mtct), so the test counts them in; has_unborn is v4's people.unborn_uids(), which now includes a declared ss.Pregnancy with fetuses |
+| 65 | d40c3218 | 0c5b7fa1 | Ported; ss.Lactation added in v4's choose_solver(); a triggered split with ss.stay is accepted (the check counted its one real destination); set_pars is pars.update |

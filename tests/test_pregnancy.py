@@ -206,6 +206,38 @@ def test_lactation():
     return sim
 
 
+@sc.timer()
+def test_legacy():
+    sc.heading('Testing back-compatibility: ss.LegacyPregnancy fires the same events, and ss.Pregnancy has the Starsim 3 names')
+    out = sc.objdict()
+    for cls in [ss.Pregnancy, ss.LegacyPregnancy]:
+        preg = cls(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.01), burnin=False)
+        S, I, C, F = ss.states('S I C F')
+        d = ss.Disease(S, I, C, F,
+            infection = S >> I @ ss.peryear(0.1),
+            mtct      = S >> C @ ss.peryear(3)*ss.mother(I),
+            flag      = S >> F @ ss.on(preg.conception),
+            unflag    = F >> S @ ss.on(preg.delivery), name='d')
+        sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=5000, **kw).run()
+        r, p = sim.results, sim.demographics.pregnancy
+        out[cls.__name__] = r
+        assert r.d.flag.sum() > 0.5*r.pregnancy.pregnancies.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
+        assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
+        assert np.all(p.pregnant[p.pregnant.uids]) and np.all(p.ti_delivery[p.pregnant.uids] >= p.ti - 1) # Within a step: ss.LegacyPregnancy keeps fractional due times
+        assert np.nanmax(p.gestation[p.pregnant.uids]) < 45 and np.all(p.parity >= 0)
+    a, b = out.Pregnancy.pregnancy, out.LegacyPregnancy.pregnancy
+    for key in ['pregnancies', 'births']:
+        assert np.isclose(a[key].sum(), b[key].sum(), rtol=0.15), key
+
+    # A Starsim 3 disease that transmits over the maternal network, with the declared pregnancy
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), diseases=ss.SIS(beta=dict(maternalnet=1.0, random=0.05)),
+                 networks=[ss.MaternalNet(), ss.RandomNet()], n_agents=3000, **kw).run()
+    assert sim.demographics.pregnancy.fetus and sim.results.sis.new_infections.sum() > 0
+    with pytest.warns(FutureWarning):
+        ss.Pregnancy().add_delivery_callback(lambda m, n: None)
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
@@ -213,4 +245,5 @@ if __name__ == '__main__':
     events = test_events()
     fetus = test_fetus()
     lact = test_lactation()
+    legacy = test_legacy()
     T.toc()

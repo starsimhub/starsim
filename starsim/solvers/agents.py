@@ -52,6 +52,7 @@ class Agents(Engine):
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
+        self._fired_seen = {} # For each trigger on a coded module's event, who it has seen it for: see unseen_fired()
         self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
         self._junctions = None # The states passed through at once: see junctions
         self._leaving = False # Whether P.dwell is being read for people leaving P (or, as a tuple, who is leaving which state: see fire())
@@ -1241,6 +1242,8 @@ class Agents(Engine):
             if tr.trigger.event:
                 mask = np.zeros(len(inside), dtype=bool)
                 mask[self.new_events(tr)] = True # Seen whether or not anyone is in the source, so an old event does not move people who enter later
+            elif getattr(tr.trigger.x, 'op', None) == 'event': # A delivery's, a product's, or a coded module's event (ss.Event): news for a step (two, from a module that steps late), so moved once
+                mask = self.unseen_fired(tr, np.asarray(self.selector.select(tr.trigger.x), dtype=bool))
             elif inside.any():
                 mask = np.asarray(self.selector.select(tr.trigger.x), dtype=bool)
             else:
@@ -1255,6 +1258,17 @@ class Agents(Engine):
                     out.append((tr, s, ss.uids(np.flatnonzero(mask & mod[s.name].raw))))
                 taken = mask if taken is None else taken | mask
         return out
+
+    def unseen_fired(self, tr, mask):
+        """ Of the people an event is news for, those this trigger has not already seen it for (on this step or the last) """
+        ti = self.mod.ti
+        last, now, before = self._fired_seen.get(tr.name, (None, None, None))
+        pad = lambda m: np.zeros(len(mask), dtype=bool) if m is None else np.pad(m, (0, len(mask) - len(m)))
+        if last != ti: # A new step: what was seen now was seen on the last step, if it was the last step
+            now, before = None, (now if last == ti - 1 else None) # The old now, as the right side is evaluated first
+        seen = pad(now) | pad(before)
+        self._fired_seen[tr.name] = (ti, pad(now) | mask, before)
+        return mask & ~seen
 
     def new_events(self, tr):
         """ The agents an event trigger's event has happened to since it last looked """
