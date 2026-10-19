@@ -140,6 +140,9 @@ def choose_solver(sim):
         tried = [cap.ingredient.split(': ', 1)[-1] for cap in sim.capabilities if cap.probe is not None and cap.groups == 'yes']
         if reasons:
             solver, reason = 'abm', reasons[0]
+            for cap in sim.capabilities:
+                if cap.ingredient.startswith('property:'):
+                    ss.note(f'running as agents: {cap.auto}', sim=sim)
         else:
             solver, reason = 'ode', 'every part of the model has a compartmental form' + (f', as running {sc.strjoin(tried)} on groups showed' if tried else '')
     elif solver == 'gillespie' and pars.approx is not False: # One event at a time, unless that would take too long
@@ -236,7 +239,7 @@ def choose_solver(sim):
     for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
         for p in mod.graph.all_pars():
             if isinstance(p.raw, ss.by):
-                p.raw.check(sim)
+                p.raw.check(sim, note=True)
     # The notes on what was chosen, kept in sim.notes whatever the verbosity
     if sim.unit_source:
         ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.UnitInferred, sim=sim)
@@ -380,15 +383,24 @@ def init_capabilities(sim, modules):
             add(f'function: {name}', '?', 'tried on groups', probe=(mod.name, func))
         for p in graph.spread_pars():
             add(f'distribution: {p.name}', 'approx', 'its mean', auto=f'"{p.name}" is a distribution across people')
+        dims = [strat.name for strat in sim.groups.strats] + ['female']*any(strat.female is not None for strat in sim.groups.strats) # A dimension by sex is people.female
+        for leaf in graph.leaves(): # A property of people that is not a dimension is each person's own
+            props = leaf.names if isinstance(leaf, ss.expressions.Prop) else leaf.raw.dims if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) else []
+            for prop in props:
+                ingredient = f'property: people.{"female" if prop == "sex" else prop}'
+                if prop not in dims and ingredient not in [cap.ingredient for cap in caps]:
+                    example = "sex=['female', 'male']" if prop in ['sex', 'female'] else f'{prop}=[...]'
+                    add(ingredient, 'no', 'not a dimension', auto=f'a value in "{mod.name}" depends on {ingredient.split(": ")[1]}, which is not a dimension; stratify by it (sim.stratify({example})) to run as compartments', fatal=True)
         aged = any(strat.kind == 'age' and strat.edges is not None for strat in list(graph.strats) + list(sim.groups.strats))
         for name,tr in graph.transitions.items():
             raw = None if tr.dur is None else tr.dur.raw
             fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.kernels.convey())
             if isinstance(raw, ss.Dist) and type(raw).__name__ != 'expon':
                 shape = raw.pars.get('a')
-                exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
+                slotted = name in graph.dwell_trs # It reads the time in its state, so is followed by it (see ss.solvers.Compartmental.build_layout())
+                exact = fixed or slotted or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
                 auto = f'"{name}" has a {type(raw).__name__} dwell time, and approx=False' if approx is False and not exact else None
-                add(f'dwell time: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'a conveyor of whole steps' if fixed else 'Erlang stages', auto=auto)
+                add(f'dwell time: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'a conveyor of whole steps' if fixed else 'a conveyor by time in state' if slotted else 'Erlang stages', auto=auto)
             if getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None:
                 if tr.contact or any(graph.exits[s.name].branches for s in tr.src): # See ss.solvers.Compartmental.stays()
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')

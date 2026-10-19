@@ -40,9 +40,11 @@ def as_expr(obj):
     """ Convert an object to an expression: anything that is not one becomes an anonymous parameter """
     if isinstance(obj, Expr):
         return obj
-    elif isinstance(obj, ss.conditions.Cond): # e.g. 0.3*(Ia | Is)
-        errormsg = 'A condition cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
-        raise TypeError(errormsg)
+    elif isinstance(obj, ss.conditions.Cond): # A property of people (ss.ppl.age), or a condition, which is 1 or 0 for each person
+        if states_or(obj): # e.g. 0.3*(Ia | Is), which almost always meant exposure to people in either
+            errormsg = 'A condition on states alone cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
+            raise TypeError(errormsg)
+        return Prop(obj)
     elif isinstance(obj, ss.transitions.Transition) and obj.src is None: # Part of a weighted destination, e.g. 0.5*I + 0.5*R @ 0.1, where @ binds before +
         errormsg = f'"@" binds before "+", so in a weighted destination the destination needs parentheses: S >> (0.5*I + 0.5*R) @ rate, not S >> 0.5*I + 0.5*R @ rate'
         raise TypeError(errormsg)
@@ -50,6 +52,15 @@ def as_expr(obj):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
         raise TypeError(errormsg)
     return par(obj, literal=True)
+
+
+def states_or(cond):
+    """ Whether a condition is, or does arithmetic on, states alone joined by |, e.g. Ia | Is, or 0.3*(Ia | Is) """
+    def only_states(c):
+        return isinstance(c, ss.conditions.Cond) and (c.op == 'state' or (c.op == '|' and all(only_states(arg) for arg in c.args)))
+    if cond.op == '|':
+        return only_states(cond)
+    return cond.op in '+-*/' and any(isinstance(arg, ss.conditions.Cond) and states_or(arg) for arg in cond.args)
 
 
 class Expr:
@@ -88,6 +99,7 @@ class Expr:
     def __truediv__(self, other):  return BinOp('/', self, other)
     def __rtruediv__(self, other): return BinOp('/', other, self)
     def __pow__(self, other):      return BinOp('**', self, other)
+    def __rpow__(self, other):     return BinOp('**', other, self)
     def __neg__(self):             return BinOp('*', -1, self)
     def __lt__(self, other):       return Func('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
     def __le__(self, other):       return Func('less_equal', self, other)
@@ -247,6 +259,35 @@ def count_power(expr):
     return 0
 
 
+class Prop(Expr):
+    """ A property of people, or a condition, in a rate: each person's value (`ss.ppl.age`), or 1 for the people a condition holds for and 0 for the others (`ss.ppl.age > 65`); in a compartmental run, each group's value (a condition: the share of the group it holds for) """
+    def __init__(self, cond):
+        self.cond = cond
+        return
+
+    @property
+    def names(self):
+        """ The properties of people it reads, e.g. ['age'] """
+        out = []
+        def walk(c):
+            if c.op == 'people':
+                out.append(c.args[0])
+            elif c.op not in ss.conditions.leaves:
+                for arg in c.args:
+                    if isinstance(arg, ss.conditions.Cond):
+                        walk(arg)
+            return
+        walk(self.cond)
+        return out
+
+
+class Dwell(Expr):
+    """ The time each person has spent in a state (`P.dwell`), in the sim's unit: in `p=` of a transition with several destinations out of it, when they leave; or in the rate of a transition out of it """
+    def __init__(self, state):
+        self.state = state
+        return
+
+
 class Flow(Expr):
     """ The number of people who made a transition in the step, in a result: e.g. `infection / S`, the per-capita incidence """
     def __init__(self, tr):
@@ -264,11 +305,11 @@ comparisons = dict(less='<', less_equal='<=', greater='>', greater_equal='>=')
 
 class Func(Expr):
     """ A NumPy function of one or two expressions, e.g. `np.minimum(I.n, K)` or `np.exp(-k * I.n)` """
-    names = dict(exp=1, log=1, sqrt=1, absolute=1, sin=1, cos=1, minimum=2, maximum=2, less=2, less_equal=2, greater=2, greater_equal=2) # The functions, and how many arguments each takes
+    names = dict(exp=1, log=1, sqrt=1, absolute=1, sin=1, cos=1, expit=1, minimum=2, maximum=2, less=2, less_equal=2, greater=2, greater_equal=2) # The functions, and how many arguments each takes (expit is SciPy's, from scipy.special)
 
     def __init__(self, name, *args):
         if self.names.get(name) != len(args):
-            errormsg = f'np.{name}() cannot be used in a rate; the functions that can are {sc.strjoin(f"np.{k}()" for k in self.names)}, and np.clip()'
+            errormsg = f'np.{name}() cannot be used in a rate; the functions that can are {sc.strjoin(f"np.{k}()" for k in self.names if k != "expit")}, np.clip(), and SciPy\'s expit()'
             raise TypeError(errormsg)
         self.name = name
         self.args = [as_expr(arg) for arg in args]
@@ -386,7 +427,13 @@ def evaluate(expr, ctx):
             return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
         else:           return a ** b
     elif isinstance(expr, Func):
-        return 1.0*getattr(getattr(ctx, 'xp', np), expr.name)(*[evaluate(arg, ctx) for arg in expr.args]) # A comparison is 1 or 0; a context can give another NumPy, e.g. jax.numpy
+        xp = getattr(ctx, 'xp', np) # A context can give another NumPy, e.g. jax.numpy
+        args = [evaluate(arg, ctx) for arg in expr.args]
+        if expr.name == 'expit': # The logistic function, 1/(1 + exp(-x)), which NumPy does not have
+            return 1/(1 + xp.exp(-args[0]))
+        return 1.0*getattr(xp, expr.name)(*args) # A comparison is 1 or 0
+    elif isinstance(expr, Prop):
+        return ctx.prop(expr.cond)
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
@@ -395,6 +442,8 @@ def evaluate(expr, ctx):
         return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.total_count(expr.states) if expr.kind == 'total' else ctx.local_frac(expr.states)
     elif isinstance(expr, ss.transitions.State):
         return ctx.exposure(expr)
+    elif isinstance(expr, Dwell):
+        return ctx.dwell(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
@@ -485,9 +534,13 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return text
         elif isinstance(e, ss.transitions.State):
             return e.label_name if bare is None else bare(e)
+        elif isinstance(e, Prop):
+            return repr(e.cond)
         elif isinstance(e, Count):
             names = [s.label_name for s in e.states]
             inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}'
+        elif isinstance(e, Dwell):
+            return f'{e.state.label_name}.dwell'
         return str(e.name) # A flow
     return fmt(expr)

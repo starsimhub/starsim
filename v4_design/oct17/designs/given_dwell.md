@@ -2,6 +2,8 @@
 
 ## Summary
 
+**Revision, 2026-10-19.** Decision 2 is (b), per Cliff: `P.dwell` may also appear in the rate of any exit out of `P`. Decision 3 has no note and is taken as recommended (the whole-step conveyor). All four decisions are settled, and the code is under way.
+
 **The problem.** In HPVsim, how long an infection lasts decides where it goes: the chance of CIN rises with the time spent infected (`P`), and the chance of cancer with the time spent in CIN (`C`). In Starsim 3, HPVsim draws the duration and then the outcome from it (`hpv.py:533` to `580`: `p_cin = compute_severity(dur_precin, rel_sev, cin_fn)`, then `p_cancer = compute_severity(dur_cin, ...)`). v4 has no declared way to say this. The spec's form (branches decided on entry, one dwell for all) gets the total right but the timing badly wrong: in a cohort of 10,000 women infected at 25, P(cancer) is 0.0274 against 0.0293, but the median time to cancer is 3.0 years against 24.0, and the mean age at cancer 32.1 against 53.7 (`status_oct18/hpv.md` HP18). Splitting by outcome with conditional dwells worked out outside the model gets closer (19.5 years, age 50.3) but cannot be fitted. The exact form today reads engine internals (`v4port/natural_history/hpv_declared.py`, `years_in()`: `(d.ti - d.ti_P[uids])*dt`) and runs as agents only.
 
 **The proposal.** A state's time in it is an expression, `P.dwell`, as its count is `P.n`. In the `p=` of a transition with several destinations out of `P` (decided when the person leaves, now documented in 03) it is the time the person spent in `P`. No new `ss.` name; `ss.given_dwell` is not added.
@@ -13,9 +15,9 @@ k_cin, k_ca, tp = ss.par(0.3, bounds=[0.1, 0.5]), ss.par(0.3), ss.par(2e-3)
 
 hpv16 = ss.Disease(S, P, C, X, R,
     infection = (S | R) >> P @ beta*(P + C),
-    precin    = ss.progression('P -> [C, R]', dur=ss.lognorm_ex(ss.years(3), ss.years(9)),
+    precin    = ss.progression('P -> C | R', dur=ss.lognorm_ex(ss.years(3), ss.years(9)),
                                p=[hpv.logf2(P.dwell, k=k_cin, ttc=50), None]),                          # P(CIN) given the years spent in P
-    cin       = ss.progression('C -> [X, R]', dur=ss.lognorm_ex(ss.years(5), ss.years(20)),
+    cin       = ss.progression('C -> X | R', dur=ss.lognorm_ex(ss.years(5), ss.years(20)),
                                p=[1 - (1 - tp)**(hpv.intlogf2(C.dwell, k=k_ca, ttc=50)**2), None]),     # P(cancer) given the years in CIN
 )
 ```
@@ -27,8 +29,8 @@ hpv16 = ss.Disease(S, P, C, X, R,
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
 | 1 | The spelling | (a) `P.dwell`, an expression of the time in the state, usable in `p=` (and any expression); (b) `ss.given_dwell(fn)`, a wrapper on a Python function of the dwell; (c) a `kind='clock'` dimension set to 0 on entering `P`, with `p=ss.by(since_P=...)`; (d) stages declared by the user (`P1 -> P2 -> ...`, a `p` per stage) | (a). It is one attribute next to `.n` and `.frac`, it is an expression (so `to_spec()` writes it as text, `k_cin` can be fitted, and gradients flow), it composes with people's properties (`ss.People.rel_sev*P.dwell`) and `ss.by`, and the compartmental form is worked out from it. (b) adds a name and an opaque function (agents only in practice, unfittable); (c) needs a `stratify()` and a `move=` on every way into `P` (infection, reactivation), and a table; (d) is approximate (the split form above is 4.5 years off) and verbose [CK: ok] |
-| 2 | Where `P.dwell` may appear | (a) only in `p=` of a transition with several destinations out of `P`; (b) also in the rate of any exit out of `P` (a hazard that depends on time in state); (c) anywhere | (a) now, (b) later if a user needs it (same machinery). Elsewhere it raises: separate transitions with `p=` are decided on entry, when no time has passed, so `p=P.dwell` there raises `ss.CapabilityError` saying to write one transition with several destinations [CK: i think we can do B] |
-| 3 | Compartmental form | (a) a conveyor of whole steps in the state (the one `after=` uses), exit hazards from the dwell distribution, and `p` worked out per slot; (b) phase-type stages (Erlang or hyperexponential, HP28) with a share per stage; (c) agents only (`CapabilityError`) | (a). It is exact to the step for any dwell distribution and any `p`, and it reuses an existing conveyor; (b) is approximate because a stage does not know the time in state. Cost: one compartment per step up to a cap (below) |
+| 2 | Where `P.dwell` may appear | (a) only in `p=` of a transition with several destinations out of `P`; (b) also in the rate of any exit out of `P` (a hazard that depends on time in state); (c) anywhere | **Decided: (b).** In `p=` of a transition with several destinations out of `P`, and in the rate of any exit out of `P` (a hazard that depends on the time in `P`: under compartments, a hazard per slot of the same conveyor). Elsewhere it raises: separate transitions with `p=` are decided on entry, when no time has passed, so `p=P.dwell` there raises `ss.CapabilityError` saying to write one transition with several destinations; in a transmission rate or a result it raises, since it is a value per person in `P`, not a count [CK: i think we can do B] |
+| 3 | Compartmental form | (a) a conveyor of whole steps in the state (the one `after=` uses), exit hazards from the dwell distribution, and `p` worked out per slot; (b) phase-type stages (Erlang or hyperexponential, HP28) with a share per stage; (c) agents only (`CapabilityError`) | (a). It is exact to the step for any dwell distribution and any `p`, and it reuses an existing conveyor; (b) is approximate because a stage does not know the time in state. Cost: one compartment per step up to a cap (below) (taken as the recommendation; no `[CK:]` note) |
 | 4 | Agents: the time actually spent, or the dwell drawn | (a) the time actually spent, in whole steps (`ti - ti_P`, plus half a step); (b) the dwell drawn, unrounded | (a). It is what the compartmental form gives too, it follows a dwell rescaled by a modifier (C17), and it differs from HPVsim's drawn value by under half a step (0.125 years at HPVsim's quarterly step) [CK: ok] |
 
 ## Use cases
@@ -71,9 +73,9 @@ With `rel_sev` as a continuous property of people, the model runs as agents (as 
 
 | Step | What | Size | Files |
 |---|---|---|---|
-| 1 | `State.dwell`: an expression leaf, its text and parsing, the check of where it is used (decision 2), the error for separate transitions | S | `transitions.py`, `expressions.py`, `spec.py`, `graph.py` |
-| 2 | Agents: evaluate it in `branch_probs_for()` from `ti_<state>`; `hpv.P.dwell[uids]` for functions | S | `solvers/agents.py`, `solvers/engine.py` |
-| 3 | Compartments: the conveyor by time in state for a state whose exit reads it; hazards per slot from the dwell distribution (by group, with constant modifiers); `p` per slot in `update_targets()`; the cap and note | M | `solvers/compartmental.py`, `kernels.py`, `solvers/crossing.py` |
+| 1 | `State.dwell`: an expression leaf, its text and parsing, the check of where it is used (decision 2 (b): `p=` of a transition with several destinations, and the rate of any exit out of the state), the error for separate transitions | S | `transitions.py`, `expressions.py`, `spec.py`, `graph.py` |
+| 2 | Agents: evaluate it in `branch_probs_for()` and in the rates of exits out of the state, from `ti_<state>`; `hpv.P.dwell[uids]` for functions | S | `solvers/agents.py`, `solvers/engine.py` |
+| 3 | Compartments: the conveyor by time in state for a state whose exit reads it; hazards per slot from the dwell distribution (by group, with constant modifiers), and an exit rate that reads `.dwell` evaluated per slot; `p` per slot in `update_targets()`; the cap and note | M | `solvers/compartmental.py`, `kernels.py`, `solvers/crossing.py` |
 | 4 | `describe()`, `to_code()`, docs (a section in the diseases guide with the HPV example), CHANGELOG | S | `presentation.py`, `docs/user_guide/modules_diseases.qmd` |
 
 About four days. **Tests:** the HP18 cohort (10,000 women infected at 25, `P -> [C, R]` and `C -> [X, R]` with HPV16's dwells and functions, no `rel_sev`): median time to cancer within 1 year of the Starsim 3 code's 24.0 and P(cancer) within 3 standard errors of 0.0293 as agents; a contract across agents (20 runs), binomial (20 runs), and ODE at a quarterly step on P(CIN), P(cancer) and the mean time to cancer, within 2% (ODE) and 3 standard errors (stochastic); a case with a known answer (exponential dwell with rate 1, `p = 1 - exp(-P.dwell)`, so the share to C is 1/2), within 1% under ODE; `p=P.dwell` on separate transitions raises; a fit of `k_ca` from cancer counts recovers it (gradients through the ODE).
@@ -82,7 +84,6 @@ About four days. **Tests:** the HP18 cohort (10,000 women infected at 25, `P -> 
 
 ## Out of scope and dependencies
 
-- **A rate that depends on time in state** (decision 2 (b)): the same machinery; added when a user needs it.
 - **Per-person values written on events** (HP19: `rel_sev`, immunity as a running maximum) belong to the cascade and behavior designs; this design only reads people's properties, as `ss.People.<property>` (or `ss.ppl`, per Cliff's note in `behavior_vocabulary.md`).
 - **HP28 for states that do not read `.dwell`**: its own fix.
 - **HP20** (`destination_results.md`): independent, but HPV needs both, since this is why HPV's cancer transition is one transition.

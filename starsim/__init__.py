@@ -86,7 +86,7 @@ t('parameters')
 from .parameters import Pars, SimPars, Requires, by, timeseries, seasonal
 
 t('people')
-from .people import People, Person, people
+from .people import People, Person, people, ppl
 
 t('modules')
 from .modules import (

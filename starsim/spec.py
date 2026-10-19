@@ -2,6 +2,7 @@
 The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`), and the parser of expressions in it
 """
 import ast
+import keyword
 import textwrap
 import numpy as np
 import sciris as sc
@@ -14,7 +15,7 @@ time_names = ['days', 'weeks', 'months', 'years', 'perday', 'perweek', 'permonth
               'probperday', 'probperweek', 'probpermonth', 'probperyear', 'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear']
 
 # Functions that can be written inside a rate, by their name in the spec
-func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'minimum', 'maximum']
+func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'expit', 'minimum', 'maximum']
 comparisons = {ast.Lt:'<', ast.LtE:'<=', ast.Gt:'>', ast.GtE:'>='}
 
 
@@ -46,6 +47,8 @@ def quantity(val, kind=None):
             elif 'values' in val:
                 return ss.by(**{dims[0]:quantity(val['values'])})
             return ss.by(**{dim:quantity(v) for dim,v in val['product'].items()})
+        elif 'keyed' in val: # Values by label, e.g. ss.by(sex=dict(female=..., male=...))
+            return {k:quantity(v) for k,v in val['keyed'].items()}
         elif 'seasonal' in val:
             fields = val['seasonal']
             return ss.seasonal(mean=quantity(fields['mean']), amplitude=fields['amplitude'], peak=fields['peak'])
@@ -61,7 +64,7 @@ def unknown(what):
 
 
 class Parser:
-    """ Read a rate or a result written as text, e.g. "beta * W.n / (W.n + K)", allowing only the names the model declares """
+    """ Read a rate or a result written as text, e.g. "beta * W.n / (W.n + K)", allowing only the names the model declares, and people's properties (people.age) """
     def __init__(self, names):
         self.names = names
         return
@@ -80,17 +83,22 @@ class Parser:
                 errormsg = f'The model spec uses "{node.id}", which is not a state, parameter, or transition of the module'
                 raise ValueError(errormsg)
             return self.names[node.id]
-        elif isinstance(node, ast.Attribute) and node.attr in ['n', 'frac', 'total']:
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'people':
+            return getattr(ss.ppl, node.attr)
+        elif isinstance(node, ast.Attribute) and node.attr in ['n', 'frac', 'total', 'dwell']:
             return getattr(ev(node.value), node.attr)
         elif isinstance(node, ast.BinOp):
             a, b = ev(node.left), ev(node.right)
-            ops = {ast.Add:lambda: a + b, ast.Sub:lambda: a - b, ast.Mult:lambda: a * b, ast.Div:lambda: a / b, ast.Pow:lambda: a ** b}
+            ops = {ast.Add:lambda: a + b, ast.Sub:lambda: a - b, ast.Mult:lambda: a * b, ast.Div:lambda: a / b, ast.Pow:lambda: a ** b, ast.BitAnd:lambda: a & b, ast.BitOr:lambda: a | b}
             if type(node.op) in ops:
                 return ops[type(node.op)]()
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
             return -ev(node.operand)
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Invert):
+            return ~ev(node.operand)
         elif isinstance(node, ast.Compare) and len(node.ops) == 1 and type(node.ops[0]) in comparisons:
-            a, b = ss.transitions.as_expr(ev(node.left)), ev(node.comparators[0])
+            a, b = ev(node.left), ev(node.comparators[0])
+            a = a if isinstance(a, ss.conditions.Cond) else ss.transitions.as_expr(a) # A condition on people's properties stays one
             return {'<':a.__lt__, '<=':a.__le__, '>':a.__gt__, '>=':a.__ge__}[comparisons[type(node.ops[0])]](b)
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
             name = node.func.id
@@ -179,6 +187,11 @@ def code_value(val):
             elif 'values' in val:
                 return f'ss.by({dims[0]}={code_value(val["values"])})'
             return 'ss.by(' + ', '.join(f'{k}={code_value(v)}' for k,v in val['product'].items()) + ')'
+        elif 'keyed' in val:
+            items = val['keyed'].items()
+            if all(str(k).isidentifier() and not keyword.iskeyword(str(k)) for k,v in items):
+                return 'dict(' + ', '.join(f'{k}={code_value(v)}' for k,v in items) + ')'
+            return '{' + ', '.join(f'{k!r}: {code_value(v)}' for k,v in items) + '}'
         elif 'seasonal' in val:
             f = val['seasonal']
             return f'ss.seasonal(mean={code_value(f["mean"])}, amplitude={f["amplitude"]!r}, peak={f["peak"]!r})'
@@ -201,13 +214,17 @@ def time_code(text):
 
 
 def code_expr(text):
-    """ The Python for a rate or result in the model spec: functions from NumPy, and typed quantities from Starsim """
+    """ The Python for a rate or result in the model spec: functions from NumPy (and SciPy's expit), typed quantities from Starsim, and people's properties as ss.ppl """
     if text is None:
         return None
     node = ast.parse(text, mode='eval').body
     for n in ast.walk(node):
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-            if n.func.id in func_names:
+        if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == 'people':
+            n.value = ast.Attribute(ast.Name('ss'), 'ppl')
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+            if n.func.id == 'expit': # Imported from scipy.special: see to_code()
+                continue
+            elif n.func.id in func_names:
                 n.func = ast.Attribute(ast.Name('np'), n.func.id)
             elif n.func.id in time_names or hasattr(ss, n.func.id): # Every Starsim name, e.g. ss.by() or ss.seasonal()
                 n.func = ast.Attribute(ast.Name('ss'), n.func.id)
@@ -513,11 +530,11 @@ def owners(spec):
 
 
 def cond_code(text, mods):
-    """ A condition written as text in the model spec (e.g. "(people.age < 5)") as Python: an attribute of people from ss.People, and a state, transition, or stratification from its disease """
+    """ A condition written as text in the model spec (e.g. "(people.age < 5)") as Python: an attribute of people from ss.ppl, and a state, transition, or stratification from its disease """
     class Names(ast.NodeTransformer):
         def visit_Attribute(self, node):
             if isinstance(node.value, ast.Name) and node.value.id == 'people':
-                return ast.Attribute(ast.Attribute(ast.Name('ss'), 'People'), node.attr)
+                return ast.Attribute(ast.Attribute(ast.Name('ss'), 'ppl'), node.attr)
             elif isinstance(node.value, ast.Name) and node.value.id in mods:
                 return ast.Attribute(ast.Name(mods[node.value.id][0]), node.attr)
             return self.generic_visit(node)
@@ -639,6 +656,8 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     code = '\n'.join(lines)
     if any('np.' in line for line in lines if not line.startswith('#')):
         code = code.replace('import starsim as ss\n', 'import numpy as np\nimport starsim as ss\n', 1)
+    if any('expit(' in line for line in lines if not line.startswith('#')):
+        code = code.replace('import starsim as ss\n', 'import starsim as ss\nfrom scipy.special import expit\n', 1)
     if filename is not None:
         sc.savetext(filename, code)
     return code

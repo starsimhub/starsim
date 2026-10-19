@@ -5,7 +5,7 @@ import types
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, did_you_mean, Expr, is_one, linear, par
+from .expressions import as_expr, BinOp, Count, did_you_mean, Dwell, Expr, is_one, linear, par
 from .parameters import by, TimeValue
 from .transitions import bound_names, find_name, FlowSum, outcome, State, Transition, update
 from .presentation import Presentation, TransitionTable
@@ -628,6 +628,10 @@ class Graph(Presentation):
                         raise ss.BadBranchSplit(f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
             elif tr.p is None and len(tr.dst) > 1:
                 raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
+            if tr.dst is not None and len(tr.dst) > 1: # Each destination's flow is res.<transition>.<state>, so it cannot be named like an attribute of a result
+                clash = [d.name for d in tr.dst if d.name in ss.Result.reserved()]
+                if clash:
+                    raise ss.DuplicateDeclaration(f'the flow of "{name}" to {sc.strjoin(clash)} is a result read as res.{name}.{clash[0]}, which is already an attribute of every result; rename the state {sc.strjoin(clash)}')
         updated = set()
         for name,upd in self.updates.items(): # A count with one value, set by one update and nothing else
             state = upd.state
@@ -640,6 +644,33 @@ class Graph(Presentation):
             if bare:
                 raise ss.ExposureToCount(f'the value of the update "{name}" uses the bare state {bare[0]}, which means contact; write {bare[0]}.n for the number, or {bare[0]}.frac for the share')
             updated.add(state.name)
+        self.check_dwell()
+        return
+
+    def check_dwell(self):
+        """ The time in a state (`P.dwell`) is known only for people in it: allowed in `p=` of a transition with several destinations out of it (decided when they leave), and in the rate of a transition out of it """
+        self.dwell_states = set() # The states whose time in state is read
+        self.dwell_trs = set() # The transitions that read it
+        where = 'P.dwell can be used in p= of a transition with several destinations out of P (decided when people leave), e.g. ss.Transition(P, [C, R], dur=..., p=[f(P.dwell), None]), or in the rate of a transition out of P'
+        dwells = lambda expr: [leaf.state for leaf in (expr.leaves if isinstance(expr, Expr) else []) if isinstance(leaf, Dwell)]
+        for name,tr in self.transitions.items():
+            own = tr.src[0] if len(tr.src or []) == 1 and not tr.contact else None
+            for state in dwells(tr.rate) + [s for p in (sc.tolist(tr.p) if len(tr.dst) > 1 else []) for s in dwells(p)]:
+                if state is not own:
+                    raise ss.CapabilityError(f'"{name}" ({tr.arrow}) reads {state.name}.dwell, the time in {state.name}, which only people leaving {state.name} have. {where}')
+                self.dwell_states.add(state.name)
+                self.dwell_trs.add(name)
+            if len(tr.dst) <= 1 and any(dwells(p) for p in sc.tolist(tr.p)):
+                state = dwells(tr.p[0])[0]
+                raise ss.CapabilityError(f'"{name}" has p= with {state.name}.dwell, but a branch with p= is decided when people enter {state.name}, when no time has passed. '
+                                         f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({state.name}, [{tr.dst[0].name}, ...], dur=..., p=[f({state.name}.dwell), None])')
+            if dwells(tr.dur):
+                raise ss.CapabilityError(f'the dwell time of "{name}" reads {dwells(tr.dur)[0].name}.dwell; {where}')
+        others = [(name, upd.value) for name,upd in self.updates.items()] + [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] + list(self.exprs.items())
+        others += [(oc.name, w) for oc in self.outcomes.values() for w in oc.weights] + [(f'init of {s.name}', s.init) for s in self.states.values()]
+        for name,expr in others:
+            if dwells(expr):
+                raise ss.CapabilityError(f'"{name}" reads {dwells(expr)[0].name}.dwell, the time in a state, which is not a number of people; {where}')
         return
 
     def stratify(self, frame=None, **kwargs):
@@ -784,6 +815,11 @@ class Graph(Presentation):
     def destinations(self):
         """ The names of the destinations of the transitions with several, as `destination()` takes them """
         return [f'{name}.{dst.name}' for name,tr in self.transitions.items() if tr.dst is not None and len(tr.dst) > 1 for dst in tr.dst]
+
+    def leaves(self):
+        """ The leaves of the rates and branch probabilities of its transitions """
+        exprs = [expr for tr in self.transitions.values() for expr in [tr.rate] + sc.tolist(tr.p)]
+        return [leaf for expr in exprs if isinstance(expr, Expr) for leaf in expr.leaves]
 
     def all_pars(self):
         """ Every parameter in the graph, named or inline """

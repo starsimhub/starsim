@@ -124,7 +124,7 @@ The approved design steps that fix silent answers:
 
 One agent revises each document in place, keeping what is approved. Each document's revision ends with the decisions that are still open.
 
-- [ ] **Care cascade, second draft of the user spelling.**
+- [x] **Care cascade, second draft of the user spelling.** (Done: `who >> ss.screen(...)` steps collected by `ss.cascade(...)`, `ss.Diagnostic`, `ss.visit()`, resistance as a transition with `on=`, `above=`, `count_events=`; open decisions 10 to 17.)
   - Add `ss.cascade()`, written so the logic reads at a glance, as `S >> I @ beta*I` does for diseases.
   - Make products and interventions impossible to confuse: no `ss.Test` beside `ss.test`.
   - Use full state names in the examples, and replace `default='normal'`.
@@ -132,28 +132,28 @@ One agent revises each document in place, keeping what is approved. Each documen
   - `on=` takes `|`, `&`, and lists with `operator='any'|'all'`.
   - Add `count_events=True`, and say what choices a user has above a stock target.
   - **Thanzi la Onse's health system** (its HSI events, appointment footprints, and consumables) should inform what a cascade can say. It is cloned at `/home/cliffk/idm/git/TLOmodel`, but don't touch it yet: Cliff is working on it with the lingua franca library first. Until then the draft goes ahead without it, and is revisited once his TLO work is done.
-- [ ] **Family as `ss.Strains`.**
+- [x] **Family as `ss.Strains`.** (Done: `ss.Strains('hpv', hpvsim.genotypes(...), ...)`, `protected=` and `reduces=`, `combine=` functions as `approx`; open decisions D8 to D13.)
   - Name first.
   - `ss.Strains(hpvsim.genotypes(...))` builds the members, with no list expansion in user code.
   - Give `of=` a name that says what it is (it is the state whose holders are protected, such as `nab`); propose two or three.
   - Allow a function for `combine=`.
   - Say how `ss.Strains` relates to the existing `kind='strain'` dimension, which `ss.immunity` shares, so the two names don't collide.
-- [ ] **Per-act transmission.**
+- [x] **Per-act transmission.** (Done: networks declare `sides=`, giving keys such as `m2f`; injecting drug use; D5 recorded; condoms as `ss.modify(route=, share=)`; the partnership approximation specified; open decisions R1 to R6.)
   - D3: the valid direction keys come from the network (sex for `MFNet`, `p1`/`p2` or modes for `between=`), and a network can say which keys it accepts. Work through injecting drug use as an example.
   - D5: wait for Cliff's choice (below).
   - D6: condoms and microbicides as interventions acting through `ss.modify` on per-act transmission, not as a parameter of the disease or the network.
   - D9: specify the partnership approximation for the compartmental solvers (step 9), marked `approx`.
-- [ ] **Behavior vocabulary.** Write the counter spelling with four or five worked examples (parity with twins, doses received, episodes, years of schooling) so Cliff can choose among `move='parity'`, `dict(to='parity')`, and `parity=1`. Rename `ss.People.<x>` to `ss.ppl.<x>`. Rewrite the FP26 example so each line is readable.
-- [ ] **Given dwell.** Add decision 2 (b): `P.dwell` in the rate of any exit out of `P`.
-- [ ] **Destination results.** Keep `select(to=)` as the second spelling.
-- [ ] **No design owns "immediately".** The family (`exclusive=`), the cascade, the behavior vocabulary, ST26 (`perday(1e6)` takes 277 s a simulated year as an ODE), HP2, and HP16 all need a move with no dwell. Write it as a short section of whichever design lands first, most likely the cascade's.
+- [x] **Behavior vocabulary.** (Done: five counter examples in four spellings, recommending `add=dict(parity=2)`; `ss.ppl`; FP26 rewritten; open decisions A to C.) Write the counter spelling with four or five worked examples (parity with twins, doses received, episodes, years of schooling) so Cliff can choose among `move='parity'`, `dict(to='parity')`, and `parity=1`. Rename `ss.People.<x>` to `ss.ppl.<x>`. Rewrite the FP26 example so each line is readable.
+- [x] **Given dwell.** Add decision 2 (b): `P.dwell` in the rate of any exit out of `P`.
+- [x] **Destination results.** Keep `select(to=)` as the second spelling.
+- [x] **No design owns "immediately".** (Done: "A move with no wait" in the cascade design, `dur=0`; its decision 17.) The family (`exclusive=`), the cascade, the behavior vocabulary, ST26 (`perday(1e6)` takes 277 s a simulated year as an ODE), HP2, and HP16 all need a move with no dwell. Write it as a short section of whichever design lands first, most likely the cascade's.
 
 ### Code that can start now (in parallel)
 
-- [ ] **Destination results** (about 2 days): steps 1 to 6 as written, with `select(to=)` kept. This is HP20 and DF13's destination half.
-- [ ] **Given dwell** (about 4 days, plus rates): steps 1 to 4, with decision 2 (b). This is HP18; it covers HP28 only for states whose `p=` reads `P.dwell`.
-- [ ] **D15** (moved from behavior step 1): a value by `sex` or `age` with no such dimension, read from `people.female`/`people.age` as agents (decision 5); a positional `ss.by(sex=[a, b])` has no level order without the dimension, so it needs a keyed form (`ss.by(sex=dict(female=a, male=b))`). Until then the error names `sim.stratify(sex=['female', 'male'])`.
-- [ ] **Behavior steps 3 and 4** (M): properties and conditions in expressions (as `ss.ppl`), `expit`, and `ss.by` over properties with tables. They need no open decision.
+- [x] **Destination results** (about 2 days): steps 1 to 6 as written, with `select(to=)` kept. This is HP20 and DF13's destination half. (Done; the total is still counted directly rather than summed from its destinations (the same draws, so equal), and a destination is recorded in the group of its total. Untested: by-group sums for a transition that enters a dimension under compartments, and the crossing path.)
+- [x] **Given dwell** (about 4 days, plus rates): steps 1 to 4, with decision 2 (b). This is HP18; it covers HP28 only for states whose `p=` reads `P.dwell`. (Done. HP18 cohort: P(cancer) 0.0275 and median 24.2 years as agents, 0.0275 and 23.9 as ODE, against 0.0274 and 23.7 by Monte Carlo. Departure: `p=` reads `(ti - ti_P)*dt` with no half step, since agents leave at the step nearest their drawn dwell; rates keep the half step. Left: under compartments, a state whose dwell-reading exit shares it with `p=` branches, a non-exponential dwell that does not read the time (HPV's `male_clear`), or `after=`/`before=` raises `CapabilityError`; a rate reading `.dwell` is evaluated slot by slot; crossings untested; the docs section.)
+- [x] **D15** (moved from behavior step 1): a value by `sex` or `age` with no such dimension, read from `people.female`/`people.age` as agents (decision 5); a positional `ss.by(sex=[a, b])` has no level order without the dimension, so it needs a keyed form (`ss.by(sex=dict(female=a, male=b))`). Until then the error names `sim.stratify(sex=['female', 'male'])`.
+- [x] **Behavior steps 3 and 4** (M): properties and conditions in expressions (as `ss.ppl`), `expit`, and `ss.by` over properties with tables. They need no open decision. (Done. Left: a property in a distribution's parameters (`lognorm_ex(mean=2*ss.ppl.age)`); a property of another module (`hiv.cd4`) in a rate; a property in a result expression or a gradient fit (a bare `AttributeError` today: make it a clear error); `describe()`'s dimension lines (step 8); outer products of tables.)
 
 ### After H0
 
@@ -225,7 +225,8 @@ Answered on 2026-10-19 (his `[CK:]` notes, folded in):
 - **The downstream CI gate**: waits.
 
 Still open:
-1. **The counter spelling**, after H0's examples.
+1. **H0's open decisions**, in a table at the end of each design: care cascade 10 to 17, `ss.Strains` D8 to D13, per-act R1 to R6, behavior vocabulary A to C (A is the counter spelling).
+1. **`ss.People.<x>`**: keep it beside `ss.ppl`, or drop it? 25 lines in this repo use it (one test on purpose) and 2 in FPsim. `ss.ppl` takes the vocabulary count from 105 to 106.
 1. **R27, `ss.Samples`**: gavi-outbreaks uses it (tests, docs, and about six analysis notebooks: Ebola, yellow fever, measles, cholera, meningitis). Still drop it?
 1. **ST19, a branch to stay**: `ss.Transition(I, L, dur=1, p=0.05)` alone raises (sum 0.05, not 1). Allowing the rest to stay put would hide typos in branch sums; a keyword (e.g. `rest='stay'`), or keep the error?
 2. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys).

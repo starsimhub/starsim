@@ -659,6 +659,108 @@ def test_property_values():
     return sim
 
 
+@sc.timer()
+def test_properties_in_rates():
+    sc.heading('Testing people\'s properties and conditions in rates, as a regression')
+    from scipy.special import expit
+
+    # A probability of use as a regression on a property (FP26), the same as agents and as compartments, and stopped by ss.change on its intercept (FP14: 3,531 starts with and without it)
+    def make(solver, change=False):
+        b0, b_urban = ss.par(-1.0, bounds=[-3, 1]), ss.par(1.0)
+        start = ss.Transition('none', 'on', rate=ss.peryear(1)*expit(b0 + b_urban*ss.ppl.urban))
+        meth = ss.Disease(start=start, stop=ss.Transition('on', 'none', rate=ss.peryear(0.5)), b0=b0, b_urban=b_urban, name='meth')
+        intv = ss.change('meth.pars.b0', at=2005, to=-np.inf) if change else None
+        sim = ss.Sim(meth, interventions=intv, n_agents=20_000, start=2000, stop=2010, dt=1/12, solver=solver, verbose=0)
+        sim.stratify(urban=[False, True], split=[0.4, 0.6])
+        return sim.run()
+    on = [make(solver).results.meth.n_on[-1] for solver in ['abm', 'ode']]
+    expected = 20_000*(0.4*expit(-1)/(expit(-1) + 0.5) + 0.6*0.5/(0.5 + 0.5)) # At equilibrium
+    assert np.isclose(on[1], expected, rtol=0.01) and np.isclose(on[0], expected, rtol=0.03)
+    for solver in ['abm', 'ode']:
+        assert make(solver, change=True).results.meth.start[61:].sum() == 0
+
+    # A condition in a rate is 1 or 0 for each person; on states alone joined by |, it is still an error
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*(1 + 2*(ss.ppl.age > 50)), init=dict(I=0.01), name='sir')
+    sim = ss.Sim(sir, n_agents=10_000, stop=5, dt=0.1, use_aging=False, verbose=0).run()
+    ode = ss.Sim(sir, total_pop=10_000, stop=5, dt=0.1, use_aging=False, solver='ode', verbose=0)
+    ode.stratify(age=[0, 50])
+    ode.run()
+    assert np.isclose(sim.results.sir.n_R[-1], ode.results.sir.n_R[-1], rtol=0.15)
+    with pytest.raises(TypeError, match=r'0.3\*\(Ia \+ Is\)'):
+        ss.Disease(S, I, R, infection=S >> I @ 0.3*(S | I))
+
+    # Written to the model spec as people.urban and expit(), and back as code with the same hash
+    sim = make('abm')
+    spec = sim.to_spec()
+    assert 'expit(b0 + b_urban * people.urban)' in spec['modules'][0]['transitions'][0]['rate']
+    code = ss.to_code(spec)
+    assert 'from scipy.special import expit' in code and 'ss.ppl.urban' in code
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == sim.hash()
+
+    # A property that is not one of the people's says what is
+    bad = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*ss.ppl.agee, name='bad')
+    with pytest.raises(ss.UnknownState, match='age'):
+        ss.Sim(bad, n_agents=100, verbose=0).init()
+    return sim
+
+
+@sc.timer()
+def test_by_properties():
+    sc.heading('Testing values by a property of people that is not a dimension (D15), and tables with bin edges')
+    def make(mu, solver='auto', dims=None, **kw):
+        S, D = ss.states('S D')
+        sim = ss.Sim(ss.Disease(S, D, death=S >> D @ mu, name='d'), solver=solver, use_aging=False, verbose=0, **sc.mergedicts(dict(stop=10), kw))
+        for dim,levels in (dims or {}).items():
+            sim.stratify(**{dim:levels})
+        return sim
+
+    # Death rates by sex with no sex dimension: read from people.female as agents; an explicit ODE says to stratify
+    mu = ss.by(sex=dict(female=ss.peryear(0.02), male=ss.peryear(0.05)))
+    sim = make(mu, n_agents=20_000).run()
+    assert sim.solver == 'abm'
+    female, dead = sim.people.female.raw[sim.people.auids], sim.diseases.d.D.raw[sim.people.auids]
+    for sel,rate in [(female, 0.02), (~female, 0.05)]:
+        p = 1 - np.exp(-10*rate)
+        assert abs(dead[sel].mean() - p) < 3*np.sqrt(p*(1 - p)/sel.sum())
+    with pytest.raises(ss.CapabilityError, match='stratify'):
+        make(mu, solver='ode', total_pop=20_000).init()
+    ode = make(mu, solver='ode', total_pop=20_000, dims=dict(sex=['female', 'male'])).run() # The same keys, by a dimension
+    assert np.allclose(ode.results.d.n_D.by('sex').values[-1], 10_000*(1 - np.exp(-10*np.array([0.02, 0.05]))), rtol=1e-3)
+    with pytest.raises(ss.MissingDimension, match=r'dict\(female='):
+        make(ss.by(sex=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
+    with pytest.raises(ss.MissingDimension, match='lower edge'):
+        make(ss.by(age=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
+
+    # A table with bin edges, by single years of age or coarser: each person's own age as agents; averaged over each age group as compartments, with a note
+    table = ss.by(dict(age=[0, 20, 40, 60], value=[ss.peryear(v) for v in [0.01, 0.02, 0.03, 0.04]]))
+    abm = make(table, n_agents=50_000, solver='abm').run()
+    ode = make(table, total_pop=50_000, solver='ode', dims=dict(age=[0, 30, 60])).run()
+    assert np.isclose(abm.results.d.n_D[-1], ode.results.d.n_D[-1], rtol=0.03)
+    assert any('averages it over each group' in str(note) for note in ode.notes)
+
+    # A row for people with no value (None), and a product of values by different dimensions
+    ppl = ss.People(10_000, extra_states=[ss.FloatArr('since_birth', default=ss.choice([np.nan, 1.0, 10.0], p=[0.5, 0.25, 0.25]))])
+    rate = ss.by(dict(since_birth=[None, 0, 5], value=[ss.peryear(0.0), ss.peryear(0.5), ss.peryear(0.1)]))
+    sim = make(rate, people=ppl, stop=1).run()
+    since, dead = sim.people.since_birth.raw[sim.people.auids], sim.diseases.d.D.raw[sim.people.auids]
+    assert dead[np.isnan(since)].sum() == 0 and dead[since == 1].mean() > 2*dead[since == 10].mean()
+    both = ss.by(sex=dict(female=1.0, male=2.0))*ss.by(urban={False:1.0, True:3.0})
+    assert both.dims == ['sex', 'urban']
+
+    # A distribution for each level of a property, as a dwell time
+    A, B = ss.states('A B')
+    dur = ss.by(sex=dict(female=ss.lognorm_ex(ss.months(6), ss.months(2)), male=ss.lognorm_ex(ss.months(12), ss.months(4))))
+    sim = ss.Sim(ss.Disease(A, B, go=ss.progression('A -> B', dur=dur), name='d'), n_agents=10_000, unit='month', stop=3, verbose=0).init()
+    uids = sim.people.auids
+    drawn = sim.diseases.d.engine.sample_dwell(sim.diseases.d.graph.transitions['go'], uids) # In months
+    female = sim.people.female.raw[uids]
+    assert np.isclose(drawn[female].mean(), 6, rtol=0.05) and np.isclose(drawn[~female].mean(), 12, rtol=0.05)
+    return sim
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -668,3 +770,5 @@ if __name__ == '__main__':
     register = test_register()
     ragged  = test_ragged()
     values  = test_property_values()
+    props   = test_properties_in_rates()
+    by_props = test_by_properties()

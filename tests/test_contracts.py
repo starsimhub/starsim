@@ -248,6 +248,22 @@ def test_dwell_forms():
     return
 
 
+def test_destinations():
+    sc.heading('Testing that every solver agrees on the flow to each destination, by age')
+    def run(solver, seed=1):
+        I, R, D = ss.states('I R D')
+        dis = ss.Disease(I, R, D, out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4)), init=dict(I=1000), name='cohort')
+        dis.stratify(age=ss.years([0, 40]))
+        res = ss.Sim(dis, n_agents=1000, unit='day', stop=40, solver=solver, rand_seed=seed, verbose=0).run().results.cohort
+        return np.array([res.out.D.select(age=age).sum() for age in [0, 1]])
+    ode = run('ode')
+    for solver in stochastic:
+        runs = np.array([run(solver, seed) for seed in range(20)])
+        se = runs.std(axis=0)/np.sqrt(len(runs))
+        assert np.all(abs(runs.mean(axis=0) - ode) <= 3*se + 1e-9), f'{solver}: deaths by age {runs.mean(axis=0)}, against {ode} for the ODE'
+    return ode
+
+
 # %% Conservation and exact identities
 
 closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.null

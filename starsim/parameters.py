@@ -7,6 +7,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
+import itertools
 from .expressions import as_expr, evaluate, Expr, par
 
 
@@ -738,18 +739,31 @@ def load_pars(filename):
 
 #%% Values that vary by level or in time
 
+def isnull(val):
+    """ Whether a value in a table is missing (None or NaN), e.g. the row for people with no value of a property """
+    return val is None or (isinstance(val, float) and np.isnan(val))
+
+
 class by:
     """
-    A value for each level of one or more stratifications
+    A value for each level of one or more stratifications, or of people's own properties
 
     With several dimensions as keywords, the value of a group is the product of
     its value in each. A table gives every combination directly: it has a column
     for each stratification (holding the labels of its levels) and a column of values.
 
+    A property of people that is not a dimension of the sim (e.g. sex, read from
+    `people.female`, or a property such as `urban`) is read from each person, as agents:
+    give its values by name (`sex=dict(female=..., male=...)`), or as a table. A column of
+    numbers in a table holds the lower edges of bins (the last one open-ended), so a table by
+    single year of age works whatever the model's age groups (a compartmental run averages
+    it over each group, with a note); a row whose key is None gives the value for people with
+    no value of the property, who otherwise get the mean over the levels.
+
     Args:
-        table (df/array): a dataframe (or a dict of columns) with a column per stratification and a column named `value`; or, with `dims`, an array with one axis per dimension
+        table (df/array): a dataframe (or a dict of columns) with a column per stratification or property and a column named `value`; or, with `dims`, an array with one axis per dimension
         dims (list): the dimensions of the axes of an array given as `table`
-        kwargs (dict): each dimension, and one value per level
+        kwargs (dict): each dimension, and one value per level (a list, by position), or a dict of values by label
 
     A value may itself vary in time (`ss.timeseries` or `ss.seasonal`), in the keyword and table forms.
 
@@ -760,6 +774,8 @@ class by:
         init = ss.by(pd.DataFrame(age=['child', 'adult'], patch=['north', 'north'], value=[10, 5])) # Every other combination is 0
         pop = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch']) # Ages by row, places by column
         beta = ss.by(age=[ss.timeseries({2020: 0.08, 2021: 0.04}), 0.05, 0.03]) # Children's value changes in 2021
+        mu = ss.by(sex=dict(female=0.008, male=0.011)) # From people.female, with or without a dimension by sex
+        p = ss.by(dict(age=range(15, 50), value=vals)) # By single year of age (bins with these lower edges)
         ```
     """
     def __init__(self, table=None, dims=None, **kwargs):
@@ -794,7 +810,7 @@ class by:
             return dict(by=self.dims, array=self.array.tolist())
         elif self.table is not None:
             return dict(by=self.dims, table={col:ss.presentation.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
-        values = {dim:ss.presentation.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
+        values = {dim:dict(keyed={str(k):ss.presentation.quantity_json(v, None, None) for k,v in vals.items()}) if isinstance(vals, dict) else ss.presentation.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
         return dict(by=self.dims, values=values[self.dims[0]]) if len(self.dims) == 1 else dict(by=self.dims, product=values)
     def map(self, func):
         """ A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product) """
@@ -805,14 +821,22 @@ class by:
             table['value'] = [func(v) for v in table['value']]
             return by(table)
         elif len(self.dims) == 1:
-            return by(**{self.dim:[func(v) for v in sc.tolist(self.values)]})
+            vals = self.values
+            return by(**{self.dim:{k:func(v) for k,v in vals.items()} if isinstance(vals, dict) else [func(v) for v in sc.tolist(vals)]})
         errormsg = f'Arithmetic on an ss.by() of several dimensions given as keywords ({sc.strjoin(self.dims)}) is not defined, since each group\'s value is a product; give it as a table or an array with dims= instead'
         raise TypeError(errormsg)
 
-    def _op(self, other, func):
-        """ Arithmetic with a number, or level by level with another ss.by over the same one dimension; anything else (an expression) is left to the other side """
+    def _op(self, other, func, op=None):
+        """ Arithmetic with a number, or level by level with another ss.by over the same one dimension, or a product of ss.by over different dimensions (each group's value the product); anything else (an expression) is left to the other side """
         if sc.isnumber(other):
             return self.map(lambda v: func(v, other))
+        elif isinstance(other, by) and self.given and other.given and not set(self.dims) & set(other.dims) and op == '*': # A product over different dimensions, given as keywords, e.g. by(age=...) * by(sex=...)
+            return by(**self.given, **other.given)
+        elif isinstance(other, by) and self.dim is not None and other.dim == self.dim and isinstance(self.values, dict) and isinstance(other.values, dict):
+            if self.values.keys() != other.values.keys():
+                errormsg = f'Cannot combine an ss.by() of {sc.strjoin(self.values.keys())} with one of {sc.strjoin(other.values.keys())}'
+                raise ValueError(errormsg)
+            return by(**{self.dim:{k:func(v, other.values[k]) for k,v in self.values.items()}})
         elif isinstance(other, by) and self.dim is not None and other.dim == self.dim:
             a, b = sc.tolist(self.values), sc.tolist(other.values)
             if len(a) != len(b):
@@ -821,8 +845,8 @@ class by:
             return by(**{self.dim:[func(x, y) for x,y in zip(a, b)]})
         return NotImplemented
 
-    def __mul__(self, other):      return self._op(other, lambda a,b: a*b)
-    def __rmul__(self, other):     return self._op(other, lambda a,b: b*a)
+    def __mul__(self, other):      return self._op(other, lambda a,b: a*b, '*')
+    def __rmul__(self, other):     return self._op(other, lambda a,b: b*a, '*')
     def __truediv__(self, other):  return self._op(other, lambda a,b: a/b)
     def __rtruediv__(self, other): return self._op(other, lambda a,b: b/a)
     def __add__(self, other):      return self._op(other, lambda a,b: a + b)
@@ -839,7 +863,7 @@ class by:
             return list(self.array.flat)
         if self.table is not None:
             return list(self.table['value'])
-        return [v for vals in self.given.values() for v in sc.tolist(vals)]
+        return [v for vals in self.given.values() for v in (list(vals.values()) if isinstance(vals, dict) else sc.tolist(vals))]
 
     @property
     def varies(self):
@@ -867,20 +891,64 @@ class by:
             return f'by(table of {len(self.table)} rows by {sc.strjoin(self.dims)})'
         return f'by({", ".join(f"{k}={v}" for k,v in self.given.items())})'
 
-    def check(self, sim):
-        """ Check that there is a value for each level of each dimension (`ss.ShapeError`); returns the positions of the dimensions in the sim, and the dimensions """
-        ds = [sim.groups.dim_index(dim) for dim in self.dims]
+    def keys(self, dim):
+        """ How the values along one dimension are given: ('edges', array) for a table's column of numbers (lower bin edges), ('keys', labels) for a table's column of labels or a dict of values by label, or None for values by position """
+        if self.table is not None:
+            vals = [v for v in self.table[dim] if not isnull(v)]
+            if vals and all(sc.isnumber(v) and not isinstance(v, (bool, np.bool_)) for v in vals):
+                return 'edges', np.unique(np.array(vals, dtype=float))
+            return 'keys', list(dict.fromkeys(str(v) for v in vals))
+        vals = self.given.get(dim)
+        if isinstance(vals, dict):
+            return 'keys', [str(k) for k in vals]
+        return None
+
+    def check(self, sim, note=False):
+        """ Check the values against the sim's dimensions (`ss.ShapeError`), and that a property of people that is not one is given by value (with `note=True`, when the sim is built, also note a table averaged over groups); returns the positions of the sim's dimensions it is by, and those dimensions """
+        names = [strat.name for strat in sim.groups.strats]
+        for dim in self.dims:
+            if dim not in names and self.keys(dim) is None: # By position, which needs the dimension's levels
+                if dim == 'sex':
+                    fix = 'give them by name, ss.by(sex=dict(female=..., male=...)), which is read from people.female, or add sim.stratify(sex=["female", "male"])'
+                elif dim == 'age':
+                    fix = 'give a table by age with the lower edge of each bin, e.g. ss.by(dict(age=[0, 15, 50], value=[...])), or add sim.stratify(age=[...])'
+                else:
+                    fix = f'give them by value, ss.by({dim}=dict(...)), which is read from people.{dim}, or add sim.stratify({dim}=[...])'
+                raise ss.MissingDimension(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
+        ds = [names.index(dim) for dim in self.dims if dim in names]
         strats = [sim.groups.strats[d] for d in ds]
         if self.array is not None:
             shape = tuple(strat.n for strat in strats)
             if self.array.shape != shape:
                 raise ss.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
         elif self.table is None:
-            for strat,(dim,vals) in zip(strats, self.given.items()):
+            for strat in strats:
+                vals = self.given[strat.name]
+                if isinstance(vals, dict):
+                    missing = [str(label) for label in strat.labels if str(label) not in [str(k) for k in vals]]
+                    if missing:
+                        raise ss.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(strat.labels)}).')
+                    continue
                 n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else strat.n # One value is for every level, e.g. ss.by(subpop=2.2)
                 if n != strat.n:
-                    raise ss.ShapeError(f'ss.by({dim}=...) has {len(sc.toarray(vals))} values, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                    raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+        if note and sim.solver != 'abm':
+            for strat in strats:
+                kind = self.keys(strat.name)
+                if kind is not None and kind[0] == 'edges' and not (strat.edges is not None and np.array_equal(strat.edges, kind[1])):
+                    ss.note(f'{self} gives values by bins of {strat.name} other than the model\'s ({sc.strjoin(strat.labels)}), so a compartmental run averages it over each group, weighting each bin by how much of the group it covers; agents read each person\'s own {strat.name}', sim=sim)
         return ds, strats
+
+    def converter(self, sim, convert=None, year=None):
+        """ A function that gives a value as a number: a value that varies in time is taken at the sim's current time, or at `year` if given """
+        def out(v):
+            if not isinstance(v, TimeValue):
+                return v if convert is None else convert(v)
+            when = sim.t.now('year') if year is None else year
+            if convert is None:
+                return v.at(when, sim)
+            return v.series([when], sim, convert)[0] # Its values converted, then interpolated as numbers
+        return out
 
     def grid(self, sim, convert=None, year=None):
         """
@@ -889,20 +957,19 @@ class by:
         Returns the positions of the dimensions in the sim, and an array with one axis for each.
         A value that varies in time is taken at the sim's current time, or at `year` if given.
         """
-        given = convert
-        def convert(v):
-            if not isinstance(v, TimeValue):
-                return v if given is None else given(v)
-            when = sim.t.now('year') if year is None else year
-            if given is None:
-                return v.at(when, sim)
-            return v.series([when], sim, given)[0] # Its values converted, then interpolated as numbers
+        convert = self.converter(sim, convert, year)
         ds, strats = self.check(sim)
+        if len(strats) < len(self.dims):
+            raise ss.CapabilityError(f'{self} is by {sc.strjoin(dim for dim in self.dims if dim not in [strat.name for strat in strats])}, a property of each person that is not a dimension, so it has no value for a group.\n'
+                                     f'     Stratify by it (sim.stratify(...)) to run as compartments, or run with solver="abm".')
         if self.array is not None:
             return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if self.array.size else self.array.copy()
         if self.table is None:
             out = np.ones([strat.n for strat in strats])
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
+                if isinstance(vals, dict): # By label, in the order of the levels
+                    vals = {str(k):v for k,v in vals.items()}
+                    vals = [vals[str(label)] for label in strat.labels]
                 if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
                     single, items = False, vals
                 else:
@@ -914,6 +981,8 @@ class by:
                 shape[i] = strat.n
                 out = out*vals.reshape(shape)
             return ds, out
+        if any(self.keys(strat.name)[0] == 'edges' for strat in strats): # Bins of their own: averaged over each group
+            return ds, self.binned_grid(strats, convert)
         out = np.zeros([strat.n for strat in strats])
         for _,row in self.table.iterrows():
             index = []
@@ -925,6 +994,129 @@ class by:
                 index.append(labels.index(label))
             out[tuple(index)] += convert(row['value'])
         return ds, out
+
+    def binned_grid(self, strats, convert):
+        """ For a table with a column of bin edges (e.g. single years of age): the value for each group, the mean over the table's bins weighted by how much of the group each covers """
+        num = np.zeros([strat.n for strat in strats])
+        den = np.zeros_like(num)
+        for _,row in self.table.iterrows():
+            parts = [] # For each dimension: the groups the row is in, and its weight in each
+            for strat in strats:
+                kind, keys = self.keys(strat.name)
+                val = row[strat.name]
+                if kind == 'keys':
+                    labels = [str(label) for label in strat.labels]
+                    if str(val) not in labels:
+                        raise ss.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                    parts.append([(labels.index(str(val)), 1.0)])
+                elif isnull(val) or strat.edges is None: # People with no value, who are in no group
+                    parts.append([])
+                else:
+                    cap = max(keys[-1], strat.edges[-1]) + 1 # The last bin of each is open-ended
+                    lo = float(val)
+                    hi = keys[keys > lo][0] if np.any(keys > lo) else cap
+                    ends = np.append(strat.edges[1:], cap)
+                    overlap = np.maximum(np.minimum(hi, ends) - np.maximum(lo, strat.edges), 0)
+                    parts.append([(i, w) for i,w in enumerate(overlap) if w > 0])
+            value = float(convert(row['value']))
+            for combo in itertools.product(*parts):
+                index = tuple(i for i,w in combo)
+                weight = np.prod([w for i,w in combo])
+                num[index] += weight*value
+                den[index] += weight
+        return np.divide(num, den, out=np.zeros_like(num), where=den > 0)
+
+    def on_people(self, sim):
+        """ Whether, as agents, it is read from each person's own values rather than by group: over a property that is not a dimension of the sim, or a table whose numbers are bin edges other than the dimension's (e.g. single years of age, against age groups) """
+        known = getattr(self, '_on_people', None)
+        if known is not None and known[0] == id(sim):
+            return known[1]
+        names = [strat.name for strat in sim.groups.strats]
+        out = False
+        for dim in self.dims:
+            kind = self.keys(dim)
+            strat = sim.groups.strats[names.index(dim)] if dim in names else None
+            if strat is None or (kind is not None and kind[0] == 'edges' and not (strat.edges is not None and np.array_equal(strat.edges, kind[1]))):
+                out = True
+        self._on_people = (id(sim), out)
+        return out
+
+    def positions(self, sim, dim):
+        """ As agents: the number of levels along one dimension, and each agent's position along it (indexed by UID), with that number for people with no value """
+        people = sim.people
+        names = [strat.name for strat in sim.groups.strats]
+        kind = self.keys(dim)
+        strat = sim.groups.strats[names.index(dim)] if dim in names else None
+        if strat is not None and kind is None: # By level of a dimension of the sim
+            level = sim.groups.level_raw(names.index(dim)).astype(int)
+            return strat.n, np.where(level >= 0, level, strat.n)
+        kind, keys = kind
+        if strat is not None and strat.edges is None: # A dimension's labels, by name
+            level = sim.groups.level_raw(names.index(dim)).astype(int)
+            order = np.array([keys.index(str(label)) for label in strat.labels] + [len(keys)])
+            return len(keys), order[np.where(level >= 0, level, strat.n)]
+        if dim == 'sex' and strat is None: # people.female: a key is for women if it says so (as for a dimension called sex), and otherwise for men
+            raw = people.female.raw
+            keys = [str(key.lower() in ['female', 'females', 'f', 'women', 'woman']) for key in keys]
+        else:
+            if strat is not None:
+                dim = strat.attr
+            try:
+                raw = people[dim].raw
+            except AttributeError:
+                raise ss.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
+        n = len(keys)
+        if kind == 'edges':
+            pos = np.digitize(raw, keys) - 1
+            return n, np.where((pos < 0) | np.isnan(raw.astype(float)), n, pos)
+        out = np.full(len(raw), n)
+        if raw.dtype == bool:
+            vals = [key.lower() in ['true', '1'] for key in keys]
+        elif raw.dtype.kind in 'iuf':
+            vals = [float(key) if sc.isnumber(key) or key.replace('.', '', 1).lstrip('-').isdigit() else np.nan for key in keys]
+        else:
+            vals = keys
+            raw = raw.astype(str)
+        for i,val in enumerate(vals):
+            out[raw == val] = i
+        return n, out
+
+    def lookup(self, sim, convert=None, year=None):
+        """ As agents: the value for every agent (indexed by UID), from their own value of each property, or their level of each dimension """
+        convert = self.converter(sim, convert, year)
+        sizes, index = zip(*[self.positions(sim, dim) for dim in self.dims])
+        auids = sim.people.auids
+        weights = [np.bincount(ind[auids], minlength=n + 1)[:n] for n,ind in zip(sizes, index)] # People at each level, for the value of those with none
+        weights = [w if w.sum() > 0 else np.ones(len(w)) for w in weights]
+        if self.table is None:
+            out = np.ones([n + 1 for n in sizes])
+            for i,(dim,n) in enumerate(zip(self.dims, sizes)):
+                vals = self.given[dim]
+                vals = list(vals.values()) if isinstance(vals, dict) else [vals]*n if np.ndim(vals) == 0 else list(vals)
+                vals = np.array([convert(v) for v in vals], dtype=float)
+                vals = np.append(vals, np.average(vals, weights=weights[i]))
+                shape = [1]*len(sizes)
+                shape[i] = n + 1
+                out = out*vals.reshape(shape)
+        else:
+            out = np.zeros([n + 1 for n in sizes])
+            given = [False]*len(sizes) # Whether a row gives the value for people with no value
+            for _,row in self.table.iterrows():
+                idx = []
+                for i,(dim,n) in enumerate(zip(self.dims, sizes)):
+                    val = row[dim]
+                    kind, keys = self.keys(dim)
+                    if isnull(val):
+                        idx.append(n)
+                        given[i] = True
+                    else:
+                        idx.append(int(np.flatnonzero(keys == float(val))[0]) if kind == 'edges' else keys.index(str(val)))
+                out[tuple(idx)] += convert(row['value'])
+            for i,n in enumerate(sizes):
+                if not given[i]:
+                    inner = np.take(out, range(n), axis=i)
+                    np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights[i]), i), axis=i)
+        return out[index]
 
     def per_group(self, sim, convert=None, year=None):
         """ The value for each group of the sim """

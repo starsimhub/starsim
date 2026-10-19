@@ -2,46 +2,67 @@
 
 Design H4 for Phase H ([implementation_oct18.md](../implementation_oct18.md), fourth and fifth bullets), for Cliff to decide before any code. Findings: FP24 to FP28, FP30, HP19 (behavior); FP19, FP20, FP39, D15 (dimensions over existing properties); FP21, FP22, FP35 (units of bare numbers). Evidence: [status_oct18/fp.md](../status_oct18/fp.md), [fpsim_review.md](../fpsim_review.md) sections 4 and 5, `fpsim:v4port/`, and probes of the current tree in `wt/scratch-h4/` (`probe.log`, `probe2.log`, `probe3.log`), all of which reproduce the status rows except FP39's boolean arrow, which now works.
 
+**Revision, 2026-10-19** (H0 of [oct19/implementation.md](../../oct19/implementation.md), after Cliff's `[CK:]` notes, which are kept below as the record):
+
+- **Counters**: `move=dict(parity='+1')` is withdrawn (no string expressions). Section 3 now has five worked examples, each in four spellings: `move='parity'`, `move=dict(to='parity')`, `move=dict(parity=1)` on a counter, and a separate `add=dict(parity=1)`. The recommendation is `add=`, but the choice is open (decision A at the end).
+- **`ss.ppl`** replaces `ss.People` as the lazy reference to people's properties (`ss.ppl.urban`), as Cliff asked. On a `People` object the arrays are unchanged.
+- **The FP26 example** is rewritten so each line holds one idea, with named terms. The FP27 transitions are built in a plain loop, not a `**{...}` comprehension.
+- **Steps 1 and 2 are done** (see the plan): FP19, FP20, FP21 (with the warning Cliff asked for: `ss.UnitInferred` when a bare `dt` takes the years of `start`/`stop`), FP22 (a note), FP35, `ss.histogram(unit=)`, and FP39's empty-level note. Moved: D15 to steps 3 and 4 (a keyed `ss.by(sex=...)` is needed), FP30's distributions by level to step 4, and FP39's counts after aging to Stage 2 of the plan.
+
 ## Summary
 
 **The problem.** FPsim's declared contraceptive choice agrees with FPsim (mCPR within 3 to 6%, births within 0.6%) at a fifth of the lines (92 against 468), but only with a function in every slot that matters: a logistic regression of eight covariates, a 10 × 9 switching matrix per age group, and durations of use whose scale depends on age. So it runs only as agents, `describe()` prints `<lambda>` ten times per transition, its calibrated coefficients can't be `ss.par`s (and `ss.change` on them silently does nothing, FP14), and `update_methods()` becomes about 70 `ss.change` calls. Parity needs one copy of each delivery branch per level (3 × 8) or a per-step function that can't tell twins from singles; time since the last birth is read from the engine's `ti_PP`. Underneath are silent errors in how dimensions meet the properties people already have: `stratify(urban=[False, True])` sets everyone rural (share urban 0.000, People set 0.9); `wealthquintile=[1, ..., 5]` counts [800, 400, 400, 400, 0] of 2,000; a bare `dt=1/12` becomes 1/12 of a month (2,881 points instead of 241); a duration function returning 6 (months) is read as 6 years; `ss.choice` of durations and `dur=ss.by(urban=[h0, h1])` crash.
 
 **The idea.** The spec already says a dimension is a property of people seen from the compartment side (05, "Dimensions are agent properties"). Take that literally, and nearly all of this is reading and writing properties with the vocabulary that exists:
 
-- **Read** a property in any rate, `p=`, or distribution parameter as a per-person term (`ss.People.urban`, and a state's membership `~never`), as conditions already can; look values up by a property with `ss.by`, whether or not it is a dimension. A regression is then an expression, and a table is an `ss.by` with a column for the destination.
-- **Write** a property on an event with `move=`, which already changes a dimension's level on a transition: a counter is a relative move (`move=dict(parity='+1')`); time since an event is a dimension of kind `clock` that the event sets to 0 (`move=dict(since_birth=0)`), as age is a clock that birth sets.
+- **Read** a property in any rate, `p=`, or distribution parameter as a per-person term (`ss.ppl.urban`, and a state's membership `~never`), as conditions already can; look values up by a property with `ss.by`, whether or not it is a dimension. A regression is then an expression, and a table is an `ss.by` with a column for the destination.
+- **Write** a property on an event with `move=`, which already changes a dimension's level on a transition: a counter is a relative move (spelling open: `add=dict(parity=1)` is recommended in section 3); time since an event is a dimension of kind `clock` that the event sets to 0 (`move=dict(since_birth=0)`), as age is a clock that birth sets.
 - **Group** by a property that already exists without overwriting it: people keep their values and levels are bins of them.
 
-No new `ss.` name. New: four values and a column (`kind='clock'`, `move` values `'+k'`/`'-k'`, a `to` column in an `ss.by` table), `expit` among the functions a rate may use, and `ss.People.<any property>` as a lazy reference (today only `age`, `female`, `alive`) [CK: ok but maybe `ss.ppl` instead of `ss.People`, the latter looks like it's creating a class rather than a helper function, plus it's much harder to type]. The reviews' proposed `ss.logistic`, `ss.spline`, `ss.table`, `ss.time_since`, and `ss.value` are not added. [CK: ok]
+One new `ss.` name, `ss.ppl` (revision: before, none). New: a few values and a column (`kind='clock'`, a relative move for counters, a `to` column in an `ss.by` table), `expit` among the functions a rate may use, and `ss.ppl.<any property>` as a lazy reference (today only `age`, `female`, `alive`) [CK: ok but maybe `ss.ppl` instead of `ss.People`, the latter looks like it's creating a class rather than a helper function, plus it's much harder to type]. The reviews' proposed `ss.logistic`, `ss.spline`, `ss.table`, `ss.time_since`, and `ss.value` are not added. [CK: ok]
 
 ```python
-P = ss.People                                  # lazy references to people's properties, as in conditions today
+P = ss.ppl                                     # lazy references to people's properties, as in conditions today
 never, none = ss.states(2)
 on = {m: ss.State(m) for m in methods}         # one state per method
 ever = ~never                                  # a condition in a rate is 1 where it holds, 0 elsewhere
 
 # FP26: the probability of use is an expression, so describe() prints it and calibrate() fits its ss.pars
-b = sc.objdict({k: ss.par(v, name=f'b_{k}') for k,v in coefs.items()})
-p_use = expit(b.intercept + b.ever*ever + b.urban*P.urban + b.parity*P.parity + b.wealth*P.wealthquintile
-              + ss.by(age_main) + ever*ss.by(age_ever)            # tables by single year of age: columns age, value
-              + b.trend*ss.timeseries({2000: -12, 2050: 38}, mode='linear')) #  [CK: this is pretty dense and hard to interpret
+b = sc.objdict({k: ss.par(v, name=f'b_{k}') for k,v in coefs.items()})   # one ss.par per coefficient: intercept, ever, urban, ...
+
+age_spline = ss.by(age_spline_table)      # the age spline, evaluated at single years of age (columns: age, value)
+age_ever   = ss.by(age_ever_table)        # its interaction with ever-use, the same way
+year_trend = ss.timeseries({2000: -12, 2050: 38}, mode='linear')   # years since 2012, a straight line
+
+ever_terms   = b.ever*ever + ever*age_ever                                    # ever-use, and its effect by age
+person_terms = b.urban*P.urban + b.parity*P.parity + b.wealth*P.wealthquintile
+logit_use    = b.intercept + age_spline + ever_terms + person_terms + b.trend*year_trend
+p_use        = expit(logit_use)
 
 # FP27: the switching matrix is a table with a column for the destination, normalized over it when used
-mix = lambda src: ss.by(switch[switch['from'] == src].drop(columns='from'))   # columns: age, to, value
-w = ss.by(to=[ss.par(1.0, name=f'w_{m}') for m in methods])                   # calibrated weights per method
+def mix(src):
+    rows = switch[switch['from'] == src.name]     # this method's rows of the matrix
+    return ss.by(rows.drop(columns='from'))       # columns: age, to, value
+
+w = ss.by(to=[ss.par(1.0, name=f'w_{m}') for m in methods])   # calibrated weights per method
 
 # FP30: a duration of use by age, in months
-dur_use = lambda m: ss.weibull(c=c[m], scale=np.exp(base[m] + ss.by(age_factor[m])), unit='month')
+def dur_use(src):
+    scale = np.exp(base[src.name] + ss.by(age_factor[src.name]))
+    return ss.weibull(c=c[src.name], scale=scale, unit='month')
 
-contra = ss.Disease(never, none, *on.values(),   # each woman re-decides when her spell ends (never-users likewise, to [never, *methods])
-    **{f'from_{s.name}': ss.Transition(s, [none, *on.values()], dur=dur_use(s), p=[1 - p_use, p_use*mix(s)*w]) for s in [none, *on.values()]},
-)
+# Each woman re-decides when her spell ends (never-users likewise, to [never, *methods])
+choices = {}
+for src in [none, *on.values()]:
+    p_methods = p_use*mix(src)*w                  # a row over the methods, normalized over them
+    choices[f'from_{src.name}'] = ss.Transition(src, [none, *on.values()], dur=dur_use(src), p=[1 - p_use, p_methods])
+contra = ss.Disease(never, none, *on.values(), **choices)
 
 # FP24, FP25 (when a pregnancy is declared): parity as a counter, months since the last birth as a clock
 sim.stratify(parity=list(range(8)))                                            # people.parity from the data is kept (FP20); 7+ is open-ended
 sim.stratify(since_birth=ss.months([0, 1, 2, 3, 6, 12, 24]), kind='clock')    # plus a level "none" for women with no birth
-delivery = ss.Transition(P3, PP, dur=dur_preg, p=1 - p_twins, move=dict(parity='+1', since_birth=0))
-twins    = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,     move=dict(parity='+2', since_birth=0))
+delivery = ss.Transition(P3, PP, dur=dur_preg, p=1 - p_twins, add=dict(parity=1), move=dict(since_birth=0))   # counter spelling open (section 3)
+twins    = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,     add=dict(parity=2), move=dict(since_birth=0))
 ```
 
 **Decisions for Cliff**
@@ -50,7 +71,7 @@ twins    = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,     move=dict(parity='
 |---|---|---|---|
 | 1 | How a regression is written (FP26) | (a) an expression over people's properties, with `ss.by` tables for splines; (b) `ss.logistic(intercept=, terms=, age=ss.spline(...))` | (a): no new names, and everything an expression has (printing, `ss.par`, modifiers, group evaluation) comes free [CK: ok] |
 | 2 | Tables and a row-valued `p=` (FP27) | (a) an `ss.by` table with a `to` column, normalized over the destinations it names; (b) `ss.table(..., axes=[...])` with a declared renormalization | (a) [CK: ok] |
-| 3 | Counters (FP24) | (a) a dimension with a relative move, `move=dict(parity='+1')`; (b) a count on the event (`delivery.count`); (c) `ss.counter` | (a): exact under every solver, and gives results, `adjust=`, and `ss.by` by parity for nothing [CK: i don't like `parity='+1'`, i'd prefer `dict(to='parity')` or just `move='parity'` for something like this, but maybe i need to see more examples] |
+| 3 | Counters (FP24) | (a) a dimension with a relative move, `move=dict(parity='+1')`; (b) a count on the event (`delivery.count`); (c) `ss.counter` | (a): exact under every solver, and gives results, `adjust=`, and `ss.by` by parity for nothing [CK: i don't like `parity='+1'`, i'd prefer `dict(to='parity')` or just `move='parity'` for something like this, but maybe i need to see more examples] **Revised:** examples in four spellings in section 3; open as decision A |
 | 4 | Time since an event (FP25) | (a) a dimension of kind `clock` set to 0 by `move=`; (b) an expression `ss.time_since(tr)`, agents only | (a): age and a product's time since delivery are already clocks of this kind; it runs under every solver [CK: ok] |
 | 5 | A value by a property that is not a dimension (D15, FP26) | (a) agents under `'auto'`, `CapabilityError` under an explicit compartmental solver, naming `sim.stratify(...)`; (b) stratify by it implicitly | (a), as a distribution on `beta` is treated today; dimensions multiply compartments, so they are never added unasked [CK: ok] |
 | 6 | Numeric levels (FP19) | (a) always lower bin edges, and a person's property holds the value, never the level's index; (b) integer labels with `kind=` | (a) [CK: ok] |
@@ -75,7 +96,7 @@ One per finding. "Today" is FPsim's Starsim 3 code or the v4 port's workaround; 
 | FP20 | `urban` and `wealth` set from data on People, then used as dimensions | `stratify(urban=[False, True])` overwrites them from the split: share urban 0.000 | Kept and binned; `split=` with an existing property raises  [CK: ok] | Fix |
 | FP39 | `stratify(age=[0, 15, 120])` makes an empty `120+`; counts by age use ages from before the step's aging; `move=dict(ever='True -> False')` | As stated (the boolean arrow now works) | A note for a level that is empty by construction (an age edge of 100 or more, since ages run to 100); counts by age after aging  [CK: ok] | Fix |
 | D15 | mCPR among women 15 to 49; death rates by sex, without declaring a sex dimension | `ss.death(rate=ss.by(sex=...))` raises "The model is not stratified by sex" | A value by `sex` or `age` reads `people.female` or `people.age` as agents; a compartmental run needs the dimension (decision 5)  [CK: ok] | Fix |
-| FP21 | Durations in months, a step of 1/12 year, dates in years | `dt=1/12` with typed months becomes 1/12 month: 2,881 points instead of 241 | A bare `dt` is in years when `start`/`stop` are years  [CK: ok, but print a warning] | Fix |
+| FP21 | Durations in months, a step of 1/12 year, dates in years | `dt=1/12` with typed months becomes 1/12 month: 2,881 points instead of 241 | A bare `dt` is in years when `start`/`stop` are years  [CK: ok, but print a warning] **Done:** `ss.UnitInferred` warns when a bare `dt` takes the years of `start`/`stop` | Fix |
 | FP22 | Duration callbacks that return months | A bare 6 from a function is read as 6 years (no one of 1,000 leaves within 2 years at a mean meant to be 6 months), silently | The number takes the distribution's `unit=` (`ss.lognorm_ex(mean=fn, std=..., unit='month')`); with no unit anywhere, a note naming the function  [CK: ok] | Fix |
 | FP35 | `ss.Pregnancy`'s own `dur_pregnancy` form: `ss.choice` of durations | Crashes (`loop of ufunc does not support ... months`); `ss.choice(unit=)` refused | `ss.choice(a=[ss.months(9), ...])` and `ss.choice(a=[9, 10], unit='month')` both work: the unit applies to the values, which is exact  [CK: ok] | Fix |
 
@@ -87,7 +108,7 @@ Where the proposal does not make a package simpler: the conception rate. Written
 
 Rates, branch probabilities, and distribution parameters are expressions (`expressions.py`); conditions (`conditions.py`) already have per-person leaves (`people.age`, a state's membership) but cannot appear in a rate (`as_expr` raises "A condition cannot be used in a rate"). The change:
 
-- `ss.People.<name>` is a lazy reference for any name, not only `age`, `female`, and `alive`, checked when the sim is built (an unknown name is `UnknownState` with a suggestion). On a `People` object it stays the array.
+- `ss.ppl.<name>` is a lazy reference for any name, not only `age`, `female`, and `alive`, checked when the sim is built (an unknown name is `UnknownState` with a suggestion). It is a small helper object, not the `People` class, so it reads as a reference and is short to type (Cliff). On a `People` object, `people.<name>` stays the array. `ss.People.age` and the other two keep working, since conditions written that way exist today.
 - A property is a leaf of an expression, worth the person's value. A condition in a rate is 1 for the people it holds for and 0 for the others, so `0.3*(P.age > 65)` and `b*ever` work. The one exception keeps today's error: a condition made only of bare states joined by `|` (`0.3*(Ia | Is)`), which almost always meant a sum of states for exposure.
 - `expit` (SciPy's, a NumPy ufunc) joins `exp`, `log`, and the others as a function a rate may use, since it is how a regression is written; `1/(1 + np.exp(-x))` already works and prints the same.
 - A property of another module is named through the module, as its states are (`edu.attainment`, `hiv.cd4`).
@@ -105,9 +126,113 @@ A regression is then an ordinary expression: `describe()` and `equations()` prin
 
 ### 3. Counters: a relative move
 
-`move=` on a transition (and on a delivery and a transfer) changes a dimension's level as well as the state. Its value gains a relative form: a string `'+k'` or `'-k'` moves people up or down `k` levels (a string, since Python reads `+1` as `1`). On a counter whose levels are lower edges `0, 1, ..., 7` the levels are the counts, `7+` is open-ended, and so a move up from it stays in it. A move below the first level stays at the first. Several transitions may move the same counter by different amounts (singles `'+1'`, twins `'+2'`, stillbirths `'+1'`), which is what FPsim needs and what a per-step function cannot do. People are born at the first level, as a dimension that people are moved along already starts them (05).
+`move=` on a transition (and on a delivery and a transfer) changes a dimension's level as well as the state. Today its value is absolute: a level (`move=dict(vaccinated=True)`, `ss.transfer(art=True, ...)`) or an arrow between two levels (`move=dict(strain='A+B -> A')`). A counter needs a relative change: up or down `k` levels from wherever each person is. On a counter whose levels are lower edges `0, 1, ..., 7` the levels are the counts, `7+` is open-ended, and so a move up from it stays in it. A move below the first level stays at the first. Several transitions may move the same counter by different amounts (singles 1, twins 2, stillbirths 1), which is what FPsim needs and what a per-step function cannot do. People are born at the first level, as a dimension that people are moved along already starts them (05). A counter is any dimension with integer edges; nothing else marks it, except in spelling (c) below.
 
 Other models that need it: TB's previous treatments, a vaccine's doses received, STIsim's lifetime partners, malaria's number of infections.
+
+**The spelling is open.** The first draft wrote `move=dict(parity='+1')`, a string because Python reads `+1` as `1`. Cliff doesn't want string expressions, and suggested `dict(to='parity')` or `move='parity'`. The five examples below are each written four ways:
+
+- **(a) `move='parity'`**: naming a counter adds one; a tuple gives the amount, `move=('parity', 2)`.
+- **(b) `move=dict(to='parity')`**: a dict naming the counter, with `by=` for the amount (default 1).
+- **(c) `move=dict(parity=1)`**: a number adds, on a dimension declared `kind='counter'`; on any other kind a number is still the level to go to.
+- **(d) `add=dict(parity=1)`**: a separate keyword, beside `move=`, on transitions, deliveries, and transfers. `move=` always says where people go; `add=` always says how far they go.
+
+The dimensions in the examples: `stratify(parity=list(range(8)))`, `stratify(doses=[0, 1, 2, 3])`, `stratify(episodes=list(range(6)))`, `stratify(schooling=list(range(13)))`, and `stratify(immunity=[0, 1, 2, 3])` (in (c), each also with `kind='counter'`).
+
+**1. Parity: singles add 1, twins 2, stillbirths 1; each birth also resets a clock.**
+
+```python
+# (a)
+delivery   = ss.Transition(P3, PP, dur=dur_preg, p=p_single, move=['parity', dict(since_birth=0)])
+twins      = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,  move=[('parity', 2), dict(since_birth=0)])
+stillbirth = ss.Transition(P3, PP, dur=dur_preg, p=p_still,  move='parity')
+# (b)
+delivery   = ss.Transition(P3, PP, dur=dur_preg, p=p_single, move=dict(to='parity', since_birth=0))
+twins      = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,  move=dict(to='parity', by=2, since_birth=0))
+stillbirth = ss.Transition(P3, PP, dur=dur_preg, p=p_still,  move=dict(to='parity'))
+# (c)
+delivery   = ss.Transition(P3, PP, dur=dur_preg, p=p_single, move=dict(parity=1, since_birth=0))   # parity adds (a counter); since_birth is set (a clock)
+twins      = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,  move=dict(parity=2, since_birth=0))
+stillbirth = ss.Transition(P3, PP, dur=dur_preg, p=p_still,  move=dict(parity=1))
+# (d)
+delivery   = ss.Transition(P3, PP, dur=dur_preg, p=p_single, add=dict(parity=1), move=dict(since_birth=0))
+twins      = ss.Transition(P3, PP, dur=dur_preg, p=p_twins,  add=dict(parity=2), move=dict(since_birth=0))
+stillbirth = ss.Transition(P3, PP, dur=dur_preg, p=p_still,  add=dict(parity=1))
+```
+
+**2. Doses received: each round of a campaign adds a dose.**
+
+```python
+# (a)
+campaign = ss.Delivery(move='doses', coverage=0.6, at=[2025, 2026, 2027])   # but move='S -> V' is already a move between states on a delivery
+# (b)
+campaign = ss.Delivery(move=dict(to='doses'), coverage=0.6, at=[2025, 2026, 2027])
+# (c)
+campaign = ss.Delivery(move=dict(doses=1), coverage=0.6, at=[2025, 2026, 2027])
+# (d)
+campaign = ss.Delivery(add=dict(doses=1), coverage=0.6, at=[2025, 2026, 2027])
+```
+
+**3. Episodes of an illness: each recovery adds one (malaria's prior infections).**
+
+```python
+# (a)
+recovery = ss.progression('I -> S', dur=dur_inf, move='episodes')
+# (b)
+recovery = ss.progression('I -> S', dur=dur_inf, move=dict(to='episodes'))
+# (c)
+recovery = ss.progression('I -> S', dur=dur_inf, move=dict(episodes=1))
+# (d)
+recovery = ss.progression('I -> S', dur=dur_inf, add=dict(episodes=1))
+```
+
+**4. Years of schooling: a year added for each year in school, and dropping out.**
+
+```python
+# (a)
+school_year = ss.transfer('schooling', dur=ss.years(1), states=['enrolled'])     # a transfer's keyword is today the dimension, so this changes its form
+dropout     = ss.progression('enrolled -> left', rate=p_drop)
+# (b)
+school_year = ss.transfer(schooling=dict(to='schooling'), dur=ss.years(1), states=['enrolled'])   # awkward: the dimension is named twice
+# (c)
+school_year = ss.transfer(schooling=1, dur=ss.years(1), states=['enrolled'])     # beside art=True, which sets a level
+# (d)
+school_year = ss.transfer(add=dict(schooling=1), dur=ss.years(1), states=['enrolled'])
+```
+
+(A transfer with `dur=` runs at the constant rate of its mean today, X1; the exact yearly step is Stage 4's.)
+
+**5. A decrement: immunity drops one level at a time as it wanes, and recovery sets it back to the top.**
+
+```python
+# (a)
+waning   = ss.transfer(('immunity', -1), rate=ss.peryear(0.5))
+recovery = ss.progression('I -> R', dur=dur_inf, move=dict(immunity=3))   # a set, as today
+# (b)
+waning   = ss.transfer(immunity=dict(to='immunity', by=-1), rate=ss.peryear(0.5))
+recovery = ss.progression('I -> R', dur=dur_inf, move=dict(immunity=3))
+# (c)
+waning   = ss.transfer(immunity=-1, rate=ss.peryear(0.5))
+recovery = ss.progression('I -> R', dur=dur_inf, move=dict(immunity='0 -> 3', ...))   # a number would add, so a set needs one arrow per level
+# (d)
+waning   = ss.transfer(add=dict(immunity=-1), rate=ss.peryear(0.5))
+recovery = ss.progression('I -> R', dur=dur_inf, move=dict(immunity=3))   # a set, as today
+```
+
+**How they compare.**
+
+| | (a) `move='parity'` | (b) `move=dict(to='parity')` | (c) `move=dict(parity=1)`, `kind='counter'` | (d) `add=dict(parity=1)` |
+|---|---|---|---|---|
+| Amounts other than 1 | A tuple, `('parity', 2)` | `by=2` | The number | The number |
+| A decrement | `('immunity', -1)` | `by=-1` | `-1` | `-1` |
+| Setting a counter to a level (a reset to 0) | `move=dict(parity=0)`, as today | `move=dict(parity=0)` | Not possible with a number (it adds); only an arrow per level | `move=dict(parity=0)`, as today |
+| With a clock reset or another level move on the same event | A list mixing forms | One dict, but `to` and `by` look like dimensions | One dict; a number means add or set by the dimension's kind | Two keywords, each with one meaning |
+| Beside `move='S -> V'` on deliveries, and transfers' keyword form | Clashes: a bare name reads as a state | Fits deliveries; transfers name the dimension twice | Fits; `art=True` sets while `schooling=1` adds | Fits everywhere |
+| Two counters on one event | `move=['parity', 'births']` | Not possible: one `to` | `move=dict(parity=1, births=1)` | `add=dict(parity=1, births=1)` |
+| `to_spec()` | `"move": "parity"`, `"move": ["parity", 2]` | `"move": {"to": "parity", "by": 2}` | `"move": {"parity": 1}`, read with the stratification's `"kind": "counter"` | `"add": {"parity": 1}` |
+| New vocabulary | A meaning for a bare string and a tuple in `move=` | Two reserved keys, `to` and `by` | `kind='counter'` | A keyword, `add=`, on three classes |
+
+**Recommendation: (d), `add=`.** Each keyword has one meaning: `move=` is where people go (a level or an arrow, as today), `add=` is how far they go. No strings, no kind that changes what a number means, two counters on one event work, a reset is the existing `move=`, and its saved form needs no context. It reads like `+=`. Its cost is one keyword on `ss.Transition`, `ss.Delivery`, and `ss.transfer`. Second choice: (c), which needs no new keyword but makes `dict(x=1)` mean "add" or "go to level 1" depending on how `x` was declared, and leaves no way to reset a counter with a number. (a) clashes with the state moves of deliveries; (b) can't move two counters at once. If h1 (the cascade) chooses one general write on events, `add=` should be one of its forms.
 
 ### 4. Clocks: time since an event
 
@@ -164,7 +289,7 @@ The rules spec 05 states, applied everywhere, and two it does not yet state:
 | A property not a dimension | The person's value | `CapabilityError` naming `stratify()`; `'auto'` runs as agents | Same | Same |
 | A condition in a rate (`b*ever`) | 1 or 0 per person | The fraction of each state and group selected, as for `where=` today | Same | Same |
 | `ss.by` table over a property | Lookup by the person's value | Per group; a finer table is averaged with a note | Same | Same |
-| Counter (`move='+k'`) | The property increases by k; the groups of those people are worked out again | Generated moves from each level to the one k up (capped at the top); exact | Same, binomial draws on the moves | Same, as events |
+| Counter (relative move by k; spelling open) | The property increases by k; the groups of those people are worked out again | Generated moves from each level to the one k up (capped at the top); exact | Same, binomial draws on the moves | Same, as events |
 | Clock | Time since the step of the last set (stored as a step number, the 16-bit timers of item 21) | A conveyor of whole steps within each level, then on to the next; `none` first; exact when the edges are whole steps | Same | Same, people moved along at step boundaries |
 | `p=` entry with a `to` axis | The person's row, normalized | The group's row, normalized, as a branch share per group (FP13's fix applies: a modifier on a parameter inside `p=` makes the run stepped) | Same | Same |
 | A regression expression | Exact | Exact when every covariate is a boolean, counter, or labeled dimension; binned continuous ones as above | Same | Same |
@@ -181,19 +306,19 @@ dimensions:
   since_birth  none, 0, 1, 2, 3-5, 6-11, 12-23, 24+ months    clock: set to 0 by delivery, twins
 ```
 
-**`to_spec()`.** A property in an expression is written `people.urban` (or `edu.attainment`), as conditions already write `people.age` (14, "Rate expressions"); `expit` joins the list of functions there and in `ss.spec.Parser`. A table is `{"by": [...], "table": {...}}`, as today, with a `to` column. A move is `{"parity": "+1"}` or `{"since_birth": 0}`. A stratification gains `"kind": "clock"` and `"split_from": "people"` for a property the people give (its values are in the data hash, not the model's).
+**`to_spec()`.** A property in an expression is written `people.urban` (or `edu.attainment`), as conditions already write `people.age` (14, "Rate expressions"); `expit` joins the list of functions there and in `ss.spec.Parser`. A table is `{"by": [...], "table": {...}}`, as today, with a `to` column. A counter's move is written in the chosen spelling (`{"add": {"parity": 1}}` under the recommendation; section 3's table gives each) and a clock's reset as `{"since_birth": 0}`. A stratification gains `"kind": "clock"` and `"split_from": "people"` for a property the people give (its values are in the data hash, not the model's).
 
-**`to_code()`.** Writes the same spellings: `ss.People.urban`, `expit(...)` (with `from scipy.special import expit`), `move=dict(parity='+1')`, `kind='clock'`, and tables as data frames written in full (as arrays are now).
+**`to_code()`.** Writes the same spellings: `ss.ppl.urban`, `expit(...)` (with `from scipy.special import expit`), the counter's move in the chosen spelling (`add=dict(parity=1)`), `kind='clock'`, and tables as data frames written in full (as arrays are now).
 
 ## Fit with what exists
 
 | Need | Carried by | New |
 |---|---|---|
-| Read a property in a rate, `p=`, or distribution | Expressions, and conditions' `people.<name>` leaves | Conditions and properties allowed in rates; `ss.People.<any>`; `expit` |
+| Read a property in a rate, `p=`, or distribution | Expressions, and conditions' `people.<name>` leaves | Conditions and properties allowed in rates; `ss.ppl.<any>`; `expit` |
 | Look up by a property | `ss.by` (its table form) | Numeric columns as edges, a `None` row, the not-a-dimension rule, outer products |
 | A regression | An expression with `ss.par`s and `ss.timeseries` (the year trend is a linear time series) | Nothing more |
 | A table, a choice among many | `ss.by` tables and `p=` lists | A `to` column, normalized |
-| A counter | A dimension, `move=` | `'+k'`, `'-k'` |
+| A counter | A dimension, `move=` | A relative move (spelling open: `add=` recommended) |
 | Time since an event | A dimension, `move=`, age's aging, a product's levels of time since delivery, the fixed-delay conveyor | `kind='clock'`, a `none` level |
 | Distributions by level, with units | `ss.by`, `unit=` | Distributions inside `ss.by`; `unit=` on `ss.choice` and `ss.histogram` |
 
@@ -226,17 +351,17 @@ So the coded pregnancy writes `people.parity` (as it does now) and the time sinc
 
 | Step | What | Size | Files |
 |---|---|---|---|
-| 1 | Dimension fixes: values not indices (FP19); existing properties kept and `split=` refused (FP20); the empty-level note and counts after aging (FP39); `ss.by(sex=...)` and other values by a property that is not a dimension as agents, with the `'auto'` rule and the `CapabilityError` (D15, decision 5) | S to M | `dimensions.py`, `parameters.py`, `solvers/choose.py`, `solvers/agents.py`, `results.py` |
-| 2 | Units: bare `dt` with `start`/`stop` (FP21); function returns in the distribution's unit, and the note (FP22); `ss.choice` and `ss.histogram` with typed values and `unit=` (FP35, FP30) | S | `timeline.py`, `time.py`, `distributions.py`, `transitions.py` |
-| 3 | Properties and conditions in expressions; `ss.People.<any>`; `expit`; group evaluation by the rules of section 7 | M | `expressions.py`, `conditions.py`, `people.py`, `solvers/engine.py`, `solvers/compartmental.py`, `kernels.py`, `spec.py` |
-| 4 | `ss.by` over properties: tables with edges and a `None` row, averaging, outer products; distributions inside `ss.by`, and properties in distribution parameters | M | `parameters.py`, `distributions.py`, `solvers/agents.py`, `solvers/compartmental.py` |
+| 1 | **Done, 2026-10-19** (FP19, FP20, FP39's empty-level note; D15 moved to steps 3 and 4, FP39's counts after aging to Stage 2 of [the plan](../../oct19/implementation.md)). Dimension fixes: values not indices (FP19); existing properties kept and `split=` refused (FP20); the empty-level note and counts after aging (FP39); `ss.by(sex=...)` and other values by a property that is not a dimension as agents, with the `'auto'` rule and the `CapabilityError` (D15, decision 5) | S to M | `dimensions.py`, `parameters.py`, `solvers/choose.py`, `solvers/agents.py`, `results.py` |
+| 2 | **Done, 2026-10-19** (FP21 with `ss.UnitInferred`'s warning, FP22 as a note, FP35, `ss.histogram(unit=)`; FP30's distributions by level moved to step 4). Units: bare `dt` with `start`/`stop` (FP21); function returns in the distribution's unit, and the note (FP22); `ss.choice` and `ss.histogram` with typed values and `unit=` (FP35, FP30) | S | `timeline.py`, `time.py`, `distributions.py`, `transitions.py` |
+| 3 | Properties and conditions in expressions; `ss.ppl.<any>`; `expit`; group evaluation by the rules of section 7; D15 (a value by `sex` or `age` with no such dimension, read from people as agents, with a keyed `ss.by(sex=dict(female=a, male=b))`, since a list has no level order without the dimension) | M | `expressions.py`, `conditions.py`, `people.py`, `solvers/engine.py`, `solvers/compartmental.py`, `kernels.py`, `spec.py` |
+| 4 | `ss.by` over properties: tables with edges and a `None` row, averaging, outer products; distributions inside `ss.by` (FP30's `dur=ss.by(urban=[h0, h1])`), and properties in distribution parameters | M | `parameters.py`, `distributions.py`, `solvers/agents.py`, `solvers/compartmental.py` |
 | 5 | `p=` entries with a `to` axis, normalized; a single function returning a row | M | `transitions.py`, `graph.py`, `solvers/agents.py`, `solvers/compartmental.py`, `kernels.py` |
-| 6 | Counters: `'+k'`/`'-k'` in `move=` on transitions, transfers, and deliveries | S to M | `transitions.py`, `dimensions.py`, `graph.py`, both solvers, `products.py` |
+| 6 | Counters: the relative move in the chosen spelling (decision A) on transitions, transfers, and deliveries | S to M | `transitions.py`, `dimensions.py`, `graph.py`, both solvers, `products.py` |
 | 7 | Clocks: `kind='clock'`, the `none` level, agents by step stamps, compartments by the conveyor (reusing `products.py`'s levels of time since delivery and the fixed delay) | M (agents S, compartments M) | `dimensions.py`, `solvers/agents.py`, `solvers/compartmental.py`, `kernels.py`, `products.py` |
 | 8 | `describe()`, `to_spec()`, `to_code()`, the spec sections listed above, the user guide, and the vocabulary keywords | M, spread over the steps | `presentation.py`, `spec.py`, `v4_design/design/*.md`, `docs/user_guide/` |
 | 9 | The FPsim contraception port rewritten in this vocabulary, as a test against FPsim's (fixed population, mCPR by year over 4 seeds) and a docs example | M | `tests/`, `docs/examples/`, `fpsim:v4port/contraception/` |
 
-Steps 1 and 2 are fixes that need no decision beyond 5 to 8 and can go first, in parallel. Steps 3 to 5 make the contraception declarable and are the core (about two weeks of agent work together). Steps 6 and 7 wait for h1's decision on the write primitive, so the spelling is shared.
+Steps 1 and 2 were fixes that needed no decision beyond 5 to 8, and are done. Steps 3 and 4 need no open decision and are being built. Steps 3 to 5 make the contraception declarable and are the core (about two weeks of agent work together). Steps 6 and 7 wait for decision A (the counter spelling) and h1's decision on the write primitive, so the spelling is shared.
 
 Tests, on numbers a user sees:
 
@@ -265,6 +390,16 @@ Out of scope:
 
 Dependencies and the interfaces assumed:
 
-- **h1, the care cascade.** I assume h1 defines (1) an event as a transition, one destination of one (`'tr.state'`), or a delivery outcome (`screen.positive`); (2) a remembered result as a property of people written when an event happens, read like any property (in `where=`, rates, and `ss.by`); and (3) the general write spelled as a value in the event's `move=` (or one keyword that every event takes). My counter (`'+k'`) and clock reset (`0` on a clock) are then two values of that write, and a clock's `none` level is h1's "never happened". If h1 instead gives events attributes (`ev.ever`, `ev.last`), a clock is `kind='clock'` over `ev.last`, the counter stays a move, and nothing else here changes. Either way h1 and this design must agree on one spelling for "set a property on an event", which is why steps 6 and 7 wait for it.
+- **h1, the care cascade.** I assume h1 defines (1) an event as a transition, one destination of one (`'tr.state'`), or a delivery outcome (`screen.positive`); (2) a remembered result as a property of people written when an event happens, read like any property (in `where=`, rates, and `ss.by`); and (3) the general write spelled as a value in the event's `move=` (or one keyword that every event takes). My counter (a relative move, `add=` if chosen) and clock reset (`0` on a clock) are then two values of that write, and a clock's `none` level is h1's "never happened". If h1 instead gives events attributes (`ev.ever`, `ev.last`), a clock is `kind='clock'` over `ev.last`, the counter stays a move, and nothing else here changes. Either way h1 and this design must agree on one spelling for "set a property on an event", which is why steps 6 and 7 wait for it.
 - **h2, a family of diseases.** The second half of FP28 (a modifier over a set of transitions) is h2's; `p=` entries with a `to` axis renormalize, and h2's combination rule for modifiers on branches should state how it composes with that (a modifier on one destination of a normalized entry scales its share before normalizing, which is FPsim's rule for method weights).
 - **h3, per-act transmission.** No overlap.
+
+## Decisions still open
+
+For Cliff's `[CK:]`. Decisions 1, 2, and 4 to 9 above are approved and not repeated.
+
+| # | Decision | Options | Recommendation |
+|---|---|---|---|
+| A | How a counter is moved (decision 3 reopened; section 3 has five examples in each spelling) | (a) `move='parity'`, with `move=('parity', 2)`; (b) `move=dict(to='parity', by=2)`; (c) `move=dict(parity=2)` on a dimension declared `kind='counter'`; (d) a separate keyword, `add=dict(parity=2)`, on transitions, deliveries, and transfers | (d): one meaning per keyword (`move=` is where people go, `add=` how far), no strings, two counters on one event, a reset is the existing `move=dict(parity=0)`, and the saved form needs no context. Second choice (c) [CK: agree with d, except use `increment` instead of `add`. `increment='parity'` means the same as `increment=dict(parity=1)`, and the dict form can be used to give more complex forms (+2, -1, etc)] |
+| B | `ss.People.age`, `.female`, and `.alive`, which conditions use today, once `ss.ppl` exists | (a) keep both, documenting `ss.ppl`; (b) keep `ss.People.<x>` as a compatibility alias with a deprecation note; (c) remove it | (a) for now: they give the same lazy references, and removing a working spelling needs a reason; the docs use only `ss.ppl` [CK: ss.People was never released, so let's just remove it. well not remove it, but keep it as the class -- sim.people = ss.People(), but "ss.People.age" is not a thing. unless there's a reason why it should?] |
+| C | Whether `add=` (if chosen) is also how h1's other per-person writes are spelled (a running maximum, a value frozen at entry) | (a) `add=` for counters only, and h1 picks its own keyword for the rest; (b) one keyword for all writes, with `add=` one of its forms | (a): a counter is a move along a dimension, which works under every solver; the other writes are agent-only values (HP19) and read better under their own name. Revisit with h1's second draft [CK: ok] |

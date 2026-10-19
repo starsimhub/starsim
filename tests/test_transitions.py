@@ -1755,6 +1755,43 @@ def test_messages_and_crashes():
     assert list(msim.results.d.n_I.scenarios()) == ['beta=0.1', 'beta=0.2']
     return
 
+
+@sc.timer()
+def test_given_dwell():
+    sc.heading('Testing a branch probability and a rate that depend on the time in the state (P.dwell)')
+    n = 20_000
+    def make(solver, p=None, rate=None, dur=ss.expon(ss.years(1))):
+        P, C, R = ss.states('P C R')
+        exits = dict(course=ss.Transition(P, [C, R], dur=dur, p=[p(P), None])) if p is not None else dict(clear=P >> R @ rate(P), death=P >> ss.null @ ss.peryear(0.1))
+        return ss.Sim(ss.Disease(P, C, R, **exits, init=dict(P=n), name='d'), n_agents=n, total_pop=n, stop=ss.years(15), dt=ss.years(0.1), solver=solver, verbose=0)
+
+    # A known answer: with an exponential dwell of mean 1, P(C) = 1 - exp(-dwell) sends half to C (HP18)
+    for solver in ['ode', 'binomial', 'abm']:
+        share = make(solver, p=lambda P: 1 - np.exp(-P.dwell)).run().results.d.n_C[-1]/n
+        assert np.isclose(share, 0.5, atol=0.01 if solver == 'ode' else 3*np.sqrt(0.25/n)), f'{solver}: {share}'
+
+    # As agents, the same as a function of the sim reading the time in the state
+    func = lambda sim, uids: 1 - np.exp(-sim.diseases.d.P.dwell[uids])
+    a = make('abm', p=lambda P: 1 - np.exp(-P.dwell)).run().results.d.n_C
+    b = make('abm', p=lambda P: func).run().results.d.n_C
+    assert np.array_equal(a, b)
+
+    # A hazard that grows with the time in the state, against a death rate: the share cleared is 0.841
+    for solver in ['ode', 'abm']:
+        cleared = make(solver, rate=lambda P: ss.peryear(0.5)*P.dwell).run().results.d.n_R[-1]/n
+        assert np.isclose(cleared, 0.841, atol=0.01), f'{solver}: {cleared}'
+
+    # The model spec writes it, and a branch with p= (decided on entry) cannot read it
+    sim = make('ode', p=lambda P: 1 - np.exp(-P.dwell), dur=ss.lognorm_ex(ss.years(3), ss.years(9))).init()
+    assert 'P.dwell' in str(sim.to_spec()) and 'by time in state' in sim.describe(output=True)
+    ns = {}
+    exec(ss.to_code(sim.to_spec()).replace("if __name__ == '__main__'", 'if False'), ns)
+    assert ns['sim'].hash() == sim.hash()
+    P, C, R = ss.states('P C R')
+    with pytest.raises(ss.CapabilityError, match='decided when people enter'):
+        ss.Disease(P, C, R, a=ss.Transition(P, C, dur=ss.years(3), p=P.dwell/10), b=ss.Transition(P, R, dur=ss.years(3), p=None), init=dict(P=10))
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1786,3 +1823,4 @@ if __name__ == '__main__':
     level = test_level_change_dwell()
     chg   = test_change_in_function()
     msgs  = test_messages_and_crashes()
+    dwell = test_given_dwell()

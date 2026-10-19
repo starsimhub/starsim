@@ -131,6 +131,9 @@ class Run:
         self.tgt_mapped = np.flatnonzero(p.tgt_map >= 0) if nt else np.zeros(0, dtype=int)
         self.gather_tgt = np.zeros((nt, nf)) # Targets by flows: which flow each target takes people from
         self.gather_tgt[np.arange(nt), self.tgt_flow] = 1
+        recs = np.flatnonzero(p.tgt_rec >= 0) if nt else np.zeros(0, dtype=int)
+        self.rec_mat = np.zeros((self.nflows, nt)) # Transitions by targets: 1 where a target is also counted in the flow to its destination
+        self.rec_mat[p.tgt_rec[recs], recs] = 1
         ncr = len(p.crd_index)
         self.credit_mat = np.zeros((self.nflows, ncr)) # Transitions by credits
         self.credit_mat[p.crd_index, np.arange(ncr)] = 1
@@ -295,6 +298,7 @@ class Run:
         if len(p.tgt_comp):
             moved = (self.gather_tgt @ amount)*X['tgt_w']
             dy = dy + arrive_mat @ moved
+            df = df + self.rec_mat @ moved
             mapped = self.tgt_mapped
             if len(mapped):
                 dy = dy.at[p.tgt_comp[mapped]].add(jnp.einsum('kg,kgh->kh', moved[mapped], X['maps'][p.tgt_map[mapped]]))
@@ -989,6 +993,8 @@ class Density:
                 leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
                 if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
                     raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
+                if dw is not None and flow.at is not None and any(id(leaf) in self.index for leaf in dw.par.leaves): # Followed by the time in its state (see ss.solvers.Compartmental.slot_rate())
+                    raise Unsupported(f'a fitted dwell time out of a state followed by the time in it ("{flow.tr.name}")')
                 if any(id(leaf) in self.index for leaf in leaves):
                     mult = np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)
                     fixed.append((f, flow, dw, mult))

@@ -18,13 +18,14 @@ So `ss.Sim`, `ss.MultiSim`, `ss.Disease`, `ss.RandomNet`, `ss.MixingPool`, and `
 
 The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: Starsim's library modules, the errors, the classes for writing modules as code, and internals; sorting them into tiers is a separate item of the review's plan.
 
-### Sim and modules: 10
+### Sim and modules: 11
 
 | Name | What it is |
 |---|---|
 | `ss.Sim` | Modules, a population, mixing, a timeline, and a solver. One sim is one run |
 | `ss.People` | The population: size, demography, per-agent attributes |
 | **`ss.people`** | A named population: `ss.people('Kenya', year=2024)` returns an `ss.People` |
+| **`ss.ppl`** | The people's properties before there are people: `ss.ppl.age < 15` is a condition, and `expit(b0 + b1*ss.ppl.urban)` a rate, with each person's value (each group's, as compartments) |
 | `ss.Module` | The one module abstraction; everything below is one |
 | `ss.Disease` | A declared disease: states and the transitions between them. Most states hold people; a reservoir or a vector population is a state that holds a count |
 | `ss.Infection` | Base class for a disease written as code (`define_states()`, `step()`, `set_prognoses()`), as in Starsim 3 |
@@ -130,7 +131,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
-Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solvers`, `stratify`, `to_spec`, `to_json`, `pars`, `run`, `results`, `R0`) are counted once. The split is deliberate: `describe`, `diagram`, `equations`, `solvers` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place, and `.total` in the whole population; `.frac` is the share. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
+Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solvers`, `stratify`, `to_spec`, `to_json`, `pars`, `run`, `results`, `R0`) are counted once. The split is deliberate: `describe`, `diagram`, `equations`, `solvers` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place, and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
 
 ## The total
 
@@ -138,7 +139,7 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solver
 
 | Group | Names | Of which new |
 |---|---|---|
-| Sim and modules | 10 | 1 |
+| Sim and modules | 11 | 2 |
 | States, transitions, parameters, results | 16 | 16 |
 | Time | 26 | 0 |
 | Distributions | 16 | 3 |
@@ -148,9 +149,9 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solver
 | Running, comparing, saving | 8 | 3 |
 | Optional metadata | 1 | 1 |
 | Types you get back or subclass | 6 | 1 |
-| **`ss.` names** | **105** | **41** |
+| **`ss.` names** | **106** | **42** |
 | Methods and attributes | 48 | 33 |
-| **Total** | **153** | **74** |
+| **Total** | **154** | **75** |
 
 <!-- counts end -->
 

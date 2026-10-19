@@ -20,7 +20,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, closest, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
+from .expressions import as_expr, BinOp, closest, Count, count_power, did_you_mean, dimension, Dwell, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 from .networks import geo, gravity, Mobility
 
@@ -112,6 +112,11 @@ class State(Nameable, Expr):
     def total(self):
         """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
         return Count([self], kind='total')
+
+    @property
+    def dwell(self):
+        """ The time each person has spent in this state: usable in p= of a transition with several destinations out of it (decided when they leave), and in the rate of a transition out of it """
+        return Dwell(self)
 
 
 def states(arg, **kwargs):
@@ -368,9 +373,9 @@ class Transition(Nameable):
         """ Arithmetic on a transition that is being written applies to its rate (`I @ beta * I`); on a finished one it is its flow: divided by something, in a result (`infection / S`), and times something, a share of it (`0.5 * infection`, an outcome) """
         if op == '/' and self.src is not None and not reverse:
             return BinOp('/', Flow(self), Flow(other) if isinstance(other, Transition) else as_expr(other))
-        if op == '*' and self.src is not None and not isinstance(other, (Transition, outcome, FlowSum)): # A share of the flow, never a change of rate (which is written in the rate, or with ss.modify)
+        if op == '*' and self.src is not None and not isinstance(other, (Transition, Destination, outcome, FlowSum)): # A share of the flow, never a change of rate (which is written in the rate, or with ss.modify)
             return FlowSum([self]) * other
-        if isinstance(other, (Transition, outcome, FlowSum)):
+        if isinstance(other, (Transition, Destination, outcome, FlowSum)):
             if op == '+': # A sum of flows, e.g. for an outcome: 0.1*mild + 0.5*severe
                 return FlowSum([self]) + other
             errormsg = f'Cannot apply "{op}" to two transitions'
@@ -403,6 +408,16 @@ class Transition(Nameable):
         errormsg = 'Several sources are a sum of states: write S + I + R >> D @ rate (| on states is a condition, for where=)'
         raise TypeError(errormsg)
     __ror__ = __or__
+
+    def __getattr__(self, attr):
+        """ The flow to one destination of a transition with several, e.g. `cin.X` for `cin = ss.progression('C -> X | R', ...)`, in an outcome or a result """
+        dst = self.__dict__.get('dst') if not attr.startswith('_') else None
+        names = [name for end in dst or [] for name in (re.split(r'[\s|,()\[\]]+', end) if isinstance(end, str) else [end.name]) if name]
+        if attr in names and len(names) > 1:
+            return Destination(self, attr)
+        elif attr in names:
+            raise AttributeError(f'"{self.name or self.arrow}" has one destination, {attr}, so its flow is the transition itself; a flow by destination is for a transition with several')
+        raise AttributeError(attr)
 
     @property
     def inflow(self):
@@ -763,6 +778,36 @@ class update(Nameable):
     def __repr__(self):
         state = self.state if isinstance(self.state, str) else self.state.label_name
         return f'update({state}, {format_expr(self.value)})'
+
+
+class Destination:
+    """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is """
+    def __init__(self, tr, state):
+        self.tr = tr
+        self.state = state
+        return
+
+    @property
+    def name(self):
+        return f'{self.tr.name}.{self.state}'
+
+    @property
+    def people(self):
+        return getattr(self.tr, 'people', True)
+
+    def __mul__(self, other):
+        return FlowSum([self]) * other
+    __rmul__ = __mul__
+
+    def __add__(self, other):
+        return FlowSum([self]) + other
+    __radd__ = __add__
+
+    def __truediv__(self, other):
+        return BinOp('/', Flow(self), Flow(other) if isinstance(other, (Transition, Destination)) else as_expr(other))
+
+    def __repr__(self):
+        return f'Destination({self.name})'
 
 
 class FlowSum:

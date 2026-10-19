@@ -78,8 +78,11 @@ class Result(ss.BaseArr):
     }
 
     def __getattr__(self, attr):
-        """ Say what a removed method has become; otherwise, as `ss.BaseArr` """
-        if attr in Result._removed:
+        """ The flow to one destination of a transition with several (`res.cin.X`); say what a removed method has become; otherwise, as `ss.BaseArr` """
+        dests = self.__dict__.get('dests')
+        if dests and attr in dests:
+            return dests[attr]
+        elif attr in Result._removed:
             raise AttributeError(f'Result.{attr}() has been removed from Starsim. Instead, write: {Result._removed[attr]}. (The migrate-starsim3 skill lists every change.)')
         return super().__getattr__(attr)
 
@@ -103,6 +106,11 @@ class Result(ss.BaseArr):
         self.validate_columns()
         self.init_values()
         return
+
+    @staticmethod
+    def reserved():
+        """ The attributes of every result, which a destination's flow (`res.cin.X`) cannot be named like """
+        return set(dir(Result)) | set(Result('x').__dict__)
 
     def __repr__(self):
         """ Show all data """
@@ -205,8 +213,23 @@ class Result(ss.BaseArr):
             res.n_I.select(age=0) # The youngest age group
             res.n_I.select(sex='female', risk='high')
             msim.results.sir.n_I.select(beta=0.3).quantiles() # The runs with beta = 0.3
+            res.cin.select(to='X') # The flow to one destination of a transition with several, as res.cin.X is
             ```
         """
+        if 'to' in dims: # The flow to some of the destinations of a transition with several
+            to = sc.tolist(dims.pop('to'))
+            dests = self.__dict__.get('dests')
+            if not dests:
+                errormsg = f'The result "{self.name}" has no destinations to select: only a transition with several (e.g. C -> X | R) has a flow to each'
+                raise ValueError(errormsg)
+            unknown = [name for name in to if name not in dests]
+            if unknown:
+                errormsg = f'"{self.name}" has no destination {sc.strjoin(unknown)}; its destinations are {sc.strjoin(dests.keys())}'
+                raise KeyError(errormsg)
+            out = dests[to[0]]
+            for name in to[1:]:
+                out = out + dests[name]
+            return out.select(run=run, **dims)
         out = self
         if self.runs is not None:
             named = {str(col).rpartition('.')[2]:col for col in self.runs.columns if '.' in str(col)} # A parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3)
@@ -1004,6 +1027,18 @@ class Results(ss.ndict):
         print(super().__str__(*args, **kwargs))
         return
 
+    def __setitem__(self, key, value):
+        """ Also link the flow to each destination of a transition with several to its total, so `res.cin.X` is `res['cin.X']` """
+        super().__setitem__(key, value)
+        if isinstance(value, Result) and isinstance(key, str):
+            total = key.rpartition('.')[0]
+            if '.' in key and isinstance(self.get(total), Result):
+                self[total].dests = sc.objdict({**(self[total].__dict__.get('dests') or {}), key.rpartition('.')[2]:value}) # A new dict, since a copy of a result (asnew) shares it
+            elif '.' not in key and (value.__dict__.get('dests') or any('.' in str(k) for k in self.keys())):
+                dests = {k.rpartition('.')[2]:v for k,v in self.items() if isinstance(k, str) and k.startswith(f'{key}.') and isinstance(v, Result)}
+                value.dests = sc.objdict(dests) if dests else None
+        return
+
     def append(self, arg, key=None):
         """ This is activated by adding as well, e.g. results += result """
         if isinstance(arg, (list, tuple)):
@@ -1424,6 +1459,12 @@ def match_name(sim, col):
             matches.append(mod.results[name])
     if not matches and col in sim.results and isinstance(sim.results[col], ss.Result):
         matches.append(sim.results[col])
+    if not matches and '.' in col: # The flow to a destination, "cin.X" or "hpv.cin.X"
+        first, _, rest = col.partition('.')
+        for mod in sim.modules:
+            for key in [col] + ([rest] if first == mod.name else []):
+                if key in mod.results and isinstance(mod.results[key], ss.Result):
+                    matches.append(mod.results[key])
     if not matches and name == 'new_infections': # Starsim 3's name, for a declared disease with one transmission: its flow
         for mod in getattr(sim, 'declared', []):
             if modname in ['', mod.name] and len(mod.graph.transmissions) == 1:

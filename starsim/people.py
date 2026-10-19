@@ -12,7 +12,7 @@ import numba as nb
 
 
 class lazy_attr:
-    """ On the class, a lazy condition on an attribute of the people (e.g. `ss.People.age < 15`), so a condition can be written without making any people; on a People object, its array """
+    """ On the class, a lazy condition on an attribute of the people (e.g. `ss.People.age < 15`; `ss.ppl.<name>` is the same for any property), so a condition can be written without making any people; on a People object, its array """
     def __set_name__(self, owner, name):
         self.name = name
 
@@ -20,6 +20,31 @@ class lazy_attr:
         if obj is None:
             return ss.conditions.Cond('people', self.name)
         raise AttributeError(self.name) # Not on this People object (see People.__getattr__())
+
+
+class LazyPeople:
+    """
+    The people's properties, before there are any people: `ss.ppl.<name>` is a lazy reference to the property `<name>` of each person (e.g. `ss.ppl.age`, `ss.ppl.urban`), checked when the sim is built
+
+    It can be used in a condition (`ss.ppl.age < 15`, for `where=`) and, as the person's value,
+    in a rate, a branch probability, or a result (`expit(b0 + b1*ss.ppl.urban)`); a condition in a
+    rate is 1 for the people it holds for and 0 for the others (`0.3*(ss.ppl.age > 65)`).
+
+    Examples:
+        ```python
+        p_use = expit(b0 + b_age*ss.ppl.age + b_urban*ss.ppl.urban)
+        kids = ss.ppl.age < 15
+        ```
+    """
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        return ss.conditions.Cond('people', name)
+
+    def __repr__(self):
+        return 'ss.ppl'
+
+ppl = LazyPeople()
 
 
 class AgentScale(ss.FloatArr):
@@ -54,10 +79,10 @@ class People:
     Examples:
         ```python
         ppl = ss.People(2000)
-        kids = ss.People.age < 15 # A lazy condition, for a sim run as agents or as compartments
+        kids = ss.ppl.age < 15 # A lazy condition, for a sim run as agents or as compartments (see ss.ppl)
         ```
     """
-    alive = lazy_attr() # The class attributes are lazy conditions; each People object has its own arrays
+    alive = lazy_attr() # The class attributes are lazy conditions (ss.ppl.<name> is the same for any name); each People object has its own arrays
     age = lazy_attr()
     female = lazy_attr()
 

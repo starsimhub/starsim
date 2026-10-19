@@ -121,7 +121,7 @@ class Engine:
         self.converted = dict() # Typed values converted to the sim's unit: see convert()
         self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.objdict() # Dwell-time information for each transition that has one
-        self.flowcounts = sc.objdict({name:0.0 for name in self.graph.transitions}) # Events in the current step
+        self.flowcounts = sc.objdict({name:0.0 for name in list(self.graph.transitions) + self.graph.destinations()}) # Events in the current step, and those of each destination of a transition with several ('cin.X')
         self.stocks = sc.objdict() # The number in each state at the start of the step
         self._by_group = False # Whether rates are being worked out for groups rather than for agents (in an agent-based run, for the states that are counts)
         self.strain = None # The position of the module's strain dimension, if it has one
@@ -670,6 +670,10 @@ class Engine:
             self.cache[key] = func(self.sim)
         return self.cache[key]
 
+    def dwell(self, state):
+        """ The time in a state (`P.dwell`), which only the solvers that follow people in it have: see `Agents.dwell()`, and the conveyor of a compartmental run (`Compartmental.build_layout()`) """
+        raise ss.CapabilityError(f'{state.name}.dwell, the time in {state.name}, cannot be worked out here; it is used in p= or the rate of a transition out of {state.name}')
+
     def call_uids(self, func, p=None):
         name = getattr(func, '__name__', 'function')
         raise ss.CapabilityError(f'the function "{name}" cannot run with solver="{self.sim.solver}".\n'
@@ -721,6 +725,9 @@ class Engine:
             if p is None:
                 continue
             raw = p.raw
+            if isinstance(raw, ss.by) and tr.dur is not None and raw.items and all(isinstance(v, ss.Dist) for v in raw.items): # A distribution for each level
+                self.dwells[name] = self.dwell_by(name, tr, p, to_unit)
+                continue
             dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False)
             if isinstance(raw, ss.Dist) and tr.dur is not None:
                 mean, std = trans.dwell_stats(raw, to_unit)
@@ -737,7 +744,7 @@ class Engine:
                     dw.family = 'exponential'
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
                     dw.fixed = True
-                elif tr.stages is None:
+                elif tr.stages is None and name not in self.graph.dwell_trs: # Not one that reads the time in its state, whose distribution is followed exactly (see Compartmental.build_layout())
                     shape = raw.pars.get('a')
                     if dw.family == 'gamma' and sc.isnumber(shape) and shape == int(shape):
                         dw.k = int(shape)
@@ -753,6 +760,38 @@ class Engine:
                 tr.guessed['dwell'] = 'scalar duration'
             self.dwells[name] = dw
         return
+
+    def dwell_by(self, name, tr, p, to_unit):
+        """
+        A dwell time with a distribution for each level, e.g. `dur=ss.by(sex=dict(female=ss.lognorm_ex(...), male=ss.lognorm_ex(...)))`
+
+        As agents, it is one distribution whose parameters are read from each person (see
+        `ss.by.lookup()`); in a compartmental run, each group has the mean of its own, with one
+        number of Erlang stages for all, from the mean and standard deviation over the groups.
+        """
+        by = p.raw
+        dists = by.items
+        family = type(dists[0])
+        if any(type(d) is not family for d in dists):
+            errormsg = f'The dwell time of "{name}" is {by}, with distributions of different kinds ({sc.strjoin(sorted({type(d).__name__ for d in dists}))}); give one kind, with its parameters for each level'
+            raise TypeError(errormsg)
+        shape = ['a', 'c', 'n', 'p'] # Parameters that are not durations, as in ss.transitions.numeric_pars()
+        def par_by(key): # The value of one parameter for each level, as a duration where it is one
+            return by.map(lambda d: d.unit(d.pars[key]) if d.unit is not None and key not in shape and sc.isnumber(d.pars[key]) else d.pars[key])
+        dw = Bunch(par=p, k=tr.stages or 1, exact=True, is_rate=False, family=family.__name__, fixed=False, staged=True)
+        if self.sim.solver == 'abm':
+            pars = {key:(lambda b: lambda module, sim, uids: module.engine.by_people(b, uids))(par_by(key)) for key in dists[0].pars}
+            dw.dist = family(**pars)
+            dw.mean = dw.std = np.nan
+        else:
+            stats = [by.map(lambda d: ss.transitions.dwell_stats(d, to_unit)[i]).per_group(self.sim) for i in [0, 1]]
+            dw.mean, dw.std = stats
+            dw.dist = dists[0] # Not drawn from: the mean is by group
+            if tr.stages is None:
+                dw.k = ss.transitions.erlang_stages(np.mean(dw.mean), np.mean(dw.std))
+                dw.exact = False
+                ss.note(f'the dwell time of "{name}" has a distribution for each level ({by}); a compartmental run gives each group its own mean, with {dw.k} Erlang stages for all, from the mean and standard deviation over the groups', sim=self.sim)
+        return dw
 
     def note_beta(self):
         """ Warn about a beta dict of bare numbers with a step shorter than the unit: in Starsim 3 these were probabilities per step, so a port copied verbatim is too low by a factor of 1/dt """
@@ -954,11 +993,11 @@ class Engine:
             return init_prev
         return None
 
-    def branch_probs(self, tr):
-        """ The probability of each destination of a transition (1 if there is only one) """
+    def branch_probs(self, tr, ps=None):
+        """ The probability of each destination of a transition (1 if there is only one), from its p= or the expressions given for them """
         if len(tr.dst) <= 1:
             return [1.0]*len(tr.dst)
-        ps = [None if p is None else self.eval(p) for p in tr.p]
+        ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
         rest = 1.0 - sum(p for p in ps if p is not None)
         return self.dest_shares(tr, [rest if p is None else p for p in ps])
 
@@ -980,6 +1019,8 @@ class Engine:
         for name,tr in graph.transitions.items():
             scale = abm and tr.people
             results += ss.Result(name, dtype=float, scale=scale, label=tr.label or name, kind='flow')
+            for dst in (tr.dst if len(tr.dst or []) > 1 else []): # A flow for each destination, e.g. res.cin.X, whose sum is the total
+                results += ss.Result(f'{name}.{dst.name}', dtype=float, scale=scale, label=f'{tr.label or name} to {dst.label or dst.name}', kind='flow', auto_plot=False)
         taken = list(graph.transitions.keys()) + list(graph.exprs.keys()) + list(graph.outcomes.keys())
         self.standard = bool(graph.transmissions) and mod.standard_results
         if self.standard:
@@ -1017,6 +1058,8 @@ class Engine:
                 dims[f'n_{state.name}'] = self.applies[state.name]
             for name,tr in graph.transitions.items():
                 dims[name] = np.any([self.applies[state.name] for state in tr.src + tr.dst], axis=0)
+                for dst in (tr.dst if len(tr.dst or []) > 1 else []):
+                    dims[f'{name}.{dst.name}'] = dims[name]
             for name in graph.transfers:
                 dims[name] = np.ones(len(names), dtype=bool)
             if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
@@ -1061,8 +1104,8 @@ class Engine:
                 sources = []
                 for base,weight in oc.flows:
                     key = base if isinstance(base, str) else base.name
-                    if key not in graph.transitions and key not in graph.outcomes:
-                        options = list(graph.transitions.keys()) + list(graph.outcomes.keys())
+                    if key not in graph.transitions and key not in graph.outcomes and graph.destination(key) is None:
+                        options = list(graph.transitions.keys()) + list(graph.outcomes.keys()) + graph.destinations()
                         raise ss.UnknownOutcomeSource(f'the source of the outcome "{name}" is not a transition or outcome of "{self.mod.name}" ({key}){trans.did_you_mean(str(key), options)}')
                     sources.append((key, weight))
                 if any(key in todo for key,weight in sources):

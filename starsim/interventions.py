@@ -473,7 +473,7 @@ class Delivery(Intervention):
         stop (date/float): when delivery stops (default: never); a stop after the end of the sim never stops it
         at (list): deliver in rounds at these times (a campaign), each within the sim; a calendar year in a sim with dates is written as a date, e.g. '2030'
         interval (dur): deliver in rounds this far apart, between `start` and `stop`
-        where (Cond/func): who can receive it: a condition (e.g. `ss.People.age < 5`), or a function of the sim
+        where (Cond/func): who can receive it: a condition (e.g. `ss.ppl.age < 5`), or a function of the sim
         coverage (float): the fraction of eligible people reached; also `ss.by(...)`, or a function of the sim returning a probability per person
         capacity (float): the number that can be delivered: a number per round (or per step, for delivery on events or by a function), or a rate (e.g. `ss.peryear(50_000)`), which routine delivery needs
         on (Transition/func): deliver to the people something has just happened to: a transition (e.g. `on=sir.infection`), or a function of the sim returning them; for the people in a state, use `where=` (e.g. `where=sir.I, interval=1`)
@@ -928,7 +928,7 @@ class Delivery(Intervention):
     def skip_past(self):
         """
         For routine delivery by age, on its first step: the people past the age at which it is given are recorded as offered it, so
-        only those who reach the age get it. For `where=ss.People.age >= 0.75` (routine at 9 months), that is everyone older than 9 months
+        only those who reach the age get it. For `where=ss.ppl.age >= 0.75` (routine at 9 months), that is everyone older than 9 months
         by more than a step; for `ppl.age < 5`, nobody, since people reach that age at birth.
 
         They are the people eligible now who were eligible a step ago (as agents; in a compartmental run, everyone in an eligible

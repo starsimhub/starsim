@@ -126,7 +126,7 @@ There is one transition object, matching the one class `ss.Transition` ([03-stat
 | Field | Holds |
 |---|---|
 | `src` | A list of source state names, or `null` for an inflow (a birth, shedding into a reservoir) |
-| `dst` | A list of destination state names, or `null` for an outflow (a death, decay). More than one name is a branch |
+| `dst` | A list of destination state names, or `null` for an outflow (a death, decay). More than one name is a branch, and each has a flow of its own, `<transition>.<state>`, which an outcome's source and a result expression name in that form (`0.8 * cin.X`) and which a data series may be named |
 | `rate` | A rate expression (below), or `null` when the transition is driven by a dwell time or a constant rate |
 | `dur` | The dwell time: a distribution, or `{"dist": "expon", "mean": ["par", name]}` for a duration and `{"dist": "expon", "rate": ["par", name]}` for a constant rate, referring to the parameter that holds the value; `null` when the transition is driven by a rate expression |
 | `p` | Branch probabilities: one per destination, or one number for a transition that is one branch of several out of its source state |
@@ -174,11 +174,13 @@ Rates, branch probabilities, result sources, and conditions are written as strin
 | `np.clip(0.5 * I.frac, 0, 0.02)` | `"minimum(maximum(0.5 * I.frac, 0), 0.02)"` |
 | `(Q.n < 20) * 0.1` | `"(Q.n < 20) * 0.1"` |
 | `ss.outcome(0.5 * infection)` | `"0.5 * infection"` |
-| `where=(ss.People.age > 65) & ~sir.I` | `"((people.age > 65) & ~sir.I)"` |
+| `where=(ss.ppl.age > 65) & ~sir.I` | `"((people.age > 65) & ~sir.I)"` |
+| `rate=ss.peryear(1)*expit(b0 + b_urban*ss.ppl.urban)` | `"peryear(1) * expit(b0 + b_urban * people.urban)"` |
+| `ss.by(sex=dict(female=0.02, male=0.05))` | `{"by": ["sex"], "values": {"keyed": {"female": 0.02, "male": 0.05}}}` |
 
-What can appear: the names of the module's states, parameters, and transitions (a transition in a result's source is its flow); a bare state, which means contact with people in that state (its presence is what makes a transition contact-mediated); `.n` (the count in a state or a set of states, summed), `.frac` (that count as a fraction of the module's population), and `.total` (the count over every place); `+`, `-`, `*`, `/`, `**`; comparisons; `&`, `|`, and `~` in conditions, with attributes of the people (`people.age`); and the functions `exp`, `log`, `sqrt`, `absolute`, `sin`, `cos`, `minimum`, and `maximum`. A set of states is written as their sum, and `np.clip` as `minimum` and `maximum`. Numbers are written at full precision, with the parentheses the expression needs, so the string means exactly what was written. A state in another module is written with its module's name (`hiv.I`); inside its own module the short name is used.
+What can appear: the names of the module's states, parameters, and transitions (a transition in a result's source is its flow); a bare state, which means contact with people in that state (its presence is what makes a transition contact-mediated); `.n` (the count in a state or a set of states, summed), `.frac` (that count as a fraction of the module's population), `.total` (the count over every place), and `.dwell` (the time each person has spent in a state, in `p=` and rates of the transitions out of it: `"1 - exp(-k * P.dwell)"`); `+`, `-`, `*`, `/`, `**`; comparisons; `&`, `|`, and `~` in conditions; attributes of the people (`people.age`), in conditions and in rates (`ss.ppl.age` in code); and the functions `exp`, `log`, `sqrt`, `absolute`, `sin`, `cos`, `expit` (SciPy's, imported by `to_code()` from `scipy.special`), `minimum`, and `maximum`. A set of states is written as their sum, and `np.clip` as `minimum` and `maximum`. Numbers are written at full precision, with the parentheses the expression needs, so the string means exactly what was written. A state in another module is written with its module's name (`hiv.I`); inside its own module the short name is used.
 
-The spec is not parsed back. The importers read rates from other frameworks' formulas ([16-interop.md](16-interop.md)) with a parser of the same arithmetic (`ss.spec.Parser`: numbers, the declared names, `.n`, `.frac`, `.total`, arithmetic, comparisons, typed quantities such as `perday(0.5)`, and the functions above), which allows nothing else, so that reading a file runs no code from it.
+The spec is not parsed back. The importers read rates from other frameworks' formulas ([16-interop.md](16-interop.md)) with a parser of the same arithmetic (`ss.spec.Parser`: numbers, the declared names, `.n`, `.frac`, `.total`, `.dwell`, arithmetic, comparisons, typed quantities such as `perday(0.5)`, and the functions above), which allows nothing else, so that reading a file runs no code from it.
 
 ## Values
 

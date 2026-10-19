@@ -43,6 +43,7 @@ class Agents(Engine):
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
         self._junctions = None # The states passed through at once: see junctions
+        self._leaving = False # Whether P.dwell is being read for people leaving P: see dwell()
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
@@ -52,7 +53,7 @@ class Agents(Engine):
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
         read = mod.times_read(self.sim) # The times of entering a state that code in the sim reads (None for all); the engine reads those of the states it schedules exits from, or whose exits have after= or before=
-        unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
+        unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and state.name not in graph.dwell_states and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name)]
@@ -205,6 +206,11 @@ class Agents(Engine):
         self.flowcounts[tr.name] += self.n_of(moved)
         if self.sim.groups.n_groups > 1 and len(moved):
             self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(moved, dst), weights=self.weights(moved), minlength=self.sim.groups.n_groups)
+        key = f'{tr.name}.{dst.name}'
+        if key in self.flowcounts: # One destination of a transition with several
+            self.flowcounts[key] += self.n_of(moved)
+            if self.sim.groups.n_groups > 1 and len(moved):
+                self.flow_groups[key] = self.flow_groups.get(key, 0) + np.bincount(self.groups(moved, dst), weights=self.weights(moved), minlength=self.sim.groups.n_groups)
         self.forced[tr.name] = ss.uids.concatenate([self.forced[tr.name], moved]) if tr.name in self.forced else moved
         return len(moved)
 
@@ -230,6 +236,10 @@ class Agents(Engine):
     def init_post(self):
         """ Sample the agents into the states """
         mod = self.mod
+        people = self.sim.people
+        for name in sorted({name for leaf in self.graph.leaves() if isinstance(leaf, ss.expressions.Prop) for name in leaf.names}): # The properties of people that its rates read (ss.ppl.<name>)
+            if not hasattr(people, name):
+                raise ss.UnknownState(f'"{mod.name}" reads people.{name}, which is not a property of the people{ss.expressions.did_you_mean(name, list(people.states.keys()))}')
         fracs, counts = self.init_fractions()
         for name,count in counts.items():
             self.counts[name] = count*self.state_split[name]
@@ -514,20 +524,48 @@ class Agents(Engine):
     def call_uids(self, func, p=None):
         return func(self.sim, self._uids)
 
+    def dwell(self, state):
+        """ The time each agent being evaluated has spent in a state (`P.dwell`): whole steps when they leave it (for `p=`, see `finish_moves()`), or to the middle of this step (for a rate) """
+        steps = self.mod.ti - self.mod[f'ti_{state.name}'][self._uids]
+        return (steps if self._leaving else steps + 0.5)*self.dt
+
     def by_group(self, by):
         """ A value for each level of a dimension becomes a value for each of the agents being evaluated (or for each group, when rates are being worked out by group) """
         out = super().by_group(by)
         return out if self._by_group else out[self.groups(self._uids)]
 
+    def by_people(self, by, uids=None):
+        """ A value read from each person's own properties (see `ss.by.lookup()`), for the agents being evaluated (or for `uids`); worked out once a step """
+        if self._by_group and uids is None:
+            errormsg = f'{by} is read from each person, so cannot be used where a value is worked out for groups rather than agents (a count that is not people, an inflow, or init_prev)'
+            raise ValueError(errormsg)
+        if uids is not None and not self.sim.people.initialized: # A distribution's parameter, tried when the distribution is made, before there are people
+            return np.ones(np.size(uids))
+        key = ('by_people', id(by))
+        if key not in self.cache:
+            self.cache[key] = by.lookup(self.sim, self.convert, year=self.year)
+        return self.cache[key][self._uids if uids is None else uids]
+
     def value(self, p):
         if isinstance(p.raw, ss.by): # Depends on which agents are being evaluated, so is not cached
-            return self.by_group(p.raw)
+            return self.by_people(p.raw) if p.raw.on_people(self.sim) else self.by_group(p.raw)
         key = id(p)
         if key in self.spread: # Each agent's own value, as an array indexed by UID
             if key not in self.cache:
                 self.cache[key] = self.modified(p, self.mod[self.spread[key]].raw)
             return self.for_uids(self.cache[key])
         return self.for_uids(super().value(p))
+
+    def prop(self, cond):
+        """ A property of people or a condition, in a rate (see `ss.expressions.Prop`): its value for each agent being evaluated, as it was when first asked for in the step """
+        if self._by_group:
+            errormsg = f'{cond} is a property of each person, so cannot be used where a value is worked out for groups rather than agents (a count that is not people, an inflow, or init_prev)'
+            raise ValueError(errormsg)
+        key = ('prop', id(cond))
+        if key not in self.cache:
+            self.cache[key] = np.asarray(cond.eval(self.selector), dtype=float)
+        out = self.cache[key]
+        return out if np.ndim(out) == 0 else out[self._uids]
 
     def for_uids(self, val):
         """ Within `eval_for()`, a value for each agent in the population (e.g. a parameter modified for some people) is taken for the agents being evaluated, so it combines with the rest of the expression """
@@ -607,11 +645,23 @@ class Agents(Engine):
             if len(tr.dst) == 1:
                 dsts = [(tr.dst[0], uids)]
             else:
-                self._uids = uids
-                ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
+                self._uids, self._leaving = uids, True # Decided as they leave: P.dwell is the time they spent there
+                try:
+                    ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
+                finally:
+                    self._leaving = False
                 rvs = self.dists[f'dst_{name}'].rvs(uids)
                 edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
-                dsts = [(dst, uids[(rvs >= edges[i]) & (rvs < edges[i+1])]) for i,dst in enumerate(tr.dst)]
+                masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(tr.dst))]
+                dsts = [(dst, uids[mask]) for dst,mask in zip(tr.dst, masks)]
+                ng = self.sim.groups.n_groups
+                entering = ng > 1 and any(self.enters(tr, src) for src in srcs[name])
+                left = np.concatenate([self.groups(u, src) for u,src in zip(uidlist, srcs[name])]) if ng > 1 and not entering else None # The groups they left, where the total is recorded (see move()), before any change of level
+                for (dst,inds),mask in zip(dsts, masks): # The flow to each destination
+                    key = f'{name}.{dst.name}'
+                    self.flowcounts[key] += self.n_of(inds)
+                    if left is not None:
+                        self.flow_groups[key] = self.flow_groups.get(key, 0) + np.bincount(left[mask], weights=self.weights(inds), minlength=ng)
             for dst,inds in dsts:
                 mod[dst.name][inds] = True
                 mod[f'ti_{dst.name}'][inds] = ti
@@ -621,6 +671,8 @@ class Agents(Engine):
                     self.sim.groups.groups_changed(inds)
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
+                    if len(tr.dst) > 1:
+                        self.flow_groups[f'{name}.{dst.name}'] = self.flow_groups.get(f'{name}.{dst.name}', 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
                 if len(inds) and dst.name in self.junctions:
                     arrived[dst.name].append(inds)
         if arrived: # A state left only by branches with no wait is passed through at once, as in the ODE, rather than held for a step
@@ -1122,6 +1174,8 @@ class Agents(Engine):
                     for dst,p in zip(tr.dst, self.branch_probs(tr)):
                         dim_map = self.dim_map(None if src is None else src.name, dst.name)
                         change[dst.name] = change[dst.name] + (amount*p if dim_map is None else (amount*p) @ dim_map)
+                        if len(tr.dst) > 1: # The flow to each destination
+                            flows[f'{name}.{dst.name}'] = flows.get(f'{name}.{dst.name}', 0.0) + amount*p
                     flows[name] = flows[name] + amount
             return change, flows
 
@@ -1132,7 +1186,7 @@ class Agents(Engine):
         k1, f1 = deriv(start)
         n_sub = max(1, int(np.ceil(self._fastest*dt/0.25)))
         h = dt/n_sub
-        total = {name:0.0 for name,tr in trs}
+        total = {name:0.0 for name in f1}
         for sub in range(n_sub):
             if sub:
                 k1, f1 = deriv(start)
@@ -1140,10 +1194,10 @@ class Agents(Engine):
             k3, f3 = deriv(ahead(k2, h/2))
             k4, f4 = deriv(ahead(k3, h))
             start = sc.objdict({name:np.maximum(start[name] + h/6*(k1[name] + 2*k2[name] + 2*k3[name] + k4[name]), 0) for name in start})
-            for name,tr in trs:
+            for name in total:
                 total[name] = total[name] + h/6*(f1[name] + 2*f2[name] + 2*f3[name] + f4[name])
         self.counts = start
-        for name,tr in trs:
+        for name in total:
             self.flowcounts[name] += np.sum(total[name])
             if self.sim.groups.n_groups > 1:
                 self.flow_groups[name] = self.flow_groups.get(name, 0) + total[name]
@@ -1451,7 +1505,8 @@ class Agents(Engine):
             spread = any(id(leaf) in self.spread for leaf in tr.rate.leaves if isinstance(leaf, ss.par)) # As does a distribution across people
             mods = [m for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal for m in self.sim.modifiers.get((self.mod.name, 'par', leaf.name), [])]
             per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.transitions.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
-            self.by_groups[tr.name] = not spread and not per_agent and not any(len(inspect.signature(func).parameters) >= 2 for func in funcs) # A function of the agents can give each a rate of their own
+            props = any(isinstance(leaf, ss.expressions.Prop) or (isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) and leaf.raw.on_people(self.sim)) for leaf in tr.rate.leaves) # As does a property of people
+            self.by_groups[tr.name] = not spread and not per_agent and not props and not any(len(inspect.signature(func).parameters) >= 2 for func in funcs) # A function of the agents can give each a rate of their own
         return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0
 
     def infect_groups(self, tr, src):

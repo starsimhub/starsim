@@ -20,6 +20,7 @@ ops = {
     '&':operator.and_, '|':operator.or_, '+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv,
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
+ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.ppl.age)
 leaves = ['people', 'state', 'dim', 'array', 'incidence']
 
 
@@ -43,7 +44,15 @@ class Cond:
         ```
     """
     _is_cond = True
-    __array_ufunc__ = None # So numpy defers to these operators
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ A NumPy function of a condition (np.exp(b*ss.ppl.age), expit(...)) is an expression, for a rate; arithmetic and comparisons with NumPy numbers stay conditions """
+        name = ufunc.__name__
+        if method != '__call__' or kwargs:
+            return NotImplemented
+        elif name in ufunc_ops:
+            return Cond(ufunc_ops[name], *[x.item() if isinstance(x, np.ndarray) and x.ndim == 0 else x for x in inputs])
+        return ufunc(*[ss.expressions.as_expr(x) if isinstance(x, Cond) else x for x in inputs])
 
     def __init__(self, op, *args):
         self.op = op
@@ -64,10 +73,17 @@ class Cond:
         errormsg = f'The condition {self} has no single truth value: it is evaluated when the sim runs. Use &, |, and ~ instead of "and", "or", and "not"; anything else can be written as a function of the sim.'
         raise TypeError(errormsg)
 
-    def __gt__(self, other): return Cond('>', self, other)
-    def __lt__(self, other): return Cond('<', self, other)
-    def __ge__(self, other): return Cond('>=', self, other)
-    def __le__(self, other): return Cond('<=', self, other)
+    def __gt__(self, other): return self.compare('>', other)
+    def __lt__(self, other): return self.compare('<', other)
+    def __ge__(self, other): return self.compare('>=', other)
+    def __le__(self, other): return self.compare('<=', other)
+
+    def compare(self, op, other):
+        """ A comparison: with an expression (e.g. a fitted ss.par), an expression that is 1 or 0, for a rate; otherwise a condition """
+        if isinstance(other, ss.expressions.Expr):
+            a = ss.expressions.as_expr(self)
+            return {'>':a.__gt__, '<':a.__lt__, '>=':a.__ge__, '<=':a.__le__}[op](other)
+        return Cond(op, self, other)
     def __eq__(self, other): return Cond('==', self, other)
     def __ne__(self, other): return Cond('!=', self, other)
     def __and__(self, other): return Cond('&', self, other)
@@ -79,14 +95,25 @@ class Cond:
     def __rshift__(self, other):
         errormsg = 'A condition is not states: several sources of a transition are a sum of states, S + I + R >> D @ rate (| on states is a condition, for where=)'
         raise TypeError(errormsg)
-    def __add__(self, other): return Cond('+', self, other)
-    def __sub__(self, other): return Cond('-', self, other)
-    def __mul__(self, other): return Cond('*', self, other)
-    def __truediv__(self, other): return Cond('/', self, other)
-    def __radd__(self, other): return Cond('+', other, self)
-    def __rsub__(self, other): return Cond('-', other, self)
-    def __rmul__(self, other): return Cond('*', other, self)
-    def __rtruediv__(self, other): return Cond('/', other, self)
+    def __add__(self, other): return self.arith('+', self, other)
+    def __sub__(self, other): return self.arith('-', self, other)
+    def __mul__(self, other): return self.arith('*', self, other)
+    def __truediv__(self, other): return self.arith('/', self, other)
+    def __pow__(self, other): return self.arith('**', self, other)
+    def __radd__(self, other): return self.arith('+', other, self)
+    def __rsub__(self, other): return self.arith('-', other, self)
+    def __rmul__(self, other): return self.arith('*', other, self)
+    def __rtruediv__(self, other): return self.arith('/', other, self)
+    def __neg__(self): return self.arith('*', -1, self)
+
+    @staticmethod
+    def arith(op, a, b):
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
+        if isinstance(a, ss.expressions.Expr) or isinstance(b, ss.expressions.Expr):
+            return ss.expressions.BinOp(op, a, b)
+        elif op == '**':
+            return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
+        return Cond(op, a, b)
     __hash__ = object.__hash__
 
     def __copy__(self): # A condition is never changed once made, and refers to modules by name, so is shared between copies of a sim
@@ -482,6 +509,8 @@ class Selector:
         if isinstance(val, ss.transitions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
             val = self.mod.engine.eval(val)
         if isinstance(val, ss.by):
+            if self.abm and val.on_people(sim): # Read from each person
+                return val.lookup(sim)
             ds, grid = val.grid(sim)
             return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):

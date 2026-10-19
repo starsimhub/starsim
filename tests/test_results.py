@@ -229,6 +229,41 @@ def test_time_points():
     return sim
 
 
+def cohort(solver, p=0.3, data=None):
+    """ 10,000 people who leave P after 5 days on average: a share p to C, and the rest to R """
+    P, C, R = ss.states('P C R')
+    course = ss.progression('P -> C | R', dur=ss.days(5), p=[p, None])
+    dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), init=dict(P=10_000), name='dis')
+    dis.stratify(age=ss.years([0, 40]))
+    return ss.Sim(dis, n_agents=10_000, solver=solver, unit='day', stop=60, data=data, verbose=0)
+
+
+@sc.timer()
+def test_destinations():
+    sc.heading('Testing the flow to each destination of a transition with several')
+    for solver in ['ode', 'binomial', 'gillespie', 'abm']:
+        res = cohort(solver).run().results.dis
+        C, R, total = res.course.C, res.course.R, res.course
+        print(f'{solver}: {C.sum():n} to C, {R.sum():n} to R')
+        assert np.allclose(C + R, total) and np.allclose((C + R).select(age=0), total.select(age=0)) # The total is the sum of its destinations, by group too
+        if solver == 'ode':
+            assert np.isclose(C.sum(), 3000, rtol=0.01)
+        else:
+            assert abs(C.sum() - 3000) < 3*np.sqrt(10_000*0.3*0.7) # Within 3 standard errors
+        assert C is res['course.C'] and np.array_equal(total.select(to='C'), C) and np.allclose(total.select(to=['C', 'R']), total) # select(to=) is a second spelling
+        assert abs(res.cases.sum() - 0.5*C.sum()) <= 3*np.sqrt(0.25*C.sum()) # A destination is a source of an outcome (drawn, except under the ODE)
+    with pytest.raises(ValueError):
+        res.n_P.select(to='C') # Not a transition with several destinations
+
+    # A data column named for a destination is matched to it, and fitted
+    truth = cohort('ode').run().results.dis.course.C
+    data = pd.DataFrame({'course.C': truth.values[1:]}, index=truth.timevec[1:]) # Daily, as the flow is
+    fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).calibrate(gof='rmse')
+    assert np.isclose(fit.table.best.iloc[0], 0.3, rtol=1e-2)
+    return res
+
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -243,6 +278,7 @@ if __name__ == '__main__':
     sim4 = test_declared_scale()
     sim4b = test_flow_ratios()
     sim5 = test_time_points()
+    res6 = test_destinations()
 
     sc.toc(T)
     plt.show()

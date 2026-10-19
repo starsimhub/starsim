@@ -104,9 +104,13 @@ class Presentation:
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
-                add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in tr.p)}')
+                slots = getattr(engine, 'n_slots', {}).get(tr.src[0].name) if name in self.dwell_trs else None # Under compartments, followed by the time in the state
+                at_exit = f'decided as people leave, from their time in {tr.src[0].name}' + (f'; {slots + 2} compartments by time in state' if slots else '') if name in self.dwell_trs else None
+                add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in tr.p)}', at_exit)
             elif 'p' in tr.guessed:
                 add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
+            if tr.dst is not None and len(tr.dst) > 1: # A result for each destination, e.g. res.cin.X
+                add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{d.name}' for d in tr.dst]))
             for key,what in [('after', 'not before'), ('before', 'only before')]: # A minimum stay, or a limit
                 if getattr(tr, key, None) is not None:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')

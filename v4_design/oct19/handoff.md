@@ -48,6 +48,13 @@ Tests after these (latest): `test_*.py -n 4` 400 passed, 11 skipped; `switching 
 
 ## In progress
 
+## Done (second session, 2026-10-19)
+
+- **H0**: all six designs revised in place (`oct17/designs/`). Destination results and given dwell are fully decided. The care cascade (with "a move with no wait"), `ss.Strains`, per-act, and behavior vocabulary each end with a table of open decisions. Branch strings in the designs' code now use `'C -> X | R'` (the parser does not take `'C -> [X, R]'`).
+- **Destination results, given dwell, behavior steps 3 and 4 with D15**: built by three agents in detached worktrees from `af81cd8d` and merged file by file (conflicts in `expressions.py`, `presentation.py`, `spec.py`, spec 14 and 17, all keep-both). The merge fixed a `describe()` bug where the flows line split the `if tr.p`/`elif 'p' in tr.guessed` pair. A probe of all three together (`P.dwell` branch, destination flows, `ss.ppl.female` in a rate) agrees across ode, binomial, gillespie, and agents. Spec 02, 03, 04, 07, 09, 12, 14, 17, 18 and `admin/deferred.md` synced to LFD. CHANGELOG has four lines. What each left is in `implementation.md` beside its item.
+
+Tests after the merge: `test_*.py -n 4` 405 passed, 11 skipped; `switching -n 3` 44 passed, 1 skipped, 8 xfailed. Agents' worklogs are kept in the session scratchpad as `WORKLOG_<dest|dwell|behav>.md` (worktrees removed).
+
 ## Not started (next, in plan order)
 
-Stages 1 and 2 are done except as noted (ST19 and R27 wait on Cliff; FP39 rest, FP29, MA20, FP8 open). Next: H0 (the design revisions), and the designs that can start now (destination results, given dwell, behavior steps 3 and 4).
+Stages 1 and 2 are done except as noted (ST19 and R27 wait on Cliff; FP39 rest, FP29, MA20, FP8 open). Next: Cliff's answers on H0's open decisions, then the per-act steps 1 to 4, strains steps 0 to 4, and the cascade, in plan order ("After H0").
