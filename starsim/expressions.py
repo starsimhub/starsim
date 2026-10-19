@@ -556,28 +556,6 @@ class Since(Expr):
     def __deepcopy__(self, memo): return self
 
 
-class Recorded(Expr):
-    """
-    A value a module recorded for each agent at an event (e.g. `preg.attr('anc_ga', dist)`, drawn at each conception), in the sim's unit
-
-    Agents only for now.
-
-    Args:
-        module (Module/str): the module that records it
-        name (str): the name of its array on the module
-    """
-    def __init__(self, module, name):
-        self.module = module
-        self.name = name
-        return
-
-    def to_str(self, parent=False):
-        return f'{ss.conditions.modname(self.module)}.{self.name}'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
-
-
 def mothers_in(obj, seen=None):
     """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` """
     seen = set() if seen is None else seen
@@ -984,8 +962,6 @@ def evaluate(expr, ctx):
         return ctx.mother(expr)
     elif isinstance(expr, Since):
         return ctx.since(expr)
-    elif isinstance(expr, Recorded):
-        return ctx.recorded(expr)
     elif isinstance(expr, (Share, Column)):
         return expr.evaluate(ctx)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'

@@ -101,7 +101,7 @@ def test_births_ode():
 def test_events():
     sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, ss.child(), and ANC at a visit after conception')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
-    anc_ga = preg.attr('anc_ga', ss.uniform(ss.months(1), ss.months(8))) # Per pregnancy
+    anc_ga = preg.attr('anc_ga', ss.uniform(ss.months(1), ss.months(8))) # Per pregnancy: ss.attr(..., on=preg.conception)
     S, F, I = ss.states('S F I')
     d = ss.Disease(S, F, I,
         flag      = S >> F @ ss.on(preg.conception), # Edge-triggered, in the same step, whatever the module order

@@ -818,12 +818,6 @@ class Agents(Engine):
         with np.errstate(invalid='ignore'):
             return np.where(np.isnan(start), np.inf, (mod.ti - start)*self.dt)
 
-    def recorded(self, expr):
-        """ A value a module recorded for each agent at an event (by UID), in the sim's unit; NaN if never """
-        name = ss.conditions.modname(expr.module)
-        mod = self.mod if name in [None, self.mod.name] else self.sim.get_declared(name)
-        return mod[expr.name].raw
-
     def clock_values(self, clock, uids):
         """ Time in some states (or the share of the dwell time elapsed), for some agents; NaN for those not in them """
         mod = self.mod

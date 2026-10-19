@@ -92,7 +92,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
             ss.BoolState('fetal', label='A fetus, as an agent'),
         )
-        self.attrs = sc.objdict() # Values drawn at an event: see attr()
         self.rng_md = ss.random() # For a plain number as p_maternal_death
         self.fetus = fetus # Whether fetuses are agents, from conception: see init_fetus()
         self.lactation_opt = lactation # Whether to add an ss.Lactation: see add_lactation()
@@ -122,22 +121,28 @@ class Pregnancy(ss.Demographics, ss.Disease):
 
     @property
     def since_birth(self):
-        """ Time since the last live birth (inf if never); survives later losses """
+        """ Time since the last live birth (inf if never); survives later losses. TODO: ss.clock(start=live_birth): see ss.expressions.Since """
         return ss.expressions.Since(self, 'live_birth')
 
     def attr(self, name, dist, on='conception'):
         """
-        A value drawn for each woman each time an event of the pregnancy happens to her, e.g. the gestational age of her
-        first antenatal visit, for conditions such as `preg.P & (preg.P.time >= anc_ga)`; agents only
+        A value drawn for each woman each time a transition of the pregnancy happens to her, e.g. the gestational age of
+        her first antenatal visit, for conditions such as `preg.P & (preg.P.time >= anc_ga)`: an `ss.attr(dist, on=)` of
+        the pregnancy
 
         Args:
             name (str): the name of the value, an array of the module
             dist (Dist): what it is drawn from (durations are in the sim's unit when read)
-            on (str): the event: a transition of the pregnancy (e.g. 'conception', 'delivery') or 'live_birth'
+            on (str): the transition, e.g. 'conception' or 'delivery'
         """
-        self.attrs[name] = sc.objdict(dist=dist, on=on)
-        self.define_states(ss.FloatArr(name, label=f'{name} (drawn at {on})'))
-        return ss.expressions.Recorded(self, name)
+        graph = self.graph
+        if on not in graph.transitions:
+            errormsg = f'preg.attr() is drawn on a transition of the pregnancy ({sc.strjoin(graph.transitions.keys())}), not {on!r}'
+            raise ValueError(errormsg)
+        a = ss.attr(dist, on=graph.transitions[on], name=name)
+        graph.attrs[name] = a
+        graph.resolve_attrs()
+        return a
 
     def init_pre(self, sim):
         pars = self.pars
@@ -155,8 +160,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.mean_dur_pregnancy = ss.transitions.dwell_stats(dist, lambda v: ss.solvers.convert(v, 'year'))[0]
         super().init_pre(sim)
         self.init_fetus()
-        for name,a in self.attrs.items(): # Durations in the sim's unit
-            self.setattribute(f'rng_{name}', ss.transitions.numeric_dist(a.dist, lambda v: ss.solvers.convert(v, sim.unit_base)))
         return
 
     def step(self):
@@ -245,10 +248,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
             new = self.engine.fresh('callbacks', 'conception')
             for fn in self._callbacks.conception:
                 fn(new)
-        for name,a in self.attrs.items():
-            uids = self.engine.fresh(('attr', name), a.on)
-            if len(uids):
-                self[name][uids] = self[f'rng_{name}'].rvs(uids)
         return
 
     def make_children(self, tr, parents, ti):

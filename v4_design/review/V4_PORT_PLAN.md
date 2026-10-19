@@ -226,3 +226,6 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 68 | 16643b84 | — | implementation.md (v4-rs design doc): log only |
 | — | c9920adf | — | B6 (attributes as compartments): deferred |
 | — | 314e523c | — | B6 (attributes as compartments; HIV CD4 ODE test): deferred |
+| 69 | 1341164c | 361371c7 | ss.spread as agents (back-dated seeds run forward by natural history) in expressions.py; Agents.backfill reuses schedule/draw_competing(key=)/finish_moves rather than a step_exits refactor; reset people can be chosen again (else pool exhausted: 985/1000); compartmental raises CapabilityError (B). Test from fc7c8bd5: agents half; ODE half strict xfail. |
+| — | fc7c8bd5 | — | B (ss.spread as compartments): deferred; its agents test went in with 69, ODE half strict xfail |
+| — | 584b4373 | — | B6 (HPV antibodies as levels, ODE vs agents) + implementation.md: deferred |

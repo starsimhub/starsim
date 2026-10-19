@@ -782,9 +782,6 @@ class Engine:
     def since(self, expr):
         raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the time since an event is kept per agent. Run with solver="abm".')
 
-    def recorded(self, expr):
-        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: a value recorded at an event is kept per agent. Run with solver="abm".')
-
     def frac(self, states):
         return self.count(states)/self.n_people()
 
