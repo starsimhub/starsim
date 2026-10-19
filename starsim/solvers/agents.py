@@ -815,6 +815,12 @@ class Agents(Engine):
         with np.errstate(invalid='ignore'):
             return np.where(np.isnan(start), np.inf, (mod.ti - start)*self.dt)
 
+    def recorded(self, expr):
+        """ A value a module recorded for each agent at an event (by UID), in the sim's unit; NaN if never """
+        name = ss.conditions.modname(expr.module)
+        mod = self.mod if name in [None, self.mod.name] else self.sim.get_declared(name)
+        return mod[expr.name].raw
+
     def clock_values(self, clock, uids):
         """ Time in some states (or the share of the dwell time elapsed), for some agents; NaN for those not in them """
         mod = self.mod
@@ -1271,9 +1277,12 @@ class Agents(Engine):
             parents = self.fresh(('per', tr.name), tr.per.name)
             if not len(parents):
                 continue
-            new = self.grow_children(tr, parents, ti)
+            make = getattr(self.mod, 'make_children', None) # E.g. ss.Pregnancy, which also records events on the mothers
+            new = make(tr, parents, ti) if make is not None else self.grow_children(tr, parents, ti)
             self.flowcounts[tr.name] += self.n_of(new)
             if len(new):
+                self.record(tr, new, -1, self.state_index[tr.dst[0].name]) # An event, e.g. preg.birth (and, on the mothers, ss.child(preg.birth))
+                self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
                 if self.sim.groups.n_groups > 1:
                     self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(new), weights=self.weights(new), minlength=self.sim.groups.n_groups)
                 for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(per=) of the same transition

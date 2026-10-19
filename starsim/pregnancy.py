@@ -88,8 +88,48 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.define_states(
             ss.BoolState('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
             ss.FloatArr('parity', label='Parity', default=0),
+            ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
         )
+        self.attrs = sc.objdict() # Values drawn at an event: see attr()
         return
+
+    # Events the pregnancy records on the mother, besides its transitions (agents only)
+    def _event(self, name):
+        return ss.conditions.Event('tr', ss.conditions.Named(self, name))
+
+    @property
+    def live_birth(self):
+        """ On the mother: at least one child born alive """
+        return self._event('live_birth')
+
+    @property
+    def infant_death(self):
+        """ On the mother: a child of hers died before the age of 1 """
+        return self._event('infant_death')
+
+    @property
+    def loss(self):
+        """ On the mother: an abortion, miscarriage, stillbirth, or infant death """
+        return self._event(('abortion', 'miscarriage', 'stillbirth', 'infant_death'))
+
+    @property
+    def since_birth(self):
+        """ Time since the last live birth (inf if never); survives later losses """
+        return ss.expressions.Since(self, 'live_birth')
+
+    def attr(self, name, dist, on='conception'):
+        """
+        A value drawn for each woman each time an event of the pregnancy happens to her, e.g. the gestational age of her
+        first antenatal visit, for conditions such as `preg.P & (preg.P.time >= anc_ga)`; agents only
+
+        Args:
+            name (str): the name of the value, an array of the module
+            dist (Dist): what it is drawn from (durations are in the sim's unit when read)
+            on (str): the event: a transition of the pregnancy (e.g. 'conception', 'delivery') or 'live_birth'
+        """
+        self.attrs[name] = sc.objdict(dist=dist, on=on)
+        self.define_states(ss.FloatArr(name, label=f'{name} (drawn at {on})'))
+        return ss.expressions.Recorded(self, name)
 
     def init_pre(self, sim):
         pars = self.pars
@@ -104,12 +144,48 @@ class Pregnancy(ss.Demographics, ss.Disease):
         dist = self.graph.pars.dur_pregnancy.raw
         self.mean_dur_pregnancy = ss.transitions.dwell_stats(dist, lambda v: ss.solvers.convert(v, 'year'))[0]
         super().init_pre(sim)
+        for name,a in self.attrs.items(): # Durations in the sim's unit
+            self.setattribute(f'rng_{name}', ss.transitions.numeric_dist(a.dist, lambda v: ss.solvers.convert(v, sim.unit_base)))
         return
 
     def step(self):
         """ The pregnancy's transitions, at the start of the step, before the diseases' """
         ss.Disease.step_state(self)
+        self.react()
         ss.Disease.step(self)
+        self.react()
+        return
+
+    def react(self):
+        """ As agents, once for each event: draw the values recorded at it (see attr()) """
+        if not self.abm:
+            return
+        for name,a in self.attrs.items():
+            uids = self.engine.fresh(('attr', name), a.on)
+            if len(uids):
+                self[name][uids] = self[f'rng_{name}'].rvs(uids)
+        return
+
+    def make_children(self, tr, parents, ti):
+        """ As agents, at a delivery: the children of the mothers (see `ss.solvers.Agents.step_per()`), and the events on the mothers """
+        engine = self.engine
+        new = engine.grow_children(tr, parents, ti)
+        self.parity[parents] += 1
+        ppl = self.sim.people
+        moms = ss.uids(np.unique(ppl.parent.raw[new]))
+        self.ti_live_birth[moms] = ti
+        engine.record_event('live_birth', moms)
+        return new
+
+    def step_die(self, uids):
+        """ As agents: take the dead out of the states, and a death before the age of 1 is an infant death for the mother """
+        super().step_die(uids)
+        if self.abm and len(uids):
+            ppl = self.sim.people
+            age, parent = ppl.age.raw[uids], ppl.parent.raw[uids]
+            infant = (age >= 0) & (age < 1) & (parent != ppl.parent.nan)
+            moms = ss.uids(np.unique(parent[infant]))
+            self.engine.record_event('infant_death', moms[ppl.alive.raw[moms]])
         return
 
     @property

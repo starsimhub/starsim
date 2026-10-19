@@ -97,8 +97,48 @@ def test_births_ode():
     return test_births(ode=True)
 
 
+@sc.timer()
+def test_events():
+    sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, ss.child(), and ANC at a visit after conception')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
+    anc_ga = preg.attr('anc_ga', ss.uniform(ss.months(1), ss.months(8))) # Per pregnancy
+    S, F, I = ss.states('S F I')
+    d = ss.Disease(S, F, I,
+        flag      = S >> F @ ss.on(preg.conception), # Edge-triggered, in the same step, whatever the module order
+        unflag    = F >> S @ ss.on(preg.delivery),
+        infection = S >> I @ ss.peryear(0.05),
+        recovery  = I >> S @ ss.years(1),
+        name='d')
+    test = lambda name: ss.Diagnostic(sensitivity=dict(I=0.9), specificity=0.99, name=name)
+    anc = ss.screen(test('t1'), where=preg.P & (preg.P.time >= anc_ga), coverage=0.85, disease='d', name='anc') # Once a pregnancy, at its visit
+    first = ss.screen(test('t2'), on=preg.conception, coverage=0.5, disease='d', name='first')
+    seen = sc.objdict(child=0, flagged=0, fresh=0, gap=[])
+    def check(sim):
+        p = sim.demographics.pregnancy
+        moms = ss.child(p.birth).uids
+        assert set(moms) == set(p.live_birth.uids)
+        seen.child += len(moms)
+        lost = p.loss.uids # Since the last live birth, through a later loss
+        sb = p.engine.eval_for(p.since_birth, lost)
+        seen.gap += list(sb[np.isfinite(sb)])
+    sim = ss.Sim(demographics=preg, diseases=d, interventions=[anc, first], analyzers=check, n_agents=10_000, **kw).run()
+    r = sim.results
+    assert 0.8*r.pregnancy.conception.sum() < r.d.flag.sum() <= r.pregnancy.conception.sum()
+    assert r.d.unflag.sum() <= r.pregnancy.delivery.sum() and r.d.unflag.sum() > 0.8*r.pregnancy.delivery.sum()
+    assert seen.child == r.pregnancy.delivery.sum() # Every delivery is a live birth here
+    assert np.isclose(r.first.delivered.sum(), 0.5*r.pregnancy.conception.sum(), rtol=0.1)
+    reached = r.pregnancy.delivery.sum() # Nearly every pregnancy reaches its visit (losses are few)
+    assert 0.7*reached < r.anc.delivered.sum() < r.pregnancy.conception.sum()
+    assert len(seen.gap) and min(seen.gap) > 0 # A loss does not reset the time since the last live birth
+    with pytest.raises(ss.CapabilityError): # Agents only
+        ss.Sim(demographics=(p := ss.Pregnancy(fertility_rate=ss.freqperyear(100))), connectors=ss.modify(p.conception, multiply=0.5, where=p.since_birth < ss.years(1)),
+               solver='ode', total_pop=1000, stratify=strat, **kw).run()
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
     births = test_births()
+    events = test_events()
     T.toc()
