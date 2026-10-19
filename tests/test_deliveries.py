@@ -513,6 +513,18 @@ def test_cascade():
         assert np.isclose(df.eligible.iloc[2], res.confirm.positive.sum(), rtol=1e-6)
     text = sim.describe(output=True)
     assert 'care (cascade of 3 steps)' in text and 'on screening.positive' in text
+
+    # The steps are registered for a subclass of ss.Sim that passes the modules in pars
+    class SubSim(ss.Sim):
+        def __init__(self, interventions=None, **kwargs):
+            super().__init__(pars=dict(interventions=interventions), **kwargs)
+    rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
+    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
+    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
+    sub = SubSim(interventions=ss.cascade(screening, confirm, treatment, name='care'), diseases=make_sis(), solver='abm', stop=120, **kw).run()
+    assert 'confirm' in sub.interventions and np.array_equal(sub.results.sis.n_I, sim.results.sis.n_I)
     assert sim.results.care.plot() is not None
 
     # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)

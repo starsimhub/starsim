@@ -111,6 +111,8 @@ class Sim(ss.Base):
             settings = [key for key in pars if key in self.pars and key not in names]
             values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.UnknownParameter when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
+            if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): their steps too, before they are copied
+                pars['interventions'] = self._add_steps(pars['interventions'])
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)

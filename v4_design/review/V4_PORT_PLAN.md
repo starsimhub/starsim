@@ -234,3 +234,4 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 72 | 331b4013 | 5ee7265c | Trimester UIDs and rel_ptb/set_ptb on ss.Pregnancy: applied cleanly. |
 | 73 | 3704190c | 8340789d | Ruling: v4 wins on condoms — protection is ss.modify(infection, efficacy=, share=lambda net: net.edges.condoms, route=) (v4 graph steers eff_condom there), so no eff_condom in net_beta. Kept: condoms edge column with edge_defaults on SexualNetwork, Disease.value(). Test rewritten to the modifier. |
 | — | 5b1a2a62 | — | Superseded by v4: an age stratification with no split takes the named world population's ages (or the people given: split_from='people'); v4-rs's uniform-0-60 People default would contradict it. Log only. |
+| 74 | 182944f6 | a66434e6 | undriven=True on ss.Transition/ss.progression silences v4's ss.UndrivenUnused (was W209); re-applied by hand onto v4's signature. |
