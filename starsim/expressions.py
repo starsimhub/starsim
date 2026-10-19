@@ -5,7 +5,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Expr', 'par', 'mother', 'attr', 'func']
+__all__ = ['Expr', 'par', 'mother', 'attr', 'func', 'spread']
 
 
 #%% Helpers
@@ -689,6 +689,46 @@ class attr(Expr):
         for k,v in self.__dict__.items():
             new.__dict__[k] = sc.dcp(v, memo=memo) if k != 'module' else memo.get(id(v), v)
         return new
+
+
+class spread:
+    """
+    Initial people who are part way through their natural history: back-dated, and run forward to the start
+
+    As `init_prev=`, the share (or number) infected at the start, infected at times uniform over `over` before it;
+    as a value of `init=`, the share in that state, having entered it then. Their declared natural history (only
+    this disease's spontaneous transitions: no transmission, demography, or interventions, and ages as at the
+    start) runs from then to the start, so they arrive spread over the stages, clocks, and attributes, and some
+    progress soon after the start. Those no longer in the target at the start are not counted: as many more are
+    back-dated. With no `over=`, they entered long enough ago that the people still there are as many as would
+    be at a constant inflow (the stationary distribution within the state).
+
+    Args:
+        value (float): the share of people (below 1) or the number (above 1)
+        over (dur/tuple): how long before the start they entered: up to a duration, or between two
+
+    Examples:
+        ```python
+        hiv = HIV(init_prev=ss.spread(0.05, over=(ss.months(5), ss.years(10))))
+        syph = Syphilis(init=dict(EL=ss.spread(0.01), LL=ss.spread(0.01)))
+        ```
+    """
+    def __init__(self, value, over=None):
+        self.value = value
+        if over is not None and not isinstance(over, (tuple, list)):
+            over = (0.0, over)
+        self.over = over
+        return
+
+    def window(self, convert):
+        """ The earliest and latest times before the start, in the sim's unit, or None """
+        if self.over is None:
+            return None
+        lo, hi = [convert(v) if isinstance(v, ss.TimePar) else float(v) for v in self.over]
+        return lo, hi
+
+    def __repr__(self):
+        return f'ss.spread({self.value}{f", over={self.over}" if self.over is not None else ""})'
 
 
 def dists_in(expr):

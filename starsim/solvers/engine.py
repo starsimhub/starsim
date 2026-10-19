@@ -1041,9 +1041,13 @@ class Engine:
         graph = self.graph
         fracs = sc.objdict({s.name:0.0 for s in graph.people_states})
         counts = sc.objdict({s.name:0.0 for s in graph.count_states})
+        self.spreads = [] # People back-dated and run forward to the start: see ss.spread and Agents.backfill_spreads()
         for state in graph.states.values():
             init = state.init
             if init is None:
+                continue
+            if isinstance(getattr(init, 'raw', init), ss.spread):
+                self.spreads.append(sc.objdict(spread=getattr(init, 'raw', init), entry=state, tr=None, target=[state.name]))
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
@@ -1085,6 +1089,13 @@ class Engine:
 
         # Initial prevalence is seeded through the transmission, so people start wherever a new infection starts
         init_prev = graph.init_prev
+        if isinstance(getattr(init_prev, 'raw', init_prev), ss.spread): # Seeded through the first transmission, back-dated
+            tr = graph.transmissions[0] if graph.transmissions else None
+            if tr is None:
+                errormsg = f'"{self.mod.name}" has no contact-mediated transition to seed init_prev through; use init= on a state instead'
+                raise ValueError(errormsg)
+            self.spreads.append(sc.objdict(spread=getattr(init_prev, 'raw', init_prev), entry=None, tr=tr, target=[s.name for s in graph.infected if s.people]))
+            init_prev = None
         if isinstance(init_prev, ss.transitions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution
             init_prev = init_prev.raw if isinstance(init_prev.raw, ss.Dist) else self.value(init_prev)
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()

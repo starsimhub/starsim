@@ -52,6 +52,8 @@ class Agents(Engine):
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
+        self._backfill = None # While seeds are back-dated: see backfill()
+        self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
         self._fired_seen = {} # For each trigger on a coded module's event, who it has seen it for: see unseen_fired()
         self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
         self._junctions = None # The states passed through at once: see junctions
@@ -1399,6 +1401,9 @@ class Agents(Engine):
     def settle_start(self):
         """ Once every module has its people (see `ss.Sim.init()`): those placed in a state nobody waits in move on at once, as they would during a step; these moves are not counted as flows """
         mod = self.mod
+        if self.spreads:
+            self.backfill_spreads()
+            self.record_stocks() # The start, again
         for key,arr in self.sets.items(): # Those placed in a set entered it when they were placed
             for name in key:
                 uids = self.members(self.graph.states[name])
@@ -1519,6 +1524,15 @@ class Agents(Engine):
     def draw(self, key, uids):
         """ Uniform draws from one of the engine's distributions, which can be called more than once in a step, since people can move more than once in a step """
         dist = self.dists[key]
+        if self._backfill is not None: # Before the start (see backfill()): from draws of its own, and the distribution left as it was
+            ind, ready = dist.ind, dist.ready
+            self._backfill += 1
+            dist.jump(to=10**12 + self._backfill, force=True)
+            try:
+                return dist.rvs(uids)
+            finally:
+                dist.jump(to=ind, force=True)
+                dist.ready = ready
         if not dist.ready:
             dist.jump()
         return dist.rvs(uids)
@@ -1753,6 +1767,170 @@ class Agents(Engine):
             rvs = rvs*(mean if np.ndim(mean) == 0 or len(mean) == len(uids) else np.asarray(mean)[uids])
         with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a where=) is a dwell that does not end until it changes: see rescale_exits()
             return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
+
+    #%% Seeds part way through their natural history (ss.spread)
+
+    def spread_horizon(self, entry):
+        """ For ss.spread with no over=: how many steps back people enter a state for those still there to be stationary (ten times the mean time to leave it) """
+        exits = self.graph.exits[entry.name]
+        rate = 0.0
+        for tr in exits.branches + exits.timed + sc.tolist(exits.remainder):
+            if tr.name in self.dwells:
+                try:
+                    rate = max(rate, 1/float(np.mean(self.dwell_mean(tr.name))))
+                except Exception:
+                    pass
+        for tr in self.competing[entry.name]:
+            try:
+                rate += float(np.mean(self.value(tr.rate)))
+            except Exception:
+                pass
+        horizon = 10/rate if rate > 0 else 20*self.convert(ss.years(1))
+        return int(np.clip(np.ceil(horizon/self.dt), 12, 2000))
+
+    def backfill_spreads(self):
+        """
+        People who start part way through their natural history (`ss.spread`): taken from the first state, back-dated
+        to times uniform over the window, and run forward to the start by the disease's spontaneous transitions only
+        (see `backfill()`); those still in the target at the start are kept, and as many more are back-dated as were
+        lost (from the share kept by the first). Those who died are removed; any left over are put back.
+        """
+        mod = self.mod
+        sim = self.sim
+        people = sim.people
+        first = self.graph.first
+        rng = np.random.default_rng([int(sim.pars.rand_seed or 0), sum(ord(c) for c in mod.name), 7])
+        used = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+        for sp in self.spreads:
+            x = sp.spread.value
+            want = int(round(x*len(people) if x <= 1 else x/self.scale))
+            window = sp.spread.window(self.convert)
+            lo, hi = (0, self.spread_horizon(sp.entry if sp.entry is not None else sp.tr.dst[0])) if window is None else [int(round(v/self.dt)) for v in window]
+            hi = max(hi, lo)
+            kept = ss.uids()
+            share = 1.0
+            for attempt in range(4):
+                need = want - len(kept)
+                if need <= 0:
+                    break
+                pool = self.members(first)
+                pool = pool[~used[pool]]
+                n = min(int(np.ceil(need/max(share, 0.02))), len(pool))
+                if n <= 0:
+                    break
+                chosen = ss.uids(np.sort(rng.choice(pool, n, replace=False)))
+                used[chosen] = True
+                t0 = -rng.integers(lo, hi + 1, size=n) - 1 # Entered in one of the steps before the start
+                self.backfill(chosen, sp, t0)
+                inside = np.zeros(len(chosen), dtype=bool)
+                for name in sp.target:
+                    inside |= mod[name].raw[chosen]
+                survivors = chosen[inside]
+                share = max(len(survivors)/n, 1e-3)
+                kept = ss.uids.concatenate([kept, survivors])
+                back = chosen[~inside & self.alive_in_states(chosen)] # Left the target, e.g. to the first state: they count as not seeded, and can be chosen again
+                self.reset_people(back)
+                used[back] = False
+            if len(kept) > want: # Back to the first state
+                self.reset_people(ss.uids(np.sort(rng.choice(kept, len(kept) - want, replace=False))))
+            what = 'infected' if sp.tr is not None else f'in {sp.entry.name}'
+            when = '[' + ', '.join(f'{v*self.dt:n}' for v in [lo, hi]) + ']' + (f' {sim.pars.unit}s' if sim.pars.get('unit') else ' steps') if window is not None else 'long enough to be stationary'
+            ss.note(f'{mod.name}: {x:n} {what}, back-dated over {when} (natural history only; ages as at the start)', sim=sim)
+        people.step_die() # Those who died before the start are gone before it is counted
+        people.remove_dead()
+        self.live = None # Counted again
+        return
+
+    def alive_in_states(self, uids):
+        """ Whether each of some agents is in a state of this module """
+        out = np.zeros(len(uids), dtype=bool)
+        for state in self.graph.people_states:
+            out |= self.mod[state.name].raw[uids]
+        return out
+
+    def reset_people(self, uids):
+        """ Put agents back in the first state at the start, with no attributes: as if never seeded """
+        if not len(uids):
+            return
+        mod = self.mod
+        first = self.graph.first.name
+        for state in self.graph.people_states:
+            inds = uids[mod[state.name].raw[uids]]
+            mod[state.name][inds] = False
+            self.clear_exit(state.name, inds)
+            mod[f'ti_{state.name}'][inds] = np.nan
+        for key,arr in self.sets.items():
+            mod[arr][uids] = np.nan
+        for a in getattr(self, 'attrs', {}).values():
+            if a.kind not in ['derived', 'trait']:
+                mod[a.name][uids] = a.default
+        mod[first][uids] = True
+        mod[f'ti_{first}'][uids] = 0
+        return
+
+    def backfill(self, seeds, sp, t0):
+        """
+        Run some agents' natural history from before the start: each enters at the step `t0` (negative), along the
+        first transmission (for init_prev) or straight into a state (for init=), and from then the disease's
+        spontaneous transitions move them, a step at a time, to the start, with draws of their own (see `draw()`)
+        """
+        if not len(seeds):
+            return
+        mod = self.mod
+        graph = self.graph
+        first = graph.first
+        saved = mod.t.ti
+        self._backfill = 0
+        active = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+        self._moved = []
+        try:
+            for k in range(int(t0.min()), 0):
+                mod.t.ti = k
+                new = seeds[t0 == k]
+                if len(new):
+                    active[new] = True
+                    if sp.tr is not None: # As a new infection, to where one goes
+                        self.move(sp.tr, first, new)
+                    else:
+                        mod[first.name][new] = False
+                        self.clear_exit(first.name, new)
+                        self.enter(sp.entry, new, k)
+                    self.finish_moves(k)
+                for state in graph.people_states:
+                    name = state.name
+                    uids = self.members(state)
+                    uids = uids[active[uids]]
+                    if not len(uids) or name not in self.listed:
+                        continue
+                    exits = graph.exits[name]
+                    candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
+                    if candidates: # Scheduled exits that are due
+                        unscheduled = uids[np.isnan(mod[f'ti_exit_{name}'].raw[uids])]
+                        if len(unscheduled):
+                            self.schedule(state, unscheduled)
+                        due = mod[f'ti_exit_{name}'].raw[uids] <= k
+                        which = mod[f'exit_{name}'][uids]
+                        for i,tr in enumerate(candidates):
+                            self.move(tr, state, uids[due & (which == i)])
+                        uids = uids[~due]
+                    if self.competing[name] and len(uids):
+                        self.draw_competing(state, uids, self.dt, key=f'exit_{name}')
+                self._drawn_ti = k
+                self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+                self.finish_moves(k)
+                self._row = None
+        finally:
+            mod.t.ti = saved
+            self._backfill = None
+            self._row = None
+            self._moved = []
+        for name in self.flowcounts: # Not part of the run
+            self.flowcounts[name] = 0.0
+        self.flow_groups = sc.objdict()
+        self.events = dict()
+        self.batches = []
+        self._died = []
+        return
 
     #%% Stepping
 

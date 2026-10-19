@@ -523,6 +523,8 @@ class Compartmental(Engine):
     def init_post(self):
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
+        if self.spreads: # Phase B: the natural history fed a constant inflow over the window, stepped to the start
+            raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}" has no compartmental form yet. Run with solver="abm".')
         self.update_targets()
         amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
         first = self.graph.first.name if self.graph.people_states else None

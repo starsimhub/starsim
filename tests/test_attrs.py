@@ -193,6 +193,38 @@ def test_attr_rules():
 
 
 @sc.timer()
+def test_spread():
+    sc.heading('ss.spread: seeds back-dated and run forward, so they start part way through (proposal 01 §7.6)')
+    kw2 = dict(start=1990, stop=1996, dt=ss.months(1), unit='year', **kw)
+    out = sc.objdict()
+    for label,init_prev in [('plain', 0.05), ('abm', ss.spread(0.05, over=(ss.months(5), ss.years(10))))]:
+        hiv, mods = make_hiv(init_prev=init_prev, art=ss.peryear(0))
+        sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=20_000, **kw2).run()
+        r = sim.results.hiv
+        out[label] = sc.objdict(n=r.n_acute[0] + r.n_latent[0] + r.n_falling[0], falling=r.n_falling[0], prog=r.progression[:37].sum(), aids=r.aids_death[:37].sum())
+    p, a = out.plain, out.abm
+    assert p.prog == 0 and p.falling == 0 # Without it, nobody progresses for years
+    assert np.isclose(a.n, 1000, atol=2) and a.falling > 50 and a.prog > 100 and a.aids > 50, out
+
+    # No over=: stationary within the state; with a fixed dwell of 10 days, those there leave evenly over the first 10
+    r = ss.Sim(make_spread_ab(), n_agents=10_000, start=0, stop=20, unit='day', **kw).run().results.d
+    assert np.isclose(r.n_B[0], 1000, atol=2) and np.isclose(r.bc[1:11].sum(), 1000, atol=5) and r.bc[11:].sum() == 0
+    assert np.allclose(r.bc[1:11], 100, atol=40), r.bc[:12]
+    return out
+
+
+def make_spread_ab():
+    A, B, C = ss.states('A B C')
+    return ss.Disease(A, B, C, ab=A >> B @ 0, bc=ss.Transition(B, C, dur=ss.constant(ss.days(10))), init=dict(B=ss.spread(0.1)), name='d')
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B: ss.spread as compartments (the natural history fed a constant inflow over the window) is deferred')
+def test_spread_ode():
+    r = ss.Sim(make_spread_ab(), solver='ode', total_pop=10_000, start=0, stop=20, unit='day', **kw).run().results.d
+    assert np.isclose(r.n_B[0], 1000) and np.allclose(r.bc[1:11], 100, atol=1e-6), r.bc[:12]
+
+
+@sc.timer()
 def test_attr_errors():
     sc.heading('Attributes: read where they have no value')
     with pytest.raises(ss.ClockOutsideDomain): # A case of a derived attribute reads a clock of another state
@@ -214,4 +246,5 @@ if __name__ == '__main__':
     test_hiv_cd4()
     test_hpv_nab()
     test_attr_rules()
+    test_spread()
     test_attr_errors()

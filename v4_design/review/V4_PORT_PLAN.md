@@ -222,3 +222,7 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 64 | c856e39b | 12bfb7f4 | Ported onto v4's add_people (fetuses in each module's first state, aged below 0); the unborn are in a declared disease's states and not among the people, as v4 decided (test_mtct), so the test counts them in; has_unborn is v4's people.unborn_uids(), which now includes a declared ss.Pregnancy with fetuses |
 | 65 | d40c3218 | 0c5b7fa1 | Ported; ss.Lactation added in v4's choose_solver(); a triggered split with ss.stay is accepted (the check counted its one real destination); set_pars is pars.update |
 | 66 | ccdf8309 | 594327a0 | Starsim 3 names/results/callbacks/p_maternal_death on ss.Pregnancy. Ruling: no Recorder — v4's ss.Event arrays on LegacyPregnancy (conception/delivery/loss) serve ss.on(); triggers on a coded/delivery event move each person once per firing (unseen_fired), else S>>F@on(conception)/F>>S@on(delivery) looped. No birth/live_birth events on LegacyPregnancy (v4 has 3). Test allows fractional due times (one step). |
+| 67 | 195c7859 | 2fd714c2 | Ruling: v4's increment= replaces move='+1' — a parity dimension makes delivery increment=dict(parity=1); the solvers.py part (+k moves) dropped as v4's counters do it. Postpartum ODE half is a strict xfail (Phase B1: clocks as compartments). |
+| 68 | 16643b84 | — | implementation.md (v4-rs design doc): log only |
+| — | c9920adf | — | B6 (attributes as compartments): deferred |
+| — | 314e523c | — | B6 (attributes as compartments; HIV CD4 ODE test): deferred |
