@@ -240,6 +240,19 @@ def test_strains():
     with pytest.raises(ss.ShapeError):
         flu(np.eye(3))
 
+    # A declared ratio whose denominator has no strain (susceptibles carry none) keeps its strata: the denominator is the whole of it for each strain
+    def amr():
+        S, I = ss.states('S I')
+        infection = ss.transmission('S -> I', beta=ss.perday(0.1))
+        d = ss.Disease(S, I, infection=infection, recovery=ss.progression('I -> S', dur=ss.days(20)), incidence=infection/S, prev=I/(S + I), init_prev=0.05, name='d')
+        return d.stratify(amr=['sens', 'res'], kind='strain')
+    for solver in ['ode', 'abm']:
+        r = run(amr(), solver, unit='day', stop=50).results.d
+        n = (r.n_S + r.n_I)[-1]
+        assert np.isclose(r.incidence.select(amr='res')[-1], r.infection.select(amr='res')[-1]/r.n_S[-1])
+        assert np.allclose(r.incidence.by('amr').values.sum(axis=1)[1:], r.incidence[1:]) and r.incidence[-1] > 0
+        assert np.isclose(r.prev.select(amr='sens')[-1], r.n_I.select(amr='sens')[-1]/n)
+
     return sims
 
 

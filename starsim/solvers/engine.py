@@ -1253,16 +1253,23 @@ class Engine:
             if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
                 dims['new_infections'] = np.ones(len(names), dtype=bool)
             self.ratios = sc.objdict() # The results that are a ratio of two sums of states, as (numerator, denominator)
+            self.denom_dims = sc.objdict() # For a ratio whose denominator has fewer dimensions than its numerator: the denominator's
             for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
                 parts = [expr.a, expr.b] if isinstance(expr, ss.transitions.BinOp) and expr.op == '/' else [expr]
                 plain = all(all(isinstance(leaf, (ss.State, ss.par, ss.transitions.Flow)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
                 if not plain: # E.g. a count (I.n), which is the total over every group, so the result is not by group
                     continue
-                flags = [self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for part in parts for leaf in part.leaves if not isinstance(leaf, ss.par)]
-                if flags and all(np.array_equal(f, flags[0]) for f in flags):
-                    dims[name] = flags[0]
-                    if len(parts) == 2:
+                flags = [[self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for leaf in part.leaves if not isinstance(leaf, ss.par)] for part in parts]
+                same = all(len(f) for f in flags) and all(np.array_equal(x, flags[0][0]) for x in flags[0]) # Within the numerator (or the sum)
+                if same and len(parts) == 1:
+                    dims[name] = flags[0][0]
+                elif same:
+                    den = np.all(flags[1], axis=0) # The dimensions every part of the denominator has; it is added up over the others
+                    if np.all(flags[0][0] >= den): # None that the numerator lacks
+                        dims[name] = flags[0][0]
                         self.ratios[name] = parts
+                        if not all(np.array_equal(x, flags[0][0]) for x in flags[1]): # E.g. infection/S with a strain, which susceptibles do not carry
+                            self.denom_dims[name] = [n for n,flag in zip(names, den) if flag]
             for name,info in self.outcomes.items(): # An outcome has the dimensions of what it is counted from (in order, since outcomes can chain)
                 dims[name] = np.any([dims[key] for key,weight in info.sources if key in dims], axis=0)
                 if f'n_{name}' in mod.results:
@@ -1276,6 +1283,8 @@ class Engine:
             n_rows = mod.t.npts if self.rows is None else len(self.group_ti)
             for res,flags in grouped:
                 res.init_groups(self.sim.groups.strats, [name for name,flag in zip(names, flags) if flag], (n_rows, ng), self.group_ti, ratio=res.name in self.ratios)
+                if res.name in self.denom_dims:
+                    res.denom_dims = self.denom_dims[res.name]
         self.init_derived_results()
         return
 
