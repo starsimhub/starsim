@@ -168,11 +168,51 @@ def test_connectors(do_plot=False):
     return sims
 
 
+def test_lazy_arrays():
+    """ A lazy condition on another module's array (not a declared state) is resolved in that module """
+    sc.heading('Testing lazy conditions on module arrays')
+    class HIV(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        infection = S >> I @ 0.0 * I
+        def __init__(self, **kwargs):
+            super().__init__(init_prev=0.2, **kwargs)
+            self.define_states(ss.FloatArr('cd4', default=ss.choice([300, 800])), ss.BoolArr('flag', default=ss.bernoulli(0.5)))
+            return
+
+    class Syph(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        infection = S >> I @ 0.2 * I
+
+    class Net(ss.RandomNet):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.BoolArr('core', default=ss.bernoulli(0.5)))
+            return
+
+    for which in ['cd4', 'flag', 'core']:
+        hiv, syph, net = HIV(name='hiv'), Syph(name='syph', init_prev=0.05), Net(name='net')
+        where = dict(cd4=hiv.cd4 >= 500, flag=~hiv.flag, core=~net.core)[which]
+        protect = ss.modify(syph.rel_sus, multiply=0, where=where)
+        sim = ss.Sim([hiv, syph], connectors=protect, networks=net, n_agents=1000, stop=2005, verbose=0, rand_seed=1).init()
+        syph = sim.diseases.syph
+        seeds = syph.I.uids
+        sim.run()
+        mods = dict(cd4=sim.diseases.hiv, flag=sim.diseases.hiv, core=sim.networks.net)
+        new = syph.I.uids.remove(seeds) # Infected during the run
+        arr = mods[which][which]
+        protected = (arr[new] >= 500) if which == 'cd4' else ~arr[new]
+        assert len(new) and not protected.any(), f'{which}: {protected.sum()} of {len(new)} infected were protected'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
     T = sc.timer()
 
     sims = test_connectors(do_plot=do_plot)
+    lazy = test_lazy_arrays()
 
     T.toc()
