@@ -227,6 +227,10 @@ class Graph(Presentation):
 
         # Either check the strings against the declared states, or infer the states from them
         names = [s.name for s in declared]
+        for string in strings:
+            if not isinstance(string, str): # e.g. ss.Transition(A + B, C): a sum of states is a count, for a rate, not where people move from
+                states = sc.strjoin(leaf.name for leaf in getattr(string, 'leaves', []) if isinstance(leaf, State)) or str(string)
+                raise TypeError(f'the source or destination of a transition is a state or a list of states, not {string}; for people moving out of either, write [{states}]')
         if declared:
             for string in strings:
                 if string not in names:
@@ -549,7 +553,7 @@ class Graph(Presentation):
                         if leaf.name is None:
                             leaf.name = find_name(leaf, frame)
                         if leaf.name is None:
-                            errormsg = f'Could not find a name for the parameter {leaf.value} used in "{name}"; give it one with ss.par(..., name="beta")'
+                            errormsg = f'Could not find a name for the parameter {leaf.value} used in "{name}"; give it one, e.g. ss.par({leaf.value}, name="{name}_{leaf.slot or "p"}")'
                             raise ValueError(errormsg)
                         self._add_par(leaf, name=leaf.name)
         return
@@ -571,12 +575,24 @@ class Graph(Presentation):
                     exits.branches.append(tr)
                 elif tr.dur is not None:
                     exits.timed.append(tr)
+                elif tr.rate is None and len(tr.dst) > 1: # Several destinations and no wait: say how to write an immediate split
+                    names = [d.name for d in tr.dst]
+                    example = ', '.join(f'{tr.name}_{n}=ss.Transition({state.name}, {n}, p={p})' for n,p in zip(names, [str(v) if v is not None else 'None' for v in sc.tolist(tr.p)]))
+                    raise ss.UndrivenTransition(f'the transition "{tr.name}" ({state.name} -> {sc.strjoin(names)}) has p= but no rate and no duration (dur=), so nothing says when people leave. '
+                                                f'For a split as soon as people arrive, write one transition for each destination: {example}; or give it dur=.')
                 else:
                     exits.hazards.append(tr)
 
-        # A single timed transition with no p= takes whatever the branches leave over
+        # A single timed transition with no p= takes whatever the branches leave over: the only one, or the only one for the same people (the same where=) as the branches
         for name,exits in self.exits.items():
             exits.remainder = None
+            apart = [] # Timed exits for other people (another where=), which compete as before
+            if exits.branches and len(exits.timed) > 1:
+                wheres = {id(getattr(tr, 'where', None)) for tr in exits.branches}
+                same = [tr for tr in exits.timed if len(wheres) == 1 and id(getattr(tr, 'where', None)) in wheres]
+                if len(same) == 1: # e.g. women split between CIN and clearance, and men only clear: the clearance of women is the remainder
+                    apart = [tr for tr in exits.timed if tr is not same[0]]
+                    exits.timed = same
             if exits.branches:
                 ps = [tr.p[0] for tr in exits.branches]
                 const = all(isinstance(p, par) and sc.isnumber(p.raw) for p in ps)
@@ -592,6 +608,7 @@ class Graph(Presentation):
                         why = f' {sc.strjoin(tr.name for tr in exits.hazards)} {"has" if len(exits.hazards) == 1 else "have"} a rate and no p=, so {"it competes" if len(exits.hazards) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and exits.hazards and not exits.timed else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
                                                 f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in exits.branches])}).{why}')
+            exits.timed += apart
         return
 
     def check(self):

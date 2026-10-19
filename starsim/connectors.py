@@ -135,8 +135,8 @@ def combine(mods, value, engine):
     for op in ['set', 'multiply', 'add']:
         for mod in active:
             if mod.op == op:
-                if isinstance(value, dict):
-                    value = {k:mod.apply(v, engine) for k,v in value.items()}
+                if isinstance(value, dict): # A value for each route, and for a pair of directions on one
+                    value = {k:[mod.apply(x, engine) for x in v] if isinstance(v, (list, tuple)) else mod.apply(v, engine) for k,v in value.items()}
                 else:
                     value = mod.apply(value, engine)
     return value
@@ -225,6 +225,10 @@ class modify(Connector):
         if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
             self.name = self.label = f'{self.target_name or self.target_kind}_{self.op}'
         self.amount = dict(multiply=multiply, add=add, set=set)[self.op]
+        if isinstance(self.amount, ss.Arr) and getattr(self.amount, 'mod', None) is not None: # A module's array, e.g. multiply=coded.factor: read from the sim by name, so it is not taken as a state of this modifier, and follows the sim's own copy
+            modname, arrname = self.amount.mod.name, self.amount.name
+            self.amount = lambda sim: getattr(sim.get_module(modname), arrname).raw
+            self.amount.__name__ = f'{modname}.{arrname}'
         self.where = None if where is None else ss.conditions.as_cond(where)
         self.start = start
         self.stop = stop

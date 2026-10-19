@@ -258,7 +258,9 @@ class Selector:
         sim = self.sim
         if name is None:
             return self.mod
-        mods = {mod.name:mod for mod in sim.modules}
+        mods = sim.__dict__.get('_modules_by_name') # Kept on the sim (each leaf of each condition asks, every step), and made again if a name is not in it
+        if mods is None or name not in mods:
+            mods = sim.__dict__['_modules_by_name'] = {mod.name:mod for mod in sim.modules}
         if name not in mods:
             errormsg = f'A condition refers to the module "{name}", which is not in the sim; the modules are {sc.strjoin(mods.keys())}'
             raise KeyError(errormsg)

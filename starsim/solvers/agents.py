@@ -617,7 +617,7 @@ class Agents(Engine):
                 mod[f'ti_{dst.name}'][inds] = ti
                 self.enter_dims(tr, srcs[name], uidlist, dst, inds)
                 for d,level in (self.moves(tr) or ()): # A change of level as well as of state
-                    self.sim.people[self.sim.groups.strats[d].attr][inds] = level
+                    self.sim.people[self.sim.groups.strats[d].attr][inds] = self.sim.groups.strats[d].value(level)
                     self.sim.groups.groups_changed(inds)
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
@@ -672,12 +672,16 @@ class Agents(Engine):
                 if lacked:
                     new = uids[np.isin(uids, ss.uids.concatenate(lacked))]
                     if len(new):
-                        sim.people[strat.attr][new] = strat.draw(sim, new, self.dists[key].rvs(new))
+                        sim.people[strat.attr][new] = strat.value(strat.draw(sim, new, self.dists[key].rvs(new)))
                         sim.groups.groups_changed(new)
         return
 
     def branch_probs_for(self, tr, uids):
         ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
+        if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of shares for each person (a switching matrix): not supported yet
+            raise ss.CapabilityError(f'p= of "{tr.name}" gave a row of probabilities for each person, but each entry of p= is one destination\'s probability (one value per person); '
+                                     f'give one per destination, e.g. p=[f_{tr.dst[0].name}, None], where each function returns one value per person')
+
         rest = 1.0 - sum(p for p in ps if p is not None)
         return self.dest_shares(tr, [rest if p is None else p for p in ps], uids)
 
@@ -1043,21 +1047,22 @@ class Agents(Engine):
                 raise ValueError(errormsg)
             arr = sim.people[strat.attr]
             dst = strat.index(tf.dst)
-            eligible = (arr == strat.index(tf.src)) if tf.src is not None else (arr != dst)
             d = sim.groups.dim_index(tf.dim)
+            uids = sim.people.auids
+            level = sim.groups.level_raw(d)[uids] # By level, not value: people of a numeric dimension hold values within each level
+            uids = uids[(level == strat.index(tf.src)) if tf.src is not None else (level != dst)]
             states = [name for name in (tf.states or [s.name for s in self.graph.people_states]) if self.applies[name][d]] # Only people in states that have the dimension can move along it
             if len(states) < len(self.graph.people_states):
                 in_states = mod[states[0]]
                 for state in states[1:]:
                     in_states = in_states | mod[state]
-                eligible = eligible & in_states
-            uids = eligible.uids
+                uids = uids[in_states.raw[uids]]
             if len(uids):
                 hazard = (self.eval_for(tf.rate, uids) if tf.rate is not None else 1/self.eval_for(tf.dur, uids))*self.mult('transition', tf.name, uids)
                 moving = uids[self.dists[f'transfer_{name}'].rvs(uids) < -np.expm1(-np.maximum(hazard, 0)*dt)]
                 self.flowcounts[name] += self.n_of(moving)
                 self.flow_groups[name] = np.bincount(self.groups(moving), weights=self.weights(moving), minlength=sim.groups.n_groups)
-                arr[moving] = dst
+                arr[moving] = strat.value(dst)
                 sim.groups.groups_changed(moving)
         rates = sim.mixing.migration
         if rates is not None and mod is sim.declared[0]: # People relocating between places; they are the same people for every module, so it is done once
@@ -1270,7 +1275,7 @@ class Agents(Engine):
         d = sim.mixing.space
         for i,strat in enumerate(sim.groups.strats): # The place given, and the other levels as people are born into them
             if i == d:
-                people[strat.attr][new] = dsts
+                people[strat.attr][new] = strat.value(dsts)
             elif strat.kind == 'age':
                 if strat.edges is None:
                     people[strat.attr][new] = 0
@@ -1278,7 +1283,7 @@ class Agents(Engine):
                     people.age[new] = strat.edges[0]
             elif strat.female is None: # A sex dimension is people.female, as drawn when the agents were made: see ss.People.grow()
                 rvs = self.dists[f'{key}_{strat.name}'].rvs(new)
-                people[strat.attr][new] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+                people[strat.attr][new] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1))
         rvs = self.dists[f'{key}_state'].rvs(new)
         sim.groups.groups_changed(new) # Before they enter their states, so they are counted in their groups: see wrote()
         for mod in sim.declared:
@@ -1497,7 +1502,7 @@ class Agents(Engine):
         uids = ss.uids(uids)
         if carried:
             strain = self.carriage.adds[self.strain_raw()[uids], strain]
-        sim.people[sim.groups.strats[self.strain].attr][uids] = strain
+        sim.people[sim.groups.strats[self.strain].attr][uids] = sim.groups.strats[self.strain].value(strain)
         if self.immunity is not None: # Every strain each person has had, so that each protects them
             self.mod.strains_had[uids] = self.mod.strains_had[uids] | (1 << np.asarray(strain, dtype=int))
         sim.groups.groups_changed(uids)

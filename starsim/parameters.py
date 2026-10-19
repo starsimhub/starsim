@@ -657,10 +657,10 @@ class SimPars(Pars):
 
 
 def check_verbose(verbose):
-    """ Check that `verbose` is 0 (print nothing), 1 (the solver, notes, and progress), or 2 (everything), and return it as an integer """
+    """ Check that `verbose` is 0 (print nothing), 1 (the solver, notes, and progress), or 2 or more (everything), and return it as an integer """
     if sc.isnumber(verbose) and verbose >= 0 and verbose == int(verbose): # Includes True and False
         return int(verbose)
-    errormsg = f'verbose must be 0 (print nothing), 1 (the solver, notes, and progress), or 2 (everything), not {verbose!r}'
+    errormsg = f'verbose must be 0 (print nothing), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
     if sc.isnumber(verbose) and 0 < verbose < 1:
         errormsg += '. A fraction of the steps (e.g. verbose=0.1 in Starsim 3) is now verbose=1, which shows the progress about ten times a run'
     elif verbose in ['brief', -1]:
@@ -1044,6 +1044,9 @@ class timeseries(TimeValue):
             if np.any(np.diff(out) <= 0):
                 errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
                 raise ValueError(errormsg)
+            start, stop = sim.t.yearvec[0], sim.t.yearvec[-1]
+            if len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # e.g. days of the year (0 to 365) beside calendar years: the value is flat over the run
+                ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout; bare times are in the sim\'s unit ({sim.unit_base}s, or calendar years beside a year-like start); for another unit, give typed times, e.g. ss.days([...])', sim=sim)
             self._years = (sim, np.array(out, dtype=float))
         return self._years[1]
 

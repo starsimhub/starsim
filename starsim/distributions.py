@@ -2066,10 +2066,17 @@ class choice(Dist):
     to use ss.bernoulli() instead.
     """
     valid_pars = ['a', 'p', 'replace', 'dtype']
-    scaling = scale_types.false
+    scaling = scale_types.postdraw # A choice is one of its values, so values with a unit (unit=, or typed values) are the numbers times the unit
     unitless_pars = ('p',)
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
+        items = [a] if isinstance(a, ss.TimePar) else sc.tolist(a) if not np.isscalar(a) else []
+        if items and all(isinstance(v, ss.TimePar) for v in items): # e.g. a=[ss.months(9), ss.months(10)] or ss.years([1, 2]): the numbers, in the unit of the first
+            unit = type(items[0])
+            if kwargs.get('unit') is not None:
+                raise ValueError(f'ss.choice() has typed values ({items[0]!r}, ...) and unit={kwargs["unit"]!r}; give one or the other')
+            a = np.concatenate([np.atleast_1d(np.asarray((v if type(v) is unit else unit(v)).value, dtype=float)) for v in items])
+            kwargs['unit'] = unit
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
         if not replace:
             # Sampling without replacement is a joint draw over all elements, so it
@@ -2152,7 +2159,7 @@ class histogram(Dist):
         ```
     """
     valid_pars = ['values', 'bins', 'density', 'data']
-    scaling = scale_types.false
+    scaling = scale_types.postdraw # Its draws are within its bins, so bins with a unit (unit=) are the numbers times the unit
 
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
         if data is not None:

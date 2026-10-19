@@ -231,7 +231,8 @@ class MultiSim:
             for p in sets:
                 for i in range(sc.ifelse(n_runs, 1)):
                     out.append(sim if n_runs is None and p is None else make_run(sim, p, sim.pars.rand_seed + i)) # A sim run once as it is is run itself
-                    rows.append(dict(scenario=sim.label or '', **(p or {})))
+                    tag = ', '.join(f'{k}={v:n}' if sc.isnumber(v) else f'{k}={v}' for k,v in (p or {}).items()) # A set of swept values is a scenario of its own
+                    rows.append(dict(scenario=f'{sim.label}: {tag}' if sim.label and tag else (sim.label or tag), **(p or {})))
         return out, pd.DataFrame(rows)
 
     def init_sims(self, **kwargs):

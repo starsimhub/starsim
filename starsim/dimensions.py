@@ -115,6 +115,7 @@ class Strat:
         if isinstance(split, by):
             self.joint = split
             split = None
+        self.split_given = split is not None or self.joint is not None
         if split is not None:
             split = np.array(split, dtype=float)
             if len(split) != self.n:
@@ -199,6 +200,10 @@ class Strat:
     def attr(self):
         """ The name of the property of people that holds each agent's level; a dimension with labels that is named like something people already have (age) is kept apart from it """
         return f'{self.name}_group' if (self.name == 'age' and self.edges is None) else self.name
+
+    def value(self, index):
+        """ The value people hold for a level, given its position: the level's lower edge for a numeric dimension (people hold values, which are binned into levels), the position itself otherwise """
+        return index if self.edges is None else self.edges[np.asarray(index, dtype=int)]
 
     def people_arr(self):
         """ The property of people that holds each agent's level, when they do not have it already: for a dimension with labels, the level itself, as 16-bit integers (so with one dimension it is also the group: see `Groups.group_raw()`); for a binned one, floats """
@@ -416,6 +421,9 @@ class Groups:
                     raise ss.DuplicateStructuralDimension(f'the sim is already stratified by "{strat.name}".')
                 strats[strat.name] = strat
                 self.sim_strats.append(strat)
+        for strat in strats.values(): # An age group nobody is in: the edges are lower edges, so [0, 15, 120] has a group 120+
+            if strat.kind == 'age' and strat.edges is not None and strat.edges[-1] >= 100:
+                ss.note(f'the age group {strat.labels[-1]} of "{strat.name}" is empty, since ages run to 100; the edges are the lower edges of each group, so the last is open-ended', sim=sim)
         if self.sim_strats and not sim.declared: # Only modules written as code, which keep their own results
             names = sc.strjoin(strat.name for strat in self.sim_strats)
             ss.note(f'the sim is stratified by {names}, but none of its modules is declared, so no results are by group; modules written as code can read the levels as people.{self.sim_strats[0].attr}', sim=sim)
@@ -618,7 +626,8 @@ class Groups:
         """ The position of a stratification dimension """
         names = [strat.name for strat in self.strats]
         if name not in names:
-            errormsg = f'The model is not stratified by "{name}"; its dimensions are {names}'
+            example = "sex=['female', 'male']" if name == 'sex' else f'{name}=[...]'
+            errormsg = f'The model is not stratified by "{name}"; its dimensions are {names}. Add e.g. sim.stratify({example}), which as agents adds no compartments'
             raise KeyError(errormsg)
         return names.index(name)
 
@@ -751,14 +760,17 @@ class Groups:
         people = sim.people
         uids = people.auids
         joint = self.joint[0] if self.joint is not None else []
+        own = getattr(self, 'kept', set()) # Properties the people came with, which are kept and binned (see ss.Sim.init_people())
         for d,strat in enumerate(self.strats):
+            if strat.name in own:
+                continue
             if strat.female is not None and d not in joint and strat.cond is None: # A sex dimension is people.female, whose share is the split: see init_people()
                 self.set_sex(uids)
             elif strat.kind != 'age' and d not in joint and strat.cond is None: # Exactly the split, rounded to whole agents, in a random order
                 order = np.argsort(getattr(sim, f'rng_strat_{strat.name}').rvs(uids), kind='stable')
                 counts = ss.solvers.Compartmental.round_preserving(strat.split*len(uids)).astype(int)
                 levels = np.repeat(np.arange(strat.n, dtype=level_dtype(strat.n)), counts) # As they are kept, to save memory
-                people[strat.attr][uids[order]] = levels
+                people[strat.attr][uids[order]] = strat.value(levels)
         if joint: # The levels of a joint split, together, given the age group if age is one of them
             ds, grid = self.joint
             ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
@@ -770,11 +782,11 @@ class Groups:
             rvs = getattr(sim, f'rng_strat_{self.strats[ds[others[0]]].name}').rvs(uids)
             cell = np.minimum((cdf[row] <= rvs[:, None]).sum(axis=1), grid.shape[1] - 1)
             for i,level in zip(others, np.unravel_index(cell, [self.strats[ds[i]].n for i in others])):
-                people[self.strats[ds[i]].attr][uids] = level
+                people[self.strats[ds[i]].attr][uids] = self.strats[ds[i]].value(level)
         for strat in self.strats: # A split given the levels of other dimensions, once those are known
             if strat.cond is not None:
                 self.groups_changed()
-                people[strat.attr][uids] = strat.draw(sim, uids, getattr(sim, f'rng_strat_{strat.name}').rvs(uids))
+                people[strat.attr][uids] = strat.value(strat.draw(sim, uids, getattr(sim, f'rng_strat_{strat.name}').rvs(uids)))
         if joint or any(strat.cond is not None for strat in self.strats): # A sex drawn with other dimensions sets people.female
             self.set_sex(uids, from_level=True)
         self.groups_changed()
@@ -789,9 +801,9 @@ class Groups:
                 continue
             rvs = getattr(sim, f'rng_strat_{strat.name}').rvs(uids)
             if strat.cond is not None:
-                people[strat.attr][uids] = strat.draw(sim, uids, rvs)
+                people[strat.attr][uids] = strat.value(strat.draw(sim, uids, rvs))
             else:
-                people[strat.attr][uids] = np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1)
+                people[strat.attr][uids] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1))
         self.groups_changed(uids)
         return
 

@@ -11,6 +11,19 @@ import matplotlib.pyplot as plt
 
 
 
+class Levels(sc.objdict):
+    """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
+    def plot(self, fig=None, ax=None, **kwargs):
+        """ Plot each level's median and interval on the same axes """
+        for label,res in self.items():
+            out = res.plot(fig=fig, ax=ax, label=label, **kwargs)
+            fig = out if fig is None else fig
+            ax = (fig.axes[0] if fig is not None and fig.axes else ax)
+        if ax is not None:
+            ax.legend()
+        return fig
+
+
 class Result(ss.BaseArr):
     """
     Array-like container for holding sim results.
@@ -371,7 +384,7 @@ class Result(ss.BaseArr):
         if self.runs is not None:
             self._check_dim(dim)
             strat = strats[[strat.name for strat in strats].index(dim)]
-            return sc.objdict({str(label):self.select(**{dim:label}) for label in strat.labels})
+            return Levels({str(label):self.select(**{dim:label}) for label in strat.labels})
         names = [strat.name for strat in strats]
         self._check_dim(dim)
         d = names.index(dim)

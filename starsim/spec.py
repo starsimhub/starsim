@@ -743,8 +743,8 @@ def diff(a, b, output=False):
         model += [f"module '{k}' removed" for k in ma if k not in mb] + [f"module '{k}' added" for k in mb if k not in ma]
     for x,y in pairs:
         prefix = f"{x['name']}: " if len(pairs) > 1 else ''
-        px = {p['name']:p['value'] for p in x.get('pars', [])}
-        py = {p['name']:p['value'] for p in y.get('pars', [])}
+        as_dict = lambda pars: dict(pars) if isinstance(pars, dict) else {p['name']:p['value'] for p in pars} # A module written as code keeps its parameters by name
+        px, py = as_dict(x.get('pars') or []), as_dict(y.get('pars') or [])
 
         # States
         sx, sy = [s['name'] for s in x.get('states', [])], [s['name'] for s in y.get('states', [])]

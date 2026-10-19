@@ -178,7 +178,8 @@ class Disease(ss.Module):
         first = kwargs.pop('first') if isinstance(kwargs.get('first'), str) else None # A state named "first" can still be declared by keyword
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        members = sc.dcp(members) # Copy class members (together, so they still refer to each other) so instances do not share them
+        outside = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values())}
+        members = sc.dcp(members, memo=outside) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
         members = sc.mergedicts(members, kwargs)
@@ -442,6 +443,32 @@ class Disease(ss.Module):
         if self.infection_log:
             self.infection_log.add_entries(uids, sources, self.now_entry)
         return
+
+    def move_to(self, uids, to, src=None):
+        """
+        Move some agents of a declared disease into a state, as a one-off move along no transition (e.g. from code: a cure, or seeding)
+
+        Args:
+            uids (uids): the agents to move
+            to (str/State): the state to move them into
+            src (str/list): the states to move them from (by default, any state of people other than `to`); agents in none of them stay where they are
+
+        Returns:
+            The agents moved
+
+        **Example**::
+
+            sir.move_to(uids, 'R', src='I') # A cure, from code
+        """
+        graph = getattr(self, 'graph', None)
+        if graph is None or self.engine is None:
+            raise ss.CapabilityError(f'"{self.name}" is not a declared disease (or the sim is not initialized), so it has no states to move people between; set its arrays directly')
+        if self.sim.solver != 'abm':
+            raise ss.CapabilityError(f'disease.move_to() moves agents, but "{self.name}" is run with solver="{self.sim.solver}"; use an intervention (e.g. ss.Delivery(move=...)) for a compartmental run')
+        name = lambda s: s if isinstance(s, str) else s.name
+        dst = graph.states[name(to)]
+        srcs = [graph.states[name(s)] for s in sc.tolist(src)] if src is not None else [s for s in graph.people_states if s is not dst]
+        return self.engine.move_states(ss.uids(uids), srcs, dst)
 
     def make_naive(self, uids, skip_states=None):
         """

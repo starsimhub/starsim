@@ -789,6 +789,9 @@ class Sim(ss.Base):
             unit, source = base(durs[0]), 'start and stop'
         elif years:
             unit, source = 'year', 'start and stop years'
+        if years and pars.unit is None and unit not in [None, 'year'] and sc.isnumber(pars.dt) and not isinstance(pars.dt, bool): # A bare step beside calendar years is in years, as start and stop are
+            ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.UnitInferred)
+            pars.dt = ss.years(pars.dt)
         self.unit = unit
         self.unit_source = source
         self.unit_base = unit or 'day' # With no unit, the arithmetic is done in days, but the times have no dates (see ss.Timeline.datevec) and are said to be steps
@@ -1367,7 +1370,10 @@ class Sim(ss.Base):
                 kwargs['age_data'] = ss.named.age_data(*self.pyramid())
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
         elif self.solver == 'abm':
+            self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
+                if strat.name in self.groups.kept and strat.split_given:
+                    raise ss.BadSplit(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
                 if strat.attr not in people.states:
                     state = strat.people_arr()
                     people.states.append(state)

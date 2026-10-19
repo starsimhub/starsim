@@ -658,7 +658,7 @@ class Delivery(Intervention):
         staged = sim is not None and self.staged(sim)
         out = []
         if self.holds:
-            levels = self.product.stage_levels() if staged and self.product.staged else [False, True]
+            levels = self.product.stage_levels(sim) if staged and self.product.staged else [False, True]
             out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
         if staged and self.waits: # Waiting for a result: one level for each step, for each result (a negative one too, since anyone waiting is not tested again)
             m = self.result_steps(sim)
@@ -858,7 +858,7 @@ class Delivery(Intervention):
         if self.selector.abm:
             uids = self.uids(sel)
             for d,level in changes.items():
-                sim.people[sim.groups.strats[d].attr][uids] = level
+                sim.people[sim.groups.strats[d].attr][uids] = sim.groups.strats[d].value(level)
             sim.groups.groups_changed(uids)
         else:
             for mod in sim.declared:
@@ -975,7 +975,7 @@ class Delivery(Intervention):
             return
         product._ti_staged = sim.ti
         if sim.ti > 0 and sim.ti % product.stage_steps == 0:
-            self.move_up(product.dim, range(1, product.n_stages)) # The last level is kept
+            self.move_up(product.dim, range(1, len(product.stage_factors) - 1)) # The last level is kept
         return
 
     def delivered_by_function(self):

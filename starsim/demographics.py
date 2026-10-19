@@ -124,7 +124,9 @@ class Births(Demographics):
         ```
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
-
+        if isinstance(birth_rate, str): # A named place: its UN crude birth rates, per 1,000
+            birth_rate = ss.named.rates(birth_rate, 'births')
+            rate_units = 1000 if rate_units is _ else rate_units
         super().__init__()
         self.define_pars(
             birth_rate = ss.peryear(20),
@@ -140,7 +142,7 @@ class Births(Demographics):
             metadata,
         )
 
-        # Process data, which may be provided as a number, dict, dataframe, or series
+        # Process data, which may be provided as a number, dict, dataframe, or series, or a named place (its UN rates)
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
         self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.pars.birth_rate, 'birth_rate')
@@ -292,6 +294,9 @@ class Deaths(Demographics):
             corresponding column name in data. Similar for "sex_keys".
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
+        if isinstance(death_rate, str): # A named place: its UN death rates by year, sex, and age, per person
+            death_rate = ss.named.rates(death_rate, 'deaths')
+            rate_units = 1 if rate_units is _ else rate_units
         super().__init__()
         self.define_pars(
             rel_death = 1,
@@ -309,7 +314,7 @@ class Deaths(Demographics):
             metadata
         )
 
-        # Process data, which may be provided as a number, dict, dataframe, or series
+        # Process data, which may be provided as a number, dict, dataframe, or series, or a named place (its UN rates)
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
         self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.death_rate_data, 'death_rate')
@@ -508,7 +513,8 @@ class Pregnancy(Demographics):
         # A number or duration sets the choice's a to a scalar; use a fixed duration instead
         dp = self.pars.dur_pregnancy
         if isinstance(dp, ss.choice) and np.ndim(dp.pars.a) == 0:
-            self.pars.dur_pregnancy = ss.constant(dp.pars.a)
+            a = dp.pars.a
+            self.pars.dur_pregnancy = ss.constant(a, unit=dp.unit) if dp.unit is not None and sc.isnumber(a) else ss.constant(a) # A bare number is in the unit of the default (weeks)
 
         # Distributions: binary outcomes
         self._p_conceive = ss.bernoulli(p=0)  # Placeholder, see make_p_conceive
@@ -735,7 +741,13 @@ class Pregnancy(Demographics):
         durs = dist.rvs(n_draws, reset=True)
 
         # Mean pregnancy duration in years, used to pick the fertility data year (exact for a choice distribution)
-        self.mean_dur_pregnancy = (dist.pars.a.years * dist.pars.p).sum() if isinstance(dist, ss.choice) else durs.mean()*self.t.dt_year
+        if isinstance(dist, ss.choice): # Exact for a choice: its values, in its unit, weighted
+            a = np.asarray(dist.pars.a, dtype=float)
+            years = dist.unit(a).years if dist.unit is not None else a
+            p = dist.pars.p if dist.pars.p is not None else np.ones(len(a))/len(a)
+            self.mean_dur_pregnancy = float((np.asarray(years)*p).sum())
+        else:
+            self.mean_dur_pregnancy = durs.mean()*self.t.dt_year
 
         # Burn-in
         if self.ti == 0 and self.pars.burnin:  # TODO: refactor

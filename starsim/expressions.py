@@ -159,6 +159,9 @@ class par(Nameable, Expr):
         ```
     """
     def __init__(self, value=None, bounds=None, prior=None, source=None, doc=None, name=None, label=None, literal=False):
+        if bounds is not None and isinstance(value, (dict, list, tuple)): # One pair of bounds cannot fit several values
+            errormsg = f'ss.par() has bounds={bounds} for several values ({value}); to fit them, give each its own ss.par with bounds, e.g. dict(home=ss.par(0.1, bounds=[0.01, 1]), ...), or ss.par(ss.by(...), bounds=...) for a value for each level'
+            raise ValueError(errormsg)
         self.value = value
         self.bounds = bounds
         self.prior = prior
@@ -183,9 +186,12 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta) """
+        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change), so a function that reads it sees the change """
         raw = self.raw
         if sc.isnumber(raw):
+            engine = getattr(self.module, 'engine', None)
+            if engine is not None and self.name and not self.literal and engine.sim.modifiers.get((self.module.name, 'par', self.name)):
+                return float(np.mean(engine.modified(self, raw)))
             return float(raw)
         errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
         raise TypeError(errormsg)

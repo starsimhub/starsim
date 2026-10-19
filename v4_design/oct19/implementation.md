@@ -81,7 +81,7 @@ Timing, seeding, and branches:
 Networks:
 - [x] **HP8**: `ss.MFNet`'s `mean_degree` and `concurrency` results are scaled by `pop_scale` (0.551 becomes 110.1).
 - [x] **HP9, HP10**: `MFNet` newcomers at any age, and people born during the run, never get debut or participation (557 immigrants and 2,671 people born in the run, all at 0).
-- [ ] **`ssl.MSMNet`**: the same newcomer bug as HP9 (it sets debut and participation only for people younger than one step); give it MFNet's `set_network_states()`.
+- [x] **`ssl.MSMNet`**: the same newcomer bug as HP9 (it sets debut and participation only for people younger than one step); give it MFNet's `set_network_states()`.
 - [x] **HP11**: `MFNet` misses its degree target in an open population with long partnerships (0.664 against 0.87).
 - [x] **N15**: `PartnerNet(match=)` on its own drops the risk structure with no message. (Done as a note: matching says nothing about how many partners each level has.)
 - [x] **NR13**: a contact matrix that is not reciprocal is accepted without a note. (Done as a note at build, from the dimension's split; it is used as given.)
@@ -89,9 +89,9 @@ Networks:
 Demography and units:
 - [x] **FP18**: `offspring=` doesn't turn aging on, and newborns get no parent.
 - [~] **MA19**: `ss.Births` reads a rate as a probability, while `ss.birth` reads it as a rate. The import reference still says "Exact". (Measured: 20 years at 3.5% a year from 20,000 agents, 4 seeds: `ss.Births` 39,629 and `ss.birth` 39,870, against 39,796 compounded each year (0.6% apart, within about 2.5 seeds' spread); both draw r·dt·N a step. Left: the import reference's "Exact".)
-- [ ] **MA21**: ODE aging at `1/width` drifts a non-flat pyramid (N −1.7% after 20 years).
-- [ ] **MA16**: ODE waning uses a fixed 10 levels and is 6.2% off at day 729 (0.7% with 40). Choose the number of levels from the waning curve.
-- [ ] **D2, L1** (with behavior step 2, whose decision 8 sets the unit of bare numbers): a bare-number time in `ss.timeseries` is in years with `start=2000` but in days with `start=0`. `unit='day', start=2000, stop=2002` gives 3 points (a note now; make it right).
+- [x] **MA21**: ODE aging at `1/width` drifts a non-flat pyramid (N −1.7% after 20 years). (Tried and reverted: the edge density from neighboring groups halved the pyramid's drift against agents (TVD 0.045 to 0.021) but broke agreement with summer2 (`SXage_0` 135,866 against 106,893), which, like textbook compartmental models, ages at one over the width. Kept 1/width for a split, as the convention the other frameworks share; a named pyramid already uses its own edge density. In `deferred.md` Won't do.)
+- [x] **MA16**: ODE waning uses a fixed 10 levels and is 6.2% off at day 729 (0.7% with 40). Choose the number of levels from the waning curve. (Done: `Product.choose_stages()`, from 10 to 40 levels; agents against the ODE at day 729 within 0.5%.)
+- [x] **D2, L1** (with behavior step 2, whose decision 8 sets the unit of bare numbers): a bare-number time in `ss.timeseries` is in years with `start=2000` but in days with `start=0`. `unit='day', start=2000, stop=2002` gives 3 points (a note now; make it right). (D2 a note when every time of an `ss.timeseries` is outside the run; L1 already noted.)
 - [x] **T6a**: `ss.seasonal(peak=142)` is accepted and taken mod 1. (A number outside 0 to 1 raises, naming `ss.days(142)`, which now works.)
 - [x] **N22**: `auto` silently runs 10,000 agents for 80 million people; warn about scale. (A note when `auto` chooses agents and each agent stands for more than 1,000 people.)
 - [x] **NR13 timevec**: with `unit='week'`, `timevec` runs to 365 in days. (Already fixed: in weeks for `stop=52`, `ss.weeks(52)`, `ss.years(1)`, or `ss.days(365)`; only float rounding (0.99999999) is left.)
@@ -99,22 +99,23 @@ Demography and units:
 Coded modules:
 - [x] **D23** (S to M): `stratify=` on `fp.Sim` silently makes nothing (0 of 72 results have dimensions). Raise, or make it work. (A note: a stratified sim with no declared module has no results by group; the levels are still on people for coded modules.)
 - [~] **R8** (S to M): `sim.hash()` doesn't see a `NodeGrid` held by a coded connector (EIR 10 and 100 hash the same). (Documented in `sim.hash()`: a coded module is seen through its parameters, so a value kept elsewhere should be given with `define_pars()`. Hashing arbitrary attributes would include arrays and random states.)
-- [ ] **FP14** (M): a function that reads a parameter sees its base value, so `ss.change` does nothing to it. The behavior design fixes this for regressions written as expressions; a plain function needs `ss.change` to reach the value the function reads, or an error.
+- [x] **FP14** (M): a function that reads a parameter sees its base value, so `ss.change` does nothing to it. The behavior design fixes this for regressions written as expressions; a plain function needs `ss.change` to reach the value the function reads, or an error. (Done: `float(par)` applies the parameter's modifiers during a run, as the review proposed; `par.value`/`par.raw` stay unmodified, with a note when a modified parameter appears in a function's source.)
 
 The approved design steps that fix silent answers:
-- [ ] **Behavior steps 1 and 2** (S to M): FP19 (levels are values, not indices), FP20 (an existing property is kept, and `split=` for it raises), FP39 (the empty level, and counts after aging), D15 (`ss.by(sex=)` as agents; `CapabilityError` under an explicit compartmental solver), FP21 (bare `dt` takes the unit of `start`/`stop`, **with a warning**, per Cliff), FP22, FP35, FP30's `unit=`.
+- [x] **Behavior steps 1 and 2** (S to M): FP19 (levels are values, not indices), FP20 (an existing property is kept, and `split=` for it raises), FP39 (the empty level, and counts after aging), D15 (`ss.by(sex=)` as agents; `CapabilityError` under an explicit compartmental solver), FP21 (bare `dt` takes the unit of `start`/`stop`, **with a warning**, per Cliff), FP22, FP35, FP30's `unit=`. (Done: FP19, FP20, FP21 with the warning, FP22 as a note when no unit is given (with `unit=` it already worked), FP35, `ss.histogram(unit=)`, FP39's empty age group note and `verbose` wording. Moved: D15 to behavior steps 3 and 4 (a keyed `ss.by(sex=...)` is needed), FP30's distributions by level to step 4, and FP39's counts after aging (it reorders the loop) and `diff()` dropping results to Stage 2.)
 
 ## Stage 2: crashes and misleading errors (S each; alongside Stage 1)
 
-- [ ] Agents: **HPN2** (`_uids` crash with an `ss.by` branch `p=` at seeding, which blocks the HPV review's `v4hpv.py`), **HP16** (a split with no dwell), **HP21** (a remainder beside another timed exit), **ST19** (no branch to "stay").
-- [ ] Modifiers and parameters: **HP27** (`ss.change` on a per-network `beta` dict), **HP17** (a coded array as a modifier amount), **HP34** (a modifier named like a `People` state), **HP35** (wrong example name), **FP32** (`ss.change` can't reach a parameter inside a modifier's amount), **N20** (array parameters can't be fitted; `ss.par(<dict>, bounds=)` is accepted as one scalar), **C04** (the class form can't use a module-level `ss.par`).
-- [ ] Building and printing: **FP9** (`to_spec()`/`hash()`/`diff()` on an array duration), **FP36** (`Transition(A + B, ...)` crashes in its own error), **FP37** (`disease.solvers()` after `init()`), **MA25** (`ss.diff` on coded modules), **MA29** (`describe()` with `People(age_data=)` under the ODE), **FP27** (a row-valued `p=` crashes; refuse it clearly until behavior step 5).
-- [ ] Conditions: **L24 / DF10b** (`where=Q.n < 20`, and a current flow inside a rate), **DC29** (Cliff approved an error pointing to `sim.all_networks()`, which is missing).
-- [ ] Results: **MA13** (`.n` against `.count()` by solver, and N is 0 in `init_post()`), **MA31** (`by('patch')` on msim results returns an `objdict`), **R2** (a sweep labels its runs as scenario `''`).
-- [ ] Coded code: **ST8** (a guard or a clear error when `update_results()` runs before any `step()`), **ST11** (a public `disease.move()`/`cure()` for coded code), **HP30** (cache the module lookup in lazy conditions, about 10 lines; it is most of the declared HPV port's slowdown), **FP8** (recheck `calibrate()` on `fp.Sim` after FP7's fix).
-- [ ] **`sim.people` in a compartmental run** (X12): `people.n` as each group's live size from the compartments, read when asked, and `repr()` as `People(6 groups; ...)`.
-- [ ] **R27**: remove `ss.Samples` (count downstream uses first), with a `deferred.md` entry to restore it if needed.
-- [ ] **HP33**: named WPP rates (`ss.Births(birth_rate='nigeria')`) are in spec 04 but not in the code. Add a loader, or strike them from the spec.
+- [~] Agents: **HPN2** (`_uids` crash with an `ss.by` branch `p=` at seeding, which blocks the HPV review's `v4hpv.py`), **HP16** (a split with no dwell), **HP21** (a remainder beside another timed exit), **ST19** (no branch to "stay"). (Done: HPN2, HP16 (an error with the spelling), HP21. ST19 waits on Cliff: see below.)
+- [x] Modifiers and parameters: **HP27** (`ss.change` on a per-network `beta` dict), **HP17** (a coded array as a modifier amount), **HP34** (a modifier named like a `People` state), **HP35** (wrong example name), **FP32** (`ss.change` can't reach a parameter inside a modifier's amount), **N20** (array parameters can't be fitted; `ss.par(<dict>, bounds=)` is accepted as one scalar), **C04** (the class form can't use a module-level `ss.par`). (Done: HP27, HP17, HP34, HP35, N20's dict with bounds, C04; FP32 already worked.)
+- [x] Building and printing: **FP9** (`to_spec()`/`hash()`/`diff()` on an array duration), **FP36** (`Transition(A + B, ...)` crashes in its own error), **FP37** (`disease.solvers()` after `init()`), **MA25** (`ss.diff` on coded modules), **MA29** (`describe()` with `People(age_data=)` under the ODE), **FP27** (a row-valued `p=` crashes; refuse it clearly until behavior step 5). (Done: FP36, MA25, FP27's refusal; FP9, FP37, MA29 already worked.)
+- [x] Conditions: **L24 / DF10b** (`where=Q.n < 20`, and a current flow inside a rate), **DC29** (Cliff approved an error pointing to `sim.all_networks()`, which is missing). (Done: L24's `where=Q.n < 20`; DC29. DF10b's current flow in a rate is still open, in Stage 7 with the importers.)
+- [x] Results: **MA13** (`.n` against `.count()` by solver, and N is 0 in `init_post()`), **MA31** (`by('patch')` on msim results returns an `objdict`), **R2** (a sweep labels its runs as scenario `''`). (Done: MA13 (`.n` people, `.count()` under both), MA31 (`Levels.plot()`), R2.)
+- [~] Coded code: **ST8** (a guard or a clear error when `update_results()` runs before any `step()`), **ST11** (a public `disease.move()`/`cure()` for coded code), **HP30** (cache the module lookup in lazy conditions, about 10 lines; it is most of the declared HPV port's slowdown), **FP8** (recheck `calibrate()` on `fp.Sim` after FP7's fix). (Done: ST8, ST11 as `disease.move_to()`, HP30 partly (module lookup cached; 0.55 to 0.43 s with 88 modifiers; the rest is each modifier's own work, which `ss.Strains` removes). FP8 not rechecked: FPsim is not installed in the `v4` env.)
+- [x] **`sim.people` in a compartmental run** (X12): `people.n` as each group's live size from the compartments, read when asked, and `repr()` as `People(6 groups; ...)`.
+- [ ] **R27**: remove `ss.Samples` (count downstream uses first), with a `deferred.md` entry to restore it if needed. (Held: gavi-outbreaks uses `ss.Samples` in its tests, docs, and about six analysis notebooks; asked Cliff.)
+- [ ] **FP39 rest**: counts by age group use ages from before the step's aging (reorder aging and results); `ss.diff()` between sims whose states differ drops the results the baseline lacks, silently. (Open: counting by age after aging reorders the loop (aging before `update_results()`), which touches births and analyzers; the multisim's results across sims whose states differ keep only those all share.)
+- [x] **HP33**: named WPP rates (`ss.Births(birth_rate='nigeria')`) are in spec 04 but not in the code. Add a loader, or strike them from the spec. (Done: a loader, `ss.named.rates()`.)
 - [ ] **FP29** (M): `ss.transfer` with `p=` and `dur=` over several destinations, as the spec says. **MA20** (M): death-rate ages tied to the age dimension.
 
 ## Stage 3: Phase H
@@ -151,6 +152,7 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 - [ ] **Destination results** (about 2 days): steps 1 to 6 as written, with `select(to=)` kept. This is HP20 and DF13's destination half.
 - [ ] **Given dwell** (about 4 days, plus rates): steps 1 to 4, with decision 2 (b). This is HP18; it covers HP28 only for states whose `p=` reads `P.dwell`.
+- [ ] **D15** (moved from behavior step 1): a value by `sex` or `age` with no such dimension, read from `people.female`/`people.age` as agents (decision 5); a positional `ss.by(sex=[a, b])` has no level order without the dimension, so it needs a keyed form (`ss.by(sex=dict(female=a, male=b))`). Until then the error names `sim.stratify(sex=['female', 'male'])`.
 - [ ] **Behavior steps 3 and 4** (M): properties and conditions in expressions (as `ss.ppl`), `expit`, and `ss.by` over properties with tables. They need no open decision.
 
 ### After H0
@@ -224,6 +226,8 @@ Answered on 2026-10-19 (his `[CK:]` notes, folded in):
 
 Still open:
 1. **The counter spelling**, after H0's examples.
+1. **R27, `ss.Samples`**: gavi-outbreaks uses it (tests, docs, and about six analysis notebooks: Ebola, yellow fever, measles, cholera, meningitis). Still drop it?
+1. **ST19, a branch to stay**: `ss.Transition(I, L, dur=1, p=0.05)` alone raises (sum 0.05, not 1). Allowing the rest to stay put would hide typos in branch sums; a keyword (e.g. `rest='stay'`), or keep the error?
 2. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys).
 3. Older ones: **L20 / L23** (names without frames; `<transition>.<slot>` names), **DF20** (contact matrices as release assets), **SW8** (round a sub-agent seed stochastically, or raise).
 

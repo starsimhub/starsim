@@ -222,8 +222,25 @@ class People:
         """ Full object information """
         return sc.pr(self)
 
+    @property
+    def grouped(self):
+        """ Whether these are the groups of a compartmental run (one row per group), not agents """
+        sim = getattr(self, 'sim', None)
+        return sim is not None and getattr(sim, 'solver', 'abm') != 'abm' and bool(getattr(sim, 'declared', None))
+
+    @property
+    def n(self):
+        """ In a compartmental run, the number of people in each group now, from the compartments (one row per group); as agents, the number alive """
+        if not self.grouped:
+            return len(self)
+        engine = self.sim.declared[0].engine
+        return engine.n_people(total=False) if hasattr(engine, 'n_people') else np.full(self.n_agents_init, np.nan)
+
     def brief(self, output=False):
         n = self.n_agents_init
+        if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
+            out = f'People({n:n} groups; {float(np.sum(self.n)):n} people; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups)'
+            return out if output else print(out)
         if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
             out = f'People({n=:n}; uninitialized)'
         else:
@@ -376,7 +393,9 @@ class People:
 
         # Connect the module as People attribute
         if hasattr(self, module.name):
-            raise AttributeError(f'Module {module.name} already added')
+            existing = getattr(self, module.name)
+            what = 'a module of that name is already in the sim' if isinstance(existing, ss.Module) else f'people already have a property called "{module.name}"'
+            raise AttributeError(f'The {type(module).__name__} "{module.name}" cannot be added to the people, since {what}; give it another name, e.g. name="{module.name}_mod"')
         else:
             setattr(self, module.name, module)
 

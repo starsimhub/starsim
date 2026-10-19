@@ -29,6 +29,21 @@ def make_engine(module, sim):
     return Compartmental(module, sim)
 
 
+class MixedNetworks(ss.ndict):
+    """ The networks of a compartmental run, which are none: they became contact rates; asking for one by name says where it is """
+    def __init__(self, names=None):
+        super().__init__()
+        self.__dict__['_mixed_names'] = list(names or [])
+
+    def __getattr__(self, attr):
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            if attr in self.__dict__.get('_mixed_names', []):
+                raise AttributeError(f'"{attr}" is not run in a compartmental run: it became contact rates between groups. It is in sim.all_networks()["{attr}"]; sim.networks holds only the networks that are run') from None
+            raise
+
+
 def choose_solver(sim):
     """
     Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
@@ -46,6 +61,10 @@ def choose_solver(sim):
             where = getattr(tr, 'where', None)
             key = f'where_{mod.name}_{name}'
             if where is not None and key not in pars.connectors:
+                if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
+                    pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
+                    pars.connectors[key].on_rate = True
+                    continue
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
                     others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
                 else: # A condition, a state, or an array
@@ -175,7 +194,7 @@ def choose_solver(sim):
         init_crossings(sim)
         sim.mixing.init(approx=pars.approx)
         sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
-        pars.networks = ss.ndict()
+        pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
         pars.n_agents = sim.groups.n_groups
 
     # A beta for each route names every route and nothing else; a route has no beta of its own

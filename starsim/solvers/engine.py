@@ -3,6 +3,7 @@ The base of the engines that run a declared model (`Engine`), and what they shar
 """
 import zlib
 import inspect
+import re
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -83,6 +84,10 @@ class CountState:
     def frac(self):
         """ The number in this state as a fraction of the module's people """
         return self.engine.frac([self.state])
+
+    def count(self):
+        """ The number in this state, as `.n` (the same spelling as agents have, where count() is the number of agents) """
+        return self.n
 
     @property
     def values(self):
@@ -531,6 +536,8 @@ class Engine:
 
     def clip(self, value, path):
         """ A modified rate, duration, or multiplier that has gone below 0 (e.g. by add=) is 0; the first time, a note says so, and sim.what_modifies() reports it """
+        if isinstance(value, dict): # A value for each route, e.g. beta=dict(random=..., mfnet=[...])
+            return {k:[self.clip(x, path) for x in v] if isinstance(v, (list, tuple)) else self.clip(v, path) for k,v in value.items()}
         if np.any(np.asarray(value) < 0):
             if path not in self.sim.clipped:
                 self.sim.clipped.add(path)
@@ -613,6 +620,21 @@ class Engine:
                                 raise ss.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
                                                           f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by().')
         self.init_strain_weights()
+        self.note_function_reads()
+        return
+
+    def note_function_reads(self):
+        """ Say when a parameter that a modifier changes (e.g. ss.change) is read inside a function, which sees its own value rather than the changed one """
+        modified = [name for (modname, kind, name) in self.sim.modifiers if modname == self.mod.name and kind == 'par']
+        if not modified:
+            return
+        funcs = {getattr(f, '__name__', 'a function'):f for f in self.graph.funcs.values()}
+        funcs.update({getattr(p.raw, '__name__', 'a function'):p.raw for p in self.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.parameters.TimeValue))})
+        for fname,func in funcs.items():
+            source = ss.presentation.func_source(func) or ''
+            read = [name for name in modified if re.search(rf'\bpars\.{name}\b|\[[\'"]{name}[\'"]\]', source)]
+            if read:
+                ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: float(par) there gives the changed value, but par.value and par.raw give the value without the change', sim=self.sim)
         return
 
     def strain_rate(self, tr, rate, strain):
@@ -708,6 +730,9 @@ class Engine:
                 if np.isnan(mean): # A parameter is a function of the agents
                     if self.sim.solver != 'abm':
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
+                    if getattr(raw, 'unit', None) is None and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
+                        funcs = sc.strjoin(getattr(v, '__name__', 'a function') for v in raw.pars.values() if callable(v))
+                        ss.note(f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
                     dw.family = 'exponential'
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
@@ -876,9 +901,14 @@ class Engine:
             if graph.infectious and not any(state.infectious for state in dst): # e.g. E in an SEIR
                 seeded = sc.strjoin(state.name for state in dst)
                 ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...)', sim=self.sim)
-            ps = self.branch_probs(trs[0])
+            by_group = getattr(self, '_by_group', None)
+            self._by_group = True # The share of each destination in each group, before there are agents to evaluate it for
+            try:
+                ps = self.branch_probs(trs[0])
+            finally:
+                self._by_group = by_group
             for state,p in zip(dst, ps):
-                fracs[state.name] += init_prev*np.mean(p)
+                fracs[state.name] = fracs[state.name] + init_prev*np.asarray(p, dtype=float)
 
         for name,val in list(fracs.items()) + list(counts.items()):
             if not np.all(np.isfinite(val)) or np.any(np.asarray(val) < 0):

@@ -231,7 +231,8 @@ class Held(Product):
     """
     compartmental = True
     default_key = 'acquisition'
-    n_stages = 10 # In a compartmental run, the levels of time since delivery for a product whose protection fades by a function of it
+    n_stages = 10 # In a compartmental run, the levels of time since delivery for a product whose protection fades by a function of it: at least this many, and more (up to max_stages) until the protection changes by less than 2% across each (see init_stages())
+    max_stages = 40
 
     def __init__(self, efficacy=None, waning=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
@@ -280,9 +281,29 @@ class Held(Product):
         """ Whether holding the product has levels of time since delivery in a compartmental run, for protection that fades by a function of it """
         return self.holds and callable(self.waning)
 
-    def stage_levels(self):
+    def stage_levels(self, sim=None):
         """ The levels of holding the product in a compartmental run: not holding it, then the levels of time since delivery """
-        return [False] + [f'stage {j+1}' for j in range(self.n_stages)]
+        n = self.choose_stages(sim)[0] if sim is not None else self.n_stages
+        return [False] + [f'stage {j+1}' for j in range(n)]
+
+    def choose_stages(self, sim):
+        """ The number of levels of time since delivery, and the steps in each: they cover the time until the protection settles, with as few levels (from n_stages to max_stages) as keep it within 2% across each """
+        dt = float(sim.pars.dt.to(sim.unit_base).value) if isinstance(sim.pars.dt, ss.dur) else float(sim.pars.dt)
+        if getattr(self, '_stages', None) is not None and self._stages[0] == dt:
+            return self._stages[1]
+        span = ss.years(100).to(sim.unit_base).value # Long enough for any protection to settle; the levels then stop where it does
+        t = np.linspace(0, span, 20_001)
+        w = np.broadcast_to(np.asarray(self.waning(t), dtype=float), t.shape)
+        top = max(np.abs(w).max(), 1e-12)
+        moving = np.flatnonzero(np.abs(w - w[-1]) > 0.01*top)
+        settled = t[min(moving[-1] + 1, len(t) - 1)] if len(moving) else 0.0
+        for n in range(type(self).n_stages, self.max_stages + 1):
+            steps = max(1, int(np.ceil(settled/dt/(n - 1) - 1e-9))) # Steps in each level
+            edges = np.arange(n + 1)*steps*dt
+            if steps == 1 or np.max(np.abs(np.diff(np.asarray(self.waning(edges), dtype=float)))[:-1], initial=0) <= 0.02*top:
+                break
+        self._stages = (dt, (n, steps))
+        return n, steps
 
     def init_stages(self, sim):
         """
@@ -295,12 +316,7 @@ class Held(Product):
         middle of the level, and a note says so.
         """
         dt = sim.t.dt.to(sim.unit_base).value
-        n = self.n_stages
-        t = np.linspace(0, sim.t.npts*dt, 1001)
-        w = np.broadcast_to(np.asarray(self.waning(t), dtype=float), t.shape)
-        moving = np.flatnonzero(np.abs(w - w[-1]) > 0.01*max(np.abs(w).max(), 1e-12))
-        settled = t[min(moving[-1] + 1, len(t) - 1)] if len(moving) else 0.0
-        steps = max(1, int(np.ceil(settled/dt/(n - 1) - 1e-9))) # Steps in each level
+        n, steps = self.choose_stages(sim)
         start = np.arange(n)*steps # The steps since delivery at the start of each level
         mids = np.append(start[:-1] + (steps - 1)/2, start[-1]) # The middle of each level, and the start of the last
         if steps > 1:

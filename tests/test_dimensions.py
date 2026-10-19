@@ -632,6 +632,33 @@ def test_ragged():
     return sims
 
 
+@sc.timer()
+def test_property_values():
+    sc.heading('Testing that people hold the values of a numeric dimension, and keep a property they already have')
+    # Numeric levels are lower bin edges, and people hold the value (FP19: they held 0 to 4, binned by the edges 1 to 5, so the top level was empty)
+    S, I = ss.states('S I')
+    sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), n_agents=5000, start=2000, stop=2001, solver='abm', verbose=0)
+    sim.stratify(wealthquintile=[1, 2, 3, 4, 5])
+    sim.run()
+    assert set(np.unique(sim.people.wealthquintile[sim.people.auids])) == {1, 2, 3, 4, 5}
+    res = sim.results.d
+    assert np.allclose(res.n_S.by('wealthquintile').values[0] + res.n_I.by('wealthquintile').values[0], 1000)
+
+    # A property people already have is kept and binned (FP20: urban at 0.9 became 0.000), and split= for it raises
+    def make(**kw):
+        ppl = ss.People(5000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
+        S, I = ss.states('S I')
+        sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), people=ppl, start=2000, stop=2001, solver='abm', verbose=0)
+        sim.stratify(urban=[False, True], **kw)
+        sim.stratify(wealth=[0, 50])
+        return sim
+    sim = make().run()
+    assert np.isclose(sim.people.urban.mean(), 0.9, atol=0.02) and len(np.unique(sim.people.wealth[sim.people.auids])) > 100
+    with pytest.raises(ss.BadSplit):
+        make(split=[0.5, 0.5]).init()
+    return sim
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -640,3 +667,4 @@ if __name__ == '__main__':
     space   = test_space()
     register = test_register()
     ragged  = test_ragged()
+    values  = test_property_values()
