@@ -201,6 +201,30 @@ class Disease(ss.Module):
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
+    def value(self, name):
+        """
+        The current value of a parameter, with the modifiers active on it applied
+
+        For a declared parameter (an `ss.par`), a number in the sim's unit once the sim is
+        initialized (before that, the value it holds); for any other parameter, the value itself.
+        Use this from module code (e.g. a network's `net_beta()`) rather than `self.pars[name]`,
+        which for a declared module is the `ss.par`.
+
+        Args:
+            name (str): the name of the parameter
+
+        Examples:
+            ```python
+            eff = disease.value('eff_condom')
+            ```
+        """
+        p = self.pars[name]
+        if not isinstance(p, ss.par):
+            return p
+        if self.engine is None:
+            return p.raw
+        return self.engine.value(p)
+
     def stratify(self, inplace=True, **kwargs):
         """
         Stratify the disease by a property of the people in it (age, risk, place, ...), in place, and return it

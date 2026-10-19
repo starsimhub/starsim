@@ -130,6 +130,8 @@ class Network(Route):
             beta = ss_float,
         )
 
+        self.edge_defaults = {} # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
+
         # Initialize the keys of the network
         self.edges = sc.objdict()
         self.participant = ss.BoolArr('participant')
@@ -232,9 +234,10 @@ class Network(Route):
         super().init_pre(sim)
 
         # Define states using placeholder values
+        n = len(self.edges['p1']) if 'p1' in self.edges else 0
         for key, dtype in self.meta.items():
             if key not in self.edges:
-                self.edges[key] = np.empty((0,), dtype=dtype)
+                self.edges[key] = np.full(n, self.edge_defaults[key], dtype=dtype) if key in self.edge_defaults else np.empty((0,), dtype=dtype)
 
         # Check that p1 and p2 are ss.uids()
         self.validate_uids()
@@ -410,9 +413,11 @@ class Network(Route):
         edges = sc.mergedicts(edges, kwargs)
         for key in self.meta_keys():
             curr_arr = self.edges[key]
-            try:
+            if key in edges:
                 new_arr = edges[key]
-            except KeyError:
+            elif key in self.edge_defaults:
+                new_arr = np.full(len(edges['p1']), self.edge_defaults[key], dtype=self.meta[key])
+            else:
                 errormsg = f'Cannot append edges since required key "{key}" is missing'
                 raise KeyError(errormsg)
             self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
@@ -492,6 +497,8 @@ class Network(Route):
         for key in keys:
             if key == 'beta' and key not in df:
                 self.edges[key] = np.ones(len(df['p1']), dtype=ss_float)
+            elif key in self.edge_defaults and key not in df:
+                self.edges[key] = np.full(len(df['p1']), self.edge_defaults[key], dtype=self.meta.get(key))
             else:
                 self.edges[key] = np.array(df[key], dtype=self.meta.get(key))
         self.validate_uids()
@@ -658,10 +665,19 @@ def check_duration(net, pars, kwargs):
 
 
 class SexualNetwork(DynamicNetwork):
-    """ Base class for all sexual networks """
+    """
+    Base class for all sexual networks
+
+    Each edge has a number of acts per step (`acts`) and the share of them in which a condom is
+    used (`condoms`, 0 unless set, e.g. by partnership type in `add_pairs()`). Condoms protect through
+    a modifier of the transmission on the network, e.g.
+    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`.
+    """
     def __init__(self, pars=None, edges=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
+        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, route=)
+        self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut', default=0)
         return
 

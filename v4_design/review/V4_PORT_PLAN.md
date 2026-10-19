@@ -231,3 +231,4 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | — | 584b4373 | — | B6 (HPV antibodies as levels, ODE vs agents) + implementation.md: deferred |
 | 70 | 31e7089c | 263bae4b | preg.attr() is an ss.attr on a pregnancy transition; Recorded removed (expressions.py, engine, agents). |
 | 71 | ac5ef437 | b7c6ad23 | CLAUDE.md: the two Pregnancy lines only. Ruling: dropped the commit's stray LLM preamble and ```markdown fence around the file (a mistake in v4-rs). |
+| 72 | 331b4013 | 5ee7265c | Trimester UIDs and rel_ptb/set_ptb on ss.Pregnancy: applied cleanly. |

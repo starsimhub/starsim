@@ -875,6 +875,32 @@ def test_per_act_beta():
     return
 
 
+def test_condoms():
+    """ A sexual network's edges carry the share of acts with a condom, which a modifier of the transmission on that route reads """
+    sc.heading('Testing condoms on a sexual network')
+    class CondomNet(ss.MFNet):
+        def add_pairs(self):
+            super().add_pairs()
+            self.edges.condoms[:] = self.pars.share
+            return
+    def make(share=0.0, eff=0.8):
+        si = ss.Disease(infection=ss.transmission('S -> I', beta=0.02), init_prev=0.05, name='si')
+        net = CondomNet(name='mf', acts=ss.constant(ss.freqperyear(50)))
+        net.define_pars(share=share)
+        condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, route='mf', name='condoms')
+        return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=1)
+    sim = make(share=0.5).init()
+    mf, si = sim.networks.mf, sim.diseases.si
+    assert np.all(mf.edges.condoms == 0.5)
+    assert si.value('beta') == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
+    none, half, full = [make(share=s).run().results.si.infection.sum() for s in [0.0, 0.5, 1.0]]
+    assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
+    assert make(share=1.0, eff=0.0).run().results.si.infection.sum() == none, 'With no efficacy, condoms do nothing'
+    plain = ss.Sim(diseases=ss.SIS(beta=dict(mf=0.05)), networks=ss.MFNet(name='mf'), n_agents=500, verbose=0).run() # append() without condoms
+    assert len(plain.networks.mf.edges.condoms) == len(plain.networks.mf)
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -903,6 +929,7 @@ if __name__ == '__main__':
     targ = test_partner_targets()
     bare = test_bare_units()
     acts = test_per_act_beta()
+    cond = test_condoms()
     peract = test_per_act()
     read = test_beta_readings()
     route = test_route_modifiers()
