@@ -1,5 +1,7 @@
 # Handoff: Starsim v4 review and ports (2026-10-19)
 
+This folder is `starsim/v4_design/review/` on branch `v4-rs`; on the original machine it was `~/gf/v4_review/`. Absolute paths in these notes refer to that machine.
+
 ## Where everything lives
 
 | Repo | Branch | State |
