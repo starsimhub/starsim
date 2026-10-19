@@ -226,6 +226,35 @@ print(f'Unprotected (20+):    {ever_infected[older].sum()} of {len(older)} ever 
 
 Assigning sets the *base* value; modifiers made with `ss.modify` apply on top of it without overwriting it (see [Connectors](modules_connectors.qmd)).
 
+### What counts as acquiring the disease
+
+`rel_sus`, a vaccine's efficacy against acquisition, and `ss.treat` (which treats the infected) act on the transitions that are an *acquisition* of the disease. A transmission (a rate with a bare state, `beta * I`) is one. So is every other transition out of the disease's first state, whatever its rate, unless a transmission leaves that state too: an infection by a bite rate, an EIR, or a dose from a reservoir is an acquisition, while `S >> V @ rate` next to `S >> I @ beta * I` is a vaccination, not an infection. Here bed nets that stop 90% of the bites people get reduce malaria infections (by less, since transmission is intense), as agents or as an ODE:
+
+```{python}
+a, b, c = ss.perday(0.3), 0.5, 0.5
+Sh, Eh, Ih, Rh = ss.states(4)
+Sv, Ev, Iv     = ss.states(3, people=False) # Mosquitoes: counts, not people
+Nh             = (Sh + Eh + Ih + Rh).n
+malaria = ss.Disease(
+    infection  = Sh >> Eh @ a * b * Iv.n / Nh, # An acquisition, though no state in it is bare
+    latency    = Eh >> Ih @ ss.days(12),
+    recovery   = Ih >> Rh @ ss.days(100),
+    waning     = Rh >> Sh @ ss.days(365),
+    emergence  = ss.null >> Sv @ ss.perday(5_000),
+    biting     = Sv >> Ev @ a * c * Ih.n / Nh,
+    incubation = Ev >> Iv @ ss.days(10),
+    mortality  = Sv + Ev + Iv >> ss.null @ ss.days(10),
+    init       = dict(Ih=0.01, Sv=50_000),
+    name       = 'malaria',
+)
+bednet = ss.modify('malaria.rel_sus', multiply=0.1)
+for intv in [None, bednet]:
+    sim = ss.Sim(malaria, interventions=intv, unit='day', stop=365, total_pop=5_000, verbose=0).run()
+    print(f'Bed nets: {intv is not None}; human infections in a year: {sim.results.malaria.infection.values.sum():,.0f}')
+```
+
+`describe()` marks a spontaneous transition that it took as an acquisition, and lists the infected states. To say it outright, give `acquisition=` to the transition: `ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True)` for an importation alongside transmission, which `rel_sus` and vaccines should then reduce, or `ss.progression('Sh -> Vh', rate=ss.perday(0.01), acquisition=False)` for a vaccination in a model with no transmission.
+
 :::{.callout-note}
 `beta` can be given per network and per direction. For sexually transmitted infections, for example, `beta={'mf': [0.25, 0.15]}` sets different male→female and female→male values on the `mf` network. See the [Networks](modules_networks.qmd) page for more.
 :::

@@ -135,7 +135,10 @@ class Disease(ss.Module):
                 if getattr(obj, 'module', None) is not None and isinstance(obj, (ss.State, ss.Transition)):
                     owners[id(obj.module)] = obj.module
                 if isinstance(obj, ss.Transition):
-                    endpoints.update(id(st) for st in (obj.src or []) + (obj.dst or []) if isinstance(st, ss.State))
+                    ends = [st for st in (obj.src or []) + (obj.dst or []) if isinstance(st, ss.State)]
+                    endpoints.update(id(st) for st in ends)
+                    for st in ends:
+                        ss.transitions.Graph.check_read(st)
                 elif isinstance(obj, ss.State) and depth == 0:
                     endpoints.add(id(obj))
                 elif isinstance(obj, ss.transitions.Count):
@@ -491,8 +494,8 @@ class Infection(Disease):
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
             ss.BoolState('infected', label='Infected'),
-            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission', shared=True),
             ss.FloatArr('ti_infected', label='Time of infection' ),
             infectious = 'infected', # Only infectious agents transmit; by default, everyone infected is infectious
         )

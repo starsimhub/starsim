@@ -56,6 +56,8 @@ def parse_target(target):
     elif isinstance(target, str) and '.' in target:
         parts = target.split('.')
         kind = parts[-1] if parts[-1] in ['rel_sus', 'rel_trans'] else 'par' if 'pars' in parts else None # If None, it is whichever the module has
+        if kind is None and len(parts) == 3: # One destination of a transition with several, e.g. 'hpv.progression.C'
+            return parts[0], 'transition', '.'.join(parts[1:])
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
     what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
     raise ss.UnmodifiableTarget(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
@@ -250,7 +252,7 @@ class modify(Connector):
         nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
         kind, name = self.target_kind, self.target_name
         options = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
-        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + ['rel_sus', 'rel_trans']]
+        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
         coded = {key:dis for key,dis in sim.diseases.items() if dis.graph is None}
@@ -267,7 +269,7 @@ class modify(Connector):
             graph = mods[modname].graph
             if kind is None:
                 kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'par'
-            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers))
+            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None))
         if not found:
             raise ss.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
@@ -291,14 +293,20 @@ class modify(Connector):
     @property
     def timed(self):
         """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
-        amount = self.amount
-        return self.where is None and self.when is None and (not callable(amount) or isinstance(amount, ss.transitions.TimeValue))
+        return self.where is None and self.when is None and self.fixed_amount
 
     @property
     def tabulated(self):
         """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
-        amount = self.amount
-        return self.when is None and self.hold is None and (not callable(amount) or isinstance(amount, ss.transitions.TimeValue)) and ss.conditions.is_static(self.where, self.sim)
+        return self.when is None and self.hold is None and self.fixed_amount and ss.conditions.is_static(self.where, self.sim)
+
+    @property
+    def fixed_amount(self):
+        """ Whether the amount depends at most on time: not a function of the sim, nor an expression that reads states (e.g. `1 - 0.7*b.R.frac`), which is worked out at each step """
+        timed = lambda val: not callable(val) or isinstance(val, ss.transitions.TimeValue)
+        if isinstance(self.amount, ss.transitions.Expr):
+            return all(isinstance(leaf, ss.par) and timed(leaf.raw) for leaf in self.amount.leaves)
+        return timed(self.amount)
 
     @property
     def active(self):

@@ -1235,6 +1235,7 @@ class Dist:
             statestr = f"state {pre_state}→{post_state}"
             print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
+        self._uids = self._slots = None # So a draw for every agent does not keep their slots after it
 
         return rvs
 
@@ -2175,12 +2176,18 @@ class histogram(Dist):
             values = values / vsum
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
+        self.cdf_bins = (dist._hcdf, dist._hbins) # For ppf()
         # Leave _use_ppf as None (the default) so UID draws go through the hash-based
         # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
         # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,
         # avoiding the slot_scale "blowup" (drawing slots.max()+1 and discarding most).
         # The values/bins arrays are baked into self.dist, not treated as per-UID pars.
         return
+
+    def ppf(self, rands):
+        """ The inverse of the CDF, which is piecewise linear: as SciPy's, without its temporaries (about 90 bytes per value) """
+        cdf, bins = self.cdf_bins
+        return np.where(rands == 0, bins[0], np.interp(rands, cdf, bins)) # SciPy gives the lowest bin edge for 0, even if the first bins are empty
 
 
 class multi_random(sc.prettyobj):

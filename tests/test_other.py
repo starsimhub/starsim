@@ -146,9 +146,9 @@ class Counter(ss.Module):
                 sim.run()
         assert sim.results.counter.seen.sum() == seen
 
-    # Renames, the network's name, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
-    text, changes, todo = migrate_text("net = ss.MaternalNet(); key = 'maternal'; pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass", network_rename=True)
-    assert text == "net = ss.PrenatalNet(); key = 'prenatal'; pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
+    # Renames, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
+    text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
+    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6

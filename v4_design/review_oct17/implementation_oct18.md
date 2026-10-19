@@ -112,9 +112,11 @@ Done by PB: after the script and the skill, HPVsim 369 of 373, STIsim 188 of 198
 
 ### Phase C: agent timing and branching (M; after D-A)
 
-- [ ] One pass in the agent engine: exits decided as D-A says; dwell times rescaled when a duration parameter or a time-varying rate changes (C17: 825, 4,323, and 4,755 against the ODE's 498); transmission entry dated as progression entry (ST4); branch choice evaluated relative to the scheduled exit (FP16, FP17); the flow recorded per destination of one transition (HP20, which `deferred.md` set aside on an assumption that does not hold for HPV); an efficacy keyed on one destination acting on its probability (HP6); `ss.given_dwell` (HP18).
-- [ ] Contract tests: a dwell entered by transmission equals one entered by progression; agents agree with the ODE at a fine step for every dwell form; branch shares agree across solvers (FP13: 0.20 against 0.79 today).
+- [~] One pass in the agent engine: exits decided as D-A says; dwell times rescaled when a duration parameter or a time-varying rate changes (C17: 825, 4,323, and 4,755 against the ODE's 498); transmission entry dated as progression entry (ST4); branch choice evaluated relative to the scheduled exit (FP16, FP17); the flow recorded per destination of one transition (HP20, which `deferred.md` set aside on an assumption that does not hold for HPV); an efficacy keyed on one destination acting on its probability (HP6); `ss.given_dwell` (HP18).
+- [~] Contract tests: a dwell entered by transmission equals one entered by progression; agents agree with the ODE at a fine step for every dwell form; branch shares agree across solvers (FP13: 0.20 against 0.79 today).
 - [ ] MA7's agents part: a fixed incubation period as agents is exact, not exponential (counts as agents through the compartmental kernels, Phase E).
+
+Done by PC (round 15): D-A documented (one transition with several destinations decided at exit); C17, FP16, FP17, FP13, HP6 (a destination as a target, `'tr.C'`); `test_dwell_forms` (eight dwell forms, agents against the ODE). For Cliff: ST4 (the extra step is in counting, not in behavior; the proposed fix puts a fixed-dwell SIR's peak 12% low) and item 18 (option B fits contact-mediated SIRs within 1% but puts rates on counts and count states 7% to 15% off; B′ would fix both, about M). Deferred: HP20 (results with a destination axis), HP18 (`ss.given_dwell`, design), MA7's agents part (with Phase E). Details: the PC worklog in the handoff_oct18b scratchpad.
 
 ### Phase D: inference (S to M)
 
@@ -126,10 +128,12 @@ Done by PB: after the script and the skill, HPVsim 369 of 373, STIsim 188 of 198
 
 ### Phase E: vector-borne models and counts (M; after D-C)
 
-- [ ] Acquisition as D-C says, fixing `rel_sus`, scalar efficacy, `ss.treat`'s default, which states are people, and the R0 matrix together (MA1 to MA5), with a conformance test that the spec's bednet idiom changes the spec's Ross-Macdonald model.
-- [ ] Counts as agents through the compartmental kernels (substeps, conveyors, modifiers), so mosquitoes do not go extinct at a monthly step (MA6, MA8, MA9, MA28).
+- [x] Acquisition as D-C says, fixing `rel_sus`, scalar efficacy, `ss.treat`'s default, which states are people, and the R0 matrix together (MA1 to MA5), with a conformance test that the spec's bednet idiom changes the spec's Ross-Macdonald model.
+- [~] Counts as agents through the compartmental kernels (substeps, conveyors, modifiers), so mosquitoes do not go extinct at a monthly step (MA6, MA8, MA9, MA28).
 - [ ] MA7's ODE offset (the conveyor gives 5,279 against the exact 5,020).
-- [ ] Typed values converted once at `init()`, series tabulated per step, function parameters evaluated once per step (MA17, MA27, FP31, FP34: `Engine.call()` calls `inspect.signature` on every call).
+- [x] Typed values converted once at `init()`, series tabulated per step, function parameters evaluated once per step (MA17, MA27, FP31, FP34: `Engine.call()` calls `inspect.signature` on every call).
+
+Done by PE (round 15): acquisition by D-C (MA1 to MA5; `test_contracts.py::test_acquisition`; the override is `acquisition=True/False` on a transition), MA17/MA27/FP31/FP34 (typed values once, functions once a step), and MA6, MA8, MA9 in the agents' count step. For Cliff: the carve-out (a transition out of the first state alongside a contact-mediated one is not an acquisition, so an SIRV's vaccination stays a vaccination; taken literally the rule counts `V` as infected, peak 0.401 to 0.510). Deferred: MA7 (the conveyor's last slot is exempt from other exits: a kernel change that moves every ODE with a fixed delay and a competing exit), MA28 (counts through the compartmental kernels as agents), `prevalence`/`new_infections` for vector models.
 
 ### Phase F: the saved form and random streams (M)
 
@@ -141,7 +145,7 @@ Done by PB: after the script and the skill, HPVsim 369 of 373, STIsim 188 of 198
 
 - [x] Sparse place-by-place arrays from `Mobility` onward (SC1) and one BLAS thread in workers (SC4), with W17 (workers by `forkserver` once JAX or Numba threads exist). (Done by PG. The multi-threaded-fork warning remains, from OpenBLAS's idle pools; silencing it needs forkserver everywhere, DC23.)
 - [x] A propensity tree or dependency graph for exact Gillespie with interacting groups (SC6), then the tau-leap rule from D-E. (Done by PG for the trees: flat cost per event, 0.2 µs at 300 strata, 4 µs at 300 places; the tau-leap rule waits on D-E.)
-- [ ] Memory per agent (N25), after decisions item 21; the lean path for small declared models (N29).
+- [~] Memory per agent (N25), after decisions item 21; the lean path for small declared models (N29). (Memory done by PM, round 15: 117 to 81 bytes per agent at the peak, results identical, speed unchanged; the rest of the way to 50 is for Cliff: group arrays as int16 and shared, about 19 to 5 bytes; dropping `people.uid`, 4.8; entry times only when read, 2.4 each. N29 open.)
 - [ ] Crossings whose places mix within a step (CROSS's deferred item), and the ODE's repeated sums of exposures in a crossing. (The ODE's repeated sums are done by PG with HP29: three HPV genotypes in 9 s, from 383 s, bit for bit.)
 
 ### Phase H: design passes (L; after D-F)

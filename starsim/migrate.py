@@ -7,8 +7,7 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
     python -m starsim.migrate mypackage/ tests/   # Rewrite in place
     python -m starsim.migrate mymodel.py --check  # Only list what would change
 
-The changes made are the renames (e.g. `ss.MaternalNet` to `ss.PrenatalNet`, and the
-network's name with it), a fractional `verbose` (now `verbose=1`), `res.annualize()`
+The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
 (`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), and the time index: in
 `update_results()` and in analyzers, `self.ti` is the end of the step, so an event dated
@@ -25,7 +24,6 @@ __all__ = ['migrate']
 
 # Names whose rename is mechanical: Starsim 3 spelling (a regular expression) to Starsim 4's
 renames = [
-    (r'\bss\.MaternalNet\b',       'ss.PrenatalNet',                 'ss.MaternalNet is ss.PrenatalNet'),
     (r'\bss\.time_prob\(',         'ss.probperyear(',                'ss.time_prob is ss.probperyear'),
     (r'\bss\.rate_prob\(',         'ss.peryear(',                    'ss.rate_prob is ss.peryear'),
     (r'\bss\.RandomExactNet\(\)',  "ss.RandomNet(method='exact')",   "ss.RandomExactNet is ss.RandomNet(method='exact')"),
@@ -193,14 +191,13 @@ def migrate_ast(text, analyzers=None):
     return text, notes, found, uses_ssl
 
 
-def migrate_text(text, network_rename=False, analyzers=None):
+def migrate_text(text, analyzers=None):
     """
     Migrate the source code of one file
 
     Args:
         text (str): the source code
         analyzers (set): the names of classes that are analyzers (see `find_analyzers()`); by default, those in this file
-        network_rename (bool): also rename the network's name (`maternalnet` to `prenatalnet`, and the key 'maternal'), as when the package used `ss.MaternalNet`
 
     Returns:
         A tuple of the new text, the changes made (line, note), and what needs a person (line, message)
@@ -213,10 +210,6 @@ def migrate_text(text, network_rename=False, analyzers=None):
             new, n = re.subn(pattern, repl, new)
             if n:
                 changes.append((i+1, note))
-        if network_rename:
-            new, n = re.subn(r'''\bmaternalnet\b|(?<=['"])maternal(?=['"])''', lambda m: 'prenatalnet' if m.group().endswith('net') else 'prenatal', new)
-            if n:
-                changes.append((i+1, "the network's name: ss.PrenatalNet is named prenatalnet (key 'prenatal')"))
         lines[i] = new
     text = ''.join(lines)
 
@@ -262,11 +255,10 @@ def migrate(*paths, check=False, verbose=True):
         path = sc.path(path)
         files += sorted(path.rglob('*.py')) if path.is_dir() else [path]
     texts = {f:f.read_text() for f in files}
-    network_rename = any('MaternalNet' in text for text in texts.values())
     analyzers = find_analyzers(texts.values())
     out = sc.objdict(changed=sc.objdict(), todo=sc.objdict())
     for f, text in texts.items():
-        new, changes, todo = migrate_text(text, network_rename=network_rename, analyzers=analyzers)
+        new, changes, todo = migrate_text(text, analyzers=analyzers)
         if changes:
             out.changed[str(f)] = changes
             if not check:

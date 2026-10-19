@@ -26,6 +26,7 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
+import types
 import functools as ft
 import sciris as sc
 import numpy as np
@@ -198,19 +199,21 @@ class TimePar:
 
     @classmethod
     def _defer_ops(cls):
-        """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n """
-        def defer(func):
+        """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n, and a function of the sim, which is a parameter in one (ss.peryear(0.02) * trend) """
+        def defer(func, swap):
             def wrapper(self, other):
                 if getattr(other, '_is_expr', False):
                     return NotImplemented
+                elif isinstance(other, (types.FunctionType, ft.partial)):
+                    return getattr(ss.transitions.as_expr(other), swap)(self)
                 return func(self, other)
             return ft.wraps(func)(wrapper)
 
         for op in ['add', 'sub', 'mul', 'truediv']:
-            for name in [f'__{op}__', f'__r{op}__']:
+            for name,swap in [(f'__{op}__', f'__r{op}__'), (f'__r{op}__', f'__{op}__')]:
                 func = cls.__dict__.get(name)
                 if func is not None:
-                    setattr(cls, name, defer(func))
+                    setattr(cls, name, defer(func, swap))
         return
 
     @classmethod
@@ -748,9 +751,9 @@ class Rate(TimePar):
             value = np.array(value)
 
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)) and value is not None:
-            if isinstance(value, (ss.transitions.Expr, ss.by)): # E.g. ss.perday(ss.par(2.4)) or ss.days(ss.by(age=[...]))
+            if isinstance(value, (ss.transitions.Expr, ss.by, ss.parameters.TimeValue)): # E.g. ss.perday(ss.par(2.4)) or ss.days(ss.by(age=[...]))
                 cls = type(self).__name__
-                errormsg = f'ss.{cls}() takes a number or an array, not {type(value).__name__}; put the type inside instead, e.g. ss.par(ss.{cls}(2.4), bounds=[ss.{cls}(1), ss.{cls}(5)]) or ss.by(age=[ss.{cls}(1), ss.{cls}(2)])'
+                errormsg = f'ss.{cls}() takes a number or an array, not {type(value).__name__}; put the type inside instead, e.g. ss.par(ss.{cls}(2.4), bounds=[ss.{cls}(1), ss.{cls}(5)]) or ss.by(age=[ss.{cls}(1), ss.{cls}(2)]), or multiply by it, e.g. ss.{cls}(1) * trend for a trend in time'
             else:
                 errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)

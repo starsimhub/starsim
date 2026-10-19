@@ -98,7 +98,7 @@ t('networks')
 from .networks import (
     Network, DynamicNetwork, SexualNetwork,
     StaticNet, RandomNet, PartnerNet, MFNet,
-    PrenatalNet, PostnatalNet, BreastfeedingNet,
+    PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts, geo, gravity, Mobility,
 )
 
@@ -233,7 +233,6 @@ _removed = {
     'campaign_triage':    "a follow-up test: ss.screen(test1, ..., on_positive=ss.screen(test2, ...))",
     'seasonality':        "ss.modify(flu.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), passed in connectors=",
     'multi_run':          "ss.parallel(sim, n_runs=n) (or sim.run(n_runs=n)); its .sims are the list multi_run returned",
-    'MaternalNet':        "ss.PrenatalNet",
     'RandomExactNet':     "ss.RandomNet(method='exact')",
     'RandomSafeNet':      "ssl.RandomSafeNet (import starsim.library as ssl)",
     'ClusterNet':         "ssl.ClusterNet (import starsim.library as ssl)",

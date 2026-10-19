@@ -332,10 +332,10 @@ class Held(Product):
                 targets = [('rel_trans', None)]
             elif key == 'mortality' and deaths:
                 targets = [('transition', name) for name in deaths]
-            elif key in graph.transitions:
+            elif key in graph.transitions or graph.destination(key) is not None: # A transition, or one destination of a transition with several ('progression.C')
                 targets = [('transition', key)]
             else:
-                options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions)
+                options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
                 raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
             for kind,name in targets:
                 if kind == 'transition':

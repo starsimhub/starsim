@@ -56,6 +56,7 @@ targets = [
     sir.pars.beta,              # a parameter
     sir.recovery.dur,           # a transition's inline value, which is a parameter too
     sir.recovery,               # a transition: scales its rate, or its probability if it is a branch chosen with p=
+    'hpv.progression.C',        # one destination of a transition with several: scales its probability
     sir.rel_sus,                # each person's (or group's) susceptibility; likewise sir.rel_trans
     'sir.pars.beta',            # the same parameter as a string path
     'school.pars.n_contacts',   # the contacts of a network or mixing pool, as a path

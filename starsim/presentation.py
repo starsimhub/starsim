@@ -40,6 +40,9 @@ class Presentation:
             sources = [name for name,tr in self.transitions.items() if state in tr.terms]
             guessed = 'infectious' in state.guessed
             add('', f'{state.name} infectious', f"guessed: source of {sc.strjoin(repr(s) for s in sources)}" if guessed else None)
+        infected = [s.name for s in self.infected if s.people]
+        if infected and not self.transmissions: # With a transmission, they are its destination and its source, as above
+            add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
         inits = {s.name:s.init for s in self.states.values() if s.init is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
@@ -67,8 +70,15 @@ class Presentation:
                 else:
                     add('', f'rate = {format_expr(tr.rate, values="number", mul="×")}', 'exposure through the networks')
             else:
-                guess = tr.guessed.get('name')
-                add(name, f'{tr.arrow}   spontaneous' if not tr.inflow else f'{tr.arrow}   inflow, in total per {unit or "step"}', f'guessed: name {guess}' if guess else None)
+                guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
+                kind = 'spontaneous'
+                if tr.inflow:
+                    kind = f'inflow, in total per {unit or "step"}'
+                elif tr.acquisition:
+                    kind += ', an acquisition'
+                elif 'acquisition' in tr.guessed: # Out of the first state, alongside a transmission
+                    kind += ', not an acquisition'
+                add(name, f'{tr.arrow}   {kind}', f'guessed: {guess}' if guess else None)
                 if not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
                     p = tr.dur if tr.dur is not None else tr.rate
                     raw = p.raw
@@ -345,6 +355,8 @@ class Presentation:
             for key in ['after', 'before']: # Likewise
                 if getattr(tr, key, None) is not None:
                     entry[key] = quantity_json(getattr(tr, key), 'dur', unit)
+            if getattr(tr, 'acquisition_given', None) is not None: # Likewise
+                entry.acquisition = bool(tr.acquisition_given)
             transitions.append(entry)
         out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
         out.transitions = transitions

@@ -114,24 +114,26 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg):
+def states(arg, **kwargs):
     """
     Create several states at once
 
     Args:
         arg (int/str): the number of states, which take their names from the variables they
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
+        kwargs (dict): passed to each `ss.State`, e.g. `people=False`
 
     Examples:
         ```python
         S, I, R = ss.states(3)
         S, I, R = ss.states('S I R') # The same, with the names given up front
+        Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         ```
     """
     if isinstance(arg, str):
-        out = [State(name) for name in arg.replace(',', ' ').split()]
+        out = [State(name, **kwargs) for name in arg.replace(',', ' ').split()]
     else:
-        out = [State() for i in range(arg)]
+        out = [State(**kwargs) for i in range(arg)]
     return out
 
 
@@ -196,6 +198,8 @@ class Transition(Nameable):
         after (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then); agents only
         before (dur): the opposite, for a rate: it applies only until people have been in its source state this long, as EMULSION's escape during a minimum stay; agents only
         offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
+        acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
+            contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -208,9 +212,10 @@ class Transition(Nameable):
         selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
         farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10)) # Ten piglets for each sow that farrows
+        importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, after=None, before=None, offspring=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes rate= or dur=, not both'
             raise ValueError(errormsg)
@@ -227,6 +232,8 @@ class Transition(Nameable):
         self.label = label
         self._pending = None if beta is None else (beta, source) # For ss.transmission(): the rate is beta times the source of infection (if not given, worked out when the module is built)
         self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
+        self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
+        self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.transitions.Graph.resolve_acquisition()
         if before is not None and rate is None:
             errormsg = 'before= limits a rate to the first part of a stay, so it goes with rate=, not dur='
             raise ValueError(errormsg)
@@ -428,7 +435,7 @@ class Transition(Nameable):
         return f'Transition({name}{self.arrow}{driver})'
 
 
-def transmission(arrow, beta=None, source=None, p=None, where=None, name=None, label=None):
+def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=None, name=None, label=None):
     """
     A contact-mediated transition: people move at rate `beta` times their exposure to the source of infection
 
@@ -440,16 +447,17 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, name=None, l
         source (str/list): the infectious state(s); if not given, the states declared `infectious=True`, else the destination
         p (list): branch probabilities, if there are several destinations
         where (Cond/func): who it applies to (see `ss.Transition`)
+        acquisition (bool): whether it is an acquisition of the disease (default True; see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
     if beta is None: # A forgotten beta is an explosive epidemic, so it is not guessed
         raise ss.UndrivenTransition(f'ss.transmission("{arrow}") has no beta. Give it one, e.g. ss.transmission("{arrow}", beta=0.3)')
-    return Transition(src, dst, beta=beta, source=source, p=p, where=where, name=name, label=label)
+    return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, after=None, before=None, offspring=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -464,11 +472,12 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         after (dur): a minimum stay in the source state first (see `ss.Transition`)
         before (dur): for a rate, the time in the source state after which it no longer applies (see `ss.Transition`)
         offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
+        acquisition (bool): whether it is an acquisition of the disease (see `ss.Transition`), e.g. `ss.progression('S -> V', rate=..., acquisition=False)` for a vaccination
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, after=after, before=before, offspring=offspring, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, after=after, before=before, offspring=offspring, acquisition=acquisition, name=name, label=label)
 
 
 def birth(arrow=None, rate=None, name=None, label=None):

@@ -440,6 +440,7 @@ def mock_time(dt=1.0, dur=10, start=2000):
         start = start,
         stop = None,
         dur = dur,
+        npts = 1000, # For arrays of step numbers, which are stored as 16-bit integers if the run fits
         is_absolute = True,
         initialized = True,
     )

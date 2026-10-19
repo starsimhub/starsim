@@ -68,6 +68,7 @@ guesses = dict(
     names      = (lambda: ss.Sim(unnamed(False)),                    lambda: ss.Sim(unnamed(True)),                        'name built from'),
     pop        = (lambda: ss.Sim(string_sir(), stop=50),             lambda: ss.Sim(string_sir(), total_pop=1000, stop=50), 'people'),
     stop       = (lambda: ss.Sim(string_sir(), total_pop=1000),      lambda: ss.Sim(string_sir(), total_pop=1000, stop=50), 'to 50'),
+    acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(string_sir()),                         'acquisition'),
     midpoint   = (lambda: ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=ss.par(bounds=[0.1, 0.5])), name='sir')),
                   lambda: ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=ss.par(0.3, bounds=[0.1, 0.5])), name='sir')), 'middle of its bounds'),
 )
@@ -220,6 +221,30 @@ def test_exit_order(solver):
     return shares
 
 
+def test_dwell_forms():
+    sc.heading('Testing that agents agree with the ODE at a fine step for every form of dwell time')
+    forms = dict(
+        exponential  = lambda I, R, D: dict(out=I >> R @ ss.days(4)),
+        rate         = lambda I, R, D: dict(out=ss.Transition(I, R, rate=ss.perday(0.25))),
+        fixed        = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.constant(ss.days(4)))),
+        erlang       = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.days(4), stages=3)),
+        lognormal    = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.lognorm_ex(ss.days(4), ss.days(2)))),
+        branches     = lambda I, R, D: dict(a=ss.Transition(I, R, p=0.7, dur=ss.days(4)), b=ss.Transition(I, D, p=0.3, dur=ss.days(2))), # Decided on entry
+        destinations = lambda I, R, D: dict(out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4))), # Decided at exit
+        competing    = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.constant(ss.days(4))), die=ss.Transition(I, D, rate=ss.perday(0.1))),
+    )
+    def run(form, solver):
+        I, R, D = ss.states('I R D')
+        dis = ss.Disease(I, R, D, **forms[form](I, R, D), init=dict(I=1.0), name='cohort')
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        res = ss.Sim(dis, unit='day', dt=0.05, stop=15, solver=solver, rand_seed=1, verbose=0, **size).run().results.cohort
+        return np.array([res.n_I.values.mean(), res.n_R[-1], res.n_D[-1]])/20_000 # Time infected, and where people end up
+    for form in forms:
+        ode, abm = run(form, 'ode'), run(form, 'abm')
+        assert np.allclose(abm, ode, rtol=0.03, atol=0.005), f'{form}: agents {abm}, ODE {ode}'
+    return
+
+
 # %% Conservation and exact identities
 
 closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.null
@@ -272,6 +297,26 @@ def test_identities():
     for solver in ['binomial', 'gillespie']:
         runs = ss.Sim(flow, total_pop=1000, unit='day', stop=30, solver=solver, verbose=0).run(n_runs=20).results.flow.n_E.values
         assert np.isclose(np.mean(runs, axis=0)[11:].mean(), 1000, rtol=0.03), f'{solver}: E holds {np.mean(runs, axis=0)[11:].mean():n} on average, not 1000'
+    return
+
+
+def test_acquisition():
+    sc.heading('Testing that an infection by a bite rate is an acquisition: the bednet idiom, a vaccine, and a cure act on the Ross-Macdonald model')
+    for solver,size in [('ode', dict(total_pop=5000)), ('abm', dict(n_agents=5000))]:
+        infections = {}
+        for key,intv in dict(none=None, bednet=ss.modify('malaria.rel_sus', multiply=0.0), vaccine=ss.vaccinate(ss.Vaccine(efficacy=1.0), coverage=1.0, at=[0]),
+                             cure=ss.treat(ss.Treatment(cure=1.0), coverage=0.9, at=[100], name='mda')).items():
+            sim = corpus.malaria(solver=solver, interventions=intv, **size).run()
+            infections[key] = sim.results.malaria.infection.values.sum()
+        assert infections['none'] > 5000 and infections['bednet'] == 0 # Was the same: rel_sus did not reach an infection by Iv.n
+        assert infections['vaccine'] == 0
+        assert sim.results.mda.delivered.values.sum() > 1000 # Was 0: nobody counted as infected
+    def imported(acq): # An importation alongside transmission is not an acquisition unless it says so
+        S, I, R = ss.states(3)
+        return ss.Disease(infection=S >> I @ ss.perday(0.2)*I, imported=ss.Transition(S, I, rate=ss.perday(0.01), acquisition=acq), recovery=I >> R @ ss.days(10), name='sir')
+    protected = [ss.Sim(imported(acq), interventions=ss.modify('sir.rel_sus', multiply=0), unit='day', stop=50, total_pop=1000, verbose=0).run().results.sir.imported.values.sum() for acq in [None, True]]
+    assert protected[0] > 300 and protected[1] == 0
+    assert np.isclose(sim.diseases.malaria.R0(), 7.5) # √(abM/(Nr) · acσ/((σ + μ)μ)) with M = 50,000 mosquitoes at equilibrium and N = 10,000 people; was 0
     return
 
 

@@ -469,6 +469,20 @@ def test_counts():
     assert sim2.solver == 'abm'
     assert np.isclose(res2.n_W.max(), res.n_W.max(), rtol=0.2)
 
+    # Mosquitoes given a starting number stay counts (they were the people), and ss.states() takes people=
+    def vector(**kwargs):
+        Sh, Ih = ss.states(2)
+        Sv, Iv = ss.states(2, **kwargs)
+        return ss.Disease(infection=Sh >> Ih @ ss.perday(0.1)*Iv.n/(Sh + Ih).n, recovery=Ih >> Sh @ ss.days(50), emergence=ss.null >> Sv @ ss.perday(100),
+                          biting=Sv >> Iv @ ss.perday(0.1)*Ih.n/(Sh + Ih).n, mortality=Sv + Iv >> ss.null @ ss.days(10), init=dict(Sv=3000), name='vector')
+    for kwargs in [{}, dict(people=False)]:
+        assert [s.name for s in vector(**kwargs).graph.people_states] == ['Sh', 'Ih']
+
+    # As agents, counts take substeps (at a monthly step they died out) and the modifiers of their transitions (which were ignored)
+    for dt,mult in [(30, 1.0), (1, 2.0)]:
+        sim = ss.Sim(vector(), interventions=ss.modify('vector.mortality', multiply=mult), n_agents=1000, unit='day', stop=360, dt=dt, **kw).run()
+        assert np.isclose(sim.results.vector.n_Sv[-1] + sim.results.vector.n_Iv[-1], 1000/mult, rtol=0.01) # Emergence over mortality
+
     # A bare count in a rate is an error
     with pytest.raises(ss.ExposureToCount):
         S, I, W = ss.states(3)
@@ -1094,6 +1108,27 @@ def test_modify():
         halves[solver] = faster/base
     assert abs(halves['abm'] - halves['ode']) < 0.1, f'Expected the same effect as agents and as compartments, not {halves}'
 
+    # So do a modifier on its duration and a duration that changes in time, as agents: a cohort, 498 left in the ODE on day 25 or 15 (not 825 and 4,755)
+    def cohort(solver, dur, mods=None):
+        I, R = ss.states('I R')
+        dis = ss.Disease(recovery=I >> R @ dur, init=dict(I=1.0), name='sir')
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        return ss.Sim(dis, interventions=mods(dis) if mods else None, unit='day', dt=0.1, stop=40, solver=solver, rand_seed=1, verbose=0, **size).run().results.sir.n_I.values
+    shorter = lambda dis: ss.modify(dis.pars.dur, multiply=0.5, start=20)
+    varying = ss.timeseries({0: ss.days(20), 10: ss.days(2)})
+    for dur, mods, i in [(ss.days(10), shorter, 250), (varying, None, 150)]:
+        ode, abm = cohort('ode', dur, mods)[i], cohort('abm', dur, mods)[i]
+        assert np.isclose(abm, ode, rtol=0.1), f'agents {abm:n}, ODE {ode:n}'
+
+    # A where= on an exit with a dwell time that becomes true while people wait: they leave once it holds, a year later
+    A, B = ss.states('A B')
+    aging = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.constant(ss.years(1)), where=lambda sim: sim.people.age.raw >= 30), init=dict(A=1.0), name='aging')
+    sim = ss.Sim(aging, n_agents=5000, start=2000, stop=2004, use_aging=True, verbose=0).init()
+    age = sim.people.age.raw.copy()
+    left = ~sim.run().diseases.aging.A.raw
+    near = (age >= 29) & (age < 29.9) & sim.people.alive.raw
+    assert near.any() and left[near].all() # Turned 30 within a year (all stayed before)
+
     # A modifier that makes a rate negative is clipped to 0, and says so
     sir = make_sir()
     clipped = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, add=-0.5, start=10), stop=30, **kw).run()
@@ -1288,6 +1323,12 @@ def test_time_values():
     func = by_age(lambda sim: ss.by(age=[0.3 if sim.t.now() < 50 else 0.1, 0.2]).per_group(sim))
     assert np.allclose(series, func)
 
+    # A rate times a trend in time or a function of the sim, in either order, also as the deaths of everyone (DuplicateDeclaration and IncompatibleTypes before)
+    trend = ss.timeseries({2000: 1.0, 2005: 0.5})
+    deaths = [ss.Sim(make_sir(), demographics=ss.death(rate=rate), start=2000, stop=2010, total_pop=1000, **kw).run().results.sir.deaths.values.sum()
+              for rate in [ss.peryear(0.02)*trend, trend*ss.peryear(0.02), ss.peryear(0.02)*(lambda sim: 1.0)]]
+    assert deaths[0] == deaths[1] and np.isclose(deaths[0], 0.75*deaths[2], rtol=0.05) # Halved for the second half
+
     # A seasonal value peaks once a year, under every solver
     for solver in ['ode', 'binomial', 'gillespie', 'abm']: # With this many people, gillespie takes tau leaps
         beta = ss.seasonal(mean=ss.perday(0.3), amplitude=0.5, peak='January')
@@ -1411,6 +1452,13 @@ def test_stays_and_offspring():
         with pytest.raises(ss.CapabilityError):
             ss.Sim(ss.Disease(infection=infection, recovery=I >> R @ ss.days(10), init=dict(I=10), name='x'), n_agents=500, unit='day', stop=20, solver=solver, verbose=0).init()
 
+    # A rate competing with a dwell of whole steps acts in each of them, including for people who arrived by a progression: 0.08 leave by it during a one-month dwell (not 0)
+    S, X, A, B = ss.states('S X A B')
+    d = ss.Disease(S, X, A, B, enter=ss.Transition(S, X, rate=ss.peryear(0.5)), timed=ss.Transition(X, A, dur=ss.constant(ss.months(1))), hazard=ss.Transition(X, B, rate=ss.peryear(1.0)), name='d')
+    r = ss.Sim(d, n_agents=20_000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run().results.d
+    share = r.hazard.values.sum()/(r.hazard.values.sum() + r.timed.values.sum())
+    assert np.isclose(share, 1 - np.exp(-1/12), rtol=0.1)
+
     G, L, NB = ss.states(3)
     herd = ss.Disease(farrowing=ss.Transition(G, L, dur=ss.days(10), offspring=(NB, 3)), weaning=ss.Transition(L, G, dur=ss.days(20)), init=dict(G=1.0), name='herd')
     res = ss.Sim(herd, unit='day', stop=60, n_agents=100, verbose=0).run().results.herd
@@ -1480,6 +1528,12 @@ def test_cross_disease_rate():
         return ss.Sim([a, b], n_agents=2000, total_pop=2000, stop=2005, solver=solver, verbose=0).run().results.b.cancel.sum()
     for solver in ['ode', 'abm']:
         assert np.isclose(cancelled('S I C X', solver), cancelled('S I D X', solver), rtol=1e-9) # Was 0 (b's own C) with agents, and an error with the ODE
+
+    # A state of the other disease read before that disease is declared: a would keep an empty state of its own, so it is refused
+    Sa, Ia, Sb, Ib, Rb = ss.states('Sa Ia Sb Ib Rb')
+    a = ss.Disease(infection=Sa >> Ia @ ss.peryear(1.5)*Ia*(1 - 0.9*Rb.frac), name='a')
+    with pytest.raises(ss.DuplicateDeclaration):
+        ss.Disease(infection=Sb >> Ib @ ss.peryear(1.5)*Ib, recovery=Ib >> Rb @ ss.years(1), name='b')
     return
 
 

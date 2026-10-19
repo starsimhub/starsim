@@ -136,7 +136,7 @@ vocabulary = {
 code_names = """
 AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr
 BoolState BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dx
-DynamicNetwork FloatArr GammaPoisson IndexArr IntArr ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
+DynamicNetwork FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
 Pregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
 check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root

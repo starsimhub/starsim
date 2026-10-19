@@ -77,7 +77,7 @@ def peak_memory(total):
     return peak
 
 
-@pytest.mark.xfail(reason='N25: about 114 bytes per agent at the peak here (142 before 16-bit step numbers, 240 before the fused passes and 32-bit UIDs): the People arrays (42 bytes: 64-bit auids, uid, slot, parent, age, ti_dead, ti_removed, scale, patch), the disease (26: rel_sus, rel_trans, four states, their 16-bit times, the scheduled exits), the groups kept (12), all with a fifth more room for births, and the temporaries of a step', strict=False)
+@pytest.mark.xfail(reason='N25: about 81 bytes per agent at the peak here (117 before 32-bit active UIDs, 16-bit death times, and no memory for arrays nothing sets; 142 before 16-bit step numbers): the People arrays (26 bytes: 32-bit auids and uid, age, patch, alive, female, 16-bit ti_dead and ti_removed), the disease (22: four states, their 16-bit times, the scheduled exits), the groups kept (14: patch as floats, its levels, and the groups), all with a fifth more room for births, and the temporaries of a step', strict=False)
 def test_laser_memory():
     sc.heading('LASER: memory per agent')
     n1, n2 = 50_000, 200_000

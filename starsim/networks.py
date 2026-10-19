@@ -1485,6 +1485,15 @@ class PrenatalNet(Network):
         return n
 
 
+class MaternalNet(PrenatalNet):
+    """
+    Mother-to-child network, for when prenatal and postnatal transmission need not be told apart
+
+    For now the same as `ss.PrenatalNet` (as in Starsim 3), but named `maternalnet`.
+    """
+    pass
+
+
 class PostnatalNet(DynamicNetwork):
     """
     Network to track postnatal processes

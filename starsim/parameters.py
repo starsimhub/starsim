@@ -874,7 +874,8 @@ class by:
                 raise ss.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
         elif self.table is None:
             for strat,(dim,vals) in zip(strats, self.given.items()):
-                if np.ndim(vals) != 0 and len(sc.toarray(vals)) != strat.n: # One value is for every level, e.g. ss.by(subpop=2.2)
+                n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else strat.n # One value is for every level, e.g. ss.by(subpop=2.2)
+                if n != strat.n:
                     raise ss.ShapeError(f'ss.by({dim}=...) has {len(sc.toarray(vals))} values, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
         return ds, strats
 
@@ -885,16 +886,25 @@ class by:
         Returns the positions of the dimensions in the sim, and an array with one axis for each.
         A value that varies in time is taken at the sim's current time, or at `year` if given.
         """
-        given = convert or (lambda v: v)
-        convert = lambda v: given((v(sim) if year is None else v.at(year, sim)) if isinstance(v, TimeValue) else v)
+        given = convert
+        def convert(v):
+            if not isinstance(v, TimeValue):
+                return v if given is None else given(v)
+            when = sim.t.now('year') if year is None else year
+            if given is None:
+                return v.at(when, sim)
+            return v.series([when], sim, given)[0] # Its values converted, then interpolated as numbers
         ds, strats = self.check(sim)
         if self.array is not None:
             return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if self.array.size else self.array.copy()
         if self.table is None:
             out = np.ones([strat.n for strat in strats])
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
-                single = np.ndim(vals) == 0 # One value for every level, e.g. ss.by(subpop=2.2)
-                vals = np.array([convert(v) for v in sc.toarray(vals)], dtype=float)
+                if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
+                    single, items = False, vals
+                else:
+                    single, items = np.ndim(vals) == 0, sc.toarray(vals) # One value for every level, e.g. ss.by(subpop=2.2)
+                vals = np.array([convert(v) for v in items], dtype=float)
                 if single:
                     vals = np.full(strat.n, vals[0])
                 shape = [1]*len(strats)

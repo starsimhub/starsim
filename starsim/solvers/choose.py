@@ -218,6 +218,9 @@ def choose_solver(sim):
         for state in mod.graph.count_states:
             if 'people' in state.guessed:
                 ss.note(f"state '{state.name}' treated as a count, not people ({state.guessed.people})", ss.StateNotPeople, sim=sim)
+        if mod.graph.separate:
+            names = sc.strjoin(s.name for s in mod.graph.separate)
+            ss.note(f"{names} of '{mod.name}' {'is' if len(mod.graph.separate) == 1 else 'are'} people (people=True) with no transition to or from {mod.graph.first.name}, so the people in them are a population of their own, counted in n_alive, with ages; a count is ss.State(people=False)", sim=sim)
     return
 
 

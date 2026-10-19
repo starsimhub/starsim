@@ -568,6 +568,9 @@ class Delivery(Intervention):
         self.trace = trace
         self.on_positive = on_positive
         self.on_negative = on_negative
+        if isinstance(disease, (list, tuple)):
+            errormsg = f'disease= of a delivery is one disease, not {len(disease)}: a product acts on one disease, so make one product for each, and deliver each with its own disease='
+            raise TypeError(errormsg)
         self.disease = disease if disease is None or isinstance(disease, str) else disease.name
         self.triggered = False # Whether this is the follow-up of another delivery, so has no schedule of its own
         self.started = False # For routine delivery by age: whether the people already past the age have been left out (see skip_past())
@@ -717,6 +720,10 @@ class Delivery(Intervention):
             raise ss.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a declared disease in the sim; these are {sc.strjoin(declared)}.')
         if self.product is not None and self.product.disease is None:
             self.product.disease = self.disease
+        elif self.product is not None and self.product.disease != self.disease: # Until products act on several diseases, it would protect against the first only
+            errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}": a product acts on one disease.\n'
+                        f'     Make one product for each disease, e.g. vx_{self.disease} = ss.Vaccine(...), and deliver each with its own ss.vaccinate(..., disease=\'{self.disease}\').')
+            raise ss.UnknownDisease(errormsg)
         super().init_pre(sim)
         self.started = False
         if self.triggered: # A follow-up runs when its parent's result arrives, so has no schedule of its own

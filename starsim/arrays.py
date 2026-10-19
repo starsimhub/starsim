@@ -12,6 +12,7 @@ import starsim as ss
 ss_float   = ss.dtypes.float
 ss_nbfloat = ss.dtypes.nbfloat
 ss_int     = ss.dtypes.int
+ss_uid     = ss.dtypes.uid
 ss_nbint   = ss.dtypes.nbint
 ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
@@ -271,6 +272,7 @@ class Arr(BaseArr):
         people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
         mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
         columns (int/list): if provided, create a 2D array with this many columns (e.g. one per variant), or a list of column names (e.g. `['wildtype', 'mutant']`)
+        shared (bool/Arr): if True, the array takes no memory per agent until a value is set (other than by its default, which must be a scalar): until then every agent has the default, and `raw` is a read-only view of it; if an `Arr`, the same with that array's values (as `people.slot` reads `people.uid`)
 
     For 2D arrays (i.e. if `columns` is supplied), `arr[uids]` returns an array of shape `(len(uids), ncols)`,
     `arr[uids, v]` or `arr[:, v]` returns column `v`, and `arr.col(v)` returns column `v` as a 1D `Arr`. If the columns
@@ -302,10 +304,12 @@ class Arr(BaseArr):
         ```
     """
     mod = None # The module whose state this is, if any; set by Module.define_states(), so a condition on it (e.g. hiv.cd4 < 200) can find it
+    shared = None # Whether it has no memory of its own yet: see own()
 
-    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None, columns=None):
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None, columns=None, shared=False):
         # Set attributes
         self.name = name
+        self.shared = None if shared is False else shared # True or an Arr until a value is set: see own()
         self.label = label or name
         self.default = default
         if nan is not None: self.nan = nan
@@ -391,7 +395,7 @@ class Arr(BaseArr):
             - BoolArr, boolean array, or full slice: values
             - tuple (for 2D arrays, e.g. `arr[uids, v]`): the first element is converted as above, and the second can be a column name
         """
-        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int): # Catch immediately for speed
+        if isinstance(key, (uids, int, ss_int, ss_uid)) or (isinstance(key, np.ndarray) and key.dtype in (ss_int, ss_uid)): # Catch immediately for speed; 32-bit, as people.auids are, too
             return key
         elif isinstance(key, tuple):
             rows = self._convert_key(key[0])
@@ -438,6 +442,8 @@ class Arr(BaseArr):
             if isinstance(key, str): # Named column for all active agents, e.g. arr['mutant'] = 0.5
                 key = (slice(None), key)
             key = self._convert_key(key)
+        if self.shared is not None:
+            self.own()
         self.raw[key] = value
         return
 
@@ -596,6 +602,8 @@ class Arr(BaseArr):
         if inplace:
             out = np.empty(a.shape, dtype=self.raw.dtype) # In-place operations cannot change the dtype
             ufunc(a, b, out=out) # Calling the ufunc this way ensures in-place operations will raise the same error for Arr as for np.array
+            if self.shared is not None:
+                self.own()
             self.raw[inds] = out # Write the values back to the existing raw array in-place
             return self
         else:
@@ -695,12 +703,34 @@ class Arr(BaseArr):
                 new_vals = self.default
             else:
                 new_vals = self.nan
+        if self.shared is not None:
+            self.own()
         self.raw[uids] = new_vals
         return new_vals
 
     def set_nan(self, uids):
         """ Shortcut function to set values to NaN """
+        if self.shared is not None:
+            self.own()
         self.raw[uids] = self.nan
+        return
+
+    def shared_raw(self):
+        """ The read-only values of an array that has no memory of its own yet (see `shared` in `ss.Arr`): its default, or the values of the array it reads """
+        if isinstance(self.shared, Arr):
+            raw = self.shared.raw.view()
+            raw.flags.writeable = False
+            return raw
+        value = self.nan if self.default is None else self.default
+        return np.broadcast_to(np.asarray(value, dtype=self.dtype), (self.len_tot, *self.item_shape))
+
+    def own(self):
+        """ Give an array that has no memory of its own yet (see `shared` in `ss.Arr`) its own values, before one is set """
+        raw = np.array(self.raw) # A copy, which can be written
+        if self.shared is True: # The space for agents not yet made is NaN, as for any array
+            raw[self.len_used:] = self.nan
+        self.raw = raw
+        self.shared = None
         return
 
     @property
@@ -737,6 +767,12 @@ class Arr(BaseArr):
         """
         orig_len = self.len_used
         n_new = len(new_uids)
+        if self.shared is not None and new_vals is None: # Every agent still has the default (or the values of the array it reads), so nothing to store
+            self.len_used += n_new
+            if self.len_used > self.len_tot:
+                self.len_tot += max(n_new, self.len_tot//5) # The same room as below, so its length is that of the other arrays
+            self.raw = self.shared_raw()
+            return
         self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
 
         # Physically reshape the arrays, if needed
@@ -827,6 +863,7 @@ class Arr(BaseArr):
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
+        new.shared = None # It has values of its own
         if copy:
             new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
             new.raw[new.auids] = arr
@@ -938,7 +975,7 @@ class ModifiableArr(FloatArr):
 
 class StepArr(Arr):
     """
-    Step numbers (time indices), stored compactly: a declared disease's `ti_X` and `ti_exit_X`, as agents
+    Step numbers (time indices), stored compactly: a declared disease's `ti_X` and `ti_exit_X`, as agents, and `people.ti_dead` and `people.ti_removed`
 
     The values are stored as 16-bit integers when the module's run has fewer than
     32,000 steps (and 32-bit otherwise), which is a quarter of the memory of a
@@ -949,6 +986,10 @@ class StepArr(Arr):
     `.years` converts them to years; `.raw` has the stored integers, where `.nan`
     means not set and `.never` means after the end of the run.
 
+    With `late=True` (as for `people.ti_dead`), "not set" is stored as the largest
+    integer, the same as after the end of the run, so `raw <= ti` is whether the time
+    has come, with no special case; both read as NaN.
+
     Example:
         ```python
         sim = ss.Sim(ss.SIR(), unit='day', stop=100).run()
@@ -957,12 +998,18 @@ class StepArr(Arr):
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
         ```
     """
-    def __init__(self, name=None, dtype=np.int32, **kwargs):
-        super().__init__(name=name, dtype=dtype, nan=np.iinfo(dtype).min, **kwargs)
-        self.never = np.iinfo(dtype).max
+    def __init__(self, name=None, dtype=np.int32, late=False, **kwargs):
+        self.late = late
+        super().__init__(name=name, dtype=dtype, nan=self.sentinels(dtype)[0], **kwargs)
+        self.lowest, self.never = self.sentinels(dtype)[1:]
         self.nan_eq = False # Read as floats, so NaN is found with np.isnan()
         self.t = None # The module's timeline, for .years; set by the engine
         return
+
+    def sentinels(self, dtype):
+        """ The stored integers for not set, the lowest step, and after the end of the run """
+        info = np.iinfo(dtype)
+        return (info.max if self.late else info.min), info.min + (0 if self.late else 1), info.max
 
     def fit(self, t):
         """ Use 16-bit integers if the module's run (on timeline `t`) fits in them """
@@ -970,7 +1017,8 @@ class StepArr(Arr):
         dtype = np.int16 if t.npts < 32_000 else np.int32
         if dtype != self.dtype:
             nan = self.raw == self.nan
-            self.dtype, self.nan, self.never = dtype, np.iinfo(dtype).min, np.iinfo(dtype).max
+            self.dtype = dtype
+            self.nan, self.lowest, self.never = self.sentinels(dtype)
             self.raw = self.raw.astype(dtype)
             self.raw[nan] = self.nan
         return
@@ -979,21 +1027,21 @@ class StepArr(Arr):
         """ Convert stored step numbers to float32: NaN where not set, and inf after the end of the run """
         vals = np.asarray(vals)
         out = vals.astype(ss_float)
-        out[vals == self.nan] = np.nan
         out[vals == self.never] = np.inf
+        out[vals == self.nan] = np.nan # After inf, since with late=True they are the same
         return out if out.ndim else out[()]
 
     def from_float(self, vals):
         """ Convert step numbers to the stored integers: NaN to not set, a time between steps to the next step, and inf (or beyond the integers) to after the end of the run """
         if isinstance(vals, numbers.Integral): # The usual case, e.g. the step now
-            return min(max(int(vals), self.nan + 1), self.never)
+            return min(max(int(vals), self.lowest), self.never)
         elif isinstance(vals, float) and vals != vals: # NaN, e.g. a scheduled exit forgotten
             return self.nan
         vals = np.asarray(vals)
         if vals.dtype.kind in 'iub':
-            return np.clip(vals, self.nan + 1, self.never)
+            return np.clip(vals, self.lowest, self.never)
         out = np.ceil(vals, out=np.empty(vals.shape)) # An array, even for one value
-        np.clip(out, self.nan + 1, self.never, out=out) # NaN stays NaN here
+        np.clip(out, self.lowest, self.never, out=out) # NaN stays NaN here
         out[np.isnan(out)] = self.nan
         return out.astype(self.dtype)
 
@@ -1309,10 +1357,10 @@ class IndexArr(Arr):
     A special class of Arr used for UIDs and RNG IDs; not to be used as a general integer array (for that, use IntArr)
 
     The values are stored as 32-bit integers, to save memory (so there can be up to 2^31 agents), and read as
-    UIDs (`ss.uids`, which are 64-bit).
+    UIDs (`ss.uids`, which keep 32-bit integers as they are).
     """
-    def __init__(self, name=None, label=None):
-        super().__init__(name=name, dtype=np.int32, default=None, nan=-1, label=label, skip_init=True)
+    def __init__(self, name=None, label=None, shared=False):
+        super().__init__(name=name, dtype=np.int32, default=None, nan=-1, label=label, skip_init=True, shared=shared)
         return
 
     def __getitem__(self, key):
@@ -1440,8 +1488,8 @@ class uids(np.ndarray):
         genuinely fractional or non-finite values (`1.5`, `nan`, `inf`) are rejected, since they
         can never index an array.
         """
-        if arr.dtype == ss_int:
-            return arr.view(cls) # Fast path: already the correct type, no copy needed
+        if arr.dtype == ss_int or arr.dtype == ss_uid:
+            return arr.view(cls) # Fast path: already the correct type (64-bit, or 32-bit as people.auids are), no copy needed
         if arr.dtype.kind not in ('i', 'u'):
             # Non-integer dtype: isfinite rejects nan/inf, floor rejects fractions
             if not (np.isfinite(arr).all() and (arr == np.floor(arr)).all()):

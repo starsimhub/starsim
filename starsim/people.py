@@ -75,19 +75,7 @@ class People:
         self.n_agents_init = n_agents
         self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
 
-        # Handle the four fundamental arrays: UIDs for tracking agents, slots for
-        # tracking random numbers, AUIDs for tracking alive agents, and agents' parents
-        n = int(n_agents)
-        uids = ss.uids(np.arange(n))
-        self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
-        self.uid    = ss.IndexArr('uid')  # This variable tracks all UIDs
-        self.slot   = ss.IndexArr('slot') # A slot is a special state managed internally to generate random numbers
-        self.parent = ss.IndexArr('parent', label='UID of parent')  # UID of parent, if any (used with pregnancy)
-        self.uid.grow(new_vals=uids)
-        self.slot.grow(new_vals=uids)
-        self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
-        for state in [self.uid, self.slot, self.parent]:
-            state.people = self # Manually link to people since we need to set these up before using state.link_people()
+        # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
         # Handle additional states
         extra_states = sc.promotetolist(extra_states)
@@ -95,9 +83,9 @@ class People:
             ss.BoolState('alive', default=True),  # Time index for death
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
             ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
-            ss.FloatArr('ti_dead'),  # Time index for death
-            ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
-            AgentScale('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
+            ss.arrays.StepArr('ti_dead', late=True),  # Time index for death, as 16-bit integers if the run fits
+            ss.arrays.StepArr('ti_removed', late=True),  # Time index for removal (e.g. emigration)
+            AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
@@ -110,6 +98,26 @@ class People:
         if mock:
             self.init_mock()
 
+        return
+
+    def make_uids(self):
+        """
+        Make the four fundamental arrays: UIDs for tracking agents, slots for tracking random
+        numbers, AUIDs for tracking alive agents, and agents' parents
+
+        They are made on first use rather than in `__init__()`, so that a People not yet in
+        a sim (such as the copy `sim.inputs` keeps for `sim.new()`) holds no arrays per agent.
+        The slots read the UIDs, and the parents are all none, until one is set (see `shared`
+        in `ss.Arr`), so they take no memory unless something (e.g. `ss.Pregnancy`) sets them.
+        """
+        uids = ss.uids(np.arange(int(self.n_agents_init)))
+        self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as 32-bit integers
+        self.uid    = ss.IndexArr('uid')  # This variable tracks all UIDs
+        self.slot   = ss.IndexArr('slot', shared=self.uid) # A slot is a special state managed internally to generate random numbers
+        self.parent = ss.IndexArr('parent', label='UID of parent', shared=True)  # UID of parent, if any (used with pregnancy)
+        for state in [self.uid, self.slot, self.parent]:
+            state.people = self # Manually link to people since we need to set these up before using state.link_people()
+            state.grow(new_uids=uids, new_vals=uids if state is self.uid else None)
         return
 
     def _link_state(self, state, die=True):
@@ -133,7 +141,10 @@ class People:
         return
 
     def __getattr__(self, attr):
-        """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
+        """ Called only if the attribute isn't found: the fundamental arrays, on first use (see make_uids()); in a compartmental run, per-agent attributes that are not stratifications do not exist """
+        if attr in ['auids', 'uid', 'slot', 'parent'] and 'n_agents_init' in self.__dict__ and 'uid' not in self.__dict__:
+            self.make_uids()
+            return self.__dict__[attr]
         missing = self.__dict__.get('_no_groups', [])
         if attr in missing:
             raise ss.CapabilityError(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
@@ -292,6 +303,8 @@ class People:
             errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
+        for arr in [self.ti_dead, self.ti_removed]:
+            arr.fit(sim.t) # 16-bit step numbers if the run fits
         ss.distributions.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
@@ -414,7 +427,7 @@ class People:
         """
         n = self.n_uids
         raw = np.zeros(self.uid.len_tot, dtype=bool)
-        raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
+        raw[:n] = ~self.alive.raw[:n] & (self.ti_dead.raw[:n] != self.ti_dead.nan)
         dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
         dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
         return dead
@@ -453,11 +466,12 @@ class People:
         new_uids = ss.uids(np.arange(start_uid, stop_uid))
         self.uid.grow(new_uids, new_vals=new_uids)
 
-        # We need to grow the slots as well
-        new_slots = new_slots if new_slots is not None else new_uids
+        # We need to grow the slots as well; unless they are given, they are the UIDs
+        if new_slots is None and self.slot.shared is None:
+            new_slots = new_uids
         self.slot.grow(new_uids, new_vals=new_slots)
 
-        self.parent.grow(new_uids, new_vals=self.parent.nan) # Grow parent array
+        self.parent.grow(new_uids) # Grow parent array: none, until set
 
         # Grow the states
         for state in self._states.values():
@@ -481,7 +495,7 @@ class People:
         if room is not None and auids is self._auids_view and n + k <= len(room): # The active agents are still the first part of the array with room
             room[n:n+k] = new_uids
         else:
-            room = np.empty(n + k + max(1000, (n + k)//10), dtype=np.int64)
+            room = np.empty(n + k + max(1000, (n + k)//10), dtype=ss.dtypes.uid)
             room[:n] = auids
             room[n:n+k] = new_uids
             self._auids_room = room
@@ -597,12 +611,15 @@ class People:
         age = self.age.raw if aging else np.zeros(0, dtype=ss.dtypes.float) # In a compartmental run, people have no ages
         dt = age.dtype.type(self.sim.t.dt_year if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
         expected = len(auids) - len(dying)
-        room = np.empty(expected + max(1000, expected//10), dtype=np.int64) # With room for births: see add_active()
+        if not len(dying) and auids is getattr(self, '_auids_view', None): # Nobody leaves (as in most steps): the agents kept, in order, are written over themselves, so no copy is made
+            room = self._auids_room
+        else:
+            room = np.empty(expected + max(1000, expected//10), dtype=ss.dtypes.uid) # With room for births: see add_active()
         n_kept = ss.kernels.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
         if n_kept >= 0:
             gone = dying.view(np.ndarray)
         else: # ...or else from the active agents themselves
-            room = np.empty(len(auids) + max(1000, len(auids)//10), dtype=np.int64)
+            room = np.empty(len(auids) + max(1000, len(auids)//10), dtype=ss.dtypes.uid)
             n_kept, gone = ss.kernels.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
         if len(gone): # Agents who are still active but no longer alive
 

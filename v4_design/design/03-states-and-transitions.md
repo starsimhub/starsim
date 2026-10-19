@@ -126,6 +126,7 @@ ss.Transition(
     after  = None,      # a minimum stay in the source state before anyone leaves by it
     before = None,      # for a rate: it applies only until people have been in the source state this long
     offspring = None,   # each person who goes through it has newborns in this state: a state, or (state, number) (agents only)
+    acquisition = None, # whether it is an acquisition of the disease (see What counts as acquisition); worked out if not given
     name   = None,
     label  = None,
 )
@@ -136,6 +137,23 @@ At most one of `rate` and `dur` is given, and `stages=` goes with `dur=`. `dur=s
 `after=`, `before=`, and `offspring=` are for models that count time in a state or have litters, as EMULSION's minimum durations, escapes, and births do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`, `farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10))`). `offspring=` needs agents. A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay.
 
 **The kind of a transition is derived, not chosen.** If the rate mentions a bare state, the transition is *contact-mediated* and that state is the source of infection; otherwise it is *spontaneous*. `describe()` prints the kind of every transition.
+
+### What counts as acquisition
+
+Whether a transition is an *acquisition* of the disease is a separate question from its kind, and it decides what acts on it: each person's `rel_sus` (and a state's), `ss.modify(dis.rel_sus, ...)`, a product's efficacy against acquisition (a scalar `efficacy`, [08-interventions.md](08-interventions.md#products)), and which states are infected, which prevalence counts and `ss.treat` cures from. The rule:
+
+- a contact-mediated transition is an acquisition;
+- so is every other transition of people out of the first state that is not an outflow, whatever its rate: a bite rate (`Sh >> Eh @ a * b * Iv.n / Nh`), an EIR (`S >> I @ b * eir`), a dose of bacteria (`S >> I @ beta * W.n / (W.n + K)`), or a constant hazard;
+- unless a transition out of the first state is contact-mediated, which is then the acquisition: `S >> V @ rate` alongside `S >> I @ beta * I` is a vaccination, not an infection.
+
+`acquisition=True` or `acquisition=False` on the transition says it outright, and is written in the model spec. It is the override for the cases the rule gets wrong: an importation alongside transmission, `ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True)`, which `rel_sus` and a vaccine should reduce; and a vaccination in a model with no transmission, `ss.progression('Sh -> Vh', rate=ss.perday(0.01), acquisition=False)`, which they should not. The infected states are those that acquisitions move people into, the sources of infection, and the states whose count is the source of infection of a count (`Ih` in mosquitoes' `biting = Sv >> Ev @ a * c * Ih.n / Nh`). `describe()` marks a spontaneous acquisition as guessed, and lists the infected states when there is no transmission:
+
+```text
+             infected: Eh, Ih                                [counted in prevalence, and cured by ss.treat]
+infection    Sh -> Eh   spontaneous, an acquisition          [guessed: acquisition: out of Sh]
+```
+
+An acquisition that is not contact-mediated takes `rel_sus` as a multiplier on its rate, as a transmission does, so the bednet idiom `ss.modify(malaria.rel_sus, multiply=0.5, where=...)` and `ss.vaccinate(ss.Vaccine(efficacy=0.9))` change the Ross-Macdonald model below under every solver.
 
 **`ss.null` stands for outside the model.** A transition from it is an inflow (births, shedding into a reservoir) and a transition to it is an outflow (deaths, decay). It is a named object and not `None` because Python evaluates `None @ 0.1` before it ever sees the arrow, and `None` cannot answer; `ss.null` can, so `I >> ss.null @ 0.1` works with a bare number. (`I >> None`, with no `@`, also makes an outflow, but the language writes `ss.null`.) `ss.null` is not a state: it has no count, no result, and no name in the model.
 
@@ -333,11 +351,11 @@ ss.transmission('S -> Lfast | Lslow', beta=beta, p=[p, 1 - p])          # arrow 
 
 A branching transition is one named transition with several destinations. Its result is the total flow, and the flow into each destination shows in the counts of the destination states; a flow per branch is had by writing each branch as its own transition with `p=` (below).
 
-**`p` is always a branch probability**: the chance of taking this branch, decided when the person enters the source state (or, for a contact-mediated transition, when they are infected). A per-period probability that governs timing is not `p=`; it is a typed rate, `rate=ss.prob(0.1, 'day')`.
+**`p` is always a branch probability**: the chance of taking this branch. Separate transitions with `p=` are decided when the person enters the source state (or, for a contact-mediated transition, when they are infected), and each then has its own dwell time. One transition with several destinations is decided when the person leaves, from the one dwell time drawn: its `p` is evaluated then, so a time series or a function of the sim sees the person as they are when they leave (an age-dependent share uses their age at exit). A per-period probability that governs timing is not `p=`; it is a typed rate, `rate=ss.prob(0.1, 'day')`.
 
 - `p` accepts everything a parameter accepts ([04-parameters.md](04-parameters.md)): a constant, `ss.by(age=[...])`, a time series, or a function of the sim returning one value per agent or per group. In real models the split is rarely two constants.
 - The probabilities out of one state MUST sum to 1. One entry MAY be left out (`None` in a list, or one transition with no `p=`) and gets the remainder, which `describe()` marks as guessed; with two destinations a single value is the first one's probability. A constant split that does not sum to 1, or `ss.null` as one of several destinations (a branch out of the model is a transition of its own), raises `BadBranchSplit`.
-- A modifier on a branch ([07-effects.md](07-effects.md)), a vaccine's efficacy against it, and `where=` on it change its probability, and the other branches share the rest; they do not change how long people take to leave.
+- A modifier on a branch ([07-effects.md](07-effects.md)), a vaccine's efficacy against it, and `where=` on it change its probability, and the other branches share the rest; they do not change how long people take to leave. One destination of a transition with several is named `'<transition>.<state>'` (`ss.modify('hpv.progression.C', multiply=0.5)`, or `efficacy={'progression.C': 0.5}`), and a modifier or efficacy on it changes that destination's probability in the same way; one on the transition itself scales its rate.
 
 **Each branch may have its own dwell time**: decide the branch on entry, then wait. Write two transitions out of the same state, each with `p=` and its own `dur=`:
 
@@ -539,7 +557,7 @@ malaria = ss.Disease(
 sim = ss.Sim(malaria, n_agents=5_000, unit='day', stop=3 * 365)
 ```
 
-Nobody can move from `Sh` into `Sv`, `Ev`, or `Iv`, so the mosquito states are counts. Here `n_agents=` makes the humans agents; the mosquitoes are three numbers. `Ih=0.01` is a fraction of the people and `Sv=50_000` is a count of mosquitoes. A seasonal mosquito population is `emergence = ss.null >> Sv @ ss.seasonal(mean=5_000, amplitude=0.8, peak='April')`. Several mosquito species are a stratification of the three vector states.
+Nobody can move from `Sh` into `Sv`, `Ev`, or `Iv`, so the mosquito states are counts (`ss.states(3, people=False)` says so outright). Here `n_agents=` makes the humans agents; the mosquitoes are three numbers. `infection` is an acquisition, so `ss.modify(malaria.rel_sus, multiply=0.5, where=...)` (a bednet) and a vaccine reduce it, `ss.treat` cures from `Eh` and `Ih`, and `malaria.R0()` is the next-generation value, with the mosquitoes at their disease-free equilibrium (the square root of the classical Ross-Macdonald number, since each passage through the vector is a generation: [12-backends.md](12-backends.md)). `Ih=0.01` is a fraction of the people and `Sv=50_000` is a count of mosquitoes. A seasonal mosquito population is `emergence = ss.null >> Sv @ ss.seasonal(mean=5_000, amplitude=0.8, peak='April')`. Several mosquito species are a stratification of the three vector states.
 
 ### A count set each step
 
@@ -578,8 +596,9 @@ Every one of these is a default that `describe()` prints and marks, and each row
 | The set of states | Every name in an arrow string, when none is declared |
 | A transmission's source, in the string form | The states declared `infectious=True`, else the destination; required if the destination leads on as in an SEIR (`SourceNeeded`) |
 | Which states are infectious | The sources of contact-mediated transitions |
+| Which transitions are acquisitions | Contact-mediated ones, and the other transitions of people out of the first state when none of those is contact-mediated ([above](#what-counts-as-acquisition)); `acquisition=` overrides it |
 | Initial conditions | Whatever is not given goes to the first state (the source of the first transmission, [above](#ssstate)); with nothing given and a transmission, `init_prev=0.01` |
-| Which states are people | Every state connected to the first state by transitions; a state connected to none of them holds a count |
+| Which states are people | Every state connected to the first state by transitions; a state connected to none of them holds a count. The first state is never in a group that only an inflow fills (`ss.null >> Sv @ emergence`) when there is another, so initial mosquitoes do not make the mosquitoes the people; `ss.states(3, people=False)` says it outright, and states given `people=True` with no transition to the first state's are said in a note |
 | Dwell-time distribution | Exponential, from a scalar duration or a rate |
 | Number of sub-stages | From the distribution, unless `stages=` is given |
 | Units of bare numbers | [02-types.md §Bare numbers](02-types.md#bare-numbers) |

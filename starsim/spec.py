@@ -331,7 +331,7 @@ def disease_code(spec, lines, left):
                 dur = held[0]['name'] if held else code_value(d)
         src, dst = endpoint(t['src']), endpoint(t['dst'])
         untyped = dur in pars and unitless_dur(pars[dur]['value']) # Written as a number, which @ would read as a rate
-        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None
+        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None and t.get('acquisition') is None
         if simple:
             members.append((t['name'], f'{src} >> {dst} @ {operand(rate if rate is not None else dur)}'))
         else:
@@ -348,6 +348,8 @@ def disease_code(spec, lines, left):
             for k in ['after', 'before']:
                 if t.get(k) is not None:
                     args.append(f'{k}={code_value(t[k])}')
+            if t.get('acquisition') is not None:
+                args.append(f'acquisition={t["acquisition"]}')
             members.append((t['name'], f'ss.Transition({", ".join(args)})'))
         if t.get('migration'):
             unknown(f'the migration of {t["name"]}')

@@ -60,6 +60,7 @@ class Graph(Presentation):
         self.resolve_states(frame)
         self.resolve_transitions()
         self.resolve_people()
+        self.resolve_acquisition()
         self.resolve_pars(frame)
         self.set_keywords()
         self.resolve_exits()
@@ -162,6 +163,17 @@ class Graph(Presentation):
         self.add(self.pars, name, obj)
         return
 
+    @staticmethod
+    def check_read(state):
+        """ Refuse a state that an earlier module only read in a rate, so took as a state of its own that nothing fills, e.g. `Rb.frac` in disease `a`, declared before the disease `b` that `Rb` was meant to belong to """
+        graph = getattr(state.module, 'graph', None)
+        if graph is not None and any(ref is state for ref in getattr(graph, '_refs', [])):
+            owner = state.module.name
+            errormsg = (f'the state "{state.name}" is read in a rate of "{owner}", which was declared first, so "{owner}" took it as a state of its own, which none of its transitions fill.\n'
+                        f'     Declare this disease first, and then "{owner}" with a rate that reads its state, e.g. "beta * I * (1 - 0.5*b.{state.name}.frac)" if this disease is b.')
+            raise ss.DuplicateDeclaration(errormsg)
+        return
+
     def resolve_states(self, frame):
         """ Find the states: the ones declared, or else every name in an arrow string """
         # Find all the state objects used in the transitions
@@ -197,6 +209,7 @@ class Graph(Presentation):
                 var = frame.f_locals.get(string, frame.f_globals.get(string))
                 if isinstance(var, State) and (var.name is None or var.name == string) and string not in [s.name for s in found.values()]:
                     if var.module not in (None, self.module): # A state of another disease: this one gets its own
+                        self.check_read(var)
                         var = sc.cp(var)
                         var.module = None
                         var.guessed = sc.objdict()
@@ -225,6 +238,9 @@ class Graph(Presentation):
             for string in strings:
                 if not string.isidentifier():
                     raise ss.UnknownState(f'"{string}" in an arrow string of "{self.module.name}" is not a state name. Branches are written with "|", e.g. "I -> R | D".')
+                var = None if frame is None else frame.f_locals.get(string, frame.f_globals.get(string))
+                if isinstance(var, State) and var.module not in (None, self.module): # e.g. 'I -> Rb' after an earlier disease read Rb.frac
+                    self.check_read(var)
             statelist = [State(name) for name in dict.fromkeys(strings)] # Unique names, in order of first appearance
         for state in statelist:
             if state.module is not None and state.module is not self.module:
@@ -311,7 +327,8 @@ class Graph(Presentation):
 
         Unless it is given, it is found among the group of states connected to the ones seeded (given initial values, or
         entered by the contact-mediated transition that init_prev seeds through; else the largest group of connected
-        states). With contact-mediated transitions, it is a source of one that people do not reach from another (S, not V
+        states), leaving out a group that only an inflow fills (`ss.null >> Sv @ emergence`, not a birth), which is a count
+        when there is another group (so `init=dict(Sv=3000)` on mosquitoes does not make them the people). With contact-mediated transitions, it is a source of one that people do not reach from another (S, not V
         after S -> V); of several, the one that no transition moves people into, then the earliest declared, with a note in
         `guessed`. With none, it is the earliest state that no transition moves people into, or else the earliest state.
         The order in which the transitions are given does not matter.
@@ -323,8 +340,13 @@ class Graph(Presentation):
             return self.states[name]
         given = [s for s in states if s.init is not None]
         seeded = given + ([st for tr in self.transitions.values() if tr.contact for st in tr.dst or []] if self.init_prev is not None else [])
-        group = connected(seeded) if seeded else max((connected([s]) for s in states), key=len)
-        members = [s for s in states if id(s) in group]
+        inflowed = {id(st) for tr in self.transitions.values() if tr.inflow and not tr.per_capita and not tr.migration for st in tr.dst or []} # Filled from nothing in total per unit time (mosquitoes emerging, bacteria shed): a count, unless joined to people
+        groups = [connected([s]) for s in states if s.people is not False]
+        allowed = set().union(*([g for g in groups if not inflowed & g] or groups)) # Never a group filled by an inflow alone, when there is another
+        group = connected(seeded) & allowed
+        if not group: # Only counts are seeded (e.g. init=dict(Sv=3000)), or nothing is: the largest group
+            group = max(groups, key=lambda g: (bool(g & allowed), len(g)), default=set())
+        members = [s for s in states if id(s) in group] or states
         entered = {id(st) for tr in self.transitions.values() for st in (tr.dst or []) if isinstance(st, State)}
         entered |= {id(self.states[kid] if isinstance(kid, str) else kid) for kid in [tr.offspring[0] for tr in self.transitions.values() if getattr(tr, 'offspring', None) is not None]} # Newborns enter theirs
         sources = [s for s in members if any(tr.contact and any(src is s for src in tr.src or []) for tr in self.transitions.values())] # In declared order
@@ -360,7 +382,9 @@ class Graph(Presentation):
                     todo += [lookup[i] for i in links[id(state)]]
             return seen
         first = self.anchor(states, connected)
+        joined = connected([first])
         seen = connected([first] + [s for s in states if s.people is True])
+        self.separate = [s for s in states if s.people is True and id(s) not in joined] # People with no transition to or from the first state's, which are said when the sim is built
         for state in states:
             if state.people is None:
                 state.people = id(state) in seen
@@ -380,6 +404,30 @@ class Graph(Presentation):
                                              f'     A bare state means contact with people in that state, and there is no contact with a count.\n'
                                              f'     Write {state.name}.n for the number itself. If {state.name} is people, declare it with ss.State(people=True).')
             tr.people = all(s.people for s in (tr.src or []) + (tr.dst or []))
+        return
+
+    def resolve_acquisition(self):
+        """
+        Work out which transitions are an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on
+
+        A contact-mediated transition is one. So is any other transition of people out of the first state that is not an outflow,
+        whatever its rate (a bite rate, an EIR, a count of bacteria), unless a transition out of that state is contact-mediated, which
+        is then the acquisition (so `S -> V` alongside `S -> I @ beta * I` is a vaccination). `acquisition=` on the transition says it outright.
+        """
+        first = self.first
+        out_of_first = [tr for tr in self.transitions.values() if any(src is first for src in tr.src or [])]
+        by_contact = [tr.name for tr in out_of_first if tr.contact]
+        for name,tr in self.transitions.items():
+            given = getattr(tr, 'acquisition_given', None)
+            if given is not None:
+                tr.acquisition = bool(given)
+            elif tr.contact:
+                tr.acquisition = True
+            elif tr in out_of_first and tr.people and not tr.outflow:
+                tr.acquisition = not by_contact
+                tr.guessed['acquisition'] = f'contact-mediated {sc.strjoin(by_contact)} is' if by_contact else f'out of {first.name}'
+            else:
+                tr.acquisition = False
         return
 
     def fill_people(self, tr):
@@ -591,16 +639,20 @@ class Graph(Presentation):
         tr.const, tr.terms = linear(tr.rate) if tr.rate is not None else (None, {})
         self.fill_people(tr)
         tr.contact = False
+        tr.acquisition = False
         tr.people = True
         tr.module = self.module
-        self.set_slots(tr)
+        slots = {id(p) for slot,p in self.set_slots(tr)}
         self.add(self.transitions, name, tr)
         self.module.setattribute(name, tr) # e.g. sir.births, so it can be the target of ss.modify()
         for expr in [tr.rate, tr.dur]: # Register its parameters, as for those of the transitions
             for leaf in [] if expr is None else expr.leaves:
-                if isinstance(leaf, par) and not any(p is leaf for p in self.pars.values()):
-                    self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else f'rate_{name}')
-                    self.module.define_pars(**{leaf.name:leaf})
+                if not isinstance(leaf, par) or any(p is leaf for p in self.pars.values()):
+                    continue
+                if leaf.literal and id(leaf) not in slots: # A value inside a rate (e.g. the trend in ss.peryear(0.01) * ts), which stays a number, as in a transition (see resolve_pars())
+                    continue
+                self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else f'rate_{name}')
+                self.module.define_pars(**{leaf.name:leaf})
         self.resolve_exits()
         return tr
 
@@ -614,22 +666,30 @@ class Graph(Presentation):
         return [tr for tr in self.transitions.values() if tr.contact]
 
     @property
+    def acquisitions(self):
+        """ The transitions that are an acquisition of the disease: see `resolve_acquisition()` """
+        return [tr for tr in self.transitions.values() if tr.acquisition]
+
+    @property
     def uninfected(self):
-        """ The names of the states people can be in without ever having been infected: those reached from the first state by transitions that are not contact-mediated """
+        """ The names of the states people can be in without ever having been infected: those reached from the first state by transitions that are not an acquisition """
         seen = []
         todo = [self.first]
         while todo:
             state = todo.pop()
             if state.name not in seen and state.people:
                 seen.append(state.name)
-                todo += [dst for tr in self.transitions.values() if not tr.contact and state in tr.src for dst in tr.dst]
+                todo += [dst for tr in self.transitions.values() if not tr.acquisition and state in tr.src for dst in tr.dst]
         return seen
 
     @property
     def infected(self):
-        """ The states counted in prevalence: the sources of infection and the states people are infected into """
-        out = {id(s):s for tr in self.transmissions for s in tr.dst}
+        """ The states counted in prevalence: the states people are infected into, and the sources of infection (of people, or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes) """
+        out = {id(s):s for tr in self.acquisitions for s in tr.dst}
         out.update({id(s):s for s in self.infectious})
+        for tr in self.transitions.values():
+            if not tr.people and tr.rate is not None:
+                out.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
         return sorted(out.values(), key=lambda s: s.order)
 
     def unit_values(self):
@@ -659,11 +719,25 @@ class Graph(Presentation):
         return out
 
     def modifier_kind(self, name):
-        """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry), and otherwise its rate """
+        """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry) or one destination of a transition with several (`'recovery.R'`), and otherwise its rate """
         tr = self.transitions.get(name)
         if tr is not None and tr.p is not None and len(tr.dst) <= 1 and not tr.contact:
             return 'branch'
+        if self.destination(name) is not None:
+            return 'branch'
         return 'transition'
+
+    def destination(self, name):
+        """ For the name of one destination of a transition with several, `'<transition>.<state>'` (e.g. `'progression.C'`): the transition; otherwise None """
+        trname, _, dst = name.rpartition('.')
+        tr = self.transitions.get(trname)
+        if tr is None or tr.dst is None or len(tr.dst) < 2 or dst not in [d.name for d in tr.dst]:
+            return None
+        return tr
+
+    def destinations(self):
+        """ The names of the destinations of the transitions with several, as `destination()` takes them """
+        return [f'{name}.{dst.name}' for name,tr in self.transitions.items() if tr.dst is not None and len(tr.dst) > 1 for dst in tr.dst]
 
     def all_pars(self):
         """ Every parameter in the graph, named or inline """

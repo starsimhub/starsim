@@ -42,9 +42,11 @@ class Agents(Engine):
         self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
-        arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility'),
-                ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission')]
+        arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
+                ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
+        self.init_dwells()
+        rescalable = any(isinstance(m, ss.modify) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name),
@@ -52,8 +54,8 @@ class Agents(Engine):
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
                 arrs += [ss.arrays.StepArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
-                if any(isinstance(m, ss.modify) for m in list(self.sim.interventions()) + list(self.sim.connectors())): # Only needed if a modifier can change a rate after dwell times are drawn: see rescale_exits()
-                    arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Multiplier on the rate of the scheduled exit from {name}, when it was scheduled'))
+                if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
+                    arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
         if any(getattr(strat, 'immunity', None) is not None for strat in list(graph.strats) + list(self.sim.groups.strats)):
             arrs.append(ss.IntArr('strains_had', default=0, label='Strains each person has had, as bits')) # For immunity= between strains: see protection()
         self.spread = dict() # A parameter that is a distribution across people: each agent's own value, drawn when they are made
@@ -110,7 +112,6 @@ class Agents(Engine):
             if strat.name in [own.name for own in graph.strats] and strat.states is not None:
                 add(f'enter_{strat.name}', ss.random())
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
-        self.init_dwells()
         for name,dw in self.dwells.items():
             add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.gamma(a=dw.k, scale=1/dw.k)) # A unit-mean Erlang, scaled by the mean when used
         return
@@ -147,9 +148,15 @@ class Agents(Engine):
         return self.sim.groups.level_raw(self.strain)
 
     def adjusted(self, name, uids):
-        """ The multiplier on a transition for each agent, from the adjust= of the stratifications (1 if there is none) """
+        """ The multiplier on a transition for each agent, from the adjust= of the stratifications (1 if there is none), and their susceptibility if it is an acquisition that is not contact-mediated (see `infect()` for those) """
         adjust = self.adjust[name]
         out = 1.0 if adjust is None else adjust[self.groups(uids)]
+        tr = self.graph.transitions[name]
+        if tr.acquisition and not tr.contact:
+            out = out*self.mod.rel_sus[uids]*self.mult('rel_sus', None, uids)
+            for src in tr.src:
+                if src.rel_sus != 1:
+                    out = out*np.where(self.mod[src.name][uids], src.rel_sus, 1.0)
         return out*self.mult('transition', name, uids)
 
     def members(self, state):
@@ -253,6 +260,10 @@ class Agents(Engine):
             self.step_register(0)
             self.sim.people.step_die() # Whoever left is gone before the start is counted
             self.sim.people.remove_dead()
+        for name,tr in self.graph.transitions.items(): # A dwell time of counts is a rate out of them, as agents (see step_counts())
+            dw = self.dwells.get(name)
+            if not tr.people and dw is not None and dw.family != 'exponential':
+                ss.note(f'"{mod.name}.{name}" moves counts ({tr.arrow}), which as agents take its dwell time ({dw.family}) as exponential with the same mean; a compartmental run keeps its shape', sim=self.sim)
         self.n_seen = self.sim.people.uid.len_used # Agents made after this (e.g. born of ss.Births) are put in the first state: see place_newcomers()
         self.record_stocks() # The results at the first time point are the start
         return
@@ -632,21 +643,34 @@ class Agents(Engine):
     def branch_probs_for(self, tr, uids):
         ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
         rest = 1.0 - sum(p for p in ps if p is not None)
-        return [rest if p is None else p for p in ps]
+        return self.dest_shares(tr, [rest if p is None else p for p in ps], uids)
 
     def schedule(self, state, members):
-        """ For the agents in a state who have just entered it: choose their branch, sample its dwell time, and schedule the exit """
+        """
+        For the agents in a state who have just entered it: choose their branch, sample its dwell time, and schedule the exit
+
+        Returns:
+            Which of the members entered the state during the last step's moves (by a progression, dated at its start), after that step's
+            competing rates were drawn, so that they have one draw of them to catch up on (see step_state()); None if there are none
+        """
         mod = self.mod
         name = state.name
         exits = self.graph.exits[name]
         candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed # Transitions that can be scheduled
         if not candidates:
-            return
+            return None
         ti_exit = mod[f'ti_exit_{name}']
-        new = members[ti_exit.raw[members] == ti_exit.nan]
+        is_new = ti_exit.raw[members] == ti_exit.nan
+        new = members[is_new]
         if not len(new):
-            return
+            return None
         entered = mod[f'ti_{name}'][new]
+        missed = None
+        if self.competing[name]:
+            late = entered < mod.ti # NaN (undated) is not
+            if late.any():
+                missed = np.zeros(len(members), dtype=bool)
+                missed[np.flatnonzero(is_new)[late]] = True
         undated = np.isnan(entered) # Put in the state directly (e.g. sir.I[uids] = True), with no time of entering: they entered it now
         if undated.any():
             entered[undated] = mod.ti
@@ -670,29 +694,54 @@ class Agents(Engine):
                 which[chosen] = i
         for i,tr in enumerate(exits.timed, start=len(branches)): # Competing dwell times: the earliest wins
             dur = self.sample_dwell(tr, new) + self.after_of(tr)
-            earlier = dur < best
+            earlier = (dur < best) | (which < 0) # A dwell that does not end until its rate changes (e.g. outside a where=) is still this exit's, so it can be rescaled
             best[earlier] = dur[earlier]
             which[earlier] = i
 
         ti_exit[new] = entered + best/self.dt - 0.5 # Exits happen at the start of a step, so this rounds the dwell time to the nearest step
         mod[f'exit_{name}'][new] = which
-        modified = [i for i,tr in enumerate(candidates) if tr.name in self.dwells and self.sim.modifiers.get((self.mod.name, 'transition', tr.name))]
-        if modified and f'mult_{name}' in mod.__dict__: # The multiplier each dwell time was divided by, so a later change can rescale what is left of it: see rescale_exits()
+        modified = [i for i,tr in enumerate(candidates) if self.rescaled(tr)]
+        if modified and f'mult_{name}' in mod.__dict__: # How fast each exit ran when its dwell time was drawn, so a later change can rescale what is left of it: see rescale_exits()
             mults = np.ones(len(new))
             for i in modified:
                 chosen = which == i
                 if chosen.any():
-                    mults[chosen] = np.broadcast_to(self.adjusted(candidates[i].name, new[chosen]), chosen.sum())
+                    mults[chosen] = self.speed(candidates[i], new[chosen])
             mod[f'mult_{name}'][new] = mults
-        return
+        return missed
+
+    def rescaled(self, tr):
+        """ Whether what is left of a transition's dwell times is rescaled when its speed changes: if it has modifiers, or a duration or rate that can change (see `varies()`) """
+        if tr.name not in self.dwells:
+            return False
+        return bool(self.sim.modifiers.get((self.mod.name, 'transition', tr.name))) or self.varies(self.dwells[tr.name])
+
+    def varies(self, dw):
+        """ Whether the mean of a dwell time can change during the run: a duration or rate that is a function or varies in time, or a parameter with modifiers """
+        if dw.dist is not None:
+            return False
+        p = dw.par
+        if callable(p.raw):
+            return True
+        return bool(p.name and not p.literal and self.sim.modifiers.get((self.mod.name, 'par', p.name)))
+
+    def speed(self, tr, uids):
+        """ How fast a scheduled exit runs for some agents: the multiplier on its rate, over its mean dwell time if that can change """
+        out = np.broadcast_to(self.adjusted(tr.name, uids), len(uids)).astype(float)
+        if self.varies(self.dwells[tr.name]):
+            self._uids = uids
+            mean = self.dwell_mean(tr.name)
+            mean = mean if np.ndim(mean) == 0 or len(mean) == len(uids) else np.asarray(mean)[uids]
+            out = out/np.maximum(mean, 1e-12) # A mean of inf (a rate of 0) is a speed of 0
+        return out
 
     def rescale_exits(self, state, uids):
-        """ When a modifier on a transition changes after people's dwell times were drawn, what is left of each is rescaled by the change in its rate """
+        """ When the speed of an exit changes after people's dwell times were drawn (a modifier, or a duration or rate that changes), what is left of each is rescaled by the change """
         mod = self.mod
         name = state.name
         exits = self.graph.exits[name]
         candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
-        modified = [i for i,tr in enumerate(candidates) if tr.name in self.dwells and self.sim.modifiers.get((self.mod.name, 'transition', tr.name))]
+        modified = [i for i,tr in enumerate(candidates) if self.rescaled(tr)]
         if not modified or not len(uids) or f'mult_{name}' not in mod.__dict__:
             return
         which = mod[f'exit_{name}'][uids]
@@ -701,17 +750,17 @@ class Agents(Engine):
             sel = uids[which == i]
             if not len(sel):
                 continue
-            raw = np.broadcast_to(self.adjusted(candidates[i].name, sel), len(sel))
+            raw = self.speed(candidates[i], sel)
             now = np.maximum(raw, 1e-9)
             before = mod[f'mult_{name}'][sel]
             stalled = before <= 0 # Their rate was 0 when they entered (e.g. outside a where=), so none of their dwell has passed
-            changed = np.where(stalled, raw > 0, now != before)
+            changed = np.where(stalled, raw > 0, ~np.isclose(now, before, rtol=1e-6)) # Not exactly, since the speed is kept in single precision
             if changed.any():
                 sel, now, before, stalled = sel[changed], now[changed], before[changed], stalled[changed]
                 ti_exit = mod[f'ti_exit_{name}'][sel]
                 new_exit = np.empty(len(sel))
                 ok = ~stalled
-                new_exit[ok] = ti + np.maximum(ti_exit[ok] - ti, 0)*before[ok]/now[ok]
+                new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, rounded up (see ss.arrays.StepArr), so what is left is taken from the middle of it
                 if stalled.any(): # Now that their rate is not 0, a dwell is drawn from now
                     new_exit[stalled] = ti + self.sample_dwell(candidates[i], sel[stalled])/self.dt - 0.5
                 mod[f'ti_exit_{name}'][sel] = new_exit
@@ -760,9 +809,11 @@ class Agents(Engine):
         self.start_weighted = {state.name:self.weighted_count(state) for state in graph.people_states} if sim.people.scale.weighted else None
         self._members = members # So counts in rates are the same for every transition this step, whatever order they are taken in
         self._updates = self.update_values()
+        self.step_counts(dt) # States that are not people, from the people at the start of the step, so that a rate of people that uses a count (a bite rate) takes it once advanced
+        missed = dict() # Who has a draw of the competing rates to catch up on, by state: see schedule()
         for state in graph.people_states:
             if state.name in self.listed:
-                self.schedule(state, members[state.name])
+                missed[state.name] = self.schedule(state, members[state.name])
 
         for state in graph.people_states:
             name = state.name
@@ -773,29 +824,41 @@ class Agents(Engine):
             if not len(uids):
                 continue
             candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
+            competing = self.competing[name]
+            late = missed.get(name)
             if candidates: # Scheduled exits that are due
                 self.rescale_exits(state, uids)
                 due = mod[f'ti_exit_{name}'].raw[uids] <= ti # Everyone here has been scheduled, so none is .nan
                 which = mod[f'exit_{name}'][uids]
+                if late is not None: # Those who entered by a progression last step face the competing rates for that step too, before their scheduled exit: see schedule()
+                    drawn = ~due | late
+                    left = np.zeros(len(uids), dtype=bool)
+                    left[np.flatnonzero(drawn)] = self.draw_competing(state, uids[drawn], np.where((late & ~due)[drawn], 2*dt, dt))
+                    due &= ~left
+                    competing = None
                 for i,tr in enumerate(candidates):
                     self.move(tr, state, uids[due & (which == i)])
                 uids = uids[~due]
-            competing = self.competing[name]
             if competing and len(uids): # Competing rates: one draw per agent
-                hazards = [np.broadcast_to(np.maximum(self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids), 0), len(uids))*self.stayed(tr, state, uids) for tr in competing]
-                total = np.sum(hazards, axis=0)
-                p_exit = -np.expm1(-total*dt)
-                rvs = self.dists[f'exit_{name}'].rvs(uids)
-                leaving = rvs < p_exit
-                edges = np.cumsum([np.zeros(len(uids))] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(len(uids)), where=total>0)
-                for i,tr in enumerate(competing):
-                    self.move(tr, state, uids[leaving & (rvs >= edges[i]) & (rvs < edges[i+1])])
-        self.step_counts(dt) # States that are not people, from the counts at the start of the step, as for every other rate
+                self.draw_competing(state, uids, dt)
         self._members = None
         self.finish_moves(ti)
         self.step_births(dt)
         self.step_transfers(dt)
         return
+
+    def draw_competing(self, state, uids, dt):
+        """ The competing rates out of a state, in one draw per agent over a time `dt` (a number, or one for each agent): moves those who leave, and returns which they are """
+        competing = self.competing[state.name]
+        hazards = [np.broadcast_to(np.maximum(self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids), 0), len(uids))*self.stayed(tr, state, uids) for tr in competing]
+        total = np.sum(hazards, axis=0)
+        p_exit = -np.expm1(-total*dt)
+        rvs = self.dists[f'exit_{state.name}'].rvs(uids)
+        leaving = rvs < p_exit
+        edges = np.cumsum([np.zeros(len(uids))] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(len(uids)), where=total>0)
+        for i,tr in enumerate(competing):
+            self.move(tr, state, uids[leaving & (rvs >= edges[i]) & (rvs < edges[i+1])])
+        return leaving
 
     def update_values(self):
         """ The values that counts are set to at the end of the step (`ss.update()`), by group, worked out from the model at its start (None if there are none) """
@@ -963,12 +1026,21 @@ class Agents(Engine):
         A count that is filled at a steady rate and decays settles where it would in
         continuous time (as for SimInf's environmental pressure), and a chain of counts
         (mosquitoes that are infected, then infectious) passes people along within a step.
+        As the ODE does, the step is split into enough substeps that no count turns over
+        by more than a quarter in one, so a long step (a month) does not make it grow
+        or die out. Modifiers of the transitions act on them, as on any other.
         """
         graph = self.graph
         trs = [(name, tr) for name,tr in graph.transitions.items() if not tr.people]
         if not trs:
             return
         self._by_group = True # Rates are worked out for each group, not for each agent
+        mults = {}
+        for name,tr in trs: # Modifiers hold for the whole step
+            mult = self.mult_raw('transition', name)*(1.0 if self.adjust[name] is None else self.adjust[name])
+            if np.ndim(mult) and np.shape(mult)[-1] != self.sim.groups.n_groups:
+                raise ss.CapabilityError(f'a modifier of "{self.mod.name}.{name}" has a condition on people, which a transition of counts ({tr.arrow}) cannot take; give it no where=, or a condition on time')
+            mults[name] = mult
         start = sc.objdict({name:np.asarray(val, dtype=float) for name,val in self.counts.items()})
 
         def deriv(counts):
@@ -977,12 +1049,13 @@ class Agents(Engine):
             change = sc.objdict({name:0.0 for name in counts})
             flows = sc.objdict()
             for name,tr in trs:
-                adjust = 1.0 if self.adjust[name] is None else self.adjust[name]
+                adjust = mults[name]
                 if tr.inflow:
                     amounts = [(None, self.eval(tr.rate)*adjust*self.inflow_split(tr))]
                 else:
                     hazard = (1/self.dwell_mean(name) if tr.dur is not None else self.eval(tr.rate))*adjust
                     amounts = [(src, counts[src.name]*hazard) for src in tr.src]
+                    self._fastest = max(self._fastest, float(np.max(hazard)))
                 flows[name] = 0.0
                 for src,amount in amounts:
                     if src is not None:
@@ -996,16 +1069,25 @@ class Agents(Engine):
         def ahead(k, h):
             return sc.objdict({name:np.maximum(start[name] + h*k[name], 0) for name in start})
 
+        self._fastest = 0.0 # The fastest rate out of a count, as the ODE works out its substeps
         k1, f1 = deriv(start)
-        k2, f2 = deriv(ahead(k1, dt/2))
-        k3, f3 = deriv(ahead(k2, dt/2))
-        k4, f4 = deriv(ahead(k3, dt))
-        self.counts = sc.objdict({name:np.maximum(start[name] + dt/6*(k1[name] + 2*k2[name] + 2*k3[name] + k4[name]), 0) for name in start})
+        n_sub = max(1, int(np.ceil(self._fastest*dt/0.25)))
+        h = dt/n_sub
+        total = {name:0.0 for name,tr in trs}
+        for sub in range(n_sub):
+            if sub:
+                k1, f1 = deriv(start)
+            k2, f2 = deriv(ahead(k1, h/2))
+            k3, f3 = deriv(ahead(k2, h/2))
+            k4, f4 = deriv(ahead(k3, h))
+            start = sc.objdict({name:np.maximum(start[name] + h/6*(k1[name] + 2*k2[name] + 2*k3[name] + k4[name]), 0) for name in start})
+            for name,tr in trs:
+                total[name] = total[name] + h/6*(f1[name] + 2*f2[name] + 2*f3[name] + f4[name])
+        self.counts = start
         for name,tr in trs:
-            amount = dt/6*(f1[name] + 2*f2[name] + 2*f3[name] + f4[name])
-            self.flowcounts[name] += np.sum(amount)
+            self.flowcounts[name] += np.sum(total[name])
             if self.sim.groups.n_groups > 1:
-                self.flow_groups[name] = self.flow_groups.get(name, 0) + amount
+                self.flow_groups[name] = self.flow_groups.get(name, 0) + total[name]
         self._by_group = False
         return
 

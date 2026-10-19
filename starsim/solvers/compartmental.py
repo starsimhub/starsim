@@ -661,6 +661,8 @@ class Compartmental(Engine):
                 mult = mult*self.protection(self.sim.groups.group_coords[:, self.strain], flow.strain)
             if flow.strain is not None and self.carriage is not None and self.applies[flow.state.name][self.strain] and self.superinfects(tr, flow.state): # Infected with another strain while staying in the same state: only if they do not carry it already
                 mult = mult*self.can_take(self.sim.groups.group_coords[:, self.strain], flow.strain)
+        elif tr.acquisition and flow.src is not None: # An acquisition that is not contact-mediated, e.g. by a bite rate: the susceptibility of its source too
+            mult = flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
         if self.adjust[tr.name] is not None:
             mult = mult*self.adjust[tr.name]
         if flow.src is not None:
@@ -1012,21 +1014,28 @@ class Compartmental(Engine):
         The next-generation matrix at the disease-free state, `F V⁻¹`, over the infected compartments of every group
 
         The infected compartments are those of the states people are infected into or
-        infect from, and of any count (such as a reservoir) that the rate of an infection
-        uses. A new infection is a flow from any other compartment into one of these. At
-        the disease-free state, everyone infected is moved to the first state, and the
-        infected counts are empty. The matrices are worked out by perturbing each infected
+        infect from, of any count (such as a reservoir, or infectious mosquitoes) that the
+        rate of an infection uses, and of the counts that infected people's numbers move
+        a count into (mosquitoes biting them). A new infection is a flow from any other
+        compartment into one of these. At the disease-free state, everyone infected is
+        moved to the first state, the infected counts are empty, and the other counts
+        that are filled by an inflow (mosquitoes not infected) are at their equilibrium. The matrices are worked out by perturbing each infected
         compartment in turn. Returns None if nothing moves people into an infected state.
         See `ss.Disease.R0()`.
         """
         graph = self.graph
         states = {id(s) for s in graph.infected}
         updated = {id(upd.state) for upd in graph.updates.values()} # A count set by an update has no flows, so is held at its value
-        for flow in self.flows: # A count that infection depends on, such as a water reservoir, and the states that infection leads to
-            if flow.src is not None and id(flow.state) not in states and flow.expr is not None:
-                counts = {id(leaf.states[0]) for leaf in flow.expr.leaves if isinstance(leaf, ss.transitions.Count) and len(leaf.states) == 1 and not leaf.states[0].people and id(leaf.states[0]) not in updated}
-                if counts:
-                    states |= counts | {id(dst) for dst in flow.tr.dst}
+        found = None
+        while found != states: # Until nothing more is found, since each count found can lead to another
+            found = set(states)
+            for flow in self.flows: # A count that infection depends on, such as a water reservoir, and the states that infection leads to
+                if flow.src is not None and id(flow.state) not in states and flow.expr is not None:
+                    single = [leaf.states[0] for leaf in flow.expr.leaves if isinstance(leaf, ss.transitions.Count) and len(leaf.states) == 1 and id(leaf.states[0]) not in updated]
+                    counts = {id(s) for s in single if not s.people}
+                    by_infected = not flow.state.people and any(id(s) in states for s in single) # A count moved by the number infected, e.g. mosquitoes biting them
+                    if counts or by_infected:
+                        states |= counts | {id(dst) for dst in flow.tr.dst}
         infected = [i for i,comp in enumerate(self.comps) if id(comp.state) in states]
         self.update_targets()
         for flow in self.flows:
@@ -1040,6 +1049,21 @@ class Compartmental(Engine):
         y0 = self.y.copy()
         y0[first] += y0[people].sum(axis=0)
         y0[infected] = 0
+        counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected and id(comp.state) not in updated]
+        if counts: # Their equilibrium, from the rates at the disease-free state
+            self.y = y0
+            self.cache.clear()
+            gain, loss = np.zeros_like(y0), np.zeros_like(y0)
+            for flow,rate in zip(self.flows, self.rates()):
+                if flow.src is not None:
+                    loss[flow.src] += rate
+                elif flow.kind == 'inflow':
+                    for ind,w,dim_map in flow.targets:
+                        amount = rate*self.inflow_split(flow.tr)*w
+                        gain[ind] += amount if dim_map is None else amount @ dim_map
+            for c in counts:
+                settles = (gain[c] > 0) & (loss[c] > 0)
+                y0[c] = np.where(settles, np.divide(gain[c], loss[c], out=np.zeros_like(gain[c]), where=settles), y0[c])
         cells = [(i, g) for i in infected for g in range(self.n_groups)]
         eps = 1e-6*max(1.0, y0.sum())
         F = np.zeros((len(cells), len(cells)))
@@ -1073,6 +1097,10 @@ class Compartmental(Engine):
             return 'a modifier changes the contacts of a network'
         if any(key[:2] == (mod.name, 'branch') for key,mods in sim.modifiers.items() if mods): # Where arrivals go is set once for a whole run
             return f'a modifier changes a branch probability of "{mod.name}"'
+        read = [leaf.name for tr in graph.transitions.values() for p in sc.tolist(tr.p) if p is not None for leaf in p.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal]
+        changed = [name for name in read if sim.modifiers.get((mod.name, 'par', name))]
+        if changed: # Likewise, including ss.change(), which is otherwise tabulated
+            return f'a modifier changes "{changed[0]}", which a branch probability of "{mod.name}" reads'
         if self.whole is None: # The rest cannot change, so is checked once
             self.whole = False # No reason
             own = [name for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)]
@@ -1146,7 +1174,7 @@ class Compartmental(Engine):
                 else:
                     for ti in range(npts):
                         sim.t.ti = mod.t.ti = ti
-                        vals.append(self.by_group(raw) if isinstance(raw, ss.by) else self.convert(raw(sim)))
+                        vals.append(raw.per_group(sim, self.convert) if isinstance(raw, ss.by) else self.convert(raw(sim))) # Not by_group(), which holds a value for the step
                 kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(len(vals), -1), per_step, inner)
             self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
         sim.t.ti = mod.t.ti = 0
@@ -1374,6 +1402,7 @@ class Compartmental(Engine):
             if grouped:
                 for j,ti in enumerate(tis):
                     mod.t.ti = ti
+                    self.cache.clear() # Values held for a step (see Engine.call() and by_group()) are for another step
                     self.flow_groups = sc.objdict({key:flows[j, self.tr_index[key]] for key in sources})
                     self.step_outcomes()
         self.flow_groups = sc.objdict()

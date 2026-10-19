@@ -16,6 +16,7 @@ import starsim as ss # Only used to set references
 dtypes = sc.dictobj(
     bool = bool,
     int = np.int64, # np.int32 is actually much slower for indexing arrays
+    uid = np.int32, # The active agents (people.auids), to save memory; ss.uids keeps either width
     nbint = nb.int64,
     rand_int = np.int32,
     rand_uint = np.uint32,

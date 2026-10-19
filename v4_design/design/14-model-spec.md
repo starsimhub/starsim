@@ -132,6 +132,7 @@ There is one transition object, matching the one class `ss.Transition` ([03-stat
 | `p` | Branch probabilities: one per destination, or one number for a transition that is one branch of several out of its source state |
 | `stages` | The number of sub-stages asked for with `stages=`, or `null` |
 | `kind` | `"contact-mediated"` if the rate contains a bare state, otherwise `"spontaneous"` |
+| `acquisition` | `true` or `false` if given with `acquisition=` ([03-states-and-transitions.md](03-states-and-transitions.md#what-counts-as-acquisition)); left out when it is worked out, so other specs are unchanged |
 
 JSON `null` in `src` or `dst` is `ss.null`, outside the model: `ss.null >> W @ rate` is written `"src": null, "dst": ["W"]`.
 

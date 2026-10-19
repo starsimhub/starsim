@@ -112,6 +112,8 @@ class Engine:
         self.graph = module.graph
         self.cache = dict() # Parameter values for the current step
         self.fixed = dict() # Converted values of plain parameters, which hold for the whole run
+        self.arities = dict() # The number of arguments of each user function: see n_args()
+        self.converted = dict() # Typed values converted to the sim's unit: see convert()
         self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.objdict() # Dwell-time information for each transition that has one
         self.flowcounts = sc.objdict({name:0.0 for name in self.graph.transitions}) # Events in the current step
@@ -395,8 +397,16 @@ class Engine:
     #%% Values
 
     def convert(self, val):
-        """ Convert a typed quantity to a plain number in the sim's unit: a duration to units, a rate to per unit """
-        return convert(val, self.sim.unit_base)
+        """ Convert a typed quantity to a plain number in the sim's unit: a duration to units, a rate to per unit; each is converted once, unless its number is changed """
+        if not isinstance(val, ss.TimePar):
+            return val
+        known = self.converted.get(id(val))
+        if known is None or known[0] is not val or changed(known[1], val.value):
+            if len(self.converted) > 10_000: # Values made as the sim runs (e.g. by a time series) are kept with the others, so are let go of now and then
+                self.converted.clear()
+            number = np.copy(val.value) if isinstance(val.value, np.ndarray) else val.value
+            known = self.converted[id(val)] = (val, number, convert(val, self.sim.unit_base))
+        return known[2]
 
     def value(self, p):
         """ The value of a parameter, as a number in the sim's unit """
@@ -465,12 +475,23 @@ class Engine:
 
     def branch_mult(self, tr, uids=None):
         """ The multiplier on a branch's probability from its modifiers (for some agents, if `uids` are given), or None if it has none """
-        if tr is None or not self.sim.modifiers.get((self.mod.name, 'branch', tr.name)):
+        return self.branch_mult_of(tr.name, uids) if tr is not None else None
+
+    def branch_mult_of(self, name, uids=None):
+        """ As `branch_mult()`, by name: a transition, or one destination of a transition with several (`'progression.C'`) """
+        if not self.sim.modifiers.get((self.mod.name, 'branch', name)):
             return None
-        out = self.mult_raw('branch', tr.name)
+        out = self.mult_raw('branch', name)
         if uids is not None and np.ndim(out):
             out = out[uids]
         return out
+
+    def dest_shares(self, tr, ps, uids=None):
+        """ The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`), as `branch_shares()` does for branches """
+        mults = [self.branch_mult_of(f'{tr.name}.{dst.name}', uids) for dst in tr.dst]
+        if all(m is None for m in mults):
+            return ps
+        return self.branch_shares([f'{tr.name}.{dst.name}' for dst in tr.dst], ps, mults)
 
     def branch_shares(self, trs, ps, mults):
         """
@@ -481,7 +502,7 @@ class Engine:
         ones come to more than 1), they are scaled to sum to 1.
 
         Args:
-            trs (list): the transitions
+            trs (list): the transitions (or their names)
             ps (list): the probability of each, or None for the one that takes the rest
             mults (list): the multiplier of each, or None for those with no modifiers
         """
@@ -493,7 +514,7 @@ class Engine:
         taken = sum(p for p in new if p is not None)
         others = sum(p for p,m in zip(ps, mults) if m is None)
         if np.any(np.asarray(taken) > 1 + 1e-12):
-            path = f'{self.mod.name}.{sc.strjoin([tr.name for tr,m in zip(trs, mults) if m is not None])}'
+            path = f'{self.mod.name}.{sc.strjoin([getattr(tr, "name", tr) for tr,m in zip(trs, mults) if m is not None])}'
             if path not in self.sim.clipped:
                 self.sim.clipped.add(path)
                 ss.note(f'the modifiers of {path} made the probabilities of the branches come to more than 1, so they were scaled to sum to 1', ss.ClippedToRange, sim=self.sim)
@@ -543,8 +564,11 @@ class Engine:
         return out
 
     def by_group(self, by):
-        """ Expand a value for each level of one or more dimensions to a value for each group """
-        return by.per_group(self.sim, self.convert, year=self.year)
+        """ Expand a value for each level of one or more dimensions to a value for each group, once a step """
+        key = ('by', id(by))
+        if key not in self.cache:
+            self.cache[key] = by.per_group(self.sim, self.convert, year=self.year)
+        return self.cache[key]
 
     def init_adjust(self):
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
@@ -559,7 +583,7 @@ class Engine:
                 if modname not in ['', self.mod.name]:
                     continue
                 if name in self.rel_adjust:
-                    states = self.graph.infectious if name == 'rel_trans' else [src for tr in self.graph.transmissions for src in tr.src]
+                    states = self.graph.infectious if name == 'rel_trans' else [src for tr in self.graph.acquisitions for src in tr.src]
                     if not any(self.applies[state.name][d] for state in states):
                         raise ss.InvalidAdjustment(f'the adjustment of {name} by "{strat.name}" cannot apply, since the people it is for ({sc.strjoin(s.name for s in states)}) have no level of "{strat.name}".')
                     self.rel_adjust[name].append((d, vals))
@@ -603,14 +627,24 @@ class Engine:
             return [self.convert(v) for v in val]
         return self.convert(val)
 
+    def n_args(self, func):
+        """ The number of arguments a user function takes, worked out once for each function """
+        known = self.arities.get(id(func))
+        if known is None or known[0] is not func:
+            known = self.arities[id(func)] = (func, len(inspect.signature(func).parameters))
+        return known[1]
+
     def call(self, func, p=None):
-        """ Call a user function of the sim """
-        if self.year is not None and isinstance(func, ss.transitions.TimeValue) and not ss.solvers.Compartmental.held(func): # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
-            return func.at(self.year, self.sim)
-        nargs = len(inspect.signature(func).parameters)
-        if nargs >= 2:
+        """ Call a user function of the sim: once a step, if it takes only the sim """
+        if isinstance(func, ss.transitions.TimeValue): # Its values converted, then interpolated as numbers
+            held = self.year is None or ss.solvers.Compartmental.held(func) # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
+            return func.series([self.sim.t.now('year') if held else self.year], self.sim, self.convert)[0]
+        if self.n_args(func) >= 2:
             return self.call_uids(func, p)
-        return func(self.sim)
+        key = ('called', id(func))
+        if key not in self.cache:
+            self.cache[key] = func(self.sim)
+        return self.cache[key]
 
     def call_uids(self, func, p=None):
         name = getattr(func, '__name__', 'function')
@@ -870,7 +904,7 @@ class Engine:
             return [1.0]*len(tr.dst)
         ps = [None if p is None else self.eval(p) for p in tr.p]
         rest = 1.0 - sum(p for p in ps if p is not None)
-        return [rest if p is None else p for p in ps]
+        return self.dest_shares(tr, [rest if p is None else p for p in ps])
 
     def eval(self, expr):
         return ss.transitions.evaluate(expr, self)

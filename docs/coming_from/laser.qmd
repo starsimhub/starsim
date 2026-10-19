@@ -125,7 +125,7 @@ These are from Starsim's switching demo for LASER users (`tests/switching/test_l
 | Task | Today |
 |---|---|
 | Speed per agent-step | **Fails**: 30 ns per agent-step on one core, against 1.1 ns for LASER on 20 threads (the demo asks for within 3 times). Starsim makes 10 to 15 passes over the agents each step, on one thread; one fused, threaded pass is planned |
-| Memory per agent | **Fails**: 243 bytes per agent, against LASER's 30 (the demo's target is 50). A run of LASER's full England and Wales (30 million agents) would need about 10 GB, against LASER's 1.2 GB |
+| Memory per agent | **Fails**: about 80 bytes per agent, against LASER's 30 (the demo's target is 50). A run of LASER's full England and Wales (30 million agents) would need about 2.5 GB, against LASER's 1.2 GB |
 | Life-table deaths | **Works**: `ss.death(lifetable=ss.lifetable(ages, deaths))`, below; as agents each person's age at death is drawn once, and in a compartmental run stratified by age it is a death rate for each age group |
 | Seeding a fixed number of people on a schedule | **Works**: `ss.Delivery(move='S -> I', capacity=3, interval=ss.days(30))`, below |
 | Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: `ss.Mobility(ss.gravity(...), kind='force', away=..., scale='mean', cap=0.2)`, below |

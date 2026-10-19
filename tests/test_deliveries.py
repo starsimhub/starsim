@@ -112,6 +112,17 @@ def test_modify_where():
     assert 'faster' in sims.abm.what_modifies(sims.abm.diseases.sir.recovery, output=True)
     assert 'none' in sims.ode.what_modifies('sir.pars.beta', output=True)
 
+    # A multiplier that is an expression of the states of another disease is worked out at each step, not once at the start
+    def make_two(solver, protect=True, **kwargs):
+        a = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=10), init_prev=0.01, name='a')
+        b = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=10), init_prev=0.01, name='b')
+        protection = ss.modify(a.rel_sus, multiply=1 - 0.8*b.I.frac) if protect else None
+        return ss.Sim(diseases=[a, b], connectors=protection, solver=solver, **kwargs)
+    two = run_each(make_two)
+    base = make_two('ode', protect=False, stop=150, **kw).run()
+    final = check_close(two, lambda sim: sim.results.a.n_I[-1], rtol=0.2) # The solvers agree (as closely as b's own levels do)
+    assert final.ode < 0.8*base.results.a.n_I[-1] # And the protection grows as b spreads
+
     # A modifier of a parameter can depend on the group, but in a compartmental run not on the state
     sir = make_sir().stratify(risk=['lower', 'higher'])
     group = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.0, where=sir.risk == 'lower'), solver='ode', stop=50, **kw).run()
@@ -255,6 +266,11 @@ def test_vaccinate():
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
     with pytest.raises(TypeError):
         ss.vaccinate(ss.Test())
+    a, b = [ss.Disease(infection=ss.transmission('S -> I', beta=0.3), init_prev=0.01, name=name) for name in 'ab']
+    vx = ss.Vaccine(efficacy=0.9)
+    with pytest.raises(ss.UnknownDisease): # A product acts on one disease, so delivered for a second it would protect against nothing
+        ss.Sim([a, b], interventions=[ss.vaccinate(vx, at=[5], disease='a', name='d1'), ss.vaccinate(vx, at=[5], disease='b', name='d2')], **kw).init()
+
     # Coverage and capacity that vary in time
     def varying(**kwargs):
         vaccine = ss.Vaccine(efficacy=0.9)
@@ -812,6 +828,26 @@ def test_branch_modifiers():
         assert np.isclose(share(base), 0.2, rtol=0.05)
         assert np.isclose(share(halved), 0.1, rtol=0.05)
         assert np.isclose(share(vx), 0.05, rtol=0.1)
+
+    # A parameter in a branch probability changed by ss.change(), under every solver: 0.8 go to B after the change (not 0.2 as compartments)
+    for multi in [True, False]:
+        sB = ss.par(0.2, name='sB')
+        trs = dict(leave=ss.Transition('A', ['B', 'C'], dur=ss.years(1), p=[sB, 1 - sB])) if multi else dict(a_to_B=ss.Transition('A', 'B', dur=ss.years(1), p=sB), a_to_C=ss.Transition('A', 'C', dur=ss.years(1), p=1 - sB))
+        for solver in solvers:
+            d = ss.Disease(**trs, back=ss.Transition(['B', 'C'], 'A', rate=ss.peryear(4)), init=dict(A=1.0), name='d')
+            size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+            r = ss.Sim(d, interventions=ss.change('d.pars.sB', at=2005, to=0.8), start=2000, stop=2012, dt=ss.months(1), solver=solver, verbose=0, **size).run().results.d
+            assert np.isclose(r.n_B[-1]/(r.n_B[-1] + r.n_C[-1]), 0.8, atol=0.05), solver
+
+    # An efficacy on one destination of a transition with several halves its probability, without changing the dwell time
+    for solver in ['ode', 'abm']:
+        P, C, R = ss.states('P C R')
+        hpv = ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[0.2, 0.8], dur=ss.years(2)), init=dict(P=1.0), name='hpv')
+        txvx = ss.vaccinate(ss.Vaccine(efficacy={'precin.C': 0.5}), coverage=0.5, at=[2000], name='txvx')
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        res = ss.Sim(hpv, interventions=txvx, start=2000, stop=2012, dt=ss.years(0.25), solver=solver, verbose=0, **size).run().results.hpv
+        assert np.isclose(res.n_C[-1]/20_000, 0.15, atol=0.01) # Half at 0.1, half at 0.2
+        assert np.isclose(res.n_P[8]/20_000, np.exp(-1), rtol=0.1) # Left P after two years on average, as without it
 
     # A branch for some people only: the others take the other branch
     ppl = ss.People(1)
