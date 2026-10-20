@@ -1685,7 +1685,7 @@ class Agents(Engine):
         branches = exits.branches + sc.tolist(exits.remainder)
         if branches: # Split on entry
             ps = [None if tr.p is None or tr.split else np.broadcast_to(self.eval_for(tr.p[0], new), len(new)) for tr in branches] # A split between several destinations takes what the branches leave over
-            mults = [self.branch_mult(tr, new) for tr in branches]
+            mults = self.where_mults(branches, state, [self.branch_mult(tr, new) for tr in branches], new) # With each branch's where=: closed to the others
             ps = [np.broadcast_to(p, len(new)) for p in self.branch_shares(branches, ps, mults)]
             rvs = self.draw(f'branch_{name}', new)
             edges = np.cumsum([np.zeros(len(new))] + ps, axis=0)

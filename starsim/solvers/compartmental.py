@@ -1132,7 +1132,7 @@ class Compartmental(Engine):
             plain = [tr for tr in tracks if not getattr(tr, 'trigger', False)]
             apart = [track for track in plain if getattr(track, 'apart', False)]
             ps = self.apart_shares(name, apart) if apart else [None if tr.p is None else self.eval(tr.p) for tr in plain]
-            mults = [self.branch_mult(tr.tr) for tr in plain]
+            mults = self.where_mults([tr.tr for tr in plain], name, [self.branch_mult(tr.tr) for tr in plain]) # With each branch's where=: closed in the groups it does not hold in
             probs[name] = self.branch_shares([tr.tr for tr in plain], ps, mults)
             if len(plain) < len(tracks): # Triggers on states and strata: in the groups where one holds, arrivals pass straight through (the compartments vanish)
                 left = np.ones(self.n_groups)
@@ -1338,12 +1338,17 @@ class Compartmental(Engine):
             out[level == dst] = 1 - np.mean(np.exp(-np.multiply.outer(draws, np.atleast_1d(hk))), axis=0)
         return out
 
+    def branch_where(self, tr):
+        """ Whether a transition is a branch out of each of its sources whose where= is on states and strata, so closes it at entry (see `branch_mult()`) rather than changing its rate """
+        return tr.where is not None and ss.conditions.is_static(tr.where, self.sim) and all(tr in self.graph.exits[s.name].branches + sc.tolist(self.graph.exits[s.name].remainder) for s in tr.src if s.people)
+
     def flow_mult(self, flow):
         """ The multipliers on a flow's rate, which hold for the whole step """
         tr = flow.tr
         mult = 1.0
         if flow.kind == 'conveyor': # When people leave a conveyor is fixed
-            if flow.named and self.sim.modifiers.get((self.mod.name, 'transition', tr.name)):
+            mods = [m for m in self.sim.modifiers.get((self.mod.name, 'transition', tr.name), []) if not (m.name == f'where_{self.mod.name}_{tr.name}' and self.branch_where(tr))] # A branch's own where= closes it at entry instead: see branch_mult()
+            if flow.named and mods:
                 raise ss.CapabilityError(f'"{tr.name}" has a fixed delay and a modifier, which cannot run with solver="{self.sim.solver}": a compartmental run keeps the delay as a conveyor of whole steps, so cannot shorten or lengthen it.\n'
                                          f'     Run with solver="abm".')
             return mult

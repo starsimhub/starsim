@@ -1759,6 +1759,25 @@ def test_level_change_dwell():
         out[solver] = ss.Sim(d, unit='day', dt=0.25, stop=20, total_pop=20_000, n_agents=20_000, solver=solver, verbose=0).run().results.d.n_I[-1]/20_000
     assert np.isclose(out['abm'], out['ode'], atol=0.03)
     return
+def test_branch_where():
+    """ A p= branch with where= has probability 0 outside it, and the other branches share the rest (as agents, men were sent to it and stayed for good; as compartments, a fixed delay with where= raised) """
+    sc.heading('Testing where= on a branch')
+    def make():
+        S, A = ss.states('S A')
+        return ss.Disease(infection=S >> A @ ss.perday(0)*A,
+            persist = ss.Transition(A, S, p=0.9, dur=ss.constant(ss.years(100)), where=ss.ppl.female), # Women only
+            clear_a = ss.Transition(A, S, p=None, dur=ss.days(30)), init_prev=0.5, name='d')
+    strat = dict(sex=['female', 'male'])
+    for solver in ['abm', 'ode']:
+        size = dict(n_agents=4000) if solver == 'abm' else dict(total_pop=4000)
+        r = ss.Sim(make(), solver=solver, stratify=strat, unit='day', stop=365, verbose=0, **size).run().results.d
+        men = r.n_A.select(sex='male')
+        women = r.n_A.select(sex='female')
+        assert men[-1] < 0.01*men[0], f'{solver}: men should all clear (the remainder), not {men[-1]/men[0]:.2f} of them stay'
+        assert np.isclose(women[-1], 0.9*women[0], rtol=0.05), f'{solver}: 90% of women persist, not {women[-1]/women[0]:.2f}'
+    return r
+
+
 @sc.timer()
 def test_branches():
     """ Immediate branches, and a branch that takes the remainder """
