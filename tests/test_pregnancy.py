@@ -280,9 +280,7 @@ def test_legacy():
     return sim
 
 
-@sc.timer()
-def test_syphilis():
-    sc.heading('Port: syphilis congenital outcomes by maternal stage, with ss.mother() and ss.on(preg.delivery/birth) (03 §4.2)')
+def make_syphilis():
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
     S, E, S2, EL, LL, Cnnd, Cstill, Ccs, Cnorm, CS = ss.states('S E S2 EL LL Cnnd Cstill Ccs Cnorm CS')
     active, late = E | S2, LL
@@ -300,17 +298,55 @@ def test_syphilis():
         born_cs    = Ccs >> CS @ ss.on(preg.birth),
         born_ok    = Cnorm >> S @ ss.on(preg.birth),
         init=dict(S2=0.03, EL=0.05, LL=0.1), name='syph')
-    sim = ss.Sim(demographics=preg, diseases=syph, n_agents=20_000, **kw).run()
+    return dict(demographics=preg, diseases=syph)
+
+
+syph_kw = dict(stratify=strat, use_aging=False, **kw)
+syph_keys = ['mtct', 'stillbirth', 'nnd', 'born_cs', 'born_ok']
+
+
+@sc.timer()
+def test_syphilis():
+    sc.heading('Port: syphilis congenital outcomes by maternal stage, with ss.mother() and ss.on(preg.delivery/birth) (03 §4.2)')
+    sim = ss.Sim(**make_syphilis(), n_agents=50_000, **syph_kw).run()
     r, p = sim.results, sim.demographics.pregnancy
     assert p.fetus and 'ss.mother' in p.fetus_reason
     total = r.syph.mtct.sum()
-    out = {k:r.syph[k].sum() for k in ['stillbirth', 'nnd', 'born_cs', 'born_ok']}
-    assert total > 200 and all(v > 10 for k,v in out.items() if k != 'nnd') and out['nnd'] > 0, out # Neonatal deaths are rare: 4 to 12 across seeds
+    out = {k:r.syph[k].sum() for k in syph_keys[1:]}
+    assert total > 500 and all(v > 10 for k,v in out.items() if k != 'nnd') and out['nnd'] > 0, out # Neonatal deaths are rare
     assert sum(out.values()) <= total # The rest unborn at the end, or lost earlier
     assert r.pregnancy.stillbirth.sum() >= out['stillbirth'] # Also a stillbirth of the pregnancy, for ANC and contraception to see
     assert r.pregnancy.neonatal_deaths.sum() >= out['nnd']
     assert np.isclose(r.pregnancy.birth.sum(), r.pregnancy.delivery.sum() - out['stillbirth'], rtol=0.01)
     return sim
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: the unborn as a fetal level of the mother\'s pregnant compartments (ss.mother, routing at the delivery and the birth) is deferred')
+def test_syphilis_ode():
+    r = ss.Sim(**make_syphilis(), n_agents=50_000, **syph_kw).run().results
+    ode = ss.Sim(**make_syphilis(), solver='ode', total_pop=50_000, **syph_kw).run()
+    o, po = ode.results, ode.demographics.pregnancy
+    assert 'fetal_syph (S, Cnnd, Cstill, Ccs, Cnorm)' in po.fetus_reason
+    for key,tol in zip(syph_keys, [0.1, 0.25, 0.5, 0.2, 0.1]):
+        assert np.isclose(o.syph[key].sum(), r.syph[key].sum(), rtol=tol), f'{key}: {o.syph[key].sum():.0f} as an ODE, {r.syph[key].sum():.0f} as agents'
+    assert np.isclose(o.pregnancy.stillbirth.sum(), o.syph.stillbirth.sum()) and np.isclose(o.pregnancy.neonatal_deaths.sum(), o.syph.nnd.sum())
+    assert np.isclose(o.pregnancy.birth.sum(), o.pregnancy.delivery.sum() - o.syph.stillbirth.sum())
+    assert np.isclose(o.syph.n_CS[-1], o.syph.born_cs.sum())
+    n = lambda res: sum(res[f'n_{s}'][-1] for s in ['S', 'E', 'S2', 'EL', 'LL', 'CS'])
+    assert np.isclose(n(o.syph), o.pregnancy.n_NP[-1] + o.pregnancy.n_P[-1])
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: ss.on(preg.conception/delivery) in another module as synchronized flows in compartments is deferred')
+def test_events_ode():
+    def flags(solver):
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
+        S, F = ss.states('S F')
+        d = ss.Disease(S, F, flag=S >> F @ ss.on(preg.conception), unflag=F >> S @ ss.on(preg.delivery), name='d')
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        return ss.Sim(demographics=preg, diseases=d, solver=solver, stratify=strat, use_aging=False, **size, **kw).run().results
+    ra, ro = flags('abm'), flags('ode')
+    for key in ['flag', 'unflag']:
+        assert np.isclose(ro.d[key].sum(), ra.d[key].sum(), rtol=0.05), f'{key}: {ro.d[key].sum():.0f} as an ODE, {ra.d[key].sum():.0f} as agents'
 
 
 def make_postpartum():
