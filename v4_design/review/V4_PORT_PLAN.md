@@ -258,3 +258,4 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | — | implementation.md | 8769d50c | Merged: v4's file as the base, v4-rs entries added, [B] marks, supersessions and open items noted |
 | — | risk 4 | eb4f67e4 | Save and load mid-run as agents, pregnancy (test_pregnancy::test_save_load) and a cascade with memory and a delay (test_deliveries::test_save_load): identical results |
 | — | review 2 | 859b4724 | solver='auto' with ss.spread chose ODE and crashed: a capability row now sends it to agents; burnin= and the other deferred features already chose agents |
+| — | review 1 | 5e9e1435 | python -m starsim.migrate on the v4-rs test_pregnancy.py: added ss.people.->ss.ppl. and eligible=->where=; what is left after it is B1 (P.time as compartments: 8 tests run the ODE) and two known adaptations (fractional due times in test_legacy; the unborn counted in a declared disease's states in test_fetus) |
