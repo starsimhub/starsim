@@ -215,8 +215,8 @@ def test_fetus():
 @pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: a fetal level of the pregnant compartments, whose death is a loss for the mother by gestational age, is deferred')
 def test_fetus_ode():
     common = dict(networks=ss.MaternalNet(), stratify=strat, use_aging=False, **kw)
+    ode = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), solver='ode', total_pop=30_000, **common).run().results # First, so that it fails fast until B7
     abm = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), n_agents=30_000, **common).run().results
-    ode = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), solver='ode', total_pop=30_000, **common).run().results
     loss = lambda r: r.pregnancy.miscarriage.sum() + r.pregnancy.stillbirth.sum()
     for key,a,o in [('mtct', abm.d.mtct.sum(), ode.d.mtct.sum()), ('fetal', abm.d.fetal.sum(), ode.d.fetal.sum()), ('still', abm.d.still.sum(), ode.d.still.sum()), ('loss', loss(abm), loss(ode)), ('birth', abm.pregnancy.birth.sum(), ode.pregnancy.birth.sum())]:
         assert np.isclose(o, a, rtol=0.1), f'{key}: {o:.0f} as an ODE, {a:.0f} as agents'
@@ -227,7 +227,8 @@ def test_lactation_ode():
     def lactation(solver):
         size = dict(n_agents=30_000) if solver == 'abm' else dict(total_pop=30_000)
         return ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150)), ss.Lactation(p_breastfeed=0.8)], solver=solver, stratify=strat, use_aging=False, **size, **kw).run()
-    a, o = lactation('abm').results.lactation, lactation('ode').results.lactation
+    o = lactation('ode').results.lactation # First, so that it fails fast until B7
+    a = lactation('abm').results.lactation
     for key,tol in [('start', 0.05), ('wean', 0.05), ('n_L', 0.15), ('restart', 0.3)]:
         va, vo = (a[key][-1], o[key][-1]) if key.startswith('n_') else (a[key].sum(), o[key].sum())
         assert np.isclose(vo, va, rtol=tol), f'{key}: {vo:.0f} as an ODE, {va:.0f} as agents'
@@ -376,8 +377,8 @@ def test_syphilis():
 
 @pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: the unborn as a fetal level of the mother\'s pregnant compartments (ss.mother, routing at the delivery and the birth) is deferred')
 def test_syphilis_ode():
+    ode = ss.Sim(**make_syphilis(), solver='ode', total_pop=50_000, **syph_kw).run() # First, so that it fails fast until B7
     r = ss.Sim(**make_syphilis(), n_agents=50_000, **syph_kw).run().results
-    ode = ss.Sim(**make_syphilis(), solver='ode', total_pop=50_000, **syph_kw).run()
     o, po = ode.results, ode.demographics.pregnancy
     assert 'fetal_syph (S, Cnnd, Cstill, Ccs, Cnorm)' in po.fetus_reason
     for key,tol in zip(syph_keys, [0.1, 0.25, 0.5, 0.2, 0.1]):
@@ -397,7 +398,8 @@ def test_events_ode():
         d = ss.Disease(S, F, flag=S >> F @ ss.on(preg.conception), unflag=F >> S @ ss.on(preg.delivery), name='d')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         return ss.Sim(demographics=preg, diseases=d, solver=solver, stratify=strat, use_aging=False, **size, **kw).run().results
-    ra, ro = flags('abm'), flags('ode')
+    ro = flags('ode') # First, so that it fails fast until B7
+    ra = flags('abm')
     for key in ['flag', 'unflag']:
         assert np.isclose(ro.d[key].sum(), ra.d[key].sum(), rtol=0.05), f'{key}: {ro.d[key].sum():.0f} as an ODE, {ra.d[key].sum():.0f} as agents'
 
