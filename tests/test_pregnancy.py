@@ -459,6 +459,22 @@ def test_save_load():
     return loaded
 
 
+def test_path_triggers():
+    """ A trigger on another module's transition by path (ss.state('pregnancy.delivery')) is its event, as ss.on(preg.delivery) is, so it reaches fetuses at their mother's delivery (it was a condition that never held for them) """
+    sc.heading('Testing triggers on a transition by path')
+    def make(by_path):
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
+        S, I, Cs = ss.states('S I Cs')
+        delivery = ss.state('pregnancy.delivery') if by_path else preg.delivery
+        d = ss.Disease(S, I, Cs, infection=S >> I @ ss.peryear(0.1), mtct=ss.Transition(S, Cs, rate=ss.peryear(3)*ss.mother(I)),
+                       still=ss.Transition(Cs, ss.null, on=delivery), name='d')
+        return ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=5000, start=2000, stop=2005, verbose=0).run()
+    direct, path = make(False), make(True)
+    assert path.results.d.still.sum() > 0, 'A fetus is removed at its mother\'s delivery'
+    assert np.array_equal(direct.results.d.still.values, path.results.d.still.values)
+    return path
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()

@@ -434,6 +434,23 @@ class Sim(ss.Base):
         """ Work out the sim's unit and solver: see `ss.solvers.choose_solver()` """
         return ss.solvers.choose_solver(self)
 
+    def _resolve_path_triggers(self):
+        """
+        A trigger on a transition of another module by its path (`on=ss.state('pregnancy.delivery')`, for a module declared
+        before that one exists) is that transition's event, as `ss.on(preg.delivery)` is, not the condition of having gone through
+        it: so it happens once, in the step, and to whoever the event also happens to (e.g. the fetuses at a delivery)
+        """
+        mods = {mod.name:mod for mod in self.declared}
+        for mod in self.declared:
+            for tr in mod.graph.transitions.values():
+                x = getattr(tr.trigger, 'x', None)
+                if tr.trigger is None or tr.trigger.event or not isinstance(x, ss.conditions.Cond) or x.op != 'state' or not isinstance(x.args[0], str):
+                    continue
+                other, name = x.args[0], x.args[1]
+                if other != mod.name and other in mods and name in mods[other].graph.transitions:
+                    tr.trigger = ss.on(ss.conditions.Event('tr', ss.conditions.Named(other, name)))
+        return
+
     def _init_lifetables(self):
         """ In a compartmental run, a life table (`ss.death(lifetable=)`) is a death rate for each age group; as agents, each person's age at death is drawn (see `ss.solvers.Agents.step_lifetables()`) """
         for mod in self.declared:
