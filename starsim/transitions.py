@@ -939,7 +939,7 @@ class outcome(Nameable):
     A reported quantity: a flow worked out from other flows, which moves nobody
 
     Args:
-        source (Transition/outcome/list): a transition, another outcome, or a weighted sum of them, e.g. `0.5 * infection`
+        source (Transition/outcome/list): a transition, one branch of one (`cin.to(CA)`), another outcome, or a weighted sum of them, e.g. `0.5 * infection`
         delay (any): the time from the source event to this one: a duration or a distribution
         duration (any): if given, also produces `n_<name>`: the number currently in this outcome
         likelihood (`ss.Dist`): optional likelihood, for calibration
@@ -987,13 +987,16 @@ class outcome(Nameable):
     def to_json(self, unit=None):
         """ The outcome as it is written in the model spec """
         def flow_str(base, weight):
-            if isinstance(base, str):
-                return base
+            if isinstance(base, ss.conditions.Event) and base.args[0] == 'to': # One branch, written as it is given
+                kind, tr, dst = base.args
+                name = f'{tr.name}.to({getattr(dst, "name", dst)})'
+            else:
+                name = flow_key(base)
             if isinstance(weight, BinOp) and is_one(weight.a): # From 1 * rho
                 weight = weight.b
             if isinstance(weight, Expr):
                 weight = format_expr(weight, exact=True)
-            return base.name if sc.isnumber(weight) and weight == 1 else f'{weight} * {base.name}'
+            return name if sc.isnumber(weight) and weight == 1 else f'{weight} * {name}'
         source = ' + '.join(flow_str(base, weight) for base,weight in self.flows)
         return dict(name=self.name, type='outcome', source=source, delay=ss.presentation.quantity_json(self.delay, 'dur', unit),
                     duration=ss.presentation.quantity_json(self.duration, 'dur', unit), likelihood=self.likelihood_json())
@@ -1079,6 +1082,23 @@ class Destination:
 
     def __repr__(self):
         return f'Destination({self.name})'
+
+
+def flow_key(base):
+    """ The name of a flow an outcome is counted from: a transition or outcome by its name, a name as given, and one branch of a transition (`tr.to(B)`) as its flow to that destination, `'<transition>.<state>'` """
+    if isinstance(base, str):
+        return base
+    if isinstance(base, ss.conditions.Event):
+        kind, tr, dst = base.args
+        if kind == 'to':
+            dst = getattr(dst, 'name', dst)
+            return f'{tr.name}.{dst}' if len(tr.dst) > 1 or tr.stays else tr.name # One destination, with nobody staying, is the whole transition
+        elif kind == 'tr':
+            return tr.name
+    if isinstance(base, ss.conditions.Cond): # E.g. 0.5*cin.to(CA), which is arithmetic on a condition
+        errormsg = f'An outcome is counted from transitions, their branches (tr.to(B)), and other outcomes, not from the condition {base}; for a share of a branch, use an outcome of it, e.g. 0.5*ss.outcome(cin.to(CA))'
+        raise TypeError(errormsg)
+    return base.name
 
 
 class FlowSum:

@@ -709,6 +709,33 @@ def test_strains_spec():
 
 
 @sc.timer()
+def test_strains_branch_flows():
+    sc.heading('Testing the flow to one destination of a split, in a family and as an outcome, as agents and compartments')
+    def make(name, beta):
+        S, P, CIN, CA = ss.states('S P CIN CA')
+        cin = ss.Transition(CIN, [CA, S], p=[0.3, 0.7], dur=ss.years(2)) # A split, as HPVsim's CIN that clears or becomes cancer
+        return ss.Disease(infection=S >> P @ ss.peryear(beta)*P, progression=P >> CIN @ ss.years(1), cin=cin,
+                          cancers=ss.outcome(cin.to(CA)), init_prev=0.1, name=name)
+    pars = dict(start=2000, stop=2015, dt=0.25, total_pop=10_000, verbose=0)
+    out = sc.objdict()
+    for solver in ['abm', 'ode']:
+        sim = ss.Sim(diseases=ss.Strains('hpv', [make('a', 3.0), make('b', 2.5)]), solver=solver, n_agents=10_000, rand_seed=1, **pars).run()
+        res = sim.results
+        assert res.a.cin.CA.sum() > 0 and np.allclose(res.a.cancers, res.a.cin.CA) and np.allclose(res.b.cancers, res.b.cin.CA) # The outcome is the flow to CA
+        assert np.allclose(res.hpv.cin.CA, res.a.cin.CA + res.b.cin.CA) and np.allclose(res.hpv.cin.S, res.a.cin.S + res.b.cin.S) # Summed across members
+        assert np.allclose(res.hpv.cin.CA + res.hpv.cin.S, res.hpv.cin) and np.allclose(res.hpv.cancers, res.hpv.cin.CA)
+        out[solver] = [res.hpv.cin.CA.sum(), res.hpv.cin.CA.sum()/res.hpv.cin.sum()]
+    assert np.isclose(out.abm[0], out.ode[0], rtol=0.1) and np.allclose([out.abm[1], out.ode[1]], 0.3, rtol=0.05), out
+
+    # Written to the spec as it was given, and back
+    sim = ss.Sim(diseases=make('a', 1.0), stop=2005, verbose=0)
+    ns = {}
+    exec(sim.to_code().replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == sim.hash()
+    return out
+
+
+@sc.timer()
 def test_strains_errors():
     sc.heading('Testing what a family refuses')
     pair = lambda **kwargs: ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18')], **kwargs)
@@ -755,4 +782,5 @@ if __name__ == '__main__':
     seeded = test_strains_seeding()
     compart = test_strains_compartmental()
     spec    = test_strains_spec()
+    branch  = test_strains_branch_flows()
     test_strains_errors()

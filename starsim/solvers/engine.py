@@ -1379,7 +1379,7 @@ class Engine:
             for name,oc in list(todo.items()):
                 sources = []
                 for base,weight in oc.flows:
-                    key = base if isinstance(base, str) else base.name
+                    key = ss.transitions.flow_key(base)
                     if key not in graph.transitions and key not in graph.outcomes and graph.destination(key) is None:
                         options = list(graph.transitions.keys()) + list(graph.outcomes.keys()) + graph.destinations()
                         raise ss.UnknownOutcomeSource(f'the source of the outcome "{name}" is not a transition or outcome of "{self.mod.name}" ({key}){trans.did_you_mean(str(key), options)}')
