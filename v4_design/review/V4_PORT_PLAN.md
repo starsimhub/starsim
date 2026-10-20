@@ -247,3 +247,7 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 82 | e34a9e76 | febf6279 | tfr result and asfr on ss.Pregnancy (applied cleanly); the test's ABM-vs-ODE TFR comparison dropped to the agents' range (ODE needs P.time as compartments: B1). |
 | — | a6642333 | — | implementation.md (v4-rs design doc): log only |
 | — | a6642333 (+risk 3) | cc5e6bd3 | sim.new() keeps burnin=, checked in test_burnin; then=/queue=/ss.Capacity are not ported (rulings), so nothing else to check |
+| 83 | 6ba95487 | 4ff4831f | B7: fetal levels of the pregnant compartments not ported (fetal_specs/route/preg_event, crossing why text). Tests: test_syphilis at 50k agents with strat (agents half); test_syphilis_ode and test_events_ode strict xfails (CapabilityError). |
+| 84 | 49140978 | 986afd3b | B7: prenatal transmission, fetal deaths, Lactation as compartments not ported. Tests: test_fetus_ode and test_lactation_ode strict xfails (make_fetal at module level). |
+| 85 | c27c2c6a | a577bd63 | B7: BreastfeedingNet as mass action in compartments not ported; Lactation docstring kept 'agents only'. Tests: test_hiv_vertical (agents: >200 in utero and by breastfeeding at 100k agents); test_hiv_vertical_ode strict xfail. |
+| — | 40491a51 | — | ss.mother docstring for compartments: B7, log only (the docstring stays 'agents only') |

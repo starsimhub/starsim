@@ -109,6 +109,7 @@ def test_burnin():
     early, later = r.delivery[1:9].sum(), r.delivery[13:21].sum()
     assert np.isclose(early, later, rtol=0.2), f'{early} deliveries in the first 8 months, against {later} a year later'
     assert np.isclose(r.n_P[0], r.n_P[18], rtol=0.15), f'{r.n_P[0]} pregnant at the start, {r.n_P[18]} later'
+    assert np.isclose(r.birth[1], r.delivery[1] - r.stillbirth[1], rtol=0.1), 'The first deliveries have their births'
     assert r.conception[0] == 0 and r.abortion[0] == 0, 'Burn-in events are not counted in the results'
 
     # The TFR and ASFR, as in Starsim 3: about the fertility rate over the ages women can conceive at (against compartments once P.time can run as them: Phase B1)
