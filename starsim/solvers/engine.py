@@ -831,10 +831,13 @@ class Engine:
             if p is None or tr.immediate: # dur=0 has no dwell: see Graph.resolve_exits()
                 continue
             raw = trans.by_dist(p.raw) if tr.dur is not None else p.raw
+            scaled = trans.scaled_dist(raw) if tr.dur is not None and isinstance(raw, trans.Expr) else None # A distribution times a factor: each draw is scaled, so it keeps its shape
+            if scaled is not None:
+                raw = trans.by_dist(scaled[0].raw)
             if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # ST18: a function's value is the mean of an exponential, not each person's own time
                 fname = getattr(raw, '__name__', 'the function')
                 ss.warn(f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
-            dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None)
+            dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None, scale=None if scaled is None else scaled[1])
             if isinstance(raw, ss.Dist) and tr.dur is not None and any(isinstance(v, ss.by) for v in trans.varying_pars(raw).values()): # Parameters by group
                 self.varying_dwell(name, tr, raw, dw, to_unit)
             elif isinstance(raw, ss.Dist) and tr.dur is not None:
@@ -1006,7 +1009,7 @@ class Engine:
         """ The current mean dwell time of a transition, in the sim's unit """
         dw = self.dwells[name]
         if dw.dist is not None or getattr(dw, 'varying', False):
-            return dw.mean
+            return dw.mean if getattr(dw, 'scale', None) is None else dw.mean*self.value(dw.scale) # A distribution times a factor
         val = self.value(dw.par)
         return np.divide(1, val, out=np.full(np.shape(val), np.inf), where=np.asarray(val)!=0)[()] if dw.is_rate else val # A rate of 0 is a dwell that never ends
 

@@ -612,9 +612,13 @@ class Graph(Presentation):
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
         inner = {q.name or find_name(q, frame) for tr,slot,p in slots for q in inner_pars(p.value)} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), or inside a probability per act, which are registered below
+        inner |= {q.name or find_name(q, frame) for tr,slot,p in slots if isinstance(p.value, Expr) for q in p.value.leaves if isinstance(q, par) and q is not p} # And inside an expression in a slot, e.g. dur=dur_rec*k
+        taken = lambda name: name in self.pars or name in self.states or name in self.transitions or name in inner
         for tr,slot,p in anon:
-            clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions or slot in inner
-            self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
+            name = f'{slot}_{tr.name}' if counts[slot] > 1 or taken(slot) else slot
+            if taken(name): # e.g. a parameter of the user's called dur_rec, inside the dwell time of a transition called rec
+                name = f'{slot}_of_{tr.name}'
+            self._add_par(p, name=name)
             p.slot_named = True
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
