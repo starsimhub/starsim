@@ -1529,8 +1529,11 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.target is not None and not (self.holds or self.edges or self.move or self.move_states or self.increment):
             errormsg = f'"{self.name}" has a target, but nothing to count against it: a target is the number holding a product, or at the end of a move'
             raise ValueError(errormsg)
+        if self.target is not None and any(k < 0 for k in (self.increment or {}).values()):
+            errormsg = f'"{self.name}" has a target and a counter that goes down (increment={self.increment}); a target counts those a counter has reached, so it needs an increment above 0'
+            raise ValueError(errormsg)
         if self.target is not None:
-            counts = self.product.dim if self.holds else sc.strjoin(dict.fromkeys(f'{e.dis}.{e.dst.name}' for e in self.edges)) if self.edges else f'{self.disease}.{self.move_states[1]}' if self.move_states else self.move or self.increment
+            counts = self.product.dim if self.holds else sc.strjoin(dict.fromkeys(f'{e.dis}.{e.dst.name}' for e in self.edges)) if self.edges else f'{self.disease}.{self.move_states[1]}' if self.move_states else self.move or sc.strjoin(f'{d} of at least {k}' for d,k in self.increment.items())
             ss.note(f'the target of "{self.name}" counts {counts}', sim=sim)
         if self.queue is not None and self.capacity is None and not self.uses:
             errormsg = f'queue= of "{self.name}" is how long people wait when there is not enough capacity, so it needs capacity= or uses='
@@ -1721,7 +1724,7 @@ class Delivery(ss.products.EventSource, Intervention):
                 if mod is not self.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.solvers.Crossing
                     continue
                 if mod is not self.dis: # Another disease has other states, so the selection cannot depend on the state
-                    if not np.all(sel == sel[0]):
+                    if not np.allclose(sel, sel[0]):
                         raise ss.CapabilityError(f'"{self.name}" selects people by their state in "{self.dis.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
                     frac = np.broadcast_to(sel[0], mod.engine.selector.shape)
                 before = mod.engine.state_counts() if mod is self.dis else None
@@ -2180,8 +2183,10 @@ class Delivery(ss.products.EventSource, Intervention):
         served = self.take_limited(chosen)
         self.use(served)
         dropped = chosen & ~served if self.selector.abm else chosen - served
-        if self.capacity is not None or self.uses:
-            self.tally('lost_capacity', dropped)
+        if self.capacity is not None or self.uses: # With a target, only those wanted to close the gap and not served for lack of capacity
+            lost = self.people(dropped) if self.target is None else self._capped
+            if lost and (n := self.people(dropped)):
+                self.tally('lost_capacity', dropped, weight=lost/n)
         return (sel & ~dropped if self.selector.abm else sel - dropped), served
 
     def take_limited(self, cands, wait=None):
@@ -2199,6 +2204,7 @@ class Delivery(ss.products.EventSource, Intervention):
         want = [min(max(g, 0.0), self.people(cands*m)) for m,g in zip(strata, gaps)]
         total = sum(want)
         f = min(1.0, limit/total) if total else 0.0
+        self._capped = total*(1 - f) # People wanted but not served for lack of capacity
         served = selector.nobody()
         for m,w in zip(strata, want):
             if w*f > 0:
@@ -2230,8 +2236,9 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.move_states is not None:
             return selector.in_states([self.move_states[1]])*selector.everyone()
         out = selector.everyone()
-        for d,level in self.changes.items():
-            out = out*(selector.dim(self.sim.groups.strats[d].name) == level)
+        for d,level in self.changes.items(): # A counter counts those it has reached at least once
+            lv = selector.dim(self.sim.groups.strats[d].name)
+            out = out*((lv >= level[1]) if isinstance(level, tuple) else (lv == level))
         return out
 
     def strata_targets(self):
@@ -2739,8 +2746,8 @@ class Delivery(ss.products.EventSource, Intervention):
         In a compartmental run, a treatment of several diseases: the people chosen in each compartment and group are moved as a
         population of their own (with `force()`), so the share forced is chosen × probability in each, and the rest of them have
         failed. Diseases tracked jointly (see `ss.solvers.Crossing`) pass the same people on, by way of the joint array, so each
-        sees those the others treated. Its outcomes `cured` and `failed` are events too, as shares of each state and group of
-        the delivery's disease (someone cured of one disease and failed by another has both)
+        sees those the others treated. Its outcomes are events as shares of this disease's states and groups; someone cured of
+        one disease and failed for another counts in both, and anyone in both outcomes for two diseases counts twice (clipped at all)
         """
         sim = self.sim
         home = self.eng
@@ -2748,32 +2755,33 @@ class Delivery(ss.products.EventSource, Intervention):
         rows = home.people_comps
         state_of = [home.selector.states.index(home.comps[i].state.name) for i in rows]
         C = home.take(home.y[rows], chosen[state_of]) # The people chosen, by compartment and group
+        U = C.copy() # Of them, those in no source of any disease's moves so far
         cur = home
-        parts = [] # Each disease's engine, and those it cured and failed, by its compartment and group
+        parts = []
         for dis in diseases:
             eng = sim.get_declared(dis).engine
             if eng is not cur:
                 if cross is None or eng.cross is not cross:
                     raise ss.CapabilityError(f'"{self.name}" treats "{dis}" and "{cur.mod.name}", whose states are not tracked jointly, with solver="{sim.solver}". Run with solver="abm".')
-                C = cross.local(cross.joint(cur, C), eng)
-            C, cured, failed = self.force_part(eng, C, [e for e in self.edges if e.dis == dis])
+                C, U = [cross.local(cross.joint(cur, X), eng) for X in [C, U]]
+            edges = [e for e in self.edges if e.dis == dis]
+            U = U.copy()
+            U[[eng.people_comps.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]]] = 0
+            C, cured, failed = self.force_part(eng, C, edges)
             parts.append((eng, cured, failed))
             cur = eng
-        if cur is not home: # Where the people treated are now, by state and group of this disease
-            C = cross.local(cross.joint(cur, C), home)
-        by_state = lambda X: np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
-        N = home.state_counts()
-        share = lambda X: np.clip(np.divide(by_state(X), N, out=np.zeros_like(N), where=N>0), 0, 1)
-        for outcome,k in [('cured', 1), ('failed', 2)]:
-            total = 0.0
-            for eng,*X in parts: # In this disease's compartments, by way of the joint array
-                X = X[k-1]
-                total = total + (X if eng is home else cross.local(cross.joint(eng, X), home))
-            self.fire(outcome, share(total))
-        return [(share(C), None)]
+        def home_share(*pairs): # People by compartment of their engines, as a share of each state and group of this disease now
+            X = sum(X if eng is home else cross.local(cross.joint(eng, X), home) for eng,X in pairs)
+            counts = np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
+            n = home.state_counts()
+            return np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1)
+        self.fire('cured', home_share(*[(eng, c) for eng,c,_ in parts]))
+        self.fire('failed', home_share(*[(eng, f) for eng,_,f in parts]))
+        self.fire('unneeded', home_share((cur, U)))
+        return [(home_share((cur, C)), None)] # Where the people treated are now
 
     def force_part(self, eng, C, edges):
-        """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and those it cured and those it failed (by compartment and group, after the move) """
+        """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and of them, the cured (where they are now) and those who failed """
         rows = eng.people_comps
         full = eng.y.copy()
         cross, eng.cross = eng.cross, None # Moved as a population of their own, which the crossing takes once they are back with the rest
@@ -2782,6 +2790,7 @@ class Delivery(ss.products.EventSource, Intervention):
             eng.y[rows] = C
             states = eng.selector.states
             treated = 0.0
+            sources = sorted({rows.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]})
             failed = np.zeros_like(C)
             for e in edges:
                 comps = [c for s in e.srcs for c in eng.state_comps[s.name]]
@@ -2795,10 +2804,12 @@ class Delivery(ss.products.EventSource, Intervention):
                 self.add('cured', groups=before - after, part=part)
                 self.add('failed', groups=after, part=part)
                 treated = treated + before
-                failed[[rows.index(c) for c in comps]] = eng.y[comps] # Still in the states it would have moved them from
             self.add('unneeded', groups=C.sum(axis=0) - treated, part=(eng.mod.name, None))
             after = eng.y[rows].copy()
-            cured = np.maximum(after - C, 0) # Arrived where it moved them
+            failed[sources] = after[sources] # Still in a source: not moved
+            untouched = C.copy()
+            untouched[sources] = 0
+            cured = np.clip(after - failed - untouched, 0, None)
             eng.y[:] = full
             eng.y[rows] += after - C
         finally:
@@ -2868,7 +2879,11 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def report(self, sels):
         """ Count the results, from the least severe (see `ss.Diagnostic.result_names`), and record the people with each as an event, which the steps that follow it act on """
-        for name,sel in zip(self.product.result_names, sels):
+        names = self.product.result_names
+        if names != ['negative', 'positive']: # Several results: positive is any but the least severe, and negative that one
+            names = names + ['negative', 'positive']
+            sels = list(sels) + [sels[0], np.logical_or.reduce(sels[1:]) if self.selector.abm else sum(sels[1:])]
+        for name,sel in zip(names, sels):
             self.tally(name, sel)
             self.fire(name, sel)
         return

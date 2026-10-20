@@ -11,15 +11,15 @@ from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_l
 __all__ = ['Compartmental', 'synced_event']
 
 
-def at_dwell(expr, value):
-    """ An expression with the time in a state (`P.dwell`) replaced by a value: that of the people in one slot of a conveyor by time in state """
+def at_dwell(expr, value, state=None):
+    """ An expression with the time in a state (`P.dwell`, or `P.time` of the state the people are in) replaced by a value: that of the people in one slot of a conveyor by time in state """
     E = ss.transitions
-    if isinstance(expr, E.Dwell):
+    if isinstance(expr, E.Dwell) or (isinstance(expr, ss.expressions.Clock) and expr.own(state)):
         return value
     elif isinstance(expr, E.BinOp):
-        return E.BinOp(expr.op, at_dwell(expr.a, value), at_dwell(expr.b, value))
+        return E.BinOp(expr.op, at_dwell(expr.a, value, state), at_dwell(expr.b, value, state))
     elif isinstance(expr, E.Func):
-        return E.Func(expr.name, *[at_dwell(arg, value) for arg in expr.args])
+        return E.Func(expr.name, *[at_dwell(arg, value, state) for arg in expr.args])
     return expr
 
 
@@ -31,7 +31,7 @@ def synced_event(tr, sim, home):
     an event a module records in code)
     """
     trig = tr.trigger
-    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event):
+    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event) or id(tr) in getattr(sim, 'fetal_trs', ()): # Unborn people's, which the pregnancy takes (see ss.Pregnancy.add_fetal_dims())
         return None
     kind, obj, dst = trig.x.args
     if kind not in ['tr', 'to']:
@@ -42,8 +42,20 @@ def synced_event(tr, sim, home):
         return None
     other = sim.get_declared(name)
     if getattr(obj, 'name', None) not in other.graph.transitions:
-        return None
+        alias = getattr(other, 'compartmental_events', {}).get(getattr(obj, 'name', None)) # An event a module records in code, which is one of its transitions under compartments (e.g. a live birth is a delivery)
+        return Bunch(mod=name, tr=alias, to=getattr(dst, 'name', dst)) if isinstance(alias, str) else None
     return Bunch(mod=name, tr=obj.name, to=getattr(dst, 'name', dst))
+
+
+def unrecorded_event(tr, sim):
+    """ Whether a transition is triggered by an event another module records in code that never happens under compartments (e.g. the death of a pregnancy's child): see `compartmental_events` of `ss.Pregnancy` """
+    trig = tr.trigger
+    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event) or trig.x.args[0] not in ['tr', 'to']:
+        return False
+    other = next((m for m in getattr(sim, 'declared', []) if m.name == ss.conditions.modname(trig.x.args[1].module)), None)
+    events = getattr(other, 'compartmental_events', {})
+    name = getattr(trig.x.args[1], 'name', None)
+    return name in events and events[name] is None
 
 
 class Compartmental(Engine):
@@ -78,9 +90,6 @@ class Compartmental(Engine):
 
     def init_pre(self):
         for name,tr in self.graph.transitions.items():
-            if getattr(tr, 'per', None) is not None:
-                raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" is a birth driven by the flow of "{tr.per.name}" (ss.birth(per=)), which runs as agents for now, so it cannot run with solver="{self.sim.solver}".\n'
-                                         f'     Run with solver="abm", or leave the solver as "auto".')
             if getattr(tr, 'offspring', None) is not None:
                 raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" has offspring (offspring=), which are added for each person who goes through it, so it cannot run with solver="{self.sim.solver}".\n'
                                          f'     Run with solver="abm", or leave the solver as "auto".')
@@ -357,11 +366,18 @@ class Compartmental(Engine):
             competing = [tr for tr in competing if tr.name not in self.slotted]
             staged = [tr for tr in staged if tr.name not in self.slotted]
             stays = self.stays(name, exits, competing, staged, branches) # The slots of a conveyor that each transition with after= or before= acts on
+            immediate = lambda tr: tr.rate is None and (tr.dur is None or tr.immediate)
+            rest = exits.remainder if slotted and exits.remainder is not None and exits.remainder.rate is None and exits.remainder.dur is not None and len(exits.remainder.dst) == 1 else None
+            if rest is not None and all(immediate(tr) for tr in exits.branches) and not stays: # Branches on entry (e.g. an abortion), and the rest leave by a dwell time: one more exit of the conveyor by time in the state
+                slotted = slotted + [rest]
+                branches = [tr for tr in branches if tr is not rest]
+                staged = [tr for tr in staged if tr is not rest]
             if slotted:
-                if branches or staged or stays:
+                if [tr for tr in branches if not immediate(tr)] or staged or stays:
                     other = 'branches with p=' if branches else 'a non-exponential dwell time' if staged else 'a minimum stay (after=) or a limit (before=)'
                     self.unsupported(slotted[0], f'an exit that reads {name}.dwell, with {other} out of "{name}",')
-                self.tracks[name] = [Bunch(tr=None, p=None, immediate=False, first=add_slots(state, slotted, exits, competing))]
+                passed = [Bunch(tr=tr, p=tr.p[0] if tr.p is not None and not tr.split else None, immediate=True) for tr in branches] # Passed straight through on entry
+                self.tracks[name] = passed + [Bunch(tr=None, p=None, immediate=False, first=add_slots(state, slotted, exits, competing))]
                 continue
             if branches: # Split on entry: one track per branch
                 if staged:
@@ -423,7 +439,7 @@ class Compartmental(Engine):
             flow.expr = None if (flow.kind in ['stage', 'conveyor'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
             flow.row = None
             if flow.at is not None and flow.expr is not None: # A rate that reads the time in the state, at the time of the people in this slot
-                flow.expr = at_dwell(flow.expr, ss.par(self.slot_times(flow)[1], literal=True))
+                flow.expr = at_dwell(flow.expr, ss.par(self.slot_times(flow)[1], literal=True), flow.state)
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
             flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.transitions.Count)) for leaf in flow.expr.leaves)
@@ -436,7 +452,7 @@ class Compartmental(Engine):
                 for row,flow in enumerate(flows):
                     flow.row = row
                 times = ss.par(np.array([self.slot_times(flow)[0] for flow in flows]).reshape(-1, 1), literal=True)
-                self.slot_ps[name] = (len(flows), [None if p is None else at_dwell(p, times) for p in tr.p])
+                self.slot_ps[name] = (len(flows), [None if p is None else at_dwell(p, times, tr.src[0]) for p in tr.p])
 
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
@@ -505,12 +521,19 @@ class Compartmental(Engine):
 
     def dwell_slots(self, state, slotted):
         """ How many whole steps the conveyor by time in a state follows people for (see `build_layout()`): until all but 0.1% have left by its longest dwell time, and no longer than the run """
-        if not isinstance(getattr(getattr(self.mod, 't', None), 'dt', None), ss.dur): # Laid out before the module is in a sim, for its equations: one slot
+        t = getattr(self.mod, 't', None)
+        if isinstance(getattr(t, 'dt', None), ss.dur):
+            dt = self.dt
+        elif getattr(getattr(self.sim, 'pars', None), 'dt', None) is not None and getattr(self.mod.pars, 'dt', None) is None: # Laid out before the sim's time is set, to track it jointly with other diseases (see ss.solvers.init_crossings()): by the sim's timeline
+            if not isinstance(getattr(getattr(self.sim, 't', None), 'dt', None), ss.dur):
+                self.sim._init_time() # Its unit is known by now; init() sets it again
+            t = self.sim.t
+            dt = t.dt.to(self.sim.unit_base).value
+        else: # Laid out before the module is in a sim, for its equations: one slot
             return 1
-        dt = self.dt
-        n = self.mod.t.npts
+        n = t.npts
         timed = [tr for tr in slotted if tr.dur is not None]
-        if timed and not any(tr.rate is not None for tr in slotted):
+        if timed: # Everyone has left by its longest dwell time, whatever the rates
             ends = [np.max(self.dwell_mean(tr.name))*np.log(1000) if self.dwells[tr.name].dist is None else self.quantiles(tr)[int(0.999*len(self.quantiles(tr)))] for tr in timed]
             n = min(n, int(np.ceil(max(ends)/dt)))
         n = max(n, 1)
@@ -536,7 +559,9 @@ class Compartmental(Engine):
             timed = [tr for tr in self.graph.exits[flow.state.name].timed if tr.name in self.slotted]
             leave = (n + 0.5)*dt + (self.time_left(timed[0], (n + 0.5)*dt, 1.0) if timed else 0)
             return leave, leave
-        return i*dt, (i + 0.5)*dt
+        if self.sim.solver == 'binomial': # Arrivals come at the end of a step, as agents', and move up a slot with it, so slot i is i - 1 steps on, to the middle of the step (slot 0 holds only those placed at the start)
+            return i*dt, (i - 0.5 if i else 0.5)*dt
+        return i*dt, (i if i else 0.25)*dt # Arrivals come through the step, then move up a slot at its end: in slot i, on average, i steps in the state (a quarter of one in the first)
 
     def time_left(self, tr, T, m):
         """ The mean time left in a transition's dwell time, sped up by m, for people who have been there a time T (an array, by group, if m is) """
@@ -583,10 +608,7 @@ class Compartmental(Engine):
     def init_post(self):
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
-        if any(sp.get('share') is not None for sp in self.spreads): # Phase B: a module's own burn-in (ss.Pregnancy's burnin=) as compartments
-            ss.note(f'{self.mod.name}: burnin= has no compartmental form yet, so nobody starts part way through (as agents they do)', sim=self.sim)
-            self.spreads = [sp for sp in self.spreads if sp.get('share') is None]
-        if self.spreads and self.cross is not None:
+        if self.cross is not None and any(sp.get('share') is None for sp in self.spreads): # A module's own burn-in (ss.Pregnancy's burnin=) is worked out in its own compartments, which the crossing starts from (see ss.solvers.Crossing.init())
             raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}", which is tracked jointly with {sc.strjoin(n for n in self.cross.names if n != self.mod.name)}, cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
         self.update_targets()
         amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
@@ -627,7 +649,13 @@ class Compartmental(Engine):
         saved = self.y.copy()
         first = self.graph.first.name
         out = np.zeros_like(self.y)
-        self._mover_rates = [np.zeros_like(np.asarray(r, dtype=float)) for r in self.mover_rates()] # Nobody moves between places (or ages) before the start
+        def zero(r): # A rate matrix (sparse, or not) with nothing in it
+            if hasattr(r, 'indptr'):
+                r = r.copy()
+                r.data[:] = 0
+                return r
+            return np.zeros_like(np.asarray(r, dtype=float))
+        self._mover_rates = [zero(r) for r in self.mover_rates()] # Nobody moves between places (or ages) before the start
         if self.program is None:
             self.init_program()
         p = self.program
@@ -638,8 +666,19 @@ class Compartmental(Engine):
         p.mult[inflows] = 0
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else 'rk4'] # The expected numbers, whatever the solver
         rng = self.make_rng(stream=3)
+        taken = np.zeros(self.n_groups) # Those back-dated, from the groups of the first state they started in
         try:
             for sp in self.spreads:
+                if sp.get('share') is not None: # A module's own burn-in (ss.Pregnancy's burnin=): each person of the first state with a chance of having entered over the steps before the start, evenly, run forward by the module's own transitions; as agents, all of them are kept (e.g. a delivery before the start counts in the parity)
+                    want = np.asarray(sp.share(), dtype=float)*saved[self.state_comps[first]].sum(axis=0)
+                    self.y = np.zeros_like(saved)
+                    for k in range(sp.steps):
+                        self.arrive(sp.tr.dst[0].name, want/sp.steps, self.y)
+                        self.y, _ = ss.kernels.one_step(rng, self.y, p, self.dt, solver, self.substeps(), no_tables, -1)
+                    out[self.people_comps] += self.y[self.people_comps]
+                    taken += want
+                    ss.note(sp.note, sim=sim)
+                    continue
                 window = sp.spread.window(self.convert)
                 lo, hi = (0, 2000) if window is None else [int(round(v/self.dt)) for v in window]
                 hi = max(hi, lo)
@@ -665,6 +704,7 @@ class Compartmental(Engine):
                 have = self.y[targets].sum(axis=0)
                 scale = np.divide(want, have, out=np.zeros_like(have), where=have > 0)
                 out[targets] += self.y[targets]*scale
+                taken += (self.y[targets]*scale).sum(axis=0)
                 what = 'infected' if sp.tr is not None else f'in {sp.entry.name}'
                 when = '[' + ', '.join(f'{v*self.dt:n}' for v in [lo, hi]) + ']' + (f' {sim.pars.unit}s' if sim.pars.get('unit') else ' steps') if window is not None else 'long enough to be stationary'
                 ss.note(f'{mod.name}: {x:n} {what}, back-dated over {when} (natural history only; values and ages as at the start)', sim=sim)
@@ -673,7 +713,6 @@ class Compartmental(Engine):
             self.cache.clear()
         firsts = self.state_comps[first] # Those back-dated are taken from the first state
         total = saved[firsts].sum(axis=0)
-        taken = out.sum(axis=0)
         keep = np.divide(np.maximum(total - taken, 0), total, out=np.zeros_like(total), where=total > 0)
         saved[firsts] *= keep
         self.y = saved + out
@@ -1017,6 +1056,7 @@ class Compartmental(Engine):
         stay = 1 - sum(ps)
         S = np.zeros((ng, ng))
         mask = np.zeros(ng)
+        inside = np.zeros(ng, dtype=bool) # The groups whose people are in the other's source
         src = {l:(state.name, l) for state in sy.otr.src for l in strat.state_levels[state.name]}
         for g in range(ng):
             b = coords[g, d]
@@ -1024,6 +1064,7 @@ class Compartmental(Engine):
                 S[g, g] = 1.0
                 continue
             mask[g] = 1 - stay
+            inside[g] = True
             for l,w in dst.items():
                 S[g, g + (l - b)*int(mults[d])] += w
             if stay > 1e-12: # ss.stay: to the source state's compartment with no exit of its own
@@ -1038,7 +1079,7 @@ class Compartmental(Engine):
                         own[self.people_comps.index(ind)] += float(np.mean(p))*float(np.mean(w))
         total = sum(own.values()) or 1.0
         rec = [(g, groups.folded(g - coords[g, d]*int(mults[d]) + (l - coords[g, a])*int(mults[a])), w/total) for g in np.flatnonzero(mask) for l,w in own.items()] # From each of this module's groups to the other's
-        sy.S, sy.mask = groups.fold_matrix(S), mask
+        sy.S, sy.mask, sy.inside = groups.fold_matrix(S), mask, inside
         sy.rec = tuple(np.array(v) for v in zip(*rec)) if rec else (np.zeros(0, int), np.zeros(0, int), np.zeros(0))
         return sy
 
@@ -1048,9 +1089,14 @@ class Compartmental(Engine):
             return dim_map
         key = (id(dim_map),) + tuple(sy.row for sy in syn)
         if key not in self._sync_maps:
-            out = dim_map
-            for sy in syn:
-                out = sy.S if out is None else out @ sy.S
+            if len(syn) > 1 and not np.any(np.sum([sy.inside for sy in syn], axis=0) > 1): # From different sources (e.g. starting from N, restarting from L): each moves the people in its own source as they were, not those another has just moved
+                eye = self.sim.groups.fold_matrix(np.eye(self.n_groups))
+                both = eye + sum(sy.S - eye for sy in syn)
+                out = both if dim_map is None else dim_map @ both
+            else:
+                out = dim_map
+                for sy in syn:
+                    out = sy.S if out is None else out @ sy.S
             self._sync_maps[key] = (dim_map, out) # The map is kept with it, so its id is not reused
         return self._sync_maps[key][1]
 
@@ -1086,7 +1132,7 @@ class Compartmental(Engine):
         """ Triggers (`ss.on()`): on states and strata, the compartments where they hold vanish; on time or counts, they are applied at each step """
         sim = self.sim
         self.triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and not tr.trigger.event and not tr.trigger.outcome]
-        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None] # An event of this module: moved at the end of the step, see step_triggers()
+        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None and not unrecorded_event(tr, sim) and id(tr) not in getattr(sim, 'fetal_trs', ())] # An event of this module: moved at the end of the step, see step_triggers()
         for tr in self.triggers:
             tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
             if not tr.static:
@@ -1151,9 +1197,9 @@ class Compartmental(Engine):
         if last is not None and len(last) == len(key) and all(np.array_equal(a, b) for a,b in zip(last, key)):
             return
         self._target_key = key
-        self.entry = sc.objdict() # For each state: [(compartment, weight)] and [(transition index, weight)]
+        self.entry = sc.objdict() # For each state: [(compartment, weight)] and [(transition index, weight, parent)], where a credit's parent is the one it is nested in (its index in the list), or -1
 
-        def enter(name, weight, comps, credits, path=()):
+        def enter(name, weight, comps, credits, path=(), parent=-1):
             if name in path: # The same-step cascade, by construction: see ss.solvers.Agents.junctions
                 cycle = ' -> '.join(path[path.index(name):] + (name,))
                 raise ss.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
@@ -1161,14 +1207,18 @@ class Compartmental(Engine):
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
                     dps = self.branch_probs(track.tr)
+                    dps = self.branch_probs(track.tr)
                     die = self.die_share(track.tr, dps) # Those who took ss.null leave the model, as by an outflow
-                    credits.append((self.tr_index[track.tr.name], weight*p*(sum(dps) + die if track.tr.stays else 1)))
+                    credits.append((self.tr_index[track.tr.name], weight*p*(sum(dps) + die if track.tr.stays else 1), parent))
+                    me = len(credits) - 1
                     for dst,dp in zip(track.tr.dst, dps):
+                        sub = me
                         if track.tr.ends:
-                            credits.append((self.tr_index[f'{track.tr.name}.{dst.name}'], weight*p*dp))
-                        enter(dst.name, weight*p*dp, comps, credits, path + (name,))
+                            credits.append((self.tr_index[f'{track.tr.name}.{dst.name}'], weight*p*dp, me))
+                            sub = len(credits) - 1
+                        enter(dst.name, weight*p*dp, comps, credits, path + (name,), sub)
                     if track.tr.dies and track.tr.ends and track.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
-                        credits.append((self.tr_index[f'{track.tr.name}.null'], weight*p*die))
+                        credits.append((self.tr_index[f'{track.tr.name}.null'], weight*p*die, me))
                     if track.tr.stays: # Those who took ss.stay
                         comps.append((self.stay_comp(name), weight*p*(1 - sum(dps) - die)))
                 elif getattr(track, 'starts', None) is not None:
@@ -1195,7 +1245,7 @@ class Compartmental(Engine):
                     comps, credits = self.entry[dst.name]
                     syn = self.syncs_of(flow.tr, dst.name)
                     for ind,w in comps:
-                        dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr)), syn) # Moving other modules' coordinates too (a synchronized flow)
+                        dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr, dst.name)), syn) # Moving other modules' coordinates too (a synchronized flow)
                         if dim_map is not None and np.ndim(w): # A branch share decided on entry, by the groups people land in, which can have a dimension the source lacks (TL16: it was read at the first level)
                             landed = dim_map*w
                             total = landed.sum(axis=1)
@@ -1204,16 +1254,17 @@ class Compartmental(Engine):
                         else:
                             flow.targets.append((ind, w*p, dim_map)) # (compartment, share, where in it)
                     flow.recs += [self.tr_index[f'{flow.tr.name}.{dst.name}'] if (flow.named or flow.tr.stays) and flow.tr.ends else -1]*len(comps) # Also counted in the flow to this destination
-                    flow.credits += [(ind, w*p) for ind,w in credits]
-                    flow.credits += [(sy.row, p*sy.mask) for sy in syn] # Moved in another module too
+                    off = len(flow.credits) # Credits are (transition index, weight, parent): the credit it is nested in, -1 for none, or -2 if it overlaps the others (drawn on its own)
+                    flow.credits += [(ind, w*p, par + off if par >= 0 else -1) for ind,w,par in credits]
+                    flow.credits += [(sy.row, p*sy.mask, -2) for sy in syn] # Moved in another module too
                 die = self.die_share(flow.tr, ps) # Those who took ss.null go to no compartment: they leave the model, as by an outflow
                 if flow.tr.dies and flow.tr.ends and flow.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
-                    flow.credits.append((self.tr_index[f'{flow.tr.name}.null'], die))
+                    flow.credits.append((self.tr_index[f'{flow.tr.name}.null'], die, -2))
                 if flow.tr.stays and src is not None: # Those who took ss.stay go to the state's compartment with no exit of its own, and are not in the flow
                     flow.targets.append((self.stay_comp(src), 1 - sum(ps) - die, None))
                     flow.recs.append(-1) # One for each target, so those of the flows after it line up
                     if flow.kind != 'stage' or flow.to is None:
-                        flow.credits.append((flow.index, sum(ps) + die))
+                        flow.credits.append((flow.index, sum(ps) + die, -2))
                 if flow.strain is not None:
                     flow.record = self.dim_map(src, src, flow.strain, record=True)
                 elif self.enters(flow.tr, flow.state): # Recorded at the level people arrive at, e.g. E -> I where only I has a clinical status
@@ -1236,6 +1287,119 @@ class Compartmental(Engine):
         active[0] += active.sum(axis=0) == 0 # Those with none of them stay in the first, where nothing moves them
         return list(active)
 
+    def attr(self, a):
+        """ An attribute's value in each group: that of its level (see ss.solvers.choose.add_attr_strats()) """
+        groups = self.sim.groups
+        for d,strat in enumerate(groups.strats):
+            if getattr(strat, 'of_attr', None) is a:
+                return strat.values[groups.group_coords[:, d]]
+        errormsg = f'The attribute "{a.name}" has no levels in this compartmental run'
+        raise ss.CapabilityError(errormsg)
+
+    def add_per_births(self):
+        """ After a step: the children of those who went through a transition with births driven by its flow (`ss.birth(per=)`), `n` for each, in the youngest groups of their parents' place """
+        for tr in self.graph.inflows:
+            if getattr(tr, 'per', None) is None or ss.conditions.modname(tr.per.module) not in [None, self.mod.name]: # Another module's children, placed here by the crossing (see ss.solvers.init_crossings())
+                continue
+            flow = np.broadcast_to(self.last_flows.get(tr.per.name, 0.0), (self.n_groups,))
+            if not flow.any():
+                continue
+            n = tr.n_born.raw if isinstance(tr.n_born, ss.par) else tr.n_born
+            if isinstance(n, ss.Dist):
+                n = ss.transitions.dwell_stats(n, self.convert)[0] # The mean number of children
+            fetal = getattr(self.mod, 'fetal_levels', None)
+            if fetal: # By the fetus's state at the delivery (see ss.Pregnancy.add_fetal_dims())
+                born, births = self.fetal_births(tr, flow, float(n), fetal)
+            else:
+                born = float(n)*flow @ self.birth_map(tr)
+                if self.integer: # Whole children
+                    born = self.rng.poisson(born).astype(float)
+                births = born
+            self.arrive(tr.dst[0].name, born, self.y)
+            if self.cross is not None: # Into the joint states, where the other diseases' children start by their dimensions' splits
+                self.cross.put(self)
+            for engine,other in self.births_of(tr): # Counted as this module's births, and as the children other modules place (ss.birth(per=) of this transition)
+                engine.flowcounts[other.name] += np.sum(births)
+                engine.last_flows[other.name] = engine.last_flows.get(other.name, 0.0) + births
+                if engine.n_groups > 1:
+                    engine.flow_groups[other.name] = engine.last_flows[other.name]
+        return
+
+    def fetal_births(self, tr, flow, n, fetal):
+        """
+        The children of the deliveries in each group of a pregnancy with fetal levels (see `ss.Pregnancy.add_fetal_dims()`), by
+        where each fetus goes (`ss.Pregnancy.route()`): none for a stillbirth (the pregnancy's, and the module's transition), born
+        and dead at once for a neonatal death, or born into the state its transitions at the delivery and birth lead to, in the
+        module's level of the crossing; the module's transitions at the delivery and the birth are counted as its own
+        """
+        if len(fetal) > 1:
+            raise ss.CapabilityError(f'"{self.mod.name}" has fetal levels for {sc.strjoin(fetal.keys())}; more than one module\'s has no compartmental form yet. Run with solver="abm".')
+        spec = fetal[0]
+        groups = self.sim.groups
+        if groups.group_fold is not None:
+            raise ss.CapabilityError(f'fetal levels of "{self.mod.name}" with dimensions that only some groups have cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
+        coords = groups.group_coords
+        f, c = groups.dim_index(spec.dim), groups.dim_index(spec.mod.name)
+        other = spec.mod.engine
+        base = self.birth_map(tr)
+        first = int(np.argmax(groups.strats[c].split)) # Where children start in the module, in the crossing
+        born = np.zeros(self.n_groups)
+        counts = sc.ddict(float) # The module's transitions
+        live = 0.0
+        for k,level in enumerate(spec.levels):
+            amount = flow*(coords[:, f] == k)
+            total = amount.sum()
+            if not total:
+                continue
+            kind, state, trs = self.mod.route(spec.mod, level)
+            for name in trs:
+                counts[name] += n*total
+            if kind == 'still':
+                self.flowcounts['stillbirth'] += total
+                self.last_flows['stillbirth'] = self.last_flows.get('stillbirth', 0.0) + amount
+                continue
+            live += total
+            if kind == 'nnd':
+                self.mod._nnd += n*total
+                continue
+            target = [(other.people_comps.index(ind), w) for ind,w in other.entry[state][0] if ind in other.people_comps]
+            for lt,w in target: # Moved from where children would start to the level of this state
+                shifted = np.zeros_like(base)
+                cols = np.flatnonzero(coords[:, c] == first)
+                shifted[:, cols + (lt - first)*int(groups.group_mults[c])] = base[:, cols]
+                born += n*float(np.mean(w))*(amount @ shifted)
+        for name,val in counts.items():
+            other.flowcounts[name] = other.flowcounts.get(name, 0.0) + val
+        if self.integer:
+            born = self.rng.poisson(born).astype(float)
+        births = born*(n*live/born.sum()) if born.sum() else born # Those who died at birth are born too, though not added
+        return born, births
+
+    def births_of(self, tr):
+        """ The engine and inflow of each declared module with an `ss.birth(per=)` of the same transition as `tr` (this module's own first) """
+        per = (ss.conditions.modname(tr.per.module) or self.mod.name, tr.per.name)
+        out = []
+        for mod in self.sim.declared:
+            for other in mod.graph.inflows:
+                if getattr(other, 'per', None) is not None and (ss.conditions.modname(other.per.module) or mod.name, other.per.name) == per:
+                    out.append((mod.engine, other))
+        return sorted(out, key=lambda pair: pair[0] is not self)
+
+    def birth_map(self, tr):
+        """ Where the children of the people in each group are born (rows to columns): the youngest group of each dimension, by the split of the others, in their parents' place """
+        key = ('birth', tr.name)
+        if key not in self.maps:
+            groups = self.sim.groups
+            coords = groups.group_coords
+            out = np.ones((groups.n_groups, groups.n_groups))
+            for d,strat in enumerate(groups.strats):
+                if strat.kind == 'space':
+                    out *= coords[:, d][:, None] == coords[:, d][None, :]
+                else:
+                    out *= np.asarray(self.inflow_factors[tr.dst[0].name][d])[None, :]
+            self.maps[key] = groups.fold_matrix(out)
+        return self.maps[key]
+
     def arrive(self, name, amount, y, before=False):
         """ Add an amount to a state, split between its tracks; with before=True, as if they arrived a step before (people infectious at the start, who have been so for the first step, as agents date them), so one slot along a conveyor """
         along = {conv.slots[0]:conv.slots[1] for conv in self.conveyors if len(conv.slots) > 1} if before else {}
@@ -1245,7 +1409,9 @@ class Compartmental(Engine):
 
     def flow_base(self, flow):
         """ The rate of a flow before its multipliers: the only part that can depend on the number in each compartment """
-        if flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.kernels.convey())
+        if flow.kind == 'inflow' and getattr(flow.tr, 'per', None) is not None: # Births driven by a flow: added after each step (see add_per_births())
+            return 0.0
+        elif flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.kernels.convey())
             return 1.0
         elif flow.expr is None and flow.at is not None:
             return self.slot_rate(flow)
@@ -1569,6 +1735,7 @@ class Compartmental(Engine):
             crd_starts = np.zeros(nf + 1, dtype=int),
             crd_index  = np.zeros(0, dtype=int),
             crd_w      = np.zeros((0, ng)),
+            crd_parent = np.zeros(0, dtype=int),
             maps       = np.zeros((0, ng, ng)),
             n_movers   = len(self.movers),
             mov_starts = np.array([ends([mover.comps for mover in self.movers]), ends([mover.matrix.data for mover in self.movers])], dtype=int),
@@ -1649,7 +1816,7 @@ class Compartmental(Engine):
         self._weights = [item[1] for flow in self.flows for item in flow.targets + flow.credits] # To tell when they change
         emptied = lambda flow: [(flow.src, -1.0, None)] if flow.kind == 'conveyor' else [] # The flow out of a conveyor empties its last slot (see ss.kernels.convey())
         targets = [(ind, w, which(dim_map)) for flow in self.flows for ind,w,dim_map in flow.targets + emptied(flow)]
-        credits = [(ind, w) for flow in self.flows for ind,w in flow.credits]
+        credits = [(ind, w, par + start if par >= 0 else par) for flow,start in zip(self.flows, np.cumsum([0] + [len(flow.credits) for flow in self.flows])) for ind,w,par in flow.credits]
         weights = lambda items: np.array([np.broadcast_to(item[1], ng) for item in items], dtype=float).reshape(len(items), ng)
         self.program = self.program._replace(
             record     = np.array([which(flow.record) for flow in self.flows], dtype=int),
@@ -1661,6 +1828,7 @@ class Compartmental(Engine):
             crd_starts = np.cumsum([0] + [len(flow.credits) for flow in self.flows]),
             crd_index  = np.array([item[0] for item in credits], dtype=int),
             crd_w      = weights(credits),
+            crd_parent = np.array([item[2] for item in credits], dtype=int),
             maps       = np.array(list(maps.values()), dtype=float).reshape(len(maps), ng, ng),
         )
         local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) and not self.graph.updates # Places do not affect each other within a step (an update can read every place): see ss.kernels.gillespie_places()
@@ -1829,6 +1997,8 @@ class Compartmental(Engine):
         sim = self.sim
         mod = self.mod
         graph = self.graph
+        if any(getattr(tr, 'per', None) is not None for tr in graph.inflows): # Added in Python after each step
+            return f'"{next(tr.name for tr in graph.inflows if getattr(tr, "per", None) is not None)}" is a birth driven by a flow (ss.birth(per=)), added at each step'
         if self.syncs: # Recorded in the other module after each step
             return f'"{self.syncs[0].mod.name}.{self.syncs[0].otr.name}" is a synchronized flow of "{self.mod.name}.{self.syncs[0].tr.name}"'
         if self.triggers: # Applied in Python at each step, for those who come to meet them other than by a transition
@@ -2477,7 +2647,22 @@ class Compartmental(Engine):
                 self.last_flows[name] = self.last_flows[name] + self.forced.pop(name)
                 if self.n_groups > 1:
                     self.flow_groups[name] = self.last_flows[name]
+        self.add_per_births()
+        for spec in (getattr(self.mod, 'fetal_levels', None) or {}).values(): # Fetal deaths, counted as the module's: their share of the losses in each group
+            if spec.deaths:
+                base = np.broadcast_to(np.asarray(self.eval(self.graph.transitions.miscarriage.orig_rate.a), dtype=float), (self.n_groups,))
+                rates = [np.broadcast_to(np.asarray(self.eval(d.extra), dtype=float), (self.n_groups,)) for d in spec.deaths]
+                total = base + sum(rates)
+                lost = sum(np.broadcast_to(self.last_flows.get(key, 0.0), (self.n_groups,)) for key in ['miscarriage', 'stillbirth'])
+                for d,rate in zip(spec.deaths, rates):
+                    share = np.divide(rate, total, out=np.zeros(self.n_groups), where=total > 0)
+                    engine = spec.mod.engine
+                    engine.flowcounts[d.tr.name] = engine.flowcounts.get(d.tr.name, 0.0) + float((lost*share).sum())
+        fetal = {tf_name:(spec.mod.engine, tf.of_fetal.name) for spec in (getattr(self.mod, 'fetal_levels', None) or {}).values() for tf_name,tf in spec.transfers.items()} # The fetal transitions, counted as the module's (see ss.Pregnancy.add_fetal_dims())
         for i,mover in enumerate(self.movers):
+            if mover.name in fetal:
+                engine, name = fetal[mover.name]
+                engine.flowcounts[name] = engine.flowcounts.get(name, 0.0) + flows[self.n_trans + i].sum()
             if mover.name is not None:
                 self.flowcounts[mover.name] += flows[self.n_trans + i].sum()
                 self.flow_groups[mover.name] = flows[self.n_trans + i]

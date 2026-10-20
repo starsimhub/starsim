@@ -48,6 +48,16 @@ def test_people():
     assert sims.abm.pars.pop_scale == 5
     check_close(sims, lambda sim: seen[sim.solver].n_I, rtol=0.15)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.1)
+
+    # The switch back: results are in agents during the run, and scaled at the end
+    ss.results.people_now = False
+    try:
+        sim = make(solver='abm', total_pop=50_000, n_agents=10_000, stop=60, **kw).run()
+    finally:
+        ss.results.people_now = True
+    res = sim.results
+    assert np.isclose(seen.abm.n_I*5, res.sir.n_I[29]) and np.isclose(seen.abm.delivered*5, res.stock.delivered[29])
+    assert np.allclose(res.stock.delivered[10:59], 500, rtol=0.02)
     return sims
 
 
@@ -207,6 +217,26 @@ def test_target_stop():
     for solver,sim in run_both(make, stop=50, pop=10_000, above=ss.perday(0.05)).items(): # At a rate, toward the target
         r = sim.results.prog
         assert r.target[45] < r.holding[45] < r.holding[30] < r.holding[20] and r.stopped.by('risk').values[:, 1].sum() == 0, solver
+    return sim
+
+
+def test_target_limits():
+    sc.heading('Testing a target within a capacity, and a target on a counter')
+    def make(**kwargs):
+        prog = ss.vaccinate(ss.Vaccine(efficacy=0.9), target=2000, capacity=ss.perday(100), coverage=0.5, name='prog')
+        return ss.Sim(make_sir(), interventions=prog, **kwargs)
+    for solver,sim in run_both(make, stop=30, pop=10_000).items(): # 100 a day toward 2000: only the gap not served is lost, not everyone chosen
+        r = sim.results.prog
+        assert np.allclose(r.holding[:19], 100*np.arange(1, 20), atol=5.1) and np.allclose(r.holding[20:29], 2000, atol=5.1), solver
+        assert np.allclose(r.lost_capacity[:19], 2000 - r.holding[:19], atol=5.1) and r.lost_capacity[20:].sum() == 0, solver
+    def counter(**kwargs): # A target on a counter counts those it has reached
+        camp = ss.Delivery(increment='doses', coverage=0.5, target=3000, name='camp')
+        sim = ss.Sim(make_sir(), interventions=camp, **kwargs)
+        return sim.stratify(doses=[0, 1, 2])
+    for solver,sim in run_both(counter, stop=10, pop=10_000).items():
+        assert np.allclose(sim.results.camp.holding[1:9], 3000, atol=5.1), solver
+    with pytest.raises(ValueError, match='goes down'):
+        ss.Sim(make_sir(), interventions=ss.Delivery(increment=dict(doses=-1), target=10), verbose=0).stratify(doses=[0, 1]).init()
     return sim
 
 
@@ -473,6 +503,7 @@ if __name__ == '__main__':
     resource = test_resource()
     target = test_target()
     tstop = test_target_stop()
+    limits = test_target_limits()
     memory = test_memory()
     visit = test_same_visit()
     hiv = test_hiv_art()

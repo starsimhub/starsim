@@ -166,13 +166,12 @@ def test_hpv_nab():
     return sim
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B6: a recorded value (antibodies, combine="max") as levels in compartments is deferred')
 def test_hpv_nab_ode():
     def one(**opts): # One genotype, its own antibodies, combine='max' as transitions between 3 levels as compartments
         h = make_hpv('hpv', beta=ss.peryear(0.6))
         h.graph.attrs.nab.bins = 3
-        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(3), unit='year', **opts, **kw).run().results.hpv.infection.sum()
-    ode = one(solver='ode', total_pop=20_000) # First, so that it fails fast until B6
+        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(1), unit='year', **opts, **kw).run().results.hpv.infection.sum() # At quarterly steps agents are 13% below the ODE with no antibodies at all, and converge as the step shrinks
+    ode = one(solver='ode', total_pop=20_000)
     abm = np.mean([one(n_agents=20_000, rand_seed=seed) for seed in range(2)])
     assert np.isclose(ode, abm, rtol=0.05), f'ODE {ode:n}, agents {abm:n}'
 

@@ -326,7 +326,6 @@ def test_after_event():
     return
 
 
-@pytest.mark.xfail(reason='Phase B, tasks B1 and B2: the conveyor with ss.stay, clocks and triggers as compartments', strict=True)
 def test_with_conveyor_ode():
     return test_with_conveyor(solvers=('abm', 'ode'))
 

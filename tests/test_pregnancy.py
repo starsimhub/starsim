@@ -49,11 +49,10 @@ def test_states(ode=False):
     loss = lambda r: r.miscarriage.sum() + r.stillbirth.sum()
     assert np.isclose(loss(ra), loss(ro), rtol=0.1)
     assert ro.stillbirth.sum() > 0.25*loss(ro) # The threshold is a level of the gestation conveyor
-    assert any('conveyor' in note for note in ode.notes)
+    assert ode.demographics.pregnancy.engine.n_slots['P'] > 0 # Followed by gestational age
     return abm
 
 
-@pytest.mark.xfail(reason='Phase B, task B1: gestational age (P.time) as levels of a conveyor in a compartmental run', strict=True)
 def test_states_ode():
     return test_states(ode=True)
 
@@ -94,7 +93,6 @@ def test_births(ode=False):
     return abm
 
 
-@pytest.mark.xfail(reason='Phase B, tasks B1 and B4: gestational age as a conveyor, and births driven by a flow, as compartments', strict=True)
 def test_births_ode():
     return test_births(ode=True)
 
@@ -126,14 +124,13 @@ def test_burnin():
     return abm
 
 
-@pytest.mark.xfail(strict=True, reason='Phase B: burnin= as compartments is deferred (a compartmental run notes it and starts with nobody pregnant)')
 def test_burnin_ode():
     pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, use_aging=False)
     make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
-    abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
-    ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
-    ra, ro = abm.results.pregnancy, ode.results.pregnancy
-    assert np.isclose(ra.n_P[0], ro.n_P[0], rtol=0.05) and np.isclose(ra.delivery[1:9].sum(), ro.delivery[1:9].sum(), rtol=0.1)
+    ras = [ss.Sim(demographics=make(), n_agents=20_000, rand_seed=seed, **pars).run().results.pregnancy for seed in range(3)] # About 250 pregnant, so 6% noise in one run
+    ro = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run().results.pregnancy
+    n_P, delivered = np.mean([ra.n_P[0] for ra in ras]), np.mean([ra.delivery[1:9].sum() for ra in ras])
+    assert np.isclose(n_P, ro.n_P[0], rtol=0.05) and np.isclose(delivered, ro.delivery[1:9].sum(), rtol=0.1), f'pregnant at the start {n_P:.0f} vs {ro.n_P[0]:.0f}; deliveries {delivered:.0f} vs {ro.delivery[1:9].sum():.0f}'
 
 
 @sc.timer()
@@ -318,28 +315,24 @@ def test_fetus():
     # Nothing reads fetuses: children are made at delivery
     plain = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, **kw).init()
     assert not plain.demographics.pregnancy.fetus
-    preg, d = make()
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(demographics=preg, diseases=d, solver='ode', total_pop=1000, stratify=strat, **kw).run()
-    return sim
+    return sim # As compartments: test_fetus_ode
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: a fetal level of the pregnant compartments, whose death is a loss for the mother by gestational age, is deferred')
 def test_fetus_ode():
     common = dict(networks=ss.MaternalNet(), stratify=strat, use_aging=False, **kw)
-    ode = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), solver='ode', total_pop=30_000, **common).run().results # First, so that it fails fast until B7
-    abm = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), n_agents=30_000, **common).run().results
+    ode = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), solver='ode', total_pop=30_000, **common).run().results
+    abms = [ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), n_agents=30_000, rand_seed=seed, **common).run().results for seed in range(3)] # About 600 stillbirths, so 4% noise in one run
     loss = lambda r: r.pregnancy.miscarriage.sum() + r.pregnancy.stillbirth.sum()
-    for key,a,o in [('mtct', abm.d.mtct.sum(), ode.d.mtct.sum()), ('fetal', abm.d.fetal.sum(), ode.d.fetal.sum()), ('still', abm.d.still.sum(), ode.d.still.sum()), ('loss', loss(abm), loss(ode)), ('birth', abm.pregnancy.birth.sum(), ode.pregnancy.birth.sum())]:
-        assert np.isclose(o, a, rtol=0.1), f'{key}: {o:.0f} as an ODE, {a:.0f} as agents'
+    mean = lambda f: np.mean([f(r) for r in abms])
+    for key,f in [('mtct', lambda r: r.d.mtct.sum()), ('fetal', lambda r: r.d.fetal.sum()), ('still', lambda r: r.d.still.sum()), ('loss', loss), ('birth', lambda r: r.pregnancy.birth.sum())]:
+        assert np.isclose(f(ode), mean(f), rtol=0.1), f'{key}: {f(ode):.0f} as an ODE, {mean(f):.0f} as agents'
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: ss.Lactation as compartments (start and restart as synchronized flows of live births) is deferred')
 def test_lactation_ode():
     def lactation(solver):
         size = dict(n_agents=30_000) if solver == 'abm' else dict(total_pop=30_000)
         return ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150)), ss.Lactation(p_breastfeed=0.8)], solver=solver, stratify=strat, use_aging=False, **size, **kw).run()
-    o = lactation('ode').results.lactation # First, so that it fails fast until B7
+    o = lactation('ode').results.lactation
     a = lactation('abm').results.lactation
     for key,tol in [('start', 0.05), ('wean', 0.05), ('n_L', 0.15), ('restart', 0.3)]:
         va, vo = (a[key][-1], o[key][-1]) if key.startswith('n_') else (a[key].sum(), o[key].sum())
@@ -441,7 +434,7 @@ def test_hiv_vertical():
     return inf
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: MaternalNet as a fetal level and BreastfeedingNet as mass action in compartments are deferred')
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: BreastfeedingNet as compartments is deferred (in utero over MaternalNet runs: 485 as an ODE against 493 as agents)')
 def test_hiv_vertical_ode():
     common = dict(stratify=strat, use_aging=False, **kw)
     inf = lambda solver, bf: ss.Sim(**make_hiv_vertical(bf), **(dict(n_agents=100_000) if solver == 'abm' else dict(solver='ode', total_pop=100_000)), **common).run().results.hiv.infection.sum()
@@ -546,9 +539,8 @@ def test_syphilis():
     return sim
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: the unborn as a fetal level of the mother\'s pregnant compartments (ss.mother, routing at the delivery and the birth) is deferred')
 def test_syphilis_ode():
-    ode = ss.Sim(**make_syphilis(), solver='ode', total_pop=50_000, **syph_kw).run() # First, so that it fails fast until B7
+    ode = ss.Sim(**make_syphilis(), solver='ode', total_pop=50_000, **syph_kw).run()
     r = ss.Sim(**make_syphilis(), n_agents=50_000, **syph_kw).run().results
     o, po = ode.results, ode.demographics.pregnancy
     assert 'fetal_syph (S, Cnnd, Cstill, Ccs, Cnorm)' in po.fetus_reason
@@ -561,7 +553,6 @@ def test_syphilis_ode():
     assert np.isclose(n(o.syph), o.pregnancy.n_NP[-1] + o.pregnancy.n_P[-1])
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: ss.on(preg.conception/delivery) in another module as synchronized flows in compartments is deferred')
 def test_events_ode():
     def flags(solver):
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
@@ -569,14 +560,14 @@ def test_events_ode():
         d = ss.Disease(S, F, flag=S >> F @ ss.on(preg.conception), unflag=F >> S @ ss.on(preg.delivery), name='d')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         return ss.Sim(demographics=preg, diseases=d, solver=solver, stratify=strat, use_aging=False, **size, **kw).run().results
-    ro = flags('ode') # First, so that it fails fast until B7
+    ro = flags('ode')
     ra = flags('abm')
     for key in ['flag', 'unflag']:
         assert np.isclose(ro.d[key].sum(), ra.d[key].sum(), rtol=0.05), f'{key}: {ro.d[key].sum():.0f} as an ODE, {ra.d[key].sum():.0f} as agents'
 
 
-def make_postpartum():
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150), p_loss=ss.bernoulli(0.02))
+def make_postpartum(**kwargs):
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150), p_loss=ss.bernoulli(0.02), **kwargs)
     preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
     return preg
 
@@ -600,11 +591,10 @@ def test_postpartum():
     return abm
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B1: clocks (P.time) as compartments are deferred, so this pregnancy cannot run with solver="ode"')
 def test_postpartum_ode():
     by = lambda sim: sum(np.asarray(sim.results.pregnancy[k].select(sex='female').by('parity').values)[-1] for k in ['n_NP', 'n_P'])
-    abm = ss.Sim(demographics=make_postpartum(), n_agents=20_000, stratify=strat, use_aging=False, **kw).run()
-    ode = ss.Sim(demographics=make_postpartum(), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
+    abm = ss.Sim(demographics=make_postpartum(burnin=False), n_agents=20_000, stratify=strat, use_aging=False, **kw).run() # Burn-in as compartments is B5's
+    ode = ss.Sim(demographics=make_postpartum(burnin=False), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
     a, o = by(abm), by(ode)
     assert np.allclose(a[1:], o[1:], rtol=0.1), (a, o)
 

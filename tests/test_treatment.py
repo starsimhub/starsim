@@ -252,10 +252,11 @@ def test_syphilis_stages():
 def test_syndromic():
     sc.heading('Testing one treatment for two diseases: the same people are treated for both')
     def make(**kwargs):
-        ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
-        kit = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.9}, name='kit')
+        kit = ss.Treatment(moves={'ng.cure': 0.95, 'ct.cure': 0.9}, name='kit')
+        ng, ct = make_sti('ng', beta=0.015, fail=kit.failed), make_sti('ct', beta=0.012) # Its outcomes are events, for a transition or a step
         syndromic = ss.treat(kit, where=ng.C | ct.C, coverage=0.5, interval=ss.days(30)) # No disease=: the product names them
-        return ss.Sim([ng, ct], interventions=syndromic, **kwargs)
+        second = ss.treat(ss.Treatment(moves={'ng.cure': 1.0, 'ct.cure': 1.0}), on=syndromic.failed, name='second')
+        return ss.Sim([ng, ct], interventions=[syndromic, second], **kwargs)
     sims = run_both(make, pop=10_000)
     for solver,sim in sims.items():
         r = sim.results.syndromic
@@ -264,12 +265,16 @@ def test_syndromic():
             n = [r[key].select(disease=dis).sum() for key in ['cured', 'failed', 'unneeded']]
             print(f'{solver} {dis}: delivered {delivered:.0f}, cured/failed/unneeded {np.round(n)}')
             assert np.isclose(sum(n), delivered) # Each disease sees every recipient: chosen once, before anyone moves
-            assert np.isclose(n[0], sim.results[dis].cure.sum())
+            assert np.isclose(n[0] + sim.results.second.cured.select(disease=dis).sum(), sim.results[dis].cure.sum())
         assert r.unneeded.select(disease='ct').sum() > 0 # Treated for CT because of NG symptoms, and the reverse
         assert np.isclose(r.cured.sum(), r.cured.by('disease').values.sum())
+        assert np.isclose(sim.results.second.delivered.sum(), r.failed.sum(), rtol=0.05) and sim.results.ng.fail.sum() > 0 # Few fail for both
+    check_close(sims, lambda sim: sim.results.ng.fail.sum(), rtol=0.2)
     check_close(sims, lambda sim: sim.results.syndromic.unneeded.select(disease='ct').sum(), rtol=0.15)
     check_close(sims, lambda sim: sim.results.syndromic.cured.select(disease='ng').sum(), rtol=0.15)
     assert sims.ode.crossings # The diseases are tracked jointly, since the treatment acts on both
+    with pytest.raises(TypeError, match='on=drug.failed'): # Removed: failure is a transition or a step of its own
+        ss.Treatment(moves='ng.cure', on_fail='ng.fail')
     return sims
 
 

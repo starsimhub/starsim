@@ -235,10 +235,19 @@ class Engine:
             self.foreign = {d for d,strat in enumerate(sim.groups.strats) if strat.kind != 'disease' and not any(self.applies[name][d] for name in people)}
         return
 
-    def moves(self, tr):
-        """ The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is ('+', amount); or None """
+    def moves(self, tr, dst=None):
+        """
+        The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is
+        ('+', amount); and in a compartmental run, of an attribute the transition (to `dst`) sets, ('attr', name); or None
+        """
+        attrs = tuple((d, ('attr', strat.name)) for d,strat in enumerate(self.sim.groups.strats) if getattr(strat, 'of_attr', None) is not None and strat in self.graph.strats
+                      and any(e.args[0] in ['tr', 'to'] and e.args[1].name == tr.name and (e.args[0] == 'tr' or dst is None or getattr(e.args[2], 'name', e.args[2]) == dst) for e in strat.of_attr.events))
         if tr.move is None and getattr(tr, 'increment', None) is None:
-            return None
+            return attrs or None
+        return (self.own_moves(tr) + attrs) or None
+
+    def own_moves(self, tr):
+        """ The moves of `move=` and `increment=`: see `moves()` """
         if tr.name not in self.move_levels:
             out = []
             for dim,level in list((tr.move or {}).items()) + [(dim, ('+', k)) for dim,k in (tr.increment or {}).items()]:
@@ -288,7 +297,9 @@ class Engine:
                 for d,strat in enumerate(self.sim.groups.strats):
                     n = strat.n
                     factor = np.zeros((n, n))
-                    if d in moved and isinstance(moved[d], tuple): # A counter (each level to the one k up), or a clock set to a time
+                    if d in moved and isinstance(moved[d], tuple) and moved[d][0] == 'attr': # An attribute drawn at the event: each level to where a draw takes it (see ss.solvers.choose.add_attr_strats())
+                        factor = strat.matrix
+                    elif d in moved and isinstance(moved[d], tuple): # A counter (each level to the one k up), or a clock set to a time
                         factor[np.arange(n), strat.target(moved[d])] = 1
                     elif d in moved:
                         factor[:, moved[d]] = 1
@@ -322,6 +333,8 @@ class Engine:
     def inflow_split(self, tr):
         """ Where an inflow arrives: people are born into the youngest group, and a count into the groups of its own dimensions """
         name = tr.dst[0].name
+        if tr.rate is None: # Driven by a flow (ss.birth(per=)), whose children are placed by their parents' groups (see Compartmental.birth_map())
+            return self.inflow_splits[name]
         if self.sim.mixing.space is not None and any(isinstance(leaf, ss.transitions.Count) for leaf in tr.rate.leaves): # A rate that uses the number in a place gives the inflow in that place
             return self.inflow_local[name]
         given = [leaf.raw for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by)]
@@ -809,6 +822,8 @@ class Engine:
         if expr.born:
             raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": it reads each agent\'s mother, and compartments do not know who anyone\'s mother is.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
+        if getattr(self.sim, 'fetal_trs', None) and self.sim.solver != 'abm': # The unborn are fetal levels of the pregnant compartments (see ss.Pregnancy.add_fetal_dims()), so everyone here is born, whose mother is 0
+            return 0.0
         raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the mother of an unborn person is kept per agent, and the fetal levels of the mother\'s compartments are not built yet.\n'
                                  f'     Run with solver="abm".')
 

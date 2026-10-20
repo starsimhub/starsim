@@ -346,6 +346,9 @@ class Transition(Nameable):
             errormsg = 'undriven=True is for a transition with no rate=, dur=, p=, or on=; it was given one'
             raise ValueError(errormsg)
         self.intended = bool(undriven) # Declared undriven on purpose, so not warned about (ss.UndrivenUnused)
+        if stages is not None and (isinstance(stages, bool) or not isinstance(stages, (int, np.integer)) or stages < 1):
+            errormsg = f'stages= is the number of sub-stages a dwell time is split into, a whole number of at least 1, not {stages!r}'
+            raise ValueError(errormsg)
         if stages is not None and rate is not None:
             errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
             raise ValueError(errormsg)
