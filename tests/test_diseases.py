@@ -357,9 +357,9 @@ def test_mtct():
     ppl = ss.People(n_agents)
     sis = ss.SIS(
         beta = dict(
-            random = [ss.permonth(0.005)]*2,
-            prenatal = [ss.permonth(0.1), 0],
-            breastfeeding = [ss.permonth(0.1), 0]
+            random = ss.permonth(0.005),
+            prenatal = ss.permonth(0.1), # Mother-to-child networks transmit one way
+            breastfeeding = ss.permonth(0.1),
         )
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
@@ -368,7 +368,7 @@ def test_mtct():
     sim.run()
     sim.plot()
     res = sim.results
-    assert np.array_equal(res.sis.n_S + res.sis.n_I, res.n_alive) # Everyone born is in a state of the declared SIS
+    assert np.array_equal(res.sis.n_S + res.sis.n_I, res.n_alive + res.pregnancy.n_unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
     return sim
 
 
@@ -539,6 +539,138 @@ def test_congenital():
     return sim
 
 
+def make_genotype(name, beta=3.0, **kwargs):
+    """ One genotype of a toy HPV: infection, clearance with immunity that wanes, and cancer (for ss.Strains) """
+    S, I, R, Ca = ss.states('S I R Ca')
+    return ss.Disease(
+        infection   = S >> I @ ss.peryear(beta)*I,
+        clearance   = I >> R @ ss.years(1),
+        reinfection = R >> I @ ss.peryear(beta)*I,
+        waning      = R >> S @ ss.years(5),
+        cancer      = I >> Ca @ ss.years(20),
+        death       = Ca >> ss.null @ ss.years(5),
+        X           = ss.State(people=True), # Where someone with cancer from another genotype goes
+        infected    = I + Ca,
+        name        = name,
+        **kwargs,
+    )
+
+
+@sc.timer()
+def test_strains_results():
+    sc.heading('Testing a family of diseases: union results and conditions, and one cancer per person')
+    names = ['hpv16', 'hpv18', 'hpv31']
+    hpv = ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18', 2.5), make_genotype('hpv31', 2.0)],
+        immunity  = ss.immunity(protected='R', rel_sus=[[0.9, 0.3, 0.2], [0.3, 0.9, 0.2], [0.1, 0.1, 0.5]], combine='sum'),
+        init_prev = 0.1,
+        exclusive = 'Ca',
+    )
+    counts = []
+    def count(sim): # The union and the co-infected, by hand, at every time point
+        held = np.array([sim.diseases[name].I.raw | sim.diseases[name].Ca.raw for name in names])
+        cancers = np.array([sim.diseases[name].Ca.raw for name in names])
+        counts.append((held.any(0).sum(), (held.sum(0) >= 2).sum(), (cancers.sum(0) >= 2).sum()))
+    sim = ss.Sim(diseases=hpv, analyzers=count, n_agents=5000, start=2000, stop=2030, dt=0.25, verbose=0).run()
+    res = sim.results
+    union, coinfected, two_cancers = np.array(counts).T
+    assert sim.solver == 'abm' and list(sim.diseases.keys()) == names + ['hpv']
+    assert np.array_equal(res.hpv.infected, union) and coinfected.max() > 0 # A union, not a sum: the co-infected are counted once
+    assert np.array_equal(res.hpv.cancer, sum(res[name].cancer for name in names)) # A flow is a sum
+    assert np.array_equal(res.hpv.infected.by('hpv')[:, 1], res.hpv18.infected) # Each member's own
+    assert two_cancers.max() == 0 and res.hpv.n_X[-1] > 0 # One cancer per person: the others move to X
+    assert 'Family hpv: 3 members' in sim.describe(output=True)
+
+    # A union is a condition, with a count of members; under a compartmental solver, a family raises for now
+    sim = ss.Sim(diseases=hpv, n_agents=500, start=2000, stop=2001, verbose=0).init()
+    for name in names[:2]:
+        sim.diseases[name].move_to(ss.uids([0, 1, 2]), 'I')
+    selector = sim.diseases.hpv31.engine.selector
+    assert np.array_equal(selector.select(sim.diseases.hpv.infected), np.array([sim.diseases[name].I.raw | sim.diseases[name].Ca.raw for name in names]).any(0))
+    assert np.flatnonzero(selector.select(sim.diseases.hpv.infected.count() >= 2)).tolist() == [0, 1, 2]
+    with pytest.raises(ss.CapabilityError):
+        ss.Sim(diseases=hpv, solver='ode', stop=2001, verbose=0).init()
+    return sim
+
+
+@sc.timer()
+def test_strains_immunity():
+    sc.heading('Testing protection between the members of a family: the combination rules, a vaccine on top, and shorter stays')
+    def make(name, beta=1.0):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(infection=S >> I @ ss.peryear(beta)*I, clearance=I >> R @ ss.years(1), reinfection=R >> I @ ss.peryear(beta)*I, name=name)
+    hpv16, hpv18 = make('hpv16'), make('hpv18')
+    matrix = [[0.2, 0.5], [0.1, 0.4]] # Rows from, columns against
+    def rel_sus(combine):
+        """ rel_sus of hpv16 for someone who has had both, someone who has had hpv16 only, and someone who has had neither; all with a vaccine of efficacy 0.5 """
+        hpv = ss.Strains('hpv', [hpv16, hpv18], immunity=ss.immunity(protected='R', rel_sus=matrix, combine=combine))
+        vaccine = ss.modify(hpv16.rel_sus, multiply=0.5, where=ss.ppl.age >= 0)
+        sim = ss.Sim(diseases=hpv, connectors=vaccine, n_agents=100, verbose=0).init()
+        sim.diseases.hpv16.move_to(ss.uids([0, 1]), 'R')
+        sim.diseases.hpv18.move_to(ss.uids([0]), 'R')
+        sim.diseases.hpv.start_step()
+        return sim.diseases.hpv16.engine.mult_raw('rel_sus')[:3]
+    assert np.allclose(rel_sus('sum'), [(1 - (0.2 + 0.1))*0.5, 0.4, 0.5]) # HP22: (1 − min(1, Σ))·(1 − vaccine) = 0.35, as HPVsim
+    assert np.allclose(rel_sus('sum')[0], 0.35)
+    assert np.allclose(rel_sus('max'), [0.4, 0.4, 0.5])
+    assert np.allclose(rel_sus('multiply'), [(1 - (1 - 0.8*0.9))*0.5, 0.4, 0.5])
+    assert np.allclose(rel_sus(lambda p: np.minimum(1, p.max(0) + 0.5*(p.sum(0) - p.max(0)))), [0.375, 0.4, 0.5]) # The strongest plus half the rest
+
+    # Time in a state: protection 0.5 halves the stay, so after a year exp(-2) are left rather than exp(-1)
+    left = []
+    for dur in [0.0, 0.5]:
+        a, b = make('a', 0.0), make('b', 0.0)
+        hpv = ss.Strains('hpv', [a, b], immunity=ss.immunity(protected='R', dur=dict(I=[[0, 0], [dur, 0]])))
+        sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
+        sim.diseases.b.move_to(sim.people.auids, 'R')
+        sim.diseases.a.move_to(sim.people.auids, 'I')
+        left.append(sim.run().results.a.n_I[52]/20_000)
+    assert np.allclose(left, [np.exp(-1), np.exp(-2)], atol=0.01)
+    return sim
+
+
+@sc.timer()
+def test_strains_seeding():
+    sc.heading('Testing joint seeding: one member for each person seeded, in the shares given')
+    names = ['hpv16', 'hpv18', 'hpv31']
+    def make(seed):
+        hpv = ss.Strains('hpv', [make_genotype(name) for name in names], init_prev=0.2, split=[0.5, 0.3, 0.2])
+        return ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2005, rand_seed=seed, verbose=0).init()
+    held = lambda sim: np.array([sim.diseases[name].I.raw for name in names])
+    seeded = held(make(1))
+    assert (seeded.sum(0) > 1).sum() == 0 # Nobody is seeded with two
+    assert np.isclose(seeded.sum()/20_000, 0.2, atol=0.01) and np.allclose(seeded.sum(1)/seeded.sum(), [0.5, 0.3, 0.2], atol=0.02)
+    assert np.array_equal(seeded, held(make(1))) and not np.array_equal(seeded, held(make(2))) # The family's own random numbers
+    return seeded
+
+
+@sc.timer()
+def test_strains_errors():
+    sc.heading('Testing what a family refuses')
+    pair = lambda **kwargs: ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18')], **kwargs)
+    build = lambda hpv, **kwargs: ss.Sim(diseases=hpv, n_agents=100, stop=2001, verbose=0, **kwargs).init()
+    with pytest.raises(ss.CapabilityError): # A member written as code, whose states the family cannot see
+        ss.Strains('hpv', [make_genotype('hpv16'), ssl.AgentSIS()])
+    with pytest.raises(ss.UnknownState): # A state the members do not have
+        build(pair(immunity=ss.immunity(protected='nab', rel_sus=0.5)))
+    with pytest.raises(ss.CapabilityError): # A combine= function under sim.gradient()
+        ss.Sim(diseases=pair(immunity=ss.immunity(protected='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
+    with pytest.raises(ValueError): # A family named like a dimension
+        build(ss.Strains('risk', [make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')]))
+    with pytest.raises(ValueError): # A member with its own initial values in a family that seeds
+        ss.Strains('hpv', [make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
+    with pytest.raises(ss.OutOfBounds): # A protection of 1 on a time spent
+        build(pair(immunity=ss.immunity(protected='R', dur=dict(I=0.6), combine='sum')))
+    with pytest.raises(ss.UnknownState): # exclusive= with no state to move to
+        sis = lambda name: ss.Disease(infection=ss.transmission('S -> I', beta=0.1), recovery=ss.progression('I -> S', dur=10), name=name)
+        build(ss.Strains('flu', [sis('a'), sis('b')], exclusive='I'))
+    with pytest.raises(TypeError): # The protection is the value of what it lowers, not a positional matrix
+        ss.immunity(np.eye(2), protected='R')
+    with pytest.raises(ss.ShapeError):
+        build(pair(immunity=ss.immunity(protected='R', rel_sus=np.eye(3))))
+    assert ss.Strains('hpv', members=[make_genotype('hpv16'), make_genotype('hpv18')]).member_names == ['hpv16', 'hpv18']
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -553,3 +685,7 @@ if __name__ == '__main__':
     mtct  = test_mtct()
     fetal = test_fetal_health(do_plot=do_plot)
     cong  = test_congenital()
+    strains = test_strains_results()
+    immune = test_strains_immunity()
+    seeded = test_strains_seeding()
+    test_strains_errors()

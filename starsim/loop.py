@@ -441,7 +441,20 @@ class Loop:
 
             if self.profile:
                 start = time.perf_counter()
-            entry.func() # Execute the function -- this is where all of Starsim happens!!
+            if entry.func_name == 'update_results' and entry.ti == 0 and entry.module not in ['sim', 'people']: # At the first time point, before any step: code written to Starsim 3 may read what its step() makes
+                try:
+                    entry.func()
+                except (AttributeError, KeyError, IndexError, TypeError) as e:
+                    errormsg = (f'{entry.label}() failed at the first time point: {type(e).__name__}: {e}\n'
+                                f'     update_results() now also runs at the start, before any step(), to record the starting values (in Starsim 3 it ran only after a step). '
+                                f'If it reads something step() makes, return early at the start, e.g. "if self.ti == 0: return" (see the migrate-starsim3 skill)')
+                    try:
+                        new = type(e)(errormsg)
+                    except Exception: # An error class that takes other arguments
+                        new = RuntimeError(errormsg)
+                    raise new from e
+            else:
+                entry.func() # Execute the function -- this is where all of Starsim happens!!
 
             # Tidy up
             self.index += 1 # Increment the count

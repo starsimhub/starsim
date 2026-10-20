@@ -144,6 +144,22 @@ def geography(place, level=1, year=None, places=None):
     return out
 
 
+def rates(place, which, revision=None):
+    """
+    The UN World Population Prospects birth or death rates of a named place, for `ss.Births(birth_rate='Kenya')` and `ss.Deaths(death_rate='Kenya')`
+
+    Args:
+        place (str): a country, by name or code
+        which (str): 'births' (crude birth rates per 1,000, by year) or 'deaths' (death rates per person, by year, sex, and age)
+        revision (str): the WPP revision (default: the latest bundled)
+    """
+    ssd = provider()
+    try:
+        return ssd.load(place, which=which, revision=revision)
+    except KeyError as E:
+        unknown(place, E)
+
+
 def population(place, year=None, revision=None):
     """
     The population of a named place by age and sex, for `ss.people('Kenya', year=2024)`

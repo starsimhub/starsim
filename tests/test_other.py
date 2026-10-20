@@ -151,6 +151,13 @@ class Counter(ss.Module):
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
+    text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names (N7, HP3)
+    assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
+
+    # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, in a cascade under the same variable
+    text = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))")[0]
+    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)',
+                                 "screening = ss.cascade(screening, screening_positive, name='screening_cascade')"]
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

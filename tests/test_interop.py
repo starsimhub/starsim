@@ -251,7 +251,7 @@ def test_round_trip(tmp_path):
     sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
     mixing = ss.contacts([[3, 1], [1, 2]], bands=[0, 15])
     distancing = ss.modify(sir.pars.beta, multiply=0.5, start=12.5, stop=30, where=sir.risk == 'hi')
-    vaccine = ss.vaccinate(efficacy=0.8, waning=ss.days(50), coverage=0.3, interval=ss.days(7), start=5, where=ss.People.age < 15)
+    vaccine = ss.vaccinate(efficacy=0.8, waning=ss.days(50), coverage=0.3, interval=ss.days(7), start=5, where=ss.ppl.age < 15)
     check('fuzzed', ss.Sim(sir, networks=mixing, interventions=[distancing, vaccine], stratify=dict(age=[0, 15]), unit='day', stop=60, total_pop=10_000, **kw))
     check('years', ss.Sim(corpus.make_sir(beta=ss.perday(0.3), dur=ss.days(10)), start=2000, stop=2001, total_pop=10_000, **kw)) # Rates per day, so the unit is days and 2000 is in years
     return

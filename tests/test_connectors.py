@@ -156,7 +156,7 @@ def test_connectors(do_plot=False):
     # The same interaction with v4's modifiers, on the HIV written as code and a declared SIS
     def run(*connectors):
         hiv = ssl.diseases.HIV(beta={'mf': [0.008, 0.004]}, init_prev=0.2)
-        sis = ss.SIS(beta={'mf': [ss.peryear(1), ss.peryear(0.5)]}, init_prev=0.05)
+        sis = ss.SIS(beta={'mf': ss.peract(m2f=0.01, f2m=0.005)}, init_prev=0.05)
         mods = [make(hiv, sis) for make in connectors]
         return ss.Sim(n_agents=2000, networks=ss.MFNet(), diseases=[hiv, sis], connectors=mods, start=2000, stop=2020, verbose=0).run().results
     base = run()

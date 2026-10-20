@@ -1289,6 +1289,24 @@ class BoolState(BoolArr):
     """
     watch = None # What keeps count of the agents in the state (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
 
+    @property
+    def n(self):
+        """ The number of people in the state: its agents, each counted by its weight (`people.scale`), as `I.n` in a rate counts them, and as a compartmental run's state gives it """
+        uids = self.uids
+        engine = getattr(self.watch, 'engine', None)
+        if engine is not None: # A declared disease's engine counts people, with each agent's weight and the population's scale
+            return float(engine.n_of(uids))*engine.scale
+        return float(len(uids))
+
+    @property
+    def dwell(self):
+        """ For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, in the sim's unit, by UID, as `P.dwell` is in `p=`; e.g. `hpv.P.dwell[uids]` in a function """
+        engine = getattr(self.watch, 'engine', None)
+        if engine is None:
+            raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.dwell)')
+        mod = engine.mod
+        return (mod.ti - mod[f'ti_{self.name}'].raw)*engine.dt
+
     def __init__(self, name=None, **kwargs):
         if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
             errormsg = f'BoolState "{name}" cannot be 2D since it automatically generates results; use ss.BoolArr instead'

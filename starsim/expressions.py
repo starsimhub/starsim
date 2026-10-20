@@ -40,9 +40,11 @@ def as_expr(obj):
     """ Convert an object to an expression: anything that is not one becomes an anonymous parameter """
     if isinstance(obj, Expr):
         return obj
-    elif isinstance(obj, ss.conditions.Cond): # e.g. 0.3*(Ia | Is)
-        errormsg = 'A condition cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
-        raise TypeError(errormsg)
+    elif isinstance(obj, ss.conditions.Cond): # A property of people (ss.ppl.age), or a condition, which is 1 or 0 for each person
+        if states_or(obj): # e.g. 0.3*(Ia | Is), which almost always meant exposure to people in either
+            errormsg = 'A condition on states alone cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
+            raise TypeError(errormsg)
+        return Prop(obj)
     elif isinstance(obj, ss.transitions.Transition) and obj.src is None: # Part of a weighted destination, e.g. 0.5*I + 0.5*R @ 0.1, where @ binds before +
         errormsg = f'"@" binds before "+", so in a weighted destination the destination needs parentheses: S >> (0.5*I + 0.5*R) @ rate, not S >> 0.5*I + 0.5*R @ rate'
         raise TypeError(errormsg)
@@ -50,6 +52,15 @@ def as_expr(obj):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
         raise TypeError(errormsg)
     return par(obj, literal=True)
+
+
+def states_or(cond):
+    """ Whether a condition is, or does arithmetic on, states alone joined by |, e.g. Ia | Is, or 0.3*(Ia | Is) """
+    def only_states(c):
+        return isinstance(c, ss.conditions.Cond) and (c.op == 'state' or (c.op == '|' and all(only_states(arg) for arg in c.args)))
+    if cond.op == '|':
+        return only_states(cond)
+    return cond.op in '+-*/' and any(isinstance(arg, ss.conditions.Cond) and states_or(arg) for arg in cond.args)
 
 
 class Expr:
@@ -165,6 +176,9 @@ class par(Nameable, Expr):
         ```
     """
     def __init__(self, value=None, bounds=None, prior=None, source=None, doc=None, name=None, label=None, literal=False):
+        if bounds is not None and isinstance(value, (dict, list, tuple)): # One pair of bounds cannot fit several values
+            errormsg = f'ss.par() has bounds={bounds} for several values ({value}); to fit them, give each its own ss.par with bounds, e.g. dict(home=ss.par(0.1, bounds=[0.01, 1]), ...), or ss.par(ss.by(...), bounds=...) for a value for each level'
+            raise ValueError(errormsg)
         self.value = value
         self.bounds = bounds
         self.prior = prior
@@ -189,9 +203,12 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta) """
+        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change), so a function that reads it sees the change """
         raw = self.raw
         if sc.isnumber(raw):
+            engine = getattr(self.module, 'engine', None)
+            if engine is not None and self.name and not self.literal and engine.sim.modifiers.get((self.module.name, 'par', self.name)):
+                return float(np.mean(engine.modified(self, raw)))
             return float(raw)
         errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
         raise TypeError(errormsg)
@@ -247,6 +264,50 @@ def count_power(expr):
     return 0
 
 
+class Prop(Expr):
+    """ A property of people, or a condition, in a rate: each person's value (`ss.ppl.age`), or 1 for the people a condition holds for and 0 for the others (`ss.ppl.age > 65`); in a compartmental run, each group's value (a condition: the share of the group it holds for) """
+    def __init__(self, cond):
+        self.cond = cond
+        return
+
+    @property
+    def names(self):
+        """ The properties of people it reads, e.g. ['age'] """
+        out = []
+        def walk(c):
+            if c.op == 'people':
+                out.append(c.args[0])
+            elif c.op not in ss.conditions.leaves:
+                for arg in c.args:
+                    if isinstance(arg, ss.conditions.Cond):
+                        walk(arg)
+            return
+        walk(self.cond)
+        return out
+
+    @property
+    def arrays(self):
+        """ The arrays of modules written as code that it reads, e.g. ['hiv.cd4'] """
+        out = []
+        def walk(c):
+            if c.op == 'array':
+                out.append(f'{ss.conditions.modname(c.args[0])}.{c.args[1]}')
+            elif c.op not in ss.conditions.leaves:
+                for arg in c.args:
+                    if isinstance(arg, ss.conditions.Cond):
+                        walk(arg)
+            return
+        walk(self.cond)
+        return out
+
+
+class Dwell(Expr):
+    """ The time each person has spent in a state (`P.dwell`), in the sim's unit: in `p=` of a transition with several destinations out of it, when they leave; or in the rate of a transition out of it """
+    def __init__(self, state):
+        self.state = state
+        return
+
+
 class Flow(Expr):
     """ The number of people who made a transition in the step, in a result: e.g. `infection / S`, the per-capita incidence """
     def __init__(self, tr):
@@ -258,17 +319,133 @@ class Flow(Expr):
         return self.tr.name
 
 
+class Row:
+    """
+    An entry of `p=` with a `to` axis (an `ss.by` with a `to` column or keyword, whose labels are destination states), for the destinations it covers
+
+    Its factors without a `to` axis (`p_use` in `p_use*mix*w`) are kept as they are, and the product of those with one
+    (`mix*w`) is normalized over the destinations, so each destination's probability is `p_use*mix[j]*w[j]/sum(mix*w)`;
+    an entry that is not a product (a sum) is normalized as a whole.
+    See `Share`, one destination's part, which is what the transition's `p=` holds once the graph is built.
+
+    Args:
+        expr (Expr): the entry as given
+        labels (list): the names of the destinations it covers
+    """
+    def __init__(self, expr, labels):
+        self.expr = expr
+        self.labels = list(labels)
+        scalar, row = [], []
+        def split(e): # The factors of a product, each with or without a to axis
+            if isinstance(e, BinOp) and e.op == '*':
+                split(e.a)
+                split(e.b)
+            elif isinstance(e, BinOp) and e.op == '/' and not to_pars(e.b):
+                split(e.a)
+                scalar.append(BinOp('/', 1, e.b))
+            elif to_pars(e):
+                row.append(e)
+            else:
+                scalar.append(e)
+            return
+        split(expr)
+        self.scalar = None
+        for e in scalar:
+            self.scalar = e if self.scalar is None else BinOp('*', self.scalar, e)
+        self.row = row[0]
+        for e in row[1:]:
+            self.row = BinOp('*', self.row, e)
+        self._parts = None
+        return
+
+    def parts(self):
+        """ The row's value for each destination, as an expression with each `ss.by` over `to` taken at it; made again if one of them has a new value """
+        tos = to_pars(self.row)
+        key = tuple(id(p.raw) for p in tos)
+        if self._parts is None or self._parts[0] != key:
+            out = {}
+            for label in self.labels:
+                subs = {id(p):as_expr(p.raw.at(label, self.labels)) for p in tos}
+                out[label] = substitute(self.row, subs)
+            self._parts = (key, out)
+        return self._parts[1]
+
+    def __repr__(self):
+        return f'{format_expr(self.expr)}, normalized over {sc.strjoin(self.labels)}'
+
+
+class Share(Expr):
+    """ One destination's part of an entry of `p=` with a `to` axis (see `Row`): the row's value for it over its sum over the destinations, times the factors without a `to` axis """
+    def __init__(self, row, label):
+        self.row = row
+        self.label = label
+        return
+
+    @property
+    def leaves(self):
+        out = [leaf for part in self.row.parts().values() for leaf in part.leaves]
+        return out + (self.row.scalar.leaves if self.row.scalar is not None else [])
+
+    def evaluate(self, ctx):
+        parts = self.row.parts()
+        num = evaluate(parts[self.label], ctx)
+        den = sum(evaluate(part, ctx) for part in parts.values())
+        if np.any(np.asarray(den) <= 0):
+            raise ss.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
+        out = num/den
+        return out if self.row.scalar is None else evaluate(self.row.scalar, ctx)*out
+
+
+class Column(Expr):
+    """ One destination's column of a function given as the single `p=` of a transition with several (`p=fn`, returning a row of probabilities or weights for each person or group, one column per destination), normalized over the row """
+    def __init__(self, p, i, n):
+        self.p = p
+        self.i = i
+        self.n_dst = n
+        return
+
+    @property
+    def leaves(self):
+        return self.p.leaves
+
+    def evaluate(self, ctx):
+        row = np.asarray(evaluate(self.p, ctx), dtype=float)
+        if row.shape[-1:] != (self.n_dst,):
+            raise ss.BadBranchSplit(f'the function {format_expr(self.p)} given as p= returns a row of {row.shape[-1] if row.ndim else 1} values, but the transition has {self.n_dst} destinations; return one column per destination')
+        total = row.sum(axis=-1)
+        if np.any(total <= 0):
+            raise ss.BadBranchSplit(f'the function {format_expr(self.p)} given as p= returns a row that sums to 0, so it has no shares')
+        return row[..., self.i]/total
+
+
+def to_pars(expr):
+    """ The parameters in an expression whose value is an `ss.by` with a `to` axis (over the destinations of a transition) """
+    if not isinstance(expr, Expr):
+        return []
+    leaves = expr.leaves if not isinstance(expr, (Share, Column)) else []
+    return [leaf for leaf in leaves if isinstance(leaf, par) and isinstance(leaf.raw, ss.by) and 'to' in leaf.raw.dims]
+
+
+def substitute(expr, subs):
+    """ An expression with some parameters replaced, by id """
+    if isinstance(expr, BinOp):
+        return BinOp(expr.op, substitute(expr.a, subs), substitute(expr.b, subs))
+    elif isinstance(expr, Func):
+        return Func(expr.name, *[substitute(arg, subs) for arg in expr.args])
+    return subs.get(id(expr), expr)
+
+
 binops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', power='**')
 comparisons = dict(less='<', less_equal='<=', greater='>', greater_equal='>=')
 
 
 class Func(Expr):
     """ A NumPy function of one or two expressions, e.g. `np.minimum(I.n, K)` or `np.exp(-k * I.n)` """
-    names = dict(exp=1, log=1, sqrt=1, absolute=1, sin=1, cos=1, minimum=2, maximum=2, less=2, less_equal=2, greater=2, greater_equal=2) # The functions, and how many arguments each takes
+    names = dict(exp=1, log=1, sqrt=1, absolute=1, sin=1, cos=1, expit=1, minimum=2, maximum=2, less=2, less_equal=2, greater=2, greater_equal=2) # The functions, and how many arguments each takes (expit is SciPy's, from scipy.special)
 
     def __init__(self, name, *args):
         if self.names.get(name) != len(args):
-            errormsg = f'np.{name}() cannot be used in a rate; the functions that can are {sc.strjoin(f"np.{k}()" for k in self.names)}, and np.clip()'
+            errormsg = f'np.{name}() cannot be used in a rate; the functions that can are {sc.strjoin(f"np.{k}()" for k in self.names if k != "expit")}, np.clip(), and SciPy\'s expit()'
             raise TypeError(errormsg)
         self.name = name
         self.args = [as_expr(arg) for arg in args]
@@ -556,7 +733,13 @@ def evaluate(expr, ctx):
             return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
         else:           return a ** b
     elif isinstance(expr, Func):
-        return 1.0*getattr(getattr(ctx, 'xp', np), expr.name)(*[evaluate(arg, ctx) for arg in expr.args]) # A comparison is 1 or 0; a context can give another NumPy, e.g. jax.numpy
+        xp = getattr(ctx, 'xp', np) # A context can give another NumPy, e.g. jax.numpy
+        args = [evaluate(arg, ctx) for arg in expr.args]
+        if expr.name == 'expit': # The logistic function, 1/(1 + exp(-x)), which NumPy does not have
+            return 1/(1 + xp.exp(-args[0]))
+        return 1.0*getattr(xp, expr.name)(*args) # A comparison is 1 or 0
+    elif isinstance(expr, Prop):
+        return ctx.prop(expr.cond)
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
@@ -565,6 +748,8 @@ def evaluate(expr, ctx):
         return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.total_count(expr.states) if expr.kind == 'total' else ctx.local_frac(expr.states)
     elif isinstance(expr, ss.transitions.State):
         return ctx.exposure(expr)
+    elif isinstance(expr, Dwell):
+        return ctx.dwell(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
     elif isinstance(expr, Clock):
@@ -573,6 +758,8 @@ def evaluate(expr, ctx):
         return ctx.mother(expr)
     elif isinstance(expr, Since):
         return ctx.since(expr)
+    elif isinstance(expr, (Share, Column)):
+        return expr.evaluate(ctx)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
     raise TypeError(errormsg)
 
@@ -661,11 +848,20 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return text
         elif isinstance(e, ss.transitions.State):
             return e.label_name if bare is None else bare(e)
+        elif isinstance(e, Prop):
+            return repr(e.cond)
         elif isinstance(e, Count):
             names = [s.label_name for s in e.states]
             inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}'
         elif isinstance(e, Clock):
             return e.to_str()
+        elif isinstance(e, Dwell):
+            return f'{e.state.label_name}.dwell'
+        elif isinstance(e, Share):
+            share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
+            return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
+        elif isinstance(e, Column):
+            return f'{fmt(e.p)}[{e.i}]'
         return str(e.name) # A flow
     return fmt(expr)

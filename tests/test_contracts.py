@@ -249,6 +249,22 @@ def test_dwell_forms():
     return
 
 
+def test_destinations():
+    sc.heading('Testing that every solver agrees on the flow to each destination, by age')
+    def run(solver, seed=1):
+        I, R, D = ss.states('I R D')
+        dis = ss.Disease(I, R, D, out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4)), init=dict(I=1000), name='cohort')
+        dis.stratify(age=ss.years([0, 40]))
+        res = ss.Sim(dis, n_agents=1000, unit='day', stop=40, solver=solver, rand_seed=seed, verbose=0).run().results.cohort
+        return np.array([res.out.D.select(age=age).sum() for age in [0, 1]])
+    ode = run('ode')
+    for solver in stochastic:
+        runs = np.array([run(solver, seed) for seed in range(20)])
+        se = runs.std(axis=0)/np.sqrt(len(runs))
+        assert np.all(abs(runs.mean(axis=0) - ode) <= 3*se + 1e-9), f'{solver}: deaths by age {runs.mean(axis=0)}, against {ode} for the ODE'
+    return ode
+
+
 # %% Conservation and exact identities
 
 closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.null
@@ -324,6 +340,55 @@ def test_acquisition():
     return
 
 
+# %% Behavior: a regression, a counter, a table over the destinations, and a clock
+
+def behavior(solver, seed=1, n=5000):
+    """ A choice of method: a regression over two boolean dimensions and a counter, a switching row by age and destination, and a clock since the last birth """
+    from scipy.special import expit
+    none, pill, iud, P = ss.states('none pill iud P')
+    p_use = expit(-1.0 + 0.5*ss.ppl.urban + 0.3*ss.ppl.edu + 0.4*ss.ppl.parity) # Parity is a counter, so is exact as compartments
+    mix = ss.par(ss.by(dict(age=[0, 0, 30, 30], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6]))) # A row of the switching matrix by age, over the destinations
+    pp = ss.par(ss.by(dict(since_birth=[None, 0, 6], value=[1.0, 2.0, 1.0]))) # More start in the six months after a birth
+    act = ss.par(ss.by(dict(since_birth=[None, 0, 3, 12], value=[1.0, 0.0, 0.5, 1.0]))) # And conceive less
+    contra = ss.Disease(none, pill, iud, P,
+        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use*pp, p=[mix]),
+        stop     = ss.Transition(pill, none, rate=ss.peryear(0.2)),
+        remove   = ss.Transition(iud, none, rate=ss.peryear(0.1)),
+        conceive = ss.Transition(none, P, rate=ss.peryear(0.2)*act),
+        deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity', move=dict(since_birth=0)),
+        mix=mix, pp=pp, act=act, name='contra')
+    size = dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
+    sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), use_aging=False, verbose=0, **size)
+    sim.stratify(age=[0, 30])
+    sim.stratify(urban=[False, True], split=[0.4, 0.6])
+    sim.stratify(edu=[False, True], split=[0.5, 0.5])
+    sim.stratify(parity=[0, 1, 2, 3])
+    sim.stratify(since_birth=ss.months([0, 3, 6, 12]), kind='clock')
+    return sim
+
+
+def behavior_shares(sim):
+    """ The share of people in each state (none, pill, iud, P) by age group, over the last year """
+    res = sim.results.contra
+    n = np.array([res[f'n_{s}'].by('age').values[-12:].mean(axis=0) for s in ['none', 'pill', 'iud', 'P']])
+    return n/n.sum(axis=0)
+
+
+@sc.timer()
+def test_behavior_solvers():
+    sc.heading('Testing that a module of behavior (a regression, a counter, a table over the destinations, and a clock) has the same shares by method and age under every solver')
+    ode = behavior_shares(behavior('ode').run())
+    sim = behavior('binomial', n=1_000_000)
+    sim.pars.substeps = 10 # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)
+    binomial = behavior_shares(sim.run())
+    assert np.allclose(binomial, ode, rtol=0.01), f'Expected the binomial solver to match the ODE: {binomial} against {ode}'
+    for solver in ['gillespie', 'abm']: # 20 runs each, within 3 standard errors
+        runs = np.array([behavior_shares(behavior(solver, seed=seed).run()) for seed in range(20)])
+        mean, se = runs.mean(axis=0), runs.std(axis=0, ddof=1)/np.sqrt(len(runs))
+        assert np.all(np.abs(mean - ode) < 3*se), f'Expected {solver} to match the ODE within 3 standard errors: {mean} against {ode}, z = {(mean - ode)/se}'
+    return ode
+
+
 if __name__ == '__main__':
     T = sc.timer()
     for row in guesses:
@@ -333,4 +398,5 @@ if __name__ == '__main__':
             print(f'{row}: {e}')
     for name in corpus.compartmental:
         test_solvers_agree(name)
+    behavior = test_behavior_solvers()
     T.toc()

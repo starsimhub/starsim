@@ -44,6 +44,7 @@ def check_close(sims, func, rtol=0.1):
 
 # %% Define the tests
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: efficacy keyed by disease (b60e7d0e)', strict=True)
 def test_vaccine_diseases():
     sc.heading('Testing a vaccine over several diseases: efficacy keyed by disease, one has_ per person, a modifier per disease and quantity')
     def make(eff, **kwargs):
@@ -68,6 +69,7 @@ def test_vaccine_diseases():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: diagnostics keyed by states of several diseases (3315ce62)', strict=True)
 def test_test_diseases():
     sc.heading('Testing a test keyed by states of several diseases: independent detection, or the highest sensitivity')
     s16, s18 = [0, 0.6, 0.9, 0], [0, 0.5, 0.8, 0] # By S, I, CIN, CA
@@ -115,6 +117,7 @@ def test_test_diseases():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: multi-outcome diagnostics (830539df)', strict=True)
 def test_outcomes():
     sc.heading('Testing a test with several results: colposcopy, the worst over genotypes, a follow-up for some results, and a delay for one')
     table = dict(lsil=dict(I=0.15, CIN=0.2), hsil=dict(CIN=0.7, CA=0.1), cancer=dict(CA=0.85)) # P(result | state), the same for each genotype
@@ -185,6 +188,7 @@ def test_outcomes():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.any() across diseases in detects= (3a52a244)', strict=True)
 def test_any():
     sc.heading('Testing ss.any() across diseases in detects= and eligible=, with the disease taken from the conditions')
     seen = sc.objdict()
@@ -213,6 +217,7 @@ def test_any():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: the check of an efficacy by a strain (fbab710f)', strict=True)
 def test_strain_efficacy():
     sc.heading('Testing an efficacy by a strain that susceptibles do not carry: an error, pointing to efficacy by disease')
     def make(eff, **kwargs):

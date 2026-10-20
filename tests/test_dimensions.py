@@ -3,6 +3,7 @@ Test dimensions that are more than a property of people: states with dimensions 
 """
 
 # %% Imports and settings
+import math
 import pytest
 import numpy as np
 import pandas as pd
@@ -226,8 +227,16 @@ def test_strains():
     assert np.isclose(total(np.ones((2, 2))), once)
     twice = total(np.eye(2), n_agents=10_000)
     assert 1.5*once < twice < 2.2*once
-    assert total(np.eye(2), solver='ode') > twice # A compartmental run keeps only the last strain, so people can go from A to B and back ...
-    assert np.isclose(total(np.eye(2)), twice, rtol=0.1) # ... so partial immunity runs as agents unless a solver is asked for
+    with pytest.raises(ss.CapabilityError): # A compartmental run would keep only the last strain, so people could go from A to B and back (KI15) ...
+        total(np.eye(2), solver='ode')
+    assert np.isclose(total(np.eye(2)), twice, rtol=0.1) # ... so partial immunity runs as agents
+    assert total(ss.immunity(rel_sus=np.eye(2)), n_agents=10_000) == twice # A bare matrix is ss.immunity with the default rule, the strongest
+    for combine in ['sum', 'multiply', lambda p: p.max(0)]: # With protection from one strain only, the rules agree
+        assert total(ss.immunity(rel_sus=np.eye(2), combine=combine), n_agents=10_000) == twice
+    with pytest.raises(ss.CapabilityError): # A function has no compartmental form (nor a gradient)
+        total(ss.immunity(rel_sus=np.ones((2, 2)), combine=lambda p: p.max(0)), solver='ode')
+    with pytest.raises(ValueError): # In a dimension, a person is protected by the strains they have had, against infection
+        flu(ss.immunity(protected='R', rel_sus=np.eye(2)))
     with pytest.raises(ss.ShapeError):
         flu(np.eye(3))
 
@@ -670,6 +679,343 @@ def test_sex():
     return
 
 
+@sc.timer()
+def test_property_values():
+    sc.heading('Testing that people hold the values of a numeric dimension, and keep a property they already have')
+    # Numeric levels are lower bin edges, and people hold the value (FP19: they held 0 to 4, binned by the edges 1 to 5, so the top level was empty)
+    S, I = ss.states('S I')
+    sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), n_agents=5000, start=2000, stop=2001, solver='abm', verbose=0)
+    sim.stratify(wealthquintile=[1, 2, 3, 4, 5])
+    sim.run()
+    assert set(np.unique(sim.people.wealthquintile[sim.people.auids])) == {1, 2, 3, 4, 5}
+    res = sim.results.d
+    assert np.allclose(res.n_S.by('wealthquintile').values[0] + res.n_I.by('wealthquintile').values[0], 1000)
+
+    # A property people already have is kept and binned (FP20: urban at 0.9 became 0.000), and split= for it raises
+    def make(**kw):
+        ppl = ss.People(5000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
+        S, I = ss.states('S I')
+        sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), people=ppl, start=2000, stop=2001, solver='abm', verbose=0)
+        sim.stratify(urban=[False, True], **kw)
+        sim.stratify(wealth=[0, 50])
+        return sim
+    sim = make().run()
+    assert np.isclose(sim.people.urban.mean(), 0.9, atol=0.02) and len(np.unique(sim.people.wealth[sim.people.auids])) > 100
+    with pytest.raises(ss.BadSplit):
+        make(split=[0.5, 0.5]).init()
+    return sim
+
+
+@sc.timer()
+def test_properties_in_rates():
+    sc.heading('Testing people\'s properties and conditions in rates, as a regression')
+    from scipy.special import expit
+
+    # A probability of use as a regression on a property (FP26), the same as agents and as compartments, and stopped by ss.change on its intercept (FP14: 3,531 starts with and without it)
+    def make(solver, change=False):
+        b0, b_urban = ss.par(-1.0, bounds=[-3, 1]), ss.par(1.0)
+        start = ss.Transition('none', 'on', rate=ss.peryear(1)*expit(b0 + b_urban*ss.ppl.urban))
+        meth = ss.Disease(start=start, stop=ss.Transition('on', 'none', rate=ss.peryear(0.5)), b0=b0, b_urban=b_urban, name='meth')
+        intv = ss.change('meth.pars.b0', at=2005, to=-np.inf) if change else None
+        sim = ss.Sim(meth, interventions=intv, n_agents=20_000, start=2000, stop=2010, dt=1/12, solver=solver, verbose=0)
+        sim.stratify(urban=[False, True], split=[0.4, 0.6])
+        return sim.run()
+    on = [make(solver).results.meth.n_on[-1] for solver in ['abm', 'ode']]
+    expected = 20_000*(0.4*expit(-1)/(expit(-1) + 0.5) + 0.6*0.5/(0.5 + 0.5)) # At equilibrium
+    assert np.isclose(on[1], expected, rtol=0.01) and np.isclose(on[0], expected, rtol=0.03)
+    for solver in ['abm', 'ode']:
+        assert make(solver, change=True).results.meth.start[61:].sum() == 0
+
+    # A condition in a rate is 1 or 0 for each person; on states alone joined by |, it is still an error
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*(1 + 2*(ss.ppl.age > 50)), init=dict(I=0.01), name='sir')
+    sim = ss.Sim(sir, n_agents=10_000, stop=5, dt=0.1, use_aging=False, verbose=0).run()
+    ode = ss.Sim(sir, total_pop=10_000, stop=5, dt=0.1, use_aging=False, solver='ode', verbose=0)
+    ode.stratify(age=[0, 50])
+    ode.run()
+    assert np.isclose(sim.results.sir.n_R[-1], ode.results.sir.n_R[-1], rtol=0.15)
+    with pytest.raises(TypeError, match=r'0.3\*\(Ia \+ Is\)'):
+        ss.Disease(S, I, R, infection=S >> I @ 0.3*(S | I))
+
+    # Written to the model spec as people.urban and expit(), and back as code with the same hash
+    sim = make('abm')
+    spec = sim.to_spec()
+    assert 'expit(b0 + b_urban * people.urban)' in spec['modules'][0]['transitions'][0]['rate']
+    code = ss.to_code(spec)
+    assert 'from scipy.special import expit' in code and 'ss.ppl.urban' in code
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == sim.hash()
+
+    # A property that is not one of the people's says what is
+    bad = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*ss.ppl.agee, name='bad')
+    with pytest.raises(ss.UnknownState, match='age'):
+        ss.Sim(bad, n_agents=100, verbose=0).init()
+    return sim
+
+
+@sc.timer()
+def test_by_properties():
+    sc.heading('Testing values by a property of people that is not a dimension (D15), and tables with bin edges')
+    def make(mu, solver='auto', dims=None, **kw):
+        S, D = ss.states('S D')
+        sim = ss.Sim(ss.Disease(S, D, death=S >> D @ mu, name='d'), solver=solver, use_aging=False, verbose=0, **sc.mergedicts(dict(stop=10), kw))
+        for dim,levels in (dims or {}).items():
+            sim.stratify(**{dim:levels})
+        return sim
+
+    # Death rates by sex with no sex dimension: read from people.female as agents; an explicit ODE says to stratify
+    mu = ss.by(sex=dict(female=ss.peryear(0.02), male=ss.peryear(0.05)))
+    sim = make(mu, n_agents=20_000).run()
+    assert sim.solver == 'abm'
+    female, dead = sim.people.female.raw[sim.people.auids], sim.diseases.d.D.raw[sim.people.auids]
+    for sel,rate in [(female, 0.02), (~female, 0.05)]:
+        p = 1 - np.exp(-10*rate)
+        assert abs(dead[sel].mean() - p) < 3*np.sqrt(p*(1 - p)/sel.sum())
+    with pytest.raises(ss.CapabilityError, match='stratify'):
+        make(mu, solver='ode', total_pop=20_000).init()
+    ode = make(mu, solver='ode', total_pop=20_000, dims=dict(sex=['female', 'male'])).run() # The same keys, by a dimension
+    assert np.allclose(ode.results.d.n_D.by('sex').values[-1], 10_000*(1 - np.exp(-10*np.array([0.02, 0.05]))), rtol=1e-3)
+    with pytest.raises(ss.MissingDimension, match=r'dict\(female='):
+        make(ss.by(sex=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
+    with pytest.raises(ss.MissingDimension, match='lower edge'):
+        make(ss.by(age=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
+
+    # A table with bin edges, by single years of age or coarser: each person's own age as agents; averaged over each age group as compartments, with a note
+    table = ss.by(dict(age=[0, 20, 40, 60], value=[ss.peryear(v) for v in [0.01, 0.02, 0.03, 0.04]]))
+    abm = make(table, n_agents=50_000, solver='abm').run()
+    ode = make(table, total_pop=50_000, solver='ode', dims=dict(age=[0, 30, 60])).run()
+    assert np.isclose(abm.results.d.n_D[-1], ode.results.d.n_D[-1], rtol=0.03)
+    assert any('averages it over each group' in str(note) for note in ode.notes)
+
+    # A row for people with no value (None), and a product of values by different dimensions
+    ppl = ss.People(10_000, extra_states=[ss.FloatArr('since_birth', default=ss.choice([np.nan, 1.0, 10.0], p=[0.5, 0.25, 0.25]))])
+    rate = ss.by(dict(since_birth=[None, 0, 5], value=[ss.peryear(0.0), ss.peryear(0.5), ss.peryear(0.1)]))
+    sim = make(rate, people=ppl, stop=1).run()
+    since, dead = sim.people.since_birth.raw[sim.people.auids], sim.diseases.d.D.raw[sim.people.auids]
+    assert dead[np.isnan(since)].sum() == 0 and dead[since == 1].mean() > 2*dead[since == 10].mean()
+    both = ss.by(sex=dict(female=1.0, male=2.0))*ss.by(urban={False:1.0, True:3.0})
+    assert both.dims == ['sex', 'urban']
+
+    # A distribution for each level of a property, as a dwell time
+    A, B = ss.states('A B')
+    dur = ss.by(sex=dict(female=ss.lognorm_ex(ss.months(6), ss.months(2)), male=ss.lognorm_ex(ss.months(12), ss.months(4))))
+    sim = ss.Sim(ss.Disease(A, B, go=ss.progression('A -> B', dur=dur), name='d'), n_agents=10_000, unit='month', stop=3, verbose=0).init()
+    uids = sim.people.auids
+    drawn = sim.diseases.d.engine.sample_dwell(sim.diseases.d.graph.transitions['go'], uids) # In months
+    female = sim.people.female.raw[uids]
+    assert np.isclose(drawn[female].mean(), 6, rtol=0.05) and np.isclose(drawn[~female].mean(), 12, rtol=0.05)
+    return sim
+
+
+@sc.timer()
+def test_many_groups():
+    sc.heading('Testing more groups than 16-bit integers hold, as agents (TL6)')
+    S, D = ss.states(2)
+    dis = ss.Disease(onset=S >> D @ ss.peryear(1), back=D >> S @ ss.days(7), name='dis')
+    dis.stratify(a=[f'a{i}' for i in range(128)], states=[D])
+    dis.stratify(b=[f'b{i}' for i in range(384)], states=[D]) # 49,152 groups: an OverflowError, or groups wrapped round to negative numbers
+    sim = ss.Sim(diseases=dis, n_agents=2_000, start='2010-01-01', stop='2010-02-01', dt=ss.days(1), verbose=0).run()
+    groups = sim.groups
+    assert groups.n_groups == 49_152
+    assert np.array_equal(groups.group_raw(), groups.level_raw(0).astype(np.int64)*384 + groups.level_raw(1)) # Kept up to date as people move in and out of D
+    res = sim.results.dis
+    assert res.n_D.by('b').values[-1].sum() == res.n_D[-1] == sim.diseases.dis.D.sum()
+    return sim
+
+
+@sc.timer()
+def test_given_splits():
+    sc.heading('Testing splits given by the people and over several dimensions (TL3, TL4)')
+    # Stratifying by a property the people already have keeps it, and is not described as guessed (TL3: everyone was put at False, the first level)
+    N = 10_000
+    tob = np.random.default_rng(1).random(N) < 0.3
+    ppl = ss.People(N, extra_states=[ss.BoolState('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
+    A, B = ss.states('A B')
+    d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), name='d') # Only smokers move
+    sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()
+    assert sim.people.tob.sum() == tob.sum()
+    expected = tob.sum()*(1 - np.exp(-0.5))
+    assert abs(sim.results.d.go.sum() - expected) < 4*np.sqrt(expected)
+    assert 'guessed' not in [line for line in sim.describe(output=True).splitlines() if 'tob' in line and 'dimension' in line][0]
+
+    # A split over two dimensions that contradicts one's own split raises (TL4: urban came out at 0.497 where 0.17 was given)
+    table = np.array([[0.11, 0.21, 0.22, 0.23, 0.23], [0.75, 0.16, 0.05, 0.02, 0.02]]) # P(wealth | urban)
+    def make(table):
+        m = ss.Disease(stay=ss.progression('S -> S', rate=ss.peryear(0)), name='life')
+        m.stratify(urban=[False, True], split=[0.83, 0.17])
+        m.stratify(wealth=['w1', 'w2', 'w3', 'w4', 'w5'], split=ss.by(table, dims=['urban', 'wealth']))
+        return ss.Sim(m, n_agents=20_000, start=2010, stop=2011, verbose=0)
+    with pytest.raises(ss.InconsistentDimension, match='0.83'):
+        make(table).init()
+    n = make(table*np.array([0.83, 0.17])[:, None]).run().results.life.n_S # As a joint distribution, it agrees
+    assert np.isclose(n.select(urban=1).values[0]/n.values[0], 0.17, atol=0.01)
+    assert np.isclose(n.select(wealth=0).values[0]/n.values[0], 0.83*0.11 + 0.17*0.75, atol=0.01)
+    return sim
+
+
+@sc.timer()
+def test_counters():
+    sc.heading('Testing counters: increment= on transitions, deliveries, and transfers')
+    def make(solver, twins=0.0, **kw):
+        NP, P = ss.states('NP P')
+        conceive = ss.Transition(NP, P, rate=ss.by(age=[ss.peryear(0), ss.peryear(0.25), ss.peryear(0.15), ss.peryear(0.05)]))
+        single = ss.Transition(P, NP, dur=ss.months(9), p=1 - twins, increment='parity')
+        double = ss.Transition(P, NP, dur=ss.months(9), p=twins, increment=dict(parity=2)) # Twins add 2
+        sim = ss.Sim(ss.Disease(NP, P, conceive=conceive, single=single, double=double, name='preg'), solver=solver, start=2000, stop=2010, dt=ss.months(1), use_aging=False, verbose=0, **kw)
+        sim.stratify(age=[0, 15, 25, 35])
+        sim.stratify(parity=list(range(8)))
+        return sim.run()
+    def mean_parity(sim): # By age group, of those 15 and over
+        res = sim.results.preg
+        n = [res.n_NP.select(age=a).by('parity').values[-1] + res.n_P.select(age=a).by('parity').values[-1] for a in range(1, 4)]
+        return np.array([(k*np.arange(8)).sum()/k.sum() for k in n])
+
+    # Mean parity by age, agents against the ODE (0.7% apart at most, measured), and twins add 2
+    ode, abm = mean_parity(make('ode', total_pop=100_000)), mean_parity(make('abm', n_agents=100_000))
+    assert np.allclose(abm, ode, rtol=0.01) and ode[0] > 1.5
+    sim = make('abm', twins=1.0, n_agents=2000)
+    parity = sim.people.parity[sim.people.auids]
+    assert np.all(parity % 2 == 0) and parity.max() > 7 # The last level is open-ended, and agents keep counting
+    assert np.allclose(mean_parity(make('ode', twins=0.5, total_pop=5000)), 1.5*ode, rtol=0.02) # A little under, since the ODE's 7+ is 7
+
+    # A delivery adds a dose to the people it reaches, a transfer takes a level of immunity off at a rate, and recovery counts episodes
+    def campaign(solver, **kw):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S, I, R, infection=S >> I @ 0.2*I, recovery=ss.progression('I -> R', dur=ss.days(10), increment='episodes'), init=dict(I=0.01), name='sir')
+        sir.stratify(waning=ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)), immunity=[0, 1, 2, 3], split=[0, 0, 0, 1])
+        camp = ss.Delivery(increment='doses', coverage=0.6, at=[1, 2, 3], name='camp')
+        sim = ss.Sim(sir, interventions=camp, solver=solver, start=0, stop=5, dt=ss.days(1), unit='year', verbose=0, **kw)
+        sim.stratify(doses=[0, 1, 2, 3], episodes=[0, 1, 2])
+        return sim.run()
+    def total(sim, dim):
+        res = sim.results.sir
+        return res.n_S.by(dim).values[-1] + res.n_I.by(dim).values[-1] + res.n_R.by(dim).values[-1]
+    ode, abm = campaign('ode', total_pop=20_000), campaign('abm', n_agents=20_000)
+    exact = 20_000*np.array([0.4**3, 3*0.6*0.4**2, 3*0.6**2*0.4, 0.6**3]) # Doses after three rounds at 60%: binomial
+    assert np.allclose(total(ode, 'doses'), exact) and np.allclose(total(abm, 'doses'), exact, rtol=0.05)
+    m = 2.5 # Levels lost in 5 years at 0.5 per year: Poisson
+    lost = np.array([1 - sum(np.exp(-m)*m**k/math.factorial(k) for k in range(3))] + [np.exp(-m)*m**k/math.factorial(k) for k in [2, 1, 0]])
+    assert np.allclose(total(ode, 'immunity'), 20_000*lost, rtol=1e-3) and np.allclose(total(abm, 'immunity'), 20_000*lost, rtol=0.05)
+    assert np.isclose(total(ode, 'episodes')[1], ode.results.sir.recovery.values.sum())
+
+    # Written to the spec and back as code
+    spec = abm.to_spec()
+    code = ss.to_code(spec)
+    assert "increment='episodes'" in code and 'increment=dict(immunity=-1)' in code and "increment='doses'" in code
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == abm.hash()
+    with pytest.raises(ValueError, match='whole number'):
+        ss.progression('I -> R', dur=10, increment=dict(episodes=0.5))
+    with pytest.raises(ss.MissingDimension, match='stratify'):
+        ss.Sim(ss.Disease(ss.progression('I -> R', dur=10, increment='episodes'), init=dict(I=0.1), name='d'), n_agents=100, verbose=0).run()
+    return abm
+
+
+@sc.timer()
+def test_clocks():
+    sc.heading('Testing clocks: the time since an event')
+    def make(solver, **kw):
+        NP, P = ss.states('NP P')
+        act = ss.par(ss.by(dict(since_birth=[None, 0, 1, 2, 3, 6, 12, 24], value=[1.0, 0.0, 0.1, 0.2, 0.5, 0.8, 0.9, 1.0]))) # Activity by months since the last birth; None: no birth yet
+        preg = ss.Disease(NP, P, conceive=NP >> P @ ss.peryear(0.5)*act, deliver=ss.Transition(P, NP, dur=ss.months(9), move=dict(since_birth=0)), act=act, name='preg')
+        sim = ss.Sim(preg, solver=solver, start=2000, stop=2010, dt=ss.months(1), use_aging=False, verbose=0, **kw)
+        sim.stratify(since_birth=ss.months([0, 1, 2, 3, 6, 12, 24]), kind='clock')
+        return sim.run()
+    def shares(sim): # The share in each level as given (a compartmental run has a level for each step)
+        strat = sim.groups.strats[sim.groups.dim_index('since_birth')]
+        res = sim.results.preg
+        n = res.n_NP.by('since_birth').values[-1] + res.n_P.by('since_birth').values[-1]
+        n = n if strat.coarse is None else np.bincount(strat.coarse, weights=n)
+        return n/n.sum()
+    ode = shares(make('ode', total_pop=100_000))
+    assert make('ode', total_pop=1000).groups.strats[0].n == 26 # 0 to 24 months a month at a time, and none
+    for solver,kw in [('binomial', dict(total_pop=100_000)), ('abm', dict(n_agents=100_000))]:
+        assert np.allclose(shares(make(solver, **kw)), ode, atol=0.01), f'Expected {solver} to match the ODE'
+    sim = make('abm', n_agents=2000)
+    since = sim.people.since_birth[sim.people.auids]
+    born = sim.results.preg.deliver.values.sum() > 0
+    assert born and np.isnan(since).any() and np.allclose(since[~np.isnan(since)] % 1, 0) # Whole months, and none for those with no birth
+    assert np.isclose(shares(sim)[-1], np.isnan(since).mean()) # none holds those with no birth
+    spec = sim.to_spec()
+    code = ss.to_code(spec)
+    assert "since_birth=ss.months([0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0])" in code and "kind='clock'" in code and 'move=dict(since_birth=0.0)' in code
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == sim.hash()
+    with pytest.raises(ss.BadSplit, match='none'):
+        bad = ss.Sim(ss.Disease(ss.progression('I -> R', dur=10), init=dict(I=0.1), name='d'), n_agents=100, verbose=0)
+        bad.stratify(since=[0, 1], kind='clock', split=[0.5, 0.5, 0])
+        bad.init()
+    return sim
+
+
+@sc.timer()
+def test_rows():
+    sc.heading('Testing p= with a to axis (a table over the destinations), and a function giving a row')
+    from scipy.special import expit
+    methods = ['pill', 'iud', 'inj']
+    def make(solver, fn=False, **kw):
+        none = ss.State('none')
+        on = {m: ss.State(m) for m in methods}
+        b0 = ss.par(-0.5)
+        p_use = expit(b0 + 1.0*ss.ppl.urban)
+        mix = ss.par(ss.by(dict(age=[0, 0, 0, 30, 30, 30], to=methods*2, value=[0.6, 0.3, 0.1, 0.2, 0.5, 0.3]))) # The switching row by age
+        w = ss.par(ss.by(to=[1.0, 2.0, 1.0])) # Weights by method, by position
+        row = lambda sim, uids: np.tile([0.5, 0.2, 0.2, 0.1], (len(uids), 1)) # A function giving a row for each person
+        trs = {f'from_{src.name}':ss.Transition(src, [none, *on.values()], dur=ss.months(12), p=row if fn else [1 - p_use, p_use*mix*w]) for src in [none, *on.values()]}
+        sim = ss.Sim(ss.Disease(none, *on.values(), **trs, b0=b0, mix=mix, w=w, name='contra'), solver=solver, start=2000, stop=2020, dt=ss.months(1), use_aging=False, verbose=0, **kw)
+        sim.stratify(age=[0, 30])
+        sim.stratify(urban=[False, True], split=[0.4, 0.6])
+        return sim
+    ode = make('ode', total_pop=20_000).run()
+    abm = make('abm', n_agents=20_000).run()
+    n = lambda sim: np.array([sim.results.contra[f'n_{m}'][-1] for m in ['none'] + methods])
+    young = ode.groups.strats[0].split[0] # Everyone re-decides each year from the same row, so the shares are those of the row
+    use = 0.4*expit(-0.5) + 0.6*expit(0.5)
+    expected = 20_000*np.array([1 - use] + list(use*(young*np.array([0.6, 0.6, 0.1])/1.3 + (1 - young)*np.array([0.2, 1.0, 0.3])/1.5)))
+    assert np.allclose(n(ode), expected, rtol=0.01) and np.allclose(n(abm), expected, rtol=0.05)
+    assert np.allclose(n(make('abm', fn=True, n_agents=10_000).run()), 10_000*np.array([0.5, 0.2, 0.2, 0.1]), rtol=0.06)
+    tr = abm.diseases.contra.graph.transitions.from_none
+    assert len(tr.p) == 4 and len(tr.p_given) == 2
+    assert 'mix * w normalized over pill, iud, inj' in '\n'.join(abm.diseases.contra.graph.describe(abm))
+    spec = abm.to_spec()
+    assert spec['modules'][0]['transitions'][0]['p'][1] == 'expit(b0 + (1.0 * people.urban)) * mix * w' # As given
+    code = ss.to_code(spec)
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == abm.hash()
+    with pytest.raises(ss.UnknownState, match='implant'):
+        none, pill = ss.states('none pill')
+        ss.Disease(go=ss.Transition(none, [none, pill], rate=ss.peryear(1), p=[0.5, 0.5*ss.par(ss.by(to=dict(pill=1.0, implant=1.0)))]), name='bad')
+    return abm
+
+
+def test_contacts_dims():
+    sc.heading('Testing one contact matrix over several stratifications together')
+    sex, risk = np.array([[0.1, 1.0], [1.0, 0.1]]), np.array([[1.0, 0.5], [0.5, 3.0]])
+    def run(net, solver='ode', seed=1):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.1)), recovery=ss.progression('I -> R', dur=ss.days(10)), init_prev=0.01, name='sir')
+        sim = ss.Sim(sir, networks=net, stratify=[dict(sex=['female', 'male']), dict(risk=['low', 'high'], split=[0.8, 0.2])], total_pop=20_000, n_agents=20_000, solver=solver, unit='day', stop=120, rand_seed=seed, **kw)
+        return sim.run().results.sir.n_R.values
+
+    # A separable matrix given whole is the product of one for each (ST23)
+    for solver in ['ode', 'abm']:
+        assert np.allclose(run(ss.contacts(sex=sex, risk=risk), solver), run(ss.contacts(np.kron(sex, risk), dims=['sex', 'risk']), solver))
+
+    # One that is not: men mix with women, and the high-risk with each other more among men; as (2, 2, 2, 2) or (4, 4), first stratification slowest
+    m = np.zeros((2, 2, 2, 2))
+    m[0, :, 1, :] = [[0.8, 0.2], [0.5, 1.5]] # Women's contacts with men
+    m[1, :, 0, :] = [[0.8, 0.5], [0.2, 2.0]] # Men's contacts with women
+    ode = run(ss.contacts(m, dims=['sex', 'risk']))
+    assert np.allclose(ode, run(ss.contacts(m.reshape(4, 4), dims=['sex', 'risk'])))
+    abm = np.mean([run(ss.contacts(m, dims=['sex', 'risk']), 'abm', seed) for seed in range(3)], axis=0)
+    assert np.isclose(abm[-1], ode[-1], rtol=0.1), (abm[-1], ode[-1]) # As with any contact matrix (about 7% apart for the product form here too)
+    with pytest.raises(ss.ShapeError, match='risk'):
+        run(ss.contacts(np.ones((6, 6)), dims=['sex', 'risk']))
+    return
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -679,3 +1025,14 @@ if __name__ == '__main__':
     register = test_register()
     ragged  = test_ragged()
     sex     = test_sex()
+    values  = test_property_values()
+    props   = test_properties_in_rates()
+    by_props = test_by_properties()
+    many    = test_many_groups()
+    splits  = test_given_splits()
+    counters = test_counters()
+    clocks  = test_clocks()
+    rows    = test_rows()
+
+
+    cdims = test_contacts_dims()

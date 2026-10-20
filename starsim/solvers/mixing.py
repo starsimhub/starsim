@@ -115,7 +115,7 @@ class Mixing:
         self.terms = []
         for net in nets:
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
-            if isinstance(net, ss.MixingPools) and getattr(net, 'dims', None):
+            if isinstance(net, ss.MixingPools) and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None):
                 self.terms.append(self.dim_matrices(net, beta))
             elif isinstance(net, ss.MixingPools):
                 self.terms.append(self.age_matrix(net, beta))
@@ -123,6 +123,8 @@ class Mixing:
                 if net.pars.src is not None or net.pars.dst is not None:
                     raise ss.CapabilityError(f'cannot run the mixing pool "{net.name}" with solver="{sim.solver}": only a pool of everyone, or ss.MixingPools between age groups, has a compartmental form so far. Run with solver="abm".')
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name))
+            elif isinstance(net, ss.PartnerNet) and net.one_off: # Exact: a contact matrix between its two groups
+                self.terms.append(self.two_groups(net))
             elif isinstance(net, ss.Network):
                 kind = type(net).__name__
                 contacts, source = self.net_contacts(net)
@@ -162,6 +164,28 @@ class Mixing:
         elif isinstance(net, ss.PartnerNet):
             return None, ' (its partnerships last, so the number of partners is not a number of contacts per unit time)'
         return None, ''
+
+    def two_groups(self, net):
+        """
+        One-off contacts between two groups (`ss.PartnerNet(between=...)` with no `dur=`) as a contact matrix over the
+        stratification the two groups are levels of: one group's contacts per unit time with the other, and the other's
+        with it, so that each contact has one of each (from the split of the stratification)
+        """
+        sim = self.sim
+        sides = list(net.sides.items())
+        strat = next((s for s in sim.groups.strats if all(isinstance(c, str) and c in s.labels for k,c in sides)), None)
+        if strat is None:
+            raise ss.CapabilityError(f'"{net.name}" is between {sc.strjoin(k for k,c in sides)}, which with solver="{sim.solver}" must be levels of one stratification, e.g. sim.stratify(role=["none", "{sides[0][0]}", "{sides[1][0]}"]), and between=("{sides[0][0]}", "{sides[1][0]}"). Or run with solver="abm".')
+        d = [s.name for s in sim.groups.strats].index(strat.name)
+        self.check_ragged(d, net)
+        net.init_one_off(sim)
+        split = np.asarray(strat.split, dtype=float) if getattr(strat, 'split', None) is not None and np.ndim(strat.split) == 1 else np.full(strat.n, 1/strat.n)
+        a, b = [strat.labels.index(c) for k,c in sides]
+        seeker, other = (a, b) if net.seeker == 0 else (b, a)
+        matrix = np.zeros((strat.n, strat.n))
+        matrix[seeker, other] = net.contact_rate
+        matrix[other, seeker] = net.contact_rate*split[seeker]/split[other] if split[other] > 0 else 0.0
+        return sc.objdict(kind='matrix', dim=d, matrix=matrix, name=net.name, sides=(a, b))
 
     def within_places(self, term):
         """
@@ -272,8 +296,18 @@ class Mixing:
         return
 
     def dim_matrices(self, net, beta):
-        """ A contact matrix for each of one or more of the model's dimensions: the contacts between two groups are the product of the entries """
+        """ A contact matrix for each of one or more of the model's dimensions: the contacts between two groups are the product of the entries; or one matrix over several dimensions together (`ss.contacts(matrix, dims=[...])`) """
         sim = self.sim
+        full = getattr(net, 'full', None)
+        if full is not None:
+            net.init_full(sim) # Checks the dimensions and the shape
+            names = [strat.name for strat in sim.groups.strats]
+            cells = np.zeros(sim.groups.n_groups, dtype=int)
+            for dim in full.dims:
+                d = names.index(dim)
+                self.check_ragged(d, net)
+                cells = cells*sim.groups.strats[d].n + sim.groups.group_coords[:, d]
+            return sc.objdict(kind='matrix', cells=cells, matrix=full.matrix*beta, name=net.name, dim=names.index(full.dims[0]), dims=[names.index(dim) for dim in full.dims])
         matrix = np.ones((1, 1))
         cells = np.zeros(sim.groups.n_groups, dtype=int) # Which row of the combined matrix each group is in
         for dim,mat in net.dims.items():
@@ -343,7 +377,7 @@ class Mixing:
             if isinstance(net, ss.MixingPool): # A pool of everyone: within each place
                 self.pool_terms[net.name] = sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name)
             else:
-                self.pool_terms[net.name] = self.dim_matrices(net, beta) if getattr(net, 'dims', None) else self.age_matrix(net, beta)
+                self.pool_terms[net.name] = self.dim_matrices(net, beta) if (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None) else self.age_matrix(net, beta)
         if any(term.kind == 'matrix' for term in self.pool_terms.values()):
             self.init_space() # A contact matrix can add an age stratification, which changes the groups
             for term in self.pool_terms.values():

@@ -274,6 +274,7 @@ class Crossing:
         full = any(p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1 for p in progs) or any(engine.net_mods for engine in self.engines) # Contacts by exposure and group
         src, named, det, index, record, starts, ops, args = [], [], [], [], [], [0], [], []
         tgt_comp, tgt_map, tgt_starts, crd_index, crd_starts = [], [], [0], [], [0]
+        tgt_rec = []
         mov_comps, mov_pair, mov_cstarts, mov_estarts = [], [[], []], [0], [0]
         sets, exposures, maps = dict(), dict(), dict()
         groups, chain = [], [] # The flows out of each compartment, for the stochastic solvers: for each disease in turn, each disease's ended by an empty set (see ss.kernels.draw())
@@ -359,6 +360,7 @@ class Crossing:
                     for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
                         tgt_comp.append(L.rowmap[p.tgt_comp[t], o])
                         tgt_map.append(which_map(k, p.tgt_map[t], o))
+                        tgt_rec.append(L.toff + p.tgt_rec[t]*O + o if p.tgt_rec[t] >= 0 else -1)
                         TI.append(t)
                         TC.append(L.cols[o])
                     tgt_starts.append(len(tgt_comp))
@@ -468,6 +470,7 @@ class Crossing:
             tgt_comp   = arr(tgt_comp),
             tgt_w      = np.zeros((len(tgt_comp), R)),
             tgt_map    = arr(tgt_map),
+            tgt_rec    = arr(tgt_rec),
             crd_starts = arr(crd_starts),
             crd_index  = arr(crd_index),
             crd_w      = np.zeros((len(crd_index), R)),

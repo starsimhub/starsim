@@ -35,6 +35,8 @@
 - [ ] Decide on and implement library examples (camdl's, Keeling & Rohani, others)
 - [ ] Show example of pure NumPy and then stages of implementation moving to pure Starsim
 - [ ] Figure out why sc.asd() doesn't work better for ODE models
+- [ ] Settle NUM_THREADS pros/cons across platforms
+- [ ] Use `sc.obj`
 
 ## AI
 

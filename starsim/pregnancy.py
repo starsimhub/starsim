@@ -29,7 +29,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         min_age (float): minimum age of conception
         max_age (float): maximum age of conception
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
-        p_loss (bernoulli): chance of a spontaneous loss in each step of the module
+        p_loss (float/bernoulli): chance of a spontaneous loss per week of pregnancy (a number, or a bernoulli of one); a typed probability for another unit, e.g. `ss.probpermonth(0.04)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
@@ -61,7 +61,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in v3 or k == 'p_abortion'})
         kwargs.setdefault('name', 'pregnancy')
         super().__init__(**kwargs)
-        own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph
+        own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph, which conception_rate() reads
+        self.own_pars = own
         self.define_pars(**{k:v3[k] for k in own})
         self.update_pars({k:v for k,v in given.items() if k in own})
         graph = {k:v for k,v in given.items() if k not in own}
@@ -89,9 +90,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
         if pars.fertility_rate is not None:
             self.fertility_rate_data = ss.LegacyPregnancy.standardize_fertility_data(self)
             self.pars.rate_units = ss.demographics.infer_rate_units(pars.rate_units, self.fertility_rate_data, 'fertility_rate')
-        p_loss = pars.p_loss.pars.p if isinstance(pars.p_loss, ss.bernoulli) else pars.p_loss # A chance in each step of the module is a hazard
-        if np.any(np.asarray(p_loss) > 0): # Before the engine lays out the clocks, which depend on it
-            self.pars.update(loss_rate=ss.prob(p_loss, pars.get('dt') or sim.pars.dt))
+        p_loss = pars.p_loss.pars.p if isinstance(pars.p_loss, ss.bernoulli) else pars.p_loss # A chance per week of pregnancy (a bare number), or per its own unit (e.g. ss.probpermonth), as in ss.LegacyPregnancy
+        if not isinstance(p_loss, ss.TimePar):
+            p_loss = ss.probperweek(p_loss)
+        if np.any(np.asarray(p_loss.value) > 0): # Before the engine lays out the clocks, which depend on it
+            self.pars.update(loss_rate=p_loss)
         dist = self.graph.pars.dur_pregnancy.raw
         self.mean_dur_pregnancy = ss.transitions.dwell_stats(dist, lambda v: ss.solvers.convert(v, 'year'))[0]
         super().init_pre(sim)

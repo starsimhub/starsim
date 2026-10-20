@@ -24,7 +24,7 @@ def kw():
 def make_hiv_sis(*interventions, where=None):
     """ The v3 library HIV, as code, with a declared SIS whose susceptibility rises with low CD4 """
     hiv = ssl.HIV(beta={'mf': [0.008, 0.004]}, init_prev=0.05)
-    sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.6)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.025, name='sis')
+    sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peract(0.05)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.025, name='sis') # Per act on ss.MFNet (a rate there is an error); about what ss.peryear(0.6) gave at monthly steps
     where = where if where is not None else hiv.cd4 < 200 # A condition on a v3 array
     intvs = [ssl.ART(year=[2000, 2010], coverage=[0, 0.4])] + [i(hiv) for i in interventions]
     return ss.Sim([hiv, sis], networks=ss.MFNet(), n_agents=1000, start=2000, stop=2015, dt=ss.years(1/12), interventions=intvs,

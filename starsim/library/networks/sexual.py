@@ -30,6 +30,8 @@ class MSMNet(ss.SexualNetwork):
         self.update_pars(pars, **kwargs)
         self.dist = ss.random(name='MSMNet') # For shuffling available males before pairing
         self.dist.hash_dtype = np.float64 # Avoid ties, as for ssl.RandomSafeNet
+        self.debut = ss.FloatArr('debut') # Drawn for each man on his first step in the sim, as for ss.MFNet
+        self.decided = ss.BoolArr('decided') # Whether his participation has been drawn, which happens at his debut
         return
 
     def init_post(self):
@@ -37,18 +39,14 @@ class MSMNet(ss.SexualNetwork):
         super().init_post()
         return
 
-    def set_network_states(self, upper_age=None):
-        """ Set network states including age of entry into network and participation rates """
+    def set_network_states(self):
+        """ Draw the age of debut of any man who has none (newborns and arrivals too), and whether he takes part when he reaches it, as for ss.MFNet """
         people = self.sim.people
-        if upper_age is None: uids = people.uid[people.male]
-        else: uids = people.uid[people.male & (people.age < upper_age)]
-
-        # Participation
-        self.participant[people.female] = False
-        self.participant[uids] = self.pars.participation.rvs(uids) # Should be CRN safe?
-
-        # Debut
-        self.debut[uids] = self.pars.debut.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
+        new = (people.alive & people.male & self.debut.isnan).uids
+        self.debut[new] = self.pars.debut.rvs(new)
+        due = (people.alive & people.male & ~self.decided & (people.age >= self.debut)).uids
+        self.participant[due] = self.pars.participation.rvs(due)
+        self.decided[due] = True
         return
 
     def add_pairs(self):
@@ -74,6 +72,6 @@ class MSMNet(ss.SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.t.dt.years)
+        self.set_network_states()
         self.add_pairs()
         return

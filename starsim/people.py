@@ -11,15 +11,29 @@ import numba as nb
 
 
 
-class lazy_attr:
-    """ On the class, a lazy condition on an attribute of the people (e.g. `ss.People.age < 15`), so a condition can be written without making any people; on a People object, its array """
-    def __set_name__(self, owner, name):
-        self.name = name
+class LazyPeople:
+    """
+    The people's properties, before there are any people: `ss.ppl.<name>` is a lazy reference to the property `<name>` of each person (e.g. `ss.ppl.age`, `ss.ppl.urban`), checked when the sim is built
 
-    def __get__(self, obj, cls=None):
-        if obj is None:
-            return ss.conditions.Cond('people', self.name)
-        raise AttributeError(self.name) # Not on this People object (see People.__getattr__())
+    It can be used in a condition (`ss.ppl.age < 15`, for `where=`) and, as the person's value,
+    in a rate, a branch probability, or a result (`expit(b0 + b1*ss.ppl.urban)`); a condition in a
+    rate is 1 for the people it holds for and 0 for the others (`0.3*(ss.ppl.age > 65)`).
+
+    Examples:
+        ```python
+        p_use = expit(b0 + b_age*ss.ppl.age + b_urban*ss.ppl.urban)
+        kids = ss.ppl.age < 15
+        ```
+    """
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        return ss.conditions.Cond('people', name)
+
+    def __repr__(self):
+        return 'ss.ppl'
+
+ppl = LazyPeople()
 
 
 class AgentScale(ss.FloatArr):
@@ -54,13 +68,9 @@ class People:
     Examples:
         ```python
         ppl = ss.People(2000)
-        kids = ss.People.age < 15 # A lazy condition, for a sim run as agents or as compartments
+        kids = ss.ppl.age < 15 # A lazy condition, for a sim run as agents or as compartments (see ss.ppl)
         ```
     """
-    alive = lazy_attr() # The class attributes are lazy conditions; each People object has its own arrays
-    age = lazy_attr()
-    female = lazy_attr()
-
     def __init__(self, n_agents, age_data=None, extra_states=None, p_female=0.5, mock=False):
         """ Initialize """
 
@@ -86,6 +96,7 @@ class People:
             ss.arrays.StepArr('ti_dead', late=True),  # Time index for death, as 16-bit integers if the run fits
             ss.arrays.StepArr('ti_removed', late=True),  # Time index for removal (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
+            ss.Arr('cause_of_death', dtype=np.int16, default=-1, nan=-1, label='Cause of death', shared=True), # Its position in people.causes (-1 for none); no memory until someone dies
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
@@ -94,6 +105,10 @@ class People:
             setattr(self, state.name, state)
             state.link_people(self)
         self._linked_modules = []
+        self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
+        self._claims = [] # The deaths requested in this step, with their causes: see step_die()
+        self._died_of = {} # Who died of each cause in this step
+        self._cause_dist = ss.random(name='cause_of_death') # To choose one cause for someone whose death several modules request in a step
 
         if mock:
             self.init_mock()
@@ -108,7 +123,7 @@ class People:
         They are made on first use rather than in `__init__()`, so that a People not yet in
         a sim (such as the copy `sim.inputs` keeps for `sim.new()`) holds no arrays per agent.
         The slots read the UIDs, and the parents are all none, until one is set (see `shared`
-        in `ss.Arr`), so they take no memory unless something (e.g. `ss.Pregnancy`) sets them.
+        in `ss.Arr`), so they take no memory unless something (e.g. `ss.LegacyPregnancy`) sets them.
         """
         uids = ss.uids(np.arange(int(self.n_agents_init)))
         self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as 32-bit integers
@@ -206,9 +221,11 @@ class People:
 
         This is not the same as `len(people)`: agents who died on the current timestep are
         not removed from `auids` until `finish_step()`, so that analyzers can still inspect
-        them. Use this rather than `len(people)` for any per-timestep denominator.
+        them, and the unborn (agents made at conception by `ss.LegacyPregnancy`) are not counted. Use
+        this rather than `len(people)` for any per-timestep denominator.
         """
-        return np.count_nonzero(self.alive)
+        unborn = self.unborn_uids()
+        return np.count_nonzero(self.alive) - np.count_nonzero(self.alive.raw[unborn])
     
     def __repr__(self):
         return self.brief(output=True)
@@ -222,8 +239,25 @@ class People:
         """ Full object information """
         return sc.pr(self)
 
+    @property
+    def grouped(self):
+        """ Whether these are the groups of a compartmental run (one row per group), not agents """
+        sim = getattr(self, 'sim', None)
+        return sim is not None and getattr(sim, 'solver', 'abm') != 'abm' and bool(getattr(sim, 'declared', None))
+
+    @property
+    def n(self):
+        """ In a compartmental run, the number of people in each group now, from the compartments (one row per group); as agents, the number alive """
+        if not self.grouped:
+            return len(self)
+        engine = self.sim.declared[0].engine
+        return engine.n_people(total=False) if hasattr(engine, 'n_people') else np.full(self.n_agents_init, np.nan)
+
     def brief(self, output=False):
         n = self.n_agents_init
+        if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
+            out = f'People({n:n} groups; {float(np.sum(self.n)):n} people; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups)'
+            return out if output else print(out)
         if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
             out = f'People({n=:n}; uninitialized)'
         else:
@@ -376,7 +410,9 @@ class People:
 
         # Connect the module as People attribute
         if hasattr(self, module.name):
-            raise AttributeError(f'Module {module.name} already added')
+            existing = getattr(self, module.name)
+            what = 'a module of that name is already in the sim' if isinstance(existing, ss.Module) else f'people already have a property called "{module.name}"'
+            raise AttributeError(f'The {type(module).__name__} "{module.name}" cannot be added to the people, since {what}; give it another name, e.g. name="{module.name}_mod"')
         else:
             setattr(self, module.name, module)
 
@@ -446,7 +482,7 @@ class People:
         """ Male boolean  (female is a state) """
         return ~self.female
 
-    def grow(self, n=None, new_slots=None, placed=False):
+    def grow(self, n=None, new_slots=None, placed=False, parent=None, age=None):
         """
         Increase the number of agents
 
@@ -454,6 +490,8 @@ class People:
             n: Integer number of agents to add
             new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
             placed: whether the caller gives them their levels of the sim's stratifications; if not, they are drawn from each one's split
+            parent: the parent of each (e.g. for newborns), set before their levels are drawn, so they can be born where their parent is
+            age: their age (e.g. 0 for newborns), likewise
         """
         if n is None:
             if new_slots is None:
@@ -480,13 +518,17 @@ class People:
         # Grow the states
         for state in self._states.values():
             state.grow(new_uids)
+        if parent is not None:
+            self.parent[new_uids] = parent
+        if age is not None:
+            self.age[new_uids] = age
 
         # Finally, update the alive indices
         self.add_active(new_uids)
         sim = getattr(self, 'sim', None)
         if getattr(sim, 'solver', None) == 'abm': # A dimension called sex is people.female
             sim.groups.set_sex(new_uids)
-            if not placed and sim.initialized and sim.groups.strats: # E.g. newborns from ss.Births, who would otherwise all be at the first level
+            if not placed and getattr(sim.groups, 'vals_set', False) and sim.groups.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
                 sim.groups.place_new(new_uids)
         return new_uids
 
@@ -536,7 +578,7 @@ class People:
             self.age[self.alive.uids] += sim.t.dt_year
         return
 
-    def request_death(self, uids):
+    def request_death(self, uids, cause=None):
         """
         External-facing function to request an agent die at the current timestep
 
@@ -546,25 +588,64 @@ class People:
 
         Modules that have a future time of death (e.g., due to disease duration) should keep
         track of that internally. When the module is ready to cause the agent to die, it should
-        call this method, and can update its own results for the cause of death. This way, if
-        multiple modules request death on the same day, they can each record a death due to their
-        own cause.
+        call this method, with itself as the cause.
 
         The actual deaths are resolved after modules have all run, but before analyzers. That way,
         regardless of whether removing dead agents is enabled or not, analyzers will be able to
         see and record outcomes for agents that died this timestep.
 
-        **WARNING** - this function allows multiple modules to each independently carry out and
-        record state changes associated with death. It is therefore important that they can
-        guarantee that after requesting death, the death is guaranteed to occur.
+        Each person dies once, of one cause: if several modules request the death of the same person
+        in the same step, one of them is chosen at random (each equally likely, whatever the order of
+        the modules, with common random numbers), and the cause is kept in `people.cause_of_death`
+        (see `people.causes`). A module counts its deaths after they are resolved, with
+        `people.died_of(module)`, so a death is counted once.
 
         Args:
             uids: Agent IDs to request deaths for
+            cause (Module/str): what they die of: a module (by its name) or a name (default: none)
 
         Returns:
             UIDs of agents that have been scheduled to die on this timestep
         """
         self.ti_dead[uids] = self.sim.ti
+        if len(uids):
+            name = cause.name if isinstance(cause, ss.Module) else cause
+            if name not in self.causes:
+                self.causes.append(name)
+            self._claims.append((ss.uids(uids), self.causes.index(name)))
+        return
+
+    def died_of(self, cause):
+        """ The agents who died in this step of a cause (a module or a name), once each death is resolved to one cause (see `request_death()`) """
+        name = cause.name if isinstance(cause, ss.Module) else cause
+        return self._died_of.get(name, ss.uids())
+
+    def resolve_causes(self, death_uids):
+        """ Give each agent who dies in this step one cause, from the deaths requested (see `request_death()`); called by `step_die()` """
+        claims, self._claims = self._claims, []
+        self._died_of = {}
+        if not claims:
+            return
+        uids = np.concatenate([u for u,c in claims]).astype(np.int64)
+        codes = np.concatenate([np.full(len(u), c) for u,c in claims])
+        keep = np.isin(uids, death_uids) # E.g. not someone who left instead
+        uids, codes = uids[keep], codes[keep]
+        rank = np.argsort(np.argsort([str(name) for name in self.causes]))[codes] # By the name of the cause, so the order of the modules does not matter
+        order = np.lexsort((rank, uids))
+        uids, codes, rank = uids[order], codes[order], rank[order]
+        new = np.ones(len(uids), dtype=bool)
+        new[1:] = (uids[1:] != uids[:-1]) | (rank[1:] != rank[:-1]) # One claim per cause per person
+        uids, codes = uids[new], codes[new]
+        people, start, counts = np.unique(uids, return_index=True, return_counts=True)
+        pick = start.copy()
+        several = counts > 1
+        if several.any(): # One of the causes, each equally likely
+            u = self._cause_dist.rvs(ss.uids(people[several]))
+            pick[several] += np.minimum((u*counts[several]).astype(int), counts[several] - 1)
+        people, codes = ss.uids(people), codes[pick]
+        self.cause_of_death[people] = codes
+        for code in np.unique(codes):
+            self._died_of[self.causes[code]] = people[codes == code]
         return
 
     def request_removal(self, uids):
@@ -590,6 +671,7 @@ class People:
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
             deaths = ss.kernels.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
+        self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
         self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
         self._dying = death_uids # Still active until the end of the step: see update_results() and remove_dead()
 
@@ -665,6 +747,13 @@ class People:
             for key in [f'n_{state.name}' for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
+        unborn = self.unborn_uids()
+        if len(unborn): # Agents made at conception (by ss.LegacyPregnancy) are not yet people, so are not counted (ss.LegacyPregnancy counts them: pregnancy.n_unborn)
+            if counts is None:
+                counts = [state.count() for state in states] + list(count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti))
+            w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
+            gone = ~self.alive.raw[unborn]
+            counts = [count - w[state.raw[unborn] != 0].sum() for state,count in zip(states, counts)] + [counts[-2] - w[gone & (self.ti_dead.raw[unborn] <= ti)].sum(), counts[-1] - w[gone & (self.ti_removed.raw[unborn] <= ti)].sum()]
         if counts is not None:
             for state,count in zip(states, counts):
                 res[f'n_{state.name}'][ti] = count
@@ -677,6 +766,14 @@ class People:
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
+    def unborn_uids(self):
+        """ The active agents not yet born: those made at conception by `ss.Pregnancy`, with a negative age, who are not counted among the people (e.g. in `n_alive`) """
+        sim = self.sim
+        if sim.solver != 'abm' or not any(isinstance(mod, ss.LegacyPregnancy) for mod in sim.demographics()):
+            return ss.uids()
+        auids = self.auids
+        return auids[self.age.raw[auids] < 0]
+
     def finish_step(self):
         """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
         sim = self.sim
@@ -685,6 +782,10 @@ class People:
         else:
             self.remove_dead()
             self.update_post()
+        if sim.solver == 'abm':
+            for strat in sim.groups.strats: # The time since an event, for those who have had it (see ss.dimensions.Strat)
+                if strat.kind == 'clock':
+                    self[strat.attr].raw[self.auids] += strat.clock_dt(sim) # Those with none stay NaN
         return
 
     def to_df(self):

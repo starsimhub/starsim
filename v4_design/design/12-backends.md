@@ -63,7 +63,9 @@ A model runs as agents under `'auto'` if it contains any of these:
 - a per-agent function (`fn(sim, uids)`) or a per-agent attribute that is not a stratification (viral load, an individual's partner count);
 - a distribution on a per-person quantity other than a dwell time (`beta`, `rel_sus = ss.lognorm_ex(mean=1, std=0.3)`) that has not been binned into a dimension;
 - custom code (a function intervention or analyzer, or a `step()` override) that does not work on groups when it is tried on them (see [Functions](#functions-try-it)); a module written as code says outright that it works on groups, or does not, with the class attribute `compartmental = True` or `False`;
-- something that needs individual histories: contact tracing, transmission trees, the infection log (`analyzers='infection_log'`).
+- something that needs individual histories: contact tracing, transmission trees, the infection log (`analyzers='infection_log'`), or the strains each person has had (a strain dimension with partial immunity);
+- a family of diseases (`ss.Strains`), for now;
+- an initial value (`init_prev=` or `init=`) by a property of people that is not a dimension, or a function of the agents.
 
 Or the user asks: `solver='abm'` runs any model as agents, for example to study elimination with a simple model.
 
@@ -143,6 +145,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 |---|---|---|---|
 | A random or static network (`ss.RandomNet`, `ss.StaticNet`) | compartmental, explicit | homogeneous mixing with the network's mean number of contacts (for a static network, the mean degree of its graph) | the contact rate and where it came from |
 | A network of partnerships (`ss.MFNet`, `ss.PartnerNet`) | compartmental, explicit | none yet: `CapabilityError` | |
+| A modifier of a transmission on a route with a share for each edge (`share=lambda net: ...`) | compartmental, explicit | none: `CapabilityError` (a share that is a number, a time series, or by a dimension is exact) | |
 | A dwell time that is not exponential, Erlang, or fixed (`ss.constant`) | compartmental, explicit or `'auto'` | Erlang stages matching the mean and, as closely as possible, the standard deviation; `stages=k` sets the number directly | the number of stages, and the mean and standard deviation that result |
 | A distribution on a per-person quantity that is not a dwell time (`beta`, `rel_sus`) | compartmental, explicit | its mean. To keep the variation, the user bins it into a dimension (`sir.stratify(rel_sus=[...])`), which is exact for the bins and needs no note | the mean used |
 | A continuous agent attribute used by the model (age, CD4 count) | compartmental, explicit | the bins of a stratification by it (a function then sees each group's midpoint); without one, `CapabilityError`, saying to stratify by it | |
@@ -171,13 +174,20 @@ A fixed delay (`ss.constant`, as odin's `delay()`) has no good Erlang form: its 
 
 The stock at each time point is the same in each: exact for a delay of whole steps. A delay that is not a whole number of steps is rounded to one, with a note. A minimum stay (`after=`) and a limit (`before=`) use the same conveyor, with each transition acting only on the people who have stayed long enough (or not too long); a stay on a transmission, or out of a state that splits on entry, has no compartmental form yet. The kernels, the particle filter, and the run in JAX all take conveyors; a model without one pays nothing for them.
 
+**A clock** ([05](05-dimensions.md#counters-and-clocks)) is a conveyor of whole steps along a dimension rather than within a state: in a compartmental run its levels are steps, and at the start of each step everyone moves up one (the last level, open-ended, and `none` stay), before the step's deliveries, so an event that sets it is advanced from the next step on, as agents' values are. It is exact when the edges are whole steps. The kernels take it as a delivery that reaches everyone, and the run in JAX the same; a crossing of several diseases has no clock yet.
+
+**By time in state.** A state whose exits read the time in it (`P.dwell`, in `p=` or a rate) is a conveyor of whole steps too, each slot holding the people who have been there that many steps, then one compartment for the rest. A dwell time out of it is followed exactly: from slot `j`, the share of those still there whose dwell ends nearest step `j` (from the distribution's quantiles, sped up by any multipliers on the transition), so people leave at the step agents would, and not in the step they arrive in; the rest leave at the rate of the mean time left. Each slot's `p=` and rate take the slot's time, as agents count it (`j` steps when leaving, `j + 1/2` for a rate), so `p` is exact to the step for any dwell distribution and any `p`. The conveyor follows people to the dwell's 99.9th percentile, or for the whole run for a rate, so HPV16's CIN at a quarterly step is about 400 compartments per group instead of 2; above 10,000 in all, a note says so. A dwell sped up by a multiplier that changes during a stay is approximate, as for any dwell. Branches with `p=`, a non-exponential dwell that does not read the time, or a minimum stay out of the same state have no compartmental form with it yet. On HPV16's natural history (10,000 women in `P`, quarterly steps), the ODE gives P(cancer) 0.0275 and a median time to cancer of 23.9 years, against 0.0275 and 24.2 as agents (20 runs), and 0.0274 and 23.8 by Monte Carlo of the continuous model; the ODE takes 0.2 s.
+
 ### What has no approximation
 
 These stop a compartmental run with `CapabilityError`:
 
 - contact tracing, and anything else that needs to know who a specific person's contacts were;
 - transmission trees and individual histories (the infection log, `analyzers='infection_log'`);
-- custom code that only works on agents: a function taking `uids`, a `deliver=fn(sim) -> uids` delivery, a `step()` override that reaches for a per-agent attribute that is not a stratification.
+- custom code that only works on agents: a function taking `uids`, a `deliver=fn(sim) -> uids` delivery, a `step()` override that reaches for a per-agent attribute that is not a stratification;
+- a strain dimension with partial immunity and people who can be infected again: a person's level is their last strain, so the protection of the strains before it would be lost (the exact form, a history of strains had with `2^k` levels, is deferred);
+- a family of diseases (`ss.Strains`), for now: its members side by side, coupled through their shares, are the next step;
+- a value read from each person's own properties that is not a dimension, including an initial value (`init_prev=ss.by(dict(age=[0, 15], value=[0, 0.1]))`).
 
 ```text
 CapabilityError: cannot run 'hiv' with solver='ode'.

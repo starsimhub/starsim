@@ -16,7 +16,7 @@ def test_lazy():
         S, I = ss.states('S I')
         d = ss.Disease(S, I, onset=ss.Transition(S, I, rate=ss.peryear(0.5), where=cond), name='d')
         return ss.Sim(d, n_agents=2000, start=2000, stop=2005, unit='year', **kw).run().diseases.d
-    new = make(ss.People.female & (ss.People.age >= 15)) # Before there are any people
+    new = make(ss.ppl.female & (ss.ppl.age >= 15)) # Before there are any people
     assert new.I.count() > 100
     ppl = new.sim.people
     assert np.all(ppl.female[new.I.uids]) and np.all(ppl.age[new.I.uids] >= 15)
@@ -39,7 +39,7 @@ def test_lazy():
 @sc.timer()
 def test_bv_debut():
     sc.heading('Port: BV debut as soon as women turn 15, with ss.on()')
-    adult_f = ss.People.female & (ss.People.age >= 15)
+    adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
         return ss.Disease(U, CST1, CST4,
@@ -71,7 +71,7 @@ def test_bv_debut():
 @pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
 def test_bv_debut_ode():
     """ As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step """
-    adult_f = ss.People.female & (ss.People.age >= 15)
+    adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     U, CST1, CST4 = ss.states('U CST1 CST4')
     bv = ss.Disease(U, CST1, CST4, debut=ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
@@ -199,12 +199,13 @@ def test_ct_by_sex():
     def make(form='pars'):
         E, P, A, Y, S = ss.states('E P A Y S')
         if form == 'pars': # A Dist whose parameters are values by group
-            onset = ss.lognorm_ex(mean=ss.by(sex=[ss.months(ms[0][0]), ss.months(ms[1][0])]), std=ss.by(sex=[ss.months(ms[0][1]), ss.months(ms[1][1])]))
+            onset = ss.lognorm_ex(mean=ss.by(sex=dict(female=ss.months(ms[0][0]), male=ss.months(ms[1][0]))), std=ss.by(sex=dict(female=ss.months(ms[0][1]), male=ss.months(ms[1][1]))))
         else: # A value by group that is a Dist: the same
-            onset = ss.by(sex=[ss.lognorm_ex(ss.months(m), ss.months(sd)) for m,sd in ms])
-        p_symp = ss.by(sex=[0.2, 0.54])
+            onset = ss.by(sex=dict(zip(['female', 'male'], [ss.lognorm_ex(ss.months(m), ss.months(sd)) for m,sd in ms])))
+        p_symp = ss.by(sex=dict(female=0.2, male=0.54))
         return ss.Disease(E, P, A, Y, S,
-            latency = ss.Transition(E, [P, A], p=[p_symp, 1 - p_symp]), # Was one transition per sex, with p=by_sex(...) and sync_sex()
+            latency_P = ss.Transition(E, P, p=p_symp), # Was one transition per sex, with p=by_sex(...) and sync_sex()
+            latency_A = ss.Transition(E, A, p=1 - p_symp),
             onset   = P >> Y @ onset,
             clear_a = A >> S @ ss.months(6),
             clear_y = Y >> S @ ss.months(3),
@@ -229,7 +230,7 @@ def test_ct_by_sex():
     for sex in ['female', 'male']:
         assert np.allclose(r.n_P.select(sex=sex)[::4], a.n_P.select(sex=sex)[::4], atol=150), sex
     assert any('4|36 Erlang stages' in note for note in ode.notes)
-    with pytest.raises(ss.MissingDimension):
+    with pytest.raises(ss.CapabilityError, match='stratify'): # By sex given by name, with no dimension of sex: to stratify, to run as compartments
         ss.Sim(make(), solver='ode', **kw2).init()
 
     # A Dist with a function as a parameter (FPsim: duration of use by age), and typed rates inside ss.by

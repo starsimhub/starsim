@@ -120,13 +120,13 @@ def test_error_catalog():
 
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
-    'Sim and modules': ('Sim People people Module Disease Infection Demographics Intervention Connector Analyzer', 'people'),
+    'Sim and modules': ('Sim People people ppl Module Disease Strains Infection Demographics Intervention Connector Analyzer', 'people ppl Strains'),
     'States, transitions, parameters, results': ('State states null Transition transmission progression birth death immigration emigration lifetable transfer par outcome update data', 'all'),
-    'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date', ''),
+    'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
     'Mixing and space': ('Network RandomNet MFNet StaticNet MixingPool MixingPools PartnerNet contacts geo Mobility gravity', 'PartnerNet contacts geo Mobility gravity'),
-    'Interactions and interventions': ('modify change Vaccine Test Treatment vaccinate screen treat', 'all'),
+    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat visit cascade', 'all'),
     'Running, comparing, saving': ('MultiSim parallel options compare_models optimize diff load save', 'compare_models optimize diff'),
     'Optional metadata': ('Requires', 'all'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar Fit', 'Fit'),
@@ -136,11 +136,11 @@ vocabulary = {
 code_names = """
 AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr
 BoolState BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dx
-DynamicNetwork FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
+DynamicNetwork Event FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
 Pregnancy LegacyPregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
 check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink single_run standardize_data standardize_netkey state any child mother desc on Capacity share stay clock style to_code treat_num uids warn
+show shrink single_run standardize_data standardize_netkey state any child mother on stay clock style to_code treat_num uids warn
 """.split()
 
 

@@ -35,7 +35,7 @@ Each document starts with a pointer to the `best-practices` document that justif
 - [05-dimensions.md](05-dimensions.md): stratification by age, space, risk, or strain; `stratify` on a model or on the whole sim, in place by default; `ss.transfer`.
 - [06-routes.md](06-routes.md): who meets whom. The force of infection, networks and mixing pools, counts used literally, layers, mobility, and geography.
 - [07-effects.md](07-effects.md): interactions between modules. `ss.modify`, conditions, and plain code in `step()`.
-- [08-interventions.md](08-interventions.md): products, delivery, follow-ups, `ss.change`, triggers, and scenarios.
+- [08-interventions.md](08-interventions.md): products, delivery, cascades of steps (events and their memory), `ss.change`, triggers, and scenarios.
 - [09-results.md](09-results.md): automatic results, stratified results as one result with dimensions, declared results and `ss.outcome`, data attached by name, results of many runs, and the transmission log.
 
 ### Running and fitting

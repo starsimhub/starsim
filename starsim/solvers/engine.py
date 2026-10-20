@@ -2,6 +2,8 @@
 The base of the engines that run a declared model (`Engine`), and what they share
 """
 import zlib
+import inspect
+import re
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -18,6 +20,11 @@ def convert(val, unit):
     if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
             period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
+            if np.any(np.asarray(val.value) >= 1): # TL12: an infinite hazard, which no solver can step (agents moved nobody, and the ODE gave NaN)
+                errormsg = f'A probability of 1 per period ({val!r}) is an infinite rate, which no solver can step. '
+                errormsg += 'A number times a probability scales its rate (so ss.probperyear(1)*0.8 is still a certainty); for an 80% chance a year, write ss.probperyear(0.8). '
+                errormsg += 'For everyone to move at once, give the transition no rate (an immediate transition).'
+                raise ValueError(errormsg)
             return -np.log1p(-val.value)/period
         return val.to(unit).value
     return val
@@ -83,6 +90,10 @@ class CountState:
         """ The number in this state as a fraction of the module's people """
         return self.engine.frac([self.state])
 
+    def count(self):
+        """ The number in this state, as `.n` (the same spelling as agents have, where count() is the number of agents) """
+        return self.n
+
     @property
     def values(self):
         """ The number in this state in each group """
@@ -115,13 +126,15 @@ class Engine:
         self.converted = dict() # Typed values converted to the sim's unit: see convert()
         self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.objdict() # Dwell-time information for each transition that has one
-        self.flowcounts = sc.objdict({name:0.0 for name in self.graph.transitions}) # Events in the current step
+        self.flowcounts = sc.objdict({name:0.0 for name in list(self.graph.transitions) + self.graph.destinations()}) # Events in the current step, and those of each destination of a transition with several ('cin.X')
         self.stocks = sc.objdict() # The number in each state at the start of the step
         self._by_group = False # Whether rates are being worked out for groups rather than for agents (in an agent-based run, for the states that are counts)
         self.strain = None # The position of the module's strain dimension, if it has one
         self.move_levels = dict() # For each transition with move=: see moves()
         self._strain = None # The strain whose force of infection is being worked out
         self._routes = None # For a transmission with a beta for each route, the beta of each term of the mixing: see Compartmental.route_betas()
+        self._route = None # As agents, the route (its name and itself) a transmission's beta is being worked out for: see Agents.route_beta()
+        self.routed = set() # In a compartmental run, the ids of the betas applied to the exposure through each route instead: see Compartmental.route_betas()
         self.register = None # The movement register, as arrays for the kernels
         self.year = None # The year in the step that values that vary in time are taken at, for its stages (None for its start)
         self.immunity = None # Protection between strains, and the states whose people it applies to: see init_immunity()
@@ -218,21 +231,31 @@ class Engine:
         return
 
     def moves(self, tr):
-        """ The change of level of a transition with `move=`, as ((dimension, level), ...), or None """
-        if tr.move is None:
+        """ The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is ('+', amount); or None """
+        if tr.move is None and getattr(tr, 'increment', None) is None:
             return None
         if tr.name not in self.move_levels:
             out = []
-            for dim,level in tr.move.items():
+            for dim,level in list((tr.move or {}).items()) + [(dim, ('+', k)) for dim,k in (tr.increment or {}).items()]:
                 if dim not in [strat.name for strat in self.sim.groups.strats]:
-                    raise ss.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", which is not a dimension of the sim. Stratify the disease or the sim by it.')
+                    example = f'stratify({dim}=list(range(8)))' if isinstance(level, tuple) else 'stratify(...)'
+                    raise ss.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", which is not a dimension of the sim. Stratify the disease or the sim by it, e.g. sim.{example}.')
                 d = self.sim.groups.dim_index(dim)
                 for state in tr.dst:
                     if not self.applies[state.name][d]:
                         raise ss.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", but the state they go to ("{state.name}") has no level of it.')
-                out.append((d, self.sim.groups.strats[d].index(level)))
+                strat = self.sim.groups.strats[d]
+                if isinstance(level, tuple):
+                    self.note_counter(strat, f'the transition "{tr.name}" of "{self.mod.name}"')
+                out.append((d, level if isinstance(level, tuple) else strat.move_level(level)))
             self.move_levels[tr.name] = tuple(out)
         return self.move_levels[tr.name]
+
+    def note_counter(self, strat, what):
+        """ In a compartmental run, a note when a counter's levels are not one apart, so people within a wider level are taken to be at its lower edge when it goes up """
+        if self.sim.solver != 'abm' and strat.edges is not None and np.any(np.diff(strat.edges) != 1):
+            ss.note(f'{what} adds to "{strat.name}", whose levels ({sc.strjoin(strat.labels)}) are not one apart, so a compartmental run takes the people in each level to be at its lower edge; agents add to each person\'s own value', sim=self.sim)
+        return
 
     def dim_map(self, src, dst, strain=None, record=False, move=None):
         """
@@ -260,7 +283,9 @@ class Engine:
                 for d,strat in enumerate(self.sim.groups.strats):
                     n = strat.n
                     factor = np.zeros((n, n))
-                    if d in moved:
+                    if d in moved and isinstance(moved[d], tuple): # A counter (each level to the one k up), or a clock set to a time
+                        factor[np.arange(n), strat.target(moved[d])] = 1
+                    elif d in moved:
                         factor[:, moved[d]] = 1
                     elif d == self.strain and strain is not None and (b[d] or record):
                         if a[d] and not record and strat.carries is not None: # Someone who carries other strains carries this one as well
@@ -312,17 +337,23 @@ class Engine:
             return
         strat = self.sim.groups.strats[self.strain]
         own = [s for s in self.graph.strats if s.name == strat.name]
-        immunity = own[0].immunity if own else strat.immunity
+        strat = own[0] if own else strat
+        immunity = strat.immunity
         if immunity is None:
             return
         sources = {id(src) for tr in self.graph.transmissions for src in tr.src}
         infected = {id(s) for s in self.graph.infected}
         self.immunity = immunity
+        self.combine = strat.combine
         self.immune_states = [s for s in self.graph.people_states if self.applies[s.name][self.strain] and id(s) not in infected and id(s) not in sources]
+        if callable(self.combine) and self.sim.solver != 'abm': # Not differentiable, and only agents hold the strains each person has had
+            raise ss.CapabilityError(f'immunity= of "{strat.name}" combines protection with a function ({getattr(self.combine, "__name__", "function")}), which needs agents, and has no gradient (for sim.gradient() or a NUTS fit); '
+                                     f'run with solver="abm", or use combine="max", "sum", or "multiply".')
         if not self.immune_states:
             ss.note(f'immunity= on "{strat.name}" has no effect, since nobody who has had a strain of "{self.mod.name}" can be infected again', sim=self.sim)
-        elif self.sim.solver != 'abm':
-            ss.note(f'a compartmental run keeps only the last strain of "{strat.name}" each person has had, so with partial immunity they can be infected again by one they had before; run as agents to keep every strain', sim=self.sim)
+        elif self.sim.solver != 'abm' and not np.all(immunity == 1): # KI15: a person's level is their last strain, so the protection of the strains before it would be lost
+            raise ss.CapabilityError(f'"{self.mod.name}" has partial immunity between the strains of "{strat.name}", which needs every strain each person has had; a compartmental run (solver="{self.sim.solver}") keeps only the last one, so would let people be infected again by a strain they had before.\n'
+                                     f'     Run with solver="abm" (or "auto"), or write the history of strains had as states.')
         return
 
     def protection(self, levels, strain):
@@ -409,11 +440,16 @@ class Engine:
 
     def value(self, p):
         """ The value of a parameter, as a number in the sim's unit """
-        key = id(p)
+        route = self._route is not None and (isinstance(p.raw, (dict, ss.peract)) or p.slot == 'rate') # A beta, worked out for one route
+        key = (id(p), self._route[0]) if route else id(p)
         if key in self.cache:
+            if route and getattr(self._route[1], 'has_acts', False):
+                self._per_act = True
             return self.cache[key]
         raw = p.raw
-        if isinstance(raw, ss.Dist): # Not a dwell time (those are handled separately), so use the mean
+        if route:
+            out = self.route_value(p, raw)
+        elif isinstance(raw, ss.Dist): # Not a dwell time (those are handled separately), so use the mean
             out = ss.transitions.dwell_stats(raw, self.convert)[0]
         elif callable(raw):
             out = self.call(raw, p)
@@ -423,6 +459,8 @@ class Engine:
             return self.modified(p, self.convert(out)) # Not cached, since it can depend on the current state
         elif isinstance(raw, dict): # A beta for each route; in a compartmental run it is applied to the exposure through each instead (see Compartmental.route_betas())
             out = 1.0 if self._routes is not None else {k:self.convert_beta(v) for k,v in raw.items()}
+        elif self._routes is not None and key in self.routed: # A beta applied to the exposure through each route (see Compartmental.route_betas())
+            out = 1.0
         elif isinstance(raw, ss.by):
             out = self.by_group(raw)
         else:
@@ -477,19 +515,23 @@ class Engine:
         return self.branch_mult_of(tr.name, uids) if tr is not None else None
 
     def branch_mult_of(self, name, uids=None):
-        """ As `branch_mult()`, by name: a transition, or one destination of a transition with several (`'progression.C'`) """
+        """ As `branch_mult()`, by name: a transition, or one destination of a transition with several (`'progression.C'`); with the adjust= of the stratifications on a branch """
+        adjust = self.branch_adjust.get(name)
         if not self.sim.modifiers.get((self.mod.name, 'branch', name)):
-            return None
-        out = self.mult_raw('branch', name)
-        if uids is not None and np.ndim(out):
-            out = out[uids]
+            if adjust is None:
+                return None
+            out = 1.0
+        else:
+            out = self.mult_raw('branch', name)
+            if uids is not None and np.ndim(out):
+                out = out[uids]
+        if adjust is not None: # By group, as an agent engine's modifiers are by agent
+            out = out*(adjust if uids is None else adjust[self.sim.groups.group_raw()[uids]])
         return out
 
     def dest_shares(self, tr, ps, uids=None):
         """ The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`), as `branch_shares()` does for branches """
         mults = [self.branch_mult_of(f'{tr.name}.{dst.name}', uids) for dst in tr.dst]
-        if all(m is None for m in mults):
-            return ps
         return self.branch_shares([f'{tr.name}.{dst.name}' for dst in tr.dst], ps, mults)
 
     def branch_shares(self, trs, ps, mults):
@@ -505,7 +547,12 @@ class Engine:
             ps (list): the probability of each, or None for the one that takes the rest
             mults (list): the multiplier of each, or None for those with no modifiers
         """
-        rest = 1.0 - sum(p for p in ps if p is not None)
+        given = sum(p for p in ps if p is not None)
+        open_ = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) # Leaving out a branch where a modifier closes it (e.g. outside the level a move= arrow limits it to)
+        if np.any(np.asarray(open_) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # TL13: was used as 1 (or as a negative remainder) with no note
+            names = sc.strjoin([getattr(tr, 'name', tr) for tr,p in zip(trs, ps) if p is not None])
+            raise ss.BadBranchSplit(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(open_):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
+        rest = 1.0 - given
         ps = [rest if p is None else p for p in ps]
         if all(m is None for m in mults):
             return ps
@@ -530,6 +577,8 @@ class Engine:
 
     def clip(self, value, path):
         """ A modified rate, duration, or multiplier that has gone below 0 (e.g. by add=) is 0; the first time, a note says so, and sim.what_modifies() reports it """
+        if isinstance(value, dict): # A value for each route, e.g. beta=dict(random=..., mfnet=[...])
+            return {k:[self.clip(x, path) for x in v] if isinstance(v, (list, tuple)) else self.clip(v, path) for k,v in value.items()}
         if np.any(np.asarray(value) < 0):
             if path not in self.sim.clipped:
                 self.sim.clipped.add(path)
@@ -573,6 +622,7 @@ class Engine:
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
         sim = self.sim
         self.adjust = sc.objdict({name:None for name in self.graph.transitions})
+        self.branch_adjust = dict() # For a branch chosen with p=: a multiplier on its probability, as for a modifier on it (TL16: the dwell time was divided instead)
         self.adjust_dims = sc.objdict({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by
         self.strain_adjust = sc.objdict({name:None for name in self.graph.transitions}) # For a transmission: a multiplier for each strain, which is the strain of the person it comes from
         self.rel_adjust = dict(rel_trans=[], rel_sus=[]) # Multipliers on infectiousness and susceptibility, as (dimension, value for each level), for the states the dimension applies to
@@ -599,7 +649,12 @@ class Engine:
                                                    f'Stratify {sc.strjoin(dst.name for dst in tr.dst)} by "{strat.name}" too (e.g. kind=\'space\' for a place), or leave the adjustment out.')
                     if d == self.strain and tr.contact:
                         self.strain_adjust[name] = vals
+                    elif self.graph.modifier_kind(name) == 'branch':
+                        self.branch_adjust[name] = self.branch_adjust.get(name, 1.0)*sim.groups.group_vals(d, vals)
                     else:
+                        msg = self.graph.dwell_not_branch(name, f'the adjustment by "{strat.name}"', self.mod.name)
+                        if msg:
+                            ss.note(msg, sim=sim)
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*sim.groups.group_vals(d, vals)
                         self.adjust_dims[name].add(d)
@@ -615,6 +670,21 @@ class Engine:
                                 raise ss.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
                                                           f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by().')
         self.init_strain_weights()
+        self.note_function_reads()
+        return
+
+    def note_function_reads(self):
+        """ Say when a parameter that a modifier changes (e.g. ss.change) is read inside a function, which sees its own value rather than the changed one """
+        modified = [name for (modname, kind, name) in self.sim.modifiers if modname == self.mod.name and kind == 'par']
+        if not modified:
+            return
+        funcs = {getattr(f, '__name__', 'a function'):f for f in self.graph.funcs.values()}
+        funcs.update({getattr(p.raw, '__name__', 'a function'):p.raw for p in self.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.parameters.TimeValue))})
+        for fname,func in funcs.items():
+            source = ss.presentation.func_source(func) or ''
+            read = [name for name in modified if re.search(rf'\bpars\.{name}\b|\[[\'"]{name}[\'"]\]', source)]
+            if read:
+                ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: float(par) there gives the changed value, but par.value and par.raw give the value without the change', sim=self.sim)
         return
 
     def strain_rate(self, tr, rate, strain):
@@ -630,6 +700,44 @@ class Engine:
         if isinstance(val, (list, tuple)):
             return [self.convert(v) for v in val]
         return self.convert(val)
+
+    def route_value(self, p, raw):
+        """
+        The value of a transmission's beta on the route it is being worked out for (`self._route`, as agents): a beta
+        for each route gives its value for this one; on a network with acts, a probability per act (`ss.peract`, or a
+        bare number) gives the hazard per act, −ln(1 − p), in each of the network's directions (see `act_hazards()`)
+        """
+        nkey, route = self._route
+        if isinstance(raw, dict):
+            keys = {ss.standardize_netkey(k):v for k,v in raw.items()}
+            key = ss.standardize_netkey(nkey)
+            if key not in keys:
+                raise ss.RouteMismatch(f'beta for "{self.mod.name}" has keys {list(raw.keys())}, but there is a network called "{nkey}" with no value.')
+            raw = keys[key]
+        if getattr(route, 'has_acts', False):
+            self._per_act = True
+            return self.act_hazards(raw, route)
+        elif isinstance(raw, ss.peract): # Checked when the sim is built: see ss.solvers.choose.check_betas()
+            raise ss.RouteMismatch(f'beta for "{self.mod.name}" on "{nkey}" is {raw}, a probability per act, but "{nkey}" has no acts')
+        return self.plain_value(raw)
+
+    def plain_value(self, val):
+        """ A value written inside another (a direction of `ss.peract`, or a route of a beta dict) as a number, or a value for each group """
+        if isinstance(val, ss.transitions.Expr):
+            return self.eval(val)
+        elif isinstance(val, ss.by):
+            return self.by_group(val)
+        elif callable(val) and not isinstance(val, ss.Dist):
+            return self.convert(self.call(val))
+        return self.convert(val)
+
+    def act_hazards(self, val, route):
+        """ The hazard per act, −ln(1 − p), of a probability per act on a network, in each of its directions (one if it has no sides): an array of directions, or of directions by groups """
+        vals = val.resolve(route) if isinstance(val, ss.peract) else [val]*max(len(route.directions), 1)
+        ps = np.array(np.broadcast_arrays(*[np.asarray(self.plain_value(v), dtype=float) for v in vals]))
+        if np.any(ps < 0) or np.any(ps > 1):
+            raise ss.OutOfBounds(f'the probability per act of "{self.mod.name}" on "{route.name}" is {val}, which gives {ps.tolist()}, outside 0 to 1')
+        return -np.log1p(-np.minimum(ps, 1 - 1e-15))
 
     def n_args(self, func):
         """ The number of arguments a user function takes, worked out once for each function """
@@ -649,6 +757,10 @@ class Engine:
         if key not in self.cache:
             self.cache[key] = func(self.sim)
         return self.cache[key]
+
+    def dwell(self, state):
+        """ The time in a state (`P.dwell`), which only the solvers that follow people in it have: see `Agents.dwell()`, and the conveyor of a compartmental run (`Compartmental.build_layout()`) """
+        raise ss.CapabilityError(f'{state.name}.dwell, the time in {state.name}, cannot be worked out here; it is used in p= or the rate of a transition out of {state.name}')
 
     def call_uids(self, func, p=None):
         name = getattr(func, '__name__', 'function')
@@ -711,7 +823,10 @@ class Engine:
             p = tr.dur if tr.dur is not None else tr.rate if (isinstance(tr.rate, trans.par) and not tr.contact) else None
             if p is None:
                 continue
-            raw = trans.by_dist(p.raw) if tr.dur is not None else p.raw
+            raw = p.raw
+            if isinstance(raw, ss.by) and tr.dur is not None and raw.items and all(isinstance(v, ss.Dist) for v in raw.items): # A distribution for each level
+                self.dwells[name] = self.dwell_by(name, tr, p, to_unit)
+                continue
             dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None)
             if isinstance(raw, ss.Dist) and tr.dur is not None and any(isinstance(v, ss.by) for v in trans.varying_pars(raw).values()): # Parameters by group
                 self.varying_dwell(name, tr, raw, dw, to_unit)
@@ -723,11 +838,14 @@ class Engine:
                 if np.isnan(mean): # A parameter is a function of the agents
                     if self.sim.solver != 'abm':
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
+                    if getattr(raw, 'unit', None) is None and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
+                        funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.transitions.Expr)))
+                        ss.note(f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
                     dw.family = 'exponential'
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
                     dw.fixed = True
-                elif tr.stages is None:
+                elif tr.stages is None and name not in self.graph.dwell_trs: # Not one that reads the time in its state, whose distribution is followed exactly (see Compartmental.build_layout())
                     shape = raw.pars.get('a')
                     if dw.family == 'gamma' and sc.isnumber(shape) and shape == int(shape):
                         dw.k = int(shape)
@@ -744,15 +862,52 @@ class Engine:
             self.dwells[name] = dw
         return
 
+    def dwell_by(self, name, tr, p, to_unit):
+        """
+        A dwell time with a distribution for each level, e.g. `dur=ss.by(sex=dict(female=ss.lognorm_ex(...), male=ss.lognorm_ex(...)))`
+
+        As agents, it is one distribution whose parameters are read from each person (see
+        `ss.by.lookup()`); in a compartmental run, each group has the mean of its own, with one
+        number of Erlang stages for all, from the mean and standard deviation over the groups.
+        """
+        by = p.raw
+        dists = by.items
+        family = type(dists[0])
+        if any(type(d) is not family for d in dists):
+            errormsg = f'The dwell time of "{name}" is {by}, with distributions of different kinds ({sc.strjoin(sorted({type(d).__name__ for d in dists}))}); give one kind, with its parameters for each level'
+            raise TypeError(errormsg)
+        shape = ['a', 'c', 'n', 'p'] # Parameters that are not durations, as in ss.transitions.numeric_pars()
+        def par_by(key): # The value of one parameter for each level, as a duration where it is one
+            return by.map(lambda d: d.unit(d.pars[key]) if d.unit is not None and key not in shape and sc.isnumber(d.pars[key]) else d.pars[key])
+        dw = Bunch(par=p, k=tr.stages or 1, exact=True, is_rate=False, family=family.__name__, fixed=False, staged=True)
+        if self.sim.solver == 'abm':
+            pars = {key:(lambda b: lambda module, sim, uids: module.engine.by_people(b, uids))(par_by(key)) for key in dists[0].pars}
+            dw.dist = family(**pars)
+            dw.mean = dw.std = np.nan
+        else:
+            stats = [by.map(lambda d: ss.transitions.dwell_stats(d, to_unit)[i]).per_group(self.sim) for i in [0, 1]]
+            dw.mean, dw.std = stats
+            dw.dist = dists[0] # Not drawn from: the mean is by group
+            if tr.stages is None:
+                dw.k = ss.transitions.erlang_stages(np.mean(dw.mean), np.mean(dw.std))
+                dw.exact = False
+                ss.note(f'the dwell time of "{name}" has a distribution for each level ({by}); a compartmental run gives each group its own mean, with {dw.k} Erlang stages for all, from the mean and standard deviation over the groups', sim=self.sim)
+        return dw
+
     def note_beta(self):
-        """ Warn about a beta dict of bare numbers with a step shorter than the unit: in Starsim 3 these were probabilities per step, so a port copied verbatim is too low by a factor of 1/dt """
+        """
+        Warn about a beta dict of bare numbers with a step shorter than the unit: in Starsim 3 these were probabilities per step, so a port copied verbatim is too low by a factor of 1/dt.
+        Not on a network with acts, where a bare number is a probability per act, as it was in Starsim 3 (see `ss.peract`).
+        """
         if self.dt >= 1:
             return
-        bare = lambda v: sc.isnumber(v) or (isinstance(v, (list, tuple)) and all(sc.isnumber(x) for x in v))
+        nets = {ss.standardize_netkey(k):net for k,net in self.sim.networks.items()}
+        acts = lambda k: getattr(nets.get(ss.standardize_netkey(k)), 'has_acts', False)
         for tr in self.graph.transmissions:
             for leaf in tr.rate.leaves:
                 raw = getattr(leaf, 'raw', None)
-                if isinstance(raw, dict) and raw and all(bare(v) for v in raw.values()):
+                if isinstance(raw, dict) and raw and all(sc.isnumber(v) for v in raw.values()) and not all(acts(k) for k in raw):
+                    raw = {k:v for k,v in raw.items() if not acts(k)}
                     unit = self.sim.unit_name
                     ss.warn(f'{self.mod.name}.{tr.name}: beta={raw} has numbers with no unit, so they are rates per {unit}, with dt = {self.dt:.3g} {unit}. '
                             f'In Starsim 3, a beta dict of bare numbers was a probability per step: if these came from Starsim 3, give each as one (e.g. ss.prob(..., "month") for monthly steps); '
@@ -887,6 +1042,8 @@ class Engine:
                 init = init.raw
             elif isinstance(init, ss.transitions.Expr): # An expression of parameters, e.g. I0/2
                 init = float(self.eval(init))
+            if isinstance(init, ss.by) and state.people and self.sim.solver == 'abm' and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
+                continue
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
                 sim = self.sim
                 ds, given = init.grid(sim)
@@ -925,12 +1082,18 @@ class Engine:
             init_prev = init_prev.raw if isinstance(init_prev.raw, ss.Dist) else self.value(init_prev)
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
             init_prev = None
-        if init_prev:
+        if isinstance(init_prev, ss.by): # A share for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
+            init_prev = init_prev.per_group(self.sim, self.convert)
+        elif callable(init_prev) and not isinstance(init_prev, ss.Dist): # A function of the sim, giving a share (or one for each group)
+            init_prev = self.call(init_prev)
+        if init_prev is not None and np.any(init_prev):
             if isinstance(init_prev, ss.bernoulli):
-                init_prev = init_prev.pars.p
+                init_prev = self.call(init_prev.pars.p) if callable(init_prev.pars.p) else init_prev.pars.p # A function of the agents raises here: see call_uids()
             elif isinstance(init_prev, ss.choose_n): # A number of people, as Starsim 3 gave it
                 init_prev = init_prev.pars.n
-            if init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
+            if np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
+                raise ss.OutOfBounds(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
+            elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
                 init_prev = init_prev/self.total_pop
             trs = graph.transmissions
             if not trs:
@@ -940,9 +1103,14 @@ class Engine:
             if graph.infectious and not any(state.infectious for state in dst): # e.g. E in an SEIR
                 seeded = sc.strjoin(state.name for state in dst)
                 ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...)', sim=self.sim)
-            ps = self.branch_probs(trs[0])
+            by_group = getattr(self, '_by_group', None)
+            self._by_group = True # The share of each destination in each group, before there are agents to evaluate it for
+            try:
+                ps = self.branch_probs(trs[0])
+            finally:
+                self._by_group = by_group
             for state,p in zip(dst, ps):
-                fracs[state.name] += init_prev*np.mean(p)
+                fracs[state.name] = fracs[state.name] + init_prev*np.asarray(p, dtype=float)
 
         for name,val in list(fracs.items()) + list(counts.items()):
             if not np.all(np.isfinite(val)) or np.any(np.asarray(val) < 0):
@@ -975,26 +1143,35 @@ class Engine:
         return fracs, counts
 
     def seed_dist(self):
-        """ As agents, an init_prev given as `ss.choose_n()` (a number of agents), or as `ss.bernoulli()` with a probability for each agent, chooses who starts infected, as in Starsim 3 """
+        """
+        As agents, an init_prev that chooses who starts infected one by one, as in Starsim 3: `ss.choose_n()` (a number of agents),
+        `ss.bernoulli()` with a probability for each agent, a function of the sim (and the agents), or `ss.by` over a property of people that is not a dimension
+        """
         init_prev = self.graph.init_prev
         if isinstance(init_prev, ss.transitions.par):
             init_prev = init_prev.raw
         trs = self.graph.transmissions
-        if self.sim.solver != 'abm' or not len(trs) or len(trs[0].dst) != 1:
+        if self.sim.solver != 'abm' or not len(trs):
             return None
-        elif isinstance(init_prev, ss.choose_n):
-            return init_prev
+        elif isinstance(init_prev, ss.choose_n): # With several destinations, a number of people shared between them as a fraction is
+            return init_prev if len(trs[0].dst) == 1 else None
         elif isinstance(init_prev, ss.bernoulli) and callable(init_prev.pars.p):
+            return init_prev
+        elif isinstance(init_prev, ss.by) and init_prev.on_people(self.sim):
+            return init_prev
+        elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
             return init_prev
         return None
 
-    def branch_probs(self, tr):
-        """ The probability of each destination of a transition (1 if there is only one) """
+    def branch_probs(self, tr, ps=None):
+        """ The probability of each destination of a transition (1 if there is only one), from its p= or the expressions given for them """
         if not tr.split:
             return [1.0]*len(tr.dst)
-        ps = [None if p is None else self.eval(p) for p in tr.p]
-        rest = 1.0 - sum(p for p in ps if p is not None) - (0.0 if tr.p_stay is None else self.eval(tr.p_stay))
-        return self.dest_shares(tr, [rest if p is None else p for p in ps]) # With ss.stay, what they leave over stays
+        ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
+        if tr.stays: # With ss.stay, what they leave over stays
+            rest = 1.0 - sum(p for p in ps if p is not None) - (0.0 if tr.p_stay is None else self.eval(tr.p_stay))
+            ps = [rest if p is None else p for p in ps]
+        return self.dest_shares(tr, ps)
 
     def eval(self, expr):
         return ss.transitions.evaluate(expr, self)
@@ -1014,6 +1191,8 @@ class Engine:
         for name,tr in graph.transitions.items():
             scale = abm and tr.people
             results += ss.Result(name, dtype=float, scale=scale, label=tr.label or name, kind='flow')
+            for dst in (tr.dst if len(tr.dst or []) > 1 else []): # A flow for each destination, e.g. res.cin.X, whose sum is the total
+                results += ss.Result(f'{name}.{dst.name}', dtype=float, scale=scale, label=f'{tr.label or name} to {dst.label or dst.name}', kind='flow', auto_plot=False)
         taken = list(graph.transitions.keys()) + list(graph.exprs.keys()) + list(graph.outcomes.keys())
         self.standard = bool(graph.transmissions) and mod.standard_results
         if self.standard:
@@ -1052,6 +1231,8 @@ class Engine:
                 dims[f'n_{state.name}'] = self.applies[state.name]
             for name,tr in graph.transitions.items():
                 dims[name] = np.any([self.applies[state.name] for state in tr.src + tr.dst], axis=0)
+                for dst in (tr.dst if len(tr.dst or []) > 1 else []):
+                    dims[f'{name}.{dst.name}'] = dims[name]
             for name in graph.transfers:
                 dims[name] = np.ones(len(names), dtype=bool)
             if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
@@ -1096,8 +1277,8 @@ class Engine:
                 sources = []
                 for base,weight in oc.flows:
                     key = base if isinstance(base, str) else base.name
-                    if key not in graph.transitions and key not in graph.outcomes:
-                        options = list(graph.transitions.keys()) + list(graph.outcomes.keys())
+                    if key not in graph.transitions and key not in graph.outcomes and graph.destination(key) is None:
+                        options = list(graph.transitions.keys()) + list(graph.outcomes.keys()) + graph.destinations()
                         raise ss.UnknownOutcomeSource(f'the source of the outcome "{name}" is not a transition or outcome of "{self.mod.name}" ({key}){trans.did_you_mean(str(key), options)}')
                     sources.append((key, weight))
                 if any(key in todo for key,weight in sources):
@@ -1144,6 +1325,10 @@ class Engine:
         new.init(force=True)
         return np.asarray(new.rvs(n), dtype=float)
 
+    def weighted_events(self, key, weight, integer):
+        """ An outcome's amount by group from the people who went through a transition, each with their own weight; None if they are not known (see `Agents.weighted_events()`) """
+        return None
+
     def step_outcomes(self):
         """ Work out this step's value of each outcome, in each group, from the flows it is counted from """
         res = self.mod.results
@@ -1168,7 +1353,15 @@ class Engine:
             for key,weight in info.sources:
                 flow = flow_of(key)
                 if isinstance(weight, ss.transitions.Expr):
-                    weight = self.eval(weight)
+                    own = self.weighted_events(key, weight, integer)
+                    if own is not None: # Each person's own weight
+                        amount += own
+                        continue
+                    by_group, self._by_group = self._by_group, True # One weight for each group, as the flows are (TL51: as agents, a weight by age crashed)
+                    try:
+                        weight = self.eval(weight)
+                    finally:
+                        self._by_group = by_group
                 if integer and np.all((0 <= weight) & (weight <= 1)): # A fraction of whole events is a draw
                     amount += self.rng.binomial(np.round(flow).astype(int), weight)
                 else:
@@ -1355,6 +1548,10 @@ class StockCtx:
 
     def value(self, p):
         return self.engine.value(p)
+
+    def prop(self, cond):
+        errormsg = f'a result is a sum or ratio of states and flows, which {cond} (a property of each person) is not; for a result by a property, stratify by it (sim.stratify(...)) and use res.<result>.by(...), or count the people it holds for with an analyzer'
+        raise ss.CapabilityError(errormsg)
 
     def stock(self, state):
         """ The number of people (or the count) in a state """

@@ -24,7 +24,8 @@ def test_states(ode=False):
             key = (b.tr, b.key, tuple(b.uids))
             if b.tr in ['miscarriage', 'stillbirth'] and key not in ga.seen:
                 ga.seen.add(key)
-                ga[b.tr] += list((b.key[0] - preg.ti_P[b.uids])*preg.t.dt.weeks) # At the step it happened
+                uids = b.uids[~preg.P.raw[b.uids]] # Not those pregnant again in the same step, whose time of conception is the new one
+                ga[b.tr] += list((b.key[0] - preg.ti_P[uids])*preg.t.dt.weeks) # At the step it happened
         assert not np.any(preg.P & ~sim.people.female), 'only women are pregnant'
 
     abm = ss.Sim(demographics=make(), analyzers=check, n_agents=20_000, stratify=strat, use_aging=False, **kw).run()

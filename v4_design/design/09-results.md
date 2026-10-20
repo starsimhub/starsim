@@ -25,7 +25,8 @@ Nothing was declared. Results live under the module that produced them, `sim.res
 A build MUST generate, for every module with states and transitions:
 
 - `n_<state>` for every state: the number of people in it at each time point;
-- `<transition>` for every named transition: the number of people who made that transition during each step (a flow, not a stock), named exactly as the transition is.
+- `<transition>` for every named transition: the number of people who made that transition during each step (a flow, not a stock), named exactly as the transition is;
+- and `<transition>.<state>` for each destination of a transition with several (`cin = ss.progression('C -> X | R', ...)` gives `cin.X` and `cin.R`): the number who made it and arrived in that state, whose sum is the transition's flow. It is read `res.cin.X` or `res['cin.X']`, and `res.cin.select(to='X')` is the same result; it is kept by group like the total, is a source of an outcome (`ss.outcome(0.8*cin.X)`) and a series in a result expression, and is matched by a data column named `cin.X`. A destination may not be named like an attribute of a result (`cum`, `values`, ...), which raises when the disease is made.
 
 Each flow's running total is `res.<transition>.cum`, a result (a stock) computed when it is asked for, not a second stored series.
 
@@ -34,6 +35,8 @@ Results follow the convention of other modeling frameworks, under every solver: 
 A flow has one name, the transition's, which matches the model text, `ss.modify()` targets, `ss.outcome()`, and data columns. Starsim's standard disease results are kept under their existing names on the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` (or any disease class with `standard_results = True`), so code written for Starsim carries over: for a disease with transmission, `new_infections` is the total flow through its transmission transitions, `cum_infections` its running total, and `prevalence` the fraction of the population in its infected states. A disease declared with `ss.Disease(...)` does not have them; a result declared under one of these names gives it one (e.g. `prevalence = I / N`). A data column called `new_infections` is matched to the flow of the transmission of a declared disease that has one, so Starsim data files still line up.
 
 A state that is not people (a water reservoir, a mosquito population; [03-states-and-transitions.md](03-states-and-transitions.md)) gets the same results: `n_W` is the count it holds.
+
+A family of diseases (`ss.Strains`, [05-dimensions.md](05-dimensions.md#strain)) has results made from its members' results of the same name: for a state or a named sum of states that every member has (a stock), the number in it in at least one member, a union that counts each person once (`sim.results.hpv.infected` is the number infected with any genotype, where a sum would count the co-infected twice); for a transition (or outcome) that every member has (a flow), the sum, since each event belongs to one member (`sim.results.hpv.cancer`). `res.by('<family>')` gives each member's own result (`sim.results.hpv.infected.by('hpv')`). The members keep their own results (`sim.results.hpv16.infected`). An outcome over unrelated diseases is still not declared.
 
 `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases, so their results are named after their states (`sim.results.sir.n_I`, not Starsim 3's `n_infected`), with the three standard results above added. Starsim 3's versions, written as code (`ssl.AgentSIR` and the others), keep Starsim 3's names.
 
@@ -146,7 +149,7 @@ An outcome is a shortcut for an observation process that the model does not repr
 | The situation | Use |
 |---|---|
 | Testing and reporting are not in the model: "about half of infections are reported, five days later" | An outcome |
-| Testing is modeled, by one or more interventions | The interventions' own results. Each testing intervention reports the diagnoses it made, and reported cases are their sum: `cases = symptomatic_testing.diagnosed + screening.diagnosed` |
+| Testing is modeled, by one or more interventions | The interventions' own results. Each testing intervention reports the diagnoses it made, and reported cases are their sum: `cases = symptomatic_testing.positive + screening.positive` |
 | Being counted changes what happens to the person (hospitalized people are isolated and stop transmitting) | A state, with transitions in and out |
 
 So an outcome never competes with a testing intervention over who produces `cases`: if the model has tests, the tests produce the cases ([08-interventions.md](08-interventions.md)), and `ss.outcome` is not used for them.
@@ -162,7 +165,7 @@ sim = ss.Sim(sir, data='kenya_2020.csv', start='2020-01-01', stop='2020-12-31').
 sim.plot()
 ```
 
-- `data=` takes a file name, a data frame, or an `ss.data(...)` object (below). It has a time column (`date`, `year`, `t`, or `time`) and one column per data series, **named like the result it corresponds to** (`cases`, `deaths`, `prevalence`). With several modules, a column is matched to the one module that has a result of that name, or is written `sir.cases` when the name is ambiguous. This works the same for modules written as code (Starsim 3's diseases among them), so it is a way into fitting for a Starsim 3 model.
+- `data=` takes a file name, a data frame, or an `ss.data(...)` object (below). It has a time column (`date`, `year`, `t`, or `time`) and one column per data series, **named like the result it corresponds to** (`cases`, `deaths`, `prevalence`, or `cin.X` for the flow to one destination of a transition). With several modules, a column is matched to the one module that has a result of that name, or is written `sir.cases` when the name is ambiguous. This works the same for modules written as code (Starsim 3's diseases among them), so it is a way into fitting for a Starsim 3 model.
 - A column that matches no result is an error (`UnknownDataColumn`) that lists the result names closest to it, so a typo in a header is caught. `ss.data(..., ignore_extra=True)` drops such columns instead. Data entirely outside the simulated period raises `DataMisaligned` when it is compared with the results (by `sim.calibrate()`, for instance); data partly outside is used where it overlaps.
 - Data for particular strata is given in long form: extra columns named after dimensions (`age`, `patch`) say which stratum each row belongs to, by the level's label (or position). Each result and stratum is then one data series, named like `cases[age=0-14]` and compared with `cases.select(age='0-14')`; a likelihood or weight given for `cases` applies to every stratum of it.
 - The data need not be on the model's time step. A flow (weekly reported cases) is compared with the model's flow summed over each data interval; a stock or ratio (a prevalence survey) is compared with the model's value at the data's time. The result already knows which it is. The interval assumed for flow data is the spacing of the data.

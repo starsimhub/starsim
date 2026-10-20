@@ -77,7 +77,7 @@ sir = ss.SIR(
 )
 
 # Intervention: close schools from day 50 to day 80
-children = ss.People.age < 20
+children = ss.ppl.age < 20
 closure = dict(multiply=0.5, where=children, start=ss.days(50), stop=ss.days(80))
 close_schools = [
     ss.modify(sir.rel_sus, **closure),

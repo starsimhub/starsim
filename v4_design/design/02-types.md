@@ -13,6 +13,8 @@ Justified by [best-practices/time-and-units.md](../best-practices/time-and-units
 | `ss.prob` | probability per period | the chance of an event within a period | `ss.probperday`, `ss.probperweek`, `ss.probpermonth`, `ss.probperyear` (the same as `ss.prob(0.1, 'day')` and so on) |
 | `ss.freq` | time⁻¹ | an expected number of events per unit time | `ss.freqperday`, `ss.freqperweek`, `ss.freqpermonth`, `ss.freqperyear` |
 
+One more value type is not a time value: **`ss.peract(p)`**, a probability per act, for a transmission over a network that defines acts (`ss.MFNet`, `ss.PartnerNet(acts=...)`). It has no unit and no conversion, so it means the same at any step: a partnership with `a` acts per unit time transmits over a step with probability `1 − (1 − p)^(a·dt)`. It takes one value, or one for each of the network's directions (`ss.peract(m2f=0.3, f2m=0.15)`; see [06-routes.md](06-routes.md#beta-per-route-and-direction)); each value is a number in [0, 1] (else `OutOfBounds`), an `ss.par` or an expression of them, an `ss.timeseries`, or an `ss.by`. A typed rate inside it raises `WrongDimension`.
+
 `ss.per`, `ss.prob`, and `ss.freq` share the base class `ss.Rate`; all four types share `ss.TimePar`. `ss.per` is the hazard type and keeps its Starsim name. A typed value needs its unit: `ss.dur(3)` and `ss.per(2)` with no unit raise (they were years in Starsim 3).
 
 `ss.per` and `ss.freq` have the same dimension and are different types. A hazard is the parameter of an exponential clock and converts to a per-step probability by `1 − exp(−r·dt)`; a frequency is an expected count and converts by `f·dt`. Mixing them up is a common quiet error, so adding one to the other raises `IncompatibleTypes`, as Starsim does today.
@@ -21,7 +23,7 @@ The difference is only in that conversion, which a module written as code asks f
 
 `ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days.
 
-Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)).
+Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)). `P.dwell`, the time each person has spent in a state, is a number in the sim's unit, as a bare number returned by a function is.
 
 ## Conversion
 
@@ -54,7 +56,7 @@ Starsim's rules, summarized:
 | `per` | `×` | `dur` | number | the probability of at least one event over the period, `1 − exp(−r·d)`: `ss.perday(0.1) * ss.days(3)` is 0.259 |
 | `freq` | `×` | `dur` | number | an expected count, `f·d`: `ss.freqperday(0.1) * ss.days(3)` is 0.3 |
 | `prob` | `+` `−` | `prob` | `prob` | through the underlying rates, as competing hazards: `ss.prob(0.1, 'day') + ss.prob(0.1, 'day')` is 0.19 per day, the same as `2 * ss.prob(0.1, 'day')` |
-| `prob` | `×` `÷` | number | `prob` | scales the underlying rate |
+| `prob` | `×` `÷` | number | `prob` | scales the underlying rate, not the probability: `ss.probperyear(0.8) * 0.2` is 0.275 a year, not 0.16 (a relative risk on a probability is a relative risk on its hazard). A probability of 1 is an infinite rate and stays 1; as the rate of a transition it raises, since no solver can step it |
 | `prob` | `×` | `dur` | number | the probability over the period |
 | rate | `÷` | rate of the same kind | number | |
 | number | `÷` | `dur` | `per` | `1 / ss.days(10)` is `ss.perday(0.1)` |

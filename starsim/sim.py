@@ -2,6 +2,8 @@
 Define core Sim classes
 """
 import os
+import types
+from dis import get_instructions
 import inspect
 import itertools
 import numpy as np
@@ -98,7 +100,7 @@ class Sim(ss.Base):
         if positional:
             modules = sc.mergelists(*positional, modules)
         self._name_modules(ss.utils.getframe(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
-        interventions = self._add_followups(interventions)
+        interventions = self._add_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
         if isinstance(pars, (str, os.PathLike)): # A file of values by name
@@ -114,6 +116,8 @@ class Sim(ss.Base):
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
+        if copy_inputs:
+            remap_closures(args, input_pars)
         self.pars.update(input_pars)  # Update the parameters
         self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
@@ -160,7 +164,7 @@ class Sim(ss.Base):
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:
-                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet)) else []
+                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet, ss.cascade)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
                     if obj is not None and obj._default_name:
@@ -172,42 +176,19 @@ class Sim(ss.Base):
                             obj._default_name = False
                 if isinstance(mod, ss.Delivery):
                     mod.name_product()
-                    mods += [f for f in mod.followups if not any(f is other for other in mods)] # A follow-up (on_positive=) is named from its variable too
         return
 
     @staticmethod
-    def _add_followups(interventions):
-        """ A delivery that is the follow-up of another (on_positive=, on_negative=) is a module of its own, so is added to the list """
-        if not any(isinstance(mod, ss.Delivery) for mod in sc.tolist(interventions)):
+    def _add_steps(interventions):
+        """ The steps of a cascade are modules of their own, so are added to the list (before it); and the deliveries run in the order of their triggers (see `ss.interventions.order_steps()`) """
+        if not any(isinstance(mod, (ss.Delivery, ss.cascade)) for mod in sc.tolist(interventions)):
             return interventions
         out = []
-        def add(mod, parent=None, suffix=None):
-            if any(mod is other for other in out):
-                return
-            if parent is not None:
-                mod.triggered = True
-                mod.parent = parent
-                if mod._default_name:
-                    mod.name = mod.label = f'{parent.name}_{suffix}'
-                    mod._default_name = False
-            cap = getattr(mod, 'capacity', None)
-            if isinstance(cap, ss.Capacity) and not any(cap is other for other in out): # A shared capacity runs just before the first delivery that uses it
-                out.append(cap)
-            out.append(mod)
-            if isinstance(mod, ss.Delivery):
-                slots = [(key, getattr(mod, key if key == 'then' else f'on_{key}')) for key in ['positive', 'negative', 'then']] + list((mod.on_result or {}).items())
-                for key,children in slots:
-                    children = sc.tolist(children)
-                    for i,child in enumerate(children):
-                        if isinstance(child, ss.Delivery):
-                            add(child, mod, key if len(children) == 1 else f'{key}{i+1}')
-                fail = getattr(mod.product, 'on_fail', None) # What happens to people a treatment did not cure
-                if isinstance(fail, ss.Delivery):
-                    add(fail, mod, 'fail')
-            return
         for mod in sc.tolist(interventions):
-            add(mod)
-        return out
+            for m in (mod.steps if isinstance(mod, ss.cascade) else []) + [mod]:
+                if not any(m is other for other in out):
+                    out.append(m)
+        return ss.interventions.order_steps(out)
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -281,15 +262,19 @@ class Sim(ss.Base):
     def modules(self):
         """
         Return an iterator over all Module instances (stored in standard places) in the Sim
+
+        This is the order they are initialized in: custom modules come after the others they
+        may read (TL54: a custom module came first, so it read a demography's properties before
+        they were set), and before the analyzers. Their step() still runs first: see `ss.Loop`.
         """
         for module in itertools.chain(
-            self.custom(),
             self.demographics(),
             self.connectors(),
             self.networks(),
             self.interventions(),
             self.products(),
             self.diseases(),
+            self.custom(),
             self.analyzers(),
             ):
             yield module
@@ -319,6 +304,9 @@ class Sim(ss.Base):
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
+        for mod in self.pars.diseases.values(): # A state that only a delivery moves people into is not where they start
+            if getattr(mod, 'graph', None) is not None:
+                mod.graph.delivered_to([d.move_states[1] for d in self.pars.interventions.values() if isinstance(d, ss.Delivery) and d.move_states is not None and d.disease in [None, mod.name]])
         self._init_solver() # Choose the unit and the solver
         self._init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
@@ -802,6 +790,9 @@ class Sim(ss.Base):
             unit, source = base(durs[0]), 'start and stop'
         elif years:
             unit, source = 'year', 'start and stop years'
+        if years and pars.unit is None and unit not in [None, 'year'] and sc.isnumber(pars.dt) and not isinstance(pars.dt, bool): # A bare step beside calendar years is in years, as start and stop are
+            ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.UnitInferred)
+            pars.dt = ss.years(pars.dt)
         self.unit = unit
         self.unit_source = source
         self.unit_base = unit or 'day' # With no unit, the arithmetic is done in days, but the times have no dates (see ss.Timeline.datevec) and are said to be steps
@@ -871,7 +862,7 @@ class Sim(ss.Base):
             else:
                 add('unit', self.unit, f'from {self.unit_source}' if self.unit_source else None)
             for strat in self.groups.strats: # Each dimension: its levels, the states it applies to, and what it generates
-                text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
+                text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}' if strat.coarse is None else f'{strat.name} ({strat.kind}): {sc.strjoin(strat.coarse_labels)}, kept as {strat.n} levels of a step each'
                 text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
@@ -882,6 +873,9 @@ class Sim(ss.Base):
                 elif strat.kind == 'age':
                     text += f'; split as the population of {named.place}' if getattr(strat, 'split_from', None) == 'people' else ''
                     text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if self.unit is None else '; people age between the groups'
+                text += self.groups.moved_by(strat)
+                if strat.name in getattr(self.groups, 'kept', set()):
+                    text += f'; people.{strat.attr}, from the people given'
                 guesses = list(strat.guessed.values())
                 if strat.kind == 'age' and 'use_aging' not in self.given:
                     guesses.append('aging, since people are born or die' if pars.use_aging else 'no aging, since nobody is born or dies')
@@ -890,7 +884,7 @@ class Sim(ss.Base):
                 sizes = [self.groups.strats[self.groups.dim_index(name)].n for name in crossing.names]
                 add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} compartments of people in each group', 'a condition in one refers to a state of another')
         for mod in mods:
-            if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
+            if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains)): # A family after its members
                 lines += ['', mod.describe(output=True)]
         if self.declared:
             lines.append('')
@@ -908,6 +902,8 @@ class Sim(ss.Base):
                     add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
                 elif isinstance(mod, ss.Delivery):
                     add('delivery', mod.describe())
+                elif isinstance(mod, ss.cascade):
+                    add('cascade', mod.describe())
             for mod in self.declared:
                 names = [f'n_{name}' for name in mod.graph.states]
                 extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
@@ -1124,7 +1120,7 @@ class Sim(ss.Base):
         def modspec(mod):
             if getattr(mod, 'graph', None) is not None:
                 return mod.to_spec()
-            if isinstance(mod, (ss.modify, ss.Delivery)):
+            if isinstance(mod, (ss.modify, ss.Delivery, ss.cascade)):
                 return mod.to_json()
             out = sc.objdict(type=type(mod).__name__, name=mod.name, label=mod.label)
             ref = getattr(mod, 'ref', None)
@@ -1135,6 +1131,8 @@ class Sim(ss.Base):
                 out.pars = {k:parspec(v) for k,v in mod.pars.items()}
             if getattr(mod, 'dims', None) is not None: # A matrix over each of the model's stratifications, from ss.contacts(); only then, so that the hash of every other model is as it was
                 out.contacts = {dim:mat.tolist() for dim,mat in mod.dims.items()}
+            elif getattr(mod, 'full', None) is not None: # One matrix over several stratifications together
+                out.contacts = dict(matrix=mod.full.matrix.tolist(), dims=mod.full.dims)
             elif getattr(mod, 'bands', None) is not None: # A matrix with its own age bands
                 out.contacts = dict(matrix=mod.pars.n_contacts.T.tolist(), bands=mod.bands)
             return out
@@ -1380,7 +1378,12 @@ class Sim(ss.Base):
                 kwargs['age_data'] = ss.named.age_data(*self.pyramid())
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
         elif self.solver == 'abm':
+            self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
+                if strat.name in self.groups.kept and strat.split_given:
+                    raise ss.BadSplit(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
+                if strat.name in self.groups.kept:
+                    strat.guessed.pop('split', None) # Not "everyone at the first level" (TL3): the people's own values are used
                 if strat.attr not in people.states:
                     state = strat.people_arr()
                     people.states.append(state)
@@ -1576,7 +1579,7 @@ class Sim(ss.Base):
     def _init_rescale(self):
         """ Check that the diseases support dynamic rescaling, and create the distribution for it """
         for disease in self.diseases():
-            if disease.graph is None and not hasattr(disease, 'ti_infected'):
+            if disease.graph is None and not hasattr(disease, 'ti_infected') and not isinstance(disease, ss.Strains):
                 errormsg = f'Dynamic rescaling (rescale=True) requires each disease written as code to have a ti_infected state, but "{disease.name}" does not'
                 raise ValueError(errormsg)
         self.rng_rescale = ss.choose_n(name='rng_rescale') # Choose who to make naive when rescaling
@@ -2369,6 +2372,93 @@ class Sim(ss.Base):
             kwargs['num'] = plotlabel
         title = self.label if show_label in ['title', 'suptitle'] else None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, title=title, show_skipped=show_skipped, show_module=show_module, n_ticks=n_ticks, annualize=annualize, **kwargs)
+
+
+def remap_closures(given, copies):
+    """
+    Point the functions that the copied modules hold at the sim's copies of the modules they close over (TL35)
+
+    A sim copies the modules it is given, and a bound method is copied with its module, but a
+    function is not copied: a closure from a factory method (`hs.serve()`), or a lambda naming
+    a module in the function it was written in, would read the module that was passed in, which
+    never runs. Their closures are remade with the copies. A function that names a module as a
+    global cannot be remade, so it is warned about.
+
+    Args:
+        given (dict): the modules as they were given, by argument (e.g. `interventions=[...]`)
+        copies (dict): the same, as copied
+    """
+    mapping = dict()
+    where = dict() # Where the sim keeps each, for the warning
+    for key,val in given.items():
+        for orig,copy in zip(sc.tolist(val), sc.tolist(copies.get(key))):
+            if isinstance(orig, (ss.Module, ss.People)) and orig is not copy:
+                mapping[id(orig)] = copy
+                where[id(orig)] = 'sim.people' if key == 'people' else f'sim.{key}.{getattr(copy, "name", None) or "<name>"}'
+    if not mapping:
+        return
+    seen = set()
+
+    def remap(fn):
+        """ The function with its closure pointed at the copies, or None if it needs no change """
+        if fn.__closure__ is None:
+            names = {ins.argval for ins in get_instructions(fn) if ins.opname in ['LOAD_GLOBAL', 'LOAD_NAME']} # Not attributes, which co_names also has
+            names = [name for name in names if id(fn.__globals__.get(name)) in mapping]
+            if names:
+                ss.warn(f'the function "{fn.__qualname__}" reads {sc.strjoin(names)} as a global, which is the module passed to the sim, not the copy the sim runs; look it up from the sim instead (e.g. {where[id(fn.__globals__[names[0]])]})')
+            return None
+        cells = []
+        changed = False
+        for cell in fn.__closure__:
+            try:
+                val = cell.cell_contents
+            except ValueError: # An empty cell
+                cells.append(cell)
+                continue
+            new = mapping.get(id(val))
+            if new is None and isinstance(val, types.FunctionType) and id(val) not in seen:
+                seen.add(id(val))
+                new = remap(val)
+            if new is not None:
+                changed = True
+                cells.append(types.CellType(new))
+            else:
+                cells.append(cell)
+        if not changed:
+            return None
+        out = types.FunctionType(fn.__code__, fn.__globals__, fn.__name__, fn.__defaults__, tuple(cells))
+        out.__kwdefaults__ = fn.__kwdefaults__
+        out.__dict__.update(fn.__dict__)
+        return out
+
+    def walk(obj, depth=0):
+        """ Replace the functions held in an object, its parameters, and the containers in them """
+        if depth > 4 or id(obj) in seen:
+            return
+        seen.add(id(obj))
+        if isinstance(obj, dict):
+            items = list(obj.items())
+            setter = lambda k, v: dict.__setitem__(obj, k, v)
+        elif isinstance(obj, list):
+            items = list(enumerate(obj))
+            setter = obj.__setitem__
+        elif type(obj).__module__.startswith('starsim') and hasattr(obj, '__dict__'):
+            items = list(vars(obj).items())
+            setter = lambda k, v: obj.__dict__.__setitem__(k, v)
+        else:
+            return
+        for k,v in items:
+            if isinstance(v, types.FunctionType):
+                new = remap(v)
+                if new is not None:
+                    setter(k, new)
+            else:
+                walk(v, depth+1)
+        return
+
+    for copy in mapping.values():
+        walk(copy)
+    return
 
 
 class AlreadyRunError(RuntimeError):

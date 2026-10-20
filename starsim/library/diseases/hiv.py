@@ -27,7 +27,6 @@ class HIV(ss.Infection):
         cd4_min (float):        CD4 count approached by untreated agents
         cd4_max (float):        CD4 count approached by agents on ART
         cd4_rate (float):       number of timesteps to close the CD4 gap
-        eff_condoms (float):    efficacy of condoms (not currently used internally)
         art_efficacy (float):   proportional reduction in transmission on ART
         init_prev (Dist):       initial prevalence
         death_dist (Dist):      death probability, by default CD4-modulated `p_death`
@@ -60,7 +59,6 @@ class HIV(ss.Infection):
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
-            eff_condoms = 0.7,
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
@@ -96,7 +94,7 @@ class HIV(ss.Infection):
         can_die = self.infected.uids
         hiv_deaths = self.pars.death_dist.filter(can_die)
 
-        people.request_death(hiv_deaths)
+        people.request_death(hiv_deaths, cause=self)
         self.ti_dead[hiv_deaths] = self.ti
         return
 

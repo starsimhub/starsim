@@ -70,6 +70,7 @@ fields = [
     'tgt_comp',   # The compartment
     'tgt_w',      # The share that goes there, by group
     'tgt_map',    # The map to the groups they land in, or -1
+    'tgt_rec',    # The flow to a destination of a transition with several that it is also counted in (in the group they leave), or -1
     'crd_starts', # The same for the transitions that a flow is also counted as
     'crd_index',
     'crd_w',
@@ -215,12 +216,15 @@ def land(rng, n, m, maps, out):
 
 
 @jit
-def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch):
-    """ Share n whole events between the targets of a flow (or the transitions it is also counted as), at random """
+def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, counted):
+    """ Share n whole events between the targets of a flow (or the transitions it is also counted as), at random; a target's share is also counted in the flow to its destination (rec, in counted), if it has one """
     ng = len(n)
     total, left, drawn = scratch[0], scratch[1], scratch[2]
     if b - a == 1 and weights[a].min() >= 1 - 1e-12:
         land(rng, n, -1 if credit else which[a], maps, out[comps[a]])
+        if not credit and rec[a] >= 0:
+            for g in range(ng):
+                counted[rec[a], g] += n[g]
     elif b > a:
         whole = True
         for g in range(ng):
@@ -235,8 +239,14 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch):
                 left[g] -= drawn[g]
                 total[g] -= weights[k, g]
             land(rng, drawn, -1 if credit else which[k], maps, out[comps[k]])
+            if not credit and rec[k] >= 0:
+                for g in range(ng):
+                    counted[rec[k], g] += drawn[g]
         if not credit and whole and left.max() > 0: # Rounding only
             land(rng, left, which[b-1], maps, out[comps[b-1]])
+            if rec[b-1] >= 0:
+                for g in range(ng):
+                    counted[rec[b-1], g] += left[g]
     return
 
 
@@ -319,13 +329,13 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
             left[g] -= n[g]
         if p.named[f]:
             land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
-        split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
+        split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
     f = p.src_last[s] # The last stage
     if p.named[f]:
         land(rng, ends, p.record[f], p.maps, flows[p.index[f]])
-    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
-    split(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
+    split(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
     return
 
 
@@ -381,13 +391,13 @@ def draw(rng, y, p, w, dt, flows, tau):
             elif p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
             t = p.tgt_starts[f]
-            if p.tgt_starts[f+1] == t + 1 and p.tgt_map[t] < 0 and p.tgt_w[t].min() >= 1 - 1e-12: # Everyone to one compartment, in the same group
+            if p.tgt_starts[f+1] == t + 1 and p.tgt_map[t] < 0 and p.tgt_rec[t] < 0 and p.tgt_w[t].min() >= 1 - 1e-12: # Everyone to one compartment, in the same group
                 for g in range(ng):
                     new[p.tgt_comp[t], g] += n[g]
             else:
-                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups)
+                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
             if p.crd_starts[f+1] > p.crd_starts[f]:
-                split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+                split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
     for m in range(p.n_movers): # Movement between groups: as move() does, but written out, since a call here (once a leap) slows tau-leaping by a few percent
         for e in range(p.mov_starts[1, m], p.mov_starts[1, m+1]):
             if p.mov_rate[e] != 0:
@@ -578,6 +588,8 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
                 cum += p.tgt_w[k, where]
                 if u*tot < cum or k == kb - 1:
                     y[p.tgt_comp[k], where] += 1
+                    if p.tgt_rec[k] >= 0:
+                        flows[p.tgt_rec[k], where] += 1
                     break
             z += golden
             u = uniform(z) # The transitions it also counts as (immediate branches)
@@ -882,6 +894,8 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             n_keys = add_key(keys, n_keys, (cf_flows[kk] << gbits) | j)
                             fresh[(cf_flows[kk] << gbits) | j] = False
                     y[c, where] += 1
+                    if p.tgt_rec[k] >= 0:
+                        flows[p.tgt_rec[k], where] += 1
                     break
             z += golden
             u = uniform(z)
@@ -1022,6 +1036,8 @@ def settle(y, p, rates, dt, flows):
                         for j in range(ng):
                             kf[stage, p.index[f], j] += amount*p.maps[p.record[f], g, j]
                 for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                    if p.tgt_rec[t] >= 0:
+                        kf[stage, p.tgt_rec[t], g] += amount*p.tgt_w[t, g]
                     if p.tgt_map[t] < 0:
                         k[stage, p.tgt_comp[t], g] += amount*p.tgt_w[t, g]
                     else:
@@ -1112,8 +1128,8 @@ def event(rng, y, p, w, dt, flows):
         y[p.src[which], where] -= 1
     if p.named[which]:
         land(rng, n, p.record[which], p.maps, flows[p.index[which]])
-    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups)
-    split(rng, n, p.crd_starts[which], p.crd_starts[which+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
+    split(rng, n, p.crd_starts[which], p.crd_starts[which+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
     return wait
 
 
@@ -1546,6 +1562,8 @@ def gillespie_groups(rng, y, p, dt, flows):
         if k >= 0:
             chc[nch], chd[nch] = p.tgt_comp[k], 1.0
             nch += 1
+            if p.tgt_rec[k] >= 0:
+                flows[p.tgt_rec[k], g] += 1
         k = pick(rng, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, g, False)
         if k >= 0:
             flows[p.crd_index[k], g] += 1
@@ -1782,8 +1800,8 @@ def convey(rng, y, p, w, flows, release):
                     idle[p.places[g]] = 0
             if p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups) # Not the last target, which is the slot they leave
-            split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups)
+            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows) # Not the last target, which is the slot they leave
+            split(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_w, True, flows, p.crd_index, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
         else:
             for g in range(ng):
                 for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, by rounding, in the ODE)
@@ -2229,6 +2247,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                 for j in range(ng):
                                     df[stage, p.index[f], j] += amount*p.maps[p.record[f], g, j]
                         for k in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                            if p.tgt_rec[k] >= 0:
+                                df[stage, p.tgt_rec[k], g] += amount*p.tgt_w[k, g]
                             if p.tgt_map[k] < 0:
                                 dy[stage, p.tgt_comp[k], g] += amount*p.tgt_w[k, g]
                             else:
@@ -2386,9 +2406,10 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
         if not sh.due[k, ti]:
             continue
         for c in range(nc):
+            before = y[c].copy() # Each group's people as they were, so nobody moved into a group is moved on again (a counter up a level)
             for g in range(ng):
                 e = sh.sel[k, c, g]
-                n = y[c, g]
+                n = before[g]
                 if e <= 0 or n <= 0:
                     continue
                 p = sh.cov[k, c, g]

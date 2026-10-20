@@ -56,7 +56,9 @@ class Presentation:
 
         for name,tr in self.transitions.items():
             if tr.contact:
-                source = ' + '.join(s.name for s in tr.terms)
+                leaf = beta_leaf(tr)
+                weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (source=dict(...))
+                source = ' + '.join(f'{weight(coef)}{s.name}' for s,coef in tr.terms.items())
                 guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([tr.guessed['source']] if 'source' in tr.guessed else []), sep='; ')
                 add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
                 for leaf in tr.rate.leaves:
@@ -70,6 +72,8 @@ class Presentation:
                     add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'exposure through the contact matrices')
                 else:
                     add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'exposure through the networks')
+                for text in (route_lines(mod, tr, sim) if sim is not None else []):
+                    add('', text)
             elif tr.trigger is not None:
                 add(name, f'{tr.arrow}   on {getattr(tr.trigger.x, "__name__", tr.trigger.x)} ({"when it happens" if tr.trigger.event else "as soon as it holds"}, in the same step)')
             elif tr.undriven:
@@ -109,10 +113,18 @@ class Presentation:
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
+                slots = getattr(engine, 'n_slots', {}).get(tr.src[0].name) if name in self.dwell_trs else None # Under compartments, followed by the time in the state
+                at_exit = f'decided as people leave, from their time in {tr.src[0].name}' + (f'; {slots + 2} compartments by time in state' if slots else '') if name in self.dwell_trs else None
+                ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis, or a function giving a row, is one entry
+                rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
+                how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]
+                how += [f'a row, one column for each of {sc.strjoin(d.name for d in tr.dst)}, normalized'] if any(isinstance(p, ss.expressions.Column) for p in tr.p) else []
                 stays = [] if not tr.stays else ['stay: ' + ('the rest' if tr.p_stay is None else format_expr(tr.p_stay, values=True))]
-                add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in tr.p] + stays)}')
+                add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in ps] + stays)}', '; '.join(how) or at_exit)
             elif 'p' in tr.guessed:
                 add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
+            if tr.dst is not None and len(tr.dst) > 1: # A result for each destination, e.g. res.cin.X
+                add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{d.name}' for d in tr.dst]))
             for key,what in [('after', 'not before'), ('before', 'only before')]: # A minimum stay, or a limit
                 if getattr(tr, key, None) is not None:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
@@ -357,7 +369,8 @@ class Presentation:
                 entry.dur = dict(dist='expon', rate=['par', tr.rate.name])
             elif tr.rate is not None:
                 entry.rate = format_expr(tr.rate, exact=True)
-            entry.p = None if tr.p is None else [None if p is None else format_expr(p, exact=True) for p in tr.p]
+            ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry (see Graph.expand_rows())
+            entry.p = None if ps is None else [None if p is None else format_expr(p, exact=True) for p in ps]
             entry.stages = tr.stages
             entry.label = tr.label
             if tr.migration: # Only when set, so that other specs are unchanged
@@ -367,8 +380,27 @@ class Presentation:
                     entry[key] = quantity_json(getattr(tr, key), 'dur', unit)
             if getattr(tr, 'acquisition_given', None) is not None: # Likewise
                 entry.acquisition = bool(tr.acquisition_given)
+            if getattr(tr, 'move_given', None): # Likewise
+                entry.move = {k:quantity_json(v, None, unit) for k,v in tr.move_given.items()}
+            if getattr(tr, 'increment', None):
+                entry.increment = dict(tr.increment)
             transitions.append(entry)
         out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
+        per_act = [] # Betas read as probabilities per act, which the spec says were guessed
+        nets = {ss.standardize_netkey(k):net for k,net in sim.all_networks().items()} if sim is not None and hasattr(sim, 'all_networks') else {}
+        acts = lambda key: getattr(nets.get(ss.standardize_netkey(key)), 'has_acts', False)
+        for name,tr in self.transitions.items(): # A bare number on a network with acts is a probability per act, written as one, so the spec is read the same without the network
+            leaf = beta_leaf(tr) if tr.contact else None
+            spec = next((p for p in out.pars if leaf is not None and p['name'] == leaf.name), None)
+            if spec is None or not nets:
+                continue
+            raw = leaf.raw
+            if isinstance(raw, dict) and any(sc.isnumber(v) and acts(k) for k,v in raw.items()):
+                spec['value'] = {k:(dict(type='peract', value=float(v)) if sc.isnumber(v) and acts(k) else spec['value'][k]) for k,v in raw.items()}
+                per_act.append(f'transitions.{name}.beta')
+            elif sc.isnumber(raw) and all(acts(k) for k in nets):
+                spec['value'] = dict(type='peract', value=float(raw))
+                per_act.append(f'transitions.{name}.beta')
         out.transitions = transitions
         out.stratifications = [sc.dcp(s.spec) for s in self.strats]
         results = [dict(name=name, type='result', source=format_expr(expr, exact=True)) for name,expr in self.exprs.items()]
@@ -377,7 +409,7 @@ class Presentation:
         out.functions = sorted([dict(name=name, source=func_source(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
         if self.transfers: # Likewise
             expr = lambda e: None if e is None else format_expr(e, exact=True)
-            out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label) for name,tf in self.transfers.items()]
+            out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, **({} if tf.increment is None else dict(increment=tf.increment))) for name,tf in self.transfers.items()]
         if self.updates: # Only when there are any, so that other specs are unchanged
             out.updates = [dict(name=name, state=self.updates[name].state.name, value=format_expr(self.updates[name].value, exact=True)) for name in sorted(self.updates.keys())]
         guessed = list(self.guessed.keys())
@@ -385,7 +417,7 @@ class Presentation:
             guessed += [f'states.{name}.{key}' for key in state.guessed.keys()]
         for name,tr in self.transitions.items():
             guessed += [f'transitions.{name}.{key}' for key in tr.guessed.keys()]
-        out.guessed = sorted(guessed)
+        out.guessed = sorted(guessed + per_act)
         return out
 
 
@@ -407,6 +439,60 @@ def quantity_str(raw, kind, unit):
     elif sc.isnumber(raw) and kind == 'dur':
         return f'{raw:n} {unit}{"s" if raw != 1 else ""}'
     return value_str(raw) # A plain number, e.g. one factor of a rate
+
+
+def beta_leaf(tr):
+    """ The parameter of a transmission that is its beta: a beta for each route, a probability per act, or the factor of the rate in the beta slot """
+    leaves = [leaf for leaf in tr.rate.leaves if isinstance(leaf, par)]
+    return next((leaf for leaf in leaves if isinstance(leaf.raw, (dict, ss.peract))), next((leaf for leaf in leaves if leaf.slot == 'rate'), None))
+
+
+def route_beta(raw, net):
+    """ The value of a beta on one route """
+    if isinstance(raw, dict):
+        keys = {ss.standardize_netkey(k):v for k,v in raw.items()}
+        return keys.get(ss.standardize_netkey(net.name))
+    return raw
+
+
+def route_lines(mod, tr, sim):
+    """
+    For describe(): how each route reads a transmission's beta (per act on a network with acts, in each of its directions,
+    with the network's acts; per contact on any other), and the modifiers of the transmission on that route
+    """
+    leaf = beta_leaf(tr)
+    nets = sim.all_networks() if hasattr(sim, 'all_networks') else {}
+    if leaf is None or not nets:
+        return []
+    unit = sim.unit_name
+    lines = []
+    for name,net in nets.items():
+        val = route_beta(leaf.raw, net)
+        if val is None:
+            continue
+        if getattr(net, 'has_acts', False):
+            dirs = net.directions
+            if isinstance(val, ss.peract) and val.value is None:
+                values = ', '.join(f'{d} {value_str(v)}' for d,v in zip(dirs, val.resolve(net)))
+            else:
+                number = val.value if isinstance(val, ss.peract) else val
+                values = (f'{value_str(number)}' + (f', in every direction ({sc.strjoin(dirs)})' if dirs else '')) if isinstance(val, ss.peract) else f'{value_str(number)} (a bare number on a network with acts)'
+            sides = f" ({net.name}'s {net.sides_str()})" if dirs else ''
+            lines.append(f'beta on {name}: per act, {values}{sides}')
+            acts = net.pars.get('acts')
+            if getattr(net, 'one_off', False):
+                lines.append(f'    acts {value_str(acts) if acts is not None else 1} per contact; contacts are one-off')
+            elif isinstance(acts, ss.Rate):
+                lines.append(f'    acts {quantity_str(acts, None, unit)} in each partnership')
+            elif acts is not None:
+                lines.append(f'    acts per unit time in each partnership ~ {acts}, drawn once for each')
+        else:
+            lines.append(f'beta on {name}: {quantity_str(val, "rate", unit) if not isinstance(val, ss.peract) else val} per contact')
+        for m in sim.modifiers.get((mod.name, 'route', f'{tr.name}@{name}'), []) if hasattr(sim, 'modifiers') else []:
+            share = value_str(m.share) if m.share is not None else None
+            factor = f'× (1 − {share} × efficacy {value_str(m.amount)})' if (m.efficacy is not None and share is not None) else f'× (1 − efficacy {value_str(m.amount)})' if m.efficacy is not None else f'× (1 − {share} × (1 − {value_str(m.amount)}))' if share is not None else f'× {value_str(m.amount)}'
+            lines.append(f'    {factor}, "{m.name}"')
+    return lines
 
 
 def seasonal_str(raw, mean):
@@ -435,6 +521,9 @@ def quantity_json(raw, kind, unit):
         return float(raw)
     elif isinstance(raw, (TimeValue, by)):
         return raw.to_json()
+    elif isinstance(raw, ss.peract): # A probability per act: one value, or one for each direction
+        items = dict(value=raw.value) if raw.value is not None else raw.directions
+        return dict(type='peract') | {k:quantity_json(v, None, unit) for k,v in items.items()}
     elif isinstance(raw, Expr):
         return format_expr(raw, exact=True)
     elif callable(raw):

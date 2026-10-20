@@ -480,6 +480,35 @@ def test_arithmetic():
 
 
 # Run as a script
+@sc.timer()
+def test_bare_units():
+    sc.heading('Testing the units of bare numbers beside typed ones')
+    def sis(rec):
+        S, I = ss.states('S I')
+        return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init=dict(I=1000), name='d')
+
+    # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (FP21: 2,881 points instead of 241)
+    with pytest.warns(ss.UnitInferred):
+        sim = ss.Sim(sis(ss.months(6)), start=2000, stop=2020, dt=1/12, n_agents=1000, verbose=0).init()
+    assert sim.t.npts == 241
+
+    # A choice of durations as a dwell, typed or with unit= (FP35: crashed, and unit= was refused)
+    for rec in [ss.choice(a=[ss.months(9), ss.months(10)]), ss.choice(a=[9, 10], unit='month')]:
+        n_I = ss.Sim(sis(rec), start=2000, stop=2002, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
+        assert n_I[8] == 1000 and 0 < n_I[9] < 1000 and n_I[10] == 0
+
+    # The numbers a function gives a distribution are in its unit= (FP22: read as years, so nobody left)
+    fn = lambda self, sim, uids: np.full(len(uids), 6.0)
+    n_I = ss.Sim(sis(ss.lognorm_ex(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
+    assert n_I[24] == 0
+
+    # A peak of a seasonal value outside the year is refused, and a time of year works (T6a: 142 was taken as January)
+    with pytest.raises(ValueError):
+        ss.seasonal(peak=142)
+    assert np.isclose(ss.seasonal(peak=ss.days(142)).peak_frac, 142/365)
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer('\nTotal time')
 
@@ -494,5 +523,6 @@ if __name__ == '__main__':
     o9 = test_years_conversion()
     o10 = test_prob_conversion()
     o11 = test_arithmetic()
+    o12 = test_bare_units()
 
     T.toc()

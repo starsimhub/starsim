@@ -29,6 +29,7 @@ def check_close(sims, func, rtol=0.1):
 
 # %% Define the tests
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: numbers are people for deliveries (96fd89d2)', strict=True)
 def test_people():
     sc.heading('Testing numbers are people: capacity and results read during a run')
     seen = sc.objdict()
@@ -51,6 +52,7 @@ def test_people():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: priority= (633fb9c3)', strict=True)
 def test_priority():
     sc.heading('Testing priority: tiers, a key highest first, and a per-agent key')
     ppl = ss.People(1)
@@ -89,6 +91,7 @@ def make_sis(name='sis', beta=0.25):
     return ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ ss.days(20), cure=I >> S, init_prev=0.01, name=name)
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue= (9f64b987)', strict=True)
 def test_queue():
     sc.heading('Testing queues: dropped, waiting up to a limit, and leaving when no longer eligible')
     def make(queue=None, **kwargs):
@@ -118,6 +121,7 @@ def test_queue():
     return out
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Capacity (fe8e9d7d)', strict=True)
 def test_capacity():
     sc.heading('Testing a capacity shared by deliveries: by their priority, then pro rata')
     def make(ranks=(1, 2), **kwargs):
@@ -155,6 +159,7 @@ def make_tx(name='tx'):
     return ss.Disease(infection=S >> I @ 0.002*(I + T), start=I >> T, dropout=T >> I @ ss.days(200), init=dict(I=0.4), name=name)
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: target=/remove= (00515859)', strict=True)
 def test_target():
     sc.heading('Testing stock targets: the gap delivered each step, removal over it, by stratum, and as a share')
     n_on = ss.timeseries({0: 0, 50: 8000, 100: 4000}, mode='linear') # People
@@ -192,6 +197,7 @@ def test_target():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: delivery memory mapped onto .ever/.count/.since, repeat= (f0f61715)', strict=True)
 def test_memory():
     sc.heading('Testing delivery memory: once per spell, repeat=, .since, .held, and doses')
 
@@ -251,6 +257,7 @@ def test_memory():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: then= as event-triggered steps (4d896abf)', strict=True)
 def test_then():
     sc.heading('Testing then=: a second product at the same visit, and a list of them')
     def make(**kwargs):
@@ -276,6 +283,7 @@ def test_then():
 
 # %% Acceptance tests: the worked examples of proposal 02, small
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: target=, priority=, Treatment(moves=) (ab3493b9)', strict=True)
 def test_hiv_art():
     sc.heading('Acceptance: HIV ART as a stock target, lowest CD4 first, with removal over the target (hiv/port.py art_deliver)')
     def make(prioritize=True, **kwargs):
@@ -309,6 +317,7 @@ def test_hiv_art():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue=, capacity, follow-ups as events (ab3493b9)', strict=True)
 def test_hpv_algorithm():
     sc.heading('Acceptance: HPV screen, then a treatment visit with a capacity of 10 a week and a queue (hpvsim_interventions/port.py algo_a, one genotype)')
     ppl = ss.People(1)
@@ -367,6 +376,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
     )
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Capacity (ab3493b9)', strict=True)
 def test_clinic():
     sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial)')
     def make(**kwargs):
@@ -393,6 +403,7 @@ def test_clinic():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: delivery memory and follow-ups as events (ab3493b9)', strict=True)
 def test_rescreen():
     sc.heading('Acceptance: rescreening every 5 years at most, at 30% a year')
     seen = sc.objdict()
@@ -420,6 +431,7 @@ def test_rescreen():
     return sims
 
 
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: dose= (ab3493b9)', strict=True)
 def test_two_doses():
     sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py)')
     ppl = ss.People(1)

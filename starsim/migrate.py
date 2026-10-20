@@ -9,9 +9,14 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
 
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
-(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), and the time index: in
+(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), a `beta` pair on
+`ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
+`ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those
+networks transmit one way), and the time index: in
 `update_results()` and in analyzers, `self.ti` is the end of the step, so an event dated
-during the step is at `self.ti - 1`; and a result written in `step()` goes at `self.ti + 1`.
+during the step is at `self.ti - 1`; and a result written in `step()` goes at `self.ti + 1`; and, from Starsim 4's
+prereleases, a test's follow-ups nested in it (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of
+their own, grouped with it in a cascade, and `ss.Test`, now `ss.Diagnostic`.
 Read the diff afterwards: each change is listed with its line.
 """
 import re
@@ -34,6 +39,7 @@ renames = [
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
     (r'''(\bverbose['"]?\s*[=:]\s*)(1\s*/\s*\d+(\.\d*)?|0?\.\d+)\b''', r'\g<1>1', 'a fractional verbose (print every n steps) is verbose=1, which prints the progress about ten times a run'),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
+    (r'\bss\.Test\(',             'ss.Diagnostic(',                 'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic'),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule
@@ -52,7 +58,8 @@ for submodule, names in moved.items():
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
-    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, a follow-up ss.screen() in on_positive= for triage"),
+    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
+    (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
@@ -66,6 +73,8 @@ flags = [
 ]
 
 agent_bases = {'SIR': 'ssl.AgentSIR', 'SIS': 'ssl.AgentSIS', 'SEIR': 'ssl.AgentSEIR'} # Starsim 3's diseases written as code, which are declared in Starsim 4
+mf_keys = {'mf', 'mfnet'} # ss.MFNet, which puts men in p1, so a pair [p1 to p2, p2 to p1] is [m2f, f2m]
+one_way_keys = {'prenatal', 'prenatalnet', 'maternal', 'maternalnet', 'postnatal', 'postnatalnet', 'breastfeeding', 'breastfeedingnet'} # Mother to child only
 ti_names = {'ti'} # A bare name, or an attribute ending in .ti (self.ti, sim.ti, self.sim.ti, self.t.ti)
 
 
@@ -103,14 +112,46 @@ class Edits:
         if node.lineno == node.end_lineno:
             self.edits.append((node.lineno, node.col_offset, node.end_col_offset, new, note))
 
+    def add_lines(self, node, new, note):
+        """ Replace the lines of a whole statement """
+        self.edits.append((node.lineno, -1, node.end_lineno, new, note))
+
     def apply(self):
         notes = []
         for lineno, col, end, new, note in sorted(self.edits, reverse=True):
-            line = self.lines[lineno-1]
-            prefix, suffix = line.encode()[:col].decode(), line.encode()[end:].decode() # AST offsets are in bytes
-            self.lines[lineno-1] = prefix + new + suffix
+            if col == -1: # Whole lines, lineno to end
+                self.lines[lineno-1:end] = [new]
+            else:
+                line = self.lines[lineno-1]
+                prefix, suffix = line.encode()[:col].decode(), line.encode()[end:].decode() # AST offsets are in bytes
+                self.lines[lineno-1] = prefix + new + suffix
             notes.append((lineno, note))
         return ''.join(self.lines), sorted(notes)
+
+
+def split_followups(var, call, found, lineno):
+    """
+    A test with its follow-ups nested in it (`v = ss.screen(test, on_positive=ss.treat(drug))`), as statements: the test,
+    each follow-up as a step of its own triggered by its result (`v_positive = ss.treat(drug, who=v.positive)`), to any depth;
+    returns the statements and the names of the steps
+    """
+    stmts, steps = [], [var]
+    children = []
+    for kw in list(call.keywords):
+        if kw.arg in ['on_positive', 'on_negative']:
+            call.keywords.remove(kw)
+            children.append((kw.arg.removeprefix('on_'), kw.value))
+    stmts.append(ast.Assign(targets=[ast.Name(var)], value=call))
+    for key,child in children:
+        name = f'{var}_{key}'
+        if isinstance(child, ast.Call):
+            child.keywords.append(ast.keyword(arg='who', value=ast.Attribute(ast.Name(var), key)))
+            more, names = split_followups(name, child, found, lineno)
+            stmts += more
+            steps += names
+        else:
+            found.append((lineno, f'on_{key}={ast.unparse(child)} is a step of its own now: give it who={var}.{key} and add it to the interventions (a function of (sim, uids) is a module with step(), or a delivery with deliver=)'))
+    return stmts, steps
 
 
 def find_analyzers(texts):
@@ -180,6 +221,46 @@ def migrate_ast(text, analyzers=None):
 
     if analyzer_steps:
         found.append((analyzer_steps[0], f'an analyzer\'s step() (line{"s" if len(analyzer_steps) > 1 else ""} {sc.strjoin(analyzer_steps)}) also runs at the first time point (self.ti == 0), before any step, to record the start: if it reads something that the first step creates, return early there'))
+
+    # A beta pair for each network, e.g. beta={'mf': [0.08, 0.04]}: Starsim 3's [p1 to p2, p2 to p1] has direction names in Starsim 4
+    def is_beta(node):
+        """ Whether an assignment target or keyword is a beta, e.g. beta=, pars['beta'] =, or self.pars.beta = """
+        return 'beta' in ast.unparse(node) if isinstance(node, ast.AST) else node == 'beta'
+    betas = [kw.value for node in ast.walk(tree) if isinstance(node, ast.Call) for kw in node.keywords if is_beta(kw.arg)]
+    betas += [node.value for node in ast.walk(tree) if isinstance(node, ast.Assign) and any(is_beta(t) for t in node.targets)]
+    for beta in betas:
+        if isinstance(beta, ast.Dict):
+            items = [(ast.literal_eval(k) if isinstance(k, ast.Constant) else None, v) for k,v in zip(beta.keys, beta.values)]
+        elif isinstance(beta, ast.Call) and ast.unparse(beta.func) == 'dict':
+            items = [(kw.arg, kw.value) for kw in beta.keywords]
+        else:
+            continue
+        for key, val in items:
+            if not (isinstance(val, (ast.List, ast.Tuple)) and len(val.elts) == 2):
+                continue
+            a, b = [ast.unparse(e) for e in val.elts]
+            key = str(key).lower()
+            if key in mf_keys and re.search(r'\bss\.\w+\(', a + b): # A typed rate, which is not a probability per act
+                found.append((val.lineno, f'the beta pair {ast.unparse(val)} on "{key}" has typed values: a beta on ss.MFNet is a probability per act in each direction, ss.peract(m2f=..., f2m=...) (in Starsim 3, a rate was converted to a probability per step and then raised to the acts)'))
+            elif key in mf_keys:
+                edits.add(val, f'ss.peract(m2f={a}, f2m={b})', 'a beta pair on ss.MFNet ([p1 to p2, p2 to p1], with men in p1) is ss.peract(m2f=..., f2m=...), a probability per act in each direction')
+            elif key in one_way_keys and b in ['0', '0.0']:
+                edits.add(val, a, 'a mother-to-child network transmits one way, so a beta pair [b, 0] on it is b')
+            else:
+                found.append((val.lineno, f'the beta pair {ast.unparse(val)} on "{key}" was [p1 to p2, p2 to p1]: on a network with acts, give ss.peract() with a value for each of its directions (net.directions, e.g. m2f and f2m for sides m and f); on any other network, one value'))
+
+    # A test with follow-ups nested in it, from Starsim 4's prereleases: each follow-up a step of its own, grouped with the test in a cascade under the same variable
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Call):
+            if any(kw.arg in ['on_positive', 'on_negative'] for kw in node.value.keywords):
+                var = node.targets[0].id
+                line = edits.lines[node.lineno-1]
+                indent = line[:len(line) - len(line.lstrip())]
+                stmts, steps = split_followups(var, node.value, found, node.lineno)
+                if len(steps) > 1:
+                    stmts.append(ast.parse(f"{var} = ss.cascade({', '.join(steps)}, name='{var}_cascade')").body[0])
+                text = ''.join(f'{indent}{ast.unparse(ast.fix_missing_locations(stmt))}\n' for stmt in stmts)
+                edits.add_lines(node, text, f'the follow-ups of {var} are steps of their own, triggered by its results (who={var}.positive), grouped with it in a cascade (which runs as its steps would as a list)')
 
     # Calls to the methods of the base written as code, e.g. ss.SIS.set_prognoses(self, ...)
     for node in ast.walk(tree):

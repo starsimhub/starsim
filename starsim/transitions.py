@@ -20,7 +20,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, closest, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
+from .expressions import as_expr, BinOp, closest, Count, count_power, did_you_mean, dimension, Dwell, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 from .networks import geo, gravity, Mobility
 
@@ -133,6 +133,11 @@ class State(Nameable, Expr):
         """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
         return Count([self], kind='total')
 
+    @property
+    def dwell(self):
+        """ The time each person has spent in this state: usable in p= of a transition with several destinations out of it (decided when they leave), and in the rate of a transition out of it """
+        return Dwell(self)
+
 
 def states(arg, **kwargs):
     """
@@ -197,6 +202,24 @@ rest_stay = False # Pending a decision (03 Q1): whether branch probabilities out
 
 
 #%% Transitions
+
+def parse_increment(increment, what):
+    """ The `increment=` of a transition, delivery, or transfer, as {counter: amount}: a name adds 1 (`'parity'`), as does a list of names; a dict gives the amounts (`dict(parity=2)`) """
+    if increment is None:
+        return None
+    if isinstance(increment, str) or (isinstance(increment, (list, tuple)) and all(isinstance(v, str) for v in increment)):
+        increment = {name:1 for name in sc.tolist(increment)}
+    if not isinstance(increment, dict) or not increment:
+        errormsg = f'increment= of {what} is the name of a counter (increment="parity", which adds 1) or a dict of the amount to add to each (increment=dict(parity=2)), not {increment!r}'
+        raise TypeError(errormsg)
+    out = sc.objdict()
+    for dim,k in increment.items():
+        if not sc.isnumber(k) or isinstance(k, bool) or k != int(k) or k == 0:
+            errormsg = f'increment= of {what} adds a whole number of levels to a counter, so "{dim}" needs a whole number other than 0 (e.g. 1, 2, or -1), not {k!r}; a level to go to is move=dict({dim}=...)'
+            raise ValueError(errormsg)
+        out[dim] = int(k)
+    return out
+
 
 def parse_arrow(arrow):
     """ Parse an arrow string such as 'S -> I', 'I -> R | D', '-> S', or 'I ->' into a source and a list of destinations """
@@ -273,6 +296,8 @@ class Transition(Nameable):
         where (Cond/func): who it applies to: a condition (e.g. `ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0
         move (dict): a change of level in a dimension as well as of state: the dimension, and an arrow between two of its levels
             (e.g. `move=dict(strain='A+B -> A')`, which applies only to people at the first), or the level people move to
+        increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
+            (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         after (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then); agents only
         before (dur): the opposite, for a rate: it applies only until people have been in its source state this long, as EMULSION's escape during a minimum stay; agents only
         offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
@@ -288,12 +313,13 @@ class Transition(Nameable):
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
         selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
+        twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2), move=dict(since_birth=0)) # Parity goes up by 2, and a clock is set to 0
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
         farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10)) # Ten piglets for each sow that farrows
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None, on=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None):
         if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
             rate, on = None, rate
         if sum(x is not None for x in [rate, dur, on]) > 1:
@@ -326,6 +352,7 @@ class Transition(Nameable):
             self.offspring = (state, int(n))
         self.move = None # A change of level in some dimensions: {dim: level}
         self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
+        self.move_given = dict(move) if move else None # As given, for the model spec
         if move:
             self.move = sc.objdict()
             for dim,level in move.items():
@@ -336,6 +363,11 @@ class Transition(Nameable):
                     at = ss.conditions.Cond('dim', dim) == srcs # Only people at the level they move from
                     self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
                 self.move[dim] = level
+        self.increment = parse_increment(increment, 'a transition') # A relative move along some counters: {dim: amount}
+        both = [dim for dim in (self.increment or {}) if dim in (self.move or {})]
+        if both:
+            errormsg = f'"{both[0]}" is given in both move= (a level to go to) and increment= (an amount to add); give one'
+            raise ValueError(errormsg)
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
@@ -350,7 +382,7 @@ class Transition(Nameable):
         if dst is not None:
             self._set_dst(dst)
         if p is not None:
-            self.p = [None if v is None else as_expr(v) for v in sc.tolist(p)]
+            self.p = sc.tolist(p)
             if self._stay_at is not None and len(self.p) == len(self.dst) + 1:
                 self.p_stay = self.p.pop(self._stay_at)
         self.check_dimensions()
@@ -386,7 +418,7 @@ class Transition(Nameable):
         return self.dst is not None and (len(self.dst) > 1 or self.stays)
 
     def _set_src(self, src):
-        self.src = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
+        self.src = [] if src is null else [s for s in sc.tolist(src)]
         return self
 
     def _set_dst(self, dst):
@@ -409,6 +441,25 @@ class Transition(Nameable):
                 raise ss.BadBranchSplit('ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
                                         'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')
         return self
+
+    @property
+    def p(self):
+        """ The branch probabilities, one for each destination (or None) """
+        return self.__dict__.get('_p')
+
+    @p.setter
+    def p(self, value):
+        current = self.__dict__.get('_p')
+        if current and isinstance(current[0], par) and current[0].module is not None and not isinstance(value, (list, tuple, Expr)): # Once the model is built, a new value is the parameter's value, e.g. d.death.p = ss.by(age=[0.1, 0.01])
+            current[0].value = value
+        elif value is None:
+            self.__dict__['_p'] = None
+        elif current is None and getattr(self, 'module', None) is not None: # TL66: crashed deep in the build, or was ignored
+            errormsg = f'p= makes "{self.name}" a branch, which changes the model, so it is given when the transition is made, e.g. ss.Transition(..., p={value!r}), not set once its module is built'
+            raise ValueError(errormsg)
+        else: # Set before the model is built, as in the constructor
+            self.__dict__['_p'] = [None if v is None else as_expr(v) for v in (value if isinstance(value, (list, tuple)) else [value])]
+        return
 
     @property
     def dur(self):
@@ -479,9 +530,9 @@ class Transition(Nameable):
         """ Arithmetic on a transition that is being written applies to its rate (`I @ beta * I`); on a finished one it is its flow: divided by something, in a result (`infection / S`), and times something, a share of it (`0.5 * infection`, an outcome) """
         if op == '/' and self.src is not None and not reverse:
             return BinOp('/', Flow(self), Flow(other) if isinstance(other, Transition) else as_expr(other))
-        if op == '*' and self.src is not None and not isinstance(other, (Transition, outcome, FlowSum)): # A share of the flow, never a change of rate (which is written in the rate, or with ss.modify)
+        if op == '*' and self.src is not None and not isinstance(other, (Transition, Destination, outcome, FlowSum)): # A share of the flow, never a change of rate (which is written in the rate, or with ss.modify)
             return FlowSum([self]) * other
-        if isinstance(other, (Transition, outcome, FlowSum)):
+        if isinstance(other, (Transition, Destination, outcome, FlowSum)):
             if op == '+': # A sum of flows, e.g. for an outcome: 0.1*mild + 0.5*severe
                 return FlowSum([self]) + other
             errormsg = f'Cannot apply "{op}" to two transitions'
@@ -511,9 +562,31 @@ class Transition(Nameable):
     def __sub__(self, other):      return self._arith('-', other)
 
     def __or__(self, other):
+        if self.src is not None and not isinstance(other, State): # As events: the people who went through either, e.g. who=a.infection | b.infection
+            return ss.conditions.as_cond(self) | other
         errormsg = 'Several sources are a sum of states: write S + I + R >> D @ rate (| on states is a condition, for where=)'
         raise TypeError(errormsg)
-    __ror__ = __or__
+
+    def __ror__(self, other):
+        if self.src is not None and not isinstance(other, State):
+            return other | ss.conditions.as_cond(self)
+        return self.__or__(other)
+
+    def __and__(self, other): # As an event: the people who went through it, among those meeting a condition (or in another event too)
+        return ss.conditions.as_cond(self) & other
+
+    def __rand__(self, other):
+        return other & ss.conditions.as_cond(self)
+
+    def __getattr__(self, attr):
+        """ The flow to one destination of a transition with several, e.g. `cin.X` for `cin = ss.progression('C -> X | R', ...)`, in an outcome or a result """
+        dst = self.__dict__.get('dst') if not attr.startswith('_') else None
+        names = [name for end in dst or [] for name in (re.split(r'[\s|,()\[\]]+', end) if isinstance(end, str) else [end.name]) if name]
+        if attr in names and len(names) > 1:
+            return Destination(self, attr)
+        elif attr in names:
+            raise AttributeError(f'"{self.name or self.arrow}" has one destination, {attr}, so its flow is the transition itself; a flow by destination is for a transition with several')
+        raise AttributeError(attr)
 
     @property
     def inflow(self):
@@ -557,7 +630,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     Args:
         arrow (str): the source and destination states, e.g. `'S -> I'`
         beta (any): the transmission rate (per contact, if networks are given); a dict gives one value per network
-        source (str/list): the infectious state(s); if not given, the states declared `infectious=True`, else the destination
+        source (str/list/dict): the infectious state(s); or a dict of a weight for each, e.g. `source=dict(P=1, EL=0.55)`, the same as `beta * (P + 0.55*EL)`; if not given, the states declared `infectious=True`, else the destination
         p (list): branch probabilities, if there are several destinations
         where (Cond/func): who it applies to (see `ss.Transition`)
         acquisition (bool): whether it is an acquisition of the disease (default True; see `ss.Transition`)
@@ -570,7 +643,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, after=None, before=None, offspring=None, acquisition=None, on=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -582,6 +655,7 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         stages (int): number of sub-stages used to realize the dwell time
         where (Cond/func): who it applies to (see `ss.Transition`)
         move (dict): a change of level in a dimension as well (see `ss.Transition`)
+        increment (str/dict): a counter that goes up as well, e.g. `increment='episodes'` (see `ss.Transition`)
         after (dur): a minimum stay in the source state first (see `ss.Transition`)
         before (dur): for a rate, the time in the source state after which it no longer applies (see `ss.Transition`)
         offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
@@ -591,7 +665,7 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
 
 
 def birth(arrow=None, rate=None, name=None, label=None):
@@ -879,6 +953,36 @@ class update(Nameable):
         return f'update({state}, {format_expr(self.value)})'
 
 
+class Destination:
+    """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is """
+    def __init__(self, tr, state):
+        self.tr = tr
+        self.state = state
+        return
+
+    @property
+    def name(self):
+        return f'{self.tr.name}.{self.state}'
+
+    @property
+    def people(self):
+        return getattr(self.tr, 'people', True)
+
+    def __mul__(self, other):
+        return FlowSum([self]) * other
+    __rmul__ = __mul__
+
+    def __add__(self, other):
+        return FlowSum([self]) + other
+    __radd__ = __add__
+
+    def __truediv__(self, other):
+        return BinOp('/', Flow(self), Flow(other) if isinstance(other, (Transition, Destination)) else as_expr(other))
+
+    def __repr__(self):
+        return f'Destination({self.name})'
+
+
 class FlowSum:
     """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection """
     def __init__(self, items):
@@ -958,6 +1062,8 @@ def numeric_pars(dist, convert, per_agent=None):
             pars[key] = val
         elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn
             pars[key] = converted_func(val, dist.unit, convert)
+        elif isinstance(val, ss.conditions.Cond) or (isinstance(val, Expr) and not isinstance(val, par)): # A property of people, or an expression of them, e.g. mean=2*ss.ppl.age: read for each agent as it is drawn (as agents only)
+            pars[key] = converted_func(person_func(as_expr(val)), dist.unit, convert)
         else:
             if dist.unit is not None and sc.isnumber(val):
                 val = dist.unit(val)
@@ -972,6 +1078,16 @@ def converted_func(func, unit, convert):
         return convert(unit(out) if unit is not None else out)
     wrapped.__signature__ = inspect.signature(func) # The distribution passes arguments by their names
     return wrapped
+
+
+def person_func(expr):
+    """ An expression of people's properties as a function of the agents, as a distribution's parameter takes one """
+    def func(module, sim, uids):
+        if not sim.people.initialized: # Tried when the distribution is made, before there are people
+            return np.ones(len(uids))
+        return module.engine.eval_for(expr, uids)
+    func.__name__ = format_expr(expr)
+    return func
 
 
 def numeric_dist(dist, convert, per_agent=None):
