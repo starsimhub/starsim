@@ -633,6 +633,7 @@ class Graph(Presentation):
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] # And a parameter in the rate of a transfer
         used += [(name, upd.value) for name,upd in self.updates.items()] # And in the value of an update
         used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
+        used += [(name, val) for name,a in self.attrs.items() if a.kind in ['drawn', 'trait'] for p in ss.expressions.dists_in(a.value) for val in p.value.pars.values() if isinstance(val, par)] # And a parameter of a distribution an attribute is drawn from, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
         used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
         for name,expr in used:
