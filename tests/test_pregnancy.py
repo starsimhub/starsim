@@ -267,6 +267,34 @@ def test_lactation():
     return sim
 
 
+def make_hiv_vertical(bf=True):
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
+    S, I = ss.states('S I')
+    beta = dict(maternalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
+    hiv = ss.Disease(S, I, infection=ss.transmission('S -> I', beta=beta), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
+    return dict(demographics=[preg, ss.Lactation(p_breastfeed=0.8)], diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+
+
+@sc.timer()
+def test_hiv_vertical():
+    sc.heading('Port: HIV vertical transmission, in utero over MaternalNet and by breastfeeding (04 §5.3)')
+    common = dict(stratify=strat, use_aging=False, **kw)
+    inf = [ss.Sim(**make_hiv_vertical(bf), n_agents=100_000, **common).run().results.hiv.infection.sum() for bf in [False, True]]
+    utero, post = inf[0], inf[1] - inf[0]
+    assert utero > 200 and post > 200, f'{utero:.0f} in utero, {post:.0f} by breastfeeding'
+    return inf
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: MaternalNet as a fetal level and BreastfeedingNet as mass action in compartments are deferred')
+def test_hiv_vertical_ode():
+    common = dict(stratify=strat, use_aging=False, **kw)
+    inf = lambda solver, bf: ss.Sim(**make_hiv_vertical(bf), **(dict(n_agents=100_000) if solver == 'abm' else dict(solver='ode', total_pop=100_000)), **common).run().results.hiv.infection.sum()
+    o = [inf('ode', bf) for bf in [False, True]]
+    a = [inf('abm', bf) for bf in [False, True]]
+    for what,va,vo in zip(['in utero', 'breastfeeding'], [a[0], a[1] - a[0]], [o[0], o[1] - o[0]]):
+        assert np.isclose(vo, va, rtol=0.2), f'{what}: {vo:.0f} as an ODE, {va:.0f} as agents'
+
+
 @sc.timer()
 def test_legacy():
     sc.heading('Testing back-compatibility: ss.LegacyPregnancy fires the same events, and ss.Pregnancy has the Starsim 3 names')
@@ -415,6 +443,7 @@ if __name__ == '__main__':
     events = test_events()
     fetus = test_fetus()
     lact = test_lactation()
+    hiv = test_hiv_vertical()
     legacy = test_legacy()
     syph = test_syphilis()
     pp = test_postpartum()
