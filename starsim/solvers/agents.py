@@ -41,6 +41,7 @@ class Agents(Engine):
         self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
+        self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
         self._junctions = None # The states passed through at once: see junctions
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
@@ -62,6 +63,8 @@ class Agents(Engine):
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
+                if graph.exits[name].hazards: # See enter()
+                    arrs.append(ss.BoolArr(f'late_{name}', label=f'Entered {name} after its competing rates were drawn in the step'))
         if any(getattr(strat, 'immunity', None) is not None for strat in list(graph.strats) + list(self.sim.groups.strats)):
             arrs.append(ss.IntArr('strains_had', default=0, label='Strains each person has had, as bits')) # For immunity= between strains: see protection()
         self.spread = dict() # A parameter that is a distribution across people: each agent's own value, drawn when they are made
@@ -217,10 +220,10 @@ class Agents(Engine):
                 inds = uids[mod[state.name][uids]]
                 mod[state.name][inds] = False
                 self.clear_exit(state.name, inds)
-                mod[dst.name][inds] = True
-                mod[f'ti_{dst.name}'][inds] = mod.ti
                 moved.append(inds)
-        return ss.uids.concatenate(moved) if moved else ss.uids()
+        moved = ss.uids.concatenate(moved) if moved else ss.uids()
+        self.enter(dst, moved, mod.ti)
+        return moved
 
     @property
     def scale(self):
@@ -609,16 +612,15 @@ class Agents(Engine):
             else:
                 self._uids = uids
                 ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
-                rvs = self.dists[f'dst_{name}'].rvs(uids)
+                rvs = self.draw(f'dst_{name}', uids)
                 edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
                 dsts = [(dst, uids[(rvs >= edges[i]) & (rvs < edges[i+1])]) for i,dst in enumerate(tr.dst)]
             for dst,inds in dsts:
-                mod[dst.name][inds] = True
-                mod[f'ti_{dst.name}'][inds] = ti
                 self.enter_dims(tr, srcs[name], uidlist, dst, inds)
                 for d,level in (self.moves(tr) or ()): # A change of level as well as of state
                     self.sim.people[self.sim.groups.strats[d].attr][inds] = level
                     self.sim.groups.groups_changed(inds)
+                self.enter(dst, inds, ti) # Once their levels are known, since dwell times can depend on them
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
                 if len(inds) and dst.name in self.junctions:
@@ -681,6 +683,33 @@ class Agents(Engine):
         rest = 1.0 - sum(p for p in ps if p is not None)
         return self.dest_shares(tr, [rest if p is None else p for p in ps], uids)
 
+    def draw(self, key, uids):
+        """ Uniform draws from one of the engine's distributions, which can be called more than once in a step, since people can move more than once in a step """
+        dist = self.dists[key]
+        if not dist.ready:
+            dist.jump()
+        return dist.rvs(uids)
+
+    def enter(self, state, uids, ti):
+        """
+        Put agents in a state, and schedule their exit from it, at the moment they enter (so `p=` is read then, and code after the step sees the exit)
+
+        An agent who enters during a step after the state's competing rates were drawn (by a
+        progression, or moved by an intervention) is marked `late_<state>`: they have a draw of
+        them to catch up on in the next step (see `step_state()`).
+        """
+        if not state.people or not len(uids):
+            return
+        mod = self.mod
+        name = state.name
+        mod[name][uids] = True
+        mod[f'ti_{name}'][uids] = ti
+        if f'late_{name}' in mod.__dict__:
+            mod[f'late_{name}'][uids] = ti == mod.ti and self._drawn_ti == mod.ti
+        if name in self.scheduled:
+            self.schedule(state, uids)
+        return
+
     def schedule(self, state, members):
         """
         For the agents in a state who have just entered it: choose their branch, sample its dwell time, and schedule the exit
@@ -719,7 +748,7 @@ class Agents(Engine):
             ps = [None if tr.p is None or len(tr.dst) > 1 else np.broadcast_to(self.eval_for(tr.p[0], new), len(new)) for tr in branches] # A split between several destinations takes what the branches leave over
             mults = [self.branch_mult(tr, new) for tr in branches]
             ps = [np.broadcast_to(p, len(new)) for p in self.branch_shares(branches, ps, mults)]
-            rvs = self.dists[f'branch_{name}'].rvs(new)
+            rvs = self.draw(f'branch_{name}', new)
             edges = np.cumsum([np.zeros(len(new))] + ps, axis=0)
             for i,tr in enumerate(branches):
                 chosen = (rvs >= edges[i]) & (rvs < edges[i+1])
@@ -824,7 +853,7 @@ class Agents(Engine):
     def sample_dwell(self, tr, uids):
         """ Sample a dwell time for each agent, in the sim's unit """
         dw = self.dwells[tr.name]
-        rvs = self.dists[f'dwell_{tr.name}'].rvs(uids)
+        rvs = self.draw(f'dwell_{tr.name}', uids)
         if dw.dist is None:
             self._uids = uids
             mean = self.dwell_mean(tr.name)
@@ -880,6 +909,11 @@ class Agents(Engine):
             candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
             competing = self.competing[name]
             late = missed.get(name)
+            if f'late_{name}' in mod.__dict__: # Those who entered after last step's draws (see enter())
+                flagged = mod[f'late_{name}'].raw[uids].astype(bool)
+                if flagged.any():
+                    late = flagged if late is None else (late | flagged)
+                    mod[f'late_{name}'][uids[flagged]] = False
             if candidates: # Scheduled exits that are due
                 self.rescale_exits(state, uids)
                 due = mod[f'ti_exit_{name}'].raw[uids] <= ti # Everyone here has been scheduled, so none is .nan
@@ -895,6 +929,7 @@ class Agents(Engine):
                 uids = uids[~due]
             if competing and len(uids): # Competing rates: one draw per agent
                 self.draw_competing(state, uids, dt)
+        self._drawn_ti = ti
         self._members = None
         self.finish_moves(ti)
         self.step_births(dt)
@@ -1176,9 +1211,8 @@ class Agents(Engine):
                     inds = uids[mod[frm].raw[uids]]
                     mod[frm][inds] = False
                     mod.engine.clear_exit(frm, inds)
-                    mod[to][inds] = True
-                    mod[f'ti_{to}'][inds] = ti
-                    mod.engine.clear_exit(to, inds) # A dwell time in the new state is drawn when it is next scheduled
+                    mod.engine.clear_exit(to, inds)
+                    mod.engine.enter(graph.states[to], inds, ti)
         return
 
     def step_register(self, ti):
@@ -1290,10 +1324,8 @@ class Agents(Engine):
             for j,states in enumerate(sets):
                 own = [name for name in (states or []) if name in placed] or placed[:1]
                 choice[j] = own[min(int(rvs[j]*len(own)), len(own) - 1)] # Shared equally between the states named
-            for name in set(choice):
-                inds = new[choice == name]
-                mod[name][inds] = True
-                mod[f'ti_{name}'][inds] = ti
+            for name in dict.fromkeys(choice): # In a fixed order, since the draws are made in it
+                engine.enter(mod.graph.states[name], new[choice == name], ti)
         return new
 
     def infect(self, tr, src):

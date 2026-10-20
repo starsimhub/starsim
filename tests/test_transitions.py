@@ -337,7 +337,7 @@ def test_time():
         sir.ti_R.notnan
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, so it is kept
         def step(self):
-            self.n = (self.sim.diseases.sir.ti_R == self.ti).sum()
+            self.n = (self.sim.diseases.sir.ti_R == self.ti - 1).sum() # Progressions are dated at the start of their step
     sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
     assert np.array_equal(sim.diseases.sir.results.n_I, sir.results.n_I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step
     S, I, R = ss.states('S I R')
@@ -1696,6 +1696,48 @@ def test_branches():
         ss.Disease(sev=ss.progression('E -> P', p=0.3), a=ss.progression('E -> A', dur=2), b=ss.progression('E -> R', dur=2))
     with pytest.raises(ss.BadBranchSplit, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
         ss.Disease(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A'))
+    return sim
+
+
+@sc.timer()
+def test_schedule():
+    """ Exits are scheduled at entry: p= is read then, and nobody in a state has no scheduled exit """
+    sc.heading('Testing exits scheduled at entry')
+
+    # A split read at entry: everyone infected in the first five steps is severe, including those infected in the fifth
+    early = lambda sim: 1.0*(sim.ti < 5)
+    def check(sim): # An HIV-like hook after the step: the share of the acute dwell elapsed needs the scheduled exit, for those who entered this step too
+        d = sim.diseases.d
+        for name in ['A', 'R']: # The states with a scheduled exit
+            u = d[name].uids
+            assert not np.isnan(d[f'ti_exit_{name}'][u]).any(), f'{len(u)} people in {name} have no scheduled exit at step {sim.ti}'
+    d = ss.Disease(
+        infection = ss.transmission('S -> A', beta=0.4, source='A'),
+        severe    = ss.progression('A -> H', p=early, dur=3),
+        mild      = ss.progression('A -> R', p=lambda sim: 1 - early(sim), dur=3),
+        relapse   = ss.progression('R -> A', dur=20), # Re-entered at row 5, so an exit is needed the same step
+        check     = check,
+        init_prev = 0.01, name='d',
+    )
+    sim = ss.Sim(d, n_agents=5000, unit='day', stop=40, **kw).run()
+    res = sim.results.d
+    assert res.severe.sum() == res.n_A[0] + res.infection[1:6].sum() + res.relapse[1:6].sum()
+
+    # Where= on a branch that is closed to everyone at entry: they wait until it opens (FPsim review)
+    A, B = ss.states('A B')
+    clock = ss.Disease(A, B, tick=A >> B @ ss.constant(ss.months(3)), name='clock') # Everyone starts in the first state
+    X, Y, Z = ss.states('X Y Z')
+    dec = ss.Disease(X, Y, Z, to_y=ss.Transition(X, Y, p=0.5, rate=ss.permonth(30), where=clock.B),
+                     to_z=ss.Transition(X, Z, p=0.5, rate=ss.permonth(30), where=clock.B), name='dec')
+    sim = ss.Sim([clock, dec], n_agents=1000, start=2000, stop=2001, dt=ss.months(1), unit='year', **kw).run()
+    assert sim.results.dec.n_X[:4].min() == 1000 and sim.results.dec.n_X[5:].max() == 0
+
+    # A rate of 0 when the dwell was drawn (where= on a timed transition), raised later
+    A, B, X, Y = ss.states('A B X Y')
+    clock = ss.Disease(A, B, tick=A >> B @ ss.constant(ss.months(3)), name='clock') # Everyone starts in the first state
+    dec = ss.Disease(X, Y, to_y=ss.Transition(X, Y, dur=ss.months(1), where=clock.B), name='dec')
+    sim = ss.Sim([clock, dec], n_agents=1000, start=2000, stop=2002, dt=ss.months(1), unit='year', **kw).run()
+    assert sim.results.dec.n_X[:4].min() == 1000 and sim.results.dec.n_X[-1] < 10
     return sim
 
 

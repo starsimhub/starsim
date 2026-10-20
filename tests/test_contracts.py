@@ -169,6 +169,7 @@ skip_solver = dict( # Corpus models that a solver cannot run, with the reason
     screening = dict(gillespie='rounds of a delivery need a step'),
 )
 loose = dict( # Wider tolerances, with the reason
+    sir         = 0.07, # Agents are about 3% above the ODE in S and below it in R, and the mean of 5 runs varies by about 2%
     custom      = 0.10, # Few people are hospitalized, so the counts are noisy
     threshold   = 0.15, # The switch on and off at the threshold amplifies differences
     ages        = 0.10, # Each of 5,000 agents is 20 people, so the few who start infected make the timing of the epidemic noisy (3% with 50,000)
