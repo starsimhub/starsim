@@ -833,21 +833,23 @@ class Agents(Engine):
         return engine.clock_values(clock, self._uids)
 
     def mother(self, expr):
-        """ `ss.mother(x)`: x evaluated on each unborn agent's mother (by UID), and 0 for everyone else """
+        """ `ss.mother(x)`: x evaluated on each unborn agent's mother (by UID; with born=True, each agent's), and 0 for everyone else """
         ppl = self.sim.people
         parent = ppl.parent.raw
-        unborn = (ppl.age.raw < 0) & (parent != ppl.parent.nan)
+        who = parent != ppl.parent.nan
+        if not expr.born:
+            who &= ppl.age.raw < 0
         out = np.zeros(len(parent))
-        if unborn.any():
+        if who.any():
             saved = getattr(self, '_uids', None), getattr(self, '_for_uids', False)
-            moms = ss.uids(parent[unborn])
+            moms = ss.uids(parent[who])
             x = expr.x
             if isinstance(x, ss.conditions.Cond) or callable(x) and not isinstance(x, ss.expressions.Expr):
                 vals = self.selector.select(x)[moms]
             else:
                 vals = np.broadcast_to(np.asarray(self.eval_for(x, moms), dtype=float), len(moms))
             self._uids, self._for_uids = saved
-            out[unborn] = vals
+            out[who] = vals
         return out
 
     def since(self, expr):

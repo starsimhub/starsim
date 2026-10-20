@@ -508,41 +508,49 @@ class Clock(Expr):
 
 class Mother(Expr):
     """
-    `ss.mother(x)`: a condition or expression evaluated on each unborn agent's mother, and 0 for everyone else
+    `ss.mother(x)`: a condition or expression evaluated on each unborn agent's mother (or, with `born=True`, each agent's), and 0 for everyone else
 
     Args:
         x (Cond/State/Expr): what to evaluate on the mother, e.g. `syph.Pv | syph.S2`, or `preg.P.time`
+        born (bool): also for agents already born, not only the unborn
     """
-    def __init__(self, x):
+    def __init__(self, x, born=False):
         if isinstance(x, Mother):
             errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
             raise ValueError(errormsg)
         self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
+        self.born = born
         return
 
     def to_str(self, parent=False):
-        return f'mother({self.x})'
+        return f'mother({self.x}{", born=True" if self.born else ""})'
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
 
 
-def mother(x):
+def mother(x, born=False):
     """
-    A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born
+    A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born, unless born=True
 
-    Usable in rates, `p=`, `where=`, `ss.on()`, and modifier conditions. Agents only for now.
+    Usable in rates, `p=`, `where=`, `who=`, `ss.on()`, and modifier conditions. Agents only for now.
+
+    With `born=True` it is evaluated on the mother of anyone who has one, born or not, e.g. to reach the newborns
+    of mothers who tested positive. An agent with no mother in the sim gets 0. A mother who has died or left is in
+    none of her states, so a condition on them is false, but what was remembered of her (e.g. `anc.positive.since`) is still read.
 
     Args:
         x (Cond/State/Expr): e.g. `syph.Pv | syph.S2`, `hiv.rel_trans`, or `preg.P.time`
+        born (bool): also for agents already born, not only the unborn
 
     Examples:
         ```python
         mtct = S >> C @ beta_m2c * ss.mother(Pv | Ph | S2 | EL | LL)
         fetal_eff = ss.where(ss.mother(preg.P.time) > ss.weeks(27), 0.75, 0.98)
+        newborn = ss.screen(test, who=preg.birth & ss.mother(anc.positive.since <= ss.years(1), born=True))
         ```
     """
-    return Mother(x)
+    return Mother(x, born=born)
 
 
 class Since(Expr):
@@ -575,7 +583,7 @@ def mothers_in(obj, seen=None):
         return False
     seen.add(id(obj))
     if isinstance(obj, Mother):
-        return True
+        return not obj.born # Only the unborn need fetuses as agents
     elif isinstance(obj, par):
         return mothers_in(obj.value, seen) if isinstance(obj.value, (Expr, ss.conditions.Cond)) else False
     elif isinstance(obj, Expr):
@@ -1077,7 +1085,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
         elif isinstance(e, Column):
             return f'{fmt(e.p)}[{e.i}]'
-        elif isinstance(e, Clock):
+        elif isinstance(e, (Clock, Mother, Since)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)
