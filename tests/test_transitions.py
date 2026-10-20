@@ -1741,6 +1741,68 @@ def test_schedule():
     return sim
 
 
+@sc.timer()
+def test_cascade():
+    """ Moves with no wait happen in the step that caused them, under every solver """
+    sc.heading('Testing the same-step cascade')
+    def make():
+        S, X, E, P, A, Q, R = ss.states('S X E P A Q R')
+        return ss.Disease(S, X, E, P, A, Q, R,
+            infection = S >> E @ 0.4*(P + A + Q),
+            onset     = ss.progression('S -> X', rate=ss.perday(0.002)), # Into an immediate split at row 5, not by transmission
+            entry     = ss.progression('X -> E', dur=2),
+            split     = ss.Transition(E, [P, A], p=[0.3, 0.7]), # No driver: split on entry, at once
+            onward    = ss.Transition(P, Q, p=1.0), # And on again, in the same step
+            rec_q     = Q >> R @ ss.days(5),
+            rec_a     = A >> R @ ss.days(5),
+            init=dict(E=50), name='d')
+    for solver in ['ode', 'abm']:
+        size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+        res = ss.Sim(make(), solver=solver, unit='day', stop=60, **size, **kw).run().results.d
+        for name in ['E', 'P']: # Nobody is ever counted in a state with no wait, including at the start
+            assert res[f'n_{name}'].max() == 0, f'{solver}: {res[f"n_{name}"].max()} people in {name}'
+        into = res.infection[1:] + res.entry[1:]
+        assert np.allclose(res.split[1:], into) # In the same step as whatever brought them
+        assert np.isclose(res.onward.sum(), 0.3*res.split.sum(), rtol=0.1)
+
+    # A dwell time competing with a hazard, for people who enter during the run (FPsim review: the hazard missed a step per entrant)
+    S, A, B, C = ss.states('S A B C')
+    d = ss.Disease(S, A, B, C, sa=S >> A @ ss.peryear(0.2), ab=ss.Transition(A, B, dur=ss.months(3)), ac=A >> C @ ss.permonth(0.04), name='d')
+    res = ss.Sim(d, n_agents=50_000, start=2000, stop=2010, dt=ss.months(1), unit='year', use_aging=False, **kw).run().results.d
+    share = res.ac.sum()/(res.ac.sum() + res.ab.sum())
+    assert np.isclose(share, 0.1063, atol=0.004), f'{share:.3f} went to C; with whole steps of a month, 0.106 should' # 0.107 in continuous time
+
+    # A loop of moves with no wait never settles
+    for solver in ['ode', 'abm']:
+        S, A, B = ss.states('S A B')
+        loop = ss.Disease(S, A, B, sa=S >> A @ 0.1, ab=ss.Transition(A, B, p=1.0), ba=ss.Transition(B, A, p=1.0), name='loop')
+        size = dict(n_agents=1000) if solver == 'abm' else {}
+        with pytest.raises(ss.TriggerLoop, match='A -> B'):
+            ss.Sim(loop, solver=solver, stop=5, **size, **kw).run()
+    return res
+
+
+@pytest.mark.xfail(reason='Phase B, task B2: moves through a transition with no wait are not all counted under binomial', strict=True)
+def test_cascade_binomial():
+    """ Under the chain-binomial solver, the moves through a transition with no wait are counted with a draw of their own """
+    sc.heading('Testing the same-step cascade')
+    def make():
+        S, X, E, P, A, Q, R = ss.states('S X E P A Q R')
+        return ss.Disease(S, X, E, P, A, Q, R,
+            infection = S >> E @ 0.4*(P + A + Q),
+            onset     = ss.progression('S -> X', rate=ss.perday(0.002)), # Into an immediate split at row 5, not by transmission
+            entry     = ss.progression('X -> E', dur=2),
+            split     = ss.Transition(E, [P, A], p=[0.3, 0.7]), # No driver: split on entry, at once
+            onward    = ss.Transition(P, Q, p=1.0), # And on again, in the same step
+            rec_q     = Q >> R @ ss.days(5),
+            rec_a     = A >> R @ ss.days(5),
+            init=dict(E=50), name='d')
+    res = ss.Sim(make(), solver='binomial', unit='day', stop=60, total_pop=5000, **kw).run().results.d
+    into = res.infection[1:] + res.entry[1:]
+    assert np.isclose(res.split.sum(), into.sum(), rtol=0.03)
+    return res
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

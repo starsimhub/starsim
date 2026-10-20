@@ -195,6 +195,9 @@ class UnknownDataColumn(CodedError, KeyError):
 class OverlappingSources(CodedError):
     """ A treatment moves people in one state along two transitions of the same disease (`ss.Treatment(moves=)`); each person treated can move along only one transition of a disease """
 
+class TriggerLoop(CodedError):
+    """ Moves with no wait (branches nobody waits in) lead back to a state they started from, so people passed through at once would never settle; names the loop """
+
 class CapabilityError(CodedError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,

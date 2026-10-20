@@ -579,15 +579,16 @@ class Compartmental(Engine):
         self._target_key = key
         self.entry = sc.objdict() # For each state: [(compartment, weight)] and [(transition index, weight)]
 
-        def enter(name, weight, comps, credits, depth=0):
-            if depth > 20:
-                errormsg = f'The immediate transitions out of "{name}" form a loop'
-                raise RuntimeError(errormsg)
+        def enter(name, weight, comps, credits, path=()):
+            if name in path: # The same-step cascade, by construction: see ss.solvers.Agents.junctions
+                cycle = ' -> '.join(path[path.index(name):] + (name,))
+                raise ss.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
+                                     f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
                     credits.append((self.tr_index[track.tr.name], weight*p))
                     for dst,dp in zip(track.tr.dst, self.branch_probs(track.tr)):
-                        enter(dst.name, weight*p*dp, comps, credits, depth+1)
+                        enter(dst.name, weight*p*dp, comps, credits, path + (name,))
                 else:
                     comps.append((track.first, weight*p))
             return

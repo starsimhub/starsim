@@ -337,6 +337,9 @@ class Sim(ss.Base):
                 elif strat.female is not None: # A sex dimension is people.female
                     self.people.female[self.people.auids] = self.groups.group_vals(d, np.arange(strat.n) == strat.female, outside=False)
         self._init_modules_post() # Initialize the module values
+        if self.solver == 'abm':
+            for mod in self.declared: # Those placed in a state nobody waits in move on at once, once every module has its people
+                mod.engine.settle_start()
         for crossing in self.crossings: # Once every disease in it has its initial conditions
             crossing.init()
         self.init_results() # Initialize the results

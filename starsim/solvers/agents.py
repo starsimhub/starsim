@@ -576,7 +576,7 @@ class Agents(Engine):
         self._moved.append((tr, src, uids))
         return
 
-    def finish_moves(self, ti):
+    def finish_moves(self, ti, depth=0):
         """
         Send the agents who left a state to their destinations; one draw per transition for those with several
 
@@ -588,7 +588,7 @@ class Agents(Engine):
         mod = self.mod
         moved = self._moved
         self._moved = []
-        arrived = sc.ddict(list) # Who arrived in a state they pass through at once
+        arrived = sc.ddict(list) # Who arrived in a state with scheduled exits, which may be due already
         by_tr = sc.ddict(list)
         srcs = sc.ddict(list)
         trs = dict()
@@ -623,17 +623,55 @@ class Agents(Engine):
                 self.enter(dst, inds, ti) # Once their levels are known, since dwell times can depend on them
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
-                if len(inds) and dst.name in self.junctions:
+                if len(inds) and dst.name in self.scheduled:
                     arrived[dst.name].append(inds)
-        if arrived: # A state left only by branches with no wait is passed through at once, as in the ODE, rather than held for a step
-            for name,uidlist in arrived.items():
-                state = self.graph.states[name]
-                uids = ss.uids.concatenate(uidlist)
-                self.schedule(state, uids)
-                which = mod[f'exit_{name}'][uids]
-                for i,tr in enumerate(self.graph.exits[name].branches + sc.tolist(self.graph.exits[name].remainder)):
-                    self.move(tr, state, uids[which == i])
-            self.finish_moves(ti)
+        onward = [] # The same-step cascade: those whose exit is due already when they enter (a branch nobody waits in, or a dwell time that rounds to no steps) move on at once, as in the ODE, rather than being held for a step
+        for name,uidlist in arrived.items():
+            state = self.graph.states[name]
+            uids = ss.uids.concatenate(uidlist)
+            uids = uids[mod[name].raw[uids]] # Those still there
+            now = uids[mod[f'ti_exit_{name}'].raw[uids] <= ti]
+            if len(now):
+                exits = self.graph.exits[name]
+                which = mod[f'exit_{name}'].raw[now]
+                for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder) + exits.timed):
+                    onward.append((tr, state, now[which == i]))
+        onward = [item for item in onward if len(item[2])]
+        if onward:
+            if depth > len(self.graph.people_states):
+                cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in onward}))
+                raise ss.TriggerLoop(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n'
+                                     f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
+            for tr,state,uids in onward:
+                self.move(tr, state, uids)
+            self.finish_moves(ti, depth + 1)
+        return
+
+    def settle_start(self):
+        """ Once every module has its people (see `ss.Sim.init()`): those placed in a state nobody waits in move on at once, as they would during a step; these moves are not counted as flows """
+        mod = self.mod
+        moved = False
+        self._moved = []
+        for state in self.graph.people_states:
+            if state.name not in self.junctions:
+                continue
+            uids = self.members(state)
+            if not len(uids):
+                continue
+            self.schedule(state, uids)
+            which = mod[f'exit_{state.name}'][uids]
+            exits = self.graph.exits[state.name]
+            for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder)):
+                self.move(tr, state, uids[which == i])
+            moved = True
+        if moved:
+            self.finish_moves(mod.ti)
+            for name in self.flowcounts:
+                self.flowcounts[name] = 0.0
+            self.flow_groups = sc.objdict()
+            self.events = dict()
+            self.live = None # Counted again
+            self.record_stocks()
         return
 
     @property
@@ -645,6 +683,19 @@ class Agents(Engine):
                 branches = exits.branches + sc.tolist(exits.remainder)
                 if branches and not exits.timed and not self.competing.get(name) and all(tr.name not in self.dwells and not self.after_of(tr) for tr in branches):
                     self._junctions.add(name)
+            def walk(name, path=()): # People passed through at once must reach a state they wait in
+                if name in path:
+                    cycle = ' -> '.join(path[path.index(name):] + (name,))
+                    raise ss.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
+                                         f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
+                if name in self._junctions:
+                    exits = self.graph.exits[name]
+                    for tr in exits.branches + sc.tolist(exits.remainder):
+                        for dst in tr.dst:
+                            walk(dst.name, path + (name,))
+                return
+            for name in sorted(self._junctions):
+                walk(name)
         return self._junctions
 
     def add_offspring(self, tr, uids, ti):
@@ -909,21 +960,24 @@ class Agents(Engine):
             candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
             competing = self.competing[name]
             late = missed.get(name)
-            if f'late_{name}' in mod.__dict__: # Those who entered after last step's draws (see enter())
+            flagged = None
+            if f'late_{name}' in mod.__dict__: # Those who entered after the draws of the step they entered in (see enter())
                 flagged = mod[f'late_{name}'].raw[uids].astype(bool)
-                if flagged.any():
-                    late = flagged if late is None else (late | flagged)
-                    mod[f'late_{name}'][uids[flagged]] = False
             if candidates: # Scheduled exits that are due
                 self.rescale_exits(state, uids)
                 due = mod[f'ti_exit_{name}'].raw[uids] <= ti # Everyone here has been scheduled, so none is .nan
                 which = mod[f'exit_{name}'][uids]
-                if late is not None: # Those who entered by a progression last step face the competing rates for that step too, before their scheduled exit: see schedule()
+                if flagged is not None and (flagged & due).any(): # Their missed draw is taken in the step their exit is due, so they face the competing rates for as long as the dwell time says
+                    late = (flagged & due) if late is None else (late | (flagged & due))
+                if late is not None: # Those placed in the state without a schedule last step face the competing rates for that step too, before their scheduled exit: see schedule()
                     drawn = ~due | late
                     left = np.zeros(len(uids), dtype=bool)
-                    left[np.flatnonzero(drawn)] = self.draw_competing(state, uids[drawn], np.where((late & ~due)[drawn], 2*dt, dt))
+                    double = late & ~due if flagged is None else late & ~due & ~flagged
+                    left[np.flatnonzero(drawn)] = self.draw_competing(state, uids[drawn], np.where(double[drawn], 2*dt, dt))
                     due &= ~left
                     competing = None
+                if flagged is not None and flagged.any():
+                    mod[f'late_{name}'][uids[flagged & due]] = False # Caught up; the others keep the flag until their exit is due
                 for i,tr in enumerate(candidates):
                     self.move(tr, state, uids[due & (which == i)])
                 uids = uids[~due]
@@ -1194,6 +1248,7 @@ class Agents(Engine):
                     self.log_infections(uids)
                 self.move(tr, src, uids)
         self.finish_moves(mod.ti + 1)
+        self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. rel_sus.effective) are worked out again
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti + 1)
         for name,val in (getattr(self, '_updates', None) or {}).items(): # The counts set by updates, at the end of the step (see update_values())
