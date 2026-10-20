@@ -85,6 +85,26 @@ class State(Nameable, Expr):
         """ I @ rate: a transition into I, with no source yet """
         return Transition(dst=self) @ driver
 
+    @property
+    def time(self):
+        """ Time since this person last entered the state, in the sim's unit (NaN outside it) """
+        return ss.expressions.Clock([self])
+
+    @property
+    def progress(self):
+        """ The share of the scheduled dwell time in this state that has elapsed, from 0 to 1 (NaN outside it) """
+        return ss.expressions.Clock([self], kind='progress')
+
+    @property
+    def enter(self):
+        """ The event of entering this state: a condition, `on=`, or `.uids` """
+        return ss.conditions.Event('enter', [self])
+
+    @property
+    def exit(self):
+        """ The event of leaving this state """
+        return ss.conditions.Event('exit', [self])
+
     def __or__(self, other): # As a condition: the people in either state, e.g. where=sir.I | sir.R (a set of sources is a sum: S + I >> D)
         return ss.conditions.as_cond(self) | other
 
@@ -168,6 +188,19 @@ class Null:
 null = Null()
 
 
+class Stay:
+    """ A destination that cancels the move: in a split, the people who take it stay where they are, and never take this transition again in this stay """
+    def __repr__(self):
+        return 'ss.stay'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+stay = Stay()
+
+rest_stay = False # Pending a decision (03 Q1): whether branch probabilities out of a state that sum below 1 leave the rest in the state, guessed and printed (True), or are an error that suggests ss.stay (False)
+
+
 #%% Transitions
 
 def parse_increment(increment, what):
@@ -198,6 +231,57 @@ def parse_arrow(arrow):
     src = src[0] if isinstance(src, list) and len(src) == 1 else src
     dst = [name.strip() for name in parts[1].split('|') if name.strip()] or null
     return src, dst
+
+
+class on:
+    """
+    A trigger, as the driver of a transition: people move as soon as a condition holds, or when an event happens to them
+
+    A condition (lazy, a state, or a function of the sim) is level-triggered: anyone in the source it holds for
+    moves, in the step it first holds, including on entry. An event (a transition, `tr.to(B)`, `X.enter`, `X.exit`)
+    is edge-triggered: the people it happened to move. Either way, in the same step as whatever caused it. As agents
+    only, for now.
+
+    Args:
+        x (Cond/Event/Transition/State/func): the condition or event
+
+    Examples:
+        ```python
+        debut = U >> CST1 @ ss.on(ss.People.female & (ss.People.age >= 15))
+        cancelled = (S + P + C) >> Z @ ss.on(ss.any(ss.state(f'{g}.X') for g in others))
+        ```
+    """
+    def __init__(self, x):
+        if isinstance(x, on):
+            x = x.x
+        elif isinstance(x, Transition):
+            x = ss.conditions.Event('tr', x)
+        elif isinstance(x, (State, ss.Arr)):
+            x = ss.conditions.as_cond(x)
+        elif not (isinstance(x, ss.conditions.Cond) or callable(x)):
+            errormsg = f'ss.on() takes a condition, an event, or a function of the sim, not {x} ({type(x).__name__})'
+            raise TypeError(errormsg)
+        self.x = x
+        return
+
+    @property
+    def event(self):
+        """ Whether it is an event (edge-triggered) rather than a condition (level-triggered) """
+        return isinstance(self.x, ss.conditions.Event)
+
+    @property
+    def outcome(self):
+        """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.interventions.trigger_moves()`) """
+        x = self.x
+        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' for leaf in ss.conditions.event_leaves(x))
+
+    def __repr__(self):
+        return f'ss.on({getattr(self.x, "__name__", self.x)})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+Trigger = on # So the class can be referred to where on= is an argument
 
 
 class Transition(Nameable):
@@ -241,9 +325,11 @@ class Transition(Nameable):
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None):
-        if rate is not None and dur is not None:
-            errormsg = 'A transition takes rate= or dur=, not both'
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None):
+        if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
+            rate, on = None, rate
+        if sum(x is not None for x in [rate, dur, on]) > 1:
+            errormsg = 'A transition takes one of rate=, dur=, or on='
             raise ValueError(errormsg)
         if stages is not None and rate is not None:
             errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
@@ -251,6 +337,7 @@ class Transition(Nameable):
         self.src = None
         self.dst = None
         self.p = None
+        self.trigger = None if on is None else Trigger(on)
         self.rate = None if rate is None else as_expr(rate)
         self.dur = None if dur is None else as_expr(dur)
         self.stages = stages
@@ -271,12 +358,14 @@ class Transition(Nameable):
             self.offspring = (state, int(n))
         self.move = None # A change of level in some dimensions: {dim: level}
         self.move_given = dict(move) if move else None # As given, for the model spec
+        self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
         if move:
             self.move = sc.objdict()
             for dim,level in move.items():
                 if isinstance(level, str) and re.search(r'->|>>', level):
                     srcs, dsts = parse_arrow(level)
                     level = dsts[0]
+                    self.move_from[dim] = sc.tolist(srcs)
                     at = ss.conditions.Cond('dim', dim) == srcs # Only people at the level they move from
                     self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
                 self.move[dim] = level
@@ -289,6 +378,10 @@ class Transition(Nameable):
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.arrow_given = True # For ss.birth() and ss.immigration() in demographics=: whether the state people arrive in was given
+        self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
+        self.stays = False # Whether ss.stay is one of the destinations, kept out of dst: what the other branches leave over stays (see split)
+        self.p_stay = None # Its probability, if given (otherwise the rest)
+        self._stay_at = None
         self.guessed = sc.objdict() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)
@@ -296,6 +389,8 @@ class Transition(Nameable):
             self._set_dst(dst)
         if p is not None:
             self.p = sc.tolist(p)
+            if self._stay_at is not None and len(self.p) == len(self.dst) + 1:
+                self.p_stay = self.p.pop(self._stay_at)
         self.check_dimensions()
         return
 
@@ -314,8 +409,22 @@ class Transition(Nameable):
         """
         return ss.conditions.Cond('incidence', self, over, by) # The transition itself, since it may be named and given its module later
 
+    def to(self, dst):
+        """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids` """
+        return ss.conditions.Event('to', self, dst)
+
+    @property
+    def uids(self):
+        """ The agents who went through this transition, from the moment they moved until the same point in the next step """
+        return ss.conditions.Event('tr', self).uids
+
+    @property
+    def split(self):
+        """ Whether it splits between several destinations when it is taken (ss.stay counts as one) """
+        return self.dst is not None and (len(self.dst) > 1 or self.stays)
+
     def _set_src(self, src):
-        self.src = [] if src is null else [s for s in sc.tolist(src)]
+        self.src = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
         return self
 
     def _set_dst(self, dst):
@@ -330,6 +439,10 @@ class Transition(Nameable):
             self.p = list(terms.values())
         else:
             self.dst = sc.tolist(dst)
+            if any(d is stay for d in self.dst): # Kept out of the destinations, so they are all states
+                self._stay_at = next(i for i,d in enumerate(self.dst) if d is stay)
+                self.dst = [d for d in self.dst if d is not stay]
+                self.stays = True
             if len(self.dst) > 1 and any(d is null for d in self.dst):
                 raise ss.BadBranchSplit('ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
                                         'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')
@@ -370,16 +483,20 @@ class Transition(Nameable):
 
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, anything else is a rate """
-        if self.rate is not None or self.dur is not None or self._pending is not None:
+        if self.rate is not None or self.dur is not None or self._pending is not None or self.trigger is not None:
             errormsg = f'The transition {self} already has what drives it, so cannot take a second "@ {driver}"'
             raise TypeError(errormsg)
+        if isinstance(driver, Trigger): # People move as soon as it holds, or when it happens
+            new = self._copy()
+            new.trigger = driver
+            return new
         value = driver.value if isinstance(driver, par) else driver
         if isinstance(value, ss.bernoulli):
             errormsg = f'"@ {value}" is a probability, not a rate or a duration; a share that goes one way is p=, e.g. ss.progression("I -> R | D", dur=10, p=[None, 0.1])'
             raise TypeError(errormsg)
         typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
         new = self._copy()
-        if isinstance(value, (ss.dur, ss.Dist)) or any(isinstance(v, ss.dur) for v in typed):
+        if isinstance(value, (ss.dur, ss.Dist)) or any(isinstance(v, (ss.dur, ss.Dist)) for v in typed): # Including ss.by(sex=[dist, dist])
             new.dur = as_expr(driver)
         else:
             new.rate = as_expr(driver)
@@ -494,7 +611,9 @@ class Transition(Nameable):
 
     @property
     def driver_str(self):
-        if self.dur is not None:
+        if self.trigger is not None:
+            return repr(self.trigger)
+        elif self.dur is not None:
             return f'dur = {value_str(self.dur.raw)}'
         elif self.rate is not None:
             return format_expr(self.rate)
@@ -530,7 +649,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -546,12 +665,13 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         after (dur): a minimum stay in the source state first (see `ss.Transition`)
         before (dur): for a rate, the time in the source state after which it no longer applies (see `ss.Transition`)
         offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
+        on (Cond/Event/func): a trigger, the same as `rate=ss.on(...)` (see `ss.on`)
         acquisition (bool): whether it is an acquisition of the disease (see `ss.Transition`), e.g. `ss.progression('S -> V', rate=..., acquisition=False)` for a vaccination
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
 
 
 def birth(arrow=None, rate=None, name=None, label=None):
@@ -928,12 +1048,23 @@ def dwell_stats(dist, convert):
     return float(mean), float(std)
 
 
-def numeric_pars(dist, convert):
-    """ The parameters of a distribution as plain numbers in the sim's unit; shape parameters are left alone """
+def numeric_pars(dist, convert, per_agent=None):
+    """
+    The parameters of a distribution as plain numbers in the sim's unit; shape parameters are left alone
+
+    A function is called by the distribution, for the agents drawn for; a value for each group (`ss.by`) becomes
+    such a function, made by `per_agent`.
+    """
     shape_pars = ['a', 'c', 'n', 'p']
     pars = dict()
     for key,val in dist.pars.items():
-        if key in shape_pars and not isinstance(val, ss.TimePar):
+        if isinstance(val, by):
+            if per_agent is None:
+                errormsg = f'The parameter "{key}" of {dist} has a value for each group ({val}), so has no single value here'
+                raise ValueError(errormsg)
+            unit = dist.unit if key not in shape_pars else None
+            pars[key] = per_agent(val if unit is None else val.map(lambda v: unit(v) if sc.isnumber(v) else v))
+        elif key in shape_pars and not isinstance(val, ss.TimePar):
             pars[key] = val
         elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn
             pars[key] = converted_func(val, dist.unit, convert)
@@ -965,9 +1096,30 @@ def person_func(expr):
     return func
 
 
-def numeric_dist(dist, convert):
+def numeric_dist(dist, convert, per_agent=None):
     """ A copy of a distribution with its parameters as plain numbers in the sim's unit, so it samples durations in that unit """
-    return type(dist)(**numeric_pars(dist, convert))
+    return type(dist)(**numeric_pars(dist, convert, per_agent))
+
+
+def varying_pars(dist):
+    """ The parameters of a distribution that differ between people: values by group (`ss.by`), and functions """
+    return {key:val for key,val in dist.pars.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
+
+
+def by_dist(raw):
+    """ A value for each group that is a distribution (`ss.by(sex=[ss.lognorm_ex(...), ss.lognorm_ex(...)])`) as one distribution with values for each group as its parameters """
+    if not (isinstance(raw, by) and raw.items and all(isinstance(v, ss.Dist) for v in raw.items)):
+        return raw
+    dists = raw.items
+    if raw.dim is None or len({type(d) for d in dists}) > 1:
+        raise ss.CapabilityError(f'{raw} has distributions of {"several families" if raw.dim is not None else "several dimensions"}, which is not supported yet; give one family over one dimension, or its parameters as ss.by() values.')
+    unit = lambda d,v: d.unit(v) if (d.unit is not None and sc.isnumber(v)) else v
+    given = raw.given.get(raw.dim)
+    if isinstance(given, dict): # By name, e.g. ss.by(sex=dict(female=..., male=...)), which is read from each person
+        pars = {key:by(**{raw.dim:{k:unit(d, d.pars[key]) for k,d in given.items()}}) for key in dists[0].pars.keys()}
+    else:
+        pars = {key:by(**{raw.dim:[unit(d, d.pars[key]) for d in dists]}) for key in dists[0].pars.keys()}
+    return type(dists[0])(**pars)
 
 
 def erlang_stages(mean, std, max_stages=50):
@@ -996,11 +1148,11 @@ def find_name(obj, frame):
 
 
 def class_members(cls):
-    """ Collect the states, transitions, parameters, and outcomes declared in a class body, in definition order """
+    """ Collect the states, transitions, parameters, outcomes, and results declared in a class body, in definition order """
     members = dict()
     for base in reversed(cls.__mro__):
         for key,val in base.__dict__.items():
-            if isinstance(val, (State, Transition, par, outcome)):
+            if isinstance(val, (Expr, Transition, outcome, FlowSum)): # Including results that are sums or ratios of states
                 members[key] = val
             elif key in members: # Rebound to something else in a subclass
                 del members[key]

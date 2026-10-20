@@ -659,13 +659,13 @@ class Groups:
         births = np.ones(self.n_groups)
         for d,strat in enumerate(self.strats):
             strat.dim = d
-        joints = [strat.joint for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
+        joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
             errormsg = 'Only one split= can cover several dimensions at once'
             raise ValueError(errormsg)
         self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
         if joints:
-            ds, grid = joints[0].grid(sim)
+            ds, grid = joints[0].joint.grid(sim)
             ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
             within = [] # A split over age and other dimensions whose rows each sum to 1 is the share at each level of the others within each age group, so people keep their ages (otherwise it is the share at each combination, and sets the ages)
             if ages:

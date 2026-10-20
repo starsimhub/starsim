@@ -198,6 +198,24 @@ class UnknownDataColumn(CodedError, KeyError):
     result that is not kept by group, or kept by group only every few steps
     """
 
+class OverlappingSources(CodedError):
+    """ A treatment moves people in one state along two transitions of the same disease (`ss.Treatment(moves=)`); each person treated can move along only one transition of a disease """
+
+class TriggerLoop(CodedError):
+    """ Moves with no wait (branches nobody waits in) lead back to a state they started from, so people passed through at once would never settle; names the loop """
+
+class ClockOutsideDomain(CodedError):
+    """ A clock (`X.time`, `(A | B).time`, `X.progress`) is read where it has no value: by a transition out of a state outside its states, or by a modifier whose `where=` is not inside them (at build; a `where=` that is a function is checked when it runs, where a NaN amount is an error) """
+
+class NoScheduledDwell(CodedError):
+    """ `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it """
+
+class PeopleAndCounts(CodedError):
+    """ A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` """
+
+class InitWhereNobodyIs(CodedError):
+    """ `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) """
+
 class CapabilityError(CodedError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,
@@ -251,6 +269,9 @@ class StageStopped(StarsimWarning):
 
 class NotConverged(StarsimWarning):
     """ The chains of a posterior disagree (R-hat above 1.01), or some draws diverged """
+
+class UndrivenUnused(StarsimWarning):
+    """ A transition with no rate, duration, or `p=` (undriven) is named by no product, delivery, or `on=` in the sim, so only custom code can move people along it """
 
 class LossyExport(StarsimWarning):
     """ An export to another format, or to code, left something out or changed it. Lists each item """

@@ -44,6 +44,14 @@ class MixedNetworks(ss.ndict):
             raise
 
 
+def clocks_of(mod):
+    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, amounts, or conditions read """
+    graph = getattr(mod, 'graph', None)
+    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
+    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
+    return ss.expressions.clocks_in(objs)
+
+
 def choose_solver(sim):
     """
     Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
@@ -60,7 +68,7 @@ def choose_solver(sim):
         for name,tr in mod.graph.transitions.items():
             where = getattr(tr, 'where', None)
             key = f'where_{mod.name}_{name}'
-            if where is not None and key not in pars.connectors:
+            if where is not None and key not in pars.connectors and tr.trigger is None: # A trigger takes where= into its condition
                 if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
                     pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
                     pars.connectors[key].on_rate = True
@@ -71,6 +79,16 @@ def choose_solver(sim):
                     others = ~ss.conditions.as_cond(where)
                 pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=others, name=key)
                 pars.connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in where=
+                level_key = f'level_{mod.name}_{name}'
+                if tr.move_from and tr.p is not None and level_key not in pars.connectors: # A branch for the people at some levels only (a move= arrow): never drawn by people at the others, who would never leave by it
+                    at = None
+                    for dim,levels in tr.move_from.items():
+                        here = None
+                        for level in levels: # At any of the levels it moves people from
+                            eq = ss.conditions.Cond('dim', dim) == level
+                            here = eq if here is None else here | eq
+                        at = here if at is None else at & here
+                    pars.connectors[level_key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=~at, name=level_key)
     for m in list(pars.interventions.values()) + list(pars.connectors.values()): # A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted
         if isinstance(m, ss.modify) and isinstance(m.amount, ss.par):
             p = m.amount
@@ -239,6 +257,7 @@ def choose_solver(sim):
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
 
     for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
+        dims = [strat.name for strat in sim.groups.strats]
         for p in mod.graph.all_pars():
             if isinstance(p.raw, ss.by):
                 p.raw.check(sim, note=True)
@@ -355,6 +374,8 @@ def init_crossings(sim):
             strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
             sim.groups.cross_strats.append(strat)
         sim.crossings.append(ss.solvers.Crossing(sim, members))
+        sizes = [strat.n for strat in sim.groups.cross_strats[-len(members):]]
+        ss.note(f'the states of {" × ".join(members)} are tracked jointly: {" × ".join(map(str, sizes))} = {int(np.prod(sizes)):,} joint states per group', sim=sim)
     sim.groups.init()
     sim.mixing = ss.solvers.Mixing(sim)
     return
@@ -386,6 +407,8 @@ def init_capabilities(sim, modules):
         reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no trying
         for reason in reasons:
             add(f'module: {mod.name}', 'no', reason, auto=reason)
+        for clock in clocks_of(mod)[:1]: # Kept per agent for now
+            add(f'module: {mod.name}', 'no', f'{clock} is a clock', auto=f'{clock} is a clock, which is kept per agent for now', fatal=True)
         if approx is False and isinstance(mod, ss.Delivery) and mod.holds and mod.product.staged: # Kept as levels of time since delivery otherwise: see ss.Held.init_stages()
             add(f'module: {mod.name}', 'approx', 'levels of time since delivery', auto=f'the protection of "{mod.product.name}" fades by a function of time, and approx=False')
         if isinstance(mod, ss.Strains):
@@ -426,7 +449,7 @@ def init_capabilities(sim, modules):
             raw = p.raw
             if callable(raw) and not isinstance(raw, ss.Dist):
                 name = getattr(raw, '__name__', 'function')
-                if len(inspect.signature(raw).parameters) >= 2:
+                if ss.utils.n_args(raw) >= 2:
                     add(f'function: {name}', 'no', 'takes uids', auto=f'the function "{name}" takes uids')
                 elif not isinstance(raw, timed):
                     add(f'function: {name}', '?', 'tried on groups', probe=(mod.name, i))
@@ -474,6 +497,10 @@ def init_capabilities(sim, modules):
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
                 else:
                     add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
+            if tr.trigger is not None and tr.trigger.outcome:
+                add(f'transition: {name}', 'yes', 'moved when the outcome of a delivery happens')
+            elif tr.trigger is not None:
+                add(f'transition: {name}', 'no', 'a trigger (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, which runs as agents for now', fatal=True)
             if getattr(tr, 'offspring', None) is not None:
                 add(f'transition: {name}', 'no', 'adds offspring for each person', auto=f'"{name}" has offspring (offspring=), which are added for each person who goes through it')
             if getattr(tr, 'lifetable', None) is not None and not aged:

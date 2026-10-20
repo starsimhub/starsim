@@ -776,8 +776,8 @@ def test_route_modifiers():
     ode = pool('ode', share())
     assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), route='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
     ratio = lambda solver, seeds: np.mean([pool(solver, share(), seed)[-1] for seed in seeds])/np.mean([pool(solver, None, seed)[-1] for seed in seeds])
-    ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(4)) # Each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26
-    assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.1), (abm_ratio, ode_ratio)
+    ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(8)) # Each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26 (agents 0.22 to 0.28 over 4 seeds at a time)
+    assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.15), (abm_ratio, ode_ratio)
     return
 
 
@@ -861,6 +861,20 @@ def test_peract_spec():
 
 
 # %% Run as a script
+def test_per_act_beta():
+    """ A bare beta on a network with acts is a probability per act, so it does not depend on dt or the unit """
+    sc.heading('Testing per-act beta on a sexual network')
+    def run(dt, unit='year', beta=0.003):
+        si = ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0.05, name='si')
+        mf = ss.MFNet(acts=ss.constant(ss.freqperyear(96)))
+        sim = ss.Sim(si, networks=mf, n_agents=3000, start='2000-01-01', stop='2005-01-01', unit=unit, dt=dt, verbose=0, rand_seed=1).run()
+        return sim.results.si.infection.sum()
+    weekly, monthly, quarterly = [run(dt) for dt in [ss.weeks(1), ss.months(1), ss.months(3)]]
+    assert monthly == run(ss.months(1), unit='month'), 'Infections should not depend on the unit'
+    assert max(weekly, monthly, quarterly) < 1.3*min(weekly, monthly, quarterly), f'Infections should not depend on dt: {weekly}, {monthly}, {quarterly}'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -894,5 +908,6 @@ if __name__ == '__main__':
     needles = test_needles()
     two = test_two_groups()
     spec = test_peract_spec()
+    acts = test_per_act_beta()
 
     T.toc()

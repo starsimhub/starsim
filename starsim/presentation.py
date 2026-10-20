@@ -74,6 +74,11 @@ class Presentation:
                     add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'exposure through the networks')
                 for text in (route_lines(mod, tr, sim) if sim is not None else []):
                     add('', text)
+            elif tr.trigger is not None:
+                add(name, f'{tr.arrow}   on {getattr(tr.trigger.x, "__name__", tr.trigger.x)} ({"when it happens" if tr.trigger.event else "as soon as it holds"}, in the same step)')
+            elif tr.undriven:
+                movers = ss.interventions.movers(sim, mod.name, name) if sim is not None else None
+                add(name, f'{tr.arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
             else:
                 guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
                 kind = 'spontaneous'
@@ -114,7 +119,8 @@ class Presentation:
                 rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
                 how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]
                 how += [f'a row, one column for each of {sc.strjoin(d.name for d in tr.dst)}, normalized'] if any(isinstance(p, ss.expressions.Column) for p in tr.p) else []
-                add('', f'p = {", ".join("the rest" if p is None else format_expr(p, values=True) for p in ps)}', '; '.join(how) or at_exit)
+                stays = [] if not tr.stays else ['stay: ' + ('the rest' if tr.p_stay is None else format_expr(tr.p_stay, values=True))]
+                add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in ps] + stays)}', '; '.join(how) or at_exit)
             elif 'p' in tr.guessed:
                 add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
             if tr.dst is not None and len(tr.dst) > 1: # A result for each destination, e.g. res.cin.X
@@ -124,6 +130,9 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
+        for name,exits in self.exits.items():
+            if exits.stay:
+                add(name, f'the other {exits.stay:.0%} stay', 'guessed')
         for name,upd in self.updates.items():
             add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", unit=unit, mul="×")}, set at the end of each step')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle

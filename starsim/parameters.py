@@ -789,7 +789,11 @@ class by:
             errormsg = 'ss.by() takes a table, or one value per level for each dimension, e.g. ss.by(age=[0.1, 0.2, 0.3])'
             raise ValueError(errormsg)
         self.array = None
+        self.wrap = None # The type of a typed array given as the table, e.g. ss.permonth(np.ones((2, 2)))
         if dims is not None: # An array with one axis for each dimension
+            if isinstance(table, ss.TimePar):
+                self.wrap = type(table)
+                table = table.value
             self.array = np.array(table, dtype=float)
             if self.array.ndim != len(dims):
                 errormsg = f'ss.by() was given {len(dims)} dimensions ({sc.strjoin(dims)}), but an array with {self.array.ndim} axes'
@@ -821,7 +825,7 @@ class by:
     def map(self, func):
         """ A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product) """
         if self.array is not None:
-            return by(func(self.array), dims=self.dims)
+            return by(func(self.array if self.wrap is None else self.wrap(self.array)), dims=self.dims)
         elif self.table is not None:
             table = self.table.copy()
             table['value'] = [func(v) for v in table['value']]
@@ -1020,7 +1024,8 @@ class by:
             raise ss.CapabilityError(f'{self} is by {sc.strjoin(dim for dim in self.dims if dim not in [strat.name for strat in strats])}, a property of each person that is not a dimension, so it has no value for a group.\n'
                                      f'     Stratify by it (sim.stratify(...)) to run as compartments, or run with solver="abm".')
         if self.array is not None:
-            return ds, np.vectorize(lambda v: float(convert(v)))(self.array) if self.array.size else self.array.copy()
+            wrap = self.wrap or (lambda v: v)
+            return ds, np.vectorize(lambda v: float(convert(wrap(v))))(self.array) if self.array.size else self.array.copy()
         if self.table is None:
             out = np.ones([strat.n for strat in strats])
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):

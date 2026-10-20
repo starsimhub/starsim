@@ -7,13 +7,13 @@ is lazy: an expression that is evaluated each time it is needed during a run, on
 agents in an agent-based run and on groups in a compartmental one. A function of
 the sim does the same job, for anything the operators cannot say.
 """
-import inspect
 import operator
+import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond']
+__all__ = ['Cond', 'Event', 'clock', 'state', 'any_', 'child']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -21,7 +21,7 @@ ops = {
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
 ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.ppl.age)
-leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory']
+leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory', 'move']
 memory_kinds = ['ever', 'count', 'since']
 
 
@@ -34,7 +34,7 @@ class Cond:
     states, and on stratifications.
 
     Args:
-        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence', 'event', 'memory'), an operator, '~', or 'isin'
+        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence', 'event', 'memory', 'move'), an operator, '~', or 'isin'
         args (list): the operands
 
     Examples:
@@ -65,6 +65,7 @@ class Cond:
         if op == 'people': return f'people.{args[0]}'
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
+        elif op == 'move': return self.label
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
         elif op == 'event': return modname(args[0]) + (f'.{args[1]}' if args[1] is not None else '')
         elif op == 'memory': return f'{args[0]!r}.{args[1]}'
@@ -90,6 +91,32 @@ class Cond:
     def __eq__(self, other): return Cond('==', self, other)
     def __ne__(self, other): return Cond('!=', self, other)
     def __and__(self, other): return Cond('&', self, other)
+    @property
+    def time(self):
+        """ For a set of states (`A | B`): the time since entering it from outside it, in the sim's unit (moves within the set do not reset it; NaN outside it) """
+        states = set_states(self)
+        if states is None:
+            errormsg = f'.time is for a set of states, e.g. (sir.I | sir.R).time, not {self!r}'
+            raise TypeError(errormsg)
+        return ss.expressions.Clock(states)
+
+    @property
+    def enter(self):
+        """ For a set of states (`A | B`): the event of entering it from outside it (moves within the set are not entering it) """
+        return self._set_event('enter')
+
+    @property
+    def exit(self):
+        """ For a set of states (`A | B`): the event of leaving it for a state outside it """
+        return self._set_event('exit')
+
+    def _set_event(self, kind):
+        states = set_states(self)
+        if states is None:
+            errormsg = f'.{kind} is for a set of states, e.g. (sir.I | sir.R).{kind}, not {self!r}'
+            raise TypeError(errormsg)
+        return Event(kind, states)
+
     def __or__(self, other):  return Cond('|', self, other)
     def __rand__(self, other): return Cond('&', other, self)
     def __ror__(self, other):  return Cond('|', other, self)
@@ -174,6 +201,244 @@ class Cond:
         return ops[op](a, b)
 
 
+class Event(Cond):
+    """
+    Something that happens to people at a moment: going through a transition (`tr`), one branch of it
+    (`tr.to(B)`), or entering or leaving a state or a set of states (`X.enter`, `(A | B).exit`), where
+    entering a set means arriving from outside it
+
+    An event is a condition, true for the agents it happened to from the moment they moved until the
+    same point in the next step; it can be given to `on=`; and in a running sim, `.uids` are those agents.
+
+    Args:
+        kind (str): 'tr', 'to', 'enter', or 'exit'
+        obj (Transition/list): the transition; or the states, as `ss.State`s or (module, name) pairs
+        dst (State): for 'to', the destination
+    """
+    def __init__(self, kind, obj, dst=None):
+        if kind == 'to' and not any(dst is d or getattr(dst, 'name', dst) == d.name for d in (obj.dst or [])):
+            errormsg = f'{getattr(dst, "name", dst)} is not a destination of {obj.name} ({obj.arrow})'
+            raise ValueError(errormsg)
+        super().__init__('move', kind, obj, dst)
+        return
+
+    @property
+    def names(self):
+        """ For entering or leaving: the names of the states """
+        return [s.name if isinstance(s, ss.State) else s[1] for s in self.args[1]]
+
+    @property
+    def module(self):
+        kind, obj, dst = self.args
+        if kind in ['tr', 'to']:
+            return obj.module
+        mods = [s.module if isinstance(s, ss.State) else s[0] for s in obj]
+        return next((m for m in mods if m is not None), None)
+
+    @property
+    def label(self):
+        kind, obj, dst = self.args
+        mod = modname(self.module)
+        prefix = f'{mod}.' if mod else ''
+        if kind in ['tr', 'to']:
+            out = f'{prefix}{obj.name}'
+            return out if kind == 'tr' else f'{out}.to({getattr(dst, "name", dst)})'
+        names = self.names
+        return f'{prefix}{names[0] if len(names) == 1 else "(" + " | ".join(names) + ")"}.{kind}'
+
+    def spec(self):
+        """ What the engine is asked for: see `ss.solvers.Agents.event_uids()` """
+        kind, obj, dst = self.args
+        if kind == 'tr':
+            return dict(tr=obj.name)
+        elif kind == 'to':
+            return dict(tr=obj.name, to=getattr(dst, 'name', dst))
+        return {kind: self.names}
+
+    @property
+    def uids(self):
+        """ The agents the event happened to, in a running sim """
+        engine = getattr(self.module, 'engine', None)
+        if engine is None:
+            errormsg = f'{self.label} has no agents yet: .uids is for a module in a sim that has been initialized'
+            raise ValueError(errormsg)
+        if not isinstance(engine, ss.solvers.Agents):
+            raise ss.CapabilityError(f'{self.label}.uids is a list of agents, which exist only with solver="abm".')
+        return engine.event_uids(**self.spec())
+
+
+class Named:
+    """
+    An event a module records that is not one of its transitions (e.g. `preg.live_birth`), or several events (a tuple of names), for `ss.conditions.Event`
+
+    Args:
+        module (Module/str): the module that records it
+        name (str/tuple): the name of the event, or of several
+    """
+    def __init__(self, module, name):
+        self.module = module
+        self.name = name
+        self.dst = None
+        return
+
+    def __repr__(self):
+        return f'{modname(self.module)}.{self.name}'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+class Child(Event):
+    """
+    `ss.child(event)`: an event on the mother, when one of her children goes through `event` (e.g. `preg.birth`), as agents
+
+    Args:
+        event (Event/Transition): the event that happens to the child
+        under (dur): only children younger than this
+    """
+    def __init__(self, event, under=None):
+        if isinstance(event, ss.Transition):
+            event = Event('tr', event)
+        if not isinstance(event, Event):
+            errormsg = f'ss.child() takes an event (a transition, or e.g. preg.birth), not {event}'
+            raise TypeError(errormsg)
+        Cond.__init__(self, 'move', 'child', event, under)
+        return
+
+    @property
+    def label(self):
+        return f'child({self.args[1].label})'
+
+    @property
+    def module(self):
+        return self.args[1].module
+
+    def spec(self):
+        return self.args[1].spec()
+
+    def mothers(self, sim, uids):
+        """ The mothers of the children an event happened to """
+        ppl = sim.people
+        under = self.args[2]
+        uids = ss.uids(uids)
+        if under is not None:
+            uids = uids[ppl.age.raw[uids] < ss.dur(under).years]
+        parent = ppl.parent.raw[uids]
+        return ss.uids(np.unique(parent[parent != ppl.parent.nan]))
+
+    @property
+    def uids(self):
+        return self.mothers(self.module.sim, self.args[1].uids)
+
+
+def child(event, under=None):
+    """
+    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
+
+    Args:
+        event (Event/Transition): the event that happens to the child
+        under (dur): only children younger than this
+    """
+    return Child(event, under=under)
+
+
+def set_states(cond):
+    """ The states a condition is a set of (`A | B`, or one state), as (module, name) pairs; None if it is anything else """
+    if cond.op == 'state':
+        return [(cond.args[0], cond.args[1])]
+    if cond.op == '|':
+        parts = [set_states(as_cond(arg)) for arg in cond.args]
+        return None if any(p is None for p in parts) else [s for p in parts for s in p]
+    return None
+
+
+def clock(within, bins=None):
+    """
+    Time since entering some states from outside them: the longhand of `X.time` and `(A | B).time`, with options
+
+    Args:
+        within (State/Cond): the state, or a set of states (`A | B`)
+        bins (dur): in a compartmental run, the width of each level of elapsed time
+
+    Examples:
+        ```python
+        latent = ss.clock(syph.EL | syph.LL, bins=ss.months(3))
+        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=syph.EL | syph.LL)
+        ```
+    """
+    states = [within] if isinstance(within, ss.State) else set_states(as_cond(within))
+    if states is None:
+        errormsg = f'ss.clock() takes a state or a set of states (A | B), not {within!r}'
+        raise TypeError(errormsg)
+    return ss.expressions.Clock(states, bins=bins)
+
+
+def state(path):
+    """
+    A state of a module by its path, resolved when the condition is evaluated: for a module made before the others exist
+
+    Args:
+        path (str): the module and the state, e.g. `'hpv18.X'`
+    """
+    parts = path.split('.') if isinstance(path, str) else []
+    if len(parts) != 2 or not all(parts):
+        errormsg = f'ss.state() takes a path "module.state", e.g. "hpv18.X", not {path!r}'
+        raise ValueError(errormsg)
+    return Cond('state', *parts)
+
+
+def any_(items):
+    """ `ss.any()`: true for anyone any of some conditions (or states) hold for, e.g. `ss.any(ss.state(f'{g}.X') for g in others)` """
+    items = [as_cond(item) for item in items]
+    if not items:
+        errormsg = 'ss.any() needs at least one condition'
+        raise ValueError(errormsg)
+    return functools.reduce(operator.or_, items)
+
+
+def module_refs(cond):
+    """ The names of the modules whose states, arrays, or events a condition reads (not those of a function of the sim) """
+    out = set()
+    if isinstance(cond, Event):
+        out.add(modname(cond.module))
+    elif isinstance(cond, Cond) and cond.op in ['state', 'array']:
+        out.add(modname(cond.args[0]))
+    elif isinstance(cond, Cond) and cond.op not in leaves:
+        for arg in cond.args:
+            out |= module_refs(arg)
+    return out - {None}
+
+
+def bounding_states(cond):
+    """ The states a condition selects people from, as names (a superset of who it selects), or None if it can select anyone """
+    if isinstance(cond, ss.State):
+        cond = as_cond(cond)
+    if not isinstance(cond, Cond):
+        return None
+    op, args = cond.op, cond.args
+    if op == 'state':
+        return {args[1]}
+    a, b = [bounding_states(arg) for arg in args] if op in ['&', '|'] else (None, None)
+    if op == '|':
+        return None if a is None or b is None else a | b
+    elif op == '&':
+        return a if b is None else b if a is None else a & b
+    return None
+
+
+def check_clocks(amount, where, what):
+    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.ClockOutsideDomain`) """
+    for clock in ss.expressions.clocks_in(amount):
+        names = set(clock.names)
+        if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
+            continue
+        inside = bounding_states(where)
+        if inside is None or not inside <= names:
+            raise ss.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
+                                        f'     Add where={clock.to_str().rsplit(".", 1)[0]} (or a condition inside it).')
+    return
+
+
 def modname(mod):
     """ The name of a module that a condition refers to: kept as the module until it is needed, since a module can be named after the condition is written """
     return mod if (mod is None or isinstance(mod, str)) else mod.name
@@ -204,6 +469,8 @@ def state_refs(obj):
         for val in (vars(holder).values() if holder is not None else []):
             if isinstance(val, (Cond, ss.State)):
                 walk(as_cond(val))
+        if hasattr(holder, 'refs'): # The sources of the transitions a treatment moves people along, and the states a test is keyed by
+            out += holder.refs()
     return out
 
 
@@ -226,7 +493,7 @@ def is_static(cond, sim):
         name = args[1]
         mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]
         return any(name in m.graph.states for m in mods) and not any(name in m.graph.transitions for m in mods)
-    elif op in ['array', 'incidence', 'event', 'memory']:
+    elif op in ['array', 'incidence', 'event', 'memory', 'move']:
         return False
     elif op == 'isin':
         return is_static(args[0], sim)
@@ -236,6 +503,8 @@ def is_static(cond, sim):
 def evaluate(obj, ctx):
     if isinstance(obj, Cond):
         return obj.eval(ctx)
+    elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.State): # E.g. a clock compared with a duration
+        return ctx.expr(obj)
     elif callable(obj) and not isinstance(obj, (ss.Arr, ss.Dist)): # A function of the sim, combined with a condition
         return ctx.select(obj)
     return obj
@@ -270,7 +539,7 @@ def is_event(cond):
     if not isinstance(cond, Cond):
         return False
     if cond.op in leaves:
-        return cond.op == 'event' or getattr(cond, 'kind', None) is not None
+        return cond.op in ['event', 'move'] or getattr(cond, 'kind', None) is not None
     return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
 
 
@@ -470,6 +739,8 @@ class Selector:
             return ss.interventions.fired(self, cond)
         elif op == 'memory':
             return ss.interventions.remembered(self, cond)
+        elif op == 'move':
+            return self.event_of(cond)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):
@@ -589,6 +860,22 @@ class Selector:
             return 'b_in_a'
         return None
 
+    def event_of(self, event):
+        """ The people an event (`tr.to(B)`, `X.enter`, `X.exit`) happened to """
+        mod = self.mod if event.module is None else self.module(modname(event.module))
+        engine = mod.engine
+        if self.abm:
+            out = np.zeros(self.shape, dtype=bool)
+            uids = engine.event_uids(**event.spec())
+            out[event.mothers(self.sim, uids) if isinstance(event, Child) else uids] = True
+            return out
+        spec = event.spec()
+        if isinstance(event, Child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
+            raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
+        if 'tr' in spec:
+            return engine.event_frac(spec['tr'], to=spec.get('to'))
+        raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
+
     def dim_strat(self, name):
         """ The stratification of the sim with a given name, if there is one """
         return next((strat for strat in self.sim.groups.strats if strat.name == name), None)
@@ -658,7 +945,7 @@ class Selector:
         if cond is None:
             return self.everyone()
         if callable(cond) and not isinstance(cond, Cond):
-            nargs = len(inspect.signature(cond).parameters)
+            nargs = ss.utils.n_args(cond)
             if nargs >= 2:
                 if not self.abm:
                     raise ss.CapabilityError(f'the function "{getattr(cond, "__name__", "function")}" cannot run with solver="{sim.solver}".\n'
@@ -668,8 +955,15 @@ class Selector:
                 out = cond(sim)
         else:
             cond = as_cond(cond)
-            out = cond.eval(self) if isinstance(cond, Cond) else cond
+            out = cond.eval(self) if isinstance(cond, Cond) else self.expr(cond) if isinstance(cond, ss.expressions.Expr) else cond
         return self.to_selection(out, cond)
+
+    def expr(self, expr):
+        """ An expression of the model (a clock, a count, a parameter): one value per agent, or per group """
+        engine = self.mod.engine
+        if self.abm:
+            return engine.eval_for(expr, ss.uids(np.arange(self.shape[0])))
+        return engine.eval(expr)
 
     def to_selection(self, out, cond=None):
         """ Convert what a condition returned (a boolean array, UIDs, or a lazy condition) to a selection """
@@ -713,7 +1007,7 @@ class Selector:
         """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
         sim = self.sim
         if isinstance(val, ss.transitions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
-            val = self.mod.engine.eval(val)
+            val = self.expr(val) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
             if self.abm and val.on_people(sim): # Read from each person
                 return val.lookup(sim)

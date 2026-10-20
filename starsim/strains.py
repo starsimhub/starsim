@@ -466,8 +466,9 @@ class Strains(ss.Module):
         return
 
     def protection(self, index, key, g):
-        """ The protection of each agent (by UID) against one member, from one `ss.immunity` on one quantity """
-        return self.prot[(index, key, g)]
+        """ The protection of each agent (by UID) against one member, from one `ss.immunity` on one quantity; none from an immunity that gives that member none, or before the first step (people moved before a run) """
+        out = getattr(self, 'prot', {}).get((index, key, g))
+        return out if out is not None else np.zeros(len(self.members[0].rel_sus.raw))
 
     def step(self):
         """ After the members' steps: someone who entered the exclusive state of one member leaves the others """

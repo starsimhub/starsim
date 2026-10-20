@@ -5,7 +5,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Expr', 'par']
+__all__ = ['Expr', 'par', 'mother']
 
 
 #%% Helpers
@@ -101,6 +101,11 @@ class Expr:
     def __pow__(self, other):      return BinOp('**', self, other)
     def __rpow__(self, other):     return BinOp('**', other, self)
     def __neg__(self):             return BinOp('*', -1, self)
+    def __and__(self, other):      return ss.conditions.Cond('&', self, other) # As a condition, e.g. hiv.on_art & (hiv.on_art.time >= ss.months(6))
+    def __rand__(self, other):     return ss.conditions.Cond('&', other, self)
+    def __or__(self, other):       return ss.conditions.Cond('|', self, other)
+    def __ror__(self, other):      return ss.conditions.Cond('|', other, self)
+    def __invert__(self):          return ss.conditions.Cond('~', self)
     def __lt__(self, other):       return Func('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
     def __le__(self, other):       return Func('less_equal', self, other)
     def __gt__(self, other):       return Func('greater', self, other)
@@ -451,6 +456,176 @@ class Func(Expr):
         return [leaf for arg in self.args for leaf in arg.leaves]
 
 
+class Clock(Expr):
+    """
+    Time in a state (`X.time`), in a set of states since entering it from outside (`(A | B).time`), or the share
+    of the scheduled dwell time in a state that has elapsed (`X.progress`, from 0 to 1)
+
+    A duration in the sim's unit, so `X.time / ss.years(1)` is a number of years. It is NaN for anyone
+    outside the states. As agents only, for now.
+
+    Args:
+        states (list): the states, as `ss.State`s or (module, name) pairs (from a condition, `A | B`)
+        kind (str): 'time' or 'progress'
+    """
+    sets = [] # The names of the sets of states that clocks have been made for: their engines keep the time each person entered the set (see `ss.solvers.Agents.define()`)
+
+    def __init__(self, states, kind='time', bins=None):
+        self.states = list(states)
+        self.kind = kind
+        self.bins = bins # In a compartmental run, the width of each level of elapsed time
+        names = tuple(self.names)
+        if len(set(names)) > 1 and names not in Clock.sets:
+            Clock.sets.append(names)
+        return
+
+    @property
+    def names(self):
+        return [s[1] if isinstance(s, tuple) else s.name for s in self.states]
+
+    @property
+    def module(self):
+        mods = [s[0] if isinstance(s, tuple) else s.module for s in self.states]
+        return next((m for m in mods if m is not None), None)
+
+    def to_str(self, parent=False):
+        names = [s[1] if isinstance(s, tuple) else s.label_name for s in self.states]
+        inner = names[0] if len(names) == 1 else '(' + ' | '.join(names) + ')'
+        return f'{inner}.{self.kind}'
+
+
+class Mother(Expr):
+    """
+    `ss.mother(x)`: a condition or expression evaluated on each unborn agent's mother, and 0 for everyone else
+
+    Args:
+        x (Cond/State/Expr): what to evaluate on the mother, e.g. `syph.Pv | syph.S2`, or `preg.P.time`
+    """
+    def __init__(self, x):
+        if isinstance(x, Mother):
+            errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
+            raise ValueError(errormsg)
+        self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
+        return
+
+    def to_str(self, parent=False):
+        return f'mother({self.x})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+def mother(x):
+    """
+    A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born
+
+    Usable in rates, `p=`, `where=`, `ss.on()`, and modifier conditions. Agents only for now.
+
+    Args:
+        x (Cond/State/Expr): e.g. `syph.Pv | syph.S2`, `hiv.rel_trans`, or `preg.P.time`
+
+    Examples:
+        ```python
+        mtct = S >> C @ beta_m2c * ss.mother(Pv | Ph | S2 | EL | LL)
+        fetal_eff = ss.where(ss.mother(preg.P.time) > ss.weeks(27), 0.75, 0.98)
+        ```
+    """
+    return Mother(x)
+
+
+class Since(Expr):
+    """
+    Time since a module last recorded an event for each agent (e.g. `preg.since_birth`), in the sim's unit: inf if never
+
+    Unlike a clock of a state, it survives later moves: a miscarriage does not reset the time since the last live birth.
+    Agents only for now.
+
+    Args:
+        module (Module/str): the module that records the event
+        event (str): the event's name; the module keeps the time of it in `ti_<event>`
+    """
+    def __init__(self, module, event):
+        self.module = module
+        self.event = event
+        return
+
+    def to_str(self, parent=False):
+        return f'{ss.conditions.modname(self.module)}.since_{self.event}'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+def mothers_in(obj, seen=None):
+    """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` """
+    seen = set() if seen is None else seen
+    if id(obj) in seen:
+        return False
+    seen.add(id(obj))
+    if isinstance(obj, Mother):
+        return True
+    elif isinstance(obj, par):
+        return mothers_in(obj.value, seen) if isinstance(obj.value, (Expr, ss.conditions.Cond)) else False
+    elif isinstance(obj, Expr):
+        return any(mothers_in(leaf, seen) for leaf in obj.leaves if leaf is not obj) or any(mothers_in(arg, seen) for arg in getattr(obj, 'args', [])) or any(mothers_in(getattr(obj, key, None), seen) for key in ['a', 'b'])
+    elif isinstance(obj, ss.transitions.on):
+        return mothers_in(obj.x, seen)
+    elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
+        return any(mothers_in(arg, seen) for arg in obj.args)
+    elif isinstance(obj, (list, tuple)):
+        return any(mothers_in(item, seen) for item in obj)
+    elif isinstance(obj, dict):
+        return any(mothers_in(item, seen) for item in obj.values())
+    return False
+
+
+def rebind(expr, memo):
+    """ The expression with the states and transitions it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; parameters are kept, not copied """
+    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition)):
+        return memo.get(id(expr), expr)
+    if not isinstance(expr, (BinOp, Func, Count, Flow, Clock)):
+        return expr
+    new = sc.cp(expr)
+    if isinstance(expr, BinOp):
+        new.a, new.b = rebind(expr.a, memo), rebind(expr.b, memo)
+    elif isinstance(expr, Func):
+        new.args = [rebind(arg, memo) for arg in expr.args]
+    elif isinstance(expr, Flow):
+        new.tr = rebind(expr.tr, memo)
+    else:
+        new.states = [s if isinstance(s, tuple) else rebind(s, memo) for s in expr.states]
+    return new
+
+
+def clocks_in(obj, out=None, seen=None):
+    """ The clocks an expression, a condition, or a list or dict of them reads """
+    out = [] if out is None else out
+    seen = set() if seen is None else seen
+    if id(obj) in seen:
+        return out
+    seen.add(id(obj))
+    if isinstance(obj, Clock):
+        out.append(obj)
+    elif isinstance(obj, Expr):
+        for leaf in obj.leaves:
+            if leaf is not obj:
+                clocks_in(leaf, out, seen)
+        for arg in getattr(obj, 'args', []): # E.g. a clock inside a comparison (Func)
+            clocks_in(arg, out, seen)
+        for key in ['a', 'b']:
+            clocks_in(getattr(obj, key, None), out, seen)
+    elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
+        for arg in obj.args:
+            clocks_in(arg, out, seen)
+    elif isinstance(obj, (list, tuple)):
+        for item in obj:
+            clocks_in(item, out, seen)
+    elif isinstance(obj, dict):
+        for item in obj.values():
+            clocks_in(item, out, seen)
+    return out
+
+
 class BinOp(Expr):
     """ Arithmetic between two expressions """
     def __init__(self, op, a, b):
@@ -579,6 +754,12 @@ def evaluate(expr, ctx):
         return ctx.flow(expr)
     elif isinstance(expr, (Share, Column)):
         return expr.evaluate(ctx)
+    elif isinstance(expr, Clock):
+        return ctx.clock(expr)
+    elif isinstance(expr, Mother):
+        return ctx.mother(expr)
+    elif isinstance(expr, Since):
+        return ctx.since(expr)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
     raise TypeError(errormsg)
 
@@ -680,5 +861,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
         elif isinstance(e, Column):
             return f'{fmt(e.p)}[{e.i}]'
+        elif isinstance(e, Clock):
+            return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

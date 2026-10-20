@@ -78,20 +78,24 @@ class Crossing:
 
     #%% The people
 
-    def joint(self, engine):
-        """ The people in an engine as one array over the dimensions of the sim, with the engine's own compartments as the levels of its dimension """
+    def joint(self, engine, y=None):
+        """ The people in an engine (or `y`, some of them by its compartments of people and groups) as one array over the dimensions of the sim, with the engine's own compartments as the levels of its dimension """
         d = self.sim.groups.dim_index(engine.mod.name)
-        y = engine.y[engine.people_comps].reshape((-1,) + self.sim.groups.group_shape)
+        y = (engine.y[engine.people_comps] if y is None else y).reshape((-1,) + self.sim.groups.group_shape)
         return np.moveaxis(np.take(y, 0, axis=d+1), 0, d)
 
-    def set_joint(self, joint, engine):
-        """ Give an engine the people in a joint array """
+    def local(self, joint, engine):
+        """ The people in a joint array, by an engine's compartments of people and groups """
         sim = self.sim
         d = sim.groups.dim_index(engine.mod.name)
         n = len(engine.people_comps)
         y = np.zeros((n,) + sim.groups.group_shape)
         y[(slice(None),)*(d+1) + (0,)] = np.moveaxis(joint, d, 0)
-        engine.y[engine.people_comps] = y.reshape(n, -1)
+        return y.reshape(n, -1)
+
+    def set_joint(self, joint, engine):
+        """ Give an engine the people in a joint array """
+        engine.y[engine.people_comps] = self.local(joint, engine)
         return
 
     def init(self):

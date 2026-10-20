@@ -180,7 +180,10 @@ class Sim(ss.Base):
 
     @staticmethod
     def _add_steps(interventions):
-        """ The steps of a cascade are modules of their own, so are added to the list (before it); and the deliveries run in the order of their triggers (see `ss.interventions.order_steps()`) """
+        """
+        The steps of a cascade are modules of their own, so are added to the list (before it); the deliveries run in the order of
+        their triggers (see `ss.interventions.order_steps()`); and a resource that steps share runs just before the first of them
+        """
         if not any(isinstance(mod, (ss.Delivery, ss.cascade)) for mod in sc.tolist(interventions)):
             return interventions
         out = []
@@ -188,7 +191,14 @@ class Sim(ss.Base):
             for m in (mod.steps if isinstance(mod, ss.cascade) else []) + [mod]:
                 if not any(m is other for other in out):
                     out.append(m)
-        return ss.interventions.order_steps(out)
+        out = ss.interventions.order_steps([m for m in out if not isinstance(m, ss.Resource)])
+        placed = []
+        for mod in list(out):
+            for res in (getattr(mod, 'uses', None) or {}):
+                if not any(res is other for other in placed):
+                    out.insert(out.index(mod), res)
+                    placed.append(res)
+        return out
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -312,6 +322,7 @@ class Sim(ss.Base):
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self._init_modules_pre()
+        ss.interventions.check_undriven(self)
 
         # Final initializations -- this is "post"
         if self.pars.rescale:
@@ -329,6 +340,9 @@ class Sim(ss.Base):
                 elif strat.female is not None: # A sex dimension is people.female
                     self.people.female[self.people.auids] = self.groups.group_vals(d, np.arange(strat.n) == strat.female, outside=False)
         self._init_modules_post() # Initialize the module values
+        if self.solver == 'abm':
+            for mod in self.declared: # Those placed in a state nobody waits in move on at once, once every module has its people
+                mod.engine.settle_start()
         for crossing in self.crossings: # Once every disease in it has its initial conditions
             crossing.init()
         self.init_results() # Initialize the results
@@ -1545,6 +1559,11 @@ class Sim(ss.Base):
 
     @property
     def current_scale(self):
+        """ Kept for Starsim 3 modules: declared models and deliveries count in people (see `ss.results.people_scale()`), so need no scale """
+        return self._current_scale
+
+    @property
+    def _current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
         if not self.pars.rescale:
             return self.pars.pop_scale

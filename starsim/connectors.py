@@ -293,6 +293,8 @@ class modify(Connector):
             found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None))
         if not found:
             raise ss.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
+        if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
+            raise ss.UnmodifiableTarget(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
             kind = graph.modifier_kind(name)
             msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)
@@ -313,6 +315,7 @@ class modify(Connector):
         self.target_module, self.target_kind = modname, kind
         for key in [name] if self.route is None else [f'{name}@{route}' for route in self.route]: # On a route, under the transmission's name and the route's (see Engine.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
+        ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
         for time in self.times or [self.start]: # Each must be within the sim
             if time is not None:
                 to_ti(sim, time, name=f'the {"time" if self.times else "start"} of "{self.name}"')
@@ -404,6 +407,8 @@ class modify(Connector):
         """ Apply the modifier to a value, for the people it applies to """
         amount = self.current(engine)
         mask = None if self.where is None else engine.selector.select(self.where)
+        if np.ndim(amount) and np.isnan(amount).any() and np.isnan(amount[mask > 0] if mask is not None else amount).any(): # A clock read where it has no value: see ss.conditions.check_clocks()
+            raise ss.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: it reads a clock outside the states it is kept for. Give it a where= inside them.')
         if mask is not None and self.hold is not None:
             mask = self.held_mask(mask, engine)
         if mask is None:

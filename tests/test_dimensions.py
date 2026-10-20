@@ -588,6 +588,25 @@ def test_mixing():
     for bad in [dict(matrix=[[-5, 0], [0, 1]], bands=[0, 20]), dict(matrix=[[1, 0], [0, 1]], bands=[20, 0]), dict(age=[[1, np.nan], [1, 1]])]:
         with pytest.raises(ValueError):
             ss.contacts(**bad)
+
+    # A split over two dimensions is the share in each level given the other, whose own split, if given, is kept (FPsim review: it was replaced by the table's totals)
+    for solver in ['ode', 'abm']:
+        d = ss.Disease(ss.State('A'), stay=ss.progression('A -> A', rate=0), name='d')
+        d.stratify(k=['x', 'y'], split=ss.by([[0.8, 0.2], [0.4, 0.6]], dims=['age', 'k']))
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        n_A = at_start(ss.Sim(d, solver=solver, stratify=dict(age=[0, 30], split=[0.9, 0.1]), stop=1, **size, **kw)).d.n_A
+        assert np.allclose(n_A.by('age').values[0], [9000, 1000], rtol=0.03)
+        assert np.allclose([n_A.select(age=a, k='y')[0] for a in ['0-29', '30+']], [1800, 600], rtol=0.1)
+
+    # Where people start, given at levels where the split puts nobody, is an error, not zero (FPsim review: everyone starts at ever=False)
+    def make_init(table):
+        A, B = ss.states('A B')
+        d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array(table), dims=['age', 'ever'])), name='d')
+        d.stratify(ever=[False, True], split=[1, 0])
+        return ss.Sim(d, total_pop=1000, stratify=dict(age=[0, 30]), stop=1, **kw)
+    with pytest.raises(ss.InitWhereNobodyIs, match='ever=True'):
+        make_init([[0, 0.5], [0, 0.5]]).init()
+    assert any('ever=True' in note for note in make_init([[0, 0.5], [0.2, 0.5]]).init().notes) # Some of it: a note
     return sims
 
 
@@ -978,6 +997,25 @@ def test_contacts_dims():
         run(ss.contacts(np.ones((6, 6)), dims=['sex', 'risk']))
     return
 
+def test_sex():
+    """ As agents, a dimension of sex is people.female, for everyone including newborns """
+    sc.heading('Testing sex as a dimension of agents')
+    for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex=['female', 'male'], split=[0.7, 0.3])]:
+        si = ss.Disease(infection=ss.transmission('S -> I', beta=0.01), init_prev=0.05, name='si')
+        sim = ss.Sim(si, networks=ss.MFNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
+        if 'split' in kw:
+            assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
+        sim.run()
+        ppl = sim.people
+        strat = sim.strats[0]
+        women = ppl[strat.attr].raw[ppl.auids] == strat.female
+        assert np.array_equal(women, ppl.female.raw[ppl.auids]), f'{kw}: the levels of sex disagree with people.female'
+        assert sim.results.si.n_S.select(**{strat.name: strat.labels[strat.female]})[-1] == (ppl.female & sim.diseases.si.S).sum()
+    with pytest.raises(ValueError, match='people.female'):
+        ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.01), name='si'), n_agents=100, stratify=dict(sex=['a', 'b']), verbose=0).init()
+    return
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -997,3 +1035,4 @@ if __name__ == '__main__':
 
 
     cdims = test_contacts_dims()
+    sex     = test_sex()

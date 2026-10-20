@@ -227,6 +227,8 @@ class TimePar:
             dist = args[0]
             dist.unit = cls
             return dist
+        elif len(args) and type(args[0]).__name__ == 'by' and hasattr(args[0], 'map'): # (By name, since ss.by is made after this) e.g. ss.permonth(ss.by(age=[1, 2])) is ss.by(age=[ss.permonth(1), ss.permonth(2)])
+            return args[0].map(cls)
         else:
             return None
 

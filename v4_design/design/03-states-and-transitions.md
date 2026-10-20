@@ -237,7 +237,7 @@ Arithmetic on a finished transition is about its flow, never its rate: `0.5 * in
 
 **A bare number after `@` is a rate**, because "at" reads as "at rate". It is never a duration: `I >> R @ 10` meaning "after 10 days" is how some people think, but `@ 0.1` and `@ 10` cannot both be guessed safely from their size. A duration after `@` is typed (`ss.days(10)`); a bare-number duration uses the keyword form, `ss.progression('I -> R', dur=10)`.
 
-A transition that reaches build time with nothing driving it and no `p=` raises `UndrivenTransition`.
+A transition between states with nothing driving it and no `p=` (`I >> S`, `ss.Transition(I, S)`, `ss.progression('I -> S')`) is **undriven**: only a product (`ss.Treatment(moves=)`), a delivery, or custom code moves people along it. It is not the remainder of `p=` branches out of its source. `ss.UndrivenUnused` is warned at `sim.init()` if nothing in the sim names it. `@ 0` is still a rate of 0. An inflow with nothing driving it raises `ss.UndrivenTransition`.
 
 ## Rates that mention states
 
@@ -375,9 +375,26 @@ ss.Disease(
 
 In the operator form a single weighted destination says the same thing: `I >> 0.1 * H @ ss.days(5)` and `I >> 0.9 * R @ ss.days(10)`.
 
-The rule that covers every case: **transitions out of one state that carry `p=` split on entry; transitions that carry only rates compete as hazards** ([below](#competing-hazards)). The two can be mixed: a death hazard out of `I` competes with whichever branch the person was assigned. In a compartmental run, a split with per-branch dwell times is realized as one generated sub-compartment per branch, summed in results. A branch with `p=` and no `rate=` or `dur=` happens immediately on entry, and `describe()` says so.
+The rule that covers every case: **separate transitions out of one state that carry `p=` split on entry; one transition with several destinations splits when it is taken; transitions that carry only rates compete as hazards** ([below](#competing-hazards)). They can be mixed: a death hazard out of `I` competes with whichever branch the person was assigned. In a compartmental run, a split with per-branch dwell times is realized as one generated sub-compartment per branch, summed in results, and a split when taken divides the exit flow. A branch with `p=` and no `rate=` or `dur=` happens immediately on entry, in the same step, under every solver, and `describe()` says so. So do its consequences: someone who enters a state with an immediate exit moves on at once, and moves with no wait cascade within the step until nobody moves. A cycle of them raises `ss.TriggerLoop`, naming it.
+
+Exits are scheduled when a person enters a state: as agents, the branch is drawn, its dwell time sampled, and the time of the exit set at the moment of entry (by a transition, by an intervention, or at placement), so `p=` on entry is evaluated then.
 
 A junction (a zero-duration pseudo-compartment that only splits its inflow) is not needed and is not part of the language.
+
+## Events and clocks
+
+**Events** are what happens to someone at a moment: a transition (`infection`), one branch of it (`outcome.to(D)`), and entering or leaving a state or a set of states (`I.enter`, `(E | I).exit`). Entering a set means arriving from outside it, by a transition, an inflow, or placement; a move within the set is not entering it. An event is a condition, true for the people it happened to from the moment they moved until the same point in the next step (a move made by an intervention is news from the next step), so it can be used in `where=`, `eligible=`, and `on=`; in a running sim, `event.uids` are those people. As compartments, a transition and a branch are events (a fraction of the state they arrived in); entering or leaving a state is not yet (`ss.CapabilityError`).
+
+**Clocks** are elapsed time, as expressions:
+
+<!-- fragment -->
+```python
+EL.time                  # time since this person last entered EL
+(EL | LL).time           # since they entered the set from outside it: moving from EL to LL does not reset it
+falling.progress         # the share of the scheduled dwell time in falling that has elapsed, from 0 to 1
+```
+
+A clock is a duration in the sim's unit (`EL.time / ss.years(1)` is a number of years), and works in `rate=`, `p=`, modifier amounts, and conditions (`where=`, `eligible=`): `ss.modify(syph.rel_trans, multiply=0.5**(latent.time/ss.years(1)), where=latent)`. In the `p=` of a transition out of `X`, taken when people leave, `X.time` is the dwell just completed. A clock is NaN for anyone outside its states, and its use is checked when the model is built: a transition that reads a clock must leave from its states, and a modifier whose amount reads one must have a `where=` inside them (`ss.ClockOutsideDomain`; a `where=` that is a function is checked when it runs). `.progress` needs a dwell time scheduled on entry, so a state with only rates out of it raises `ss.NoScheduledDwell`. A clock of a set has to be made before the sim, which keeps the time each person entered the set. As compartments (levels of elapsed time) clocks are not built yet: `solver='auto'` runs a model that reads a clock as agents, and a compartmental solver raises `ss.CapabilityError`.
 
 ## Many-to-one
 
