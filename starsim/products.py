@@ -995,7 +995,11 @@ class Diagnostic(Product):
                 elif self.detects is not None:
                     sel = selector.select(self.detects)
                 else:
-                    sel = selector.in_states([s.name for s in sim.get_declared(home).graph.infected if s.people])*selector.everyone()
+                    infected = [s.name for s in sim.get_declared(home).graph.infected if s.people]
+                    if not infected: # TL52: nobody was found, with no message
+                        errormsg = f'the test "{self.name}" is for the infected of "{home}", but it has no infected states (no transition is an acquisition); say who it is for with detects= on the test or where= on the delivery, or mark the onset with acquisition=True'
+                        raise ValueError(errormsg)
+                    sel = selector.in_states(infected)*selector.everyone()
                 sel = sel*1.0
                 inside = inside + sel
                 vals = [selector.per_person(v) for v in vals]
