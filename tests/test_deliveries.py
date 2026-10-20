@@ -1185,6 +1185,26 @@ def test_save_load():
     return loaded
 
 
+def test_copied_steps():
+    """ Deliveries deep-copied together still trigger each other: a condition refers to the original delivery, so the order of steps finds it by name """
+    sc.heading('Testing steps after a deep copy of the interventions')
+    class CopySim(ss.Sim):
+        def __init__(self, interventions=None, **kwargs):
+            super().__init__(**kwargs)
+            self.pars.update(dict(interventions=sc.dcp(interventions)))
+    def make(sim_class):
+        S, I = ss.states('S I')
+        d = ss.Disease(infection=S >> I @ ss.permonth(0.3)*I, recovery=I >> S @ ss.months(6), init_prev=0.1, name='d')
+        visit = ss.visit(who=ss.state('d.I').enter, name='visit')
+        test = ss.screen(ss.Diagnostic(sensitivity=0.9), who=visit, name='test')
+        tx = ss.treat(ss.Treatment(cure=0.9), who=test.positive, name='tx')
+        return sim_class(diseases=d, interventions=[ss.cascade(visit, test, name='casc'), tx], n_agents=1000, start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
+    plain, copied = make(ss.Sim), make(CopySim)
+    assert copied.results.tx.delivered.sum() > 0
+    assert np.array_equal(plain.results.tx.delivered.values, copied.results.tx.delivered.values)
+    return copied
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()

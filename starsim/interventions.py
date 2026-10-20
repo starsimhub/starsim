@@ -832,8 +832,9 @@ def order_steps(mods):
         if isinstance(obj, str):
             return [m for m in mods if isinstance(m, Delivery) and (m.name == obj or getattr(m.product, 'name', None) == obj)]
         elif isinstance(obj, ss.Product):
-            return [m for m in mods if isinstance(m, Delivery) and m.product is obj]
-        return [obj] if id(obj) in index else []
+            found = [m for m in mods if isinstance(m, Delivery) and m.product is obj]
+            return found or find(obj.name) # A copy of the product (conditions keep the object they were written with, and the engines read them by name)
+        return [obj] if id(obj) in index else find(obj.name) if getattr(obj, 'name', None) else [] # Or a copy of the delivery, e.g. after a deep copy of the interventions
     deps = {}
     for i,m in enumerate(mods):
         deps[i] = set()
@@ -845,11 +846,11 @@ def order_steps(mods):
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions= (or to the cascade)'
                         raise ValueError(errormsg)
                     deps[i] |= {index[id(d)] for d in found if d is not m}
-            if any(leaf.op == 'event' and leaf.args[0] is m for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)):
+            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)):
                 errormsg = f'"{m.name}" is triggered by its own event ({m.on}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
                 raise ValueError(errormsg)
         elif isinstance(m, cascade):
-            deps[i] = {index[id(s)] for s in m.steps if id(s) in index}
+            deps[i] = {index[id(d)] for s in m.steps for d in ([s] if id(s) in index else find(s.name))}
     out, done = [], set()
     while len(out) < len(mods):
         ready = [i for i in range(len(mods)) if i not in done and deps[i] <= done]
