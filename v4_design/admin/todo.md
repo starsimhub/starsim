@@ -27,6 +27,7 @@
 - [ ] New TB model ensemble
 - [ ] Atomica applications
 - [ ] Additional camdl examples
+- [ ] MIGHTI
 
 ## Refactoring 0/4
 
@@ -34,6 +35,8 @@
 - [ ] Settle NUM_THREADS pros/cons across platforms
 - [ ] Use `sc.obj`
 - [ ] Replace Bunch with sc.obj()
+- [ ] Atomica example, fix `foi  = (1 - (1 - prev * transpercontact)**contacts) * (1 - 0.008)`
+- [ ] Dan: too confusing to have beta * I vs beta * I.n, hidden and not the obvious thing
 
 ## Other 3/6
 
