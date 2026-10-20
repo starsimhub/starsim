@@ -273,6 +273,22 @@ def test_with_conveyor(solvers=('abm',)):
     return
 
 
+@sc.timer()
+def test_after_event():
+    sc.heading('Testing an exact dwell until an event of another module, and a time after it (ST18)')
+    A, B = ss.states('A B')
+    def make(**kw):
+        a = ss.Disease(A, B, go=ss.progression('A -> B', dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
+        X, Y = ss.states('X Y')
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, after=a.go, **kw), name='b')]
+    for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
+        res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
+        assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
+    with pytest.warns(RuntimeWarning, match='ss.constant'): # A function as dur= is the mean of an exponential
+        ss.Sim(ss.Disease(A, B, go=ss.progression('A -> B', dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
+    return
+
+
 @pytest.mark.xfail(reason='Phase B, tasks B1 and B2: the conveyor with ss.stay, clocks and triggers as compartments', strict=True)
 def test_with_conveyor_ode():
     return test_with_conveyor(solvers=('abm', 'ode'))
@@ -287,3 +303,4 @@ if __name__ == '__main__':
     test_syphilis_stay()
     test_ct_by_sex()
     test_with_conveyor()
+    test_after_event()

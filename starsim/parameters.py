@@ -474,7 +474,7 @@ class SimPars(Pars):
             if source == 'modules':
                 # Modules from 'modules=' get sorted by type
                 for modkey, modclass in modmap.items():
-                    if isinstance(mod, modclass):
+                    if isinstance(mod, modclass) or (modkey == 'diseases' and isinstance(mod, ss.Strains)): # A family of diseases is with its members
                         break
                 else:
                     modkey = 'custom'

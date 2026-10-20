@@ -315,6 +315,14 @@ def test_restart():
     assert 0.3 < ext.share[0] < 0.9 and ext.runs[0] == 50
     assert msim_small.summarize().small_extinction.mean == ext.share[0] # Reported by summarize() too, since some runs died out
 
+    # How often it is a major outbreak, which extinction does not say for an SIR, since every run dies out in the end
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=2/7), recovery=ss.progression('I -> R', dur=7), init=dict(I=1), name='sir')
+    msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
+    major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
+    out = msim.outbreaks(output=True)
+    assert 0.25 < major < 0.75 and out.share[0] == major and out.threshold[0] == 100 # 10% of the people, by default
+    assert msim.extinction(output=True).share[0] == 1 and msim.outbreaks(threshold=1000, output=True).share[0] == 0
+
     # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, when=lambda sim: sim.ti >= 20)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()

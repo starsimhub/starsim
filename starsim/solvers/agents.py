@@ -94,6 +94,12 @@ class Agents(Engine):
         for p in graph.spread_pars():
             self.spread[id(p)] = f'par_{p.name}'
             arrs.append(ss.FloatArr(f'par_{p.name}', default=ss.transitions.numeric_dist(p.raw, self.convert), label=f'Value of {p.name}'))
+        self.delays = {tr.name:tr.trigger.delay for tr in self.triggers if tr.trigger.delay is not None} # after= an event, with dur=: each person's time after it (see triggered())
+        for name in self.delays:
+            arrs.append(ss.arrays.StepArr(f'ti_after_{name}', label=f'Scheduled time of {name}, after its event'))
+        self.tf_dists = {name:dist for name,tf in graph.transfers.items() if (dist := self.transfer_dist(tf, per_agent=self.agent_values)) is not None} # A transfer whose dur= is a distribution: each person's time is drawn when they can first move, and they move when it is up (see step_transfers())
+        for name in self.tf_dists:
+            arrs.append(ss.arrays.StepArr(f'ti_move_{name}', label=f'Scheduled time of the transfer {name}'))
         mod.define_states(*arrs, overwrite=True) # Overwrite, since in the class form the declarations are class attributes
         for name in unkept: # Setting it does nothing, and reading it says how to keep it
             mod.setattribute(f'ti_{name}', ss.arrays.Unkept(f'ti_{name}', mod))
@@ -139,10 +145,17 @@ class Agents(Engine):
             add(f'mix_{name}', ss.random())
             if carriage and tr.contact:
                 add(f'pass_{name}', ss.random()) # Which strain someone who carries several passes on
-        for name in graph.transfers:
-            add(f'transfer_{name}', ss.random())
+        for name,delay in self.delays.items():
+            raw = ss.transitions.by_dist(getattr(delay, 'raw', None))
+            add(f'after_{name}', ss.transitions.numeric_dist(raw, self.convert, per_agent=self.agent_values) if isinstance(raw, ss.Dist) else ss.random()) # A scalar is the mean of an exponential, as for any dur=
+        for name,tf in graph.transfers.items():
+            add(f'transfer_{name}', self.tf_dists.get(name, ss.random()))
+            if tf.p is not None:
+                add(f'transfer_to_{name}', ss.random()) # Which level they move to
         if self.sim.mixing.migration is not None:
             add('migrate', ss.random())
+        if self.sim.mixing.commuting is not None:
+            add('commute', ss.random())
         adders = [f'born_{tr.name}' for tr in graph.inflows if tr.people] + [f'born_{name}' for name,tr in graph.transitions.items() if getattr(tr, 'offspring', None) is not None] # What adds people: births, offspring, and a movement register
         if self.sim.mixing.register is not None:
             add('register', ss.random()) # The order in which people in a place are chosen
@@ -344,6 +357,9 @@ class Agents(Engine):
             dw = self.dwells.get(name)
             if not tr.people and dw is not None and dw.family != 'exponential':
                 ss.note(f'"{mod.name}.{name}" moves counts ({tr.arrow}), which as agents take its dwell time ({dw.family}) as exponential with the same mean; a compartmental run keeps its shape', sim=self.sim)
+        for name,tf in self.graph.transfers.items(): # Those who can move by a transfer at the start have been there since it, as if they arrived in the step before
+            if name in self.tf_dists:
+                self.schedule_transfer(name, self.transfer_uids(name, tf)[1], self.dt, -1)
         self.n_seen = self.sim.people.uid.len_used # Agents made after this (e.g. born of ss.Births) are put in the first state: see place_newcomers()
         self.record_stocks() # The results at the first time point are the start
         return
@@ -962,6 +978,17 @@ class Agents(Engine):
             else:
                 continue
             mask = mask & inside
+            if tr.name in self.delays: # Not at once, but a time after the event drawn for each person, as long as they stay in the source
+                due = mod[f'ti_after_{tr.name}']
+                due.raw[(due.raw != due.nan) & ~inside] = due.nan
+                new = ss.uids(np.flatnonzero(mask & (due.raw == due.nan)))
+                if len(new):
+                    dur = self.draw(f'after_{tr.name}', new)
+                    if not isinstance(ss.transitions.by_dist(getattr(self.delays[tr.name], 'raw', None)), ss.Dist): # A scalar: an exponential with that mean
+                        dur = -np.log1p(-dur)*self.eval_for(self.delays[tr.name], new)
+                    due[new] = mod.ti + np.asarray(dur, dtype=float)/self.dt - 0.5 # To the nearest step, as for a dwell time
+                mask = inside & (due.raw != due.nan) & (due.raw <= mod.ti)
+                due.raw[mask] = due.nan
             if tr.where is not None and mask.any():
                 mask &= np.asarray(self.selector.select(tr.where), dtype=bool)
             if taken is not None:
@@ -1303,7 +1330,7 @@ class Agents(Engine):
         for mod in sim.declared:
             out |= {sim.groups.dim_index(tf.dim) for tf in mod.graph.transfers.values()}
         out |= {d for tr in self.graph.transitions.values() for d,level in (self.moves(tr) or ())}
-        if getattr(sim.mixing, 'migration', None) is not None:
+        if getattr(sim.mixing, 'migration', None) is not None or getattr(sim.mixing, 'commuting', None) is not None:
             out.add(sim.mixing.space)
         if getattr(sim, 'initialized', False):
             self._changing_dims = out
@@ -1612,40 +1639,77 @@ class Agents(Engine):
                 self.flow_groups[tr.name] = np.bincount(self.groups(new), weights=self.weights(new), minlength=sim.groups.n_groups)
         return
 
+    def transfer_uids(self, name, tf):
+        """ The agents who can move by a transfer now (at a level it moves people from, and in its states), and their levels """
+        sim = self.sim
+        mod = self.mod
+        strat = sim.groups.strats[sim.groups.dim_index(tf.dim)]
+        if strat.kind == 'age':
+            errormsg = f'The transfer "{name}" cannot move agents between age groups: agents get older by themselves'
+            raise ValueError(errormsg)
+        d = sim.groups.dim_index(tf.dim)
+        uids = sim.people.auids
+        level = sim.groups.level_raw(d)[uids] # By level, not value: people of a numeric dimension hold values within each level
+        if tf.increment is not None: # A counter: everyone who can move up it (or down)
+            keep = strat.shifted(tf.increment)[level] != level
+        else:
+            keep = (level == strat.index(tf.src)) if tf.src is not None else (level != strat.index(tf.dst))
+        states = [name for name in (tf.states or [s.name for s in self.graph.people_states]) if self.applies[name][d]] # Only people in states that have the dimension can move along it
+        if len(states) < len(self.graph.people_states):
+            in_states = mod[states[0]]
+            for state in states[1:]:
+                in_states = in_states | mod[state]
+            keep &= in_states.raw[uids]
+        return strat, uids[keep], level[keep]
+
+    def schedule_transfer(self, name, uids, dt, ti):
+        """ Draw the time before a transfer for people who can move by it from the end of step `ti`; a modifier on it speeds it up, as it was when drawn """
+        if len(uids):
+            with np.errstate(divide='ignore'): # Stopped by a modifier: never
+                dur = self.draw(f'transfer_{name}', uids)/self.mult('transition', name, uids)
+            self.mod[f'ti_move_{name}'][uids] = ti + dur/dt - 0.5 # To the nearest step, as for a dwell time (see schedule())
+        return
+
     def step_transfers(self, dt):
         """ Movement between the levels of a stratification: the agent's property changes, and their disease state does not """
         sim = self.sim
         mod = self.mod
         for name,tf in self.graph.transfers.items():
-            strat = sim.groups.strats[sim.groups.dim_index(tf.dim)]
-            if strat.kind == 'age':
-                errormsg = f'The transfer "{name}" cannot move agents between age groups: agents get older by themselves'
-                raise ValueError(errormsg)
+            strat, uids, level = self.transfer_uids(name, tf)
             arr = sim.people[strat.attr]
-            d = sim.groups.dim_index(tf.dim)
-            uids = sim.people.auids
-            level = sim.groups.level_raw(d)[uids] # By level, not value: people of a numeric dimension hold values within each level
-            if tf.increment is not None: # A counter: everyone who can move up it (or down)
-                dst = None
-                uids = uids[strat.shifted(tf.increment)[level] != level]
-            else:
-                dst = strat.index(tf.dst)
-                uids = uids[(level == strat.index(tf.src)) if tf.src is not None else (level != dst)]
-            states = [name for name in (tf.states or [s.name for s in self.graph.people_states]) if self.applies[name][d]] # Only people in states that have the dimension can move along it
-            if len(states) < len(self.graph.people_states):
-                in_states = mod[states[0]]
-                for state in states[1:]:
-                    in_states = in_states | mod[state]
-                uids = uids[in_states.raw[uids]]
             self.events[name] = ss.uids() # The people who moved this step, as an event (e.g. a delivery triggered by a symptom kept as a stratification)
+            timed = name in self.tf_dists
+            if timed: # A time drawn for each person, as for a dwell time
+                due = mod[f'ti_move_{name}']
+                held = np.zeros(len(due.raw), dtype=bool)
+                held[uids] = True
+                due.raw[(due.raw != due.nan) & ~held] = due.nan # Those who can no longer move (they left the level or the states) forget their time
+                self.schedule_transfer(name, uids[due.raw[uids] == due.nan], dt, mod.ti) # Those who can move now, who arrived in this step (or the one before, after it)
             if len(uids):
-                hazard = (self.eval_for(tf.rate, uids) if tf.rate is not None else 1/self.eval_for(tf.dur, uids))*self.mult('transition', tf.name, uids)
-                moving = uids[self.dists[f'transfer_{name}'].rvs(uids) < -np.expm1(-np.maximum(hazard, 0)*dt)]
+                if timed:
+                    now = due.raw[uids] <= mod.ti
+                else:
+                    hazard = (self.eval_for(tf.rate, uids) if tf.rate is not None else 1/self.eval_for(tf.dur, uids))*self.mult('transition', tf.name, uids)
+                    now = self.dists[f'transfer_{name}'].rvs(uids) < -np.expm1(-np.maximum(hazard, 0)*dt)
+                moving = uids[now]
                 self.events[name] = moving
                 self.flowcounts[name] += self.n_of(moving)
                 self.flow_groups[name] = np.bincount(self.groups(moving), weights=self.weights(moving), minlength=sim.groups.n_groups)
-                arr[moving] = strat.value(dst) if dst is not None else strat.add(arr[moving], tf.increment)
+                if tf.increment is not None:
+                    arr[moving] = strat.add(arr[moving], tf.increment)
+                elif tf.p is None:
+                    arr[moving] = strat.value(strat.index(tf.dst))
+                elif len(moving): # One of several levels, chosen as they move
+                    ps = self.branch_shares([f'{name}.{dst}' for dst in tf.dsts], [None if p is None else self.eval_for(p, moving) for p in tf.p], [None]*len(tf.p))
+                    edges = np.cumsum([np.broadcast_to(p, len(moving)) for p in ps[:-1]], axis=0)
+                    which = (self.draw(f'transfer_to_{name}', moving) >= edges).sum(axis=0)
+                    arr[moving] = np.array([strat.value(strat.index(dst)) for dst in tf.dsts])[which]
                 sim.groups.groups_changed(moving)
+                if timed: # A move up a counter that can go on: the next time is drawn from now
+                    due.raw[moving] = due.nan
+                    if tf.increment is not None:
+                        new = strat.shifted(tf.increment)[level[now]]
+                        self.schedule_transfer(name, moving[strat.shifted(tf.increment)[new] != new], dt, mod.ti)
         rates = sim.mixing.migration
         if rates is not None and mod is sim.declared[0]: # People relocating between places; they are the same people for every module, so it is done once
             uids = sim.people.auids
@@ -1657,6 +1721,24 @@ class Agents(Engine):
             share = np.cumsum(rates, axis=1)/np.maximum(rates.sum(axis=1), 1e-300)[:, None] # The same draw chooses where they go
             where = (rvs[moving]/p[moving] >= share[places[moving]].T).sum(axis=0)
             arr[uids[moving]] = np.minimum(where, rates.shape[0] - 1)
+            sim.groups.groups_changed(uids[moving])
+        home = sim.mixing.commuting
+        if home is not None and mod is sim.declared[0]: # Commuters leaving home, and coming back, once for every module as for migration
+            if getattr(self, "_commute", None) is None: # Worked out once, now the unit is known
+                self._commute = home.mobility.commute_rates(home, sim.unit_base)
+            leave, back = self._commute
+            uids = sim.people.auids
+            arr = sim.people[sim.groups.strats[sim.mixing.space].attr]
+            h, now = sim.groups.level_raw(home.dim)[uids], self.place_raw()[uids]
+            at_home = now == h
+            total = leave.sum(axis=1)[h] + back
+            p = np.where(at_home, total - back, back)/total*-np.expm1(-total*dt) # Whether each is home or away at the end of the step, exactly, as between two states, so the share away is kept with long steps
+            rvs = self.dists.commute.rvs(uids)
+            moving = rvs < p
+            share = np.cumsum(leave, axis=1)/np.maximum(leave.sum(axis=1), 1e-300)[:, None] # The same draw chooses where those at home go
+            out = moving & at_home
+            arr[uids[out]] = np.minimum((rvs[out]/p[out] >= share[h[out]].T).sum(axis=0), leave.shape[0] - 1)
+            arr[uids[moving & ~at_home]] = h[moving & ~at_home]
             sim.groups.groups_changed(uids[moving])
         return
 

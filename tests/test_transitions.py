@@ -12,6 +12,7 @@ import itertools
 import pytest
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import sciris as sc
 import starsim as ss
 
@@ -954,6 +955,31 @@ def test_transfer():
         dis.stratify(v=[False, True])
         assert ss.Sim(dis, stop=20, solver=solver, pars=dict(c=1), **agents, **kw).run().results.dis.switch.sum() > 0
         assert ss.Sim(dis, stop=20, solver=solver, pars=dict(c=1), interventions=ss.modify(dis.switch, multiply=0), **agents, **kw).run().results.dis.switch.sum() == 0
+
+    # A transfer's dur= distribution is drawn for each person (X1): as agents exactly, as compartments by Erlang stages
+    S, I = ss.states(2)
+    wane = ss.Disease(inf=S >> I @ 0*I, init=dict(I=0.0), name='wane')
+    wane.stratify(rpr=[False, True], split=[0, 1], revert=ss.transfer(rpr=False, dur=ss.lognorm_ex(ss.years(15), ss.years(5))))
+    s2 = np.log(1 + (5/15)**2)
+    lognorm = stats.lognorm.cdf([8, 15], np.sqrt(s2), scale=15*np.exp(-s2/2))
+    erlang = stats.gamma.cdf([8, 15], 9, scale=15/9) # 9 stages for a CV of 1/3
+    for solver,expected,agents in [('abm', lognorm, dict(n_agents=5000)), ('ode', erlang, {})]:
+        sim = ss.Sim(wane, unit='year', dt=0.5, start=0, stop=16, solver=solver, **agents, **kw).run()
+        n = sim.results.wane.n_S.by('rpr').values
+        moved = n[[16, 30], 0]/n[0].sum()
+        assert np.allclose(moved, expected, atol=0.025), f'{solver}: {moved} moved by years 8 and 15, against {expected}' # Not the 0.41 and 0.63 of a rate of one over the mean
+    yearly = ss.Disease(inf=S >> I @ 0*I, init=dict(I=0.0), name='yearly').stratify(school=[0, 1, 2, 3], year=ss.transfer(increment='school', dur=ss.constant(ss.years(1))))
+    n = ss.Sim(yearly, unit='year', dt=0.25, start=0, stop=2.5, solver='abm', n_agents=200, **kw).run().results.yearly.n_S.by('school').values
+    assert np.array_equal(n[[3, 4, 7, 8]].argmax(axis=1), [0, 1, 1, 2]) and n[[3, 4, 7, 8]].max(axis=1).min() == 200 # Everyone up a year on each birthday of the run, exactly
+
+    # To one of several levels, with p= (FP29)
+    for solver,agents in [('abm', dict(n_agents=5000)), ('ode', {})]:
+        fp = ss.Disease(inf=S >> I @ 0*I, init=dict(I=0.0), name='fp')
+        fp.stratify(method=['none', 'pill', 'iud'], split=[1, 0, 0], start=ss.transfer(method='none -> pill | iud', p=[0.6, None], dur=ss.lognorm_ex(ss.years(2), ss.years(1))))
+        n = ss.Sim(fp, unit='year', dt=0.25, start=0, stop=10, solver=solver, **agents, **kw).run().results.fp.n_S.by('method').values[-1]
+        assert np.allclose(n/n.sum(), [0, 0.6, 0.4], atol=0.02), f'{solver}: {n/n.sum()}'
+    with pytest.raises(ss.BadBranchSplit, match='rate='): # One level to move to
+        ss.transfer(v=True, p=0.5, rate=0.1)
     return sims
 
 
@@ -1684,6 +1710,45 @@ def test_junction():
 
 
 @sc.timer()
+def test_immediate():
+    sc.heading('Testing dur=0: a move with no wait, on entry or as soon as a condition holds, under every solver')
+    size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+    for solver in ['ode', 'binomial', 'gillespie', 'abm']: # A junction holds nobody (HP2, HP16): a split, and a single destination
+        d = ss.Disease(go=ss.progression('S -> P', rate=ss.perday(0.1)), triage=ss.progression('P -> A | B', dur=0, p=[0.8, None]), name='d')
+        res = ss.Sim(d, unit='day', stop=10, solver=solver, **size(solver), **kw).run().results.d
+        assert res.n_P.max() == 0 and np.isclose(res.n_A[-1]/(res.n_A[-1] + res.n_B[-1]), 0.8, atol=0.03)
+        d = ss.Disease(go=ss.progression('S -> P', rate=ss.perday(0.1)), onward=ss.progression('P -> A', dur=0), name='d')
+        res = ss.Sim(d, unit='day', stop=10, solver=solver, **size(solver), **kw).run().results.d
+        assert res.n_P.max() == 0 and res.onward.sum() == res.go.sum()
+
+    # With where=, as soon as the condition holds: everyone moved to level b recovers at once, under compartments too
+    out = {}
+    for solver in ['ode', 'abm']:
+        I, R = ss.states('I R')
+        d = ss.Disease(I, R, drop=ss.Transition(I, R, dur=0, where=ss.conditions.Cond('dim', 'level') == 'b'), name='d')
+        d.stratify(level=['a', 'b'], split=[1, 0], move=ss.transfer(level='b', rate=ss.perday(0.1)))
+        out[solver] = ss.Sim(d, unit='day', stop=20, solver=solver, **size(solver), **kw).run().results.d.n_I[-1]/10_000
+    assert np.isclose(out['ode'], np.exp(-2), rtol=0.01) and np.isclose(out['abm'], out['ode'], atol=0.02)
+
+    # As an ODE, I -> X -> R with dur=0 out of X takes about as long as I -> R (ST26: X >> R @ ss.perday(1e6) took 48 s for 30 days)
+    def make(through):
+        trs = dict(infection=ss.transmission('S -> I', beta=0.3, source='I'), recovery=ss.progression('I -> X' if through else 'I -> R', dur=10))
+        trs.update(through=ss.progression('X -> R', dur=0)) if through else None
+        return ss.Disease(**trs, init_prev=0.01, name='sir')
+    times = {}
+    for through in [False, True, False, True]:
+        T = sc.timer()
+        res = ss.Sim(make(through), unit='day', stop=3650, **kw).run().results.sir
+        times.setdefault(through, []).append(T.toc(output=True))
+    assert res.n_X.max() == 0 and min(times[True]) < 2*min(times[False]) + 0.05, f'dur=0 took {min(times[True]):.3f} s, against {min(times[False]):.3f} s without it'
+
+    # A split with p= and no rate or duration still raises, saying dur=0
+    with pytest.raises(ss.UndrivenTransition, match='dur=0'):
+        ss.Disease(go=ss.progression('S -> P', rate=0.1), triage=ss.progression('P -> A | B', p=[0.8, None]), name='d')
+    return res
+
+
+@sc.timer()
 def test_level_change_dwell():
     sc.heading('Testing that a dwell drawn at one level follows a person who moves to another, where the transition runs at a different speed')
     out = {}
@@ -1882,7 +1947,7 @@ def test_messages_and_crashes():
 
     # An immediate split as one transition says how to write it (HP16: crashed); a source that is a sum of states is several sources, as in A + B >> C (FP36: crashed in its own error)
     S, J, A, B = ss.states('S J A B')
-    with pytest.raises(ss.UndrivenTransition, match='one transition for each destination'):
+    with pytest.raises(ss.UndrivenTransition, match='give it dur=0'):
         ss.Sim(ss.Disease(go=S >> J @ ss.peryear(1), branch=ss.Transition(J, [A, B], p=[0.5, 0.5]), name='d'), **kw).init()
     A, B, C = ss.states('A B C')
     d = ss.Disease(A, B, C, tr=ss.Transition(A + B, C, rate=ss.peryear(0.1)), name='d')
@@ -2180,6 +2245,7 @@ if __name__ == '__main__':
     seed  = test_seeded_stay()
     disc  = test_disconnected_groups()
     junc  = test_junction()
+    imm   = test_immediate()
     level = test_level_change_dwell()
     chg   = test_change_in_function()
     msgs  = test_messages_and_crashes()

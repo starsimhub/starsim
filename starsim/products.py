@@ -161,6 +161,16 @@ class Product(EventSource, ss.Module):
                 raise self.no_outcome(attr) from None
             raise
 
+    def key_by(self, mods):
+        """ For a delivery with `disease=` several diseases (a list or an `ss.Strains`, HP7): the product's values as keyed by each, if they are not already (see the subclasses) """
+        return
+
+    @staticmethod
+    def keyed_by(vals, mods):
+        """ Whether a dict of values is keyed by diseases """
+        names = [mod.name for mod in mods]
+        return isinstance(vals, dict) and any(isinstance(k, ss.Module) or k in names for k in vals)
+
     def init_pre(self, sim):
         """ Initialize the product; skips if already initialized """
         if not self.initialized:
@@ -425,6 +435,12 @@ class Held(Product):
         eff = self.efficacy
         return [k.name for k in eff if isinstance(k, ss.Module)] if isinstance(eff, dict) else []
 
+    def key_by(self, mods):
+        """ The same efficacy against each disease, e.g. a bivalent vaccine delivered with disease=[hpv16, hpv18] """
+        if self.efficacy is not None and not self.keyed_by(self.efficacy, mods):
+            self.efficacy = {mod.name:self.efficacy for mod in mods}
+        return
+
     def disease_effects(self, sim):
         """
         The efficacy against each thing, for each disease it acts on, as {disease name: {key: efficacy}}
@@ -520,6 +536,15 @@ class Held(Product):
         if self.staged and sim.solver != 'abm':
             self.init_stages(sim)
         for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
+            coded = ss.interventions.coded_disease(sim, disname)
+            if coded is not None: # Written as code (PL2): its rel_sus and rel_trans, as for ss.modify()
+                for key,eff in effects.items():
+                    kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
+                    if kind is None:
+                        raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
+                    ss.connectors.AgentModifiers.attach(coded, kind, sim)
+                    sim.modifiers[(disname, kind, None)].append(Effect(self, key, eff))
+                continue
             dis = sim.get_declared(disname)
             graph = dis.graph
             deaths = [name for name,tr in graph.transitions.items() if tr.outflow and tr.people]
@@ -566,8 +591,9 @@ class Held(Product):
         arr = sim.people[self.dim]
         uids = (arr == 1).uids
         if len(uids):
-            dis = sim.get_declared(self.disease)
-            p = -np.expm1(-dis.engine.dt/dis.engine.convert(self.waning))
+            dis = ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)
+            eng = dis.engine if dis.graph is not None else ss.connectors.AgentModifiers.engine(dis, sim)
+            p = -np.expm1(-eng.dt/eng.convert(self.waning))
             lost = uids[self.rng_wane.rvs(uids) < p]
             arr[lost] = 0
             sim.groups.groups_changed(lost)
@@ -705,6 +731,14 @@ class Treatment(Held):
         self.to = to if to is None or isinstance(to, str) else to.name
         self.moves = moves
         self.cures = None # What a cure does, once the disease is known: see recovery()
+        self.members = None # The diseases it cures, if a delivery gives several (disease=[...]): see key_by()
+        return
+
+    def key_by(self, mods):
+        """ A cure of each disease's infected (and an efficacy against each, if it is held) """
+        super().key_by(mods)
+        if self.moves is None:
+            self.members = [mod.name for mod in mods]
         return
 
     @property
@@ -762,6 +796,13 @@ class Treatment(Held):
         """
         if not self.curing:
             return []
+        if self.moves is None and self.members and disease in self.members: # Each disease's infected, for a delivery with disease=[...]
+            return self.resolve_each(sim)
+        if self.moves is None and ss.interventions.coded_disease(sim, disease) is not None: # Written as code: its infected are cured by its clear_infection()
+            if isinstance(self.cure, dict):
+                raise ss.CapabilityError(f'the cure of "{self.name}" is by state, but "{disease}" is written as code, so has no declared states; give one cure=, for its infected')
+            self.cures = f'with {disease}.clear_infection()'
+            return [sc.objdict(dis=disease, tr=None, dst=None, srcs=[sc.objdict(name='infected', people=True)], eff=self.cure)]
         if self.moves is None:
             dis = sim.get_declared(disease)
             tr, dst, srcs = self.recovery(dis)
@@ -785,6 +826,14 @@ class Treatment(Held):
                     raise ss.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
                                                 f'each person treated can move along only one transition of a disease, so give the sources of each once.')
         return edges
+
+    def resolve_each(self, sim):
+        """ The cure of each of the diseases a delivery gives (disease=[...]) """
+        members, self.members = self.members, None
+        try:
+            return [e for name in members for e in self.resolve(sim, name)]
+        finally:
+            self.members = members
 
     def recovery(self, dis):
         """
@@ -917,6 +966,22 @@ class Diagnostic(Product):
         self.disease = None
         return
 
+    def key_by(self, mods):
+        """ Each disease's states: a value for its infected (or for detects=) becomes one for the infected of each, and one by state, for that state of each that has it; a person's result is the worst over the diseases """
+        if self.detects is not None:
+            return
+        def expand(vals):
+            if not isinstance(vals, dict): # For the infected
+                return {f'{mod.name}.{st.name}':vals for mod in mods for st in mod.graph.infected if st.people}
+            if any(self.key_ref(k)[0] is not None for k in vals): # Keyed by disease already
+                return vals
+            return {f'{mod.name}.{k}':v for k,v in vals.items() for mod in mods if k in mod.graph.states} | ({None:vals[None]} if None in vals else {})
+        if self.results_given is not None:
+            self.results_given = {k:(None if v is None else expand(v)) for k,v in self.results_given.items()}
+        else:
+            self.sensitivity = expand(self.sensitivity)
+        return
+
     def outcome_names(self):
         results = self.__dict__.get('results_given')
         return ['positive', 'negative'] if results is None else list(results)
@@ -991,6 +1056,8 @@ class Diagnostic(Product):
             else:
                 name, state = self.key_ref(key)
                 name = name or home
+                if ss.interventions.coded_disease(sim, name) is not None:
+                    raise ss.CapabilityError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for the state "{state}" of "{name}", which is written as code, so has no declared states; give one sensitivity=, for its infected, or detects=')
                 states = sim.get_declared(name).graph.states
                 if state not in states:
                     raise ss.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')

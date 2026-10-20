@@ -233,6 +233,19 @@ def test_result_exprs():
     return res
 
 
+def test_standard_prevalence():
+    sc.heading('Testing the standard prevalence by group, as a ratio (ST20)')
+    for solver in ['ode', 'binomial', 'abm']:
+        sis = ss.SIS(beta=ss.peryear(0.3), init_prev=0.05)
+        sis.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust=dict(infection=[0.5, 3]))
+        res = ss.Sim(sis, solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
+        high, low = res.prevalence.select(risk='high'), res.prevalence.select(risk='low')
+        assert high[-1] > 2*low[-1] > 0, f'{solver}: {high[-1]:.3f} against {low[-1]:.3f}'
+        assert np.allclose(res.n_I.select(risk='high')/(res.n_S.select(risk='high') + res.n_I.select(risk='high')), high)
+        assert np.allclose(0.8*low + 0.2*high, res.prevalence, rtol=0.05) # The groups keep their shares of people, about
+    return res
+
+
 # %% Run as a script
 def test_time_points():
     sc.heading('Testing results by time point: the start, then the end of each step')
@@ -311,6 +324,7 @@ if __name__ == '__main__':
     sim5 = test_time_points()
     res6 = test_destinations()
     res6 = test_result_exprs()
+    res7 = test_standard_prevalence()
 
     sc.toc(T)
     plt.show()

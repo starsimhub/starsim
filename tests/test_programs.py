@@ -192,6 +192,24 @@ def test_target():
     return sims
 
 
+def test_target_stop():
+    sc.heading('Testing above= a target that falls: "stop" follows it down, lowest priority first, and a rate drifts down')
+    n = ss.timeseries({0: 0, 20: 4000, 40: 1000}, mode='linear') # People: up, then down
+    def make(above='stop', **kwargs):
+        sir = make_sir().stratify(risk=['low', 'high'], split=[0.8, 0.2])
+        prog = ss.vaccinate(ss.Vaccine(efficacy=0.9), target=n, above=above, priority=[sir.risk == 'high'], name='prog')
+        return ss.Sim(sir, interventions=prog, **kwargs)
+    for solver,sim in run_both(make, stop=50, pop=10_000).items():
+        r = sim.results.prog
+        assert np.allclose(r.holding[1:50], r.target[1:50], rtol=0.01, atol=5.1), f'{solver}: {np.abs(r.holding - r.target)[1:50].max()}'
+        stopped = r.stopped.by('risk').values.sum(axis=0) # 3000 stopped: all 2000 of the low risk first, then 1000 of the high
+        assert np.allclose(stopped, [2000, 1000], atol=5.1), f'{solver}: {stopped}'
+    for solver,sim in run_both(make, stop=50, pop=10_000, above=ss.perday(0.05)).items(): # At a rate, toward the target
+        r = sim.results.prog
+        assert r.target[45] < r.holding[45] < r.holding[30] < r.holding[20] and r.stopped.by('risk').values[:, 1].sum() == 0, solver
+    return sim
+
+
 def test_memory():
     sc.heading('Testing delivery memory: once per spell, .ever, .since, .held, and doses')
 
@@ -444,6 +462,7 @@ if __name__ == '__main__':
     queue = test_queue()
     resource = test_resource()
     target = test_target()
+    tstop = test_target_stop()
     memory = test_memory()
     visit = test_same_visit()
     hiv = test_hiv_art()

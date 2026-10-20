@@ -75,7 +75,7 @@ def check_close(sims, func, rtol=0.1):
     return vals
 
 
-def make_sti(name='ng', beta=0.015, fail=None, init_prev=0.1):
+def make_sti(name='ng', beta=0.015, fail=None, init_prev=0.1, p_fail=None):
     """ A bacterial STI as in STIsim (stisim_bacterial/port.py), with treatment as an undriven transition and no treated state; `fail` is the event of a treatment failing """
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     trs = dict(
@@ -88,7 +88,7 @@ def make_sti(name='ng', beta=0.015, fail=None, init_prev=0.1):
         cure      = (E + A + P + Y + C) >> S, # Undriven: moved only by treatment
     )
     if fail is not None: # Failures lose their symptoms and stop seeking care
-        trs['fail'] = ss.Transition(P + Y + C, A, on=fail)
+        trs['fail'] = ss.Transition(P + Y + C, A, on=fail, p=p_fail)
     return ss.Disease(**trs, init_prev=init_prev, name=name)
 
 
@@ -128,6 +128,15 @@ def test_sti_failure():
         assert np.isclose(share(early), 0.8, atol=0.04) and np.isclose(share(late), 0.4, atol=0.05), f'{solver}: {share(early):.2f}, {share(late):.2f}'
         assert np.isclose(res.ng.fail.sum(), res.clinic.failed.sum()) # Every failure (in C) moved to A
     check_close(sims, lambda sim: sim.results.clinic.failed.sum(), rtol=0.15)
+
+    # With p=, that share of the failures move (resistance at failure)
+    def make_resist(**kwargs):
+        drug = ss.Treatment(moves='ng.cure', cure=0.8)
+        ng = make_sti(fail=drug.failed, p_fail=0.05)
+        return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'), **kwargs)
+    for solver,sim in run_both(make_resist).items():
+        res = sim.results
+        assert np.isclose(res.ng.fail.sum(), 0.05*res.clinic.failed.sum(), rtol=0.01 if solver == 'ode' else 0.3), f'{solver}: {res.ng.fail.sum()} of {res.clinic.failed.sum()} failures'
 
     # A transfer for those who failed, as a step of its own: resistance acquired
     def make_amr(**kwargs):

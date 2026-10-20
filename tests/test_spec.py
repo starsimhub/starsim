@@ -153,7 +153,7 @@ methods = {
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
     'PartnerNet': ('check', 'all'),
-    'MultiSim': ('run plot summarize to_df results diff extinction to_hub', 'diff extinction to_hub'),
+    'MultiSim': ('run plot summarize to_df results diff extinction outbreaks to_hub', 'diff extinction outbreaks to_hub'),
     'Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
     'ModelComparison': ('fits plot summarize to_df', 'fits'),
 }

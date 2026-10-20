@@ -443,6 +443,20 @@ def disease_code(spec, lines, left):
     return var
 
 
+def strains_code(spec, names, lines):
+    """ The Python for a family of diseases (`ss.Strains`), whose members are written before it; returns the names of the sim's diseases, with the family in place of its members """
+    immunity = []
+    for imm in spec['immunity']:
+        kwargs = {k:v for k,v in imm.items() if k != 'combine'}
+        kwargs['combine'] = imm['combine'] if imm['combine'] != 'max' else None
+        immunity.append(f'ss.immunity({kwargs_code(kwargs)})')
+    kwargs = dict(immunity=Code('[' + ', '.join(immunity) + ']') if immunity else None, init_prev=spec['init_prev'], split=spec['split'], exclusive=spec['exclusive'])
+    members = spec['members']
+    args = kwargs_code(kwargs)
+    lines += ['# Family', f"{spec['name']} = ss.Strains({spec['name']!r}, [{', '.join(members)}]{', ' + args if args else ''})", '']
+    return list(dict.fromkeys(spec['name'] if name in members else name for name in names)) # In the place of its first member
+
+
 def increment_code(inc):
     """ The Python for an `increment=`: a name alone for adding 1 to one counter, else a dict """
     if len(inc) == 1 and list(inc.values())[0] == 1:
@@ -452,9 +466,10 @@ def increment_code(inc):
 
 def transfer_code(tf):
     """ The Python for a transfer in the model spec """
-    target = tf['dst'] if tf['src'] is None else f"{tf['src']} -> {tf['dst']}"
+    target = tf['dst'] if tf['src'] is None else f"{tf['src']} -> {' | '.join(map(str, sc.tolist(tf['dst'])))}"
     first = [f'increment={increment_code({tf["dim"]:tf["increment"]})}'] if tf.get('increment') is not None else [f"{tf['dim']}={target!r}"]
     args = first + [f'{k}={code_expr(tf[k])}' for k in ['rate', 'dur'] if tf[k] is not None]
+    args += [f"p=[{', '.join('None' if v is None else code_expr(v) for v in tf['p'])}]"] if tf.get('p') is not None else []
     args += [f'{k}={tf[k]!r}' for k in ['states', 'label'] if tf[k] is not None]
     return f"ss.transfer({', '.join(args)})"
 
@@ -497,7 +512,7 @@ def movable(strat, left):
     if mob is None:
         return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
-        args = ', '.join(f'{k}={v if k == "away" and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name
+        args = ', '.join(f'{k}={v if k in ["away", "back"] and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name, and a typed rate of coming back as written
         out['mobility'] = Code(f'ss.Mobility({args})')
     else:
         left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.Mobility(...) in stratify()')
@@ -536,7 +551,7 @@ def modify_code(mod, mods):
 
 
 delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen', 'visit']
-delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'disease', 'cost', 'count_events']
+delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease', 'cost', 'count_events']
 cond_keys = ['where', 'on', 'detects']
 
 
@@ -699,7 +714,9 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     lines += ['import starsim as ss', '']
     if funcs:
         lines += ['# Functions'] + [line for block in funcs for line in block.splitlines() + ['']]
-    names = [disease_code(mod, lines, left) for mod in spec['modules']]
+    names = [disease_code(mod, lines, left) for mod in spec['modules'] if mod['type'] != 'Strains']
+    for fam in [mod for mod in spec['modules'] if mod['type'] == 'Strains']: # A family after its members, in their place among the sim's diseases
+        names = strains_code(fam, names, lines)
     if prelude:
         lines += ['# Interventions'] + prelude + ['']
     cfg = spec['config']
@@ -840,6 +857,17 @@ def diff(a, b, output=False):
         model += [f"module '{k}' removed" for k in ma if k not in mb] + [f"module '{k}' added" for k in mb if k not in ma]
     for x,y in pairs:
         prefix = f"{x['name']}: " if len(pairs) > 1 else ''
+        if 'Strains' in (x['type'], y['type']): # A family: its members and its options
+            for key in ['members', 'exclusive', 'immunity', 'init_prev', 'split']:
+                vx, vy = x.get(key), y.get(key)
+                if key == 'immunity' and vx and vy and len(vx) == len(vy): # Each, by what it protects with and what it lowers (the structure), then by its values
+                    for i,(ix,iy) in enumerate(zip(vx, vy)):
+                        for k in sorted(set(ix) | set(iy)):
+                            if ix.get(k) != iy.get(k):
+                                (pars if k in ['rel_sus', 'rel_trans', 'dur'] and k in ix and k in iy else model).append(f'{prefix}immunity[{i}].{k} {shown(ix.get(k))} -> {shown(iy.get(k))}')
+                elif vx != vy:
+                    (pars if key in ['init_prev', 'split'] and None not in (vx, vy) else model).append(f'{prefix}{key} {shown(vx, unit)} -> {shown(vy, unit)}')
+            continue
         as_dict = lambda pars: dict(pars) if isinstance(pars, dict) else {p['name']:p['value'] for p in pars} # A module written as code keeps its parameters by name
         px, py = as_dict(x.get('pars') or []), as_dict(y.get('pars') or [])
 

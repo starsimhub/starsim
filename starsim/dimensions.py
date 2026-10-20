@@ -76,6 +76,7 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
+        self.home = None # For where commuters are now (see ss.Mobility.now()): the dimension of their home
         self.clock_unit = None # For a clock: the unit of time its values are in (None for the sim's), and its levels as given
         self.declared = None
         if self.kind == 'clock':
@@ -320,7 +321,7 @@ class Strat:
             levels = self.declared.tolist()
             named['unit'] = None if self.clock_unit is None else self.clock_unit.base.removesuffix('s')
         return dict(**named, name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
-                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else self.mobility.away.name if isinstance(self.mobility.away, ss.par) and self.mobility.away.name else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
+                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else self.mobility.away.name if isinstance(self.mobility.away, ss.par) and self.mobility.away.name else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **({} if self.mobility.back is None else dict(back=f'ss.{self.mobility.back!r}' if isinstance(self.mobility.back, ss.TimePar) else float(self.mobility.back))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property
     def mids(self):
@@ -387,7 +388,8 @@ class Transfer:
 
     Args:
         rate (any): the per-person hazard
-        dur (any): the mean time before moving (instead of `rate`)
+        dur (any): the time before moving (instead of `rate`): a scalar is the mean of an exponential, and a distribution is drawn for each person when they reach a level it moves them from
+        p (list): with several levels to move to (`method='none -> pill | iud'`), the probability of each, decided as people move; one may be None, for the rest
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword it is passed under
         increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
@@ -399,9 +401,10 @@ class Transfer:
         ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
         ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
         ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # Down a level at a time
+        ss.transfer(method='none -> pill | iud', p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
         ```
     """
-    def __init__(self, rate=None, dur=None, states=None, name=None, label=None, increment=None, **kwargs):
+    def __init__(self, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
         increment = parse_increment(increment, 'ss.transfer()')
         if len(kwargs) + len(increment or {}) != 1:
             errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(risk="low -> high", rate=0.1) or ss.transfer(increment="doses", rate=0.1), not {list(kwargs.keys()) + list(increment or {})}'
@@ -417,9 +420,23 @@ class Transfer:
             self.dim, target = list(kwargs.items())[0]
         if isinstance(target, str) and re.search(r'->|>>', target):
             src, dst = parse_arrow(target)
-            self.src, self.dst = src, dst[0]
+            self.src, self.dst = src, (dst[0] if len(dst) == 1 else dst)
         else:
             self.src, self.dst = None, target # From every other level
+        self.dsts = self.dst if isinstance(self.dst, list) else [self.dst] # The levels it moves people to
+        if len(self.dsts) > 1 and self.src is None:
+            errormsg = f'A transfer to one of several levels names the level people move from, with an arrow, e.g. ss.transfer({self.dim}="a -> b | c", p=[0.6, 0.4], dur=...), not {self.dim}={target!r}'
+            raise ValueError(errormsg)
+        self.p = None # With several, the probability of each, as people move
+        if len(self.dsts) > 1 or p is not None:
+            p = sc.tolist(p)
+            p = p + [None] if len(p) == len(self.dsts) - 1 else p # With two levels, one value is the first one's probability
+            if len(self.dsts) == 1 or len(p) != len(self.dsts) or sum(v is None for v in p) > 1:
+                what = f'{len(self.dsts)} levels to move to' if len(self.dsts) > 1 else 'one level to move to'
+                errormsg = (f'p= of ss.transfer() gives the probability of each level it moves people to, one each (or None for the rest), as people move, e.g. ss.transfer(method="none -> pill | iud", p=[0.6, 0.4], dur=...); '
+                            f'it has {what} and p={p}. For only some people to move, give a rate (rate=), or where= on the stratification')
+                raise ss.BadBranchSplit(errormsg)
+            self.p = [None if v is None else as_expr(v) for v in p]
         self.rate = None if rate is None else as_expr(rate)
         self.dur = None if dur is None else as_expr(dur)
         self.states = None if states is None else [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
@@ -430,7 +447,7 @@ class Transfer:
     def __repr__(self):
         if self.increment is not None:
             return f'transfer({self.name}: {self.dim} {self.increment:+d})'
-        return f'transfer({self.name}: {self.dim} {self.src or "*"} -> {self.dst})'
+        return f'transfer({self.name}: {self.dim} {self.src or "*"} -> {" | ".join(map(str, self.dsts))})'
 
     def __or__(self, other): return ss.conditions.as_cond(self) | other # As an event: the people who moved this step
     def __ror__(self, other): return other | ss.conditions.as_cond(self)
@@ -438,7 +455,7 @@ class Transfer:
     def __rand__(self, other): return other & ss.conditions.as_cond(self)
 
 
-def transfer(rate=None, dur=None, states=None, name=None, label=None, increment=None, **kwargs):
+def transfer(rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
     """
     Movement between the levels of a stratification, without a change of disease state
 
@@ -448,7 +465,8 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, increment=
 
     Args:
         rate (any): the per-person hazard
-        dur (any): the mean time before moving (instead of `rate`)
+        dur (any): the time before moving (instead of `rate`): a scalar is the mean of an exponential, and a distribution is drawn for each person when they reach a level it moves them from
+        p (list): with several levels to move to (`method='none -> pill | iud'`), the probability of each, decided as people move; one may be None, for the rest
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
@@ -460,6 +478,7 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, increment=
         ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
         ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
         ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # A counter, down a level at a time
+        ss.transfer(method='none -> pill | iud', p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
         ```
     """
     opts = [key for key in kwargs if key in ss.interventions.delivery_keys + list(ss.interventions.renamed_keys) + ['disease']]
@@ -468,7 +487,34 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, increment=
         errormsg = (f'ss.transfer() is movement that happens all the time, at a rate (rate= or dur=); {sc.strjoin(f"{key}=" for key in opts)} {"is" if len(opts) == 1 else "are"} for a delivery. '
                     f'A move delivered to some people is ss.Delivery(move=dict({dim}=...), ...), e.g. ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[2021])')
         raise TypeError(errormsg)
-    return Transfer(rate=rate, dur=dur, states=states, name=name, label=label, increment=increment, **kwargs)
+    return Transfer(rate=rate, dur=dur, p=p, states=states, name=name, label=label, increment=increment, **kwargs)
+
+
+def transfer_stages(sim, mod, tf, strat):
+    """
+    For a compartmental run: the Erlang stages of a transfer whose dur= is a distribution, as a dimension of the people at the levels it moves from (None if it needs none)
+
+    People enter its first stage when they reach a level the transfer moves them from (or one of its states), go up a stage at k
+    over its mean, and move from the last; the k stages match its mean and standard deviation, as for a dwell time (see `ss.solvers.Engine.init_dwells()`).
+    """
+    trans = ss.transitions
+    raw = trans.by_dist(getattr(tf.dur, 'raw', None))
+    if not isinstance(raw, ss.Dist) or isinstance(raw, ss.expon) or trans.varying_pars(raw): # Values by group stay at the rate of their mean, with a note
+        return None
+    mean, std = trans.dwell_stats(raw, lambda val: ss.solvers.engine.convert(val, sim.unit_base))
+    shape = raw.pars.get('a')
+    k = int(shape) if (type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape)) else trans.erlang_stages(mean, std)
+    if k == 1:
+        return None
+    if tf.increment is not None:
+        levels = [i for i,j in enumerate(strat.shifted(tf.increment)) if i != j]
+    else:
+        levels = [strat.index(tf.src)] if tf.src is not None else [i for i in range(strat.n) if i != strat.index(tf.dst)]
+    out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], split=[1.0] + [0.0]*(k - 1), states=tf.states, where={tf.dim:levels})
+    out.owner = mod.name
+    out.stages_of = (mod.name, tf.name)
+    out.dwell = sc.objdict(mean=mean, std=std, k=k, family=type(raw).__name__, exact=type(raw) is ss.gamma and k == shape) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
+    return out
 
 
 strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility', 'immunity']
@@ -603,6 +649,12 @@ class Groups:
                         mod.graph.strats.append(strats[tf.dim])
                     else:
                         raise ss.MissingDimension(f'the transfer "{tf.name}" moves people along "{tf.dim}", but the model is not stratified by it. Add e.g. {mod.name}.stratify({tf.dim}=[...]).')
+        for strat in list(strats.values()): # Commuters who come home at a finite rate are in one place at a time: where they are now, beside their home (see ss.Mobility(back=))
+            if strat.mobility is not None and strat.mobility.back is not None:
+                now = strat.mobility.now(strat)
+                if strats.get(now.name, now) is not now:
+                    raise ss.DuplicateStructuralDimension(f'the model has a dimension called "{now.name}", which is also where the commuters of "{strat.name}" are now; rename it.')
+                strats[now.name] = now
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         for mod in sim.pars.interventions.values(): # Properties of people that the interventions need, e.g. holding a product
             if hasattr(mod, 'dims'):
@@ -613,6 +665,12 @@ class Groups:
                 for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
                     if dim not in strats:
                         raise ss.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+        if sim.solver not in [None, 'abm']: # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
+            for mod in sim.declared:
+                for tf in mod.graph.transfers.values():
+                    strat = transfer_stages(sim, mod, tf, strats[tf.dim])
+                    if strat is not None:
+                        strats[strat.name] = strat
         moved = [tf.dim for mod in sim.declared for tf in mod.graph.transfers.values()] # A dimension that people are moved along, with no split of its own, starts with everyone at its first level
         moved += [dim for mod in sim.declared for tr in mod.graph.transitions.values() for dim in list(getattr(tr, 'move', None) or {}) + list(getattr(tr, 'increment', None) or {})]
         moved += [dim for mod in sim.pars.interventions.values() for dim in list(getattr(mod, 'move', None) or {}) + list(getattr(mod, 'increment', None) or {})]
@@ -659,6 +717,12 @@ class Groups:
         births = np.ones(self.n_groups)
         for d,strat in enumerate(self.strats):
             strat.dim = d
+        for strat in self.strats: # Where commuters are now: at the start, in each place for their share of time there
+            if strat.home is not None:
+                share = strat.home.mobility.time_share(strat.home).toarray()
+                strat.cond = ((strat.home.dim, strat.dim), share)
+                strat.split = strat.home.split @ share
+                strat.guessed.pop('split', None)
         joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
             errormsg = 'Only one split= can cover several dimensions at once'
@@ -693,12 +757,13 @@ class Groups:
             born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
             births *= (born/born.sum())[tuple(self.group_coords[:, d] for i,d in enumerate(ds) if i not in ages)]
         for d,strat in enumerate(self.strats):
+            share = strat.shares(self.group_coords) if strat.home is not None else strat.split[self.group_coords[:, d]] # Where commuters are now, given their home
             if self.joint is None or d not in self.joint[0]:
-                split *= strat.split[self.group_coords[:, d]]
-            first = np.zeros(strat.n)
-            first[0] = 1
-            if strat.kind == 'age' or self.joint is None or d not in self.joint[0]:
-                births *= (first if strat.kind == 'age' else strat.split)[self.group_coords[:, d]] # People are born into the youngest group
+                split *= share
+            if strat.kind == 'age':
+                births *= self.group_coords[:, d] == 0 # People are born into the youngest group
+            elif self.joint is None or d not in self.joint[0]:
+                births *= share
         for d,strat in enumerate(self.strats): # A split of a dimension of some states only, given the levels of others (e.g. clinical severity by age): normalized over this dimension
             if strat.joint is not None and strat.states is not None:
                 ds, grid = strat.joint.grid(sim)
@@ -739,7 +804,7 @@ class Groups:
                     events.append((name, str(tr.move_given[strat.name])))
             for name,tf in mod.graph.transfers.items():
                 if tf.dim == strat.name:
-                    events.append((name, f'{tf.increment:+d}' if tf.increment is not None else str(tf.dst)))
+                    events.append((name, f'{tf.increment:+d}' if tf.increment is not None else ' | '.join(map(str, tf.dsts))))
         for mod in sim.pars.interventions.values():
             if strat.name in (getattr(mod, 'increment', None) or {}):
                 events.append((mod.name, f'{mod.increment[strat.name]:+d}'))

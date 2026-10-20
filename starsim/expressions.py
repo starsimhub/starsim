@@ -21,7 +21,7 @@ def did_you_mean(name, options):
     short = lambda opt: opt if '.' in name else opt.rpartition('.')[2]
     dists = sc.suggest(name, [short(opt) for opt in options], n=3, fulloutput=True) or {}
     best = min(dists.values(), default=0)
-    close = [key for key,dist in dists.items() if dist <= best + 1] # Not those much further away than the closest
+    close = [key for key,dist in dists.items() if dist <= best + 1 and dist < len(name)/2] # Not those much further away than the closest, nor any that differ in half the name or more (every one-letter state from another)
     matches = [opt for opt in options if short(opt) in close]
     return f'; did you mean {sc.strjoin(matches)}?' if matches else '.'
 

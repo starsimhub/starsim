@@ -8,6 +8,8 @@ import pytest
 import numpy as np
 import pandas as pd
 import scipy.sparse as sps
+import scipy.integrate as sp_integrate
+import scipy.stats as stats
 import sciris as sc
 import starsim as ss
 import corpus
@@ -384,8 +386,8 @@ def test_space():
     sim = ss.Sim(commuters(away), n_agents=3000, solver='abm', **pars).init()
     shares = [sim.new(pars=dict(away=val)).init().mixing.time_share.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
     assert np.allclose(shares[0], 0.99) and np.allclose(shares[1], 0.8)
-    with pytest.raises(ValueError, match='sim.new'): # Rather than restarting with the old mixing
-        ss.Sim(commuters(away), **pars).restart(pars=dict(away=0.05))
+    restarted = ss.Sim(commuters(away), solver='ode', **pars).init().restart(pars=dict(away=0.05)).run().results.sir.n_I.values # The mixing is worked out again on a restart
+    assert np.allclose(restarted, ss.Sim(commuters(0.05), solver='ode', **pars).run().results.sir.n_I.values)
 
     # A gravity model needs a geography
     with pytest.raises(ss.NoGeography):
@@ -399,6 +401,44 @@ def test_space():
     n = sim.results.sis.n_S.by('patch').values[-1] + sim.results.sis.n_I.by('patch').values[-1]
     assert np.allclose(n/n.sum(), [0.4, 0.3, 0.3], atol=0.03) # Was 0.73, 0.13, 0.13
     return peaks
+
+
+@sc.timer()
+def test_commuting():
+    sc.heading('Testing commuters who leave home and come back at finite rates')
+    beta, gamma, away, N = 1.0, 0.1, 0.1, np.array([8000, 2000.])
+    def make(back, solver='ode', **kwargs):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(beta)), recovery=ss.progression('I -> R', rate=ss.perday(gamma)), init=dict(I=ss.by(patch=[5, 0])), name='sir')
+        sir.stratify(patch=['a', 'b'], split=list(N/N.sum()), mobility=ss.Mobility(matrix=[[0, 1], [1, 0]], kind='commute', away=away, back=back))
+        return ss.Sim(sir, unit='day', stop=100, total_pop=N.sum(), solver=solver, **kwargs, **kw)
+
+    # Keeling and Rohani's commuter model (7.3): X[i,j] are the residents of i now in j, who leave home at rate l and come back at rate r, which give 10% of time away
+    l = 0.05
+    r = l*(1 - away)/away
+    def deriv(t, y):
+        S, I, R = y.reshape(3, 2, 2)
+        lam = beta*I.sum(axis=0)/y.reshape(3, 2, 2).sum(axis=(0, 1)) # The force of infection where people are now
+        move = lambda X: np.array([[r*X[0, 1] - l*X[0, 0], l*X[0, 0] - r*X[0, 1]], [l*X[1, 1] - r*X[1, 0], r*X[1, 0] - l*X[1, 1]]])
+        return np.concatenate([-lam*S + move(S), lam*S - gamma*I + move(I), gamma*I + move(R)]).ravel()
+    T = np.array([[1 - away, away], [away, 1 - away]]) # People start in each place for their share of time there
+    I0 = np.array([5, 0])[:, None]*T
+    y = sp_integrate.solve_ivp(deriv, [0, 100], np.concatenate([N[:, None]*T - I0, I0, 0*T]).ravel(), t_eval=np.arange(101), rtol=1e-10, atol=1e-8).y
+    sim = make(ss.perday(r)).run()
+    I = sim.results.sir.n_I.by('patch').values # By home, wherever people are
+    assert np.allclose(I, y.reshape(3, 2, 2, -1)[1].sum(axis=1).T, rtol=1e-4, atol=1e-2)
+    assert 'patch_now (space): a, b' in sim.describe(output=True)
+
+    # Coming back fast is the time-share form, and slowly, fewer people take the infection to b early on
+    fast = make(ss.perday(1000)).run().results.sir.n_I.by('patch').values
+    shared = make(None).run().results.sir.n_I.by('patch').values
+    assert np.allclose(fast, shared, rtol=0.01, atol=1) and np.all(I[1:8, 1] < 0.9*shared[1:8, 1])
+
+    # As agents, the share of time away is kept with daily steps, and the epidemic reaches b
+    sim = make(ss.days(2), solver='abm', n_agents=10_000).run()
+    home, now = sim.people.patch.raw, sim.people.patch_now.raw
+    assert abs((now[home == 0] == 1).mean() - away) < 0.02 and abs((now[home == 1] == 0).mean() - away) < 0.03
+    assert sim.results.sir.infection.cum.by('patch').values[-1, 1] > 1000
+    return sim
 
 
 @sc.timer()
@@ -786,6 +826,23 @@ def test_by_properties():
     drawn = sim.diseases.d.engine.sample_dwell(sim.diseases.d.graph.transitions['go'], uids) # In months
     female = sim.people.female.raw[uids]
     assert np.isclose(drawn[female].mean(), 6, rtol=0.05) and np.isclose(drawn[~female].mean(), 12, rtol=0.05)
+
+    # Several non-exponential dwell times out of a state, each for one sex (ST24): a track for each as compartments, as agents as ever
+    def clearance(where_m=ss.ppl.male):
+        S, A, R = ss.states('S A R')
+        clear_f = ss.Transition(A, R, dur=ss.lognorm_ex(ss.months(8), ss.months(2)), where=ss.ppl.female)
+        clear_m = ss.Transition(A, S, dur=ss.lognorm_ex(mean=ss.by(sex=dict(female=ss.months(6), male=ss.months(6))), std=ss.months(3)), where=where_m)
+        return ss.Disease(S, A, R, clear_f=clear_f, clear_m=clear_m, init=dict(S=0.5, A=0.5), name='d').stratify(sex=['female', 'male'])
+    left = sc.objdict()
+    for solver,pop in [('ode', dict(total_pop=20_000)), ('binomial', dict(total_pop=20_000)), ('abm', dict(n_agents=20_000))]:
+        n = ss.Sim(clearance(), unit='month', dt=0.25, stop=10, solver=solver, verbose=0, **pop).run().results.d.n_A.by('sex').values
+        left[solver] = n[32]/n[0] # Still infected at 8 months
+    erlang = [stats.gamma.sf(8, 16, scale=8/16), stats.gamma.sf(8, 4, scale=6/4)] # 16 and 4 stages
+    assert np.allclose(left.ode, erlang, atol=1e-3) and np.allclose(left.binomial, erlang, atol=0.03) and np.allclose(left.abm, [0.476, 0.208], atol=0.02) # Lognormal as agents (those who leave at 7.875 months or later, at the step nearest)
+    sim = ss.Sim(clearance(where_m=ss.ppl.female), stop=10, verbose=0).init() # Both for women: none as compartments, so agents
+    assert sim.solver == 'abm'
+    with pytest.raises(ss.CapabilityError, match='same people'):
+        ss.Sim(clearance(where_m=ss.ppl.female), stop=10, solver='ode', verbose=0).init()
     return sim
 
 
@@ -1022,6 +1079,7 @@ if __name__ == '__main__':
     strains = test_strains()
     carriage = test_carriage()
     space   = test_space()
+    commuting = test_commuting()
     register = test_register()
     ragged  = test_ragged()
     values  = test_property_values()

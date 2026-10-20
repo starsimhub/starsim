@@ -51,7 +51,7 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.death`** | Shorthand: an outflow; `lifetable=` draws each person's age at death from a life table |
 | **`ss.immigration`** | Shorthand: an inflow of a number of people per unit time, at ages like the population's |
 | **`ss.emigration`** | Shorthand: an outflow, recorded as people who left rather than died |
-| **`ss.lifetable`** | A life table (ages and deaths) for `ss.death(lifetable=...)` |
+| **`ss.lifetable`** | A life table (ages and deaths) for `ss.death(lifetable=...)`, or by year and sex for `ss.Deaths(lifetable=...)` |
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
@@ -119,7 +119,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 `ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's, and **`ss.Fit`**, what `sim.calibrate()` returns (called `fit` below). Users rarely construct these. (Starsim 3's `ss.Calibration` remains, for packages that subclass it, and is not counted.)
 
-### Methods and attributes: 48 distinct names
+### Methods and attributes: 49 distinct names
 
 | On | Names |
 |---|---|
@@ -131,7 +131,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
 | A result of an `ss.MultiSim`, which has a run dimension | **`quantiles`** `values` |
 | A network (`ss.PartnerNet`, `ss.MFNet`) | **`check`** |
-| An `ss.MultiSim`, which is what `ss.parallel` returns | `run` `plot` `summarize` `to_df` `results` **`diff`** **`extinction`** **`to_hub`** |
+| An `ss.MultiSim`, which is what `ss.parallel` returns | `run` `plot` `summarize` `to_df` `results` **`diff`** **`extinction`** **`outbreaks`** **`to_hub`** |
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
@@ -154,8 +154,8 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `solver
 | Optional metadata | 1 | 1 |
 | Types you get back or subclass | 6 | 1 |
 | **`ss.` names** | **111** | **47** |
-| Methods and attributes | 48 | 33 |
-| **Total** | **159** | **80** |
+| Methods and attributes | 49 | 34 |
+| **Total** | **160** | **81** |
 
 <!-- counts end -->
 

@@ -570,11 +570,11 @@ def test_partners():
     degree = sim2.networks[0].degrees(sim2.people.alive.uids)
     assert np.isclose(degree[level == 0].mean(), 0.4, rtol=0.25) and np.isclose(degree[level == 1].mean(), 1.6, rtol=0.25)
 
-    # Targets that cannot be met together are an error; partnerships have no compartmental approximation yet, and a static network is approximated by the mean degree of its graph
+    # Targets that cannot be met together are an error; partnerships are approximate under an ODE (see test_partnership_approx()), and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
         ss.PartnerNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
+    with pytest.raises(ss.CapabilityError, match='partnership approximation'):
+        ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approx=False, verbose=0).run()
     ring = ss.Sim(sis, networks=ss.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
     assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
@@ -609,6 +609,12 @@ def test_partner_targets():
         assert np.isclose(net.results.mean_degree[150:].mean(), 0.7, rtol=0.05)
         assert np.isclose(within, 0.68, atol=0.03) if share is None else np.isclose(within, share, atol=0.02) # By chance, 0.8² + 0.2²
     assert 'match' in net.check(n_runs=2, output=True).index
+
+    # Within the levels of several properties at once, each with its own target (EpiModel's nodematch on each)
+    sir.stratify(region=['a', 'b', 'c'], split=[0.5, 0.3, 0.2])
+    net = ss.PartnerNet(n_contacts=0.7, dur=50, match=dict(risk=0.9, region=0.7), name='net')
+    res = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run().networks.net.results
+    assert np.isclose(res.match_risk[150:].mean(), 0.9, atol=0.02) and np.isclose(res.match_region[150:].mean(), 0.7, atol=0.02) # By chance, 0.68 and 0.38
 
     # A target number of partners at a time between men and women, with concurrency
     duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))
@@ -834,6 +840,49 @@ def test_two_groups():
 
 
 @sc.timer()
+def test_partnership_approx():
+    sc.heading('Testing the partnership approximation: lasting partnerships under the ODE, binomial, and Gillespie solvers')
+    sis = lambda beta, dur=None: ss.Disease(infection=ss.transmission('S -> I', beta=beta), **(dict(recovery=ss.progression('I -> S', dur=dur)) if dur else {}), init_prev=0.05, name='d') # SI with no dur
+    def run(solver, disease, net, dt=ss.months(1), stratify=None, seed=1, n=5000, **kw):
+        sim = ss.Sim(disease, networks=net, n_agents=n, total_pop=n, start=2000, stop=2020, dt=dt, solver=solver, rand_seed=seed, verbose=0, **kw)
+        return sim.stratify(**(stratify or dict(sex=['female', 'male'])))
+
+    # With partnerships that end at a constant rate and no way out of the infectious state, the chance over a partnership is H/(H + 1/D̄)
+    sim = run('ode', sis(ss.peract(0.05)), ss.PartnerNet(name='pairs', n_contacts=1, dur=ss.years(2), acts=ss.freqperyear(10)), stratify=dict(risk=['low', 'high'])).init()
+    H = 10*-np.log(0.95)
+    assert sim.diseases.d.describe(output=True).count('partnership approximation (approx)') == 1
+    assert np.isclose(sim.diseases.d.engine.partnership_info[('infection', 'I', 'pairs', 0)][0], H/(H + 1/2)), 'H/(H + 1/D)'
+
+    # Prevalence at 10 and 20 years under the ODE against agents (4 runs here; 20 runs of 10,000 agents gave the ratios in the comments): it is close
+    # for risk groups with short partnerships, too high for long monogamous partnerships with a long infection, and too low with concurrency
+    mf = lambda **kw: ss.MFNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), **kw)
+    cases = dict(
+        risk = ([0.9, 1.1], [0.9, 1.1], dict(disease=sis(ss.peract(0.002)), stratify=dict(risk=['low', 'medium', 'high'], split=[0.8, 0.15, 0.05]), # 0.999, 0.995
+                 net=ss.PartnerNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6), acts=ss.freqperyear(80)))),
+        gono = ([0.08, 0.4], [0.06, 0.4], dict(disease=sis(ss.peract(m2f=0.05, f2m=0.03), ss.months(4)), dt=ss.weeks(1), # 0.19, 0.13: concurrency (Poisson partners), which the approximation leaves out
+                 net=mf(n_contacts=1, dur=ss.lognorm_ex(mean=ss.weeks(4), std=ss.weeks(2)), acts=ss.freqperweek(2)))),
+        hiv  = ([1.0, 1.25], [1.1, 1.4], dict(disease=sis(ss.peract(m2f=0.004, f2m=0.002)), # 1.105, 1.247: infection kept within pairs, which the approximation spreads
+                 net=mf(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(3)), acts=ss.freqperyear(80)))),
+    )
+    for name,(at10,at20,kw) in cases.items():
+        prev = lambda solver, seed=1: run(solver, seed=seed, **sc.dcp(kw)).run().results.d.n_I.values[[120, -1] if name != 'gono' else [522, -1]]/5000
+        ratio = prev('ode')/np.mean([prev('abm', seed) for seed in range(4)], axis=0)
+        assert at10[0] < ratio[0] < at10[1] and at20[0] < ratio[1] < at20[1], f'{name}: {ratio}'
+
+    # The other compartmental solvers use the same force of infection; approx=False raises, sides need a dimension, and 'auto' keeps agents
+    hiv = cases['hiv'][2]
+    ode = run('ode', **sc.dcp(hiv)).run().results.d.n_I[-1]
+    for solver in ['binomial', 'gillespie']: # Stochastic, in 5,000 people
+        assert np.isclose(run(solver, **sc.dcp(hiv)).run().results.d.n_I[-1], ode, rtol=0.1), solver
+    with pytest.raises(ss.CapabilityError, match='abm'):
+        run('ode', approx=False, **sc.dcp(hiv)).init()
+    with pytest.raises(ss.CapabilityError, match=r'stratify\(sex='):
+        ss.Sim(sis(0.01), networks=ss.MFNet(), solver='ode', verbose=0).init()
+    assert run('auto', **sc.dcp(hiv)).init().solver == 'abm'
+    return
+
+
+@sc.timer()
 def test_peract_spec():
     sc.heading('Testing how a probability per act is described, written in the model spec, and written as code')
     def make(beta):
@@ -907,6 +956,7 @@ if __name__ == '__main__':
     route = test_route_modifiers()
     needles = test_needles()
     two = test_two_groups()
+    pa = test_partnership_approx()
     spec = test_peract_spec()
     acts = test_per_act_beta()
 

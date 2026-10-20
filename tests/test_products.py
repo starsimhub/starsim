@@ -231,6 +231,46 @@ def test_strain_efficacy():
     return sim
 
 
+def test_disease_list():
+    sc.heading('Testing disease= as a list or an ss.Strains (HP7): a bivalent vaccine, a test and a cure of each, and their counts')
+    def make(dis=None, vx=True, **kwargs):
+        g16, g18 = make_geno('hpv16'), make_geno('hpv18')
+        diseases = ss.Strains('hpv', [g16, g18]) if dis == 'strains' else [g16, g18]
+        given = diseases if dis == 'strains' else [g16, g18]
+        ivs = [ss.vaccinate(ss.Vaccine(efficacy=0.95 if vx else 0.0), coverage=0.8, at=[2001], disease=given, name='vx')]
+        if kwargs.get('solver') == 'abm':
+            dna = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=1.0), coverage=0.5, at=[2005], disease=given, name='dna')
+            ivs += [dna, ss.treat(ss.Treatment(cure=1.0), who=dna.positive, disease=given, name='tx')]
+        return ss.Sim(diseases, interventions=ivs, **kwargs)
+    base = run_both(lambda **k: make(vx=False, **k))
+    sims = run_both(make)
+    for solver,sim in sims.items(): # The vaccine protects against both
+        r, r0 = sim.results, base[solver].results
+        assert r.hpv16.n_I[8] < 0.5*r0.hpv16.n_I[8] and r.hpv18.n_I[8] < 0.5*r0.hpv18.n_I[8], solver
+    r = sims.abm.results
+    assert r.dna.positive.sum() > 0 and r.tx.cured.select(disease='hpv16').sum() > 0 and r.tx.cured.select(disease='hpv18').sum() > 0 # Detected and cured in each
+    assert sims.abm.results.hpv18.n_I[21] < sims.abm.results.hpv18.n_I[20]
+    family = make('strains', solver='abm', n_agents=10_000, **kw).run().results # The same as the list
+    assert np.array_equal(family.hpv18.n_I, r.hpv18.n_I) and family.tx.cured.sum() == r.tx.cured.sum()
+
+    # A scalar cure is the dict over every infected state; a test's count and cost are one per person tested
+    def cure(c, **kwargs):
+        g = make_hpv('hpv16')
+        cyto = ss.Diagnostic(results=dict(high=dict(CIN=0.9, CA=1.0), low=dict(I=0.5), normal=None), cost=10)
+        screening = ss.screen(cyto, at=[2005], name='screening')
+        return ss.Sim(g, interventions=[screening, ss.treat(ss.Treatment(cure=c, to='S'), who=screening.high, name='tx')], solver='abm', n_agents=20_000, **kw, **kwargs).run().results
+    scalar, bystate = cure(0.936), cure(dict(I=0.936, CIN=0.936)) # Its infected states
+    assert np.array_equal(scalar.hpv16.n_I, bystate.hpv16.n_I) and scalar.tx.cured.sum() == bystate.tx.cured.sum() > 0
+    assert scalar.screening.delivered.sum() == 20_000 and scalar.screening.cost.sum() == 200_000
+
+    # One product for one disease, delivered for another, says to give both
+    g16, g18 = make_geno('hpv16'), make_geno('hpv18')
+    test = ss.Diagnostic(sensitivity=0.9)
+    with pytest.raises(ss.UnknownDisease, match=r"disease=\['hpv16', 'hpv18'\]"):
+        ss.Sim([g16, g18], interventions=[ss.screen(test, at=[2005], disease=g16, name='a'), ss.screen(test, at=[2006], disease=g18, name='b')], solver='abm', **kw).init()
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
@@ -238,3 +278,4 @@ if __name__ == '__main__':
     outcomes = test_outcomes()
     any_ = test_any()
     strain = test_strain_efficacy()
+    dlist  = test_disease_list()

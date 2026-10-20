@@ -729,6 +729,12 @@ def remembered(selector, cond):
     return np.where(np.isnan(last), np.inf, (sim.ti - last)*dt)
 
 
+def coded_disease(sim, name):
+    """ The disease of this name if it is written as code (not declared), else None """
+    dis = sim.diseases.get(name) if name is not None and sim.diseases is not None else None
+    return dis if dis is not None and getattr(dis, 'graph', None) is None and not isinstance(dis, ss.Strains) else None
+
+
 def trigger_moves(owner, outcome, sel, eng=None, before=None):
     """
     The transitions triggered by an event of a delivery or product (e.g. `ss.Transition('I -> R_res', on=drug.failed, p=0.05)`):
@@ -772,11 +778,7 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
                 frac = now*tgt.selector.in_states([s.name for s in srcs])
                 if cond is not None:
                     frac = frac*tgt.selector.select(cond)
-                ps = tgt.branch_probs(tr) if tr.split else [tgt.selector.per_person(tr.p[0]) if tr.p else 1.0]
-                N = tgt.state_counts()
-                for dst,p in zip(tr.dst, ps): # Each as a share of those still in the source
-                    cur = tgt.state_counts()
-                    tgt.force(np.clip(np.divide(frac*p*N, cur, out=np.zeros_like(cur), where=cur>0), 0, 1), tr, dst, srcs=srcs)
+                tgt.move_share(tr, frac, srcs)
     return
 
 
@@ -833,7 +835,7 @@ def order_steps(mods):
 
 #%% Deliveries for declared models: who gets a product, when, and how many
 
-delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'when', 'deliver', 'trace', 'priority', 'queue', 'target', 'above']
+delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'priority', 'queue', 'target', 'above']
 renamed_keys = dict(years='at', dates='at', eligible='where') # Starsim 4 prereleases and Starsim 3, which are an error that names the new keyword
 removed_keys = dict(on_positive='positive', on_negative='negative') # Nested follow-ups, now steps of their own
 replaced_keys = dict( # Keywords of the v4-rs branch, written another way here
@@ -961,6 +963,9 @@ class Delivery(ss.products.EventSource, Intervention):
             are moved along (lowest priority first)
         on (event/func): the event part of who=, joined to it with `&`: a transition (e.g. `on=sir.infection`), a delivery or an outcome
             of one, or a function of the sim returning the people; for the people in a state, use `where=` (e.g. `where=sir.I, interval=1`)
+        delay (dur/Dist): for a triggered step, the time from the trigger to delivery: a duration, or (agents only) a distribution of
+            durations, drawn per person (e.g. `ss.uniform(ss.months(1), ss.months(8))`). The people triggered receive it then if they are
+            eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that the event in
             who= selects, instead of to them; the condition and `coverage=` then apply to the contacts. Agents only, since only networks
             know who someone's contacts are
@@ -994,7 +999,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
                  capacity=None, uses=None, on=None, operator='any', when=None, deliver=None, trace=None, priority=None, queue=None, target=None, above=None,
-                 disease=None, at_age=None, count_events=None, name=None, label=None, **kwargs):
+                 delay=None, disease=None, at_age=None, count_events=None, name=None, label=None, **kwargs):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
@@ -1082,6 +1087,10 @@ class Delivery(ss.products.EventSource, Intervention):
                 errormsg = f'uses= is a resource (each person reached uses one), or a dict of the amount of each resource each person reached uses, e.g. uses={{clinic: 1}}; not {uses!r}'
                 raise TypeError(errormsg)
         self.on = trigger # The event part of who=
+        self.delay = delay # From the trigger to delivery
+        if delay is not None and trigger is None:
+            errormsg = f'delay= is the time from a trigger to delivery, so it needs an event in who= (e.g. who=screening.positive); "{name or type(self).__name__}" has none'
+            raise ValueError(errormsg)
         self.when = when
         self.deliver = deliver
         self.trace = trace
@@ -1099,15 +1108,21 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = f'above= is "keep", "stop", a rate (e.g. ss.peryear(0.5)), or a transition, not {above!r}'
             raise ValueError(errormsg)
         self.count_events = count_events
-        if isinstance(disease, (list, tuple)):
-            errormsg = f'disease= of a delivery is one disease, not {len(disease)}: key the efficacy of a product by disease instead (efficacy=dict(hpv16=0.9, hpv18=0.5)), or make one product for each, and deliver each with its own disease='
-            raise TypeError(errormsg)
+        self.disease_list = None # Several diseases (HP7): the product acts on each, as if its values were keyed by them (see init_pre())
+        if isinstance(disease, (list, tuple, ss.Strains)):
+            self.disease_list = [d for item in (disease if isinstance(disease, (list, tuple)) else [disease]) for d in (item._members if isinstance(item, ss.Strains) else [item])]
+            if self.product is None or not self.disease_list:
+                errormsg = f'disease= of a delivery is one disease, or a list (or an ss.Strains) of them that its product acts on; "{name or type(self).__name__}" has {"no product" if self.product is None else "an empty list"}'
+                raise TypeError(errormsg)
+            disease = self.disease_list[0]
         self.disease = disease
         self.started = False # For routine delivery by age: whether the people already past the age have been left out (see skip_past())
         self.carry = 0.0 # The part of the capacity not yet used, when it is less than one agent per step
         self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.FloatArr('result', label='Test result, waited for'))
         if self.queue is not None:
             self.define_states(ss.FloatArr('ti_queued', label='Time joined the queue'))
+        if self.delay is not None:
+            self.define_states(ss.FloatArr('ti_due', label='Time a delayed delivery is due'))
         self.rng_cov = ss.random()
         self.rng_cap = ss.random()
         self.rng_test = ss.random()
@@ -1226,6 +1241,15 @@ class Delivery(ss.products.EventSource, Intervention):
         return f'pending_{self.name}'
 
     @property
+    def delayed(self):
+        """ In a compartmental run: the property of people that says how long they have waited since the trigger, with delay= """
+        return f'delayed_{self.name}'
+
+    def delay_steps(self, sim):
+        """ The number of steps from the trigger to delivery, with a fixed delay= """
+        return self.result_steps(sim, self.delay)
+
+    @property
     def waiting(self):
         """ In a compartmental run: the property of people that says how long they have waited in the queue """
         return f'waiting_{self.name}'
@@ -1234,7 +1258,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Whether, in this sim, the delivery needs levels that people move up step by step: the time since a product whose protection fades was delivered, or since a test whose result is delayed, or in a queue """
         if sim.solver in [None, 'abm']:
             return False
-        return (self.holds and self.product.staged) or self.waits or self.queue is not None
+        return (self.holds and self.product.staged) or self.waits or self.queue is not None or self.delay is not None
 
     def result_steps(self, sim, delay=None):
         """ The number of steps from a test to its result, as agents wait (see `test()`) """
@@ -1267,6 +1291,9 @@ class Delivery(ss.products.EventSource, Intervention):
             names = self.product.result_names
             levels = ['none'] + [f'{names[k]} {j+1}' for k,first,m in self.pending_blocks(sim) for j in range(m)]
             out.append(Strat(self.pending, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
+        if staged and self.delay is not None and not isinstance(self.delay, ss.Dist): # Waiting for a delayed delivery: one level for each step (a delay drawn per person is agents only)
+            n = self.delay_steps(sim)
+            out.append(Strat(self.delayed, ['none'] + [f'wait {j}' for j in range(1, n + 1)], split=[1.0] + [0.0]*n))
         if staged and self.queue is not None: # Waiting in the queue: one level for each step waited
             n = self.wait_levels(sim)[0]
             out.append(Strat(self.waiting, ['none'] + [f'waited {j}' for j in range(1, n + 1)], split=[1.0] + [0.0]*n))
@@ -1308,6 +1335,10 @@ class Delivery(ss.products.EventSource, Intervention):
                 out.append(f'"{self.name}" is triggered by {leaf}, an event of a module written as code')
         if self.trace is not None:
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
+        if isinstance(self.delay, ss.Dist):
+            out.append(f'"{self.name}" has a delay drawn for each person ({self.delay})')
+        if self.disease_list and not self.holds and isinstance(self.product, (ss.Diagnostic, ss.Treatment)):
+            out.append(f'"{self.name}" tests or cures several diseases given by disease=, the worst result over them per person')
         for key,attr in [('where', 'eligible'), ('coverage', 'coverage'), ('on', 'on'), ('deliver', 'deliver'), ('priority', 'priority')]:
             func = getattr(self, attr)
             if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.n_args(func) >= 2:
@@ -1318,12 +1349,15 @@ class Delivery(ss.products.EventSource, Intervention):
 
     @property
     def dis(self):
-        """ The disease the product acts on """
+        """ The disease the product acts on: declared, or written as code """
+        if self.__dict__.get('_coded'): # Written as code: see check_coded()
+            return coded_disease(self.sim, self.disease)
         return self.sim.get_declared(self.disease)
 
     @property
     def eng(self):
-        return self.dis.engine
+        dis = self.dis
+        return dis.engine if not self.__dict__.get('_coded') else ss.connectors.AgentModifiers.engine(dis, self.sim)
 
     @property
     def selector(self):
@@ -1331,6 +1365,18 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def init_pre(self, sim):
         declared = [mod.name for mod in sim.declared]
+        if self.disease_list is not None: # Several diseases: their names now, as the sim has them, and the product keyed by them
+            names = [d if isinstance(d, str) else d.name for d in self.disease_list]
+            names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.Strains) else [n])] # A family by name
+            missing = [n for n in names if n not in declared]
+            if missing:
+                raise ss.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a declared disease" if len(missing) == 1 else "are not declared diseases"} in the sim; these are {sc.strjoin(declared)}.')
+            self.disease_list = names
+            self.disease = names[0]
+            self.product.key_by([sim.get_declared(n) for n in names])
+        if isinstance(self.delay, ss.Dist) and not getattr(self.delay, '_numeric', False): # Durations in the sim's unit, however they are given
+            self.delay = ss.transitions.numeric_dist(self.delay, lambda val: ss.solvers.convert(val, sim.unit_base))
+            self.delay._numeric = True
         if self.disease is None and (self.move or self.increment): # Moving people along a dimension of one disease's states: that disease
             owners = [mod.name for mod in sim.declared if any(strat.name in list(self.move or {}) + list(self.increment or {}) for strat in mod.graph.strats)]
             if len(owners) == 1:
@@ -1343,17 +1389,21 @@ class Delivery(ss.products.EventSource, Intervention):
             self.disease = self.trigger_disease(sim) or declared[0]
         if self.disease is None and len(declared) > 1: # The disease of the step that triggers it
             self.disease = self.trigger_disease(sim)
+        coded = [name for name in sim.diseases.keys() if coded_disease(sim, name) is not None] # PL2: a disease written as code, as agents
         if self.disease is None:
-            if len(declared) != 1:
-                raise ss.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}. Use disease=.')
-            self.disease = declared[0]
-        elif self.disease not in declared:
-            raise ss.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a declared disease in the sim; these are {sc.strjoin(declared)}.')
+            if len(declared) != 1 and not (not declared and len(coded) == 1):
+                raise ss.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}{" and " + sc.strjoin(coded) + " written as code" if coded else ""}. Use disease=.')
+            self.disease = declared[0] if declared else coded[0]
+        elif self.disease not in declared + coded:
+            raise ss.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a disease in the sim; these are {sc.strjoin(declared + coded)}.')
+        self._coded = self.disease in coded
+        if self._coded:
+            self.check_coded(sim)
         if self.product is not None and self.product.disease is None:
             self.product.disease = self.disease
-        elif self.product is not None and self.product.disease != self.disease and not (self.holds and len(self.product.disease_effects(sim)) > 1): # One product for one disease, unless its efficacy is keyed by disease
-            errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}": a product acts on one disease.\n'
-                        f'     Make one product for each disease, e.g. vx_{self.disease} = ss.Vaccine(...), and deliver each with its own ss.vaccinate(..., disease=\'{self.disease}\').')
+        elif self.product is not None and self.product.disease != self.disease and not (self.holds and len(self.product.disease_effects(sim)) > 1): # One product for one disease, unless its efficacy is keyed by disease (HP7)
+            errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}" alone.\n'
+                        f'     For a product that acts on both, deliver it once with disease=[\'{self.product.disease}\', \'{self.disease}\'] (or key its values by disease); otherwise make one product for each disease.')
             raise ss.UnknownDisease(errormsg)
         self.edges = self.product.resolve(sim, self.disease) if isinstance(self.product, ss.Treatment) else [] # What a treatment that cures moves people along
         self.above_edge = None
@@ -1431,6 +1481,26 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.queue is not None and self.capacity is None and not self.uses:
             errormsg = f'queue= of "{self.name}" is how long people wait when there is not enough capacity, so it needs capacity= or uses='
             raise ValueError(errormsg)
+        return
+
+    def check_coded(self, sim):
+        """ For a disease written as code (PL2): agents only, and it has the parts the product uses, or this raises naming the missing one """
+        dis = coded_disease(sim, self.disease)
+        if sim.solver != 'abm':
+            raise ss.CapabilityError(f'"{self.name}" is for "{dis.name}", which is written as code, so it cannot run with solver="{sim.solver}". Run with solver="abm".')
+        product = self.product
+        needs = []
+        if isinstance(product, ss.Diagnostic) and product.detects is None:
+            needs.append(('infected', 'a state, which the test detects (or give detects= to the test)'))
+        if isinstance(product, ss.Treatment) and product.curing:
+            needs.append(('clear_infection', 'a method of the UIDs cured'))
+        if self.holds:
+            needs += [(attr, 'an array the efficacy scales') for key,attr in [('acquisition', 'rel_sus'), ('transmission', 'rel_trans')] if key in product.effects]
+        if self.move_states is not None or (product is not None and getattr(product, 'moves', None) is not None):
+            raise ss.CapabilityError(f'"{self.name}" moves people between states of "{dis.name}", which is written as code, so has no declared states; a delivery for it can test (the state "infected"), cure (clear_infection()), or protect (rel_sus and rel_trans)')
+        for attr,what in needs:
+            if not hasattr(dis, attr):
+                raise ss.UnknownEffect(f'"{self.name}" is for "{dis.name}", which is written as code and has no "{attr}": {what}')
         return
 
     def changes_back(self):
@@ -1726,9 +1796,35 @@ class Delivery(ss.products.EventSource, Intervention):
         return
 
     def arrivals(self):
-        """ Who is offered it now, before eligibility: everyone, or those its event happened to """
+        """ Who is offered it now, before eligibility: everyone, or those its event happened to (with delay=, those it happened to the delay ago) """
         selector = self.selector
-        return selector.everyone() if self.on is None else selector.select(self.on)
+        if self.on is None:
+            return selector.everyone()
+        sel = selector.select(self.on)
+        return sel if self.delay is None else self.delayed_arrivals(sel)
+
+    def delayed_arrivals(self, sel):
+        """ With delay=: those triggered now start waiting (unless waiting already), and those whose wait is over arrive """
+        selector = self.selector
+        ti = self.sim.ti
+        if selector.abm:
+            due = (self.ti_due <= ti).uids
+            self.ti_due[due] = np.nan
+            uids = self.uids(sel)
+            uids = uids[np.isnan(self.ti_due[uids])] # Not triggered again while waiting
+            if len(uids):
+                steps = np.ceil(self.delay.rvs(uids)/self.dt_sim - 1e-9) if isinstance(self.delay, ss.Dist) else self.delay_steps(self.sim)
+                self.ti_due[uids] = ti + np.maximum(steps, 0)
+            now = uids[self.ti_due[uids] <= ti] # A delay drawn as less than a step: now
+            self.ti_due[now] = np.nan
+            return selector.to_selection(due.concat(now) if len(now) else due)
+        n = self.delay_steps(self.sim) # As levels of the time waited: those at the last arrive, and wait no more; the others move up
+        d = self.sim.groups.dim_index(self.delayed)
+        due = self.follow_each([(selector.dim(self.delayed) == n)*selector.everyone()], {d:0})[0]
+        self.move_up(self.delayed, range(1, n))
+        before = self.eng.state_counts()
+        self.shift(sel*(selector.dim(self.delayed) == 0), {d:1}, mover=self.on)
+        return self.same_people(due, before)
 
     def skip_past(self):
         """
@@ -1817,6 +1913,8 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def infected_states(self):
         """ The infected states of the disease, which a test with no detects= finds and a treatment with no where= is for; raises if there are none (TL52: nobody was found, with no message) """
+        if self.dis.graph is None: # Written as code: see check_coded()
+            return ['infected']
         out = [s.name for s in self.dis.graph.infected if s.people]
         if not out:
             errormsg = f'"{self.name}" is for the infected of "{self.dis.name}", but it has no infected states (no transition is an acquisition); say who it is for with detects= on the test or where= on the delivery, or mark the onset with acquisition=True'
@@ -2109,6 +2207,7 @@ class Delivery(ss.products.EventSource, Intervention):
     def stop_above(self, sel):
         """ Stop people above the target: move them along the transition above= names, take the product from them, or move them back to the level a move came from """
         sim = self.sim
+        self.tally('stopped', sel) # Before they move, while sel is a share of the groups they are in
         if self.above_edge is not None:
             e = self.above_edge
             eng = sim.get_declared(e.dis).engine
@@ -2117,7 +2216,6 @@ class Delivery(ss.products.EventSource, Intervention):
             self.shift(sel, {sim.groups.dim_index(self.product.dim):0})
         else:
             self.shift(sel, self.changes_back())
-        self.tally('stopped', sel)
         return
 
     def record_target(self):
@@ -2528,7 +2626,7 @@ class Delivery(ss.products.EventSource, Intervention):
         treated_any = np.zeros(len(uids), dtype=bool)
         several = len(diseases) > 1
         for dis in diseases:
-            eng = sim.get_declared(dis).engine
+            eng = self.eng if dis == self.disease else sim.get_declared(dis).engine
             mod = eng.mod
             edges = [e for e in self.edges if e.dis == dis]
             insides = [np.logical_or.reduce([mod[s.name].raw[uids] for s in e.srcs]) for e in edges] # Before anyone moves
@@ -2746,6 +2844,8 @@ class Delivery(ss.products.EventSource, Intervention):
             how += f' every {ss.presentation.quantity_str(self.interval, "dur", unit)}'
             if self.start is not None:
                 how += f' from {unit or "step"} {self.start:n}' if sc.isnumber(self.start) else f' from {self.start}'
+        if self.delay is not None:
+            how += f', after {ss.presentation.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
         if self.coverage is not None and not callable(self.coverage):
             how += f', coverage {ss.expressions.value_str(self.coverage)}'
         if self.uses:
@@ -2763,7 +2863,8 @@ class Delivery(ss.products.EventSource, Intervention):
         out = super().to_json()
         out.pop('pars', None)
         move = f'{self.move_states[0]} -> {self.move_states[1]}' if self.move_states is not None else self.move
-        out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=move, disease=self.disease)
+        names = [d if isinstance(d, str) else d.name for d in self.disease_list] if self.disease_list else None
+        out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=move, disease=names or self.disease)
         if self.increment:
             out['increment'] = dict(self.increment)
         if self.product is not None: # What makes it, so that ss.to_code() can write it
@@ -2854,7 +2955,8 @@ class screen(Delivery):
     """
     Deliver a diagnostic test; see `ss.Delivery` for the arguments
 
-    The test's keywords (`sensitivity=`, `specificity=`, `delay=`, `detects=`, `cost=`) can be given instead of a test, which then belongs to the delivery.
+    The test's keywords (`sensitivity=`, `specificity=`, `detects=`, `cost=`) can be given instead of a test, which then belongs to the delivery.
+    `delay=` is the step's, the time from its trigger to the test, as for any step; the time from the test to its result is the test's (`ss.Diagnostic(delay=...)`).
 
     Its outcomes, `positive` and `negative`, are events on the step the result is available (after the test's `delay`), and results:
     the number with each result on each step. What happens next is a step of its own, triggered by an outcome.
@@ -2869,7 +2971,7 @@ class screen(Delivery):
         ```
     """
     kind = ss.Diagnostic
-    product_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
+    product_keys = ['sensitivity', 'specificity', 'detects', 'cost'] # Not delay=, which is the step's: the time to the result is ss.Diagnostic(delay=)
 
 
 class visit(Delivery):

@@ -32,7 +32,7 @@ Each flow's running total is `res.<transition>.cum`, a result (a stock) computed
 
 Results follow the convention of other modeling frameworks, under every solver: a result has one value for each time point of the sim, from `start` to `stop`. `n_<state>[ti]` is the number in the state at time point `ti` (so `n_<state>[0]` is the number at the start), and `<transition>[ti]` is the number who made the transition during the step that ends at time point `ti` (so it is 0 at the start). So if nobody has recovered at the start and 10 people recover in the first step, `n_R[0]` is 0 and `n_R[1]` and `recovery[1]` are both 10, and `n_R[ti] - n_R[ti-1]` is the net flow into the state in the step that ends at `ti`. A sim with `stop=T` takes a step from each time point but the last, so it ends at `T`. A declared model takes values that vary in time at the start of each step (between the time points, an ODE solver takes them where it needs them); a delivery at a time point happens there, between the steps, and is counted there.
 
-A flow has one name, the transition's, which matches the model text, `ss.modify()` targets, `ss.outcome()`, and data columns. Starsim's standard disease results are kept under their existing names on the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` (or any disease class with `standard_results = True`), so code written for Starsim carries over: for a disease with transmission, `new_infections` is the total flow through its transmission transitions, `cum_infections` its running total, and `prevalence` the fraction of the population in its infected states. A disease declared with `ss.Disease(...)` does not have them; a result declared under one of these names gives it one (e.g. `prevalence = I / N`). A data column called `new_infections` is matched to the flow of the transmission of a declared disease that has one, so Starsim data files still line up.
+A flow has one name, the transition's, which matches the model text, `ss.modify()` targets, `ss.outcome()`, and data columns. Starsim's standard disease results are kept under their existing names on the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` (or any disease class with `standard_results = True`), so code written for Starsim carries over: for a disease with transmission, `new_infections` is the total flow through its transmission transitions, `cum_infections` its running total, and `prevalence` the fraction of the population in its infected states, kept as the ratio of the infected over people, so in a stratified run it is by group as a declared ratio is (`res.prevalence.select(risk='high')`, ST20). A disease declared with `ss.Disease(...)` does not have them; a result declared under one of these names gives it one (e.g. `prevalence = I / N`). A data column called `new_infections` is matched to the flow of the transmission of a declared disease that has one, so Starsim data files still line up.
 
 A state that is not people (a water reservoir, a mosquito population; [03-states-and-transitions.md](03-states-and-transitions.md)) gets the same results: `n_W` is the count it holds.
 
@@ -221,7 +221,7 @@ n_I.values                                   # the full array, runs by time
 - `n_runs` belongs to the MultiSim, not to the sim. `ss.Sim` has no replicate count, and `sim.results` always holds one series per result. Each run has its own seed ([11-random.md](11-random.md)).
 - **A MultiSim is its results, and a MultiSim result is the same `ss.Result` with a `run` dimension first.** `.select()` and `.by()` work as on a single sim (`msim.results.sir.n_I.select(age=0).quantiles([0.5])`), `.select(run=3)` is one run (a result of one sim), and arithmetic, `.resample()`, `.to_df()`, and `.plot()` work on it as on any result. `len(msim)` is the number of runs, whichever way they were taken (restarted compartmental runs, runs in one call to the kernels or to JAX, or sims run in parallel).
 - `.quantiles(q)` takes a list of quantiles and returns a result with one series per quantile (for each scenario), over the runs; `.median()` and `.mean()` return the series over the runs (of each scenario). `.values` is the full array with one row per run.
-- `msim.summarize()`, `msim.diff()`, `msim.extinction()`, and `msim.compare()` work from the results.
+- `msim.summarize()`, `msim.diff()`, `msim.extinction()`, `msim.outbreaks()`, and `msim.compare()` work from the results.
 - `msim.plot()` draws the median and an interval. `msim.plot(lines=True)` draws every run, because extinction, bimodality, and threshold behavior cannot be seen in a median.
 - `ss.parallel(baseline=sim_a, vaccine=sim_b, n_runs=100)` returns one object whose results are indexed by scenario, run, and time ([08-interventions.md](08-interventions.md)): `msim.results.sir.n_I.select(scenario='vaccine')`. A sweep, `ss.parallel(sim, pars=dict(beta=[0.2, 0.4]), n_runs=10)`, has the values as coordinates of the runs: `msim.results.sir.n_I.select(beta=0.2).quantiles()`.
 - `ss.parallel()` is the one way to run many sims, and `sim.run(n_runs=100)` is its shortcut for running one sim many times; both end in the same results.
@@ -231,6 +231,12 @@ Where extinction is possible, `msim.extinction()` reports it, for each declared 
 
 ```text
 sir: died out in 41% of 500 runs (median time 23 days)
+```
+
+A disease that nobody can catch again dies out in every run that is long enough, after a major outbreak as after a minor one, so for it the question is how often there was a major outbreak. `msim.outbreaks(threshold=0.1)` gives the share of runs in which more than a threshold were infected: a share of the people at the start, or a number of people if it is 1 or more. The number infected is the total of the acquisitions over the run, so the people infected at the start are not counted:
+
+```text
+sir: a major outbreak (more than 100 infected) in 48% of 500 runs
 ```
 
 ## The transmission log
