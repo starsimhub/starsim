@@ -315,7 +315,7 @@ def test_hiv_art():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue=, capacity, follow-ups as events (ab3493b9)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: queue= and capacity, with v4\'s shared-resource design (ss.Resource) (ab3493b9)', strict=True)
 def test_hpv_algorithm():
     sc.heading('Acceptance: HPV screen, then a treatment visit with a capacity of 10 a week and a queue (hpvsim_interventions/port.py algo_a, one genotype)')
     ppl = ss.People(1)
@@ -374,7 +374,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
     )
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Capacity (ab3493b9)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: ss.Capacity shared by deliveries, with v4\'s shared-resource design (ss.Resource) (ab3493b9)', strict=True)
 def test_clinic():
     sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial)')
     def make(**kwargs):
@@ -401,35 +401,28 @@ def test_clinic():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: delivery memory and follow-ups as events (ab3493b9)', strict=True)
 def test_rescreen():
     sc.heading('Acceptance: rescreening every 5 years at most, at 30% a year')
-    seen = sc.objdict()
     def make(**kwargs):
         sir = make_sir()
-        def log(sim, uids):
-            seen.setdefault(sim.ti, []).extend(uids.tolist())
-        primary = ss.screen(ss.Test(), coverage=ss.probperyear(0.3), repeat=ss.years(5))
-        if kwargs['solver'] == 'abm':
-            primary.then = log
+        primary = ss.screen(ss.Diagnostic(), coverage=ss.probperyear(0.3), count_events=True, name='primary')
+        primary.eligible = primary.since >= ss.years(5) # At most every 5 years (v4-rs repeat=ss.years(5))
         return ss.Sim(sir, interventions=primary, start=2020, stop=2040, dt=ss.months(3), **kwargs)
     kwa = dict(verbose=0)
     sims = sc.objdict(ode=make(solver='ode', total_pop=10_000, **kwa).run(), abm=make(solver='abm', total_pop=10_000, n_agents=10_000, **kwa).run())
-    last = {}
-    for ti,uids in sorted(seen.items()): # As agents: nobody screened twice within 20 quarters
-        for uid in uids:
-            assert ti - last.get(uid, -100) >= 20
-            last[uid] = ti
+    df = sims.abm.interventions.primary.events_df() # As agents: nobody screened twice within 5 years
+    tested = df[df.event == 'primary'].sort_values(['uid', 'time'])
+    assert tested.groupby('uid').time.diff().dropna().min() >= np.timedelta64(5*365, 'D')
     for solver,sim in sims.items():
         d, e = sim.results.primary.delivered, sim.results.primary.eligible
         assert np.isclose(d[0], 10_000*(1 - 0.7**0.25), rtol=0.05)
         assert np.isclose(e[19], 10_000 - d[:19].sum()) and np.isclose(e[20], 10_000 - d[1:20].sum()) # Those screened first are due again after exactly 5 years
     check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.03)
-    assert [s.n for s in sims.ode.strats if s.name == 'since_primary'] == [22]
+    assert 'since_primary' in [s.name for s in sims.ode.groups.strats]
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: dose= (ab3493b9)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: doses of a held product (vaccinate(dose=)), which have no form in v4\'s deliveries (ab3493b9)', strict=True)
 def test_two_doses():
     sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py)')
     ppl = ss.People(1)

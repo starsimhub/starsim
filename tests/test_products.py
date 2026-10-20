@@ -239,7 +239,7 @@ def hpv_vaccine(name, genos):
     return ss.Vaccine(efficacy={g:0.95*rel[g.name] for g in genos}, doses=[0.85, 1.0], cost=5.0, name=name)
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: doses (Vaccine doses=, dose=) and routine held products over untracked diseases (820932c0)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: doses of a held product (Vaccine doses=, vaccinate(dose=)), which have no form in v4\'s deliveries (820932c0)', strict=True)
 def test_hpv_vaccines():
     sc.heading('Acceptance: bivalent vs nonavalent over genotype diseases, two doses 6 months apart (port.py vaccination())')
     def make(product=None, **kwargs):
@@ -270,7 +270,7 @@ def test_hpv_vaccines():
     return out
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue= and repeat=, then rewritten with steps triggered by events (820932c0)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: queue=, with v4\'s shared-resource design (ss.Resource); then rewritten with steps triggered by events (820932c0)', strict=True)
 def test_hpv_screen_treat():
     sc.heading('Acceptance: HPV DNA across genotypes -> ablation-eligible? -> ablation or excision across genotypes, with capacity and a queue (port.py algo_a)')
     def make(**kwargs):
@@ -299,7 +299,7 @@ def test_hpv_screen_treat():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue=, then rewritten with steps triggered by events (820932c0)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: queue=, with v4\'s shared-resource design (ss.Resource); then rewritten with steps triggered by events (820932c0)', strict=True)
 def test_hpv_colposcopy():
     sc.heading('Acceptance: HPV DNA -> colposcopy with four results -> excision for HSIL (queued) and referral for cancer')
     def make(**kwargs):
