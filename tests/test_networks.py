@@ -724,6 +724,19 @@ def test_beta_readings():
     mf = ss.MFNet()
     assert ss.MFNet().directions == ['m2f', 'f2m'] and ss.PrenatalNet().directions == ['mother2child']
     assert ss.PartnerNet(sides='sex').directions == ['m2f', 'f2m', 'm2m', 'f2f'] and ss.RandomNet().directions == []
+    class Couples(ss.SexualNetwork): # A sexual network of its own is between men and women unless it says otherwise
+        def step(self):
+            self.end_pairs()
+            self.participant[self.sim.people.auids] = True
+            m, f = [self.available(self.sim.people, sex) for sex in ['male', 'female']]
+            n = min(len(m), len(f))
+            self.append(p1=m[:n], p2=f[:n], beta=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, 2.0))
+            return
+    assert Couples().directions == ['m2f', 'f2m'] and ssl.MSMNet().directions == [] # Men only: one beta
+    sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples'), **kw).run()
+    assert sim.results.sis.infection.sum() > 0
+    with pytest.raises(ss.RouteMismatch, match='sides = dict'):
+        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ssl.MSMNet(), **kw).init()
     assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
     with pytest.raises(ss.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard (D2)
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.MFNet(), **kw).init()

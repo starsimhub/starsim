@@ -672,7 +672,13 @@ class SexualNetwork(DynamicNetwork):
     used (`condoms`, 0 unless set, e.g. by partnership type in `add_pairs()`). Condoms protect through
     a modifier of the transmission on the network, e.g.
     `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`.
+
+    Its partnerships are between men and women (`sides = dict(m='male', f='female')`), so a disease's
+    beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both. A subclass with other partnerships
+    declares its own sides, e.g. `sides = None` for one between men only (one beta, as `ssl.MSMNet`).
     """
+    sides = dict(m='male', f='female') # People's sex, so its directions are m2f and f2m
+
     def __init__(self, pars=None, edges=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
@@ -1599,8 +1605,6 @@ class MFNet(DegreeTargets, SexualNetwork):
             self.rng_order  = ss.random() # The order in which people are paired
             self.waiting = ss.uids() # People of one sex who looked for a partner and were left over, who look again
         return
-
-    sides = dict(m='male', f='female') # People's sex, so its directions are m2f and f2m
 
     def side_raw(self):
         """ Men are side m (0) and women side f (1) """
