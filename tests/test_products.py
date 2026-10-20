@@ -44,7 +44,6 @@ def check_close(sims, func, rtol=0.1):
 
 # %% Define the tests
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: efficacy keyed by disease (b60e7d0e)', strict=True)
 def test_vaccine_diseases():
     sc.heading('Testing a vaccine over several diseases: efficacy keyed by disease, one has_ per person, a modifier per disease and quantity')
     def make(eff, **kwargs):
@@ -69,14 +68,13 @@ def test_vaccine_diseases():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: diagnostics keyed by states of several diseases (3315ce62)', strict=True)
 def test_test_diseases():
     sc.heading('Testing a test keyed by states of several diseases: independent detection, or the highest sensitivity')
     s16, s18 = [0, 0.6, 0.9, 0], [0, 0.5, 0.8, 0] # By S, I, CIN, CA
     seen = sc.objdict()
     def make(combine='worst', **kwargs):
         g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
-        dna = ss.Test(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95, combine=combine)
+        dna = ss.Diagnostic(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95, combine=combine)
         def look(sim): # As agents: the expected positives, from each agent's states when tested
             if sim.solver == 'abm':
                 d, u = sim.diseases, sim.people.auids
@@ -103,21 +101,20 @@ def test_test_diseases():
     for combine in ['worst', 'max']:
         sims = run_both(make, combine=combine)
         for solver,sim in sims.items():
-            exp, got = expected(sim, combine), sim.results.prog.diagnosed.sum()
+            exp, got = expected(sim, combine), sim.results.prog.positive.sum()
             assert np.isclose(got, exp, rtol=1e-5 if solver == 'ode' else 0.03), f'{solver} {combine}: {got:.1f} vs {exp:.1f}' # v4's joint stepping moves the marginals by about 1e-6
         assert any('tracked jointly: 4 × 4 = 16 joint states per group' in note for note in sims.ode.notes)
         if combine == 'worst':
-            worst = sims.ode.results.prog.diagnosed.sum()
-    assert sims.ode.results.prog.diagnosed.sum() < worst
+            worst = sims.ode.results.prog.positive.sum()
+    assert sims.ode.results.prog.positive.sum() < worst
 
     g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
-    bad = ss.screen(ss.Test(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
+    bad = ss.screen(ss.Diagnostic(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
     with pytest.raises(ss.UnknownEffect, match='"hpv18.X", but "hpv18" has no state "X"; its states are S, I, CIN, CA'):
         ss.Sim([g16, g18], interventions=bad, solver='abm', **kw).run()
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: multi-outcome diagnostics (830539df)', strict=True)
 def test_outcomes():
     sc.heading('Testing a test with several results: colposcopy, the worst over genotypes, a follow-up for some results, and a delay for one')
     table = dict(lsil=dict(I=0.15, CIN=0.2), hsil=dict(CIN=0.7, CA=0.1), cancer=dict(CA=0.85)) # P(result | state), the same for each genotype
@@ -125,7 +122,7 @@ def test_outcomes():
     def make(delay=None, **kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
         outcomes = dict(normal=None) | {res:{g[x]:p for g in genos for x,p in probs.items()} for res,probs in table.items()}
-        colpo = ss.Test(outcomes=outcomes, combine='worst', delay=delay)
+        colpo = ss.Diagnostic(outcomes=outcomes, combine='worst', delay=delay)
         excise = ss.Treatment(moves={g.excised: 0.9 for g in genos}) # Across genotypes, with no fan-out
         def look(sim): # As agents: each result expected, from each agent's states when tested
             if sim.solver == 'abm':
@@ -139,8 +136,10 @@ def test_outcomes():
                 tails = np.column_stack([np.ones(len(u)), 1 - tails, np.zeros(len(u))])
                 seen.expected = (tails[:, :-1] - tails[:, 1:]).sum(axis=0)
             return True
-        prog = ss.screen(colpo, at=[2005], when=look, on_result=dict(hsil=ss.treat(excise), cancer=ss.screen(ss.Test(name='biopsy'))))
-        return ss.Sim(genos, interventions=prog, **kwargs)
+        prog = ss.screen(colpo, at=[2005], when=look)
+        tx = ss.treat(excise, who=prog.hsil, name='prog_hsil') # Steps triggered by a result
+        biopsy = ss.screen(ss.Diagnostic(name='biopsy'), who=prog.cancer, name='prog_cancer')
+        return ss.Sim(genos, interventions=[prog, tx, biopsy], **kwargs)
     def expected(sim):
         """ As an ODE: from the marginals of independent genotypes, P(worst ≥ k) = 1 − ∏(1 − P_g(≥ k)) """
         if sim.solver == 'abm':
@@ -159,36 +158,36 @@ def test_outcomes():
     for solver,sim in sims.items():
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
-        got = r.prog.outcome.by('result').values[k]
+        got = np.array([r.prog[name][k] for name in ['normal', 'lsil', 'hsil', 'cancer']]) # Each result is a result of the delivery, and an event
         assert np.allclose(got, expected(sim), rtol=1e-6 if solver == 'ode' else 0.08), f'{solver}: {got} vs {expected(sim)}' # As agents, about 3% sampling noise for the smallest result (seeds 1-6)
-        assert np.isclose(got.sum(), r.prog.delivered[k]) and np.isclose(got[1:].sum(), r.prog.diagnosed[k])
-        assert np.isclose(r.prog.outcome.select(result='hsil')[k], got[2])
-        assert np.isclose(r.prog_hsil.delivered[k], got[2]) and np.isclose(r.prog_cancer.delivered[k], got[3]) # on_result=
+        assert np.isclose(got.sum(), r.prog.delivered[k]) and np.isclose(got[1:].sum(), r.prog.positive[k])
+        assert np.isclose(r.prog_hsil.delivered[k], got[2]) and np.isclose(r.prog_cancer.delivered[k], got[3]) # Triggered by prog.hsil and prog.cancer
         cured, failed = r.prog_hsil.cured.sum(), r.prog_hsil.failed.sum()
-        assert np.isclose(cured, 0.9*(cured + failed), rtol=1e-6 if solver == 'ode' else 0.05) and r.prog_hsil.overtreated.sum() > 0 # Some with HSIL from cancer
-    check_close(sims, lambda sim: sim.results.prog.diagnosed.sum(), rtol=0.25) # At 3-month steps, agents have about 20% fewer people in CIN than the ODE (v4's own agents too)
+        assert np.isclose(cured, 0.9*(cured + failed), rtol=1e-6 if solver == 'ode' else 0.05) and r.prog_hsil.unneeded.sum() > 0 # Some with HSIL from cancer
+    check_close(sims, lambda sim: sim.results.prog.positive.sum(), rtol=0.25) # At 3-month steps, agents have about 20% fewer people in CIN than the ODE (v4's own agents too)
 
     sims = run_both(make, delay=dict(hsil=ss.months(3))) # A delay for one result: its follow-up a step later
     for solver,sim in sims.items():
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
         assert list(np.flatnonzero(r.prog_hsil.delivered)) == [k + 1] and list(np.flatnonzero(r.prog_cancer.delivered)) == [k], solver
-        assert np.isclose(r.prog_hsil.delivered[k + 1], r.prog.outcome.select(result='hsil')[k], rtol=0.02 if solver == 'ode' else 0.05)
+        assert np.isclose(r.prog_hsil.delivered[k + 1], r.prog.hsil[k + 1], rtol=0.02 if solver == 'ode' else 0.05) # Counted when the result comes
     assert [s.labels for s in sims.ode.groups.strats if s.name == 'pending_prog'] == [['none', 'hsil 1']]
 
-    # on_positive= is every result but the first; on_result= names have to be results; probabilities above 1 are an error
+    # positive is every result but the first; an outcome has to be a result; probabilities above 1 are an error
     g = make_hpv('hpv')
-    colpo = ss.Test(outcomes=dict(normal=None, abnormal={g.CIN: 0.9}, cancer={g.CA: 0.9}))
-    sim = ss.Sim(g, interventions=ss.screen(colpo, at=[2005], on_positive=ss.screen(ss.Test(name='biopsy'), name='refer')), solver='ode', **kw).run()
-    assert np.isclose(sim.results.refer.delivered.sum(), sim.results.screen.diagnosed.sum())
-    with pytest.raises(ValueError, match='not a result'):
-        ss.Sim(make_hpv('hpv'), interventions=ss.screen(colpo, on_result=dict(hsil=ss.treat(ss.Treatment()))), solver='abm', **kw).init()
+    colpo = ss.Diagnostic(outcomes=dict(normal=None, abnormal={g.CIN: 0.9}, cancer={g.CA: 0.9}))
+    screen = ss.screen(colpo, at=[2005], name='screen')
+    refer = ss.screen(ss.Diagnostic(name='biopsy'), who=screen.positive, name='refer')
+    sim = ss.Sim(g, interventions=[screen, refer], solver='ode', **kw).run()
+    assert np.isclose(sim.results.refer.delivered.sum(), sim.results.screen.positive.sum())
+    with pytest.raises(AttributeError, match='hsil'):
+        screen.hsil
     with pytest.raises(ValueError, match='sum to at most 1'):
-        ss.Sim(g, interventions=ss.screen(ss.Test(outcomes=dict(a=None, b={g.CIN: 0.6}, c={g.CIN: 0.6}))), solver='abm', **kw).init().run()
+        ss.Sim(g, interventions=ss.screen(ss.Diagnostic(outcomes=dict(a=None, b={g.CIN: 0.6}, c={g.CIN: 0.6}))), solver='abm', **kw).init().run()
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.any() across diseases in detects= (3a52a244)', strict=True)
 def test_any():
     sc.heading('Testing ss.any() across diseases in detects= and eligible=, with the disease taken from the conditions')
     seen = sc.objdict()
@@ -201,7 +200,7 @@ def test_any():
                 ca = d.hpv16.CA.raw[u] | d.hpv18.CA.raw[u]
                 seen.update(eligible=np.count_nonzero(~ca), found=0.9*np.count_nonzero((d.hpv16.CIN.raw[u] | d.hpv18.CIN.raw[u]) & ~ca))
             return True
-        prog = ss.screen(ss.Test(sensitivity=0.9, detects=any_cin), where=~any_ca, at=[2005], when=look) # No disease=
+        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), where=~any_ca, at=[2005], when=look) # No disease=
         return ss.Sim(genos, interventions=prog, **kwargs)
     sims = run_both(make)
     for solver,sim in sims.items():
@@ -212,12 +211,11 @@ def test_any():
             f = {x:[r[g][f'n_{x}'][k]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']}
             no_ca = np.prod([1 - p for p in f['CA']])
             exp = sc.objdict(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
-        assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.diagnosed[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver
+        assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.positive[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver
     assert any('tracked jointly' in note for note in sims.ode.notes)
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: the check of an efficacy by a strain (fbab710f)', strict=True)
 def test_strain_efficacy():
     sc.heading('Testing an efficacy by a strain that susceptibles do not carry: an error, pointing to efficacy by disease')
     def make(eff, **kwargs):
@@ -241,7 +239,7 @@ def hpv_vaccine(name, genos):
     return ss.Vaccine(efficacy={g:0.95*rel[g.name] for g in genos}, doses=[0.85, 1.0], cost=5.0, name=name)
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: routine held products over untracked diseases, efficacy keyed by disease (820932c0)', strict=True)
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: doses (Vaccine doses=, dose=) and routine held products over untracked diseases (820932c0)', strict=True)
 def test_hpv_vaccines():
     sc.heading('Acceptance: bivalent vs nonavalent over genotype diseases, two doses 6 months apart (port.py vaccination())')
     def make(product=None, **kwargs):
@@ -272,7 +270,7 @@ def test_hpv_vaccines():
     return out
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: diagnostics across diseases and Treatment(moves=) (820932c0)', strict=True)
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue= and repeat=, then rewritten with steps triggered by events (820932c0)', strict=True)
 def test_hpv_screen_treat():
     sc.heading('Acceptance: HPV DNA across genotypes -> ablation-eligible? -> ablation or excision across genotypes, with capacity and a queue (port.py algo_a)')
     def make(**kwargs):
@@ -301,7 +299,7 @@ def test_hpv_screen_treat():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: multi-outcome diagnostics (820932c0)', strict=True)
+@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue=, then rewritten with steps triggered by events (820932c0)', strict=True)
 def test_hpv_colposcopy():
     sc.heading('Acceptance: HPV DNA -> colposcopy with four results -> excision for HSIL (queued) and referral for cancer')
     def make(**kwargs):

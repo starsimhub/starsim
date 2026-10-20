@@ -408,6 +408,35 @@ class Held(Product):
         return dict(eff) if isinstance(eff, dict) else {self.default_key:eff}
 
     @property
+    def diseases(self):
+        """ The names of the diseases the efficacy is keyed by, where they are given as modules (by name, they are known only in a sim: see `disease_effects()`) """
+        eff = self.efficacy
+        return [k.name for k in eff if isinstance(k, ss.Module)] if isinstance(eff, dict) else []
+
+    def disease_effects(self, sim):
+        """
+        The efficacy against each thing, for each disease it acts on, as {disease name: {key: efficacy}}
+
+        The efficacy is keyed by disease (`{hpv16: 0.95, 'hpv18': dict(dysplasia=0.5)}`, each a number or a dict as
+        for one disease), or is for the delivery's disease.
+        """
+        eff = self.efficacy
+        names = [mod.name for mod in sim.declared]
+        keyed = [isinstance(k, ss.Module) or k in names for k in eff] if isinstance(eff, dict) else []
+        if not any(keyed):
+            return {self.disease:self.effects}
+        if not all(keyed):
+            others = [k for k,ok in zip(eff, keyed) if not ok]
+            raise ss.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
+                                   f'Give the efficacy against each thing within each disease, e.g. {{hpv16: dict(acquisition=0.9)}}.')
+        return {ss.conditions.modname(k):(dict(v) if isinstance(v, dict) else {self.default_key:v}) for k,v in eff.items()}
+
+    @property
+    def held(self):
+        """ Whether each person holds it, as a condition (e.g. `where=vx.held`) """
+        return ss.conditions.Cond('dim', self.dim) > 0
+
+    @property
     def tabulated(self):
         """ In a compartmental run, a product has no step of its own (its deliveries move people between levels of holding it), so it does not stop a whole run in the kernels """
         return self.sim.solver != 'abm'
@@ -483,26 +512,44 @@ class Held(Product):
             return
         if self.staged and sim.solver != 'abm':
             self.init_stages(sim)
-        dis = sim.get_declared(self.disease)
-        graph = dis.graph
-        deaths = [name for name,tr in graph.transitions.items() if tr.outflow and tr.people]
-        for key,eff in self.effects.items():
-            if key == 'acquisition':
-                targets = [('rel_sus', None)]
-            elif key == 'transmission':
-                targets = [('rel_trans', None)]
-            elif key == 'mortality' and deaths:
-                targets = [('transition', name) for name in deaths]
-            elif key in graph.transitions or graph.destination(key) is not None: # A transition, or one destination of a transition with several ('progression.C')
-                targets = [('transition', key)]
-            else:
-                options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
-                raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
-            for kind,name in targets:
-                if kind == 'transition':
-                    kind = graph.modifier_kind(name)
-                sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
+        for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
+            dis = sim.get_declared(disname)
+            graph = dis.graph
+            deaths = [name for name,tr in graph.transitions.items() if tr.outflow and tr.people]
+            for key,eff in effects.items():
+                if key == 'acquisition':
+                    targets = [('rel_sus', None)]
+                    states = [s for tr in graph.transitions.values() if tr.contact for s in tr.src]
+                elif key == 'transmission':
+                    targets = [('rel_trans', None)]
+                    states = graph.infectious
+                elif key == 'mortality' and deaths:
+                    targets = [('transition', name) for name in deaths]
+                    states = [s for name in deaths for s in graph.transitions[name].src]
+                elif key in graph.transitions or graph.destination(key) is not None: # A transition, or one destination of a transition with several ('progression.C')
+                    targets = [('transition', key)]
+                    states = (graph.transitions.get(key) or graph.destination(key)).src
+                else:
+                    options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
+                    raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                self.check_dims(eff, key, dis, states)
+                for kind,name in targets:
+                    if kind == 'transition':
+                        kind = graph.modifier_kind(name)
+                    sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
         return
+
+    def check_dims(self, eff, key, dis, states):
+        """ An efficacy by a dimension (`ss.by(genotype=...)`) that the people it acts on have no level of, such as a strain, which susceptibles do not carry, is an error """
+        if not isinstance(eff, ss.by):
+            return
+        for strat in dis.graph.strats:
+            missing = [s.name for s in states if s.people and s.name not in strat.states] if strat.states is not None and strat.name in eff.dims else []
+            if missing:
+                raise ss.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
+                                           f'For an efficacy against each genotype, make each a disease and key the efficacy by disease: ss.Vaccine(efficacy={{hpv16: 0.95, hpv18: 0.95}}).')
+        return
+
 
     def step_waning(self):
         """ In an agent-based run: holders lose their protection at a constant rate. Called by the deliveries; acts once per step """
@@ -521,7 +568,7 @@ class Held(Product):
         return
 
     def describe(self):
-        eff = sc.strjoin([f'{key} {val}' for key,val in self.effects.items()])
+        eff = sc.strjoin([f'{ss.conditions.modname(key)} {val}' for key,val in self.effects.items()])
         waning = '' if self.waning is None else f'; protection lost after a mean of {self.waning!r}' if self.loses else '; fades by a function of time since delivery'
         return f'{self.name}: {type(self).__name__.lower()} with efficacy against {eff}{waning}'
 
@@ -670,8 +717,10 @@ class Treatment(Held):
 
     @property
     def diseases(self):
-        """ The names of the diseases whose transitions moves= names """
-        return list(dict.fromkeys(name for tr,_ in self.edge_specs() if (name := self.edge_disease(tr)) is not None)) if self.moves is not None else []
+        """ The names of the diseases whose transitions moves= names, or (for one that changes rates) that its efficacy is keyed by """
+        if self.moves is None:
+            return super().diseases if self.holds else []
+        return list(dict.fromkeys(name for tr,_ in self.edge_specs() if (name := self.edge_disease(tr)) is not None))
 
     def refs(self):
         """ The source states of the transitions of moves=, as (disease, state), for tracking diseases jointly (see `ss.solvers.Crossing`) """
@@ -807,12 +856,19 @@ class Diagnostic(Product):
     A diagnostic test: what `ss.screen()` delivers
 
     Its outcomes are `positive` and `negative`: results of each delivery of it, and events (`screening.positive` for one
-    delivery, `hiv_rdt.positive` for any delivery of the product), which trigger the steps that follow.
+    delivery, `hiv_rdt.positive` for any delivery of the product), which trigger the steps that follow. With `outcomes=`,
+    each result is an outcome as well (`colposcopy.hsil`); `positive` is then any result but the first, and `negative` the first.
 
     Args:
-        sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`), and the test then detects being in those states
+        sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`),
+            and the test then detects being in those states. The states can be of several diseases (`{hpv16.I: 0.9, hpv18.CIN: 0.95}`, or `'hpv18.CIN'`)
         specificity (float): the probability that someone without it tests negative
-        delay (dur): the time from the test to the result (in a compartmental run, people wait in levels of one step each)
+        outcomes (dict): instead of sensitivity and specificity, the results, each with its probability for people in each state (a dict
+            by state, of any disease, as for `sensitivity`; `None` as a key is people in none of the states; a number is for those with
+            what `detects=` says); the first is `None`, and takes the rest
+        combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the last-listed of them is theirs; for
+            positive and negative, each disease is detected independently), or 'max' (the highest probability of each result or a later one)
+        delay (dur/dict): the time from the test to the result (in a compartmental run, people wait in levels of one step each); a dict gives one for each result
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to
@@ -821,15 +877,34 @@ class Diagnostic(Product):
         ```python
         pcr = ss.Diagnostic(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
         xpert = ss.Diagnostic(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
+        hpv_dna = ss.Diagnostic(sensitivity={hpv16.I: 0.9, hpv16.CIN: 0.95, hpv18.I: 0.9}, specificity=0.97) # Across diseases
+        colpo = ss.Diagnostic(outcomes=dict(normal=None, lsil={g.I: 0.15 for g in genos}, hsil={g.CIN: 0.7 for g in genos})) # Several results
         ```
     """
     compartmental = True
     holds = False
     waning = None
-    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
+    spec_keys = ['sensitivity', 'specificity', 'outcomes', 'combine', 'delay', 'detects', 'cost']
 
-    def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
+    def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, cost=None, outcomes=None, combine='worst', name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
+        if combine not in ['worst', 'max']:
+            errormsg = f'combine= is "worst" or "max", not {combine!r}'
+            raise ValueError(errormsg)
+        if outcomes is not None:
+            names = list(outcomes)
+            if len(names) < 2 or outcomes[names[0]] is not None or any(v is None for v in list(outcomes.values())[1:]):
+                errormsg = f'outcomes= is a dict of the results, with the probability of each for people in each state; the first is None, and takes the rest, e.g. dict(normal=None, abnormal={{hpv.CIN: 0.8}}), not {outcomes}'
+                raise ValueError(errormsg)
+            if sensitivity != 1.0 or specificity != 1.0:
+                errormsg = 'sensitivity= and specificity= are another way of giving outcomes=: give one or the other'
+                raise ValueError(errormsg)
+            clash = [name for name in names if name in ['positive', 'negative']]
+            if clash:
+                errormsg = f'outcomes= has a result named {sc.strjoin(clash)}, but positive (any result but the first) and negative (the first) are outcomes of every test; name the results otherwise'
+                raise ValueError(errormsg)
+        self.outcomes = outcomes
+        self.combine = combine
         self.sensitivity = sensitivity
         self.specificity = specificity
         self.delay = delay
@@ -839,7 +914,108 @@ class Diagnostic(Product):
         return
 
     def outcome_names(self):
-        return ['positive', 'negative']
+        return ['positive', 'negative'] + ([] if self.__dict__.get('outcomes') is None else list(self.outcomes))
+
+    @property
+    def result_names(self):
+        """ The names of its results, the first being the one that is not a diagnosis """
+        return ['negative', 'positive'] if self.outcomes is None else list(self.outcomes)
+
+    def tables(self):
+        """ The probability of each result but the first, as {key: value}: a key is a state, None (people in none of the states), or 'detects' (people with what `detects=` says) """
+        if self.outcomes is not None:
+            return [dict(v) if isinstance(v, dict) else {'detects':v} for v in list(self.outcomes.values())[1:]]
+        sens = self.sensitivity
+        rest = {None:1 - self.specificity} if sc.isnumber(self.specificity) else {None:self.specificity} # A specificity that is not a number is worked out when it is used: see tails()
+        return [(dict(sens) if isinstance(sens, dict) else {'detects':sens}) | rest]
+
+    @staticmethod
+    def key_ref(key):
+        """ A key of a dict by state, as (disease name, or None for the delivery's; state name) """
+        if isinstance(key, ss.State):
+            return ss.conditions.modname(key.module), key.name
+        mod, _, name = key.rpartition('.')
+        return mod or None, name
+
+    def state_keys(self):
+        """ The states it is keyed by, as given """
+        return list(dict.fromkeys(key for table in self.tables() for key in table if key not in [None, 'detects']))
+
+    @property
+    def diseases(self):
+        """ The names of the diseases whose states it is keyed by """
+        return list(dict.fromkeys(mod for mod,_ in self.refs()))
+
+    def refs(self):
+        """ The states of named diseases it is keyed by, as (disease, state), for tracking diseases jointly (see `ss.solvers.Crossing`) """
+        return [ref for key in self.state_keys() if (ref := self.key_ref(key))[0] is not None]
+
+    def layout(self, sim, home):
+        """
+        The probability of each result but the first, as rows that each hold for some people: grouped by disease, whose
+        states are exclusive, as {disease: [(state, [values])]} (and 'detects': [(None, [values])]); and the values for
+        people in none of them. A state with no disease is one of `home`
+        """
+        tables = self.tables()
+        groups = {}
+        for key in self.state_keys() + ['detects']*any('detects' in t for t in tables):
+            if key == 'detects':
+                name, state = 'detects', None
+            else:
+                name, state = self.key_ref(key)
+                name = name or home
+                states = sim.get_declared(name).graph.states
+                if state not in states:
+                    raise ss.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.outcomes is None else "result"} for "{name}.{state}", but "{name}" has no state "{state}"; its states are {sc.strjoin(states.keys())}.')
+            vals = [t.get(key, 0.0) for t in tables]
+            if all(sc.isnumber(v) for v in vals) and (sum(vals) > 1 + 1e-9 or min(vals) < 0):
+                errormsg = f'The results of the test "{self.name}" for {name if state is None else name + "." + state} have probabilities {vals}, which have to be between 0 and 1 and sum to at most 1'
+                raise ValueError(errormsg)
+            groups.setdefault(name, []).append((state, vals))
+        rest = [t.get(None, 0.0) for t in tables]
+        return groups, rest
+
+    def tails(self, selector, home):
+        """
+        The probability that each person's result is each one or a later one, for each but the first (so for a
+        positive and a negative result, the probability of a positive one). For each disease, from the state they
+        are in; combined over diseases as the worst result (P(worst ≥ k) = 1 − ∏(1 − P_d(≥ k))) or the highest
+        """
+        sim = selector.sim
+        groups, rest = self.layout(sim, home)
+        worst = self.combine == 'worst'
+        none = 1.0
+        combined = [1.0 if worst else 0.0]*len(rest)
+        for name,rows in groups.items():
+            inside = 0.0
+            tail = [0.0]*len(rest)
+            for state,vals in rows:
+                if name != 'detects':
+                    sel = selector.select(ss.conditions.Cond('state', name, state))
+                elif self.detects is not None:
+                    sel = selector.select(self.detects)
+                else:
+                    sel = selector.in_states([s.name for s in sim.get_declared(home).graph.infected if s.people])*selector.everyone()
+                sel = sel*1.0
+                inside = inside + sel
+                vals = [selector.per_person(v) for v in vals]
+                for k in range(len(rest)):
+                    tail[k] = tail[k] + sel*sum(vals[k:])
+            none = none*(1 - inside)
+            combined = [c*(1 - t) if worst else np.maximum(c, t) for c,t in zip(combined, tail)]
+        rest = [1 - selector.per_person(self.specificity) if v is self.specificity else selector.per_person(v) for v in rest]
+        return [(1 - c if worst else c) + none*sum(rest[k:]) for k,c in enumerate(combined)]
+
+    def delays(self):
+        """ The delay of each result (None for none) """
+        names = self.result_names
+        if isinstance(self.delay, dict):
+            unknown = [k for k in self.delay if k not in names]
+            if unknown:
+                errormsg = f'The test "{self.name}" has a delay for {sc.strjoin(unknown)}, which is not one of its results ({sc.strjoin(names)})'
+                raise ValueError(errormsg)
+            return [self.delay.get(k) for k in names]
+        return [self.delay]*len(names)
 
     @property
     def tabulated(self):
@@ -864,6 +1040,9 @@ class Diagnostic(Product):
         return
 
     def describe(self):
-        detects = sc.strjoin(self.sensitivity.keys()) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
+        label = lambda key: '.'.join(n for n in self.key_ref(key) if n)
         delay = '' if self.delay is None else f', result after {self.delay!r}'
+        if self.outcomes is not None:
+            return f'{self.name}: test with results {sc.strjoin(self.result_names)}, by {sc.strjoin(label(k) for k in self.state_keys()) or "what it detects"}{delay}'
+        detects = sc.strjoin(label(k) for k in self.sensitivity) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         return f'{self.name}: test for {detects} (sensitivity {self.sensitivity}, specificity {self.specificity}{delay})'

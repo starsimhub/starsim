@@ -332,7 +332,9 @@ def init_crossings(sim):
     if any(sim.flows_of(mod) for mod in sim.declared): # People born or dying, who are born or die once in every disease: see Sim._init_flows()
         links = {name:set(names) for name in names}
     for mod in list(sim.pars.connectors.values()) + list(sim.pars.interventions.values()):
-        home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) or next(iter(getattr(getattr(mod, 'product', None), 'diseases', None) or []), None) # The disease whose engine evaluates the conditions (for a delivery, as given, or the first its product names)
+        home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) or next(iter(getattr(getattr(mod, 'product', None), 'diseases', None) or []), None) # The disease whose engine evaluates the conditions (for a delivery, as given, or the first its product names, or the first its conditions name)
+        if home is None and isinstance(mod, ss.Delivery):
+            home = next((m for m,_ in ss.conditions.state_refs(mod) if m in names), None)
         home = ss.conditions.modname(home)
         if home not in links:
             continue

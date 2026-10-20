@@ -966,7 +966,7 @@ class Delivery(ss.products.EventSource, Intervention):
         self.disease = disease if disease is None or isinstance(disease, str) else disease.name
         self.started = False # For routine delivery by age: whether the people already past the age have been left out (see skip_past())
         self.carry = 0.0 # The part of the capacity not yet used, when it is less than one agent per step
-        self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.BoolArr('result', label='Test result'))
+        self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.FloatArr('result', label='Test result, waited for'))
         self.rng_cov = ss.random()
         self.rng_cap = ss.random()
         self.rng_test = ss.random()
@@ -1061,10 +1061,24 @@ class Delivery(ss.products.EventSource, Intervention):
             return False
         return (self.holds and self.product.staged) or self.waits
 
-    def result_steps(self, sim):
-        """ The number of steps from a test to its result, as agents wait (see `test()`) """
+    def result_steps(self, sim, delay=None):
+        """ The number of steps from a test to its result (of the test's delay, or another), as agents wait (see `test()`) """
         dt = sim.pars.dt.to(sim.unit_base).value
-        return max(1, int(np.ceil(ss.solvers.convert(self.product.delay, sim.unit_base)/dt - 1e-9)))
+        return max(1, int(np.ceil(ss.solvers.convert(self.product.delay if delay is None else delay, sim.unit_base)/dt - 1e-9)))
+
+    def pending_blocks(self, sim):
+        """ In a compartmental run: for each result that people wait for, its levels of pending_<delivery>, as (result, first level, number of levels); the last result first, as positive came before negative """
+        if not self.waits:
+            return []
+        out = []
+        first = 1
+        delays = self.product.delays()
+        for k in reversed(range(len(delays))):
+            if delays[k] is not None:
+                m = self.result_steps(sim, delays[k])
+                out.append((k, first, m))
+                first += m
+        return out
 
     def dims(self, sim=None):
         """ The properties of people that this delivery needs, as stratifications where everyone starts at the first level """
@@ -1074,9 +1088,9 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.holds:
             levels = self.product.stage_levels(sim) if staged and self.product.staged else [False, True]
             out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
-        if staged and self.waits: # Waiting for a result: one level for each step, for each result (a negative one too, since anyone waiting is not tested again)
-            m = self.result_steps(sim)
-            levels = ['none'] + [f'positive {j+1}' for j in range(m)] + [f'negative {j+1}' for j in range(m)]
+        if staged and self.waits: # Waiting for a result: one level for each step, for each result with a delay (a negative one too, since anyone waiting is not tested again)
+            names = self.product.result_names
+            levels = ['none'] + [f'{names[k]} {j+1}' for k,first,m in self.pending_blocks(sim) for j in range(m)]
             out.append(Strat(self.pending, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
         for dim,level in (self.move or {}).items():
             if isinstance(level, bool):
@@ -1145,8 +1159,16 @@ class Delivery(ss.products.EventSource, Intervention):
                 self.disease = owners[0]
         if self.disease is None and self.product is None and self.move is None and self.move_states is None and len(declared) > 1: # A visit acts on no disease: the one its trigger is of, or the first
             self.disease = self.trigger_disease(sim) or declared[0]
-        if self.disease is None and getattr(self.product, 'moves', None) is not None and self.product.diseases: # A treatment of transitions given as objects: the first of their diseases
+        if self.disease is None and getattr(self.product, 'diseases', None): # A product of several diseases, given as objects (a treatment's moves=, or an efficacy keyed by disease): the first of them
             self.disease = self.product.diseases[0]
+        if self.disease is None and getattr(self.product, 'holds', False) and isinstance(self.product.efficacy, dict): # An efficacy keyed by diseases given by name
+            keyed = [k for k in self.product.efficacy if k in declared]
+            if keyed:
+                self.disease = keyed[0]
+        if self.disease is None and self.on is not None and len(declared) > 1: # A step triggered by another's event: that one's disease
+            self.disease = self.trigger_disease(sim)
+        if self.disease is None and len(declared) > 1: # Otherwise the first disease its conditions name (e.g. ss.any(g.CIN for g in genos))
+            self.disease = next((mod for mod,_ in ss.conditions.state_refs(self) if mod in declared), None)
         if self.disease is None:
             if len(declared) != 1:
                 raise ss.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}. Use disease=.')
@@ -1155,7 +1177,7 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ss.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a declared disease in the sim; these are {sc.strjoin(declared)}.')
         if self.product is not None and self.product.disease is None:
             self.product.disease = self.disease
-        elif self.product is not None and self.product.disease != self.disease: # Until products act on several diseases, it would protect against the first only
+        elif self.product is not None and self.product.disease != self.disease and not (getattr(self.product, 'holds', False) and len(self.product.disease_effects(sim)) > 1): # A product acts on one disease, unless its efficacy is keyed by several
             errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}": a product acts on one disease.\n'
                         f'     Make one product for each disease, e.g. vx_{self.disease} = ss.Vaccine(...), and deliver each with its own ss.vaccinate(..., disease=\'{self.disease}\').')
             raise ss.UnknownDisease(errormsg)
@@ -1220,8 +1242,10 @@ class Delivery(ss.products.EventSource, Intervention):
         """ The disease of the first transition or delivery in the event that triggers this delivery, if any """
         for leaf in ss.conditions.event_leaves(self.on):
             mod = leaf.args[0]
-            if isinstance(mod, Delivery):
-                return mod.disease if mod.disease is not None else mod.trigger_disease(sim)
+            if isinstance(mod, Delivery): # As given, or as it will work it out (see init_pre())
+                declared = [m.name for m in sim.declared]
+                return (mod.disease or next(iter(getattr(mod.product, 'diseases', None) or []), None) or mod.trigger_disease(sim)
+                        or next((m for m,_ in ss.conditions.state_refs(mod) if m in declared), None))
             elif isinstance(mod, ss.Module) and mod.name in [m.name for m in sim.declared]:
                 return mod.name
         return None
@@ -1975,69 +1999,73 @@ class Delivery(ss.products.EventSource, Intervention):
         return [(cured, None), (failed + unneeded, before)]
 
     def test(self, chosen):
-        """ Work out the result of each test, and either act on it or wait for it """
+        """ Work out the result of each test (one draw per person, from the probability of each result: see `ss.Diagnostic.tails()`), and either act on it or wait for it """
         selector = self.selector
         product = self.product
-        if isinstance(product.sensitivity, dict): # A sensitivity for each state, which are then what the test detects
-            states = self.dis.graph.states
-            for name in product.sensitivity:
-                if name not in states:
-                    raise ss.UnknownEffect(f'the test "{product.name}" has a sensitivity for "{name}", which is not a state of "{self.dis.name}". Its states are {sc.strjoin(states.keys())}.')
-            has = selector.in_states(list(product.sensitivity))*selector.everyone()
-            sens = self.per_state(product.sensitivity, f'the sensitivity= of "{product.name}"')
-        else:
-            if product.detects is not None:
-                has = selector.select(product.detects)
-            else:
-                has = selector.in_states(self.infected_states())*selector.everyone()
-            sens = selector.per_person(product.sensitivity)
-        spec = selector.per_person(product.specificity)
+        tails = product.tails(selector, self.dis.name)
+        names = product.result_names
+        steps = [None if d is None else self.convert(d)/self.dt_sim for d in product.delays()]
         if selector.abm:
             uids = self.uids(chosen)
-            p = np.where(has, sens, 1 - spec)[uids]
-            positive = self.rng_test.rvs(uids) < p
-            if product.delay is not None:
-                self.ti_result[uids] = self.sim.ti + self.convert(product.delay)/self.dt_sim
-                self.result[uids] = positive
-                return
-            pos, neg = selector.to_selection(uids[positive]), selector.to_selection(uids[~positive])
-        else:
-            pos = chosen*(has*sens + (1 - has)*(1 - spec))
-            neg = chosen - pos
-            if product.delay is not None: # They wait for the result: see step_results()
-                d = self.sim.groups.dim_index(self.pending)
-                before = self.eng.state_counts()
-                self.shift(pos, {d:1})
-                self.shift(self.same_people(neg, before), {d:self.result_steps(self.sim) + 1})
-                return
-        self.report(pos, neg)
+            u = self.rng_test.rvs(uids)
+            result = np.zeros(len(uids), dtype=int)
+            for t in tails:
+                result += u < (t if np.ndim(t) == 0 else t[uids])
+            wait = np.array([st is not None for st in steps])[result]
+            if wait.any():
+                later = uids[wait]
+                self.ti_result[later] = self.sim.ti + np.array([st or 0.0 for st in steps])[result[wait]]
+                self.result[later] = result[wait]
+            if not all(st is not None for st in steps): # Some results now
+                self.report([selector.to_selection(uids[(result == k) & ~wait]) for k in range(len(names))])
+            return
+        probs = [1 - tails[0]] + [tails[k] - tails[k+1] for k in range(len(tails) - 1)] + [tails[-1]]
+        sels = [chosen*np.clip(p, 0, 1) for p in probs]
+        blocks = self.pending_blocks(self.sim)
+        if blocks: # They wait for the result: see step_results()
+            d = self.sim.groups.dim_index(self.pending)
+            before = self.eng.state_counts()
+            for k,first,m in blocks:
+                self.shift(self.same_people(sels[k], before), {d:first})
+            waiting = {k for k,first,m in blocks}
+            sels = [selector.nobody() if k in waiting else self.same_people(sel, before) for k,sel in enumerate(sels)]
+        if len(blocks) < len(sels): # Some results now
+            self.report(sels)
         return
 
     def step_results(self):
         """ Act on the test results that have become available """
         if not self.waits:
             return
-        if not self.selector.abm: # The people who have waited long enough are at the top level for their result
-            selector = self.selector
-            m = self.result_steps(self.sim)
+        selector = self.selector
+        n = len(self.product.result_names)
+        if not selector.abm: # The people who have waited long enough are at the top level for their result
+            blocks = self.pending_blocks(self.sim)
             level = selector.dim(self.pending)
             everyone = selector.everyone()
-            pos = (level == m)*everyone
-            neg = (level == 2*m)*everyone
-            pos, neg = self.follow_each([pos, neg], {self.sim.groups.dim_index(self.pending):0}) # They wait no more
-            self.report(pos, neg)
-            self.move_up(self.pending, list(range(1, m)) + list(range(m + 1, 2*m))) # And the others move up
+            tops = [(level == first + m - 1)*everyone for k,first,m in blocks]
+            tops = self.follow_each(tops, {self.sim.groups.dim_index(self.pending):0}) # They wait no more
+            sels = [selector.nobody() for k in range(n)]
+            for (k,first,m),sel in zip(blocks, tops):
+                sels[k] = sel
+            self.report(sels)
+            self.move_up(self.pending, [j for k,first,m in blocks for j in range(first, first + m - 1)]) # And the others move up
             return
         due = (self.ti_result <= self.sim.ti).uids
         if len(due):
-            positive = self.result[due]
+            result = self.result[due].astype(int)
             self.ti_result[due] = np.nan
-            self.report(self.selector.to_selection(due[positive]), self.selector.to_selection(due[~positive]))
+            self.report([selector.to_selection(due[result == k]) for k in range(n)])
         return
 
-    def report(self, pos, neg):
-        """ Count the results, and record the people with each as an event, which the steps that follow it act on """
-        for key,sel in [('positive', pos), ('negative', neg)]:
+    def report(self, sels):
+        """ Count the results, and record the people with each as an event, which the steps that follow it act on: each named result (with outcomes=), positive (any but the first), and negative (the first) """
+        abm = self.selector.abm
+        combine = lambda parts: np.logical_or.reduce(parts) if abm else np.sum(parts, axis=0)
+        out = [('positive', combine(sels[1:])), ('negative', sels[0])]
+        if self.product.outcomes is not None:
+            out += list(zip(self.product.result_names, sels))
+        for key,sel in out:
             self.tally(key, sel)
             self.fire(key, sel)
         return
