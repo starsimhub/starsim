@@ -8,11 +8,12 @@ agents in an agent-based run and on groups in a compartmental one. A function of
 the sim does the same job, for anything the operators cannot say.
 """
 import operator
+import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event']
+__all__ = ['Cond', 'Event', 'state', 'any_']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -221,6 +222,29 @@ def set_states(cond):
         parts = [set_states(as_cond(arg)) for arg in cond.args]
         return None if any(p is None for p in parts) else [s for p in parts for s in p]
     return None
+
+
+def state(path):
+    """
+    A state of a module by its path, resolved when the condition is evaluated: for a module made before the others exist
+
+    Args:
+        path (str): the module and the state, e.g. `'hpv18.X'`
+    """
+    parts = path.split('.') if isinstance(path, str) else []
+    if len(parts) != 2 or not all(parts):
+        errormsg = f'ss.state() takes a path "module.state", e.g. "hpv18.X", not {path!r}'
+        raise ValueError(errormsg)
+    return Cond('state', *parts)
+
+
+def any_(items):
+    """ `ss.any()`: true for anyone any of some conditions (or states) hold for, e.g. `ss.any(ss.state(f'{g}.X') for g in others)` """
+    items = [as_cond(item) for item in items]
+    if not items:
+        errormsg = 'ss.any() needs at least one condition'
+        raise ValueError(errormsg)
+    return functools.reduce(operator.or_, items)
 
 
 def bounding_states(cond):
