@@ -55,6 +55,10 @@ class Cond:
             return Cond(ufunc_ops[name], *[x.item() if isinstance(x, np.ndarray) and x.ndim == 0 else x for x in inputs])
         return ufunc(*[ss.expressions.as_expr(x) if isinstance(x, Cond) else x for x in inputs])
 
+    def clip(self, min=None, max=None, out=None):
+        """ The value kept between two values, as an expression for a rate (`np.clip(0.5*ss.ppl.age, 0, 1)` calls this) """
+        return ss.expressions.as_expr(self).clip(min, max)
+
     def __init__(self, op, *args):
         self.op = op
         self.args = args if op in leaves else tuple(as_cond(arg) for arg in args) # So e.g. a declared state can be an operand
@@ -159,9 +163,9 @@ class Cond:
 
     @staticmethod
     def arith(op, a, b):
-        """ Arithmetic on a condition: with an expression (a parameter, a state's count), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
-        if isinstance(a, ss.expressions.Expr) or isinstance(b, ss.expressions.Expr):
-            return ss.expressions.BinOp(op, a, b)
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count) or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
+        if any(isinstance(x, (ss.expressions.Expr, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
+            return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
         elif op == '**':
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
         return Cond(op, a, b)

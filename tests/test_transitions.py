@@ -2225,6 +2225,56 @@ def test_source_weights():
     assert 'source P + 0.55 EL' in make('dict', 0.3).describe(output=True)
     return
 
+
+def test_cond_by_expr():
+    sc.heading('Testing arithmetic on a condition and an ss.by: an expression for a rate, in either order')
+    age = ss.by(age=[0.1, 0.3])
+    older = ss.ppl.age >= 50
+    forms = {
+        'by + cond':  lambda: age + 0.2*older,
+        'cond + by':  lambda: 0.2*older + age,
+        'by * cond':  lambda: age * (1 + older),
+        'cond * by':  lambda: (1 + older) * age,
+        'cond - by':  lambda: 1 + older - age,
+        'exp(cond) * by': lambda: np.exp(np.log(2)*older) * age,
+        'par(by) + cond': lambda: ss.par(age, name='agefx') + 0.2*older,
+        'cond + par(by)': lambda: 0.2*older + ss.par(age, name='agefx'),
+    }
+    rates = {'by + cond':[0.1, 0.5], 'cond + by':[0.1, 0.5], 'by * cond':[0.1, 0.6], 'cond * by':[0.1, 0.6], 'cond - by':[0.9, 1.7],
+             'exp(cond) * by':[0.1, 0.6], 'par(by) + cond':[0.1, 0.5], 'cond + par(by)':[0.1, 0.5]} # Under 50, then 50 and over
+    def make(form):
+        A, B = ss.states('A B')
+        return ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*forms[form](), name='c').stratify(age=[0, 50])
+    pars = dict(start=2000, stop=2002, dt=ss.months(1), verbose=0)
+    for form in forms:
+        expected = 1 - np.exp(-2*np.array(rates[form])) # The share of each age group that moves in two years
+        for solver,size in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=20_000))]:
+            res = ss.Sim(make(form), solver=solver, **size, **pars).run().results.c
+            moved = res.go.by('age').values.sum(axis=0)/res.n_A.by('age').values[0]
+            assert np.allclose(moved, expected, rtol=0.02 if solver == 'ode' else 0.1), f'{form} ({solver}): {moved} moved, not {expected}'
+
+    # A bare ss.by in a rate with a property of people that is not a dimension, as agents (the reported case)
+    by_year = ss.by(dict(age=list(range(100)), value=np.linspace(0, 1, 100)))
+    for rate in [by_year + 0.5*ss.ppl.female, 0.5*ss.ppl.female + by_year, by_year * (1 + ss.ppl.female), (1 + ss.ppl.female) * by_year]:
+        assert isinstance(rate, ss.expressions.Expr), f'{rate!r} should be an expression'
+        A, B = ss.states('A B')
+        d = ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*rate, name='c')
+        assert ss.Sim(d, n_agents=500, **pars).run().results.c.go.sum() > 0
+
+    # An unnamed ss.par inside an expression is an error when the model is built, not when it runs
+    A, B = ss.states('A B')
+    with pytest.raises(ValueError, match='Could not find a name'):
+        ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*(ss.par(age) + 0.2*older), name='c')
+
+    # np.clip of arithmetic on a condition (a state of another module, by name) is an expression, the same as np.maximum and np.minimum
+    def clipped(fn):
+        A, B, cell, other = ss.states('A B cell other')
+        return [ss.Disease(cell, other, name='b'), ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*fn(3*ss.state('b.cell')), name='c')]
+    res = [ss.Sim(clipped(fn), n_agents=2000, **pars).run().results.c.go.values for fn in [lambda x: np.clip(x, 0, 1), lambda x: np.minimum(np.maximum(x, 0), 1)]]
+    assert np.array_equal(res[0], res[1]) and np.isclose(res[0].sum()/2000, 1 - np.exp(-2), rtol=0.05)
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -2263,4 +2313,5 @@ if __name__ == '__main__':
 
 
     weights = test_source_weights()
+    condby = test_cond_by_expr()
     branch = test_branches()
