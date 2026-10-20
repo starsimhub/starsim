@@ -674,6 +674,7 @@ class Module(Base):
     def define_results(self, *args):
         """ Add results to the module """
         auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate an n_<name> result
+        own = ss.utils.getframe(1).f_globals.get('__name__', '').startswith('starsim.') # Defined by Starsim's own classes (e.g. ss.Delivery), so not checked by sim.check_time_index()
         for arg in args:
             if isinstance(arg, (list, tuple)):
                 result = ss.Result(*arg)
@@ -690,6 +691,8 @@ class Module(Base):
                 msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the state "{result.name[2:]}".'
                 raise ValueError(msg)
             self.results += result
+            if own:
+                self.setattribute('_starsim_results', getattr(self, '_starsim_results', set()) | {result.name})
         return
 
     @required()

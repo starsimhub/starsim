@@ -55,6 +55,10 @@ class Cond:
             return Cond(ufunc_ops[name], *[x.item() if isinstance(x, np.ndarray) and x.ndim == 0 else x for x in inputs])
         return ufunc(*[ss.expressions.as_expr(x) if isinstance(x, Cond) else x for x in inputs])
 
+    def clip(self, min=None, max=None, out=None):
+        """ The value kept between two values, as an expression for a rate (`np.clip(0.5*ss.ppl.age, 0, 1)` calls this) """
+        return ss.expressions.as_expr(self).clip(min, max)
+
     def __init__(self, op, *args):
         self.op = op
         self.args = args if op in leaves else tuple(as_cond(arg) for arg in args) # So e.g. a declared state can be an operand
@@ -117,9 +121,9 @@ class Cond:
             raise TypeError(errormsg)
         return Event(kind, states)
 
-    def __or__(self, other):  return Cond('|', self, other)
+    def __or__(self, other):  return Cond('|', self, tr_event(other, self))
     def __rand__(self, other): return Cond('&', other, self)
-    def __ror__(self, other):  return Cond('|', other, self)
+    def __ror__(self, other):  return Cond('|', tr_event(other, self), self)
     def __invert__(self):     return Cond('~', self)
 
     @property
@@ -159,9 +163,9 @@ class Cond:
 
     @staticmethod
     def arith(op, a, b):
-        """ Arithmetic on a condition: with an expression (a parameter, a state's count), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
-        if isinstance(a, ss.expressions.Expr) or isinstance(b, ss.expressions.Expr):
-            return ss.expressions.BinOp(op, a, b)
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count) or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
+        if any(isinstance(x, (ss.expressions.Expr, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
+            return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
         elif op == '**':
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
         return Cond(op, a, b)
@@ -221,12 +225,6 @@ class Event(Cond):
             raise ValueError(errormsg)
         super().__init__('move', kind, obj, dst)
         return
-
-    def __or__(self, other): # A transition joined to an event is the event of going through it, e.g. on=precin.to(S) | cin
-        return Cond('|', self, Event('tr', other) if isinstance(other, ss.Transition) else other)
-
-    def __ror__(self, other):
-        return Cond('|', Event('tr', other) if isinstance(other, ss.Transition) else other, self)
 
     __hash__ = Cond.__hash__
 
@@ -581,6 +579,13 @@ def is_event(cond):
     return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
 
 
+def tr_event(obj, other):
+    """ A transition joined with | to an event (or to another transition) is the event of going through it, e.g. on=precin.to(S) | cin.to(S) | clear """
+    if isinstance(obj, ss.Transition) and (isinstance(other, ss.Transition) or has_event(other)):
+        return Event('tr', obj)
+    return obj
+
+
 def has_event(cond):
     """ Whether a condition has an event in it """
     if not isinstance(cond, Cond):
@@ -592,6 +597,8 @@ def has_event(cond):
 
 def event_leaves(cond):
     """ The event leaves of a condition, including those that its memory is read from """
+    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+        return event_leaves(cond.x)
     if not isinstance(cond, Cond):
         return []
     if cond.op == 'memory':
@@ -604,6 +611,8 @@ def event_leaves(cond):
 def memory_leaves(cond, out=None):
     """ The memory leaves of a condition (e.g. `cytology.since`), each with the values it is compared with """
     out = [] if out is None else out
+    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+        return memory_leaves(cond.x, out)
     if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
         return out
     if cond.op == 'memory':
@@ -624,6 +633,32 @@ def join(op, conds):
     for c in conds:
         out = c if out is None else Cond(op, out, c)
     return out
+
+
+def path_events(cond):
+    """ In on=, which is an event, a path (`ss.state('pregnancy.birth')`, for a module made before that one exists) is the event of going through that transition """
+    if isinstance(cond, StatePath):
+        event = Event('tr', Named(*cond.args))
+        event.path = cond # Checked when the sim is initialized: see check_path_events()
+        return event
+    if isinstance(cond, Cond) and cond.op not in leaves:
+        return Cond(cond.op, *[path_events(arg) for arg in cond.args])
+    return cond
+
+
+def check_path_events(sim, cond, owner):
+    """ Check that each path made an event in on= (see path_events()) is a transition of a module in the sim """
+    for leaf in event_leaves(cond) if isinstance(cond, Cond) else []:
+        path = getattr(leaf, 'path', None)
+        if path is None:
+            continue
+        modname, name = path.args
+        mod = next((m for m in sim.declared if m.name == modname), None)
+        if mod is None or name not in mod.graph.transitions:
+            what = f'"{modname}" is not a declared module in the sim' if mod is None else f'"{name}" is not a transition of "{modname}"{"; for entering the state, use ss.state(" + repr(modname + "." + name) + ").enter" if name in mod.graph.states else ""}'
+            errormsg = f'on=ss.state("{modname}.{name}") of "{owner}" is the event of going through a transition, but {what}'
+            raise ValueError(errormsg)
+    return
 
 
 def split_who(who, operator='any', where=None, on=None):
@@ -651,6 +686,7 @@ def split_who(who, operator='any', where=None, on=None):
             raise TypeError(errormsg)
         parts.append(val)
     who, on, where = parts
+    on = path_events(on)
     if on is not None and isinstance(on, Cond) and not has_event(on):
         errormsg = f'on= of a delivery is an event: a transition (e.g. on=sir.infection), a delivery or one of its outcomes (e.g. on=screening.positive), or a function of the sim; for the people in a state or meeting a condition, use where= (e.g. where=sir.I, interval=1), not on={on}'
         raise TypeError(errormsg)

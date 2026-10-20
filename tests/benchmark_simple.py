@@ -12,7 +12,7 @@ with sc.timer():
     hiv = ssl.diseases.HIV()
     hiv.pars['beta'] = {'mf': [0.0008, 0.0004], 'maternal': [0.2, 0]}
 
-    sim = ss.Sim(start=1950, stop=2050, people=ppl, networks=networks, demographics=ss.LegacyPregnancy(), diseases=hiv)
+    sim = ss.Sim(start=1950, stop=2050, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=hiv)
     sim.init()
     sim.run()
 

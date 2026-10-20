@@ -527,6 +527,19 @@ def test_cascade():
     treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
     sub = SubSim(interventions=ss.cascade(screening, confirm, treatment, name='care'), diseases=make_sis(), solver='abm', stop=120, **kw).run()
     assert 'confirm' in sub.interventions and np.array_equal(sub.results.sis.n_I, sim.results.sis.n_I)
+
+    # And for a subclass that puts the modules in its parameters itself, after ss.Sim.__init__()
+    class LateSim(ss.Sim):
+        def __init__(self, interventions=None, **kwargs):
+            super().__init__(**kwargs)
+            self.pars.interventions = interventions
+    rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7), name='screening')
+    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9, name='confirm')
+    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50), name='treatment')
+    late = LateSim(interventions=[ss.cascade(screening, confirm, treatment, name='care')], diseases=make_sis(), solver='abm', stop=120, **kw).run()
+    assert 'confirm' in late.interventions and np.array_equal(late.results.sis.n_I, sim.results.sis.n_I)
     assert sim.results.care.plot() is not None
 
     # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)
@@ -573,7 +586,7 @@ def test_memory():
 
     # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.1, name='sis')
-    preg = ss.LegacyPregnancy(fertility_rate=50)
+    preg = ss.Pregnancy(fertility_rate=50)
     anc_visit = ss.visit(who=preg.conception, coverage=0.85)
     anc_a = ss.screen(ss.Diagnostic(sensitivity=0.9, name='rdt'), who=anc_visit)
     anc_b = ss.screen(ss.Diagnostic(sensitivity=0.8, name='rpr'), who=anc_visit)
@@ -1170,6 +1183,26 @@ def test_save_load():
     assert np.array_equal(sim.results.sis.n_I.values, loaded.results.sis.n_I.values)
     assert np.array_equal(sim.results.treatment.delivered.values, loaded.results.treatment.delivered.values)
     return loaded
+
+
+def test_copied_steps():
+    """ Deliveries deep-copied together still trigger each other: a condition refers to the original delivery, so the order of steps finds it by name """
+    sc.heading('Testing steps after a deep copy of the interventions')
+    class CopySim(ss.Sim):
+        def __init__(self, interventions=None, **kwargs):
+            super().__init__(**kwargs)
+            self.pars.update(dict(interventions=sc.dcp(interventions)))
+    def make(sim_class):
+        S, I = ss.states('S I')
+        d = ss.Disease(infection=S >> I @ ss.permonth(0.3)*I, recovery=I >> S @ ss.months(6), init_prev=0.1, name='d')
+        visit = ss.visit(who=ss.state('d.I').enter, name='visit')
+        test = ss.screen(ss.Diagnostic(sensitivity=0.9), who=visit, name='test')
+        tx = ss.treat(ss.Treatment(cure=0.9), who=test.positive, name='tx')
+        return sim_class(diseases=d, interventions=[ss.cascade(visit, test, name='casc'), tx], n_agents=1000, start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
+    plain, copied = make(ss.Sim), make(CopySim)
+    assert copied.results.tx.delivered.sum() > 0
+    assert np.array_equal(plain.results.tx.delivered.values, copied.results.tx.delivered.values)
+    return copied
 
 
 if __name__ == '__main__':

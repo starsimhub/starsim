@@ -34,6 +34,8 @@ class MSMNet(ss.SexualNetwork):
         self.decided = ss.BoolArr('decided') # Whether his participation has been drawn, which happens at his debut
         return
 
+    sides = None # Men only: one beta, ss.peract(p)
+
     def init_post(self):
         self.set_network_states()
         super().init_post()

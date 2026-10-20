@@ -393,7 +393,7 @@ def test_dynamic_household():
     dhs_data = make_dhs_data(n=medium)
 
     household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
-    preg = ss.LegacyPregnancy()
+    preg = ss.Pregnancy()
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
 
@@ -419,14 +419,14 @@ def test_household_coarse_pregnancy_dt():
     Move-out is evaluated once per pregnancy, so the resulting number of households should be
     ~invariant to the pregnancy module's dt. Previously, HouseholdNet compared
     pregnancy.ti_delivery (an index in the pregnancy module's own timeline) against sim.ti; when
-    pregnancy ran on a coarser dt (e.g. ss.LegacyPregnancy(dt=ss.months(3))), pregnant non-heads became
+    pregnancy ran on a coarser dt (e.g. ss.Pregnancy(dt=ss.months(3))), pregnant non-heads became
     re-eligible far too often, greatly over-fragmenting households. """
     sc.heading('Testing HouseholdNet with a coarse-dt Pregnancy module...')
     dhs_data = make_dhs_data(n=medium)
 
     def run(preg_dt):
         household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True, prob_move_out=0.5)
-        preg = ss.LegacyPregnancy(dt=preg_dt)
+        preg = ss.Pregnancy(dt=preg_dt)
         sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
                      start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1, copy_inputs=False)
         sim.run()
@@ -724,6 +724,19 @@ def test_beta_readings():
     mf = ss.MFNet()
     assert ss.MFNet().directions == ['m2f', 'f2m'] and ss.PrenatalNet().directions == ['mother2child']
     assert ss.PartnerNet(sides='sex').directions == ['m2f', 'f2m', 'm2m', 'f2f'] and ss.RandomNet().directions == []
+    class Couples(ss.SexualNetwork): # A sexual network of its own is between men and women unless it says otherwise
+        def step(self):
+            self.end_pairs()
+            self.participant[self.sim.people.auids] = True
+            m, f = [self.available(self.sim.people, sex) for sex in ['male', 'female']]
+            n = min(len(m), len(f))
+            self.append(p1=m[:n], p2=f[:n], beta=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, 2.0))
+            return
+    assert Couples().directions == ['m2f', 'f2m'] and ssl.MSMNet().directions == [] # Men only: one beta
+    sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples'), **kw).run()
+    assert sim.results.sis.infection.sum() > 0
+    with pytest.raises(ss.RouteMismatch, match='sides = dict'):
+        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ssl.MSMNet(), **kw).init()
     assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
     with pytest.raises(ss.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard (D2)
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.MFNet(), **kw).init()
@@ -744,7 +757,7 @@ def test_beta_readings():
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
     hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5))), init_prev=0.1, name='hiv')
-    sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.LegacyPregnancy(), **kw).run()
+    sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.Pregnancy(), **kw).run()
     assert sim.results.hiv.n_I[-1] > 0
     return
 
@@ -909,6 +922,53 @@ def test_peract_spec():
     return
 
 
+@sc.timer()
+def test_beta_default():
+    sc.heading('Testing a beta for each route with a default for the routes it does not name')
+    kw = dict(n_agents=1000, stop=2, verbose=0)
+    m2f = ss.par(0.06, name='m2f')
+    def make(**betas):
+        return ss.Disease(infection=ss.transmission('S -> I', beta=betas), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='d')
+
+    # A library disease names routes the sim may not have: those are dropped with a note, and the routes it does not name take the default
+    sim = ss.Sim(make(mfnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.MFNet(), ss.MaternalNet()], **kw).run()
+    assert sim.results.d.n_I[-1] > 0
+    assert any('msm' in note and 'default' in note for note in sim.notes), sim.notes
+    assert 'beta on maternalnet' in sim.diseases.d.describe(output=True)
+
+    # Without a default, a name that is not a route, or a route with no value, still raises, since it is likely a typo
+    with pytest.raises(ss.RouteMismatch, match='no route is called msm'):
+        ss.Sim(make(mfnet=ss.peract(0.01), maternalnet=0, msm=ss.peract(0.1)), networks=[ss.MFNet(), ss.MaternalNet()], **kw).init()
+    with pytest.raises(ss.RouteMismatch, match='maternalnet has no value'):
+        ss.Sim(make(mfnet=ss.peract(0.01)), networks=[ss.MFNet(), ss.MaternalNet()], **kw).init()
+
+    # The default is the same as giving each route its value, as agents and as an ODE, which agree; it can be a typed rate or a parameter
+    def pools(solver, **betas):
+        nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=betas), recovery=ss.progression('I -> R', dur=ss.days(10)), init_prev=0.01, name='sir')
+        sim = ss.Sim(sir, networks=nets, total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=1, verbose=0)
+        return sim.run().results.sir.n_R.values
+    res = {}
+    for solver in ['abm', 'ode']:
+        res[solver] = pools(solver, pool=ss.perday(0.03), home=ss.perday(0.02))
+        assert np.array_equal(res[solver], pools(solver, pool=ss.perday(0.03), school=ss.perday(0.1), default=ss.perday(0.02))), solver
+        assert np.array_equal(res[solver], pools(solver, pool=ss.perday(0.03), default=ss.par(ss.perday(0.02), name='other'))), solver
+    assert np.isclose(res['abm'][-1], res['ode'][-1], rtol=0.15), (res['abm'][-1], res['ode'][-1])
+
+    # The default is kept in the model spec, and written as code
+    sim = ss.Sim(make(mfnet=ss.peract(0.01), msm=ss.peract(0.1), default=0), networks=[ss.MFNet(), ss.MaternalNet()], **kw)
+    beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
+    assert beta['default'] == 0 and 'msm' in beta # Bare, since it is per act on a route with acts
+    with pytest.warns(ss.LossyExport):
+        assert "'default': 0.0" in sim.to_code()
+
+    # A disease written as code reads the default too
+    sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.MFNet()], **kw).run()
+    assert sim.results.agentsis.prevalence[-1] > 0 and any('msm' in note for note in sim.notes)
+    assert sim.diseases.agentsis.validate_beta()['mf'] == [0, 0]
+    return
+
+
 # %% Run as a script
 def test_per_act_beta():
     """ A bare beta on a network with acts is a probability per act, so it does not depend on dt or the unit """
@@ -986,5 +1046,6 @@ if __name__ == '__main__':
     two = test_two_groups()
     pa = test_partnership_approx()
     spec = test_peract_spec()
+    default = test_beta_default()
 
     T.toc()

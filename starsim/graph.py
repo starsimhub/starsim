@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Column, Count, did_you_mean, Dwell, Expr, is_one, linear, par, Row, Share, to_pars
+from .expressions import as_expr, BinOp, Clock, Column, Count, did_you_mean, Dwell, Expr, is_one, linear, par, Row, Share, to_pars
 from .parameters import by, TimeValue
 from .transitions import bound_names, find_name, FlowSum, outcome, State, Transition, update
 from .presentation import Presentation, TransitionTable
@@ -21,6 +21,27 @@ def inner_pars(val):
     elif isinstance(val, dict):
         return [q for v in val.values() for q in inner_pars(v)]
     return []
+
+
+def bad_end(end, side):
+    """ The message for a source or destination of a transition that is not a state (or a state's name): what to write instead """
+    null, stay = ss.transitions.null, ss.transitions.stay
+    if end is null and side == 'source':
+        return 'ss.null cannot be one of several sources of a transition: for an inflow, give it alone, e.g. ss.Transition(ss.null, S, rate=0.1)'
+    elif end is stay and side == 'source':
+        return 'ss.stay is a destination, not a source: give it as one destination of a split, e.g. ss.Transition(I, [R, ss.stay], p=[0.3, None], dur=10)'
+    elif end is null or end is stay:
+        return f'{end} is one destination of a split, with at least one other, e.g. ss.Transition(I, [R, {end}], p=[0.9, 0.1], dur=10)'
+    if isinstance(end, ss.conditions.Cond):
+        names = [name for _,name in ss.conditions.leaf_states(end)]
+    else:
+        names = [leaf.name for leaf in getattr(end, 'leaves', []) if isinstance(leaf, State)]
+    names = list(dict.fromkeys(name for name in names if name is not None))
+    if not names:
+        return f'the {side} of a transition is a state or a list of states, not {end}'
+    elif side == 'source':
+        return f'the source of a transition is a state or a list of states, not {end}; for people moving out of any of them, write [{", ".join(names)}] or the sum {" + ".join(names)}'
+    return f'the destination of a transition is a state or a list of states (a split, with p=), not {end}; for a split between them, write [{", ".join(names)}] with p=[...]'
 
 
 class Graph(Presentation):
@@ -118,6 +139,9 @@ class Graph(Presentation):
                     raise ValueError(errormsg)
                 self.add(self.attrs if isinstance(obj, ss.expressions.attr) else self.hooks, obj.name, obj)
                 continue
+            if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
+                self.add(self.exprs, name, obj)
+                continue
             if isinstance(obj, (Transition, outcome, par, State, update)):
                 if name is not None:
                     obj.name = name
@@ -209,6 +233,10 @@ class Graph(Presentation):
         strings = sc.autolist()
         self._refs = [] # States used only inside a rate
         for tr in trs:
+            for side,ends in [('source', tr.src or []), ('destination', tr.dst or [])]:
+                for end in ends:
+                    if not isinstance(end, (State, str)):
+                        raise TypeError(bad_end(end, side))
             for end in (tr.src or []) + (tr.dst or []):
                 if isinstance(end, State): found[id(end)] = end
                 else:                      strings += end
@@ -254,10 +282,6 @@ class Graph(Presentation):
 
         # Either check the strings against the declared states, or infer the states from them
         names = [s.name for s in declared]
-        for string in strings:
-            if not isinstance(string, str): # e.g. ss.Transition(A + B, C): a sum of states is a count, for a rate, not where people move from
-                states = sc.strjoin(leaf.name for leaf in getattr(string, 'leaves', []) if isinstance(leaf, State)) or str(string)
-                raise TypeError(f'the source or destination of a transition is a state or a list of states, not {string}; for people moving out of either, write [{states}]')
         if declared:
             for string in strings:
                 if string not in names:
@@ -437,7 +461,7 @@ class Graph(Presentation):
         return
 
     def resolve_people(self):
-        """ Work out which states are people: the ones connected by transitions to the first state """
+        """ Work out which states are people: the ones connected by transitions to the first state, and the ones that no transition touches """
         states = list(self.states.values())
         links = {id(s):set() for s in states}
         for tr in self.transitions.values():
@@ -449,6 +473,8 @@ class Graph(Presentation):
             if not tr.src: # An inflow split between several states: its destinations are connected too
                 for a in tr.dst or []:
                     links[id(a)].update(id(b) for b in tr.dst if b is not a)
+
+        touched = {id(st) for tr in self.transitions.values() for st in (tr.src or []) + (tr.dst or []) if isinstance(st, State)} | {i for i,linked in links.items() if linked}
 
         # Start from the anchor, and from everything declared to be people
         lookup = {id(s):s for s in states}
@@ -467,7 +493,7 @@ class Graph(Presentation):
         self.separate = [s for s in states if s.people is True and id(s) not in joined] # People with no transition to or from the first state's, which are said when the sim is built
         for state in states:
             if state.people is None:
-                state.people = id(state) in seen
+                state.people = id(state) in seen or id(state) not in touched # A state that no transition touches is people, as the first state is: a count is filled and emptied by transitions of its own
                 if not state.people:
                     state.guessed['people'] = f'no transition connects {state.name} to {first.name}'
         self.people_states = [s for s in states if s.people]
@@ -612,9 +638,13 @@ class Graph(Presentation):
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
         inner = {q.name or find_name(q, frame) for tr,slot,p in slots for q in inner_pars(p.value)} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), or inside a probability per act, which are registered below
+        inner |= {q.name or find_name(q, frame) for tr,slot,p in slots if isinstance(p.value, Expr) for q in p.value.leaves if isinstance(q, par) and q is not p} # And inside an expression in a slot, e.g. dur=dur_rec*k
+        taken = lambda name: name in self.pars or name in self.states or name in self.transitions or name in inner
         for tr,slot,p in anon:
-            clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions or slot in inner
-            self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
+            name = f'{slot}_{tr.name}' if counts[slot] > 1 or taken(slot) else slot
+            if taken(name): # e.g. a parameter of the user's called dur_rec, inside the dwell time of a transition called rec
+                name = f'{slot}_of_{tr.name}'
+            self._add_par(p, name=name)
             p.slot_named = True
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
@@ -629,6 +659,7 @@ class Graph(Presentation):
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] # And a parameter in the rate of a transfer
         used += [(name, upd.value) for name,upd in self.updates.items()] # And in the value of an update
         used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
+        used += [(name, val) for name,a in self.attrs.items() if a.kind in ['drawn', 'trait'] for p in ss.expressions.dists_in(a.value) for val in p.value.pars.values() if isinstance(val, par)] # And a parameter of a distribution an attribute is drawn from, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
         used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
         for name,expr in used:
@@ -738,7 +769,7 @@ class Graph(Presentation):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr.check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1 and not tr.trigger.outcome and not tr.stays)): # On an outcome, p= is the share of its people who move; a split with ss.stay is a split, though ss.stay is not a destination
+            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and not tr.split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.null is a split, though neither is a state
                 raise ss.BadBranchSplit(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
@@ -751,7 +782,7 @@ class Graph(Presentation):
                     ex = self.exits[clock.names[0]]
                     if not (ex.branches or ex.remainder or ex.timed):
                         raise ss.NoScheduledDwell(f'"{name}" reads {clock}, but {clock.names[0]} has only rates out of it, so no dwell time is scheduled when people enter it.')
-            if tr.stays and not tr.dst:
+            if tr.stays and not tr.dst and not tr.dies:
                 raise ss.BadBranchSplit(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
             if tr.p is not None and tr.split:
                 ps = tr.p
@@ -760,14 +791,16 @@ class Graph(Presentation):
                 elif len(ps) == 1 and isinstance(ps[0], par) and callable(ps[0].raw) and not isinstance(ps[0].raw, (ss.Dist, TimeValue)): # A function giving a row, one column per destination
                     tr.p_given = list(ps)
                     ps = tr.p = [Column(ps[0], i, len(tr.dst)) for i in range(len(tr.dst))]
+                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
                 if len(ps) != len(tr.dst):
-                    raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst) + tr.stays} destinations but {len(ps) + (tr.p_stay is not None)} branch probabilities.')
-                given = [p for p in ps + [tr.p_stay] if p is not None]
-                if tr.stays and len(given) < len(ps):
-                    raise ss.BadBranchSplit(f'"{name}" leaves the rest to both ss.stay and another destination; give one of them a p=.')
+                    raise ss.BadBranchSplit(f'"{name}" has {len(ends)} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities.')
+                given = [p for p in ends if p is not None]
+                if len(given) < len(ends) - 1:
+                    which = [label for label,p in zip([d.name for d in tr.dst] + ['ss.stay']*tr.stays + ['ss.null']*tr.dies, ends) if p is None]
+                    raise ss.BadBranchSplit(f'"{name}" leaves the rest to {sc.strjoin(which)}; only one destination can take the rest, so give the others a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)
-                    if (len(given) == len(ps) + tr.stays and not np.isclose(total, 1)) or total > 1 + 1e-9:
+                    if (len(given) == len(ends) and not np.isclose(total, 1)) or total > 1 + 1e-9:
                         raise ss.BadBranchSplit(f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
             elif tr.p is None and tr.split:
                 raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
@@ -857,6 +890,10 @@ class Graph(Presentation):
                     raise ss.CapabilityError(f'"{name}" ({tr.arrow}) reads {state.name}.dwell, the time in {state.name}, which only people leaving {state.name} have. {where}')
                 self.dwell_states.add(state.name)
                 self.dwell_trs.add(name)
+            for expr in [tr.rate] + (sc.tolist(tr.p) if len(tr.dst) > 1 else []): # The time in its own state (X.time) is X.dwell here, so is followed as it is under compartments
+                if any(isinstance(leaf, Clock) and leaf.own(own) for leaf in (expr.leaves if isinstance(expr, Expr) else [])):
+                    self.dwell_states.add(own.name)
+                    self.dwell_trs.add(name)
             if len(tr.dst) <= 1 and any(dwells(p) for p in sc.tolist(tr.p)):
                 state = dwells(tr.p[0])[0]
                 raise ss.CapabilityError(f'"{name}" has p= with {state.name}.dwell, but a branch with p= is decided when people enter {state.name}, when no time has passed. '
@@ -1057,7 +1094,7 @@ class Graph(Presentation):
 
     def destinations(self):
         """ The names of the destinations of the transitions with several, as `destination()` takes them """
-        return [f'{name}.{dst.name}' for name,tr in self.transitions.items() if tr.dst is not None and len(tr.dst) > 1 for dst in tr.dst]
+        return [f'{name}.{end}' for name,tr in self.transitions.items() for end in tr.ends]
 
     def leaves(self):
         """ The leaves of the rates and branch probabilities of its transitions """

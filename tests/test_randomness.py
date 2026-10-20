@@ -142,18 +142,11 @@ class OneMore(ss.Intervention):
         self.ti_apply = ti_apply
         return
 
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        one_birth = ss.LegacyPregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
-        one_birth.init_pre(sim)
-        self.one_birth = one_birth
-        return
-
     def step(self):
         """ Create an extra agent """
         sim = self.sim
         if sim.ti == self.ti_apply:
-            _, new_uids = self.one_birth.make_embryos(ss.uids(0), embryo_counts=np.array([1])) # Assign 0th agent to be the "mother"
+            new_uids = sim.people.grow(1, parent=ss.uids(0), age=0) # The 0th agent is the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
 
             # Infect that agent and immediately recover

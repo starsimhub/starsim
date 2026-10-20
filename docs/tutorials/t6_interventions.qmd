@@ -18,7 +18,7 @@ Starsim contains _products_, which can be thought of as the actual test, treatme
 Starsim includes three products:
 
 - `ss.Vaccine(efficacy=...)`, which protects people from infection (and optionally from transmitting it, or from severe disease); by default it is leaky (everyone vaccinated is partly protected), and `leaky=False` makes it all-or-nothing (a share `efficacy` of those vaccinated are fully protected)
-- `ss.Test(sensitivity=..., specificity=...)`, which tells infected people apart from uninfected ones, with some errors
+- `ss.Diagnostic(sensitivity=..., specificity=...)`, which tells infected people apart from uninfected ones, with some errors
 - `ss.Treatment(cure=...)`, which clears an infection with some probability
 
 and one delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. They all take the same keywords for who gets the product (`where=`, `coverage=`, `capacity=`) and when (`start=`, `stop=`, and either `at=` for one-off campaigns or `interval=` for regular rounds). Interventions that don't hand out a product, such as wearing masks or closing schools, are changes to a parameter: `ss.change()` and `ss.modify()`.
@@ -86,10 +86,10 @@ print(f'Doses delivered: {sim.results.my_intervention.delivered.sum():,.0f}')
 
 ## Screening and treatment
 
-A test is delivered by `ss.screen()`, and what happens to the people who test positive is given by `on_positive`, usually another delivery. Here, 30% of the population is screened each year from 2015, and 80% of those who test positive are treated, with a treatment that cures 95% of them. We use an SIS disease, since screening and treatment are mostly used for infections that people can get again:
+A test is delivered by `ss.screen()`, and what happens to the people who test positive is another delivery, given them with `who=`: the screening's `positive` are the people who tested positive on that step. Here, 30% of the population is screened each year from 2015, and 80% of those who test positive are treated, with a treatment that cures 95% of them. We use an SIS disease, since screening and treatment are mostly used for infections that people can get again:
 
 ```{python}
-test = ss.Test(sensitivity=0.9, specificity=0.98)
+test = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
 treatment = ss.Treatment(cure=0.95)
 
 screening = ss.screen(
@@ -97,11 +97,11 @@ screening = ss.screen(
     start = '2015',
     coverage = 0.3,
     interval = ss.years(1),
-    on_positive = ss.treat(treatment, coverage=0.8),
 )
+treat = ss.treat(treatment, who=screening.positive, coverage=0.8)
 
 sis_pars = dict(pars, diseases=dict(type='sis', dur_inf=10, beta=0.1))
-msim = ss.parallel(baseline=ss.Sim(sis_pars), screening=ss.Sim(sis_pars, interventions=screening))
+msim = ss.parallel(baseline=ss.Sim(sis_pars), screening=ss.Sim(sis_pars, interventions=[screening, treat]))
 msim.plot('sis.prevalence')
 ```
 

@@ -9,7 +9,8 @@ Starsim can include detailed population dynamics through its demographics module
 Demographics are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics. There are two ways to add them:
 
 - **Births and deaths declared for the population** (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`), at per-person rates. They run under every solver, including as an ODE, and add and remove the same people from every disease. `demographics=True` declares them at default rates.
-- **Demographics modules** (`ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`), written as code, with rates per 1,000 people if they are above 1 and per person otherwise (`rate_units=1000` or `rate_units=1` says which, and a rate that could be either gives a warning). They support rates that vary by age, sex, and year, pregnancy, and maternal transmission, and run as agents.
+- **Demographics modules** (`ss.Births`, `ss.Deaths`), written as code, with rates per 1,000 people if they are above 1 and per person otherwise (`rate_units=1000` or `rate_units=1` says which, and a rate that could be either gives a warning). They support rates that vary by age, sex, and year, and run as agents.
+- **Pregnancy** (`ss.Pregnancy`), declared (states `NP` and `P`, with conception, losses, and delivery), with age-specific fertility in the same units, fetuses as agents when something reads them, and maternal transmission over `ss.MaternalNet` and `ss.BreastfeedingNet`; as agents for now.
 
 ## Simple usage
 
@@ -66,7 +67,7 @@ fertility_data = pd.DataFrame({
 births = ss.Births(birth_rate=birth_data)
 
 # Create a pregnancy module with custom parameters
-pregnancy = ss.LegacyPregnancy(
+pregnancy = ss.Pregnancy(
     fertility_rate = fertility_data,
     rate_units = 1,                                         # The data are per woman (rates up to 0.2 could be either)
     p_maternal_death = ss.bernoulli(0.001),                  # 0.1% maternal mortality
@@ -138,6 +139,6 @@ The births and deaths become transitions of the disease (of the first one, if th
 - **Key considerations:**
     - Use `demographics=True` for default birth/death rates
     - Use `demographics=[ss.birth(rate=...), ss.death(rate=...)]` for custom constant rates (per person)
-    - Use `ss.LegacyPregnancy()` for age-specific fertility, pregnancy modeling, and mother-to-child transmission
+    - Use `ss.Pregnancy()` for age-specific fertility, pregnancy modeling, and mother-to-child transmission
     - Demographics automatically enables aging; if you want to use demographics without aging, set `use_aging=False` (and conversely, `use_aging=True` to enable aging without demographics)
 

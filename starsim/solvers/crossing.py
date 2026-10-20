@@ -273,7 +273,7 @@ class Crossing:
         L0 = self.layout[0]
         full = any(p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1 for p in progs) or any(engine.net_mods for engine in self.engines) # Contacts by exposure and group
         src, named, det, index, record, starts, ops, args = [], [], [], [], [], [0], [], []
-        tgt_comp, tgt_map, tgt_starts, crd_index, crd_starts = [], [], [0], [], [0]
+        tgt_comp, tgt_map, tgt_starts, crd_index, crd_parent, crd_starts = [], [], [0], [], [], [0]
         tgt_rec = []
         mov_comps, mov_pair, mov_cstarts, mov_estarts = [], [[], []], [0], [0]
         sets, exposures, maps = dict(), dict(), dict()
@@ -381,7 +381,10 @@ class Crossing:
                             TI.append(t)
                             TC.append(L.cols[o])
                     tgt_starts.append(len(tgt_comp))
+                    at = {} # Where each credit of this flow went, for those nested in it
                     for t in range(p.crd_starts[f], p.crd_starts[f+1]):
+                        at[t] = len(crd_index)
+                        crd_parent.append(at[p.crd_parent[t]] if p.crd_parent[t] >= 0 else p.crd_parent[t])
                         crd_index.append(L.toff + p.crd_index[t]*O + o)
                         CI.append(t)
                         CC.append(L.cols[o])
@@ -492,6 +495,7 @@ class Crossing:
             crd_starts = arr(crd_starts),
             crd_index  = arr(crd_index),
             crd_w      = np.zeros((len(crd_index), R)),
+            crd_parent = arr(crd_parent),
             maps       = np.zeros((len(maps), R, R)),
             n_movers   = self.n_movers,
             mov_starts = arr([mov_cstarts, mov_estarts]),

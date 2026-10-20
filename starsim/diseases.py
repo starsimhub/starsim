@@ -85,7 +85,7 @@ class Disease(ss.Module):
     """
     graph = None # The declared states and transitions; None for a disease written as code
     standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
-    code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.LegacyPregnancy's fertility rates)
+    code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
     _coded = False # Whether the class is written as code (ss.Infection and its subclasses), so that the check in __init_subclass__() does not apply
     _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital', 'step_congenital'] # Called only on a disease written as code
@@ -115,6 +115,19 @@ class Disease(ss.Module):
         else: # Nothing declared, so written as code: the subclass defines its parameters and states after calling this
             self.update_pars(pars, **kwargs)
         return
+
+    def define_pars(self, inherit=True, **kwargs):
+        """
+        Create or merge parameters; see `ss.Module.define_pars()`
+
+        For a declared disease, a parameter defined here that is not one of its graph's (e.g. by a subclass, after
+        `super().__init__()`, for its own code to read) is added to `code_pars`, so the sim does not reject it as one
+        that nothing reads. A parameter set any other way (e.g. a misspelling in `pars=`) is still rejected.
+        """
+        out = super().define_pars(inherit=inherit, **kwargs)
+        if self.graph is not None:
+            self.code_pars = list(self.code_pars) + [k for k in kwargs if k not in self.graph.pars and k not in self.code_pars]
+        return out
 
     @staticmethod
     def reuse(args, members, frame=None):
@@ -500,6 +513,40 @@ class Disease(ss.Module):
         srcs = [graph.states[name(s)] for s in sc.tolist(src)] if src is not None else [s for s in graph.people_states if s is not dst]
         return self.engine.move_states(ss.uids(uids), srcs, dst)
 
+    def current_state(self, states=None):
+        """
+        The state each agent is in, as a read-only `ss.IntArr` (by UID) of its index among `states`, or -1 for none
+
+        The names of the states, in order, are its `.labels`, so `arr.labels[i]` is the name of index `i`.
+
+        Args:
+            states (list): the states to look in, as names or states (default: the module's states of people, in order)
+
+        **Example**::
+
+            cs = sir.current_state() # 0 for S, 1 for I, 2 for R
+            cs.labels[cs[uid]] # The name of an agent's state
+        """
+        graph = getattr(self, 'graph', None)
+        if graph is None or self.engine is None:
+            raise ss.CapabilityError(f'"{self.name}" is not a declared disease (or the sim is not initialized), so it has no states to look in')
+        if self.sim.solver != 'abm':
+            raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.n_S) instead')
+        names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
+        unknown = [name for name in names if name not in graph.states]
+        if unknown:
+            raise ss.UnknownState(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+        age = self.sim.people.age # A plain array of the people, to copy
+        raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
+        for i,name in enumerate(names):
+            raw[self[name].raw] = i
+        raw.flags.writeable = False
+        out = age.asnew(raw, cls=ss.IntArr, name='current_state', copy=False)
+        out.label = f'Current state of {self.name}'
+        out.nan = out.default = -1 # In none of the states
+        out.labels = names
+        return out
+
     def make_naive(self, uids, skip_states=None):
         """
         Reset agents to the state of never having had the disease; for dynamic rescaling (see `ss.Sim.rescale()`)
@@ -674,9 +721,14 @@ class Infection(Disease):
         if scalar_beta(β) or isinstance(β, ss.peract):
             betamap = {ss.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.standardize_netkey(k)) for k in sim.networks.keys()}
 
-        # If beta is a dict, check all entries are bi-directional
+        # If beta is a dict, check all entries are bi-directional; a default is the beta of every network it does not name, and the names that are not networks are not used
         elif isinstance(β, dict):
             betamap = dict()
+            if 'default' in β:
+                unknown = [k for k in β if k != 'default' and ss.standardize_netkey(k) not in nets]
+                if unknown:
+                    ss.note(f'the beta of "{self.name}" names {sc.strjoin(unknown)}, which {"is not a network" if len(unknown) == 1 else "are not networks"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the networks not named take the default', sim=sim)
+                β = {k:ss.utils.route_beta(β, k) for k in sim.networks.keys()}
             for k,thisbeta in β.items():
                 nkey = ss.standardize_netkey(k)
                 if scalar_beta(thisbeta):
@@ -1334,7 +1386,7 @@ class SIR(Disease):
     the infection unless `p_death` is given. The keywords are Starsim 3's.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 6 years; a number is in years), as an exponential; give a distribution (e.g. `ss.lognorm_ex(mean=ss.years(6))`) for another shape
         p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
@@ -1372,7 +1424,7 @@ class SEIR(Disease):
     An SEIR model: as `ss.SIR`, with an exposed (latent) state before people become infectious
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected, who start exposed, in `E` (or a number of people); to start people infectious, give `init=dict(I=10)` instead
         dur_exp (float/`ss.dur`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in years), as an exponential
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
@@ -1416,7 +1468,7 @@ class SIS(Disease):
     Declared from states and transitions (see `ss.Disease`), so it runs with any solver.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 10 years; a number is in years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`

@@ -123,7 +123,17 @@ class Mixing:
         if not nets:
             return
         self.terms = []
+        fetal = any(getattr(mod, 'fetal_levels', None) for mod in sim.declared)
         for net in nets:
+            named = all(isinstance(getattr(coef, 'raw', coef), dict) for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values()) # Every transmission names its routes, so one over this network is a fetal transition
+            if fetal and isinstance(net, ss.PrenatalNet) and named: # Links mothers and the unborn, whom the pregnancy's fetal levels carry (see ss.Pregnancy.add_fetal_dims())
+                ss.note(f'"{net.name}" links mothers and their unborn children, who are fetal levels of the pregnant compartments in a compartmental run, so it adds no contacts', sim=sim)
+                continue
+            key = ss.standardize_netkey(net.name)
+            betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.standardize_netkey(k) == key] if named else None
+            if betas and not any(np.any(np.asarray(convert(val, sim.unit_base)) > 0) for val in betas): # Named by transmissions, but none over it
+                ss.note(f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
+                continue
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
             if isinstance(net, ss.MixingPools) and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None):
                 self.terms.append(self.dim_matrices(net, beta))
@@ -153,6 +163,8 @@ class Mixing:
                 else:
                     ss.note(what, sim=sim, verbose=0 if approx else None)
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=contacts, name=net.name))
+        if not self.terms: # Every network skipped (each carries no contacts here): none, under a network's name, so a beta by route finds it
+            self.terms = [sc.objdict(kind='homogeneous', contacts=0.0, name=nets[-1].name)]
         if self.space is not None and any(term.kind == 'matrix' for term in self.terms):
             self.init_space() # A contact matrix can add an age stratification, which changes the groups
             for term in self.terms:

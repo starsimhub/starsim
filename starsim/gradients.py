@@ -1098,6 +1098,8 @@ class Density:
         for name,info in engine.outcomes.items():
             amount = 0.0
             for key,weight in info.sources:
+                if key not in new and key not in out: # The flow to one destination of a transition with several, e.g. cin.CA
+                    raise Unsupported(f'the outcome "{name}", from the flow to one destination ({key})')
                 flow = new[key] if key in new else out[key]
                 if isinstance(weight, ss.transitions.Expr):
                     weight = ss.transitions.evaluate(weight, ctx)
