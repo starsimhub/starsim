@@ -291,6 +291,48 @@ def test_with_conveyor_ode():
     return test_with_conveyor(solvers=('abm', 'ode'))
 
 
+def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
+    states = {g:ss.states('S P C X Z') for g in names}
+    cin = {g:ss.Transition(st[2], [st[3], st[0]], p=[0.4, None], dur=ss.years(3)) for g,st in states.items()} # To cancer, or cleared
+    mods = []
+    for g in order:
+        o = next(n for n in names if n != g)
+        S, P, C, X, Z = states[g]
+        mods.append(ss.Disease(S, P, C, X, Z,
+            infection = S >> P @ ss.peryear(0.3),
+            precin    = P >> C @ ss.years(2),
+            cin       = cin[g],
+            cancelled = ss.Transition([S, P, C], Z, on=cin[o].to(states[o][3])), # The other genotype's branch to cancer
+            name = g))
+    return mods
+
+
+def test_hpv_cancel_event():
+    sc.heading('HPV: cancelling the other genotypes on the event of one reaching cancer, ss.on(other.cin.to(X)), as agents')
+    names = ['hpv16', 'hpv18']
+    def check(sim):
+        d = sim.diseases
+        for g,o in [names, names[::-1]]:
+            assert not np.any(d[o].X.raw & (d[g].S.raw | d[g].P.raw | d[g].C.raw)), f'step {sim.ti}: {g} progresses beside {o} cancer'
+    abm = ss.Sim(make_hpv_cancel(names), analyzers=check, n_agents=20_000, start=2000, stop=2020, unit='year', **kw).run()
+    assert all(abm.results[g].cancelled.sum() > 0 for g in names)
+    return abm
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B3: synchronized flows (ss.on(other.tr) as compartments) are deferred')
+def test_hpv_cancel_event_ode():
+    names = ['hpv16', 'hpv18']
+    common = dict(start=2000, stop=2020, unit='year', **kw)
+    odes = [ss.Sim(make_hpv_cancel(order), solver='ode', total_pop=20_000, **common).run() for order in [names, names[::-1]]] # First, so that it fails fast until B3
+    abm = ss.Sim(make_hpv_cancel(names), n_agents=20_000, **common).run()
+    for ode in odes:
+        for g in names:
+            a, o = abm.results[g], ode.results[g]
+            assert np.isclose(o.cancelled.sum(), a.cancelled.sum(), rtol=0.05), f'{g}: {o.cancelled.sum():.0f} cancelled as an ODE, {a.cancelled.sum():.0f} as agents'
+            other = ode.results[next(n for n in names if n != g)]
+            assert np.isclose(o.n_Z[-1], other.n_X[-1], rtol=1e-6)
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()

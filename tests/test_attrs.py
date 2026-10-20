@@ -118,6 +118,32 @@ class TrackNab(ss.Analyzer):
         return
 
 
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B6: attributes as compartments (CD4 derived per compartment, recorded values as levels) are deferred')
+def test_hiv_cd4_ode():
+    sc.heading('HIV CD4 as an ODE: derived per compartment, CD4 at infection and at ART as levels; against agents')
+    kw2 = dict(start=1990, stop=2000, dt=ss.months(1), unit='year', **kw)
+    hiv, mods = make_hiv()
+    assert ss.Sim(hiv, connectors=mods, **kw2).init().solver == 'abm' # cd4_start has no bins, so 'auto' runs agents
+    hiv, mods = make_hiv()
+    ode = ss.Sim(hiv, connectors=mods, solver='ode', total_pop=20_000, **kw2).run()
+    e = ode.diseases.hiv.engine
+    assert e.attr_forms.cd4_start == 'its mean' and e.attr_forms.cd4_latent.startswith('3 levels') and e.attr_forms.cd4_preart.startswith('5 levels in on_art, post_art')
+    assert any('replaces by its mean' in note for note in ode.notes)
+    r = ode.results.hiv
+    by = r.cd4_death.by('cd4')
+    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and np.allclose(r.n_on_art.by('cd4').values.sum(axis=1), r.n_on_art.values)
+    abm = []
+    for seed in range(2):
+        hiv, mods = make_hiv()
+        abm.append(ss.Sim(hiv, connectors=mods, n_agents=20_000, rand_seed=seed, **kw2).run().results.hiv)
+    deaths = lambda r: r.cd4_death.sum() + r.aids_death.sum() + r.post_art_death.sum()
+    on_art = np.mean([a.n_on_art[-1] for a in abm])
+    dead = np.mean([deaths(a) for a in abm])
+    assert np.isclose(r.n_on_art[-1], on_art, rtol=0.1), f'on ART: ODE {r.n_on_art[-1]:n}, agents {on_art:n}'
+    assert np.isclose(deaths(r), dead, rtol=0.15), f'HIV deaths: ODE {deaths(r):n}, agents {dead:n}'
+    return ode
+
+
 @sc.timer()
 def test_hpv_nab():
     sc.heading('HPV: antibodies at clearance (combine="max") across two genotypes, as cross-immunity')
