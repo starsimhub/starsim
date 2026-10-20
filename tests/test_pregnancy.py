@@ -116,6 +116,10 @@ def test_burnin():
     assert 2.5 < tfr < 3.5, f'TFR {tfr}'
     asfr = abm.demographics.pregnancy.asfr
     assert asfr.shape == (11, len(abm.timevec)) and asfr[:3, 24].sum() == 0 and asfr[4, 24] > 50 # None under 15; per 1000 women, over a year
+
+    # sim.new() keeps burnin= (it replays the sim's inputs)
+    again = abm.new().run().results.pregnancy
+    assert np.array_equal(again.n_P.values, r.n_P.values) and np.array_equal(again.delivery.values, r.delivery.values)
     return abm
 
 
