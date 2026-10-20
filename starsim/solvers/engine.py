@@ -521,6 +521,34 @@ class Engine:
         """ The multiplier on a branch's probability from its modifiers (for some agents, if `uids` are given), or None if it has none """
         return self.branch_mult_of(tr.name, uids) if tr is not None else None
 
+    def where_mults(self, branches, state, mults, uids=None):
+        """
+        The branches' multipliers with their where=: a branch is closed to the people (or groups) it does not hold for, so the
+        others share the rest; but if every branch is closed to someone, they are split as before and wait until one opens
+        """
+        ws = [self.where_share(tr, state, uids) if tr is not None and getattr(tr, 'where', None) is not None else None for tr in branches]
+        if all(w is None for w in ws):
+            return mults
+        n = len(uids) if uids is not None else self.n_groups
+        open_any = np.logical_or.reduce([np.ones(n, dtype=bool) if w is None else np.asarray(w) > 0 for w in ws])
+        out = list(mults)
+        for i,w in enumerate(ws):
+            if w is not None:
+                w = np.where(open_any, w, 1.0)
+                out[i] = w if out[i] is None else out[i]*w
+        return out
+
+    def where_share(self, tr, state, uids=None):
+        """ For a branch with where=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
+        sel = self.selector
+        if sel.abm:
+            mask = np.asarray(sel.select(tr.where), dtype=float)
+            return mask[uids] if uids is not None else mask
+        if not ss.conditions.is_static(tr.where, self.sim):
+            return None
+        frac = np.broadcast_to(np.asarray(sel.select(tr.where), dtype=float), (len(sel.states), self.n_groups))
+        return np.clip(frac[sel.states.index(getattr(state, 'name', state))], 0, 1)
+
     def branch_mult_of(self, name, uids=None):
         """ As `branch_mult()`, by name: a transition, or one destination of a transition with several (`'progression.C'`); with the adjust= of the stratifications on a branch """
         adjust = self.branch_adjust.get(name)
