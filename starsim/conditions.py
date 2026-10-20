@@ -525,7 +525,7 @@ def is_static(cond, sim):
     if op in ['dim', 'memory']: # Delivery memory is a stratification too: see ss.Delivery.memory_dims()
         return True
     elif op == 'people':
-        return args[0] in dims
+        return args[0] in dims or (args[0] == 'female' and any(getattr(strat, 'female', None) is not None for strat in sim.groups.strats)) # people.female is the level of women of a sex stratification
     elif op == 'state':
         name = args[1]
         mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]

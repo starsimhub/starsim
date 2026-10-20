@@ -243,6 +243,7 @@ class Compartmental(Engine):
         self.state_comps = sc.objdict({name:[] for name in graph.states})
         self.tracks = sc.objdict() # For each state: the tracks an arrival is split between
         self.flows = []
+        self.init_triggers()
         self.tr_index = {name:i for i,name in enumerate(list(graph.transitions) + graph.destinations())} # After the transitions, the flow to each destination of a transition with several ('cin.X')
         self._target_key = None # So that update_targets() works out where the new flows go
 
@@ -320,8 +321,10 @@ class Compartmental(Engine):
                 tracks.append(Bunch(tr=staged[0] if staged else None, p=None, immediate=False))
             if exits.held: # People who stay, with no exit of their own: the rest of the branches (p=None), or those who took ss.stay (p=0, entered only from the split)
                 tracks.append(Bunch(tr=None, p=None if exits.stay else ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
-            for tr in exits.triggered:
-                self.unsupported(tr, f'a trigger ({tr.trigger})')
+            for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
+                if tr.trigger.event:
+                    self.unsupported(tr, f'a trigger on an event ({tr.trigger}), which needs a synchronized flow in the joint space,')
+                tracks.append(Bunch(tr=tr, p=None, immediate=True, trigger=True))
 
             for j,track in enumerate(tracks):
                 tr = track.tr
@@ -541,6 +544,11 @@ class Compartmental(Engine):
             self.arrive(name, count*self.state_split[name], self.y, before=name in infected)
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
+        if any(not tr.static for tr in self.triggers) and self.cross is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
+            self.sweep_triggers()
+            for name in self.flowcounts:
+                self.flowcounts[name] = 0.0
+            self.forced = dict()
         if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
             self.check_short(ss.kernels.apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
         self.record_stocks() # The results at the first time point are the start
@@ -751,13 +759,66 @@ class Compartmental(Engine):
         """ The compartment of a state for people who stay in it with no exit of their own """
         return next(track.first for track in self.tracks[name] if getattr(track, 'stay', False))
 
+    def init_triggers(self):
+        """ Triggers (`ss.on()`): on states and strata, the compartments where they hold vanish; on time or counts, they are applied at each step """
+        sim = self.sim
+        self.triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and not tr.trigger.event]
+        for tr in self.triggers:
+            tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
+            if not tr.static:
+                ss.note(f'{tr.name} is triggered by {tr.trigger}, which is not only on states and strata; applied at each step', sim=sim)
+            else:
+                ss.note(f'{tr.name} is triggered by {tr.trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dst)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
+        return
+
+    def trigger_frac(self, tr):
+        """ Where a trigger holds, as the fraction of each state (rows) and group (columns) it selects """
+        sel = self.selector
+        out = np.asarray(sel.select(tr.trigger.x), dtype=float)
+        if tr.where is not None:
+            out = out*np.asarray(sel.select(tr.where), dtype=float)
+        return np.broadcast_to(out, (len(sel.states), self.n_groups))
+
+    def trigger_mask(self, tr, name):
+        """ The groups of a state where a trigger on states and strata holds (1) or not (0); 0 for one on time or counts, which is applied at each step instead: see sweep_triggers() """
+        if not tr.static:
+            return np.zeros(self.n_groups)
+        return np.clip(self.trigger_frac(tr)[self.selector.states.index(name)], 0, 1)
+
+    def sweep_triggers(self):
+        """ At each step: move the people a trigger holds for who are still in its source (who arrived by aging, a transfer, or another disease's move, or for whom a condition on time or counts has come to hold) """
+        for tr in self.triggers:
+            frac = np.array(self.trigger_frac(tr))
+            rows = [self.selector.states.index(s.name) for s in tr.src if s.people]
+            keep = np.zeros(frac.shape[0], dtype=bool)
+            keep[rows] = True
+            frac = np.where(keep[:, None], frac, 0.0)
+            if not np.any(frac > 0):
+                continue
+            rest = 1.0
+            for dst,p in zip(tr.dst, self.branch_probs(tr)):
+                share = np.divide(p, rest, out=np.zeros(np.broadcast(p, rest).shape), where=np.asarray(rest) > 0)
+                self.force(frac*share, tr, dst)
+                frac = frac*(1 - share)
+                rest = rest - p
+        return
+
     def update_targets(self):
         """ Work out where each flow's arrivals go; done once per step, since branch probabilities can change (and only worked out again if they have) """
         probs = sc.objdict()
         for name,tracks in self.tracks.items():
-            ps = [None if tr.p is None else self.eval(tr.p) for tr in tracks]
-            mults = [self.branch_mult(tr.tr) for tr in tracks]
-            probs[name] = self.branch_shares([tr.tr for tr in tracks], ps, mults)
+            plain = [tr for tr in tracks if not getattr(tr, 'trigger', False)]
+            ps = [None if tr.p is None else self.eval(tr.p) for tr in plain]
+            mults = [self.branch_mult(tr.tr) for tr in plain]
+            probs[name] = self.branch_shares([tr.tr for tr in plain], ps, mults)
+            if len(plain) < len(tracks): # Triggers on states and strata: in the groups where one holds, arrivals pass straight through (the compartments vanish)
+                left = np.ones(self.n_groups)
+                masks = []
+                for track in tracks[len(plain):]:
+                    mask = self.trigger_mask(track.tr, name)*left
+                    masks.append(mask)
+                    left = left - mask
+                probs[name] = [p*left for p in probs[name]] + masks
         key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and tr.split and tr.name not in self.slotted for p in self.branch_probs(tr)]
         slot_probs = {name:[np.broadcast_to(p, (n, self.n_groups)) for p in self.branch_probs(self.graph.transitions[name], ps)] for name,(n,ps) in self.slot_ps.items()} # For every slot at once
         key += [p for probs in slot_probs.values() for p in probs]
@@ -1368,6 +1429,8 @@ class Compartmental(Engine):
         sim = self.sim
         mod = self.mod
         graph = self.graph
+        if self.triggers: # Applied in Python at each step, for those who come to meet them other than by a transition
+            return f'"{self.triggers[0].name}" is triggered by {self.triggers[0].trigger}, which is applied at each step'
         stepped = [m for mods in sim.modifiers.values() for m in mods if not getattr(m, 'tabulated', False)]
         if stepped:
             return f'the modifier "{stepped[0].name}" is applied each step (it has where=, when=, or a function as its amount, or changes a value that varies by person)'
@@ -1951,6 +2014,10 @@ class Compartmental(Engine):
 
     def step(self):
         """ Advance the compartments by one timestep """
+        if self.triggers: # Those who came to meet a trigger since the last step
+            self.cache.clear()
+            self.update_targets()
+            self.sweep_triggers()
         if self.cross is not None: # Together with the other diseases in the crossing, once each has worked out its rates
             return self.cross.step(self)
         self.cache.clear() # The interventions have run since the step started

@@ -344,6 +344,16 @@ def init_crossings(sim):
                 group = links[home] | links[other]
                 for name in group:
                     links[name] = group
+    for mod in sim.declared: # A trigger on another disease's state: the compartments where it holds are those of the joint states
+        for tr in mod.graph.transitions.values():
+            if tr.trigger is None or tr.trigger.event or not isinstance(tr.trigger.x, ss.conditions.Cond):
+                continue
+            for other,state in ss.conditions.leaf_states(tr.trigger.x):
+                other = ss.conditions.modname(other)
+                if other in links and other != mod.name and state in sim.get_declared(other).graph.states:
+                    group = links[mod.name] | links[other]
+                    for name in group:
+                        links[name] = group
     groups = []
     for name in names:
         if len(links[name]) > 1 and links[name] not in groups:
@@ -509,8 +519,10 @@ def init_capabilities(sim, modules):
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
                 else:
                     add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
-            if tr.trigger is not None:
-                add(f'transition: {name}', 'no', 'a trigger (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, which runs as agents for now', fatal=True)
+            if tr.trigger is not None and tr.trigger.event:
+                add(f'transition: {name}', 'no', 'a trigger on an event (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, an event, which runs as agents for now', fatal=True)
+            elif tr.trigger is not None:
+                add(f'transition: {name}', 'yes', 'a trigger (ss.on): where it holds, arrivals pass straight through')
             if getattr(tr, 'offspring', None) is not None:
                 add(f'transition: {name}', 'no', 'adds offspring for each person', auto=f'"{name}" has offspring (offspring=), which are added for each person who goes through it')
             if getattr(tr, 'per', None) is not None:

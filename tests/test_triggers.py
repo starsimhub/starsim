@@ -68,14 +68,13 @@ def test_bv_debut():
     return sim
 
 
-@pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
 def test_bv_debut_ode():
     """ As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step """
     adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     U, CST1, CST4 = ss.states('U CST1 CST4')
     bv = ss.Disease(U, CST1, CST4, debut=ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
-    ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run()
+    ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
     waiting = r.n_U.select(sex='female', age='15-49')
     assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
@@ -143,7 +142,6 @@ def test_hpv_cancel():
     return sim
 
 
-@pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
 def test_hpv_cancel_ode():
     """ As compartments, tracked jointly; arrivals by the other's move are cancelled at the next loop time """
     names = ['hpv16', 'hpv18']
