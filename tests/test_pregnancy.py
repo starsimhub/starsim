@@ -173,19 +173,23 @@ def test_events():
 
 
 @sc.timer()
+def make_fetal():
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
+    S, I, C, Cs = ss.states('S I C Cs')
+    d = ss.Disease(S, I, C, Cs,
+        infection = S >> I @ ss.peryear(0.1),
+        mtct      = ss.Transition(S, [C, Cs], rate=ss.peryear(3)*ss.mother(I), p=[0.6, None]), # In utero, from the mother's state
+        fetal     = C >> ss.null @ ss.peryear(4), # A fetal death before delivery: a loss for the mother, by gestational age
+        still     = Cs >> ss.null @ ss.on(preg.delivery), # At delivery, before birth: a stillbirth
+        born      = Cs >> S @ ss.on(preg.birth),
+        name='d')
+    return preg, d
+
+
+@sc.timer()
 def test_fetus():
     sc.heading('Testing fetuses as agents (fetus="auto"), ss.mother(), and fetal removals as losses')
-    def make():
-        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
-        S, I, C, Cs = ss.states('S I C Cs')
-        d = ss.Disease(S, I, C, Cs,
-            infection = S >> I @ ss.peryear(0.1),
-            mtct      = ss.Transition(S, [C, Cs], rate=ss.peryear(3)*ss.mother(I), p=[0.6, None]), # In utero, from the mother's state
-            fetal     = C >> ss.null @ ss.peryear(4), # A fetal death before delivery: a loss for the mother, by gestational age
-            still     = Cs >> ss.null @ ss.on(preg.delivery), # At delivery, before birth: a stillbirth
-            born      = Cs >> S @ ss.on(preg.birth),
-            name='d')
-        return preg, d
+    make = make_fetal
     preg, d = make()
     sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=10_000, **kw).run()
     p, ppl, r = sim.demographics.pregnancy, sim.people, sim.results
@@ -206,6 +210,27 @@ def test_fetus():
     with pytest.raises(ss.CapabilityError):
         ss.Sim(demographics=preg, diseases=d, solver='ode', total_pop=1000, stratify=strat, **kw).run()
     return sim
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: a fetal level of the pregnant compartments, whose death is a loss for the mother by gestational age, is deferred')
+def test_fetus_ode():
+    common = dict(networks=ss.MaternalNet(), stratify=strat, use_aging=False, **kw)
+    abm = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), n_agents=30_000, **common).run().results
+    ode = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), solver='ode', total_pop=30_000, **common).run().results
+    loss = lambda r: r.pregnancy.miscarriage.sum() + r.pregnancy.stillbirth.sum()
+    for key,a,o in [('mtct', abm.d.mtct.sum(), ode.d.mtct.sum()), ('fetal', abm.d.fetal.sum(), ode.d.fetal.sum()), ('still', abm.d.still.sum(), ode.d.still.sum()), ('loss', loss(abm), loss(ode)), ('birth', abm.pregnancy.birth.sum(), ode.pregnancy.birth.sum())]:
+        assert np.isclose(o, a, rtol=0.1), f'{key}: {o:.0f} as an ODE, {a:.0f} as agents'
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: ss.Lactation as compartments (start and restart as synchronized flows of live births) is deferred')
+def test_lactation_ode():
+    def lactation(solver):
+        size = dict(n_agents=30_000) if solver == 'abm' else dict(total_pop=30_000)
+        return ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150)), ss.Lactation(p_breastfeed=0.8)], solver=solver, stratify=strat, use_aging=False, **size, **kw).run()
+    a, o = lactation('abm').results.lactation, lactation('ode').results.lactation
+    for key,tol in [('start', 0.05), ('wean', 0.05), ('n_L', 0.15), ('restart', 0.3)]:
+        va, vo = (a[key][-1], o[key][-1]) if key.startswith('n_') else (a[key].sum(), o[key].sum())
+        assert np.isclose(vo, va, rtol=tol), f'{key}: {vo:.0f} as an ODE, {va:.0f} as agents'
 
 
 @sc.timer()
