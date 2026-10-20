@@ -251,3 +251,9 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 84 | 49140978 | 986afd3b | B7: prenatal transmission, fetal deaths, Lactation as compartments not ported. Tests: test_fetus_ode and test_lactation_ode strict xfails (make_fetal at module level). |
 | 85 | c27c2c6a | a577bd63 | B7: BreastfeedingNet as mass action in compartments not ported; Lactation docstring kept 'agents only'. Tests: test_hiv_vertical (agents: >200 in utero and by breastfeeding at 100k agents); test_hiv_vertical_ode strict xfail. |
 | — | 40491a51 | — | ss.mother docstring for compartments: B7, log only (the docstring stays 'agents only') |
+| 86 | 14c21d45 | f786a65b | Test only: test_burnin asserts the first deliveries have their births (holds as agents). Its births-at-the-first-step half is B4/B5 (compartmental burn-in); its crossing-ownership half has no counterpart in v4 (no claim), dropped. |
+| — | tests check | 4cca0ec0 | tests/ against the v4-rs tip, by test name: missing were 4 that v4 removed, test_age_split (5b1a2a62, superseded), test_year_start_with_unit (d15a4780, dropped), and test_hpv_cancel_event (e924ee52) and test_hiv_cd4_ode (314e523c), now added (agents live; ODE strict xfails, B3/B6) |
+| — | 28207463 | de3eb3aa | The merge's own resolution was in test_triggers only (pregnancy tests merged clean): it combined the B3 ODE checks and a treatment-move event test; added test_treated_event (agents) and test_on_event_ode (strict xfail, B3) |
+| — | c9920adf, 584b4373 | c9265161 | Their test changes: bins= on cd4_stop, test_hpv_nab_ode strict xfail (B6) |
+| — | implementation.md | 8769d50c | Merged: v4's file as the base, v4-rs entries added, [B] marks, supersessions and open items noted |
+| — | risk 4 | eb4f67e4 | Save and load mid-run as agents, pregnancy (test_pregnancy::test_save_load) and a cascade with memory and a delay (test_deliveries::test_save_load): identical results |
