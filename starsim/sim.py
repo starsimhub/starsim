@@ -188,6 +188,17 @@ class Sim(ss.Base):
             for m in (mod.steps if isinstance(mod, ss.cascade) else []) + [mod]:
                 if not any(m is other for other in out):
                     out.append(m)
+        for mod in list(out): # A treatment's on_fail= that is a delivery: a step triggered by the failures of each delivery of it
+            fail = getattr(getattr(mod, 'product', None), 'on_fail', None)
+            if isinstance(mod, ss.Delivery) and isinstance(fail, ss.Delivery):
+                event = ss.conditions.Cond('event', mod, 'failed')
+                fail.on = event if fail.on is None or getattr(fail, '_fail_of', None) is None else fail.on | event
+                fail._fail_of = getattr(fail, '_fail_of', []) + [mod]
+                if fail._default_name:
+                    fail.name = fail.label = f'{mod.name}_fail'
+                    fail._default_name = False
+                if not any(fail is other for other in out):
+                    out.append(fail)
         return ss.interventions.order_steps(out)
 
     def __getitem__(self, key):

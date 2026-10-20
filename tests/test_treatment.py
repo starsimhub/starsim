@@ -27,7 +27,6 @@ def w209(sim):
 
 # %% Define the tests
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Treatment(moves=, on_fail=) (13bb390d)', strict=True)
 def test_undriven():
     sc.heading('Testing undriven transitions')
     forms = dict(
@@ -47,7 +46,7 @@ def test_undriven():
     assert not w209(sim)
     assert 'undriven: moved by treatment' in sim.diseases.sis.describe(output=True)
     sis = make_sis(forms['op'])
-    assert not w209(ss.Sim(sis, interventions=ss.screen(ss.Test(), on=sis.cure), stop=10, **kw))
+    assert not w209(ss.Sim(sis, interventions=ss.screen(ss.Diagnostic(), on=sis.cure), stop=10, **kw))
     sis = make_sis(lambda S, I: I >> S @ 0)
     assert not sis.cure.undriven and not w209(ss.Sim(sis, stop=10, **kw))
 
@@ -93,7 +92,6 @@ def make_sti(name='ng', beta=0.015, fail=False, init_prev=0.1):
     return ss.Disease(**trs, init_prev=init_prev, name=name)
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Treatment(moves=, on_fail=) (13bb390d)', strict=True)
 def test_sti_failure():
     sc.heading('Testing treatment with failure and no treated state: cured, failed, and overtreated')
     def make(**kwargs):
@@ -107,14 +105,14 @@ def test_sti_failure():
         res = sim.results
         for key in ['clinic', 'mass']:
             r = res[key]
-            n = sc.objdict({k:r[k].sum() for k in ['delivered', 'cured', 'failed', 'overtreated']})
+            n = sc.objdict({k:r[k].sum() for k in ['delivered', 'cured', 'failed', 'unneeded']})
             print(f'{solver} {key}: {n}')
-            assert np.isclose(n.cured + n.failed + n.overtreated, n.delivered)
+            assert np.isclose(n.cured + n.failed + n.unneeded, n.delivered)
             assert np.isclose(n.cured/(n.cured + n.failed), 0.9, atol=0.03)
-        assert res.clinic.overtreated.sum() == 0 and res.mass.overtreated.sum() > res.mass.cured.sum()
+        assert res.clinic.unneeded.sum() == 0 and res.mass.unneeded.sum() > res.mass.cured.sum()
         assert np.isclose(res.ng.cure.sum(), res.clinic.cured.sum() + res.mass.cured.sum()) # The disease's flow is the same people
     check_close(sims, lambda sim: sim.results.clinic.cured.sum(), rtol=0.15)
-    check_close(sims, lambda sim: sim.results.mass.overtreated.sum(), rtol=0.05)
+    check_close(sims, lambda sim: sim.results.mass.unneeded.sum(), rtol=0.05)
 
     # Failure along another transition, and a modifier of the undriven transition, which multiplies the efficacy
     def make_fail(**kwargs):
@@ -145,7 +143,6 @@ def test_sti_failure():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Treatment(moves=, on_fail=) (13bb390d)', strict=True)
 def test_efficacy_forms():
     sc.heading('Testing efficacy as anything a parameter accepts, and a modifier of the undriven transition for some people')
     for eff,expected in [(ss.by(amr=[0.9, 0.3]), [0.9, 0.15]), (ss.par(0.7), [0.7, 0.35]), (lambda sim: 0.6, [0.6, 0.3])]:
@@ -161,7 +158,6 @@ def test_efficacy_forms():
     return sim
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Treatment(moves=, on_fail=) (13bb390d)', strict=True)
 def test_syphilis_stages():
     sc.heading('Testing a treatment with a destination for each stage: early and late syphilis')
     def make_syph():
@@ -191,7 +187,7 @@ def test_syphilis_stages():
             c, f = cured.select(edge=edge).sum(), res.tx.failed.select(edge=edge).sum()
             assert np.isclose(c/(c + f), eff, atol=0.04), f'{solver} {edge}: {c/(c + f):.2f}'
         assert np.allclose(cured.by('edge').values.sum(axis=0), [early, late])
-        assert np.isclose(res.tx.overtreated.sum(), 0) # By default, only people in the sources are eligible
+        assert np.isclose(res.tx.unneeded.sum(), 0) # By default, only people in the sources are eligible
     check_close(sims, lambda sim: sim.results.tx.cured.select(edge='cure_late').sum(), rtol=0.15)
 
     # A person who could match two transitions of one disease is an error
@@ -201,7 +197,6 @@ def test_syphilis_stages():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Treatment(moves=, on_fail=) (13bb390d)', strict=True)
 def test_syndromic():
     sc.heading('Testing one treatment for two diseases: the same people are treated for both')
     def make(**kwargs):
@@ -214,19 +209,18 @@ def test_syndromic():
         r = sim.results.syndromic
         delivered = r.delivered.sum()
         for dis in ['ng', 'ct']:
-            n = [r[key].select(disease=dis).sum() for key in ['cured', 'failed', 'overtreated']]
+            n = [r[key].select(disease=dis).sum() for key in ['cured', 'failed', 'unneeded']]
             print(f'{solver} {dis}: delivered {delivered:.0f}, cured/failed/overtreated {np.round(n)}')
             assert np.isclose(sum(n), delivered) # Each disease sees every recipient: chosen once, before anyone moves
             assert np.isclose(n[0], sim.results[dis].cure.sum())
-        assert r.overtreated.select(disease='ct').sum() > 0 # Treated for CT because of NG symptoms, and the reverse
+        assert r.unneeded.select(disease='ct').sum() > 0 # Treated for CT because of NG symptoms, and the reverse
         assert np.isclose(r.cured.sum(), r.cured.by('disease').values.sum())
-    check_close(sims, lambda sim: sim.results.syndromic.overtreated.select(disease='ct').sum(), rtol=0.15)
+    check_close(sims, lambda sim: sim.results.syndromic.unneeded.select(disease='ct').sum(), rtol=0.15)
     check_close(sims, lambda sim: sim.results.syndromic.cured.select(disease='ng').sum(), rtol=0.15)
     assert sims.ode.crossings # The diseases are tracked jointly, since the treatment acts on both
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Treatment(moves=, on_fail=) (13bb390d)', strict=True)
 def test_bv():
     sc.heading('Testing BV treatment along an undriven transition (it was tx = ... @ 0)')
     def make_bv():

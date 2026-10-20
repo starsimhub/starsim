@@ -739,8 +739,16 @@ def movers(sim, modname, name):
         if isinstance(prod, ss.Treatment) and prod.transition == name and intv.disease in [None, modname]:
             out.append(prod.name)
             continue
+        if isinstance(prod, ss.Treatment) and prod.moves is not None and any((prod.edge_disease(tr) or intv.disease, tr.rpartition('.')[2] if isinstance(tr, str) else tr.name) in [(modname, name), (None, name)] for tr,_ in prod.edge_specs()): # Along moves=
+            out.append(prod.name)
+            continue
         for leaf in ss.conditions.event_leaves(intv.on) + ss.conditions.event_leaves(intv.eligible):
             args = leaf.args
+            if leaf.op == 'state' and getattr(leaf, 'kind', None) == 'transition': # A transition as a condition (see ss.conditions.as_cond())
+                if args[1] == name and ss.conditions.modname(args[0]) in [None, modname]:
+                    out.append(intv.name)
+                    break
+                continue
             tr = args[1] if isinstance(args[0], str) and args[0] in ['tr', 'to'] else args[0] # A transition's event (ss.conditions.Event), or the transition itself
             if isinstance(tr, ss.Transition) and tr.name == name and ss.conditions.modname(getattr(tr, 'module', None)) == modname:
                 out.append(intv.name)
@@ -1137,6 +1145,8 @@ class Delivery(ss.products.EventSource, Intervention):
                 self.disease = owners[0]
         if self.disease is None and self.product is None and self.move is None and self.move_states is None and len(declared) > 1: # A visit acts on no disease: the one its trigger is of, or the first
             self.disease = self.trigger_disease(sim) or declared[0]
+        if self.disease is None and getattr(self.product, 'moves', None) is not None and self.product.diseases: # A treatment of transitions given as objects: the first of their diseases
+            self.disease = self.product.diseases[0]
         if self.disease is None:
             if len(declared) != 1:
                 raise ss.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}. Use disease=.')
@@ -1149,6 +1159,7 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}": a product acts on one disease.\n'
                         f'     Make one product for each disease, e.g. vx_{self.disease} = ss.Vaccine(...), and deliver each with its own ss.vaccinate(..., disease=\'{self.disease}\').')
             raise ss.UnknownDisease(errormsg)
+        self.edges, self.fail_edge = self.product.resolve(sim, self.disease) if getattr(self.product, 'moves', None) is not None else ([], None) # What a treatment with moves= moves people along (before the results, which are kept for each)
         self.init_events(sim)
         super().init_pre(sim)
         self.started = False
@@ -1184,7 +1195,7 @@ class Delivery(ss.products.EventSource, Intervention):
             gaps = np.diff(tis)
             gaps = np.append(gaps[:1], gaps) if len(gaps) else [every] # The first round covers as long as the next gap (or the interval, or a step)
             self.round_span = {ti:gap*self.dt_sim for ti,gap in zip(tis, gaps)} # The time each round stands for, which a capacity per unit time is scaled by
-        if getattr(self.product, 'cure', None) is not None:
+        if getattr(self.product, 'moves', None) is None and getattr(self.product, 'cure', None) is not None:
             self.cure_tr, self.cure_dst, self.cure_srcs = self.product.recovery(self.dis)
         if self.move_states is not None:
             states = self.dis.graph.states
@@ -1238,7 +1249,18 @@ class Delivery(ss.products.EventSource, Intervention):
             results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', summarize_by='sum', auto_plot=False)]
         labels = dict(positive='Number testing positive', negative='Number testing negative', cured='Number cured', failed='Number treated and not cured', unneeded='Number treated who were not infected')
         results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number {o}'), summarize_by='sum', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
+        self.by_edge = dict() # For a treatment that moves people along several transitions: the results for each, as {key: {(disease, transition): result}}
+        if self.edges:
+            pairs = [(e.dis, e.tr.name) for e in self.edges]
+            diseases = list(dict.fromkeys(e.dis for e in self.edges))
+            for key in ['cured', 'failed', 'unneeded']:
+                keys = (pairs if len(pairs) > 1 else []) if key != 'unneeded' else [(dis, None) for dis in diseases] if len(diseases) > 1 else []
+                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', summarize_by='sum', auto_plot=False) for k in keys}
+                results += list(parts.values())
+                self.by_edge[key] = parts
         self.define_results(*results)
+        for key,parts in self.by_edge.items():
+            self.results[key].by_edge = parts
         ss.results.in_people(*results) # Written in people, as agents, so read in people during the run: see ss.results.people_scale()
         self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the share of everyone eligible who received it
         ng = self.sim.groups.n_groups
@@ -1272,6 +1294,22 @@ class Delivery(ss.products.EventSource, Intervention):
             else:
                 res.strata[self.row(ti)] += (sel*self.eng.state_counts()).sum(axis=0)*weight
         return n
+
+    def add(self, key, uids=None, groups=None, part=None):
+        """ Add people to a result (and to its part for one disease and transition): agents by UID, or people by group """
+        ti = self.sim.ti
+        if uids is not None:
+            scale = ss.results.people_scale(self.sim)
+            n = float(len(uids))*scale
+            groups = np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*scale if self.sim.groups.n_groups > 1 and n else None
+        else:
+            n = float(groups.sum())
+        for res in [self.results[key], self.by_edge.get(key, {}).get(part)]:
+            if res is not None:
+                res[ti] += n
+                if groups is not None and getattr(res, 'strata', None) is not None:
+                    res.strata[self.row(ti)] += groups
+        return
 
     def try_groups(self):
         """ Check that the conditions and functions of this delivery can be evaluated on groups """
@@ -1501,8 +1539,10 @@ class Delivery(ss.products.EventSource, Intervention):
         return np.broadcast_to(frac[None, :], selector.shape).astype(float)
 
     def default_eligible(self):
-        """ Who is eligible if nothing is said: for a treatment that is not a follow-up, the people who are infected """
+        """ Who is eligible if nothing is said: for a treatment that is not a follow-up, the people who are infected (with moves=, those in the sources of its transitions) """
         selector = self.selector
+        if isinstance(self.product, ss.Treatment) and self.on is None and self.edges: # With moves=: the people in the sources of its transitions of this disease
+            return selector.in_states(list(dict.fromkeys(s.name for e in self.edges if e.dis == self.disease for s in e.srcs)))*selector.everyone()
         if isinstance(self.product, ss.Treatment) and self.on is None:
             return selector.in_states(self.infected_states())*selector.everyone()
         return selector.everyone()
@@ -1727,7 +1767,7 @@ class Delivery(ss.products.EventSource, Intervention):
             if abm:
                 product.ti_delivered[self.uids(chosen)] = sim.ti
             chosen = self.follow(chosen, chosen, {sim.groups.dim_index(product.dim):1}, self.event) # Those chosen as they are now, holding it (to cure them too)
-        if getattr(product, 'cure', None) is not None: # A treatment that cures with a probability
+        if getattr(product, 'cure', None) is not None or getattr(product, 'moves', None) is not None: # A treatment that cures with a probability, or moves people along transitions
             parts += self.cure(chosen)
         else:
             parts.append((chosen, None))
@@ -1767,11 +1807,147 @@ class Delivery(ss.products.EventSource, Intervention):
             out = out + selector.in_states([name])*selector.everyone()*selector.per_person(val)
         return out
 
+    def efficacy(self, e, eng, state=None):
+        """ The probability of moving along one transition: the treatment's, times the modifiers of the transition if it is undriven (scalar, per agent, or per group) """
+        out = eng.selector.per_person(e.eff)
+        if e.tr is not None and e.tr.undriven:
+            out = out*eng.mult_raw('transition', e.tr.name, state=state)
+        return out
+
+    def cure_moves(self, chosen):
+        """
+        Move the people treated along the transitions of the treatment (see `ss.Treatment`): each person in a source of
+        one of a disease's moves along it with its probability (cured), or does not (failed); one in none is overtreated
+        """
+        sim = self.sim
+        diseases = list(dict.fromkeys(e.dis for e in self.edges))
+        if not self.selector.abm:
+            return self.cure_groups(chosen, diseases)
+        uids = self.uids(chosen)
+        failed = []
+        cured_all = np.zeros(len(uids), dtype=bool)
+        unneeded_all = np.ones(len(uids), dtype=bool)
+        for dis in diseases:
+            eng = sim.get_declared(dis).engine
+            mod = eng.mod
+            edges = [e for e in self.edges if e.dis == dis]
+            insides = [np.logical_or.reduce([mod[s.name].raw[uids] for s in e.srcs]) for e in edges] # Before anyone moves
+            rvs = self.rng_eff.rvs(uids) # One draw per person and disease
+            treated = np.zeros(len(uids), dtype=bool)
+            for e,inside in zip(edges, insides):
+                p = self.efficacy(e, eng)
+                cured = inside & (rvs < (p if np.ndim(p) == 0 else p[uids]))
+                eng.force(uids[cured], e.tr, e.dst, srcs=e.srcs)
+                part = (dis, None if e.tr is None else e.tr.name)
+                self.add('cured', uids[cured], part=part)
+                self.add('failed', uids[inside & ~cured], part=part)
+                failed.append((dis, uids[inside & ~cured]))
+                treated |= inside
+                cured_all |= cured
+            self.add('unneeded', uids[~treated], part=(dis, None))
+            unneeded_all &= ~treated
+        failed_uids = ss.uids(np.unique(np.concatenate([u for _,u in failed]))) if failed else ss.uids()
+        self.fire('cured', uids[cured_all])
+        self.fire('failed', failed_uids)
+        self.fire('unneeded', uids[unneeded_all])
+        self.fail(failed)
+        return []
+
+    def fail(self, failed):
+        """ As agents: what happens to the people the treatment did not cure, given as (disease, UIDs) """
+        fail = self.product.on_fail
+        if fail is None:
+            return
+        if self.fail_edge is not None:
+            for dis,uids in failed:
+                if dis == self.fail_edge.dis and len(uids):
+                    self.sim.get_declared(dis).engine.force(uids, self.fail_edge.tr, self.fail_edge.dst)
+            return
+        if isinstance(fail, Delivery): # A step triggered by this delivery's failed event: see ss.Sim._add_steps()
+            return
+        uids = ss.uids(np.unique(np.concatenate([u for _,u in failed]))) if failed else ss.uids()
+        fail(self.sim, uids)
+        return
+
+    def cure_groups(self, chosen, diseases):
+        """
+        In a compartmental run: the people chosen in each compartment and group are moved as a population of their own (with
+        `force()`), so the share forced is chosen × probability in each, and the rest of them have failed. Diseases tracked jointly
+        (see `ss.Crossing`) pass the same people on, by way of the joint array, so each sees those the others treated
+        """
+        sim = self.sim
+        home = self.eng
+        cross = home.cross
+        before = home.state_counts() # Those treated as they were, for the delivery's event
+        rows = home.people_comps
+        state_of = [home.selector.states.index(home.comps[i].state.name) for i in rows]
+        C = home.take(home.y[rows], chosen[state_of]) # The people chosen, by compartment and group
+        cur = home
+        fails = []
+        for dis in diseases:
+            eng = sim.get_declared(dis).engine
+            if eng is not cur:
+                if cross is None or eng.cross is not cross:
+                    raise ss.CapabilityError(f'"{self.name}" treats "{dis}" and "{cur.mod.name}", whose states are not tracked jointly, with solver="{sim.solver}". Run with solver="abm".')
+                C = cross.local(cross.joint(cur, C), eng)
+            C, F = self.force_part(eng, C, [e for e in self.edges if e.dis == dis])
+            fails.append((eng, F))
+            cur = eng
+        F = 0.0 # Those who failed, as a share of each state and group of this disease, as the failed event (which an on_fail= delivery is triggered by)
+        for eng,f in fails:
+            F = F + (f if eng is home else cross.local(cross.joint(eng, f), home))
+        counts = np.array([F[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
+        n = home.state_counts()
+        self.fire('failed', np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1))
+        return [(chosen, before)]
+
+    def force_part(self, eng, C, edges):
+        """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and those who failed """
+        rows = eng.people_comps
+        full = eng.y.copy()
+        cross, eng.cross = eng.cross, None # Moved as a population of their own, which the crossing takes once they are back with the rest
+        try:
+            eng.y[:] = 0
+            eng.y[rows] = C
+            states = eng.selector.states
+            failed = np.zeros_like(C)
+            treated = 0.0
+            for e in edges:
+                comps = [c for s in e.srcs for c in eng.state_comps[s.name]]
+                frac = eng.selector.nobody()
+                for s in e.srcs:
+                    frac[states.index(s.name)] = np.broadcast_to(self.efficacy(e, eng, state=s), frac.shape)[states.index(s.name)]
+                before = eng.y[comps].sum(axis=0)
+                eng.force(frac, e.tr, e.dst, srcs=e.srcs)
+                after = eng.y[comps].sum(axis=0)
+                part = (eng.mod.name, None if e.tr is None else e.tr.name)
+                self.add('cured', groups=before - after, part=part)
+                self.add('failed', groups=after, part=part)
+                treated = treated + before
+                failed[[rows.index(c) for c in comps]] = eng.y[comps]
+            self.add('unneeded', groups=C.sum(axis=0) - treated, part=(eng.mod.name, None))
+            fe = self.fail_edge
+            if fe is not None and fe.dis == eng.mod.name: # Those who failed move along on_fail=
+                frac = eng.selector.nobody()
+                for s in fe.tr.src:
+                    if s.people and any(s in e.srcs for e in edges):
+                        frac[states.index(s.name)] = 1.0
+                eng.force(frac, fe.tr, fe.dst)
+            after = eng.y[rows].copy()
+            eng.y[:] = full
+            eng.y[rows] += after - C
+        finally:
+            eng.cross = cross
+        eng.changed()
+        return after, failed
+
     def cure(self, chosen):
         """
         Cure some of the people treated, and record the outcomes as results and events: `cured`, `failed` (infected and not
         cured), and `unneeded` (not infected). In a compartmental run, returns those treated as they now are, in parts.
         """
+        if self.edges: # Along the transitions of moves=
+            return self.cure_moves(chosen)
         selector = self.selector
         eng = self.eng
         product = self.product
