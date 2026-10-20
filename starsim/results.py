@@ -24,6 +24,27 @@ class Levels(sc.objdict):
         return fig
 
 
+# Numbers are people (proposal 02 rule 1.2; pending a decision, so kept to this switch and the two functions below):
+# as agents, the results of declared modules and deliveries are scaled when written, so they are people when read
+# during a run, and capacities, targets, and counts given to deliveries are people. False scales results at the end, as before
+people_now = True
+
+
+def people_scale(sim):
+    """ What a declared result is multiplied by when written: the people each agent stands for, or 1 """
+    return sim._current_scale if people_now and sim.solver == 'abm' else 1.0
+
+
+def in_people(*results):
+    """ Mark results as written in people, so they are not scaled again at the end """
+    for res in results:
+        if res.scale and people_now:
+            res.in_people = True
+            if res.values is not None and res.values.dtype.kind in 'iu': # A count times a scale that need not be whole
+                res.init_values(dtype=float, force=True)
+    return
+
+
 class Result(ss.BaseArr):
     """
     Array-like container for holding sim results.
@@ -214,6 +235,7 @@ class Result(ss.BaseArr):
             res.n_I.select(sex='female', risk='high')
             msim.results.sir.n_I.select(beta=0.3).quantiles() # The runs with beta = 0.3
             res.cin.select(to='X') # The flow to one destination of a transition with several, as res.cin.X is
+            res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             ```
         """
         if 'to' in dims: # The flow to some of the destinations of a transition with several
@@ -230,6 +252,10 @@ class Result(ss.BaseArr):
             for name in to[1:]:
                 out = out + dests[name]
             return out.select(run=run, **dims)
+        pick = {key:dims.pop(key) for key in self.part_dims if key in dims}
+        if pick:
+            out = self._select_parts(pick)
+            return out.select(run=run, **dims) if (dims or run is not None) else out
         out = self
         if self.runs is not None:
             named = {str(col).rpartition('.')[2]:col for col in self.runs.columns if '.' in str(col)} # A parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3)
@@ -248,13 +274,17 @@ class Result(ss.BaseArr):
         strats = out._check_strata()
         coords = strats[0].sim_coords
         keep = np.ones(out.strata.shape[-1], dtype=bool)
+        keep_den = keep.copy() # For a ratio, the groups of the denominator: a dimension it does not have is added up over
+        den_dims = getattr(out, 'denom_dims', None)
         for dim,levels in dims.items():
             names = [strat.name for strat in strats]
             out._check_dim(dim)
             d = names.index(dim)
             inds = [strats[d].index(level) for level in sc.tolist(levels)]
             keep &= np.isin(coords[:, d], inds)
-        out = out._substrata(keep)
+            if den_dims is None or dim in den_dims:
+                keep_den &= np.isin(coords[:, d], inds)
+        out = out._substrata(keep, keep_den)
         out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})'
         return out
 
@@ -399,7 +429,7 @@ class Result(ss.BaseArr):
         Split a stratified result by one dimension, summing over the rest; returns a 2D result with one column per level
 
         Args:
-            dim (str): the dimension, e.g. 'age'
+            dim (str): the dimension, e.g. 'age'; or, for the results of a treatment of several diseases or transitions, 'disease' or 'edge'
 
         For a result across runs, returns a dict of results across runs instead, one per level.
         For a result of a family of diseases (`ss.Strains`), the family's name gives each member's own result.
@@ -408,6 +438,12 @@ class Result(ss.BaseArr):
         if family is not None and dim == family[0]: # Each member's own
             name, members, values = family
             return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind)
+        if dim in self.part_dims:
+            i = self.part_dims.index(dim)
+            levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
+            values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
+            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
+                          values=values, shape=values.shape[0], columns=levels, kind=self.kind)
         strats = self._check_strata()
         if self.runs is not None:
             self._check_dim(dim)
@@ -421,7 +457,11 @@ class Result(ss.BaseArr):
         values = np.column_stack([self.strata[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
         denom = getattr(self, 'denom', None)
         if denom is not None: # A ratio: the numerator and denominator of each level, divided
-            den = np.column_stack([denom[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+            den_dims = getattr(self, 'denom_dims', None)
+            if den_dims is None or dim in den_dims:
+                den = np.column_stack([denom[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+            else: # The denominator does not have this dimension, so is the whole of it for every level
+                den = np.tile(denom.sum(axis=1)[:, None], (1, strat.n))
             values = np.divide(values, den, out=np.zeros(values.shape), where=den!=0)
         columns = [str(label) for label in strat.labels]
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
@@ -454,6 +494,7 @@ class Result(ss.BaseArr):
         strata = getattr(self, 'strata', None)
         if strata is None:
             return
+        vals = vals*getattr(self, 'write_scale', 1.0) # In people, as agents: see people_scale()
         if rows is None:
             strata[ti] = vals
         elif flow:
@@ -467,6 +508,40 @@ class Result(ss.BaseArr):
         """ The time points of the values by group: every one, or the end of every few steps (see `select()`) """
         group_ti = getattr(self, 'group_ti', None)
         return self.timevec if group_ti is None or self.timevec is None else self.timevec[group_ti]
+
+    @property
+    def part_dims(self):
+        """ The dimensions of the parts of a result: (disease, transition) for a treatment, (result,) for the outcomes of a test """
+        return self.__dict__.get('_part_dims', ['disease', 'edge'])
+
+    @part_dims.setter
+    def part_dims(self, value):
+        self._part_dims = value
+        return
+
+    def _parts(self, dim):
+        """ The results of a treatment for each (disease, transition) it acts on: see `ss.Delivery` """
+        parts = getattr(self, 'by_edge', None)
+        if not parts:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}": only the results of a treatment of several diseases or transitions do'
+            raise KeyError(errormsg)
+        return parts
+
+    def _select_parts(self, pick):
+        """ The sum of the parts for some diseases and transitions """
+        parts = self._parts(sc.strjoin(pick.keys()))
+        keep = [res for key,res in parts.items() if all(key[i] in sc.tolist(pick[dim]) for i,dim in enumerate(self.part_dims) if dim in pick)]
+        if not keep:
+            errormsg = f'The result "{self.name}" has no part with {pick}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in parts)}'
+            raise KeyError(errormsg)
+        out = Result(name=self.name, label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in pick.items())})', module=self.module, scale=False, timevec=self.timevec,
+                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), kind=self.kind)
+        if getattr(self, 'strata', None) is not None and all(getattr(res, 'strata', None) is not None for res in keep):
+            out.strata = np.sum([res.strata for res in keep], axis=0)
+            for attr in ['strats', 'dims', 'group_ti']:
+                setattr(out, attr, getattr(self, attr, None))
+            out.denom = None
+        return out
 
     def _check_strata(self):
         if getattr(self, 'strata', None) is None:
@@ -502,18 +577,19 @@ class Result(ss.BaseArr):
                     out.strata = None
         return out
 
-    def _substrata(self, keep):
-        """ A result made of some of the groups of this one """
+    def _substrata(self, keep, keep_den=None):
+        """ A result made of some of the groups of this one (and, for a ratio, of its denominator: `keep_den`, by default the same) """
         strata = self.strata*keep # The groups left out are zero, so the result can be selected from or split again
         denom = getattr(self, 'denom', None)
         values = strata.sum(axis=-1)
         if denom is not None: # A ratio: the numerator and denominator are each added up over the groups, then divided
-            denom = denom*keep
+            denom = denom*(keep if keep_den is None else keep_den)
             values = np.divide(values, denom.sum(axis=-1), out=np.zeros(values.shape), where=denom.sum(axis=-1)!=0)
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
                      values=values, kind=self.kind, runs=self.runs)
         out.strata = strata
         out.denom = denom
+        out.denom_dims = getattr(self, 'denom_dims', None)
         out.strats = self.strats
         out.dims = getattr(self, 'dims', None)
         out.group_ti = None # Its values are at the time points of its rows
@@ -545,6 +621,8 @@ class Result(ss.BaseArr):
 
     def apply_scale(self, scale):
         """ Multiply the values by the population scale: a number, or an array with one entry per timestep """
+        if getattr(self, 'in_people', False): # Written in people already: see people_scale()
+            return self
         scale = np.asarray(scale)
         if getattr(self, 'strata', None) is not None: # The values by group too
             self.strata = (self.strata.T*scale).T

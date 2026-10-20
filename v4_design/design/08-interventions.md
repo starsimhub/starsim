@@ -107,12 +107,13 @@ With an event in it, delivery is triggered; otherwise it is routine or in rounds
 | `coverage=` | the fraction of eligible people reached |
 | `capacity=` | the number that can be delivered |
 | `on=` | the event part of `who=`: an event that [triggers delivery](#event-triggered-delivery), such as `on=anc.visit` |
+| `delay=` | for a step with an event in `who=`, the time from the trigger to delivery (HP26): a duration, or (agents only) a distribution of durations, drawn per person. The people triggered receive it then if they still meet `who=`'s condition, and `coverage=` applies then; someone waiting is not triggered again. In a compartmental run they wait in levels of one step each (`delayed_<step>`), as for a test's result. On `ss.screen` it is the step's delay; the time from a test to its result is the test's (`ss.Diagnostic(delay=)`) |
 | `when=` | a [trigger](#triggers): deliver only on steps where a function of the sim returns `True` |
 | `at_age=` | routine delivery to people as they reach an age, e.g. `at_age=ss.months(9)` (a bare number is in years) |
 | `move=` | instead of a product, a move between two states for the people reached, e.g. `move='S -> V'` (a one-off campaign); with `capacity=`, it seeds a number of people on a schedule |
 | `trace=` | deliver to the contacts, in this network (or these), of the people that the event in `who=` selects, instead of to them (contact tracing, partner notification). Agents only |
 | `deliver=` | a function of the sim returning who receives it this step ([below](#the-deliver-function)) |
-| `disease=` | the disease the product acts on (default: the only one; for `ss.visit`, the disease of its trigger, or the first) |
+| `disease=` | the disease the product acts on (default: the only one; for `ss.visit`, the disease of its trigger, or the first). A list or an `ss.Strains` (HP7) delivers it for each: a vaccine's efficacy against each disease, a test detecting each one's infected (or each one's state of a name, `results=dict(high=dict(cin=0.9))`), the worst result over them per person, and a cure of each one's infected; as if its values were keyed by disease, which they then are. A test or a cure of several needs agents. A disease written as code (PL2) is a `disease=` too, as agents: a test detects its `infected`, a cure calls its `clear_infection(uids)`, and a vaccine scales its `rel_sus` and `rel_trans`; a missing part raises naming it |
 | `count_events=` | keep the [memory](#memory-ever-count-since) of every event of the step (`True`), or of those listed (`[screening.positive]`), whether or not something reads it; as agents, also a log of each person's events (`events_df()`) |
 
 <!-- fragment -->

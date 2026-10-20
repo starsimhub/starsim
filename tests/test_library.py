@@ -194,7 +194,7 @@ def test_households():
     sc.heading('Testing HouseholdNet...')
 
     sim = ss.Sim(diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'),
-                 demographics=ss.Pregnancy(), **endemic_pars)
+                 demographics=ss.LegacyPregnancy(), **endemic_pars)
     sim.run()
 
     net = sim.networks.householdnet
@@ -215,7 +215,7 @@ def test_mnch():
     """ Check that the MNCH modules run and produce their headline outcomes """
     sc.heading('Testing MNCH modules...')
 
-    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
+    demographics = lambda: [ss.LegacyPregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
     networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
     sims = sc.objdict()
 

@@ -189,6 +189,8 @@ class TimePar:
         This is so e.g. ss.years(ss.normal(3)) is the same as ss.normal(3, unit=ss.years)
         """
         dist = cls._check_dist_arg(*args, **kwargs)
+        if dist is None and args and isinstance(args[0], (types.FunctionType, ft.partial)): # A function whose numbers are in this unit, e.g. ss.peryear(fn): the unit times it, as ss.peryear(1) * fn (MA20)
+            return cls(1, *args[1:], **kwargs) * args[0]
         return dist if dist is not None else super().__new__(cls)
 
     def __init_subclass__(cls, **kwargs):
@@ -227,6 +229,8 @@ class TimePar:
             dist = args[0]
             dist.unit = cls
             return dist
+        elif len(args) and type(args[0]).__name__ == 'by' and hasattr(args[0], 'map'): # (By name, since ss.by is made after this) e.g. ss.permonth(ss.by(age=[1, 2])) is ss.by(age=[ss.permonth(1), ss.permonth(2)])
+            return args[0].map(cls)
         else:
             return None
 

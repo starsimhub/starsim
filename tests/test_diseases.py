@@ -363,7 +363,7 @@ def test_mtct():
         )
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
-    demographics = ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'))
+    demographics = ss.LegacyPregnancy(fertility_rate=ss.time.freq(20, 'year'))
     sim = ss.Sim(dt=ss.months(1), people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     sim.plot()
@@ -390,7 +390,7 @@ def test_fetal_health(do_plot=do_plot):
     )
     def demog():
         return [
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ]
     sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.years(6), std=ss.years(1)), beta=0.1, init_prev=0.1)
@@ -504,7 +504,7 @@ def test_congenital():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
@@ -580,15 +580,13 @@ def test_strains_results():
     assert two_cancers.max() == 0 and res.hpv.n_X[-1] > 0 # One cancer per person: the others move to X
     assert 'Family hpv: 3 members' in sim.describe(output=True)
 
-    # A union is a condition, with a count of members; under a compartmental solver, a family raises for now
+    # A union is a condition, with a count of members
     sim = ss.Sim(diseases=hpv, n_agents=500, start=2000, stop=2001, verbose=0).init()
     for name in names[:2]:
         sim.diseases[name].move_to(ss.uids([0, 1, 2]), 'I')
     selector = sim.diseases.hpv31.engine.selector
     assert np.array_equal(selector.select(sim.diseases.hpv.infected), np.array([sim.diseases[name].I.raw | sim.diseases[name].Ca.raw for name in names]).any(0))
     assert np.flatnonzero(selector.select(sim.diseases.hpv.infected.count() >= 2)).tolist() == [0, 1, 2]
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(diseases=hpv, solver='ode', stop=2001, verbose=0).init()
     return sim
 
 
@@ -644,6 +642,73 @@ def test_strains_seeding():
 
 
 @sc.timer()
+def test_strains_compartmental():
+    sc.heading('Testing a family under the compartmental solvers: members side by side, couplings from shares, against agents')
+    def make(name, beta, **kwargs):
+        S, I, R, Ca = ss.states('S I R Ca')
+        return ss.Disease(infection=S >> I @ ss.peryear(beta)*I, clearance=I >> R @ ss.years(1), reinfection=R >> I @ ss.peryear(beta)*I, waning=R >> S @ ss.years(2),
+                          cancer=I >> Ca @ ss.years(50), X=ss.State(people=True), infected=I + Ca, name=name, **kwargs)
+    pars = dict(start=2000, stop=2020, dt=1/12, verbose=0)
+
+    # With nothing between them, the members run as they would alone, and the union is from their shares
+    alone = ss.Sim(diseases=[make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)], solver='ode', total_pop=10_000, **pars).run()
+    sim = ss.Sim(diseases=ss.Strains('hpv', [make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)]), total_pop=10_000, **pars).run()
+    res = sim.results
+    assert sim.solver == 'ode' and np.array_equal(res.a.n_I, alone.results.a.n_I) and np.array_equal(res.b.n_I, alone.results.b.n_I) # Bit for bit
+    assert np.allclose(res.hpv.n_I, 10_000*(1 - (1 - res.a.n_I/10_000)*(1 - res.b.n_I/10_000)))
+
+    # HP22's rule as shares: rel_sus of a for people in its own R (exact) when everyone is in b's R, with a vaccine on top: (1 − (0.2 + 0.1))·0.5 = 0.35
+    hpv = ss.Strains('hpv', [make('a', 1, init=dict(S=0.5, R=0.5)), make('b', 1, init=dict(R=10_000))], immunity=ss.immunity(protected='R', rel_sus=[[0.2, 0.5], [0.1, 0.4]], combine='sum'))
+    sim = ss.Sim(diseases=hpv, connectors=ss.modify('a.rel_sus', multiply=0.5), solver='ode', total_pop=10_000, approx=True, **pars).init()
+    sim.diseases.hpv.start_step()
+    a = sim.diseases.a
+    assert np.isclose(a.engine.mult_raw('rel_sus', state=a.graph.states.R), 0.35) and np.isclose(a.engine.mult_raw('rel_sus', state=a.graph.states.S), (1 - 0.1)*0.5)
+
+    # A contract, for 2 and 4 members with HPV-like cross-immunity: side by side (ODE, binomial) against the exact form (the crossing, which a
+    # modifier between the members gives, here one that changes nothing) and agents. Side by side is within 10% of exact on these
+    for n in [2, 4]:
+        matrix = np.full((n, n), 0.3) + np.eye(n)*0.6 # Rows from, columns against
+        family = lambda: ss.Strains('hpv', [make(f'g{i}', 3 - 0.3*i) for i in range(n)], immunity=ss.immunity(protected='R', rel_sus=matrix, combine='sum'), init_prev=0.1)
+        links = [ss.modify('g0.rel_sus', multiply=1.0, where=ss.conditions.Cond('state', f'g{i}', 'R'), name=f'link{i}') for i in range(1, n)]
+        out = sc.objdict()
+        for key,solver,connectors,seeds in [('ode', 'ode', [], 1), ('exact', 'ode', links, 1), ('binomial', 'binomial', [], 2), ('abm', 'abm', [], 2)]:
+            sims = [ss.Sim(diseases=family(), connectors=sc.dcp(connectors), solver=solver, n_agents=10_000, total_pop=10_000, rand_seed=seed, approx=True, **pars).run() for seed in range(seeds)]
+            out[key] = np.mean([[sim.results.hpv.infected[-1], sim.results.hpv.cancer.sum(), sim.results.g0.infected[-1]] for sim in sims], axis=0)
+        assert np.allclose(out.ode, out.exact, rtol=0.1) and np.allclose(out.binomial, out.ode, rtol=0.05) and np.allclose(out.abm, out.exact, rtol=0.15), f'{n} members: {out}'
+
+    # One course at a time, from shares: those who get cancer from one member are moved to X in the other, except those with cancer in it already
+    hpv = ss.Strains('hpv', [make('a', 3), make('b', 2.5)], immunity=ss.immunity(protected='R', rel_sus=0.3), init_prev=0.1, exclusive='Ca')
+    res = ss.Sim(diseases=hpv, solver='ode', total_pop=10_000, approx=True, **pars).run().results
+    assert np.isclose(res.a.n_X[-1], res.b.n_Ca[-1]*(1 - res.a.n_Ca[-1]/10_000), rtol=0.05) and np.isclose(res.b.n_X[-1], res.a.n_Ca[-1]*(1 - res.b.n_Ca[-1]/10_000), rtol=0.05)
+
+    # What the solvers say: approx, with auto running a coupled family as agents unless approx=True
+    sim = ss.Sim(diseases=family(), **pars).init()
+    assert sim.solver == 'abm' and 'approx (members side by side' in sim.solvers(output=True)
+    assert ss.Sim(diseases=family(), approx=True, **pars).init().solver == 'ode'
+    with pytest.raises(ss.CapabilityError):
+        ss.Sim(diseases=family(), solver='ode', approx=False, **pars).init()
+    return out
+
+
+@sc.timer()
+def test_strains_spec():
+    sc.heading('Testing a family in the model spec: to_code() round trip, ss.diff(), and the hash')
+    def family(m=0.3, exclusive='Ca'):
+        return ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18', 2.5)], immunity=ss.immunity(protected='R', rel_sus=[[0.9, m], [m, 0.9]], combine='sum'), init_prev=0.1, split=[0.6, 0.4], exclusive=exclusive)
+    sim = ss.Sim(diseases=family(), stop=2010, verbose=0)
+    spec = sim.to_spec()['modules'][-1]
+    assert spec['type'] == 'Strains' and spec['members'] == ['hpv16', 'hpv18'] and spec['split'] == [0.6, 0.4] and spec['immunity'][0]['combine'] == 'sum'
+    ns = {}
+    exec(sim.to_code().replace("if __name__ == '__main__':", 'if False:'), ns) # Each member, then the family
+    assert ns['sim'].hash() == sim.hash()
+    assert 'immunity[0].rel_sus' in ss.diff(sim, ss.Sim(diseases=family(m=0.4), stop=2010, verbose=0), output=True)
+    other = [ss.Sim(diseases=f, stop=2010, verbose=0).hash() for f in [family(m=0.4), family(exclusive=None)]]
+    assert other[0].model == sim.hash().model and other[0].pars != sim.hash().pars # A value
+    assert other[1].model != sim.hash().model # The structure
+    return spec
+
+
+@sc.timer()
 def test_strains_errors():
     sc.heading('Testing what a family refuses')
     pair = lambda **kwargs: ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18')], **kwargs)
@@ -688,4 +753,6 @@ if __name__ == '__main__':
     strains = test_strains_results()
     immune = test_strains_immunity()
     seeded = test_strains_seeding()
+    compart = test_strains_compartmental()
+    spec    = test_strains_spec()
     test_strains_errors()

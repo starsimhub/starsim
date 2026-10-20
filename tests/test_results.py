@@ -162,6 +162,14 @@ def test_flow_ratios():
                 assert np.allclose(weekly.select(age='0-49') + weekly.select(age='50+'), weekly) and np.isclose(weekly[1], res.infection[8:15].sum())
                 assert res.n_S.resample('week')[1] == res.n_S[14] # A stock at the end of each week
                 assert np.isclose(res.incidence.resample('week')[1], res.infection[8:15].sum()/res.n_S[8:15].sum()) # A ratio of the sums of its parts
+
+    # A ratio with nobody in its denominator is 0 (nothing divided by anything), not an error
+    for solver in ['ode', 'abm']:
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), share=R/R, init=dict(I=0.01), name='sir')
+        res = ss.Sim(sir, unit='day', stop=10, total_pop=10_000, n_agents=small*10, solver=solver, verbose=0).run().results.sir
+        assert res.share[0] == 0 and res.share[-1] == 1
+
     return sim
 
 
@@ -200,6 +208,42 @@ def test_groups_kept(monkeypatch):
     young, old = n_I.select(age='0-49').values, n_I.select(age='50+').values
     assert young.shape == (3, len(n_I.group_ti)) and np.allclose(young + old, n_I.values[:, n_I.group_ti])
     return sim
+
+
+def test_result_exprs():
+    sc.heading('Testing results declared in a class body')
+    class SIR(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        R = ss.State()
+        infection = S >> I @ 0.3*I
+        recovery = I >> R @ ss.days(10)
+        prev = I / (S + I + R)
+        n_ever = I + R
+    S, I, R = ss.states(3)
+    plain = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), n_ir=I + R, init=dict(I=0.01), name='sir')
+    for solver in ['ode', 'abm']:
+        for sir in [SIR(n_kw=SIR.I + SIR.R, init=dict(I=0.01), name='sir'), plain]: # A result passed to an instance can use the class's states
+            res = ss.Sim(sir, unit='day', stop=30, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
+            if 'prev' in res:
+                assert np.allclose(res.prev, res.n_I/(res.n_S + res.n_I + res.n_R)) and np.allclose(res.n_ever, res.n_I + res.n_R)
+                assert np.allclose(res.n_kw, res.n_ever) # Scaled, as the instance's states are
+            else:
+                assert np.allclose(res.n_ir, res.n_I + res.n_R)
+    return res
+
+
+def test_standard_prevalence():
+    sc.heading('Testing the standard prevalence by group, as a ratio (ST20)')
+    for solver in ['ode', 'binomial', 'abm']:
+        sis = ss.SIS(beta=ss.peryear(0.3), init_prev=0.05)
+        sis.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust=dict(infection=[0.5, 3]))
+        res = ss.Sim(sis, solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
+        high, low = res.prevalence.select(risk='high'), res.prevalence.select(risk='low')
+        assert high[-1] > 2*low[-1] > 0, f'{solver}: {high[-1]:.3f} against {low[-1]:.3f}'
+        assert np.allclose(res.n_I.select(risk='high')/(res.n_S.select(risk='high') + res.n_I.select(risk='high')), high)
+        assert np.allclose(0.8*low + 0.2*high, res.prevalence, rtol=0.05) # The groups keep their shares of people, about
+    return res
 
 
 # %% Run as a script
@@ -279,6 +323,8 @@ if __name__ == '__main__':
     sim4b = test_flow_ratios()
     sim5 = test_time_points()
     res6 = test_destinations()
+    res6 = test_result_exprs()
+    res7 = test_standard_prevalence()
 
     sc.toc(T)
     plt.show()

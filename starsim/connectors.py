@@ -47,6 +47,8 @@ def parse_target(target):
         return target.module, 'par', target.name
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
+    elif isinstance(target, ss.expressions.attr) and target.module is not None: # An attribute, wherever it is read
+        return target.module, 'attr', target.name
     elif isinstance(target, ss.ModifiableArr) and target.engine is not None: # The array itself, once the sim exists
         return target.engine.mod, target.name, None
     elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # Of a disease written as code, e.g. hiv.rel_trans
@@ -144,19 +146,40 @@ def combine(mods, value, engine):
 
 class AgentModifiers:
     """
-    Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own
+    Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own;
+    and is what a delivery for it uses as its engine (see `engine()`): its conditions, and a cure as `clear_infection()`
 
     The array becomes an `ss.ModifiableArr`, whose base values the disease's code sets as before, and
     whose `.effective` values (with the modifiers that are active applied) `ss.Infection.infect()` uses.
     """
+    cross = None # Never tracked jointly with another disease
+
     def __init__(self, mod, sim):
         self.mod = mod
         self.sim = sim
-        self.selector = ss.conditions.Selector(sim) # Over agents
+        self.selector = ss.conditions.Selector(sim, mod) # Over agents
         return
+
+    @staticmethod
+    def engine(mod, sim):
+        """ The one for a disease written as code, made once """
+        eng = mod.__dict__.get('_coded_engine')
+        if eng is None or eng.sim is not sim:
+            eng = mod.__dict__['_coded_engine'] = AgentModifiers(mod, sim)
+        return eng
 
     def convert(self, val):
         return ss.solvers.convert(val, self.sim.unit_base)
+
+    @property
+    def dt(self):
+        return self.mod.t.dt.to(self.sim.unit_base).value
+
+    def force(self, uids, tr, dst, srcs=None):
+        """ A cure by a delivery (see `ss.Delivery.cure()`): the disease's own `clear_infection()` """
+        if len(uids):
+            self.mod.clear_infection(uids)
+        return len(uids)
 
     def mult_raw(self, kind, name=None, state=None):
         """ The multiplier on `rel_sus` or `rel_trans` for each agent from the modifiers that are active (1 if there are none) """
@@ -172,7 +195,7 @@ class AgentModifiers:
         if not isinstance(arr, ss.ModifiableArr):
             arr.__class__ = ss.ModifiableArr # The same array and values, with .effective
         if arr.engine is None:
-            arr.engine = AgentModifiers(mod, sim)
+            arr.engine = AgentModifiers.engine(mod, sim)
         return
 
 
@@ -273,7 +296,7 @@ class modify(Connector):
         nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
         kind, name = self.target_kind, self.target_name
         options = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
-        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + ['rel_sus', 'rel_trans']]
+        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
         coded = {key:dis for key,dis in sim.diseases.items() if dis.graph is None and not isinstance(dis, ss.Strains)}
@@ -289,10 +312,12 @@ class modify(Connector):
         elif modname in mods:
             graph = mods[modname].graph
             if kind is None:
-                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'par'
-            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None))
+                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'attr' if name in graph.attrs else 'par'
+            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
         if not found:
             raise ss.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
+        if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
+            raise ss.UnmodifiableTarget(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
             kind = graph.modifier_kind(name)
             msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)
@@ -313,6 +338,7 @@ class modify(Connector):
         self.target_module, self.target_kind = modname, kind
         for key in [name] if self.route is None else [f'{name}@{route}' for route in self.route]: # On a route, under the transmission's name and the route's (see Engine.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
+        ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
         for time in self.times or [self.start]: # Each must be within the sim
             if time is not None:
                 to_ti(sim, time, name=f'the {"time" if self.times else "start"} of "{self.name}"')
@@ -404,6 +430,8 @@ class modify(Connector):
         """ Apply the modifier to a value, for the people it applies to """
         amount = self.current(engine)
         mask = None if self.where is None else engine.selector.select(self.where)
+        if np.ndim(amount) and np.isnan(amount).any() and np.isnan(amount[mask > 0] if mask is not None else amount).any(): # A clock read where it has no value: see ss.conditions.check_clocks()
+            raise ss.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: it reads a clock outside the states it is kept for. Give it a where= inside them.')
         if mask is not None and self.hold is not None:
             mask = self.held_mask(mask, engine)
         if mask is None:

@@ -10,6 +10,8 @@ The four design documents for Phase H of [implementation_oct18.md](../implementa
 | [behavior_vocabulary.md](behavior_vocabulary.md) | Regressions, tables, counters, time since an event, dimensions over people's properties, units of bare numbers | none | Steps 1 and 2 S; contraception declarable in about two weeks | About 60 of 134 lines of FPsim's `contra_v4.py` |
 | [destination_results.md](destination_results.md) | HP20: the flow per destination of one transition with several (new cancers out of `C -> [X, R]`) | none (a result `cin.X`, the HP6 and cascade name) | About two days | HPVsim's cancer counters and by-age cancer analyzer |
 | [given_dwell.md](given_dwell.md) | HP18: a branch probability that depends on the time spent in the state (CIN and cancer given the duration) | none (`P.dwell`, an attribute of a state; `ss.given_dwell` not added) | About four days; the compartmental conveyor M | About 60 lines of the port's `hpv_declared.py`, then most of `set_prognoses()` |
+| [people_as_data.md](people_as_data.md) | TLO review group 1: people from a table (TL1), `init=` per person, time already spent at the start (TL2), splits given other properties (TL5), a module of properties (TL10), only occupied groups as agents (TL7) | `ss.Properties`, `ss.People.from_df()` (and `since=`) | 9 steps, about two weeks; occupied groups L | TLO's post-`init()` writes and engine arrays, the Lifestyle port's loops and fake disease; FPsim's coded starting draws |
+| [burden_of_disease.md](burden_of_disease.md) | TLO review group 6 (TL50, TL51) and TL23's `net_of=`: disability weights, YLD, YLL, DALYs by cause, person-time, combining weights per person, discounting | `ss.Burden`, `ss.integral` (and `disability=`, `cause=`, `net_of=`) | 7 steps, about a week | TLO's burden analyzer (65 lines), HPVsim's `dalys` (about 100), STIsim's syphilis DALY analyzers, MIGHTI's multimorbidity and YLL code |
 
 ## Where the documents disagree (my recommendation)
 
@@ -61,7 +63,7 @@ Also found: STIsim rounds acts per step down to whole numbers (`mf.py:297`, `fsw
 6. Numeric levels are always lower bin edges, and people hold the value, never the level's index.
 7. A property people already have is kept and binned; `split=` for one raises (as spec 05 says).
 8. Units: a bare `dt` takes the unit of `start`/`stop`; a number returned by a function takes its distribution's `unit=`; `ss.choice` and `ss.histogram` accept `unit=` and typed values.
-9. FPsim declares contraceptive choice (and education, later); pregnancy and conception stay code, since `ss.Pregnancy` holds the mother-fetus structure STIsim and HPVsim share and runs only as agents either way.
+9. FPsim declares contraceptive choice (and education, later); pregnancy and conception stay code, since `ss.LegacyPregnancy` holds the mother-fetus structure STIsim and HPVsim share and runs only as agents either way.
 
 **Results by destination** ([destination_results.md](destination_results.md)):
 1. A result per destination named `'<transition>.<state>'` (`res.cin.X`, `res['cin.X']`), the name it has as a modifier target (HP6) and an event (cascade); no `to` axis.

@@ -168,7 +168,7 @@ class HouseholdNet(ss.Network):
         (the random draws differ).
         """
         ppl = self.sim.people
-        all_uids = (ppl.age >= 0).uids # Exclude unborn agents (e.g. from ss.Pregnancy(burnin=True)); they join their mother's household at birth
+        all_uids = (ppl.age >= 0).uids # Exclude unborn agents (e.g. from ss.LegacyPregnancy(burnin=True)); they join their mother's household at birth
         pop_size = len(all_uids)
         sizes, ages_flat, sexes_flat, offsets, has_sex = self._parse_dhs()
         n_dhs = len(sizes)
@@ -303,7 +303,7 @@ class HouseholdNet(ss.Network):
         # only when her current `ti_pregnant` is newer than that. This is dt-agnostic: comparing
         # against `ti_pregnant` (rather than the sim timestep vs. `ti_delivery`) avoids mis-timed,
         # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
-        # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
+        # ss.LegacyPregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
         # to the previous logic when pregnancy dt == sim dt.
         potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.pregnant & (self.ti_move_out_check < ppl.pregnancy.ti_pregnant))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)

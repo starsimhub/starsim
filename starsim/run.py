@@ -544,8 +544,7 @@ class MultiSim:
         This is not the chance of a major outbreak. A disease that nobody can catch again
         (an SIR, with no births or imports) dies out in every run that runs long enough,
         after a major outbreak as after a minor one, so this gives 100%. For the share
-        of runs with a major outbreak, count the runs whose final size passes a threshold,
-        e.g. `(msim.results.sir.infection.values.sum(axis=1) > 100).mean()` (each result has a run axis first).
+        of runs with a major outbreak, see `msim.outbreaks()`.
 
         Args:
             output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
@@ -574,8 +573,47 @@ class MultiSim:
             scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
             unit = f' {base.unit}s' if getattr(base, 'unit', None) else ''
             when = f' (median time {row["median_time"]:n}{unit})' if row['median_time'] is not None else ''
-            every = '; every run ended with nobody infected, as an epidemic that nobody can catch again always does, so this does not say how often there was a major outbreak (see help(msim.extinction))' if row['share'] == 1 else ''
+            every = '; every run ended with nobody infected, as an epidemic that nobody can catch again always does, so this does not say how often there was a major outbreak (see msim.outbreaks())' if row['share'] == 1 else ''
             print(f'{row["disease"]}{scenario}: died out in {row["share"]:.0%} of {row["runs"]} runs{when}{every}')
+        return
+
+    def outbreaks(self, threshold=0.1, output=False):
+        """
+        How often each declared disease caused a major outbreak: the share of runs in which more than a threshold were infected
+
+        The number infected in a run is its total of the transitions that infect people (the
+        acquisitions, e.g. `S -> I`), so the people infected at the start are not counted. Reported
+        for each scenario, if there are several. With no reinfection, a run that is not a major
+        outbreak is a minor one, which died out early.
+
+        Args:
+            threshold (float): the share of the people at the start (or, if 1 or more, the number of people) who are infected in a major outbreak
+            output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
+
+        Examples:
+            ```python
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.2), recovery=ss.progression('I -> R', dur=10), init=dict(I=1))
+            msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365).run(n_runs=100)
+            msim.outbreaks() # e.g. "sir: a major outbreak (more than 100 infected) in 48% of 100 runs"
+            ```
+        """
+        self.check_run('outbreaks')
+        rows = []
+        for name,(first,n) in self._infected().items():
+            res = self.results[name]
+            graph = self.sims[0].diseases[name].graph
+            infected = sum(res[tr.name].values.sum(axis=1) for tr in graph.acquisitions)
+            people = sum(res[f'n_{state.name}'].values[:, 0] for state in graph.people_states)
+            least = np.broadcast_to(threshold if threshold >= 1 else threshold*people, infected.shape) # The number infected in a major outbreak, in each run
+            for label,inds in first.scenarios().items():
+                scenario = label if len(first.scenarios()) > 1 else None
+                rows.append(dict(disease=name, scenario=scenario, runs=len(inds), share=(infected[inds] > least[inds]).mean(), threshold=float(np.median(least[inds]))))
+        df = sc.dataframe(rows)
+        if output:
+            return df
+        for row in rows:
+            scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
+            print(f'{row["disease"]}{scenario}: a major outbreak (more than {row["threshold"]:n} infected) in {row["share"]:.0%} of {row["runs"]} runs')
         return
 
     def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):

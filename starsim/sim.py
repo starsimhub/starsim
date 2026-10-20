@@ -111,6 +111,8 @@ class Sim(ss.Base):
             settings = [key for key in pars if key in self.pars and key not in names]
             values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.UnknownParameter when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
+            if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): their steps too, before they are copied
+                pars['interventions'] = self._add_steps(pars['interventions'])
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
@@ -180,7 +182,10 @@ class Sim(ss.Base):
 
     @staticmethod
     def _add_steps(interventions):
-        """ The steps of a cascade are modules of their own, so are added to the list (before it); and the deliveries run in the order of their triggers (see `ss.interventions.order_steps()`) """
+        """
+        The steps of a cascade are modules of their own, so are added to the list (before it); the deliveries run in the order of
+        their triggers (see `ss.interventions.order_steps()`); and a resource that steps share runs just before the first of them
+        """
         if not any(isinstance(mod, (ss.Delivery, ss.cascade)) for mod in sc.tolist(interventions)):
             return interventions
         out = []
@@ -188,7 +193,14 @@ class Sim(ss.Base):
             for m in (mod.steps if isinstance(mod, ss.cascade) else []) + [mod]:
                 if not any(m is other for other in out):
                     out.append(m)
-        return ss.interventions.order_steps(out)
+        out = ss.interventions.order_steps([m for m in out if not isinstance(m, ss.Resource)])
+        placed = []
+        for mod in list(out):
+            for res in (getattr(mod, 'uses', None) or {}):
+                if not any(res is other for other in placed):
+                    out.insert(out.index(mod), res)
+                    placed.append(res)
+        return out
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -312,6 +324,7 @@ class Sim(ss.Base):
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self._init_modules_pre()
+        ss.interventions.check_undriven(self)
 
         # Final initializations -- this is "post"
         if self.pars.rescale:
@@ -329,6 +342,9 @@ class Sim(ss.Base):
                 elif strat.female is not None: # A sex dimension is people.female
                     self.people.female[self.people.auids] = self.groups.group_vals(d, np.arange(strat.n) == strat.female, outside=False)
         self._init_modules_post() # Initialize the module values
+        if self.solver == 'abm':
+            for mod in self.declared: # Those placed in a state nobody waits in move on at once, once every module has its people
+                mod.engine.settle_start()
         for crossing in self.crossings: # Once every disease in it has its initial conditions
             crossing.init()
         self.init_results() # Initialize the results
@@ -644,7 +660,8 @@ class Sim(ss.Base):
     @staticmethod
     def flows_of(mod):
         """ The transitions of a declared disease that are births, arrivals, or deaths of everyone, so are the population's """
-        return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people) or getattr(tr, 'every_state', False)]
+        placed = lambda tr: getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) not in [None, mod.name] # Another module's births (ss.birth(per=)), which only say where its children start
+        return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people and not placed(tr)) or getattr(tr, 'every_state', False)]
 
     def _init_flows(self):
         """
@@ -862,7 +879,7 @@ class Sim(ss.Base):
                 text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
-                    text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                    text += f'; where the people of each {strat.home.name} are now, who mix there' if strat.home is not None else f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
                     if strat.geo is not None and strat.geo.ref is not None: # Where a named geography came from
                         ref = strat.geo.ref
                         text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
@@ -889,7 +906,7 @@ class Sim(ss.Base):
             if nets:
                 for net in nets:
                     term = [term for term in self.mixing.terms if term.name == net.name] if self.solver != 'abm' else []
-                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': contact matrix by {self.groups.strats[term[0].dim].name}'
+                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partnership approximation (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {self.groups.strats[term[0].dim].name}'
                     add('mixing', f'{net.name} ({type(net).__name__}){how}')
             elif any(mod.graph.transmissions for mod in self.declared): # How a state in a rate is read is shown with each rate
                 add('mixing', f'homogeneous{place}, 1 contact per {unit}', 'guessed: no network given')
@@ -1114,7 +1131,7 @@ class Sim(ss.Base):
                 return [parspec(v) for v in val]
             return sc.jsonify(val)
         def modspec(mod):
-            if getattr(mod, 'graph', None) is not None:
+            if getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains):
                 return mod.to_spec()
             if isinstance(mod, (ss.modify, ss.Delivery, ss.cascade)):
                 return mod.to_json()
@@ -1545,6 +1562,11 @@ class Sim(ss.Base):
 
     @property
     def current_scale(self):
+        """ Kept for Starsim 3 modules: declared models and deliveries count in people (see `ss.results.people_scale()`), so need no scale """
+        return self._current_scale
+
+    @property
+    def _current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
         if not self.pars.rescale:
             return self.pars.pop_scale
@@ -1887,10 +1909,10 @@ class Sim(ss.Base):
             before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
             self.set_par_values()
-            changed = [p.name for p,val in zip(moving, before) if float(p) != val]
-            if changed: # The mixing between places was worked out when the sim was built
-                errormsg = f'This sim cannot be restarted with a new value of "{changed[0]}", since it sets the movement between places, which is worked out when the sim is built; use sim.new(pars=...) instead'
-                raise ValueError(errormsg)
+            if any(float(p) != val for p,val in zip(moving, before)): # The movement between places, worked out again with the new values
+                self.mixing.init_movement()
+                for mod in self.declared:
+                    mod.engine.restart_movement()
             varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
                 timed = getattr(mod.engine, 'time_pars', None)

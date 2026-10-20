@@ -378,6 +378,38 @@ def test_particle_mcmc():
     return fit
 
 
+@sc.timer()
+def test_fitted_mobility():
+    sc.heading('Testing a fitted share of time away from home: restarted, run over values, differentiated, and fitted by IF2')
+    def make(away=0.1, data=None, solver='binomial'):
+        S, I, R = ss.states(3)
+        infection = S >> I @ 0.4 * I
+        cases = ss.outcome(infection, likelihood=ss.poisson())
+        sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init=dict(I=ss.by(patch=[20, 0])), name='sir')
+        sir.stratify(patch=ss.geo(names=['a', 'b']), mobility=ss.Mobility(matrix=[[0, 1], [1, 0]], away=ss.par(away, bounds=[0.001, 0.3], name='away')))
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver=solver, total_pop=20_000, data=data, verbose=0, rand_seed=3)
+
+    # A restart with a new value works out the movement again, as a new sim does
+    sim = make(solver='ode').init()
+    n_I = lambda away: sim.restart(pars=dict(away=away)).run().results.sir.n_I.values.copy()
+    assert np.allclose(n_I(0.01), make(away=0.01, solver='ode').run().results.sir.n_I.values)
+    msim = ss.parallel(make(solver='ode'), pars=dict(away=[0.01, 0.1]))
+    assert np.allclose(msim.results.sir.n_I.select(away=0.01).values.ravel(), n_I(0.01))
+
+    # Its gradient is that of the runs
+    h = 1e-5
+    grad = sim.restart(pars=dict(away=0.1)).gradient(results='n_I', pars='away').away.sir.n_I
+    assert np.allclose(grad, (n_I(0.1 + h) - n_I(0.1 - h))/(2*h), rtol=1e-3, atol=1e-2)
+
+    # IF2 gives each particle its own movement, and finds the value that made the data
+    truth = make(away=0.01, solver='ode').run().results.sir
+    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1]
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+    fit = make(data=data).calibrate(method='if2', particles=100, iterations=10, chains=2, rand_seed=1, verbose=False)
+    assert 0.005 < fit.table.set_index('par').best.away < 0.02, fit.table
+    return fit
+
+
 #%% Run as a script
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -408,6 +440,7 @@ if __name__ == '__main__':
 
     do_plot = True
     test_particle_mcmc()
+    test_fitted_mobility()
     for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
         T = sc.timer()
         sim, calib = f(do_plot=do_plot)

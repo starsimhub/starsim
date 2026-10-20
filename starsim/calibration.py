@@ -1513,6 +1513,8 @@ class ParticleFilter:
 
         rngs = nb.typed.List([np.random.Generator(bits) for bits in rng.bit_generator.spawn(n)]) # The random numbers of each particle (of each place in the swarm, which a resampled particle takes over)
         tables = [table[None] for table in tables] # The same values for every particle (unless each has its own, for IF2)
+        own_share = prog.sh_val.copy()
+        shares = own_share[None] # The same time share between places for every particle (unless each has its own, for IF2)
         if swarm is not None:
             swarm.perturb(rng)
         n_threads = min(ss.options.threads or nb.get_num_threads(), n)
@@ -1529,10 +1531,11 @@ class ParticleFilter:
                 swarm.perturb(rng)
                 row0 = done*per_step
                 tables = swarm.tables(rows=slice(row0, max(last[k], done)*per_step))
+                shares = swarm.shares() if swarm.moving else shares
             if last[k] > done and n_threads > 1:
-                ss.kernels.advance_threads(rngs, progs, ys, dt, done, last[k], solver, n_sub, *tables, reg, shifts, state_of, stocks, flows, per_step, row0)
+                ss.kernels.advance_threads(rngs, progs, ys, dt, done, last[k], solver, n_sub, *tables, shares, reg, shifts, state_of, stocks, flows, per_step, row0)
             elif last[k] > done:
-                ss.kernels.advance(rngs, prog, ys, 0, n, dt, done, last[k], solver, n_sub, *tables, reg, shifts, state_of, stocks, flows, per_step, row0)
+                ss.kernels.advance(rngs, prog, ys, 0, n, dt, done, last[k], solver, n_sub, *tables, shares, reg, shifts, state_of, stocks, flows, per_step, row0)
             done = max(done, last[k])
             obs = np.zeros(n)
             for s,i in points[row]:
@@ -1568,6 +1571,7 @@ class ParticleFilter:
                     stocks[:, lo:done+1] = stocks[picks, lo:done+1]
                     flows[:, lo:done+1] = flows[picks, lo:done+1]
                 logw = np.full(n, -np.log(n))
+        prog.sh_val[:] = own_share # A particle's own, for IF2, written into the program
         for j in js:
             self.engines[j].cache.clear()
         return total
@@ -1630,17 +1634,20 @@ class Swarm:
             if any(id(leaf) in self.index for leaf in leaves):
                 self.flows.append((f, flow, dw, np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)))
 
-        # Each fitted value must set the rates of the run, and nothing else: the rest is the same for every particle
-        x0 = to_x(z0)[0]
+        # Each fitted value must set the rates of the run, or the time share between places, and nothing else: the rest is the same for every particle
+        self.x0 = x0 = to_x(z0)[0]
         set_pars(x0)
         base = ss.gradients.capture(engine)[2]
         self.base = [base[key] for key in ss.gradients.table_fields]
+        self.sh0 = base['sh_val'] # The time share at x0, and its change with each value (see shares())
+        self.sh_slopes = np.zeros((len(self.names), len(self.sh0)))
+        self.moving = False
         for i,name in enumerate(self.names):
             x = to_x(z0 + 0.5*np.eye(len(z0))[i])[0] # Another value of this one
             set_pars(x)
             X = ss.gradients.capture(engine)[2]
             changed = [key for key in X if not np.array_equal(X[key], base[key])]
-            others = [key for key in changed if key not in ['fixed', 'consts']]
+            others = [key for key in changed if key not in ['fixed', 'consts', 'sh_val']]
             if others or not changed:
                 why = f'it sets {sc.strjoin(others)} of the run, not only its rates' if others else 'it is not a parameter of the rates of the run (e.g. it is one of how the data are observed)'
                 errormsg = f'IF2 cannot fit "{name}" yet, since {why}; fit it with method="pmcmc", or fix it'
@@ -1649,8 +1656,21 @@ class Swarm:
             if not all(np.allclose(g[0], X[key], rtol=1e-9, atol=1e-12) for g,key in zip(got, ss.gradients.table_fields)):
                 errormsg = f'IF2 cannot fit "{name}" yet, since the rates worked out from it differ from the sim\'s own; fit it with method="pmcmc"'
                 raise ValueError(errormsg)
+            if 'sh_val' in changed: # The movement between places, worked out for each particle from a straight line (as away= gives), which a third value checks
+                self.sh_slopes[i] = (X['sh_val'] - self.sh0)/(x[i] - x0[i])
+                self.moving = True
+                x = to_x(z0 - 0.5*np.eye(len(z0))[i])[0]
+                set_pars(x)
+                if not np.allclose(self.shares(x[None])[0], ss.gradients.capture(engine)[2]['sh_val'], rtol=1e-9, atol=1e-12):
+                    errormsg = f'IF2 cannot fit "{name}" yet, since the movement between places does not change in proportion to it (as away= does, with no cap=); fit it with method="pmcmc", or fix it'
+                    raise ValueError(errormsg)
         set_pars(x0)
         return
+
+    def shares(self, x=None):
+        """ The time share between places of every particle, as `ss.kernels.advance()` takes it (particles by entries; default, the swarm's) """
+        x = self.to_x(self.z)[0] if x is None else x
+        return np.ascontiguousarray(self.sh0 + (x - self.x0) @ self.sh_slopes)
 
     def convert(self, i, val):
         """ A fitted value as the engine uses it: in the sim's unit, as `ss.gradients.Density.convert()` """
@@ -2234,7 +2254,7 @@ def product_pairs(sim, names):
         for tr in graph.transitions.values():
             uses += [tr.rate, tr.dur] + sc.tolist(tr.p)
         for tf in graph.transfers.values():
-            uses += [tf.rate, tf.dur]
+            uses += [tf.rate, tf.dur] + sc.tolist(tf.p)
         for oc in graph.outcomes.values():
             uses += [oc.source, oc.delay, oc.duration]
         uses += list(graph.exprs.values()) + [state.init for state in graph.states.values()]
@@ -2438,7 +2458,7 @@ def bounded_pars(probe, pars=None, unused=()):
         pars (list): the names to take (default: all with bounds)
         unused (set): the ids of parameters to leave out (those of likelihoods not used)
 
-    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of the movement between places, and of networks that a compartmental run turns into contact rates.
+    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of networks that a compartmental run turns into contact rates (those of the movement between places are worked out again on a restart: see `ss.Sim.restart()`).
     """
     fitted = sc.objdict()
     for mod in probe.declared:
@@ -2451,8 +2471,6 @@ def bounded_pars(probe, pars=None, unused=()):
                 fitted[key] = p
     mixed = getattr(probe, 'mixed', []) if probe.solver != 'abm' else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
-    moving = [id(p) for mod in probe.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
-    contacts += [key for key,p in fitted.items() if id(p) in moving] # And those of the movement between places, which set the mixing then too
     for mod in list(probe.modules) + mixed: # A parameter of a module written as code, given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
         if getattr(mod, 'graph', None) is None and isinstance(mod.pars, ss.Pars):
             for name,p in mod.pars.bounded().items():

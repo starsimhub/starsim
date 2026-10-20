@@ -79,7 +79,7 @@ import matplotlib.pyplot as plt
 
 # Read in age-specific fertility rates
 fertility_rates = pd.read_csv('test_data/nigeria_asfr.csv')
-pregnancy = ss.Pregnancy(fertility_rate=fertility_rates)
+pregnancy = ss.LegacyPregnancy(fertility_rate=fertility_rates)
 
 death_rates = pd.read_csv('test_data/nigeria_deaths.csv')
 death = ss.Deaths(death_rate=death_rates, rate_units=1)

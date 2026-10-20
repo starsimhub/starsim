@@ -135,7 +135,7 @@ ss.Transition(
 
 At most one of `rate` and `dur` is given, and `stages=` goes with `dur=`. `dur=ss.days(10)` and `rate=ss.perday(0.1)` say the same thing and produce the same model spec.
 
-`after=`, `before=`, and `offspring=` are for models that count time in a state or have litters, as EMULSION's minimum durations, escapes, and births do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`, `farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10))`). `offspring=` needs agents. A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay.
+`after=`, `before=`, and `offspring=` are for models that count time in a state or have litters, as EMULSION's minimum durations, escapes, and births do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`, `farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10))`). `offspring=` needs agents. A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay. `after=` may instead be an event, of this module or another (`after=preg.delivery`, or any event `ss.on()` takes): people in the source move when it happens to them, or with `dur=` that long after it (drawn for each person when the event happens, a scalar being the mean of an exponential as for any `dur=`), unless they leave the source first; so "until delivery" is `ss.Transition(X, Y, after=preg.delivery)` and "a month after delivery" adds `dur=ss.constant(ss.months(1))`. As agents only, as for `ss.on()`. A function as `dur=` (`dur=fn`) is the mean of an exponential, which warns, since each person's own time from a function is `dur=ss.constant(fn)`.
 
 **The kind of a transition is derived, not chosen.** If the rate mentions a bare state, the transition is *contact-mediated* and that state is the source of infection; otherwise it is *spontaneous*. `describe()` prints the kind of every transition.
 
@@ -237,7 +237,7 @@ Arithmetic on a finished transition is about its flow, never its rate: `0.5 * in
 
 **A bare number after `@` is a rate**, because "at" reads as "at rate". It is never a duration: `I >> R @ 10` meaning "after 10 days" is how some people think, but `@ 0.1` and `@ 10` cannot both be guessed safely from their size. A duration after `@` is typed (`ss.days(10)`); a bare-number duration uses the keyword form, `ss.progression('I -> R', dur=10)`.
 
-A transition that reaches build time with nothing driving it and no `p=` raises `UndrivenTransition`.
+A transition between states with nothing driving it and no `p=` (`I >> S`, `ss.Transition(I, S)`, `ss.progression('I -> S')`) is **undriven**: only a product (`ss.Treatment(moves=)`), a delivery, or custom code moves people along it. It is not the remainder of `p=` branches out of its source. `ss.UndrivenUnused` is warned at `sim.init()` if nothing in the sim names it. `@ 0` is still a rate of 0. An inflow with nothing driving it raises `ss.UndrivenTransition`.
 
 ## Rates that mention states
 
@@ -326,6 +326,8 @@ How it is realized follows from the solver:
 
 When the distribution has no exact compartmental form, a compartmental run uses Erlang stages matched to the mean and variance (`k = round((mean / std)²)`, at least 1) and says so in one line (`ss.StagesUnderAuto`: `note: recovery has a lognorm_ex dwell time, approximated by 11 Erlang stages (mean 10 days kept; std 3.02 instead of 3 days)`). This is the one approximation `solver='auto'` makes without being asked: a non-exponential dwell time does not by itself make a model agent-based. A user who wants the distribution sampled exactly asks for `solver='abm'`. `approx=True` hides the note. With `approx=False` nothing is approximated: `'auto'` runs the model as agents, where the dwell time is sampled directly, and an explicit compartmental solver raises `CapabilityError`. The approximation policy as a whole is in [12-backends.md](12-backends.md).
 
+**Several non-exponential dwell times out of one state** have a compartmental form when each is for other people, by `where=` (durations by sex: `ss.Transition(A, R, dur=ss.lognorm_ex(...), where=ss.ppl.female)` and another `where=ss.ppl.male`): each gets its own stages, and each group enters those of the one it has, worked out from the groups the `where=` holds for when the run starts. Two that hold for the same people in some group compete, which has no compartmental form yet: `solver='auto'` tries the model on groups and runs it as agents, and a compartmental solver raises `CapabilityError` naming them. A distribution whose parameters differ by group (`ss.lognorm_ex(mean=ss.by(sex=...), std=...)`) is one dwell time with stages for each group.
+
 **The user can say how explicitly** with `stages=k`: a compartmental run uses `k` sub-stages with the given mean, and agents draw their dwell time from the Erlang distribution with `k` stages and that mean, which is the way to make an agent-based and a compartmental run of a model match.
 
 ```python
@@ -375,9 +377,32 @@ ss.Disease(
 
 In the operator form a single weighted destination says the same thing: `I >> 0.1 * H @ ss.days(5)` and `I >> 0.9 * R @ ss.days(10)`.
 
-The rule that covers every case: **transitions out of one state that carry `p=` split on entry; transitions that carry only rates compete as hazards** ([below](#competing-hazards)). The two can be mixed: a death hazard out of `I` competes with whichever branch the person was assigned. In a compartmental run, a split with per-branch dwell times is realized as one generated sub-compartment per branch, summed in results. A branch with `p=` and no `rate=` or `dur=` happens immediately on entry, and `describe()` says so.
+The rule that covers every case: **separate transitions out of one state that carry `p=` split on entry; one transition with several destinations splits when it is taken; transitions that carry only rates compete as hazards** ([below](#competing-hazards)). They can be mixed: a death hazard out of `I` competes with whichever branch the person was assigned. In a compartmental run, a split with per-branch dwell times is realized as one generated sub-compartment per branch, summed in results, and a split when taken divides the exit flow. A branch with `p=` and no `rate=` or `dur=` happens immediately on entry, in the same step, under every solver, and `describe()` says so. So do its consequences: someone who enters a state with an immediate exit moves on at once, and moves with no wait cascade within the step until nobody moves. A cycle of them raises `ss.TriggerLoop`, naming it.
+
+Exits are scheduled when a person enters a state: as agents, the branch is drawn, its dwell time sampled, and the time of the exit set at the moment of entry (by a transition, by an intervention, or at placement), so `p=` on entry is evaluated then.
 
 A junction (a zero-duration pseudo-compartment that only splits its inflow) is not needed and is not part of the language.
+
+### A move with no wait: `dur=0` and `on=`
+
+**`dur=0` is "immediately".** A transition with `dur=0` is taken in the step people arrive in its source: with several destinations, `p=` splits them, as for any branch (`ss.progression('presenting -> mild | severe', dur=0, p=[0.8, None])`, a junction that holds nobody). With `where=`, it is taken as soon as the condition holds for someone in the source, including on arrival (`ss.Transition(I, R, dur=0, where=others.cancer)`), which is `on=` the condition. A transition with `on=` an event is immediate for the people of the event, with `p=` the share of them who move (`ss.Transition('infected -> resistant', on=drug.failed, p=0.05)`). Nothing else is immediate: a split with `p=` and no rate or duration keeps raising `UndrivenTransition`, which says to give it `dur=0` (the care cascade's decision 17, option a; if `dur=0` is written often, option b, any such split immediate, is the fallback). `describe()` says "immediately".
+
+Under every solver an unconditional `dur=0` exit has no compartment and no rate: the flows into its source are passed to its destinations by the shares of `p=`, both flows recorded, so `X >> R` with `dur=0` costs nothing (the `ss.perday(1e6)` idiom took 48 s for 30 days as an ODE, against 0.08 s). A conditional one (`where=`, or `on=` a condition or an event of the same module) is, as agents, checked after every move in the step; under the compartmental solvers the share of each source compartment and group it holds for moves at the end of each step, after the step's flows, so people an intervention puts in the source between steps move at the end of the next step. `on=` a condition or an event of another module, or a function, is agents only (`solver='auto'` picks agents), except an outcome of a delivery, which moves its people as it happens under every solver.
+
+## Events and clocks
+
+**Events** are what happens to someone at a moment: a transition (`infection`), one branch of it (`outcome.to(D)`), and entering or leaving a state or a set of states (`I.enter`, `(E | I).exit`). Entering a set means arriving from outside it, by a transition, an inflow, or placement; a move within the set is not entering it. An event is a condition, true for the people it happened to from the moment they moved until the same point in the next step (a move made by an intervention is news from the next step), so it can be used in `where=`, `eligible=`, and `on=`; in a running sim, `event.uids` are those people. As compartments, a transition and a branch are events (a fraction of the state they arrived in); entering or leaving a state is not yet (`ss.CapabilityError`).
+
+**Clocks** are elapsed time, as expressions:
+
+<!-- fragment -->
+```python
+EL.time                  # time since this person last entered EL
+(EL | LL).time           # since they entered the set from outside it: moving from EL to LL does not reset it
+falling.progress         # the share of the scheduled dwell time in falling that has elapsed, from 0 to 1
+```
+
+A clock is a duration in the sim's unit (`EL.time / ss.years(1)` is a number of years), and works in `rate=`, `p=`, modifier amounts, and conditions (`where=`, `eligible=`): `ss.modify(syph.rel_trans, multiply=0.5**(latent.time/ss.years(1)), where=latent)`. In the `p=` of a transition out of `X`, taken when people leave, `X.time` is the dwell just completed. A clock is NaN for anyone outside its states, and its use is checked when the model is built: a transition that reads a clock must leave from its states, and a modifier whose amount reads one must have a `where=` inside them (`ss.ClockOutsideDomain`; a `where=` that is a function is checked when it runs). `.progress` needs a dwell time scheduled on entry, so a state with only rates out of it raises `ss.NoScheduledDwell`. A clock of a set has to be made before the sim, which keeps the time each person entered the set. As compartments (levels of elapsed time) clocks are not built yet: `solver='auto'` runs a model that reads a clock as agents, and a compartmental solver raises `ss.CapabilityError`.
 
 ## Many-to-one
 
@@ -406,7 +431,8 @@ I >> ss.null @ ss.peryear(0.1)
 - An outflow rate is per person in the source state, like any other transition.
 - An inflow has no source state to be "per person" of, so in the operator and explicit forms its rate is the total number entering per unit time. `ss.birth(rate=r)` is the epidemiologist's crude birth rate and is shorthand for `r * N.n`, where `N` is everyone alive in the module.
 - `ss.immigration()` and `ss.emigration()` are an inflow and an outflow like any other in a compartmental run. As agents, immigrants arrive at ages drawn from the population's age distribution (people born with `ss.birth()` are newborns), and emigrants are recorded as having left (`sim.results.new_emigrants`) rather than as having died.
-- `ss.death(lifetable=ss.lifetable(ages, deaths))` takes deaths from a life table (`deaths` is a life table's d(x)) instead of a rate: as agents, each person's age at death is drawn from it once, given their age; in a compartmental run, which then needs a stratification by age, it is a death rate for each age group.
+- `ss.death(lifetable=ss.lifetable(ages, deaths))` takes deaths from a life table (`deaths` is a life table's d(x)) instead of a rate: as agents, each person's age at death is drawn from it once, given their age; in a compartmental run, which then needs a stratification by age, it is a death rate for each age group. The table is stationary: an age at death drawn once cannot follow a trend. Life tables by year and sex are `ss.Deaths(lifetable=...)`, the module written as code (agents): one table, `dict(female=..., male=...)`, or either for each year from which it holds (`{2000: ..., 2010: ...}`), each read as the death rate of each of its age bands, so deaths follow the table of the year and each person's sex and age.
+- A death rate (or any rate) by single year of age need not match the model's age groups: `ss.by(dict(age=np.arange(100), value=[...]))` gives each band by its lower edge, read for each person's own age as agents and averaged over each age group as compartments, with a note. A function whose numbers are in a unit is written with the unit, `ss.peryear(fn)`, which is `ss.peryear(1) * fn`.
 - As agents, people age in a model whose births are declared, as they do with demographics modules.
 - In an agent-based run, removals are requested during the step and carried out at its end (Starsim's `request_death`), so a person who dies this step is still visible to the modules that run after the disease ([10-execution.md](10-execution.md)).
 

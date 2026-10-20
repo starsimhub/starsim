@@ -78,20 +78,24 @@ class Crossing:
 
     #%% The people
 
-    def joint(self, engine):
-        """ The people in an engine as one array over the dimensions of the sim, with the engine's own compartments as the levels of its dimension """
+    def joint(self, engine, y=None):
+        """ The people in an engine (or `y`, some of them by its compartments of people and groups) as one array over the dimensions of the sim, with the engine's own compartments as the levels of its dimension """
         d = self.sim.groups.dim_index(engine.mod.name)
-        y = engine.y[engine.people_comps].reshape((-1,) + self.sim.groups.group_shape)
+        y = (engine.y[engine.people_comps] if y is None else y).reshape((-1,) + self.sim.groups.group_shape)
         return np.moveaxis(np.take(y, 0, axis=d+1), 0, d)
 
-    def set_joint(self, joint, engine):
-        """ Give an engine the people in a joint array """
+    def local(self, joint, engine):
+        """ The people in a joint array, by an engine's compartments of people and groups """
         sim = self.sim
         d = sim.groups.dim_index(engine.mod.name)
         n = len(engine.people_comps)
         y = np.zeros((n,) + sim.groups.group_shape)
         y[(slice(None),)*(d+1) + (0,)] = np.moveaxis(joint, d, 0)
-        engine.y[engine.people_comps] = y.reshape(n, -1)
+        return y.reshape(n, -1)
+
+    def set_joint(self, joint, engine):
+        """ Give an engine the people in a joint array """
+        engine.y[engine.people_comps] = self.local(joint, engine)
         return
 
     def init(self):
@@ -295,7 +299,23 @@ class Crossing:
             if not np.allclose(M[:, self.layout[k].cols[o]].sum(axis=1), M.sum(axis=1)):
                 raise ss.CapabilityError(f'a transition of "{self.names[k]}" moves people between the compartments of another disease it is tracked jointly with, which cannot run with solver="{self.sim.solver}".\n'
                                          f'     Run with solver="abm".')
-            return add(maps, (k, int(m), o))
+            return add(maps, (k, int(m), o, o))
+
+        def which_maps(k, m, o):
+            """ For a target of a flow of engine k, from the slice o of the other diseases' levels: the slices people land in, each with its map (a synchronized flow moves another disease's coordinate, so lands in another slice) """
+            if m < 0:
+                return [(o, -1)]
+            L = self.layout[k]
+            M = progs[k].maps[m][L.cols[o]]
+            out = []
+            for o2 in range(L.O):
+                block = M[:, L.cols[o2]]
+                if np.any(block):
+                    out.append((o2, add(maps, (k, int(m), o, o2))))
+            if not np.allclose(sum(M[:, L.cols[o2]].sum(axis=1) for o2 in range(L.O)), M.sum(axis=1)):
+                raise ss.CapabilityError(f'a transition of "{self.names[k]}" moves people to groups outside the crossing\'s layout, which cannot run with solver="{self.sim.solver}".\n'
+                                         f'     Run with solver="abm".')
+            return out
 
         n_flows = n_consts = 0
         for k,(p,L) in enumerate(zip(progs, self.layout)):
@@ -354,11 +374,12 @@ class Crossing:
                             args.append(arg)
                     starts.append(len(ops))
                     for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
-                        tgt_comp.append(L.rowmap[p.tgt_comp[t], o])
-                        tgt_map.append(which_map(k, p.tgt_map[t], o))
-                        tgt_rec.append(L.toff + p.tgt_rec[t]*O + o if p.tgt_rec[t] >= 0 else -1)
-                        TI.append(t)
-                        TC.append(L.cols[o])
+                        for o2,mi in which_maps(k, p.tgt_map[t], o): # Usually one: the slice it leaves from
+                            tgt_comp.append(L.rowmap[p.tgt_comp[t], o2])
+                            tgt_map.append(mi)
+                            tgt_rec.append(L.toff + p.tgt_rec[t]*O + o if p.tgt_rec[t] >= 0 else -1)
+                            TI.append(t)
+                            TC.append(L.cols[o])
                     tgt_starts.append(len(tgt_comp))
                     for t in range(p.crd_starts[f], p.crd_starts[f+1]):
                         crd_index.append(L.toff + p.crd_index[t]*O + o)
@@ -403,7 +424,8 @@ class Crossing:
             self.pieces.contacts.append(pairs(KI, KC))
             self.pieces.tgt.append(pairs(TI, TC))
             self.pieces.crd.append(pairs(CI, CC))
-            self.pieces.maps.append(pairs([key[1] for key in maps if key[0] == k], [self.layout[k].cols[key[2]] for key in maps if key[0] == k]))
+            keys = [key for key in maps if key[0] == k]
+            self.pieces.maps.append((arr([key[1] for key in keys]), np.array([self.layout[k].cols[key[2]] for key in keys], dtype=np.int64).reshape(len(keys), R), np.array([self.layout[k].cols[key[3]] for key in keys], dtype=np.int64).reshape(len(keys), R))) # The map, its rows (the slice left), and its columns (the slice landed in)
             self.pieces.movers.append(arr(MI))
             n_flows += len(p.src)*O
             n_consts += len(p.consts)*O
@@ -558,7 +580,7 @@ class Crossing:
             elif key in ['inflow', 'tgt_w', 'crd_w']:
                 out[key] = cat([X[key][I[:, None], C] for X,(I,C) in zip(Xs, self.pieces[dict(inflow='flows', tgt_w='tgt', crd_w='crd')[key]])])
             elif key == 'maps':
-                out[key] = cat([X[key][I[:, None, None], C[:, :, None], C[:, None, :]] for X,(I,C) in zip(Xs, self.pieces.maps)])
+                out[key] = cat([X[key][I[:, None, None], C[:, :, None], D[:, None, :]] for X,(I,C,D) in zip(Xs, self.pieces.maps)])
             elif key == 'mov_rate':
                 out[key] = cat([X[key][I] for X,I in zip(Xs, self.pieces.movers)])
             elif key == 'contacts': # By exposure, term, and group, or once for every exposure and group
@@ -700,10 +722,15 @@ class Crossing:
             sim.get_declared(self.lead).engine.check_short(ss.kernels.apply_events(self.rng, self.y, self.register, first.mod.ti + 1, first.integer))
         if solver == 'gillespie' and p.local and p.has_det: # By place, the counts are settled after the events, as in SimInf
             ss.kernels.settle_places(self.y, p, first.dt, flows)
+        recorded = []
         for k,e in enumerate(self.engines):
             L = self.layout[k]
             e.y = self.gather(e)
-            e.record_flows(np.where(L.fidx >= 0, flows.ravel()[np.maximum(L.fidx, 0)], 0.0))
+            recorded.append(np.where(L.fidx >= 0, flows.ravel()[np.maximum(L.fidx, 0)], 0.0))
+            e.record_flows(recorded[-1])
+        for e,f in zip(self.engines, recorded): # Synchronized flows, once every engine has recorded its own
+            if getattr(e, 'syncs', None):
+                e.pass_syncs(f)
         return
 
     def run_many(self, seeds):

@@ -137,10 +137,10 @@ code_names = """
 AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr
 BoolState BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dx
 DynamicNetwork Event FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
-Pregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
+Pregnancy LegacyPregnancy Lactation PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
 check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink single_run standardize_data standardize_netkey style to_code treat_num uids warn
+show shrink single_run standardize_data standardize_netkey state any child mother attr func spread on Resource share stay clock style to_code treat_num uids warn
 """.split()
 
 
@@ -153,7 +153,7 @@ methods = {
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
     'PartnerNet': ('check', 'all'),
-    'MultiSim': ('run plot summarize to_df results diff extinction to_hub', 'diff extinction to_hub'),
+    'MultiSim': ('run plot summarize to_df results diff extinction outbreaks to_hub', 'diff extinction outbreaks to_hub'),
     'Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
     'ModelComparison': ('fits plot summarize to_df', 'fits'),
 }

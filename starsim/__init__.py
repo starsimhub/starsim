@@ -107,7 +107,7 @@ from .results import Result, Results, data, compare
 
 t('demographics')
 from .demographics import (
-    Demographics, Births, Deaths, PregnancyPars, Pregnancy,
+    Demographics, Births, Deaths, PregnancyPars, LegacyPregnancy,
 )
 
 t('products')
@@ -117,7 +117,7 @@ t('interventions')
 from .interventions import (
     Intervention, RoutineDelivery, CampaignDelivery,
     BaseTest, BaseScreening, BaseTriage, BaseTreatment, treat_num, BaseVaccination,
-    Event, Delivery, vaccinate, treat, screen, visit, cascade,
+    Event, Delivery, Resource, vaccinate, treat, screen, visit, cascade, share,
 )
 
 t('analyzers')
@@ -128,12 +128,13 @@ from .connectors import Connector, modify, change
 
 t('conditions')
 from . import conditions
+from .conditions import clock, state, any_ as any, child # Conditions on a state by path, on any of several, and on a mother when her child goes through an event
 from . import kernels
 
 t('transitions')
-from .expressions import par
+from .expressions import par, mother, attr, func, spread
 from .transitions import (
-    State, states, null,
+    State, states, null, stay, on,
     Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome, update,
 )
 
@@ -146,6 +147,10 @@ from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.s
 t('diseases')
 from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
 from .strains import immunity, Strains
+
+t('pregnancy')
+from . import pregnancy
+from .pregnancy import Pregnancy, Lactation
 
 t('loop')
 from .loop import Loop

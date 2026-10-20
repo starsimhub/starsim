@@ -85,7 +85,8 @@ These are from Starsim's switching demo for EpiModel users (`tests/switching/tes
 | Task | Today |
 |---|---|
 | Degree by risk group, with most partnerships within a group (EpiModel's `nodefactor` and `nodematch`) | **Works**: `n_contacts=ss.by(...)` and `match=`, below. Prevalence by group is within 6 points of EpiModel's 20.7% and 77.4% |
-| Several `match=` properties at once, a mixing matrix (`nodemix`), age differences (`absdiff`), degree in one network conditioning another | **Not yet**: `match=` takes one property |
+| Several `match=` properties at once | **Works**: `match=dict(risk=0.9, region=0.7)`, a target for each |
+| A mixing matrix (`nodemix`), age differences (`absdiff`), degree in one network conditioning another | **Not yet** |
 | Triangles and other terms that need an ERGM (`gwesp`) | **Not planned**: `ss.PartnerNet` is not an ERGM |
 | Acts per partnership | **Works**: `acts=` on `ss.PartnerNet`, with `beta` per act |
 | Network diagnostics (`netdx`) | **Works**: `net.check(n_runs=)` gives the target, the realized value, and its spread for the mean degree, concurrency, maximum degree, and duration |

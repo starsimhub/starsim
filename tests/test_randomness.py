@@ -144,7 +144,7 @@ class OneMore(ss.Intervention):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
+        one_birth = ss.LegacyPregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
         one_birth.init_pre(sim)
         self.one_birth = one_birth
         return

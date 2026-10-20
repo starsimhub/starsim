@@ -85,6 +85,7 @@ class Disease(ss.Module):
     """
     graph = None # The declared states and transitions; None for a disease written as code
     standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
+    code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.LegacyPregnancy's fertility rates)
 
     _coded = False # Whether the class is written as code (ss.Infection and its subclasses), so that the check in __init_subclass__() does not apply
     _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital', 'step_congenital'] # Called only on a disease written as code
@@ -108,7 +109,7 @@ class Disease(ss.Module):
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.expressions.func)
         if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
             self.init_graph(args, members, pars, kwargs, frame=ss.utils.getframe(1))
         else: # Nothing declared, so written as code: the subclass defines its parameters and states after calling this
@@ -171,22 +172,23 @@ class Disease(ss.Module):
     def init_graph(self, args, members, pars, kwargs, frame=None):
         """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer, ss.expressions.func)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
         first = kwargs.pop('first') if isinstance(kwargs.get('first'), str) else None # A state named "first" can still be declared by keyword
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        outside = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values())}
-        members = sc.dcp(members, memo=outside) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values())}
+        members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
+        kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, frame)
         self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, first=first, frame=frame)
-        for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()):
-            self.setattribute(name, obj) # e.g. sir.S, sir.infection
+        for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()) + list(self.graph.attrs.items()):
+            self.setattribute(name, obj) # e.g. sir.S, sir.infection, hiv.cd4
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
             tr.module = self
         for name,tf in self.graph.transfers.items(): # e.g. sir.vaccination, so it can be the target of ss.modify()
@@ -199,6 +201,30 @@ class Disease(ss.Module):
                 raise ss.UnknownParameter(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(key, self.pars.keys())}')
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
+
+    def value(self, name):
+        """
+        The current value of a parameter, with the modifiers active on it applied
+
+        For a declared parameter (an `ss.par`), a number in the sim's unit once the sim is
+        initialized (before that, the value it holds); for any other parameter, the value itself.
+        Use this from module code (e.g. a network's `net_beta()`) rather than `self.pars[name]`,
+        which for a declared module is the `ss.par`.
+
+        Args:
+            name (str): the name of the parameter
+
+        Examples:
+            ```python
+            eff = disease.value('eff_condom')
+            ```
+        """
+        p = self.pars[name]
+        if not isinstance(p, ss.par):
+            return p
+        if self.engine is None:
+            return p.raw
+        return self.engine.value(p)
 
     def stratify(self, inplace=True, **kwargs):
         """
@@ -349,7 +375,7 @@ class Disease(ss.Module):
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         if self.graph is not None:
-            unknown = [key for key in self.pars if key not in self.graph.pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
+            unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
             if unknown:
                 hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=100)), and cannot be set through pars.' if 'init' in unknown else ''
                 raise ss.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
