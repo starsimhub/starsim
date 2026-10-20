@@ -597,6 +597,8 @@ def has_event(cond):
 
 def event_leaves(cond):
     """ The event leaves of a condition, including those that its memory is read from """
+    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+        return event_leaves(cond.x)
     if not isinstance(cond, Cond):
         return []
     if cond.op == 'memory':
@@ -609,6 +611,8 @@ def event_leaves(cond):
 def memory_leaves(cond, out=None):
     """ The memory leaves of a condition (e.g. `cytology.since`), each with the values it is compared with """
     out = [] if out is None else out
+    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+        return memory_leaves(cond.x, out)
     if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
         return out
     if cond.op == 'memory':

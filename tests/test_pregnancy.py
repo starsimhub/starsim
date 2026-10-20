@@ -239,6 +239,38 @@ def test_events():
 
 
 @sc.timer()
+def test_mother_cond():
+    sc.heading('Testing ss.mother(born=True): newborns of mothers who tested positive in the last year')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
+    S, I = ss.states('S I')
+    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), name='d')
+    screening = ss.screen(ss.Diagnostic(sensitivity=dict(I=1.0), specificity=1.0, name='dx'), where=preg.P, coverage=0.5, disease='d', name='screening')
+    newborn = ss.screen(ss.Diagnostic(sensitivity=1.0, name='nbdx'), who=preg.birth & ss.mother(screening.positive.since <= ss.years(1), born=True), disease='d', name='newborn')
+    seen = sc.objdict(last={}, n=0)
+    def check(sim): # Run after both screens, so it sees their events
+        ppl = sim.people
+        fired = lambda event: np.flatnonzero(ss.networks.people_mask(sim, ss.conditions.as_cond(event)))
+        for uid in fired(screening.positive):
+            seen.last[int(uid)] = sim.ti
+        kids = ss.conditions.Event('tr', sim.demographics.pregnancy.birth).uids
+        moms = ppl.parent.raw[kids]
+        expected = {int(k) for k,m in zip(kids, moms) if not np.isnan(m) and sim.ti - seen.last.get(int(m), -np.inf) <= 12} # Within a year, with monthly steps
+        reached = set(fired(newborn).tolist())
+        assert reached == expected
+        seen.n += len(reached)
+    ss.Sim(demographics=preg, diseases=d, interventions=[screening, newborn, check], n_agents=10_000, **kw).run()
+    assert seen.n > 50
+    def make(solver): # Nothing else here needs agents
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth('-> S', rate=ss.peryear(0.03)), name='d')
+        nb = ss.screen(ss.Diagnostic(sensitivity=1.0), who=d.births & ss.mother(I, born=True), disease='d')
+        return ss.Sim(diseases=d, interventions=nb, solver=solver, total_pop=1000, **kw)
+    with pytest.raises(ss.CapabilityError, match='mother'): # Agents only: compartments do not know anyone's mother
+        make('ode').run()
+    assert make('auto').init().solver == 'abm'
+    return seen
+
+
+@sc.timer()
 def make_fetal():
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
@@ -614,6 +646,7 @@ if __name__ == '__main__':
     abm = test_states()
     births = test_births()
     events = test_events()
+    mom = test_mother_cond()
     fetus = test_fetus()
     lact = test_lactation()
     lact_sub = test_lactation_subclass()

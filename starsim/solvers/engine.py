@@ -806,6 +806,9 @@ class Engine:
                                  f'     Run with solver="abm".')
 
     def mother(self, expr):
+        if expr.born:
+            raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": it reads each agent\'s mother, and compartments do not know who anyone\'s mother is.\n'
+                                     f'     Run with solver="abm", or leave the solver as "auto".')
         raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the mother of an unborn person is kept per agent, and the fetal levels of the mother\'s compartments are not built yet.\n'
                                  f'     Run with solver="abm".')
 
