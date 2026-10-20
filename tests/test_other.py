@@ -161,9 +161,14 @@ class Counter(ss.Module):
         def step(self):
             super().step()
             self.results.steps[self.ti] += 1 # Starsim 3: the step's index
-    with warnings.catch_warnings():
-        warnings.simplefilter('error', RuntimeWarning)
-        make_screen(MyScreen).run()
+    class AliasScreen(ss.screen): # A copy of one of Starsim's results under an older name, as STIsim keeps its Starsim 3 names
+        def finalize_results(self):
+            super().finalize_results()
+            self.results += ss.Result('new_tests', values=sc.dcp(self.results.delivered.values), timevec=self.results.delivered.timevec, module=self.name)
+    for cls in [MyScreen, AliasScreen]:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', RuntimeWarning)
+            make_screen(cls).run()
     with pytest.warns(RuntimeWarning, match=r'time index \(scr\.steps\)'):
         make_screen(OldScreen).run()
 

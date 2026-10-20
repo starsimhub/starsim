@@ -1993,10 +1993,13 @@ class Sim(ss.Base):
         for mod in self.modules:
             if getattr(mod, 'graph', None) is not None or type(mod).__module__.startswith('starsim.'): # Only code written outside Starsim
                 continue
+            own = [np.asarray(r.values) for r in mod.results.values() if isinstance(r, ss.Result) and r.name in getattr(mod, '_starsim_results', ())]
             for res in mod.results.values():
                 if getattr(res, 'name', None) in getattr(mod, '_starsim_results', ()): # Defined and written by Starsim's own classes, e.g. the results of a subclass of ss.screen
                     continue
                 vals = np.asarray(res.values) if isinstance(res, ss.Result) else None
+                if vals is not None and any(o.shape == vals.shape and np.array_equal(o, vals) for o in own): # A copy of one of those, e.g. under an older name
+                    continue
                 if vals is None or vals.ndim != 1 or vals.dtype.kind not in 'biuf' or len(vals) < 5: # Only series of numbers
                     continue
                 vals = np.nan_to_num(vals.astype(float))
