@@ -170,6 +170,8 @@ class Engine:
         coords = sim.groups.group_coords
         own = {strat.name:strat for strat in graph.strats}
         for tr in graph.inflows: # A birth rate for each level of a property of people would be births from the people at each level, which cannot be declared yet
+            if tr.rate is None: # Driven by a flow (ss.birth(per=))
+                continue
             dims = [dim for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) for dim in leaf.raw.dims]
             others = [dim for dim in dims if sim.groups.strats[sim.groups.dim_index(dim)].kind != 'space']
             if tr.per_capita and others:
@@ -443,6 +445,8 @@ class Engine:
 
     def value(self, p):
         """ The value of a parameter, as a number in the sim's unit """
+        if isinstance(p.raw, ss.expressions.Expr): # E.g. a dwell time given as an expression of attributes: for whoever it is worked out for, so not cached
+            return self.eval(p.raw)
         route = self._route is not None and (isinstance(p.raw, (dict, ss.peract)) or p.slot == 'rate') # A beta, worked out for one route
         key = (id(p), self._route[0]) if route else id(p)
         if key in self.cache:
@@ -666,7 +670,7 @@ class Engine:
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
                 for leaf in (expr.leaves if isinstance(expr, ss.transitions.Expr) else []):
                     raw = getattr(leaf, 'raw', None)
-                    if isinstance(raw, ss.by) and not (set(raw.dims) <= {'sex', 'female'} and not set(raw.dims) & {strat.name for strat in sim.groups.strats}): # By sex alone, as agents, is people.female
+                    if isinstance(raw, ss.by) and not raw.on_people(sim) and not set(raw.dims) & {strat.name for strat in self.graph.derived}: # Not read from each person, or by a derived attribute's levels, which have no groups
                         for d in raw.check(sim)[0]:
                             if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
                                 dim = sim.groups.strats[d].name
@@ -920,7 +924,7 @@ class Engine:
         for name,dw in self.dwells.items():
             if name in inflows:
                 continue
-            if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, ss.by)): # Not known until the sim runs, or not one number
+            if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
             if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
@@ -1013,9 +1017,13 @@ class Engine:
         graph = self.graph
         fracs = sc.objdict({s.name:0.0 for s in graph.people_states})
         counts = sc.objdict({s.name:0.0 for s in graph.count_states})
+        self.spreads = [] # People back-dated and run forward to the start: see ss.spread and Agents.backfill_spreads()
         for state in graph.states.values():
             init = state.init
             if init is None:
+                continue
+            if isinstance(getattr(init, 'raw', init), ss.spread):
+                self.spreads.append(sc.objdict(spread=getattr(init, 'raw', init), entry=state, tr=None, target=[state.name]))
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
@@ -1062,6 +1070,13 @@ class Engine:
         if family is not None and self.sim.solver != 'abm': # A member of a family that seeds it (ss.Strains): the family's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
             family = self.sim.diseases[family]
             init_prev, share = family.init_prev, family.split[family.member_names.index(self.mod.name)]
+        if isinstance(getattr(init_prev, 'raw', init_prev), ss.spread): # Seeded through the first transmission, back-dated
+            tr = graph.transmissions[0] if graph.transmissions else None
+            if tr is None:
+                errormsg = f'"{self.mod.name}" has no contact-mediated transition to seed init_prev through; use init= on a state instead'
+                raise ValueError(errormsg)
+            self.spreads.append(sc.objdict(spread=getattr(init_prev, 'raw', init_prev), entry=None, tr=tr, target=[s.name for s in graph.infected if s.people]))
+            init_prev = None
         if isinstance(init_prev, ss.transitions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution
             init_prev = init_prev.raw if isinstance(init_prev.raw, ss.Dist) else self.value(init_prev)
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
@@ -1125,6 +1140,11 @@ class Engine:
                 fracs[graph.rest.name] += rest
             if left and graph.rest is not graph.first:
                 ss.note(f'the initial value of {graph.first.name} in "{self.mod.name}" is kept, and the rest ({np.max(rest):.3g}) start in {graph.rest.name}, the only state not given one', sim=self.sim)
+        burnin = getattr(self.mod, 'burnin_spread', None) # People who start part way through, from a module's own rule (e.g. ss.Pregnancy's burnin=)
+        if burnin is not None:
+            sp = burnin(self)
+            if sp is not None:
+                self.spreads.append(sp)
         return fracs, counts
 
     def seed_dist(self):
@@ -1220,16 +1240,23 @@ class Engine:
             if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
                 dims['new_infections'] = np.ones(len(names), dtype=bool)
             self.ratios = sc.objdict() # The results that are a ratio of two sums of states, as (numerator, denominator)
+            self.denom_dims = sc.objdict() # For a ratio whose denominator has fewer dimensions than its numerator: the denominator's
             for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
                 parts = [expr.a, expr.b] if isinstance(expr, ss.transitions.BinOp) and expr.op == '/' else [expr]
                 plain = all(all(isinstance(leaf, (ss.State, ss.par, ss.transitions.Flow)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
                 if not plain: # E.g. a count (I.n), which is the total over every group, so the result is not by group
                     continue
-                flags = [self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for part in parts for leaf in part.leaves if not isinstance(leaf, ss.par)]
-                if flags and all(np.array_equal(f, flags[0]) for f in flags):
-                    dims[name] = flags[0]
-                    if len(parts) == 2:
+                flags = [[self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for leaf in part.leaves if not isinstance(leaf, ss.par)] for part in parts]
+                same = all(len(f) for f in flags) and all(np.array_equal(x, flags[0][0]) for x in flags[0]) # Within the numerator (or the sum)
+                if same and len(parts) == 1:
+                    dims[name] = flags[0][0]
+                elif same:
+                    den = np.all(flags[1], axis=0) # The dimensions every part of the denominator has; it is added up over the others
+                    if np.all(flags[0][0] >= den): # None that the numerator lacks
+                        dims[name] = flags[0][0]
                         self.ratios[name] = parts
+                        if not all(np.array_equal(x, flags[0][0]) for x in flags[1]): # E.g. infection/S with a strain, which susceptibles do not carry
+                            self.denom_dims[name] = [n for n,flag in zip(names, den) if flag]
             if self.standard and 'prevalence' in mod.results and 'prevalence' not in graph.exprs: # The standard prevalence, as the declared ratio of the infected over people, so it is by group as one is (ST20)
                 parts = [sum(states[1:], states[0]) for states in [[s for s in graph.infected if s.people], graph.people_states] if states]
                 flags = [self.applies[leaf.name] for part in parts for leaf in part.leaves]
@@ -1249,7 +1276,47 @@ class Engine:
             n_rows = mod.t.npts if self.rows is None else len(self.group_ti)
             for res,flags in grouped:
                 res.init_groups(self.sim.groups.strats, [name for name,flag in zip(names, flags) if flag], (n_rows, ng), self.group_ti, ratio=res.name in self.ratios)
+                if res.name in self.denom_dims:
+                    res.denom_dims = self.denom_dims[res.name]
+        self.init_derived_results()
         return
+
+    def init_derived_results(self):
+        """
+        Results by a stratification of a derived attribute (e.g. `hiv.stratify(cd4=[0, 200, 500])`), which adds no
+        groups: the number in each of its states, and each flow out of them, by the level of the attribute (at the
+        source, for a flow), as well as by the sim's own groups
+        """
+        mod = self.mod
+        sim = self.sim
+        self.derived_res = sc.objdict() # The stratification of each result kept by one
+        self.stock_derived = sc.objdict()
+        self.flow_derived = sc.objdict()
+        self.derived_trs = sc.objdict() # The stratification each transition is recorded by
+        ng = sim.groups.n_groups
+        names = [s.name for s in sim.groups.strats]
+        for strat in self.graph.derived:
+            L = strat.n
+            ext = [sc.cp(s) for s in sim.groups.strats] + [sc.cp(strat)]
+            coords = np.column_stack([np.repeat(np.asarray(sim.groups.group_levels).reshape(ng, -1), L, axis=0), np.tile(np.arange(L), ng)])
+            for d,s in enumerate(ext):
+                s.sim_coords = coords
+                s.dim = d
+            keys = [f'n_{name}' for name in strat.states]
+            for name,tr in self.graph.transitions.items():
+                if tr.src and all(s.name in strat.states for s in tr.src) and name not in self.derived_trs:
+                    keys.append(name)
+                    self.derived_trs[name] = strat
+            for key in keys:
+                if key in self.derived_res:
+                    continue
+                self.derived_res[key] = strat
+                mod.results[key].init_groups(ext, names + [strat.name], (mod.t.npts, ng*L))
+        return
+
+    def derived_groups(self, strat, groups, levels):
+        """ The index of each (group, level) pair among the results by a derived stratification """
+        return np.asarray(groups)*strat.n + np.asarray(levels)
 
     def init_outcomes(self, results):
         """ Work out the sources and delay of each outcome, and the order to compute them in """
@@ -1386,6 +1453,8 @@ class Engine:
             self.flowcounts[name] = 0.0
         if hasattr(self, 'flow_groups'):
             self.flow_groups.clear()
+        if getattr(self, 'flow_derived', None):
+            self.flow_derived.clear()
         return
 
     def record_stocks(self):
@@ -1412,10 +1481,15 @@ class Engine:
         for name,val in self.flowcounts.items():
             res[name][ti] = val
         self.step_outcomes()
+        derived = getattr(self, 'derived_res', {})
         for name,val in self.stock_groups.items():
-            res[f'n_{name}'].store_group(ti, val, self.rows)
+            if f'n_{name}' not in derived:
+                res[f'n_{name}'].store_group(ti, val, self.rows)
         for name,val in self.flow_groups.items():
-            res[name].store_group(ti, val, self.rows, flow=True)
+            if name not in derived:
+                res[name].store_group(ti, val, self.rows, flow=True)
+        for key,strat in derived.items(): # By a derived stratification instead (whose results keep every time point)
+            res[key].store_group(ti, self.stock_derived.get(key[2:], 0.0) if key.startswith('n_') and key[2:] in self.graph.states else self.flow_derived.get(key, 0.0))
         if self.flow_groups and 'new_infections' in res and 'new_infections' not in graph.transitions:
             res.new_infections.store_group(ti, sum(self.flow_groups.get(tr.name, 0) for tr in graph.transmissions), self.rows, flow=True)
         if self.rows is not None: # The flows by group so far in this row, for the results worked out from them

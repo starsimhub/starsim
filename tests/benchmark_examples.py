@@ -41,7 +41,7 @@ def make_complex_30():
         verbose=0,
         diseases=[ss.SIS(), hiv],
         networks=[ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()],
-        demographics=ss.Pregnancy(),
+        demographics=ss.LegacyPregnancy(),
         label='complex_30',
     )
 

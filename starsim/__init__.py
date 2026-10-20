@@ -107,7 +107,7 @@ from .results import Result, Results, data, compare
 
 t('demographics')
 from .demographics import (
-    Demographics, Births, Deaths, PregnancyPars, Pregnancy,
+    Demographics, Births, Deaths, PregnancyPars, LegacyPregnancy,
 )
 
 t('products')
@@ -132,7 +132,7 @@ from .conditions import clock, state, any_ as any, child # Conditions on a state
 from . import kernels
 
 t('transitions')
-from .expressions import par, mother
+from .expressions import par, mother, attr, func, spread
 from .transitions import (
     State, states, null, stay, on,
     Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome, update,
@@ -149,7 +149,8 @@ from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
 from .strains import immunity, Strains
 
 t('pregnancy')
-from . import pregnancy # The declared pregnancy, ss.pregnancy.Pregnancy (ss.Pregnancy is the module written as code)
+from . import pregnancy
+from .pregnancy import Pregnancy, Lactation
 
 t('loop')
 from .loop import Loop

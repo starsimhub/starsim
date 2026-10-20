@@ -111,6 +111,8 @@ class Sim(ss.Base):
             settings = [key for key in pars if key in self.pars and key not in names]
             values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.UnknownParameter when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
+            if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): their steps too, before they are copied
+                pars['interventions'] = self._add_steps(pars['interventions'])
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
@@ -658,7 +660,8 @@ class Sim(ss.Base):
     @staticmethod
     def flows_of(mod):
         """ The transitions of a declared disease that are births, arrivals, or deaths of everyone, so are the population's """
-        return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people) or getattr(tr, 'every_state', False)]
+        placed = lambda tr: getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) not in [None, mod.name] # Another module's births (ss.birth(per=)), which only say where its children start
+        return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people and not placed(tr)) or getattr(tr, 'every_state', False)]
 
     def _init_flows(self):
         """

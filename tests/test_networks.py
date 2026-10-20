@@ -393,7 +393,7 @@ def test_dynamic_household():
     dhs_data = make_dhs_data(n=medium)
 
     household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
-    preg = ss.Pregnancy()
+    preg = ss.LegacyPregnancy()
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
 
@@ -419,14 +419,14 @@ def test_household_coarse_pregnancy_dt():
     Move-out is evaluated once per pregnancy, so the resulting number of households should be
     ~invariant to the pregnancy module's dt. Previously, HouseholdNet compared
     pregnancy.ti_delivery (an index in the pregnancy module's own timeline) against sim.ti; when
-    pregnancy ran on a coarser dt (e.g. ss.Pregnancy(dt=ss.months(3))), pregnant non-heads became
+    pregnancy ran on a coarser dt (e.g. ss.LegacyPregnancy(dt=ss.months(3))), pregnant non-heads became
     re-eligible far too often, greatly over-fragmenting households. """
     sc.heading('Testing HouseholdNet with a coarse-dt Pregnancy module...')
     dhs_data = make_dhs_data(n=medium)
 
     def run(preg_dt):
         household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True, prob_move_out=0.5)
-        preg = ss.Pregnancy(dt=preg_dt)
+        preg = ss.LegacyPregnancy(dt=preg_dt)
         sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
                      start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1, copy_inputs=False)
         sim.run()
@@ -744,7 +744,7 @@ def test_beta_readings():
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
     hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5))), init_prev=0.1, name='hiv')
-    sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.Pregnancy(), **kw).run()
+    sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.LegacyPregnancy(), **kw).run()
     assert sim.results.hiv.n_I[-1] > 0
     return
 
@@ -782,8 +782,8 @@ def test_route_modifiers():
     ode = pool('ode', share())
     assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), route='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
     ratio = lambda solver, seeds: np.mean([pool(solver, share(), seed)[-1] for seed in seeds])/np.mean([pool(solver, None, seed)[-1] for seed in seeds])
-    ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(8)) # Each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26 (agents 0.22 to 0.28 over 4 seeds at a time)
-    assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.15), (abm_ratio, ode_ratio)
+    ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(12)) # 12 seeds, since near its threshold one run's epidemic varies a lot (seeds 0-3 alone gave 0.22 here); each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26
+    assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.1), (abm_ratio, ode_ratio)
     return
 
 
@@ -924,6 +924,32 @@ def test_per_act_beta():
     return
 
 
+def test_condoms():
+    """ A sexual network's edges carry the share of acts with a condom, which a modifier of the transmission on that route reads """
+    sc.heading('Testing condoms on a sexual network')
+    class CondomNet(ss.MFNet):
+        def add_pairs(self):
+            super().add_pairs()
+            self.edges.condoms[:] = self.pars.share
+            return
+    def make(share=0.0, eff=0.8):
+        si = ss.Disease(infection=ss.transmission('S -> I', beta=0.02), init_prev=0.05, name='si')
+        net = CondomNet(name='mf', acts=ss.constant(ss.freqperyear(50)))
+        net.define_pars(share=share)
+        condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, route='mf', name='condoms')
+        return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=1)
+    sim = make(share=0.5).init()
+    mf, si = sim.networks.mf, sim.diseases.si
+    assert np.all(mf.edges.condoms == 0.5)
+    assert si.value('beta') == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
+    none, half, full = [make(share=s).run().results.si.infection.sum() for s in [0.0, 0.5, 1.0]]
+    assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
+    assert make(share=1.0, eff=0.0).run().results.si.infection.sum() == none, 'With no efficacy, condoms do nothing'
+    plain = ss.Sim(diseases=ss.SIS(beta=dict(mf=0.05)), networks=ss.MFNet(name='mf'), n_agents=500, verbose=0).run() # append() without condoms
+    assert len(plain.networks.mf.edges.condoms) == len(plain.networks.mf)
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -951,6 +977,8 @@ if __name__ == '__main__':
     part = test_partners()
     targ = test_partner_targets()
     bare = test_bare_units()
+    acts = test_per_act_beta()
+    cond = test_condoms()
     peract = test_per_act()
     read = test_beta_readings()
     route = test_route_modifiers()
@@ -958,6 +986,5 @@ if __name__ == '__main__':
     two = test_two_groups()
     pa = test_partnership_approx()
     spec = test_peract_spec()
-    acts = test_per_act_beta()
 
     T.toc()

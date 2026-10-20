@@ -63,7 +63,7 @@ Also found: STIsim rounds acts per step down to whole numbers (`mf.py:297`, `fsw
 6. Numeric levels are always lower bin edges, and people hold the value, never the level's index.
 7. A property people already have is kept and binned; `split=` for one raises (as spec 05 says).
 8. Units: a bare `dt` takes the unit of `start`/`stop`; a number returned by a function takes its distribution's `unit=`; `ss.choice` and `ss.histogram` accept `unit=` and typed values.
-9. FPsim declares contraceptive choice (and education, later); pregnancy and conception stay code, since `ss.Pregnancy` holds the mother-fetus structure STIsim and HPVsim share and runs only as agents either way.
+9. FPsim declares contraceptive choice (and education, later); pregnancy and conception stay code, since `ss.LegacyPregnancy` holds the mother-fetus structure STIsim and HPVsim share and runs only as agents either way.
 
 **Results by destination** ([destination_results.md](destination_results.md)):
 1. A result per destination named `'<transition>.<state>'` (`res.cin.X`, `res['cin.X']`), the name it has as a modifier target (HP6) and an event (cascade); no `to` axis.

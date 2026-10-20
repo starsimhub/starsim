@@ -59,7 +59,7 @@ Sizes: S is under a day of agent work, M a few days, L more. **SWA** marks a sil
 ### Thanzi la Onse review
 
 [tlo_review.md](tlo_review.md) (2026-10-19, TL1 to TL72, 24 of them silent) replaces Stage 8's "review for the cascade". Where each finding goes:
-- **Stage 1 (silent), in progress**: TL23 to TL27, TL29, TL30 (and TL28, TL31 if small) in `ss.Deaths`, `ss.Pregnancy`, `ss.Births`; TL4, TL6, TL12, TL13, TL16, TL17, TL35, TL52, TL54, TL58 in the engine; TL38 with the cascade. TL3 is fixed and gets a test.
+- **Stage 1 (silent), in progress**: TL23 to TL27, TL29, TL30 (and TL28, TL31 if small) in `ss.Deaths`, `ss.LegacyPregnancy`, `ss.Births`; TL4, TL6, TL12, TL13, TL16, TL17, TL35, TL52, TL54, TL58 in the engine; TL38 with the cascade. TL3 is fixed and gets a test.
 - **Stage 2 (crashes), in progress**: TL8, TL37's crash, TL51, TL65, TL66; TL47 with the cascade.
 - **Phase H**: TL9 and TL11 with the behavior vocabulary; TL41, TL43, TL45, TL46, TL48 with the cascade; TL39, TL40, TL42, TL44 are the shared resource (`ss.Resource`, a visit's footprint, `queue=`, `priority=`, `record=`), now a section of the cascade's third draft; TL36 (re-dosing) with MA15 in Stage 4.
 - **Two new design passes** (after Phase H's current designs): **people as data** (TL1 `init=` functions and `ss.People.from_df()`, TL2 time already spent, TL5 several conditional splits, TL10 a module of properties, TL7 the full grid of groups as agents); **the burden of disease** (TL50, TL51: `ss.disability`, `ss.Burden`, a time-integral result). (Drafted 2026-10-20: [people_as_data.md](../oct17/designs/people_as_data.md) and [burden_of_disease.md](../oct17/designs/burden_of_disease.md), each ending with decisions for Cliff; TL23's cause per person and TL51 were found already fixed.)

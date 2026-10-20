@@ -274,7 +274,7 @@ class on:
     def outcome(self):
         """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.interventions.trigger_moves()`) """
         x = self.x
-        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' for leaf in ss.conditions.event_leaves(x))
+        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x)) # Not an event a module written as code records (e.g. ss.LegacyPregnancy's conception)
 
     def __repr__(self):
         return f'ss.on({getattr(self.x, "__name__", self.x)})'
@@ -310,6 +310,7 @@ class Transition(Nameable):
         offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
+        undriven (bool): declare that it has no rate, duration, p=, or trigger on purpose, so only products, deliveries, or code move people along it; a sim with none of them does not warn (`ss.UndrivenUnused`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -317,6 +318,7 @@ class Transition(Nameable):
         ```python
         S, I, R = ss.states(3)
         infection = ss.Transition(S, I, rate=0.05 * I)
+        cure      = ss.Transition(I, S, undriven=True) # Only by treatment
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
         selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
@@ -327,7 +329,7 @@ class Transition(Nameable):
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False):
         if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
             rate, on = None, rate
         delay = None # With after= an event: the time after it that people move, if dur= is given
@@ -339,6 +341,10 @@ class Transition(Nameable):
         if sum(x is not None for x in [rate, dur, on]) > 1:
             errormsg = 'A transition takes one of rate=, dur=, or on='
             raise ValueError(errormsg)
+        if undriven and any(x is not None for x in [rate, dur, on, p, beta]):
+            errormsg = 'undriven=True is for a transition with no rate=, dur=, p=, or on=; it was given one'
+            raise ValueError(errormsg)
+        self.intended = bool(undriven) # Declared undriven on purpose, so not warned about (ss.UndrivenUnused)
         if stages is not None and rate is not None:
             errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
             raise ValueError(errormsg)
@@ -385,6 +391,9 @@ class Transition(Nameable):
             errormsg = f'"{both[0]}" is given in both move= (a level to go to) and increment= (an amount to add); give one'
             raise ValueError(errormsg)
         self.per_capita = False # For ss.birth(): the rate is per person, so is multiplied by the population
+        self.per = None # For ss.birth(per=): the transition whose flow drives the inflow, and the children each time
+        self.n_born = 1
+        self.sex = None
         self.every_state = False # For ss.death() with no arrow: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.arrow_given = True # For ss.birth() and ss.immigration() in demographics=: whether the state people arrive in was given
@@ -495,7 +504,7 @@ class Transition(Nameable):
         if isinstance(current, par) and current.module is not None and not isinstance(value, Expr): # Once the model is built, a new value is the parameter's value, e.g. sir.recovery.dur = ss.erlang(k=3, mean=10)
             current.value = value
         else:
-            self.__dict__['_dur'] = None if value is None else as_expr(value)
+            self.__dict__['_dur'] = None if value is None else value if isinstance(value, par) else par(value, literal=True) if isinstance(value, Expr) and any(isinstance(leaf, ss.expressions.attr) for leaf in value.leaves) else as_expr(value) # An expression of attributes is the mean, worked out for each person
         return
 
     def __matmul__(self, driver):
@@ -666,7 +675,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -684,16 +693,42 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
         on (Cond/Event/func): a trigger, the same as `rate=ss.on(...)` (see `ss.on`)
         acquisition (bool): whether it is an acquisition of the disease (see `ss.Transition`), e.g. `ss.progression('S -> V', rate=..., acquisition=False)` for a vaccination
+        undriven (bool): no driver on purpose: only products, deliveries, or code move people along it (see `ss.Transition`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, undriven=undriven, name=name, label=label)
 
 
-def birth(arrow=None, rate=None, name=None, label=None):
+class Per:
+    """ The transition that drives a birth (`ss.birth(per=)`), kept by reference when its module is copied, since it may be another module's """
+    def __init__(self, tr):
+        self.tr = tr
+
+    @property
+    def name(self):
+        return self.tr.name
+
+    @property
+    def module(self):
+        return getattr(self.tr, 'module', None)
+
+    def __repr__(self):
+        return f'per({self.tr.name})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
+def birth(arrow=None, rate=None, per=None, n=1, sex=None, name=None, label=None):
     """
-    An inflow of people at a crude (per-person) birth rate, e.g. `ss.birth('-> S', rate=ss.peryear(0.02))`
+    An inflow of people: at a crude (per-person) birth rate, e.g. `ss.birth('-> S', rate=ss.peryear(0.02))`; or driven by a
+    flow, e.g. `ss.birth('-> NP', per=preg.delivery, n=2)`, `n` children for each person who goes through the transition
+
+    With `per=`, as agents the children are made by the module that owns the transition, with `parent` set to the
+    person who went through it, and placed in each declared module's state given by its own `ss.birth(per=...)` of
+    the same transition, or else its first state. Agents only, for now.
 
     Births of the whole population go in `ss.Sim(demographics=[...])`, where they are declared once
     for every disease's people and run under every solver; births into one disease's state go in
@@ -702,6 +737,9 @@ def birth(arrow=None, rate=None, name=None, label=None):
     Args:
         arrow (str): the state people are born into, e.g. `'-> S'` (default: `S` in a disease; in `demographics=`, each disease's first state)
         rate (any): the birth rate per person per unit time
+        per (Transition): instead of a rate, the transition whose flow drives the births
+        n (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
+        sex (float/Dist): the chance a child is female (default: as for anyone added)
         name (str): the name of the transition
         label (str): a human-readable name
 
@@ -713,8 +751,14 @@ def birth(arrow=None, rate=None, name=None, label=None):
     given = arrow is not None
     arrow = arrow or '-> S'
     src, dst = parse_arrow(arrow if '>' in arrow else f'-> {arrow}')
+    if per is not None and rate is not None:
+        errormsg = 'ss.birth() takes either rate= (a crude birth rate) or per= (a transition that drives the births), not both'
+        raise ValueError(errormsg)
     out = Transition(null, dst, rate=rate, name=name, label=label)
-    out.per_capita = True
+    out.per_capita = per is None
+    out.per = None if per is None else Per(per)
+    out.n_born = n
+    out.sex = sex
     out.arrow_given = given
     return out
 
@@ -1169,7 +1213,7 @@ def class_members(cls):
     members = dict()
     for base in reversed(cls.__mro__):
         for key,val in base.__dict__.items():
-            if isinstance(val, (Expr, Transition, outcome, FlowSum)): # Including results that are sums or ratios of states
+            if isinstance(val, (Expr, Transition, outcome, FlowSum, ss.expressions.func)): # Including results that are sums or ratios of states, attributes, and hooks
                 members[key] = val
             elif key in members: # Rebound to something else in a subclass
                 del members[key]

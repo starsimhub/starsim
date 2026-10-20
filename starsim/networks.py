@@ -130,6 +130,8 @@ class Network(Route):
             beta = ss_float,
         )
 
+        self.edge_defaults = {} # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
+
         # Initialize the keys of the network
         self.edges = sc.objdict()
         self.participant = ss.BoolArr('participant')
@@ -232,9 +234,10 @@ class Network(Route):
         super().init_pre(sim)
 
         # Define states using placeholder values
+        n = len(self.edges['p1']) if 'p1' in self.edges else 0
         for key, dtype in self.meta.items():
             if key not in self.edges:
-                self.edges[key] = np.empty((0,), dtype=dtype)
+                self.edges[key] = np.full(n, self.edge_defaults[key], dtype=dtype) if key in self.edge_defaults else np.empty((0,), dtype=dtype)
 
         # Check that p1 and p2 are ss.uids()
         self.validate_uids()
@@ -410,9 +413,11 @@ class Network(Route):
         edges = sc.mergedicts(edges, kwargs)
         for key in self.meta_keys():
             curr_arr = self.edges[key]
-            try:
+            if key in edges:
                 new_arr = edges[key]
-            except KeyError:
+            elif key in self.edge_defaults:
+                new_arr = np.full(len(edges['p1']), self.edge_defaults[key], dtype=self.meta[key])
+            else:
                 errormsg = f'Cannot append edges since required key "{key}" is missing'
                 raise KeyError(errormsg)
             self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
@@ -492,6 +497,8 @@ class Network(Route):
         for key in keys:
             if key == 'beta' and key not in df:
                 self.edges[key] = np.ones(len(df['p1']), dtype=ss_float)
+            elif key in self.edge_defaults and key not in df:
+                self.edges[key] = np.full(len(df['p1']), self.edge_defaults[key], dtype=self.meta.get(key))
             else:
                 self.edges[key] = np.array(df[key], dtype=self.meta.get(key))
         self.validate_uids()
@@ -658,10 +665,19 @@ def check_duration(net, pars, kwargs):
 
 
 class SexualNetwork(DynamicNetwork):
-    """ Base class for all sexual networks """
+    """
+    Base class for all sexual networks
+
+    Each edge has a number of acts per step (`acts`) and the share of them in which a condom is
+    used (`condoms`, 0 unless set, e.g. by partnership type in `add_pairs()`). Condoms protect through
+    a modifier of the transmission on the network, e.g.
+    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`.
+    """
     def __init__(self, pars=None, edges=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
+        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, route=)
+        self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut', default=0)
         return
 
@@ -1763,7 +1779,7 @@ class PrenatalNet(Network):
     """
     Prenatal transmission network
 
-    Although edges change over time, the edges are managed via ss.Pregnancy as pregnancies start and finish.
+    Although edges change over time, the edges are managed via ss.LegacyPregnancy as pregnancies start and finish.
     The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
     It transmits one way only, from the mother (`p1`) to the child (`p2`), so its one direction is `mother2child`.
     """
@@ -1771,7 +1787,7 @@ class PrenatalNet(Network):
     one_way = True
 
     def step(self):
-        # Adding/removing edges is managed by ss.Pregnancy
+        # Adding/removing edges is managed by ss.LegacyPregnancy
         pass
 
     def add_pairs(self, mother_uids=None, unborn_uids=None):
@@ -1853,11 +1869,9 @@ class BreastfeedingNet(PostnatalNet):
     def init_pre(self, sim):
         # Connect the pregnancy module to this network; do this here rather than in init_post() since deliveries during the pregnancy burn-in call add_pairs()
         super().init_pre(sim)
-        for mod in self.sim.modules:
-            if isinstance(mod, ss.Pregnancy):
-                self.pregnancy = mod
-                break
-        else:
+        self.pregnancy = next((mod for mod in self.sim.modules if isinstance(mod, ss.LegacyPregnancy)), None)
+        self.lactation = next((mod for mod in self.sim.modules if isinstance(mod, ss.Lactation)), None) # With the declared ss.Pregnancy, which pairs newborns itself
+        if self.pregnancy is None and self.lactation is None:
             raise RuntimeError('BreastfeedingNet requires a Pregnancy module in the simulation to track breastfeeding status')
         return
 
@@ -1865,14 +1879,14 @@ class BreastfeedingNet(PostnatalNet):
         """
         Add pairs upon delivery if the mother is breastfeeding the newborn - called via Pregnancy.process_delivery()
         """
-        if mother_uids is not None:
+        if mother_uids is not None and self.pregnancy is not None:
             mask = self.pregnancy.breastfeeding[mother_uids] & self.pregnancy.breastfed[newborn_uids]
             super().add_pairs(mother_uids[mask], newborn_uids[mask])
         return
 
     def end_pairs(self):
         """Remove edges for mothers whose breastfeeding status has changed in the Pregnancy module"""
-        active = self.pregnancy.breastfeeding[self.p1]
+        active = self.pregnancy.breastfeeding[self.p1] if self.pregnancy is not None else self.lactation.L[self.p1] # Until the mother leaves L
         for k in self.meta_keys():
             self.edges[k] = self.edges[k][active]
         return np.count_nonzero(active)

@@ -274,13 +274,17 @@ class Result(ss.BaseArr):
         strats = out._check_strata()
         coords = strats[0].sim_coords
         keep = np.ones(out.strata.shape[-1], dtype=bool)
+        keep_den = keep.copy() # For a ratio, the groups of the denominator: a dimension it does not have is added up over
+        den_dims = getattr(out, 'denom_dims', None)
         for dim,levels in dims.items():
             names = [strat.name for strat in strats]
             out._check_dim(dim)
             d = names.index(dim)
             inds = [strats[d].index(level) for level in sc.tolist(levels)]
             keep &= np.isin(coords[:, d], inds)
-        out = out._substrata(keep)
+            if den_dims is None or dim in den_dims:
+                keep_den &= np.isin(coords[:, d], inds)
+        out = out._substrata(keep, keep_den)
         out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})'
         return out
 
@@ -453,7 +457,11 @@ class Result(ss.BaseArr):
         values = np.column_stack([self.strata[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
         denom = getattr(self, 'denom', None)
         if denom is not None: # A ratio: the numerator and denominator of each level, divided
-            den = np.column_stack([denom[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+            den_dims = getattr(self, 'denom_dims', None)
+            if den_dims is None or dim in den_dims:
+                den = np.column_stack([denom[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
+            else: # The denominator does not have this dimension, so is the whole of it for every level
+                den = np.tile(denom.sum(axis=1)[:, None], (1, strat.n))
             values = np.divide(values, den, out=np.zeros(values.shape), where=den!=0)
         columns = [str(label) for label in strat.labels]
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
@@ -569,18 +577,19 @@ class Result(ss.BaseArr):
                     out.strata = None
         return out
 
-    def _substrata(self, keep):
-        """ A result made of some of the groups of this one """
+    def _substrata(self, keep, keep_den=None):
+        """ A result made of some of the groups of this one (and, for a ratio, of its denominator: `keep_den`, by default the same) """
         strata = self.strata*keep # The groups left out are zero, so the result can be selected from or split again
         denom = getattr(self, 'denom', None)
         values = strata.sum(axis=-1)
         if denom is not None: # A ratio: the numerator and denominator are each added up over the groups, then divided
-            denom = denom*keep
+            denom = denom*(keep if keep_den is None else keep_den)
             values = np.divide(values, denom.sum(axis=-1), out=np.zeros(values.shape), where=denom.sum(axis=-1)!=0)
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
                      values=values, kind=self.kind, runs=self.runs)
         out.strata = strata
         out.denom = denom
+        out.denom_dims = getattr(self, 'denom_dims', None)
         out.strats = self.strats
         out.dims = getattr(self, 'dims', None)
         out.group_ti = None # Its values are at the time points of its rows

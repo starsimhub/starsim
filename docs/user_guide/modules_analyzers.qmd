@@ -5,7 +5,7 @@ jupyter: python3
 
 
 
-Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.pregnant`, and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
+Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.LegacyPregnancy` module adds results like `sim.results.pregnancy.pregnant`, and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
 
 ## When analyzers run
 
@@ -82,7 +82,7 @@ class HIV_preg(ss.Analyzer):
         self.results['new_infections_pregnancy'][ti] = len((newly_infected & pregnant).uids)
         return
 
-pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv('test_data/nigeria_asfr.csv'))
+pregnancy = ss.LegacyPregnancy(fertility_rate=pd.read_csv('test_data/nigeria_asfr.csv'))
 hiv = ssl.HIV(beta={'mfnet':[0.5,0.25]})
 sim = ss.Sim(diseases=hiv, networks='mfnet', demographics=pregnancy, analyzers=HIV_preg(), start='2000', stop='2050')
 sim.run()

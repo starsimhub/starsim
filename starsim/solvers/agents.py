@@ -28,9 +28,9 @@ class Agents(Engine):
         mod = self.mod
         graph = self.graph
         self.init_dims()
-        for state in graph.states.values(): # Remove the declarations, which are replaced by their run-time form
-            if state.name in mod.__dict__:
-                delattr(mod, state.name)
+        for obj in list(graph.states.values()) + list(graph.attrs.values()): # Remove the declarations, which are replaced by their run-time form
+            if obj.name in mod.__dict__:
+                delattr(mod, obj.name)
         for key in ['rel_sus', 'rel_trans']:
             mod.__dict__.pop(key, None)
         self.events = dict() # The agents who went through each transition this step
@@ -51,9 +51,14 @@ class Agents(Engine):
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
+        self._backfill = None # While seeds are back-dated: see backfill()
+        self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
+        self._fired_seen = {} # For each trigger on a coded module's event, who it has seen it for: see unseen_fired()
         self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
         self._junctions = None # The states passed through at once: see junctions
         self._leaving = None # The people leaving a state and the states they leave, while P.dwell (see dwell()) and clocks (see clock_values()) are read for them
+        self._uids = None # The agents being evaluated: see eval_for()
+        self._for_uids = False
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
@@ -80,6 +85,18 @@ class Agents(Engine):
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
                 if graph.exits[name].hazards: # See enter()
                     arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The share of a step of the competing rates out of {name} missed in the step of entering it'))
+        self.attrs = graph.attrs # Attributes: an array each (for a derived one, its values when last worked out); see fire() and attr_values()
+        self.on_event = [a for a in self.attrs.values() if a.events] # Set at events, in the order declared
+        self.traits = [a for a in self.attrs.values() if a.kind == 'trait']
+        self.hooks = list(graph.hooks.values())
+        self.derived = graph.derived
+        self._drawing = False
+        if self.on_event:
+            arrs.append(ss.FloatArr('left_exit', label='The scheduled exit from the state each agent last left'))
+        for a in self.attrs.values():
+            arrs.append(ss.FloatArr(a.name, default=None if a.kind == 'derived' else a.default, label=a.label or a.name))
+            if a.combine == 'first':
+                arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set'))
         self.sets = sc.objdict() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
         people = [state.name for state in graph.people_states]
         for names in ss.expressions.Clock.sets:
@@ -168,6 +185,19 @@ class Agents(Engine):
         for strat in self.sim.groups.strats: # For a dimension that only some states have: the level people take when they enter one of those states
             if strat.name in [own.name for own in graph.strats] and strat.states is not None:
                 add(f'enter_{strat.name}', ss.random())
+        for tr in graph.inflows: # Births driven by a flow: the number of children of each parent, and their sex (see step_per())
+            if getattr(tr, 'per', None) is not None and tr.people:
+                if isinstance(tr.n_born, ss.Dist):
+                    add(f'n_{tr.name}', sc.dcp(tr.n_born))
+                if tr.sex is not None:
+                    add(f'sex_{tr.name}', sc.dcp(tr.sex) if isinstance(tr.sex, ss.Dist) else ss.bernoulli(p=tr.sex))
+        self.attr_dists = dict() # Each distribution an attribute is drawn from, and the key of its copy: see draw_attr()
+        for a in self.attrs.values():
+            if a.kind in ['drawn', 'trait']:
+                for i,p in enumerate(ss.expressions.dists_in(a.value)):
+                    key = f'attr_{a.name}_{i}'
+                    add(key, sc.dcp(p.value))
+                    self.attr_dists[id(p.value)] = key
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
         for name,dw in self.dwells.items():
             add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.gamma(a=dw.k, scale=1/dw.k)) # A unit-mean Erlang, scaled by the mean when used
@@ -272,12 +302,19 @@ class Agents(Engine):
         for state in srcs:
             if state.people:
                 inds = uids[mod[state.name][uids]]
+                if self.derived_trs and tr is not None:
+                    self.derived_flows(tr, state, inds)
+                if self.on_event and state.name in self.scheduled:
+                    mod.left_exit[inds] = mod[f'ti_exit_{state.name}'].raw[inds]
                 mod[state.name][inds] = False
                 self.clear_exit(state.name, inds)
                 moved.append(inds)
                 frm.append(np.full(len(inds), self.state_index[state.name]))
         moved = ss.uids.concatenate(moved) if moved else ss.uids()
-        self.enter(dst, moved, mod.ti, tr=tr, srcs=np.concatenate(frm) if frm else -1)
+        srcs = np.concatenate(frm) if frm else -1
+        self.fire(tr, moved, srcs, self.state_index.get(dst.name, -1)) # The attributes the move sets, before the dwell times that can read them
+        self.enter(dst, moved, mod.ti, tr=tr, srcs=srcs)
+        self.call_hooks(tr, moved, srcs, self.state_index.get(dst.name, -1))
         return moved
 
     @property
@@ -349,6 +386,7 @@ class Agents(Engine):
             for name,want,got in zip(names, wanted, placed): # Rounded to whole agents, a small seed can be none at all
                 if want > 0 and got == 0:
                     ss.note(f'"{mod.name}" starts with nobody in {name}: its initial number is {want:.2g} agents at {self.scale:n} people per agent, which rounds to 0. Give more agents (n_agents=) or a larger initial number', sim=self.sim)
+        self.draw_traits(self.sim.people.auids)
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the start, once every module has its people
             self.step_register(0)
             self.sim.people.step_die() # Whoever left is gone before the start is counted
@@ -543,6 +581,8 @@ class Agents(Engine):
                 self.stocks[state.name] = float(counts[state.name].sum())
             else:
                 self.stocks[state.name] = self.stock(state)
+        if getattr(self, 'derived_res', None) and self._started: # Once the people placed at the start have their attributes: see settle_start()
+            self.derived_stocks()
         return
 
     def count(self, states, total=True):
@@ -682,7 +722,15 @@ class Agents(Engine):
     def by_agent(self, by, uids):
         """ A value for each level of a dimension, for some agents; sex needs no stratification, since it is people.female (the first level is women) """
         sim = self.sim
-        if by.on_people(sim): # Read from each person, e.g. ss.by(sex=dict(female=..., male=...))
+        strat = self.derived_strat(by)
+        if strat is not None: # By the level of an attribute
+            raw = by.values
+            vals = self.convert(raw) if isinstance(raw, ss.TimePar) else [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(raw)]
+            vals = np.asarray(vals, dtype=float).ravel()
+            if len(vals) != strat.n:
+                raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(vals)} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+            return vals[self.derived_level(strat, uids)]
+        if by.on_people(sim): # Read from each person's own properties, e.g. ss.by(sex=dict(female=..., male=...))
             return self.by_people(by, uids)
         if by.dim in ['sex', 'female'] and by.dim not in [strat.name for strat in sim.groups.strats]:
             vals = [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(by.values)]
@@ -710,6 +758,10 @@ class Agents(Engine):
         return self.cache[key][self._uids if uids is None else uids]
 
     def value(self, p):
+        if self._drawing and id(p.raw) in self.attr_dists: # A distribution an attribute is drawn from: see draw_attr()
+            return np.asarray(self.draw(self.attr_dists[id(p.raw)], self._uids), dtype=float)
+        if isinstance(p.raw, ss.by) and self.derived_strat(p.raw) is not None: # By the level of a derived attribute, for the agents being evaluated
+            return self.by_agent(p.raw, self._uids)
         if isinstance(p.raw, ss.by) and self._route is None: # Depends on which agents are being evaluated, so is not cached (on a route, a beta is worked out by group: see Engine.route_value())
             return self.by_people(p.raw) if p.raw.on_people(self.sim) else self.by_group(p.raw)
         key = id(p)
@@ -816,9 +868,230 @@ class Agents(Engine):
             if not (exits.branches or exits.remainder or exits.timed):
                 raise ss.NoScheduledDwell(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
             end = np.asarray(mod[f'ti_exit_{name}'][uids], dtype=float) # The step the exit is due in
+            if isinstance(leaving, tuple) and 'left_exit' in mod.__dict__: # Leaving it now: the exit they had
+                end = np.where(np.isnan(end), mod.left_exit.raw[uids], end)
             with np.errstate(divide='ignore', invalid='ignore'):
                 out = np.clip(np.where(end > start, (ti - start)/(end - start), 1.0), 0, 1)
         return np.where(inside, out, np.nan)
+
+    #%% Attributes
+
+    def in_states_for(self, names, uids):
+        """ Whether each of some agents is in any of some states; those moving (see `fire()`) are still in the state they left """
+        mod = self.mod
+        out = np.zeros(len(uids), dtype=bool)
+        for name in names:
+            out |= mod[name].raw[uids]
+        leaving = self._leaving
+        if isinstance(leaving, tuple):
+            src = np.full(len(mod.rel_sus.raw), -1)
+            src[leaving[0]] = leaving[1]
+            out |= np.isin(src[uids], [self.state_index[name] for name in names])
+        return out
+
+    def attr(self, a):
+        """ The value of an attribute for the agents being evaluated, from the engine of the module it belongs to """
+        name = ss.conditions.modname(a.module)
+        engine = self if name in [None, self.mod.name] else next((m.engine for m in self.sim.declared if m.name == name), None)
+        if engine is None:
+            errormsg = f'The attribute "{a.name}" belongs to the module "{name}", which is not in the sim'
+            raise KeyError(errormsg)
+        if getattr(self, '_for_uids', False):
+            return engine.attr_values(a, self._uids)
+        return engine.attr_values(a, ss.uids(np.arange(len(self.mod.rel_sus.raw)))) # For every agent, by UID (e.g. in a modifier's amount)
+
+    def values_for(self, expr, uids):
+        """ An expression for some agents, as one value each, leaving the agents being evaluated as they were """
+        saved = self._uids, self._for_uids
+        try:
+            return np.array(np.broadcast_to(self.eval_for(expr, uids), len(uids)), dtype=float)
+        finally:
+            self._uids, self._for_uids = saved
+
+    def attr_values(self, a, uids):
+        """ The value of an attribute for some agents: as held, or worked out now if it is derived (NaN in a state it has no value for); with its modifiers """
+        if a.kind != 'derived':
+            out = self.mod[a.name].raw[uids].astype(float)
+        elif a.cases is None:
+            out = self.values_for(a.value, uids)
+        else:
+            out = np.full(len(uids), np.nan)
+            for names,expr in a.cases:
+                inside = self.in_states_for(names, uids)
+                if inside.any():
+                    out[inside] = self.values_for(expr, uids[inside])
+        mods = self.sim.modifiers.get((self.mod.name, 'attr', a.name))
+        return self.modify_attr(mods, out, uids) if mods else out
+
+    def modify_attr(self, mods, value, uids):
+        """ The values of an attribute for some agents with its active modifiers: set, then multiply, then add """
+        saved = self._uids, self._for_uids
+        try:
+            active = [m for m in mods if m.active]
+            for op in ['set', 'multiply', 'add']:
+                for m in active:
+                    if m.op != op:
+                        continue
+                    amount = m.current(self)
+                    amount = amount[uids] if np.ndim(amount) else amount
+                    mask = np.ones(len(uids), dtype=bool) if m.where is None else self.selector.select(m.where)[uids] > 0
+                    if   op == 'set':      value = np.where(mask, amount, value)
+                    elif op == 'multiply': value = value*np.where(mask, amount, 1.0)
+                    else:                  value = value + np.where(mask, amount, 0.0)
+        finally:
+            self._uids, self._for_uids = saved
+        return value
+
+    def draw_attr(self, a, uids):
+        """ Draws of an attribute for some agents: from its distribution, or an expression of several, each from a stream of its own """
+        if not len(uids):
+            return np.zeros(0)
+        if isinstance(a.value, ss.Dist):
+            return np.asarray(self.draw(self.attr_dists[id(a.value)], uids), dtype=float)
+        self._drawing = True
+        try:
+            return self.values_for(a.value, uids)
+        finally:
+            self._drawing = False
+
+    def draw_traits(self, uids):
+        """ The traits of agents who have just been made (or placed at the start) """
+        for a in getattr(self, 'traits', []):
+            if len(uids):
+                self.mod[a.name][uids] = self.draw_attr(a, uids)
+        return
+
+    def event_mask(self, events, tr, srcs, dst):
+        """ Which of some agents moving along a transition (None if moved some other way) from states (by index) to a state an event happens to """
+        out = np.zeros(len(srcs), dtype=bool)
+        index = self.state_index
+        for e in events:
+            kind, obj, to = e.args
+            if kind in ['tr', 'to']:
+                if tr is not None and tr.name == obj.name and (kind == 'tr' or dst == index.get(getattr(to, 'name', to))):
+                    out[:] = True
+            else:
+                inside = [index[s[1] if isinstance(s, tuple) else s.name] for s in obj]
+                src_in = np.isin(srcs, inside)
+                dst_in = dst in inside
+                out |= (~src_in & dst_in) if kind == 'enter' else (src_in & ~dst_in)
+        return out
+
+    def fire(self, tr, uids, srcs, dst):
+        """
+        Set the attributes an event sets, for the agents it happens to, in the order they are declared: inside
+        the move, once they have left the state they were in and before they are in the new one, so a recorded
+        value (and a clock it reads) is as it was just before the move
+
+        Args:
+            tr (Transition): the transition (None for a move of another kind)
+            uids (uids): the agents
+            srcs (array): the index of the state each came from (-1 for none), or one for all
+            dst (int): the index of the state they go to (-1 for none)
+        """
+        if not getattr(self, 'on_event', None) or not len(uids):
+            return
+        mod = self.mod
+        srcs = np.broadcast_to(srcs, len(uids))
+        saved = self._leaving
+        self._leaving = (uids, srcs)
+        try:
+            for a in self.on_event:
+                mask = self.event_mask(a.events, tr, srcs, dst)
+                if not mask.any():
+                    continue
+                sel = uids if mask.all() else uids[mask]
+                new = self.draw_attr(a, sel) if a.kind == 'drawn' else self.values_for(a.value, sel)
+                old = mod[a.name].raw[sel]
+                if a.combine == 'first':
+                    val = np.where(mod[f'had_{a.name}'].raw[sel], old, new)
+                    mod[f'had_{a.name}'][sel] = True
+                else:
+                    val = a.combined(old, new)
+                mod[a.name][sel] = val
+        finally:
+            self._leaving = saved
+        return
+
+    def call_hooks(self, tr, uids, srcs, dst):
+        """ Call the functions an event calls (`ss.func`), once the agents are in their new state """
+        for hook in getattr(self, 'hooks', []):
+            if len(uids):
+                mask = self.event_mask(hook.events, tr, np.broadcast_to(srcs, len(uids)), dst)
+                if mask.any():
+                    hook(self.sim, uids[mask])
+        return
+
+    def paths(self):
+        """ For each state, the transitions on the shortest path to it from the first state, as (transition, source, destination) """
+        graph = self.graph
+        out = {graph.first.name: []}
+        todo = [graph.first.name]
+        while todo:
+            name = todo.pop(0)
+            for tr in graph.transitions.values():
+                if any(s.name == name for s in tr.src or []):
+                    for d in tr.dst or []:
+                        if d.people and d.name not in out:
+                            out[d.name] = out[name] + [(tr, name, d.name)]
+                            todo.append(d.name)
+        return out
+
+    def fire_placed(self):
+        """ People placed at the start count as having gone through the transitions on the shortest path from the first state to theirs, at the start (each source read as just completed) """
+        mod = self.mod
+        paths = self.paths()
+        for state in self.graph.people_states:
+            uids = self.members(state)
+            if not len(uids):
+                continue
+            for tr,src,dst in paths.get(state.name, []):
+                arr = mod[f'ti_{src}']
+                kept = not isinstance(arr, ss.arrays.Unkept) # Not kept if nothing reads the time of entering it, which then this cannot either
+                if kept:
+                    before = np.asarray(arr.raw[uids]).copy()
+                    arr[uids] = 0
+                mod.left_exit[uids] = -0.5 # A dwell time just completed: see clock_values()
+                self.fire(tr, uids, self.state_index[src], self.state_index[dst])
+                if kept:
+                    arr.raw[uids] = before
+        return
+
+    def derived_strat(self, by):
+        """ The stratification by a derived attribute that a value by level (`ss.by`) is given by, if it is one """
+        if not getattr(self, 'derived', None) or by.dim is None:
+            return None
+        return next((strat for strat in self.derived if strat.name == by.dim), None)
+
+    def derived_level(self, strat, uids):
+        """ The level of a stratification by a derived attribute for some agents """
+        vals = self.attr_values(strat.attr_of, uids)
+        if np.isnan(vals).any():
+            raise ss.ClockOutsideDomain(f'"{strat.name}" is read for people for whom {strat.attr_of.name} has no value (it is NaN in {sc.strjoin(sorted({s.name for s in self.graph.people_states if self.mod[s.name].raw[uids[np.isnan(vals)]].any()}))}); give it a value there, or read it only inside the states that have one.')
+        return np.clip(np.searchsorted(strat.edges, vals, side='right') - 1, 0, strat.n - 1)
+
+    def derived_flows(self, tr, src, uids):
+        """ Count a flow by the level of a derived attribute at its source, before the move """
+        strat = self.derived_trs.get(tr.name)
+        if strat is not None and len(uids):
+            ng = self.sim.groups.n_groups
+            groups = self.groups(uids, src) if ng > 1 else 0
+            index = self.derived_groups(strat, groups, self.derived_level(strat, uids))
+            self.flow_derived[tr.name] = self.flow_derived.get(tr.name, 0) + np.bincount(index, weights=self.weights(uids), minlength=ng*strat.n)
+        return
+
+    def derived_stocks(self, uids=None):
+        """ The number in each state by the level of a derived attribute; or, given some agents (who died), with them taken out """
+        ng = self.sim.groups.n_groups
+        for key,strat in self.derived_res.items():
+            if not key.startswith('n_') or key[2:] not in self.graph.states:
+                continue
+            state = self.graph.states[key[2:]]
+            inds = self.members(state) if uids is None else uids[self.mod[state.name].raw[uids]]
+            groups = self.groups(inds, state) if ng > 1 else 0
+            counts = np.bincount(self.derived_groups(strat, groups, self.derived_level(strat, inds)), minlength=ng*strat.n) if len(inds) else 0.0
+            self.stock_derived[state.name] = counts if uids is None else self.stock_derived.get(state.name, 0) - counts
+        return
 
     #%% Moving agents
 
@@ -834,6 +1107,10 @@ class Agents(Engine):
             return
         mod = self.mod
         ti = mod.ti
+        if self.derived_trs:
+            self.derived_flows(tr, src, uids)
+        if self.on_event and src.name in self.scheduled:
+            mod.left_exit[uids] = mod[f'ti_exit_{src.name}'].raw[uids]
         mod[src.name][uids] = False
         self.clear_exit(src.name, uids)
         self.flowcounts[tr.name] += self.n_of(uids)
@@ -872,6 +1149,10 @@ class Agents(Engine):
             if getattr(tr, 'offspring', None) is not None:
                 self.add_offspring(tr, uids, ti)
             if tr.outflow:
+                if self.on_event or self.hooks:
+                    src_idx = np.concatenate([np.full(len(u), self.state_index.get(s.name, -1)) for s,u in zip(srcs[name], uidlist)])
+                    self.fire(tr, uids, src_idx, -1)
+                    self.call_hooks(tr, uids, src_idx, -1)
                 if tr.migration:
                     self.sim.people.request_removal(uids)
                 else:
@@ -910,7 +1191,9 @@ class Agents(Engine):
                     arr = self.sim.people[strat.attr]
                     arr[inds] = strat.moved(arr[inds], level)
                     self.sim.groups.groups_changed(inds)
+                self.fire(tr, inds, came, self.state_index[dst.name]) # The attributes the move sets, before the dwell times that can read them
                 self.enter(dst, inds, ti, tr=tr, srcs=came) # Once their levels are known, since dwell times can depend on them
+                self.call_hooks(tr, inds, came, self.state_index[dst.name])
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
                     if len(tr.dst) > 1:
@@ -973,6 +1256,8 @@ class Agents(Engine):
             if tr.trigger.event:
                 mask = np.zeros(len(inside), dtype=bool)
                 mask[self.new_events(tr)] = True # Seen whether or not anyone is in the source, so an old event does not move people who enter later
+            elif getattr(tr.trigger.x, 'op', None) == 'event': # A delivery's, a product's, or a coded module's event (ss.Event): news for a step (two, from a module that steps late), so moved once
+                mask = self.unseen_fired(tr, np.asarray(self.selector.select(tr.trigger.x), dtype=bool))
             elif inside.any():
                 mask = np.asarray(self.selector.select(tr.trigger.x), dtype=bool)
             else:
@@ -999,6 +1284,17 @@ class Agents(Engine):
                 taken = mask if taken is None else taken | mask
         return out
 
+    def unseen_fired(self, tr, mask):
+        """ Of the people an event is news for, those this trigger has not already seen it for (on this step or the last) """
+        ti = self.mod.ti
+        last, now, before = self._fired_seen.get(tr.name, (None, None, None))
+        pad = lambda m: np.zeros(len(mask), dtype=bool) if m is None else np.pad(m, (0, len(mask) - len(m)))
+        if last != ti: # A new step: what was seen now was seen on the last step, if it was the last step
+            now, before = None, (now if last == ti - 1 else None) # The old now, as the right side is evaluated first
+        seen = pad(now) | pad(before)
+        self._fired_seen[tr.name] = (ti, pad(now) | mask, before)
+        return mask & ~seen
+
     def new_events(self, tr):
         """ The agents an event trigger's event has happened to since it last looked """
         event = tr.trigger.x
@@ -1011,10 +1307,84 @@ class Agents(Engine):
         uids = engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
         return event.mothers(self.sim, uids) if isinstance(event, ss.conditions.Child) else uids
 
+    def step_per(self, ti):
+        """ Births driven by a flow (`ss.birth(per=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once """
+        born = False
+        for tr in self.graph.inflows:
+            if getattr(tr, 'per', None) is None or not tr.people or ss.conditions.modname(tr.per.module) not in [None, self.mod.name]: # Another module's transition: that module makes the children, who are placed here by this inflow's state (see into())
+                continue
+            parents = self.fresh(('per', tr.name), tr.per.name)
+            if not len(parents):
+                continue
+            make = getattr(self.mod, 'make_children', None) # E.g. ss.Pregnancy, which also records events on the mothers
+            new = make(tr, parents, ti) if make is not None else self.grow_children(tr, parents, ti)
+            self.flowcounts[tr.name] += self.n_of(new)
+            if len(new):
+                self.record(tr, new, -1, self.state_index[tr.dst[0].name]) # An event, e.g. preg.birth (and, on the mothers, ss.child(preg.birth))
+                self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
+                if self.sim.groups.n_groups > 1:
+                    self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(new), weights=self.weights(new), minlength=self.sim.groups.n_groups)
+                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(per=) of the same transition
+                    other = next((o for o in mod.graph.inflows if mod is not self.mod and getattr(o, 'per', None) is not None and o.per.name == tr.per.name and ss.conditions.modname(o.per.module) == self.mod.name), None)
+                    if other is not None:
+                        mod.engine.flowcounts[other.name] += self.n_of(new)
+                born = True
+        if born:
+            self.finish_moves(ti)
+        return
+
+    def n_children(self, tr, parents):
+        """ The number of children of each parent at a birth driven by a flow """
+        n = tr.n_born
+        if isinstance(n, ss.Dist):
+            n = self.dists[f'n_{tr.name}'].rvs(parents)
+        elif callable(n):
+            n = n(self.sim, parents)
+        return np.broadcast_to(np.asarray(n, dtype=int), len(parents))
+
+    def grow_children(self, tr, parents, ti, counts=None, age=0.0, into=None):
+        """
+        Make the children of some parents (`counts` of each, default `n_children()`), linked to them, in their parent's place,
+        and in each declared module's state for them (see `into()`), or (`into=False`) each module's first state, as for fetuses
+        """
+        sim = self.sim
+        people = sim.people
+        counts = self.n_children(tr, parents) if counts is None else counts
+        moms = np.repeat(np.asarray(parents), counts)
+        if not len(moms):
+            return ss.uids()
+        places = self.place_raw()[moms] if sim.mixing.space is not None else np.zeros(len(moms), dtype=int)
+        states = () if into is False else tuple(self.into(tr))
+        born = np.all(np.asarray(age) >= 0) # Or fetuses, aged below 0
+        npl = np.bincount(places, minlength=1)
+        new = self.add_people([(place, states, int(k)) for place,k in enumerate(npl) if k], ti, f'born_{tr.name}', newborn=born)
+        order = np.concatenate([moms[places == place] for place,k in enumerate(npl) if k]) # In the order they were made: by place, then each parent's
+        people.parent[new] = order
+        if f'sex_{tr.name}' in self.dists:
+            people.female[new] = self.dists[f'sex_{tr.name}'].rvs(new)
+            sim.groups.groups_changed(new)
+        if not born: # Fetuses, so that they are born at 0
+            byplace = np.concatenate([np.flatnonzero(places == place) for place,k in enumerate(npl) if k])
+            people.age[new] = np.broadcast_to(age, len(moms))[byplace]
+            sim.groups.groups_changed(new)
+        elif not any(strat.kind == 'age' for strat in sim.groups.strats):
+            people.age[new] = 0
+        return new
+
+    def into(self, tr):
+        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(per=)` of the same transition """
+        out = [d.name for d in tr.dst]
+        per = (ss.conditions.modname(tr.per.module) or self.mod.name, tr.per.name)
+        for mod in self.sim.declared:
+            for other in mod.graph.inflows:
+                if getattr(other, 'per', None) is not None and (ss.conditions.modname(other.per.module) or mod.name, other.per.name) == per:
+                    out += [d.name for d in other.dst]
+        return list(dict.fromkeys(out))
+
     def fresh(self, key, tr):
         """ The agents who went through a transition (or a recorded event) of this module since `key` last asked: for code that reacts to events once each """
         seen = self._seen.get(key, {})
-        fresh = [b for b in self.batches if id(b) not in seen]
+        fresh = [b for b in self.batches if id(b) not in seen and not b.get('also', False)] # Those the event happened to themselves
         self._seen[key] = {id(b):b for b in self.batches}
         return self.event_uids(tr, batches=fresh) if fresh else ss.uids()
 
@@ -1054,14 +1424,20 @@ class Agents(Engine):
     def settle_start(self):
         """ Once every module has its people (see `ss.Sim.init()`): those placed in a state nobody waits in move on at once, as they would during a step; these moves are not counted as flows """
         mod = self.mod
+        if self.spreads:
+            self.backfill_spreads()
+            self.record_stocks() # The start, again
         for key,arr in self.sets.items(): # Those placed in a set entered it when they were placed
             for name in key:
                 uids = self.members(self.graph.states[name])
                 uids = uids[np.isnan(np.asarray(mod[arr][uids], dtype=float))]
                 mod[arr][uids] = mod[f'ti_{name}'][uids]
+        if self.on_event:
+            self.fire_placed()
         moved = False
         self._moved = []
         self._started = True
+        n_batches = len(self.batches)
         for state in self.graph.people_states:
             if state.name not in self.junctions:
                 continue
@@ -1076,11 +1452,10 @@ class Agents(Engine):
             moved = True
         if self.triggers: # Seeds a trigger holds for move on before the start
             moved = moved or bool(self.triggered())
-        if moved:
+        if moved: # Counted at the start (the results at the first time point), and news to the deliveries of the first step only
             self.finish_moves(mod.ti)
-            for name in self.flowcounts:
-                self.flowcounts[name] = 0.0
-            self.flow_groups = sc.objdict()
+            for b in self.batches[n_batches:]:
+                b.key = (mod.ti - 1, 0)
             self.events = dict()
             self.live = None # Counted again
             self.record_stocks()
@@ -1170,6 +1545,15 @@ class Agents(Engine):
     def draw(self, key, uids):
         """ Uniform draws from one of the engine's distributions, which can be called more than once in a step, since people can move more than once in a step """
         dist = self.dists[key]
+        if self._backfill is not None: # Before the start (see backfill()): from draws of its own, and the distribution left as it was
+            ind, ready = dist.ind, dist.ready
+            self._backfill += 1
+            dist.jump(to=10**12 + self._backfill, force=True)
+            try:
+                return dist.rvs(uids)
+            finally:
+                dist.jump(to=ind, force=True)
+                dist.ready = ready
         if not dist.ready:
             dist.jump()
         return dist.rvs(uids)
@@ -1216,6 +1600,11 @@ class Agents(Engine):
         phase = self._phase[1] if self._phase[0] == ti else -1 # Moved by another module before this one's step: see start_phase()
         self.batches.append(sc.objdict(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase)))
         self._news = True
+        also = getattr(self.mod, 'also_happened', None) # Others an event also happens to, e.g. the fetuses of a mother at a delivery
+        if tr is not None and also is not None:
+            others = also(tr.name, uids)
+            if others is not None and len(others):
+                self.batches.append(sc.objdict(tr=tr.name, uids=others, src=-1, dst=-1, key=(ti, phase), also=True))
         return
 
     def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None):
@@ -1400,6 +1789,193 @@ class Agents(Engine):
         with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a where=) is a dwell that does not end until it changes: see rescale_exits()
             return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
 
+    #%% Seeds part way through their natural history (ss.spread)
+
+    def spread_horizon(self, entry):
+        """ For ss.spread with no over=: how many steps back people enter a state for those still there to be stationary (ten times the mean time to leave it) """
+        exits = self.graph.exits[entry.name]
+        rate = 0.0
+        for tr in exits.branches + exits.timed + sc.tolist(exits.remainder):
+            if tr.name in self.dwells:
+                try:
+                    rate = max(rate, 1/float(np.mean(self.dwell_mean(tr.name))))
+                except Exception:
+                    pass
+        for tr in self.competing[entry.name]:
+            try:
+                rate += float(np.mean(self.value(tr.rate)))
+            except Exception:
+                pass
+        horizon = 10/rate if rate > 0 else 20*self.convert(ss.years(1))
+        return int(np.clip(np.ceil(horizon/self.dt), 12, 2000))
+
+    def backfill_spreads(self):
+        """
+        People who start part way through their natural history (`ss.spread`): taken from the first state, back-dated
+        to times uniform over the window, and run forward to the start by the disease's spontaneous transitions only
+        (see `backfill()`); those still in the target at the start are kept, and as many more are back-dated as were
+        lost (from the share kept by the first). Those who died are removed; any left over are put back.
+        """
+        mod = self.mod
+        sim = self.sim
+        people = sim.people
+        first = self.graph.first
+        rng = np.random.default_rng([int(sim.pars.rand_seed or 0), sum(ord(c) for c in mod.name), 7])
+        used = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+        for sp in self.spreads:
+            if sp.get('share') is not None: # Each agent of the first state with their own chance of having entered, evenly over the steps before the start (see ss.Pregnancy.burnin_spread())
+                share = np.asarray(sp.share(), dtype=float)
+                pool = self.members(first)
+                pool = pool[~used[pool]]
+                p = share[pool] if share.ndim else np.full(len(pool), share)
+                chosen = ss.uids(pool[rng.random(len(pool)) < p])
+                used[chosen] = True
+                t0 = -rng.integers(0, sp.steps, size=len(chosen)) - 1
+                levels = {strat.attr:people[strat.attr].raw[chosen].copy() for strat in sim.groups.strats if strat.attr in people.states} # A counter moved (e.g. parity) is undone for those reset
+                self.backfill(chosen, sp, t0)
+                inside = np.zeros(len(chosen), dtype=bool)
+                for name in sp.target:
+                    inside |= mod[name].raw[chosen]
+                back = ~inside & self.alive_in_states(chosen)
+                self.reset_people(chosen[back]) # Left before the start, e.g. delivered: as if never there
+                if sp.get('after') is not None: # The module's own records of what happened before the start to those kept, e.g. ss.Pregnancy's parity
+                    sp.after(chosen[~back], {attr:vals[~back] for attr,vals in levels.items()})
+                if levels and back.any():
+                    for attr,vals in levels.items():
+                        people[attr][chosen[back]] = vals[back]
+                    sim.groups.groups_changed(chosen[back])
+                ss.note(sp.note, sim=sim)
+                continue
+            x = sp.spread.value
+            want = int(round(x*len(people) if x <= 1 else x/self.scale))
+            window = sp.spread.window(self.convert)
+            lo, hi = (0, self.spread_horizon(sp.entry if sp.entry is not None else sp.tr.dst[0])) if window is None else [int(round(v/self.dt)) for v in window]
+            hi = max(hi, lo)
+            kept = ss.uids()
+            share = 1.0
+            for attempt in range(4):
+                need = want - len(kept)
+                if need <= 0:
+                    break
+                pool = self.members(first)
+                pool = pool[~used[pool]]
+                n = min(int(np.ceil(need/max(share, 0.02))), len(pool))
+                if n <= 0:
+                    break
+                chosen = ss.uids(np.sort(rng.choice(pool, n, replace=False)))
+                used[chosen] = True
+                t0 = -rng.integers(lo, hi + 1, size=n) - 1 # Entered in one of the steps before the start
+                self.backfill(chosen, sp, t0)
+                inside = np.zeros(len(chosen), dtype=bool)
+                for name in sp.target:
+                    inside |= mod[name].raw[chosen]
+                survivors = chosen[inside]
+                share = max(len(survivors)/n, 1e-3)
+                kept = ss.uids.concatenate([kept, survivors])
+                back = chosen[~inside & self.alive_in_states(chosen)] # Left the target, e.g. to the first state: they count as not seeded, and can be chosen again
+                self.reset_people(back)
+                used[back] = False
+            if len(kept) > want: # Back to the first state
+                self.reset_people(ss.uids(np.sort(rng.choice(kept, len(kept) - want, replace=False))))
+            what = 'infected' if sp.tr is not None else f'in {sp.entry.name}'
+            when = '[' + ', '.join(f'{v*self.dt:n}' for v in [lo, hi]) + ']' + (f' {sim.pars.unit}s' if sim.pars.get('unit') else ' steps') if window is not None else 'long enough to be stationary'
+            ss.note(f'{mod.name}: {x:n} {what}, back-dated over {when} (natural history only; ages as at the start)', sim=sim)
+        people.step_die() # Those who died before the start are gone before it is counted
+        people.remove_dead()
+        self.live = None # Counted again
+        return
+
+    def alive_in_states(self, uids):
+        """ Whether each of some agents is in a state of this module """
+        out = np.zeros(len(uids), dtype=bool)
+        for state in self.graph.people_states:
+            out |= self.mod[state.name].raw[uids]
+        return out
+
+    def reset_people(self, uids):
+        """ Put agents back in the first state at the start, with no attributes: as if never seeded """
+        if not len(uids):
+            return
+        mod = self.mod
+        first = self.graph.first.name
+        for state in self.graph.people_states:
+            inds = uids[mod[state.name].raw[uids]]
+            mod[state.name][inds] = False
+            self.clear_exit(state.name, inds)
+            mod[f'ti_{state.name}'][inds] = np.nan
+        for key,arr in self.sets.items():
+            mod[arr][uids] = np.nan
+        for a in getattr(self, 'attrs', {}).values():
+            if a.kind not in ['derived', 'trait']:
+                mod[a.name][uids] = a.default
+        mod[first][uids] = True
+        mod[f'ti_{first}'][uids] = 0
+        return
+
+    def backfill(self, seeds, sp, t0):
+        """
+        Run some agents' natural history from before the start: each enters at the step `t0` (negative), along the
+        first transmission (for init_prev) or straight into a state (for init=), and from then the disease's
+        spontaneous transitions move them, a step at a time, to the start, with draws of their own (see `draw()`)
+        """
+        if not len(seeds):
+            return
+        mod = self.mod
+        graph = self.graph
+        first = graph.first
+        saved = mod.t.ti
+        self._backfill = 0
+        active = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+        self._moved = []
+        try:
+            for k in range(int(t0.min()), 0):
+                mod.t.ti = k
+                new = seeds[t0 == k]
+                if len(new):
+                    active[new] = True
+                    if sp.tr is not None: # As a new infection, to where one goes
+                        self.move(sp.tr, first, new)
+                    else:
+                        mod[first.name][new] = False
+                        self.clear_exit(first.name, new)
+                        self.enter(sp.entry, new, k)
+                    self.finish_moves(k)
+                for state in graph.people_states:
+                    name = state.name
+                    uids = self.members(state)
+                    uids = uids[active[uids]]
+                    if not len(uids) or name not in self.listed:
+                        continue
+                    exits = graph.exits[name]
+                    candidates = exits.branches + sc.tolist(exits.remainder) + exits.timed
+                    if candidates: # Scheduled exits that are due
+                        unscheduled = uids[np.isnan(mod[f'ti_exit_{name}'].raw[uids])]
+                        if len(unscheduled):
+                            self.schedule(state, unscheduled)
+                        due = mod[f'ti_exit_{name}'].raw[uids] <= k
+                        which = mod[f'exit_{name}'][uids]
+                        for i,tr in enumerate(candidates):
+                            self.move(tr, state, uids[due & (which == i)])
+                        uids = uids[~due]
+                    if self.competing[name] and len(uids):
+                        self.draw_competing(state, uids, self.dt, key=f'exit_{name}')
+                self._drawn_ti = k
+                self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+                self.finish_moves(k)
+                self._row = None
+        finally:
+            mod.t.ti = saved
+            self._backfill = None
+            self._row = None
+            self._moved = []
+        for name in self.flowcounts: # Not part of the run
+            self.flowcounts[name] = 0.0
+        self.flow_groups = sc.objdict()
+        self.events = dict()
+        self.batches = []
+        self._died = []
+        return
+
     #%% Stepping
 
     def step_state(self):
@@ -1480,6 +2056,7 @@ class Agents(Engine):
         self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
         self.finish_moves(ti)
         self._row = None
+        self.step_per(ti)
         self.step_births(dt)
         self.step_transfers(dt)
         return
@@ -1489,6 +2066,9 @@ class Agents(Engine):
         competing = self.competing[state.name]
         hazards = [np.broadcast_to(np.maximum(self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids), 0), len(uids))*self.stayed(tr, state, uids) for tr in competing]
         total = np.sum(hazards, axis=0)
+        if np.isnan(total).any():
+            bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
+            raise ss.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
         p_exit = -np.expm1(-total*dt)
         rvs = self.dists[f'exit_{state.name}'].rvs(uids) if key is None else self.draw(key, uids) # Drawn on entry as well, so perhaps more than once a step
         leaving = rvs < p_exit
@@ -1598,6 +2178,8 @@ class Agents(Engine):
         """ People who died this step (of anything, in any module) leave every state, and are taken out of the counts recorded for it """
         if not len(uids):
             return
+        if getattr(self, 'derived_res', None):
+            self.derived_stocks(uids=uids)
         if self.live_total is not None: # Counted as alive no longer
             counted = uids[uids < self.n_counted]
             self.live_total = self.live_total - (np.bincount(self.sim.groups.group_raw()[counted], minlength=self.sim.groups.n_groups) if self.sim.groups.n_groups > 1 else len(counted))
@@ -1615,7 +2197,7 @@ class Agents(Engine):
         sim = self.sim
         d = sim.mixing.space
         for tr in self.graph.inflows:
-            if not tr.people:
+            if not tr.people or getattr(tr, 'per', None) is not None: # Driven by a flow: see step_per()
                 continue
             self._by_group = True
             adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
@@ -1831,6 +2413,11 @@ class Agents(Engine):
                     self.log_infections(uids)
                 self.move(tr, src, uids)
         self.finish_moves(mod.ti + 1)
+        self.step_per(mod.ti + 1)
+        for a in self.attrs.values(): # Derived attributes as they are now, for code that reads them
+            if a.kind == 'derived':
+                uids = self.sim.people.auids
+                mod[a.name][uids] = self.attr_values(a, uids)
         self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. rel_sus.effective) are worked out again
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti + 1)
@@ -1847,10 +2434,15 @@ class Agents(Engine):
             for frm,to in zip(states, to_states):
                 if frm in graph.states and to in graph.states and graph.states[frm].people:
                     inds = uids[mod[frm].raw[uids]]
+                    engine = mod.engine
+                    if engine.on_event and frm in engine.scheduled:
+                        mod.left_exit[inds] = mod[f'ti_exit_{frm}'].raw[inds]
                     mod[frm][inds] = False
-                    mod.engine.clear_exit(frm, inds)
-                    mod.engine.clear_exit(to, inds)
-                    mod.engine.enter(graph.states[to], inds, ti, srcs=mod.engine.state_index[frm])
+                    engine.clear_exit(frm, inds)
+                    engine.clear_exit(to, inds)
+                    engine.fire(None, inds, engine.state_index[frm], engine.state_index[to])
+                    engine.enter(graph.states[to], inds, ti, srcs=engine.state_index[frm])
+                    engine.call_hooks(None, inds, engine.state_index[frm], engine.state_index[to])
         return
 
     def step_register(self, ti):
@@ -1955,6 +2547,7 @@ class Agents(Engine):
         sim.groups.groups_changed(new) # Before they enter their states, so they are counted in their groups: see wrote()
         for mod in sim.declared:
             engine = mod.engine
+            engine.draw_traits(new)
             placed = [s.name for s in mod.graph.people_states if d is None or engine.applies[s.name][d]]
             if not placed:
                 continue

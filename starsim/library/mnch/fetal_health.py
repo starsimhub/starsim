@@ -14,7 +14,7 @@ Architecture:
       specified year range and partially reverses fetal damage.
 
 Both modules require `ssl.mnch.FetalHealth()` in the sim's `custom` modules and
-`ss.Pregnancy()` in demographics. The connector also requires the target
+`ss.LegacyPregnancy()` in demographics. The connector also requires the target
 disease (default: SIR) to be present.
 
 Usage::
@@ -24,7 +24,7 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
-        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
+        demographics=[ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2025),
         custom=ssl.mnch.FetalHealth(),
@@ -87,7 +87,7 @@ class FetalHealth(ss.Module):
         import starsim as ss
 
         sim = ss.Sim(
-            demographics=[ss.Pregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
+            demographics=[ss.LegacyPregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
             modules=ssl.mnch.FetalHealth(),
             networks=ss.PrenatalNet(),
         )
@@ -139,7 +139,7 @@ class FetalHealth(ss.Module):
         """ Register callbacks with the Pregnancy module """
         super().init_pre(sim)
         if not hasattr(sim.demographics, 'pregnancy'):
-            raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
+            raise ValueError('FetalHealth requires a Pregnancy module. Add ss.LegacyPregnancy() to demographics.')
         preg = sim.demographics.pregnancy
         preg.add_conception_callback(self.on_conception)
         preg.add_delivery_callback(self.on_delivery)

@@ -520,7 +520,7 @@ class PregnancyPars(ss.Pars):
         return
 
 
-class Pregnancy(Demographics):
+class LegacyPregnancy(Demographics):
     """
     Create births via pregnancies for each agent: the Starsim 3 pregnancy module, written as code (agents only)
 

@@ -35,7 +35,7 @@ The names below are checked against the code: each one is exported by `starsim`,
 | `ss.Connector` | Base class for cross-module `step()` code |
 | `ss.Analyzer` | Base class for extra results |
 
-Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.Pregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.UnknownState`, `ss.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
+Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.UnknownState`, `ss.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
 ### States, transitions, parameters, results: 16
 

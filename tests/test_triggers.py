@@ -68,14 +68,13 @@ def test_bv_debut():
     return sim
 
 
-@pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
 def test_bv_debut_ode():
     """ As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step """
     adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     U, CST1, CST4 = ss.states('U CST1 CST4')
     bv = ss.Disease(U, CST1, CST4, debut=ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
-    ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run()
+    ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
     waiting = r.n_U.select(sex='female', age='15-49')
     assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
@@ -98,10 +97,24 @@ def test_on_event():
         assert res.b.flag.sum() > 100
         assert res.b.flag.sum() <= res.a.sa.sum() # Only those infected (and in S of b at the time)
         assert np.isclose(res.b.flag[1:].sum(), res.a.sa[1:].sum(), rtol=0.25)
-    with pytest.raises(ss.CapabilityError): # Not yet as compartments
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
-        b = ss.Disease(flag=ss.progression('S -> F', on=a.sa), name='b')
-        ss.Sim([a, b], solver='ode', **kw).init()
+
+    # The events of a state by path, for modules made from strings: the same as the state's own
+    def by_path(path):
+        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+        S, F, G = ss.states('S F G')
+        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.state('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
+        on = [ss.state('a.I').exit] if path else [a.I.exit] # A transition by path (ss.state('a.sa')) is not known to be an event when the delivery is made, so is not an on=
+        dx = [ss.screen(ss.Diagnostic(), on=x, name=f'dx{i}') for i,x in enumerate(on)]
+        return ss.Sim([a, b], interventions=dx, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run().results
+    direct, path = by_path(False), by_path(True)
+    assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
+    assert path.dx0.delivered.sum() > 100 and np.array_equal(path.dx0.delivered.values, direct.dx0.delivered.values)
+
+    # An event of its own module, as compartments: those it happened to move at the end of the step
+    S, F, G = ss.states('S F G')
+    a = ss.Disease(S, F, G, sa=(sa := S >> F @ ss.peryear(0.5)), flag=F >> G @ ss.on(sa), name='a')
+    res = ss.Sim(a, solver='ode', **kw).run().results.a
+    assert res.flag.sum() > 0 and np.isclose(res.flag.sum(), res.sa.sum(), rtol=0.01) and res.n_F.max() < 1e-6*res.n_S[0]
     return sim
 
 
@@ -130,7 +143,6 @@ def test_hpv_cancel():
     return sim
 
 
-@pytest.mark.xfail(reason='Phase B, task B2: triggers (ss.on) as compartments', strict=True)
 def test_hpv_cancel_ode():
     """ As compartments, tracked jointly; arrivals by the other's move are cancelled at the next loop time """
     names = ['hpv16', 'hpv18']
@@ -292,6 +304,83 @@ def test_after_event():
 @pytest.mark.xfail(reason='Phase B, tasks B1 and B2: the conveyor with ss.stay, clocks and triggers as compartments', strict=True)
 def test_with_conveyor_ode():
     return test_with_conveyor(solvers=('abm', 'ode'))
+
+
+def make_on_event(order, solver='abm'):
+    a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+    S, F, G = ss.states('S F G')
+    b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b')
+    mods = [a, b] if order else [b, a]
+    size = dict(n_agents=3000) if solver == 'abm' else dict(total_pop=3000)
+    return ss.Sim(mods, solver=solver, start=2000, stop=2005, dt=ss.months(1), unit='year', **size, **kw).run()
+
+
+def treated_event(solver):
+    a = ss.Disease(inf=ss.progression('S -> I', rate=ss.peryear(0.5)), cure=ss.progression('I -> S'), name='a')
+    S, F = ss.states('S F')
+    b = ss.Disease(S, F, flag=S >> F @ ss.on(a.cure), unflag=F >> S @ ss.years(0.5), name='b')
+    tx = ss.treat(ss.Treatment(moves=a.cure), where=a.I, coverage=ss.peryear(1.0), name="tx")
+    size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+    return ss.Sim([a, b], interventions=tx, solver=solver, start=2000, stop=2005, dt=ss.months(1), unit='year', **size, **kw).run().results
+
+
+def test_treated_event():
+    sc.heading('A move by a treatment is the event of its transition, for ss.on() in another module')
+    r = treated_event('abm')
+    assert r.b.flag.sum() > 1000 and r.b.flag.sum() <= r.a.cure.sum()
+    return r
+
+
+def test_on_event_ode():
+    for order in [True, False]:
+        ode = make_on_event(order, solver='ode') # First, so that it fails fast until B3
+        res = make_on_event(order).results
+        r = ode.results
+        assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
+        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.n_F[-1], rtol=1e-6) # The flow is the move
+    ro, ra = treated_event('ode'), treated_event('abm')
+    assert np.isclose(ra.b.flag.sum(), ro.b.flag.sum(), rtol=0.1)
+
+
+def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
+    states = {g:ss.states('S P C X Z') for g in names}
+    cin = {g:ss.Transition(st[2], [st[3], st[0]], p=[0.4, None], dur=ss.years(3)) for g,st in states.items()} # To cancer, or cleared
+    mods = []
+    for g in order:
+        o = next(n for n in names if n != g)
+        S, P, C, X, Z = states[g]
+        mods.append(ss.Disease(S, P, C, X, Z,
+            infection = S >> P @ ss.peryear(0.3),
+            precin    = P >> C @ ss.years(2),
+            cin       = cin[g],
+            cancelled = ss.Transition([S, P, C], Z, on=cin[o].to(states[o][3])), # The other genotype's branch to cancer
+            name = g))
+    return mods
+
+
+def test_hpv_cancel_event():
+    sc.heading('HPV: cancelling the other genotypes on the event of one reaching cancer, ss.on(other.cin.to(X)), as agents')
+    names = ['hpv16', 'hpv18']
+    def check(sim):
+        d = sim.diseases
+        for g,o in [names, names[::-1]]:
+            assert not np.any(d[o].X.raw & (d[g].S.raw | d[g].P.raw | d[g].C.raw)), f'step {sim.ti}: {g} progresses beside {o} cancer'
+    abm = ss.Sim(make_hpv_cancel(names), analyzers=check, n_agents=20_000, start=2000, stop=2020, unit='year', **kw).run()
+    assert all(abm.results[g].cancelled.sum() > 0 for g in names)
+    return abm
+
+
+def test_hpv_cancel_event_ode():
+    names = ['hpv16', 'hpv18']
+    common = dict(start=2000, stop=2020, unit='year', **kw)
+    odes = [ss.Sim(make_hpv_cancel(order), solver='ode', total_pop=20_000, **common).run() for order in [names, names[::-1]]] # First, so that it fails fast until B3
+    abm = ss.Sim(make_hpv_cancel(names), n_agents=20_000, **common).run()
+    for ode in odes:
+        for g in names:
+            a, o = abm.results[g], ode.results[g]
+            assert np.isclose(o.cancelled.sum(), a.cancelled.sum(), rtol=0.05), f'{g}: {o.cancelled.sum():.0f} cancelled as an ODE, {a.cancelled.sum():.0f} as agents'
+            other = ode.results[next(n for n in names if n != g)]
+            assert np.isclose(o.n_Z[-1], other.n_X[-1], rtol=1e-6)
 
 
 if __name__ == '__main__':

@@ -908,7 +908,7 @@ def check_undriven(sim):
     """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.UndrivenUnused`) """
     for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
-            if tr.undriven and not movers(sim, mod.name, name):
+            if tr.undriven and not getattr(tr, 'intended', False) and not movers(sim, mod.name, name):
                 ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.UndrivenUnused)
     return
 
@@ -1207,12 +1207,27 @@ class Delivery(ss.products.EventSource, Intervention):
     spells = True # Routine delivery is once per spell of being eligible (pending a decision: False is once per life)
     max_levels = 50 # In a compartmental run, the most levels of time waiting in a queue before the last is kept for those who have waited longer
 
+    def typed_function(self):
+        """ Whether the coverage is a function of the sim that gives a typed rate (e.g. `lambda sim: ss.peryear(4)`): worked out the first time it can be called """
+        cov = self.coverage
+        if not callable(cov) or isinstance(cov, (ss.TimePar, ss.Dist, ss.conditions.Cond, ss.expressions.Expr, ss.by)):
+            return False
+        if getattr(self, '_typed_coverage', None) is None:
+            sim = getattr(self, 'sim', None)
+            if sim is None:
+                return False
+            try:
+                self._typed_coverage = isinstance(cov(sim), ss.TimePar)
+            except Exception: # Not callable yet, e.g. it reads results that do not exist before the run
+                return False
+        return self._typed_coverage
+
     @property
     def remembers(self):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good, nor for a rate among those eligible or a target """
         full = self.coverage is None and self.capacity is None and self.when is None and not self.uses
         lost = self.holds and self.product.loses # Once lost, they would be eligible again, and given it again at the next step
-        rate = isinstance(self.coverage, ss.TimePar) # Typed coverage is a rate among those eligible, offered at every step
+        rate = isinstance(self.coverage, ss.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
         return self.routine and self.target is None and not rate and (self.by_age or not ((self.holds or self.move) and full and not lost))
 
     @property

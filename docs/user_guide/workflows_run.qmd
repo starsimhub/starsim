@@ -212,7 +212,7 @@ def make_sim(seed=1, n_agents=None, start=1990, stop=2030, debug=False, add_stis
 
     # Demographic modules
     fertility_data = pd.read_csv(f'data/asfr.csv')
-    pregnancy = ss.Pregnancy(dt='month', fertility_rate=fertility_data)
+    pregnancy = ss.LegacyPregnancy(dt='month', fertility_rate=fertility_data)
     death_data = pd.read_csv(f'data/deaths.csv')
     death = ss.Deaths(death_rate=death_data, rate_units=1)
 

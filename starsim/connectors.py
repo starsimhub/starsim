@@ -47,6 +47,8 @@ def parse_target(target):
         return target.module, 'par', target.name
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
+    elif isinstance(target, ss.expressions.attr) and target.module is not None: # An attribute, wherever it is read
+        return target.module, 'attr', target.name
     elif isinstance(target, ss.ModifiableArr) and target.engine is not None: # The array itself, once the sim exists
         return target.engine.mod, target.name, None
     elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # Of a disease written as code, e.g. hiv.rel_trans
@@ -294,7 +296,7 @@ class modify(Connector):
         nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
         kind, name = self.target_kind, self.target_name
         options = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
-        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + ['rel_sus', 'rel_trans']]
+        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
         coded = {key:dis for key,dis in sim.diseases.items() if dis.graph is None and not isinstance(dis, ss.Strains)}
@@ -310,8 +312,8 @@ class modify(Connector):
         elif modname in mods:
             graph = mods[modname].graph
             if kind is None:
-                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'par'
-            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None))
+                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'attr' if name in graph.attrs else 'par'
+            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
         if not found:
             raise ss.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
         if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:

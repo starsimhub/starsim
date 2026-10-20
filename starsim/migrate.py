@@ -40,6 +40,8 @@ renames = [
     (r'''(\bverbose['"]?\s*[=:]\s*)(1\s*/\s*\d+(\.\d*)?|0?\.\d+)\b''', r'\g<1>1', 'a fractional verbose (print every n steps) is verbose=1, which prints the progress about ten times a run'),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
     (r'\bss\.Test\(',             'ss.Diagnostic(',                 'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic'),
+    (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
+    (r'\beligible=',              'where=',                         'eligible= of a delivery (a Starsim 4 prerelease) is where='),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule

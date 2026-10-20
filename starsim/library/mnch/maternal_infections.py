@@ -40,7 +40,7 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
-        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True), ss.Deaths()],
+        demographics=[ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()

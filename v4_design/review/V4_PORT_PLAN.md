@@ -94,7 +94,7 @@ Births placed in declared modules; per-act beta; the sex dimension; owning modul
 - `d8b1d689`: `then=` as compartments.
 - `50bb85ce`: the conveyor with `ss.stay` (B1).
 - `2e9fc5fc`: births driven by a flow as compartments (B4).
-- `ef453e07`: the declared `ss.Pregnancy` goes in `starsim/pregnancy.py`. v4's `demographics.Pregnancy` is renamed `ss.LegacyPregnancy`, as on `v4-rs`.
+- `ef453e07`: the declared `ss.LegacyPregnancy` goes in `starsim/pregnancy.py`. v4's `demographics.Pregnancy` is renamed `ss.LegacyPregnancy`, as on `v4-rs`.
 
 - [ ] Replay each commit; full suite green; push; update PR.
 
@@ -137,7 +137,7 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 - **B2 Triggers:** `ss.on()` as compartments (`17f7ca50`): vanishing source compartments with per-group weights, and loop-time moves with a note.
 - **B3 Synchronized flows:** `ss.on(other.tr)` as compartments, in the kernels' crossing step and in `force()` (`e924ee52`, `ab75d5ad`).
 - **B4 Flow-driven births:** `ss.birth(per=)` as compartments, including births at the first step after back-dating (`2e9fc5fc`, `14c21d45`).
-- **B5 Back-dating:** `ss.spread` and `ss.Pregnancy(burnin=)` as compartments (`fc7c8bd5`, `15626732`). Back-dating must not disturb a crossing's other engines; that is the bug `14c21d45` fixed on `v4-rs`, and `test_hiv_vertical` covers it.
+- **B5 Back-dating:** `ss.spread` and `ss.LegacyPregnancy(burnin=)` as compartments (`fc7c8bd5`, `15626732`). Back-dating must not disturb a crossing's other engines; that is the bug `14c21d45` fixed on `v4-rs`, and `test_hiv_vertical` covers it.
 - **B6 Attributes and clocks as compartments:** `82057114`, `c9920adf`, `314e523c`, and clocks.
 - **B7 Fetal levels:** `ss.mother`, delivery routing, prenatal transmission, fetal deaths, `ss.Lactation` and `BreastfeedingNet` as mass action (`6ba95487`, `49140978`, `c27c2c6a`).
 - **B8 Programs as compartments:** water-filling by priority, the `waiting_` dimension, and `then=` (`bf1675d7`, `e52ef390`, `d8b1d689`), if Phase A found they needed removed stepping paths.
@@ -200,3 +200,65 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 43 | 824232d3 | c8f49a3b | Phase B1: ss.clock(within, bins=) ported; the conveyor (compartmental clocks, whole-step dwells) deferred, its tests in test_conveyor.py xfail(run=False) |
 | 44 | c99f5438 | c18cd54e | Ported (agents and ragged Erlang stages as compartments); by sex alone skips the build-time dimension check as agents |
 | 45 | ada9334d | — | implementation.md only: merged in Task 6 |
+| 46 | d8b1d689 | 4d896abf | Ported; v4-rs's follow() is follow_up() (v4 has a follow() for a held product that cures), and its offer() is choose() |
+| 47 | 8419867d | — | Docs for the conveyor: with B1 (implementation.md in Task 6) |
+| 48 | c5058c4e | ab3493b9 | HIV ART rate typed ss.permonth (v4 asks for a unit; v4-rs's bare numbers were per step); agent queue balance to 5% (known coverage bias); routine-by-age skip only when it remembers |
+| 49 | 8db7df80 | — | implementation.md only: merged in Task 6 |
+| 50 | 50bb85ce | b9cc5289 | Agents half passes as is; compartmental conveyor with ss.stay and clocks in a crossing are a strict xfail for B1/B2; init of everyone written as a count (in v4, 1 or more is people) |
+| 51 | fe356e4a | b2432223 | Ported to v4's draw_competing/finish_moves cascade; new agents-only test_entry_hazard in test_clocks.py (weekly vs monthly within 3%; was 15% apart), as test_conveyor is B1; baseline regenerated (draws moved, <1.2%) |
+| 52 | 270f35ee | b60e7d0e | Ported; E505 is ss.UnknownEffect; v4's disease= list TypeError now points to keying efficacy by disease |
+| 53 | 4266fedc | 3315ce62 | Ported (edge_refs -> refs; E505 is ss.UnknownEffect; crossing-size note in choose.py); ODE rtol 1e-5, as v4's joint stepping moves marginals ~1e-6 (ruling) |
+| 54 | 46f5d303 | 830539df | Ported (by_edge holds the outcome parts; E505 is ss.UnknownEffect); every result with a delay is waited for, as v4; shifts the last result first (v4's draws); agents rtol 0.08, cross-solver 0.25 (v4's own agents gap: rulings) |
+| 55 | 2f0c10fc | 3a52a244 | Ported as is |
+| 56 | a6e2c3de | fbab710f | Ported (E306 is ss.InvalidAdjustment); the test declares kind='strain', as in v4 the name genotype only suggests a kind |
+| 57 | ef453e07 | 60519d39 | Agents half ported (ss.Pregnancy, ss.mother, ss.child, named events); P.time as compartments is a strict xfail for B1; birth(per=) left for 59 (v4 has offspring=); no stages='step' (v4 conveys a constant dwell); docs building a Starsim 3 pregnancy use ss.LegacyPregnancy (rulings) |
+| merge | origin/v4 92902b20 | 0d709392 | Cliff's delivery redesign merged; v4's deliveries taken whole, v4-rs delivery features xfailed for re-port (see the merge message) |
+| 58 | da61f0ca | df6ef759 | Agents only (capability rows make compartments say so); attr/func live in expressions.py; on= also takes v4's transition-as-condition; fire()/hooks inside move_states() (v4's force path); results by a derived stratification via v4's init_groups/store_group; the test's sets of states written as sums, and rec/10 not rec/ss.days(10) (v4's unit check); no describe() lines yet |
+| 59 | 2e9fc5fc | 707c1d5f | Agents half: ss.birth(per=) kept as v4-rs's declared form, built on v4's add_people and parent links (per held by reference, so it survives copying); another module's ss.birth(per=) only places the children, so it is not a second birth of everyone; compartments are a CapabilityError (B4), test_births_ode a strict xfail |
+| 60 | 820932c0 | ae12efcc | Tests only, as strict xfails: its interventions.py changes (routine held products over untracked diseases) go with the delivery re-ports |
+| 61 | b5b0a17f | — | implementation.md only: merged in Task 6 |
+| 62 | 1f2f77f9 | 1fb9c159 | Ported as on v4-rs (preg.attr kept as its Recorded form; Since/Recorded live in expressions.py); flow-driven births are now recorded as events, so ss.child(preg.birth) and on=preg.birth see them; the test in v4's spelling |
+| 63 | 82057114 | — | ss.attr as compartments: Phase B (B6) |
+| 64 | c856e39b | 12bfb7f4 | Ported onto v4's add_people (fetuses in each module's first state, aged below 0); the unborn are in a declared disease's states and not among the people, as v4 decided (test_mtct), so the test counts them in; has_unborn is v4's people.unborn_uids(), which now includes a declared ss.Pregnancy with fetuses |
+| 65 | d40c3218 | 0c5b7fa1 | Ported; ss.Lactation added in v4's choose_solver(); a triggered split with ss.stay is accepted (the check counted its one real destination); set_pars is pars.update |
+| 66 | ccdf8309 | 594327a0 | Starsim 3 names/results/callbacks/p_maternal_death on ss.Pregnancy. Ruling: no Recorder — v4's ss.Event arrays on LegacyPregnancy (conception/delivery/loss) serve ss.on(); triggers on a coded/delivery event move each person once per firing (unseen_fired), else S>>F@on(conception)/F>>S@on(delivery) looped. No birth/live_birth events on LegacyPregnancy (v4 has 3). Test allows fractional due times (one step). |
+| 67 | 195c7859 | 2fd714c2 | Ruling: v4's increment= replaces move='+1' — a parity dimension makes delivery increment=dict(parity=1); the solvers.py part (+k moves) dropped as v4's counters do it. Postpartum ODE half is a strict xfail (Phase B1: clocks as compartments). |
+| 68 | 16643b84 | — | implementation.md (v4-rs design doc): log only |
+| — | c9920adf | — | B6 (attributes as compartments): deferred |
+| — | 314e523c | — | B6 (attributes as compartments; HIV CD4 ODE test): deferred |
+| 69 | 1341164c | 361371c7 | ss.spread as agents (back-dated seeds run forward by natural history) in expressions.py; Agents.backfill reuses schedule/draw_competing(key=)/finish_moves rather than a step_exits refactor; reset people can be chosen again (else pool exhausted: 985/1000); compartmental raises CapabilityError (B). Test from fc7c8bd5: agents half; ODE half strict xfail. |
+| — | fc7c8bd5 | — | B (ss.spread as compartments): deferred; its agents test went in with 69, ODE half strict xfail |
+| — | 584b4373 | — | B6 (HPV antibodies as levels, ODE vs agents) + implementation.md: deferred |
+| 70 | 31e7089c | 263bae4b | preg.attr() is an ss.attr on a pregnancy transition; Recorded removed (expressions.py, engine, agents). |
+| 71 | ac5ef437 | b7c6ad23 | CLAUDE.md: the two Pregnancy lines only. Ruling: dropped the commit's stray LLM preamble and ```markdown fence around the file (a mistake in v4-rs). |
+| 72 | 331b4013 | 5ee7265c | Trimester UIDs and rel_ptb/set_ptb on ss.Pregnancy: applied cleanly. |
+| 73 | 3704190c | 8340789d | Ruling: v4 wins on condoms — protection is ss.modify(infection, efficacy=, share=lambda net: net.edges.condoms, route=) (v4 graph steers eff_condom there), so no eff_condom in net_beta. Kept: condoms edge column with edge_defaults on SexualNetwork, Disease.value(). Test rewritten to the modifier. |
+| — | 5b1a2a62 | — | Superseded by v4: an age stratification with no split takes the named world population's ages (or the people given: split_from='people'); v4-rs's uniform-0-60 People default would contradict it. Log only. |
+| 74 | 182944f6 | a66434e6 | undriven=True on ss.Transition/ss.progression silences v4's ss.UndrivenUnused (was W209); re-applied by hand onto v4's signature. |
+| 75 | b35d005c | 26283a09 | Remapped to v4: follow-ups are cascade steps/on_fail steps (_add_steps), so ss.Sim also applies _add_steps to interventions given in pars= (before the copy; at validation the copies break identity). Test: a SubSim passing a cascade in pars. The order-of-list half is v4's order_steps already. |
+| — | e924ee52 | — | B2 (synchronized flows: ss.on(other.tr) as compartments): deferred |
+| — | ab75d5ad | — | B2 (synchronized flows for moves by an intervention, compartments): deferred |
+| 76 | dc83aea1 | a4f087f4 | Remapped to v4's indexing: seeds that move on at the start (from a junction) are counted in the flows at the start (index 0) rather than zeroed, and their events are dated just before step 0 (key ti-1) so deliveries see them once — v4 delivered them twice (index 0 and 1) with a 0 flow. The dur=0 case already matched. |
+| 77 | 7efdc3c5 | 9dbfbb10 | ss.state('mod.X').enter/.exit as Events of (module, name) pairs (v4's Event takes them; no StateRef); state_refs follows Events. Ruling: a transition by path (ss.state('a.sa')) is not an on= — its kind is unknown when the delivery is made (v4's split_who checks has_event then); cost: write the transition object or .enter of its destination. |
+| 78 | 958b820a | 81549280 | Delivery.typed_function(): a coverage function giving a typed rate is a rate (not remembered once per spell); worked out when first callable (with the sim), so the ODE's offered dimension follows it too. |
+| 79 | 79ecc00b | 94bbe0ee | Ratio results with a denominator lacking a dimension (strain) keep their strata: denom_dims on the result, by()/select() add the denominator up over the dimensions it lacks; re-applied onto v4's results (runs axis) by hand. |
+| 80 | 06374473 | 0edcdda0 | Superseded by v4 (seed_dist()/seed() and init_fractions call an init_prev function per agent / per group); test only, which v4 passes, minus the check that exits are scheduled at init (v4 schedules placed agents at the first step). |
+| 81 | 15626732 | def299f9 | Pregnancy burnin= as agents, through the ss.spread backfill (a per-agent share over the mean pregnancy before the start); pre-start deliveries counted in Pregnancy.parity (after= callback). Ruling: compartmental burn-in deferred (B) — an ODE run notes it and starts with nobody pregnant (raising would break every ODE pregnancy, as burnin=True is the default); ODE test strict xfail. test_syphilis nnd threshold 10 -> >0 (4-12 across seeds either way). |
+| 82 | e34a9e76 | febf6279 | tfr result and asfr on ss.Pregnancy (applied cleanly); the test's ABM-vs-ODE TFR comparison dropped to the agents' range (ODE needs P.time as compartments: B1). |
+| — | a6642333 | — | implementation.md (v4-rs design doc): log only |
+| — | a6642333 (+risk 3) | cc5e6bd3 | sim.new() keeps burnin=, checked in test_burnin; then=/queue=/ss.Capacity are not ported (rulings), so nothing else to check |
+| 83 | 6ba95487 | 4ff4831f | B7: fetal levels of the pregnant compartments not ported (fetal_specs/route/preg_event, crossing why text). Tests: test_syphilis at 50k agents with strat (agents half); test_syphilis_ode and test_events_ode strict xfails (CapabilityError). |
+| 84 | 49140978 | 986afd3b | B7: prenatal transmission, fetal deaths, Lactation as compartments not ported. Tests: test_fetus_ode and test_lactation_ode strict xfails (make_fetal at module level). |
+| 85 | c27c2c6a | a577bd63 | B7: BreastfeedingNet as mass action in compartments not ported; Lactation docstring kept 'agents only'. Tests: test_hiv_vertical (agents: >200 in utero and by breastfeeding at 100k agents); test_hiv_vertical_ode strict xfail. |
+| — | 40491a51 | — | ss.mother docstring for compartments: B7, log only (the docstring stays 'agents only') |
+| 86 | 14c21d45 | f786a65b | Test only: test_burnin asserts the first deliveries have their births (holds as agents). Its births-at-the-first-step half is B4/B5 (compartmental burn-in); its crossing-ownership half has no counterpart in v4 (no claim), dropped. |
+| — | tests check | 4cca0ec0 | tests/ against the v4-rs tip, by test name: missing were 4 that v4 removed, test_age_split (5b1a2a62, superseded), test_year_start_with_unit (d15a4780, dropped), and test_hpv_cancel_event (e924ee52) and test_hiv_cd4_ode (314e523c), now added (agents live; ODE strict xfails, B3/B6) |
+| — | 28207463 | de3eb3aa | The merge's own resolution was in test_triggers only (pregnancy tests merged clean): it combined the B3 ODE checks and a treatment-move event test; added test_treated_event (agents) and test_on_event_ode (strict xfail, B3) |
+| — | c9920adf, 584b4373 | c9265161 | Their test changes: bins= on cd4_stop, test_hpv_nab_ode strict xfail (B6) |
+| — | implementation.md | 8769d50c | Merged: v4's file as the base, v4-rs entries added, [B] marks, supersessions and open items noted |
+| — | risk 4 | eb4f67e4 | Save and load mid-run as agents, pregnancy (test_pregnancy::test_save_load) and a cascade with memory and a delay (test_deliveries::test_save_load): identical results |
+| — | review 2 | 859b4724 | solver='auto' with ss.spread chose ODE and crashed: a capability row now sends it to agents; burnin= and the other deferred features already chose agents |
+| — | review 1 | 5e9e1435 | python -m starsim.migrate on the v4-rs test_pregnancy.py: added ss.people.->ss.ppl. and eligible=->where=; what is left after it is B1 (P.time as compartments: 8 tests run the ODE) and two known adaptations (fractional due times in test_legacy; the unborn counted in a declared disease's states in test_fetus) |
+| B2 | 17f7ca50 | 972b98e1 | Triggers on states and strata as compartments, on v4's tracks (immediate, masked per group) and force(); sweep each step and at placement; crossings for a trigger on another disease's state. test_bv_debut_ode needs use_aging=True (v4 ages only with births/deaths). Unblocked: test_bv_debut_ode, test_hpv_cancel_ode. Gradients: not checked (no JAX here); kernel_reason refuses whole runs with triggers. test_cascade_binomial's B2 label is wrong (binomial counting in the kernels), left xfail |
+| B3 | e924ee52, ab75d5ad | 808f1d1d | Synchronized flows on v4's layout: init_syncs/sync_maps/pass_syncs in compartmental.py; v4's crossing kept each flow's map within its slice of the other diseases' levels, so targets are now split by the slice they land in (which_maps; pieces.maps with row and column slices). Step path only: kernel_reason refuses whole runs with syncs (the whole-run kernels and JAX are not extended). Unblocked: test_on_event_ode, test_hpv_cancel_event_ode (treated moves included) |
+| B5 (spread) | fc7c8bd5 | 28585a89 | ss.spread as compartments on v4's kernels (one_step with the program at the start, inflows and movers zeroed, rk4 for the expected numbers); a crossing raises CapabilityError. test_spread_ode unblocked (fixed dwell: exactly 100 a day over the first 10). The HIV half of v4-rs's test needs attributes as compartments (B6). burnin= as compartments needs ss.Pregnancy as an ODE (B1) |

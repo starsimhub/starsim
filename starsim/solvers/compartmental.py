@@ -8,7 +8,7 @@ import sciris as sc
 import starsim as ss
 from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_level, no_tables
 
-__all__ = ['Compartmental']
+__all__ = ['Compartmental', 'synced_event']
 
 
 def at_dwell(expr, value):
@@ -21,6 +21,29 @@ def at_dwell(expr, value):
     elif isinstance(expr, E.Func):
         return E.Func(expr.name, *[at_dwell(arg, value) for arg in expr.args])
     return expr
+
+
+def synced_event(tr, sim, home):
+    """
+    For a transition triggered by an event (`ss.on(other.tr)`, `ss.on(other.tr.to(B))`): the transition of another
+    declared module it is, as Bunch(mod, tr, to), which a compartmental run realizes as a synchronized flow (see
+    `Compartmental.init_syncs()`); None for anything else (an event of its own module, entering or leaving a state, or
+    an event a module records in code)
+    """
+    trig = tr.trigger
+    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event):
+        return None
+    kind, obj, dst = trig.x.args
+    if kind not in ['tr', 'to']:
+        return None
+    name = ss.conditions.modname(obj.module)
+    declared = [m.name for m in getattr(sim, 'declared', [])]
+    if name in [None, home] or name not in declared:
+        return None
+    other = sim.get_declared(name)
+    if getattr(obj, 'name', None) not in other.graph.transitions:
+        return None
+    return Bunch(mod=name, tr=obj.name, to=getattr(dst, 'name', dst))
 
 
 class Compartmental(Engine):
@@ -44,7 +67,6 @@ class Compartmental(Engine):
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.cross = next((c for c in sim.crossings if module.name in c.names), None)
-        self.triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on() (or dur=0 with where=) between steps: see step_triggers()
         return
 
     def define(self):
@@ -56,12 +78,16 @@ class Compartmental(Engine):
 
     def init_pre(self):
         for name,tr in self.graph.transitions.items():
+            if getattr(tr, 'per', None) is not None:
+                raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" is a birth driven by the flow of "{tr.per.name}" (ss.birth(per=)), which runs as agents for now, so it cannot run with solver="{self.sim.solver}".\n'
+                                         f'     Run with solver="abm", or leave the solver as "auto".')
             if getattr(tr, 'offspring', None) is not None:
                 raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" has offspring (offspring=), which are added for each person who goes through it, so it cannot run with solver="{self.sim.solver}".\n'
                                          f'     Run with solver="abm", or leave the solver as "auto".')
         self.init_dwells()
         self.init_immunity()
         self.build_layout()
+        self.init_syncs()
         self.init_adjust()
         self.init_movers()
         self.init_results()
@@ -269,6 +295,7 @@ class Compartmental(Engine):
         self.state_comps = sc.objdict({name:[] for name in graph.states})
         self.tracks = sc.objdict() # For each state: the tracks an arrival is split between
         self.flows = []
+        self.init_triggers()
         self.tr_index = {name:i for i,name in enumerate(list(graph.transitions) + graph.destinations())} # After the transitions, the flow to each destination of a transition with several ('cin.X')
         self._target_key = None # So that update_targets() works out where the new flows go
 
@@ -347,6 +374,12 @@ class Compartmental(Engine):
                 tracks += [Bunch(tr=tr, p=None, immediate=False, apart=apart) for tr in (staged or [None])]
             if exits.held: # People who stay, with no exit of their own: the rest of the branches (p=None), or those who took ss.stay (p=0, entered only from the split)
                 tracks.append(Bunch(tr=None, p=None if exits.stay else ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
+            for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
+                if tr.trigger.outcome: # Moved when the outcome happens: see ss.interventions.trigger_moves()
+                    continue
+                if tr.trigger.event: # Moved by the other module's flow (see init_syncs()), or at the end of the step (see step_triggers())
+                    continue
+                tracks.append(Bunch(tr=tr, p=None, immediate=True, trigger=True))
 
             for j,track in enumerate(tracks):
                 tr = track.tr
@@ -548,6 +581,11 @@ class Compartmental(Engine):
     def init_post(self):
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
+        if any(sp.get('share') is not None for sp in self.spreads): # Phase B: a module's own burn-in (ss.Pregnancy's burnin=) as compartments
+            ss.note(f'{self.mod.name}: burnin= has no compartmental form yet, so nobody starts part way through (as agents they do)', sim=self.sim)
+            self.spreads = [sp for sp in self.spreads if sp.get('share') is None]
+        if self.spreads and self.cross is not None:
+            raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}", which is tracked jointly with {sc.strjoin(n for n in self.cross.names if n != self.mod.name)}, cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
         self.update_targets()
         amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
         first = self.graph.first.name if self.graph.people_states else None
@@ -559,13 +597,84 @@ class Compartmental(Engine):
             self.arrive(name, amount, self.y, before=name in infected)
         for name,count in counts.items():
             self.arrive(name, count*self.state_split[name], self.y, before=name in infected)
+        if self.spreads: # People who start part way through their natural history
+            self.backfill_spreads()
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
+        if any(not tr.static for tr in self.triggers) and self.cross is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
+            self.sweep_triggers()
+            for name in self.flowcounts:
+                self.flowcounts[name] = 0.0
+            self.forced = dict()
         if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
             self.check_short(ss.kernels.apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
         self.record_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
+        return
+
+    def backfill_spreads(self):
+        """
+        People who start part way through their natural history (`ss.spread`): the model with nobody to infect and no
+        inflows, fed a constant inflow over the window (or until the people still there settle, with no `over=`), and
+        stepped to the start in the kernels, so they spread over the stages and slots of its dwell times; scaled to the
+        share given in the target, and taken from the first state. The values are those at the start (as are the ages)
+        """
+        mod = self.mod
+        sim = self.sim
+        saved = self.y.copy()
+        first = self.graph.first.name
+        out = np.zeros_like(self.y)
+        self._mover_rates = [np.zeros_like(np.asarray(r, dtype=float)) for r in self.mover_rates()] # Nobody moves between places (or ages) before the start
+        if self.program is None:
+            self.init_program()
+        p = self.program
+        inflows = [i for i,flow in enumerate(self.flows) if flow.src is None]
+        kept = (p.fixed.copy(), p.mult.copy())
+        self.refresh_program()
+        p.fixed[inflows] = 0 # No births or immigration before the start
+        p.mult[inflows] = 0
+        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else 'rk4'] # The expected numbers, whatever the solver
+        rng = self.make_rng(stream=3)
+        try:
+            for sp in self.spreads:
+                window = sp.spread.window(self.convert)
+                lo, hi = (0, 2000) if window is None else [int(round(v/self.dt)) for v in window]
+                hi = max(hi, lo)
+                if sp.tr is not None: # Where a new infection goes
+                    entry = list(zip(sp.tr.dst, [np.asarray(x, dtype=float) for x in self.branch_probs(sp.tr)]))
+                else:
+                    entry = [(sp.entry, 1.0)]
+                self.y = np.zeros_like(saved)
+                targets = [c for name in sp.target for c in self.state_comps[name]]
+                last = None
+                for k in range(-hi - 1, 0):
+                    if -k - 1 >= lo: # Entered in this step
+                        for dst,share in entry:
+                            self.arrive(dst.name, share*self.state_split[first], self.y)
+                    self.y, _ = ss.kernels.one_step(rng, self.y, p, self.dt, solver, self.substeps(), no_tables, -1)
+                    if window is None: # Until those still there settle
+                        now = self.y[targets].sum(axis=0)
+                        if last is not None and np.allclose(now, last, rtol=1e-7, atol=0):
+                            break
+                        last = now
+                x = sp.spread.value
+                want = (x if x <= 1 else x/self.total_pop)*self.total_pop*self.state_split[first]
+                have = self.y[targets].sum(axis=0)
+                scale = np.divide(want, have, out=np.zeros_like(have), where=have > 0)
+                out[targets] += self.y[targets]*scale
+                what = 'infected' if sp.tr is not None else f'in {sp.entry.name}'
+                when = '[' + ', '.join(f'{v*self.dt:n}' for v in [lo, hi]) + ']' + (f' {sim.pars.unit}s' if sim.pars.get('unit') else ' steps') if window is not None else 'long enough to be stationary'
+                ss.note(f'{mod.name}: {x:n} {what}, back-dated over {when} (natural history only; values and ages as at the start)', sim=sim)
+        finally:
+            p.fixed[:], p.mult[:] = kept
+            self.cache.clear()
+        firsts = self.state_comps[first] # Those back-dated are taken from the first state
+        total = saved[firsts].sum(axis=0)
+        taken = out.sum(axis=0)
+        keep = np.divide(np.maximum(total - taken, 0), total, out=np.zeros_like(total), where=total > 0)
+        saved[firsts] *= keep
+        self.y = saved + out
         return
 
     def restart(self):
@@ -723,27 +832,33 @@ class Compartmental(Engine):
         return moved
 
     def force(self, frac, tr, dst, srcs=None):
-        """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures) """
-        total = self.move_states(frac, tr.src if srcs is None else srcs, dst)
+        """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures); a synchronized flow moves other modules' coordinates too """
+        syn = self.syncs_of(tr, dst.name) if tr is not None else []
+        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn)
         if tr is None:
             return total
-        self.flowcounts[tr.name] += total.sum()
-        self.forced[tr.name] = self.forced.get(tr.name, 0) + total
-        return total
+        self.flowcounts[tr.name] += recorded.sum()
+        self.forced[tr.name] = self.forced.get(tr.name, 0) + recorded
+        if syn:
+            self.pass_syncs({sy.row:recorded*sy.mask for sy in syn})
+        return recorded
 
-    def move_states(self, frac, srcs, dst):
-        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move='S -> V')`) """
+    def move_states(self, frac, srcs, dst, syn=None):
+        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move='S -> V')`); with `syn` (synchronized flows), also returns the moves in this module's own groups """
         total = np.zeros(self.n_groups)
+        recorded = np.zeros(self.n_groups)
         entry = self.entry[dst.name][0]
         for state in srcs:
             if not state.people:
                 continue
             s = self.selector.states.index(state.name)
-            dim_map = self.dim_map(state.name, dst.name)
+            base = self.dim_map(state.name, dst.name)
+            dim_map = self.synced(base, syn) if syn else base
             for comp in self.state_comps[state.name]:
                 n = self.take(self.y[comp], frac[s])
                 self.y[comp] -= n
                 total += n if dim_map is None else n @ dim_map
+                recorded += n if base is None else n @ base # In this module's own groups, before the others' coordinates move
         if self.integer and len(entry) > 1: # Whole people, split at random between the branches of the destination
             left, rest = total.copy(), 1.0
             for ind,w in entry[:-1]:
@@ -754,7 +869,7 @@ class Compartmental(Engine):
         else:
             self.arrive(dst.name, total, self.y)
         self.changed()
-        return total
+        return (total, recorded) if syn is not None else total
 
     def move_share(self, tr, frac, srcs):
         """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """
@@ -767,11 +882,11 @@ class Compartmental(Engine):
 
     def step_triggers(self):
         """
-        The transitions moved by a trigger (`on=` a condition or an event of this module, or `dur=0` with `where=`), at the end of each
-        step: the share of each source state and group the condition holds for, or the step's event happened to, moves then, as a
-        delivery's people do (so people put in the source between steps, by an intervention, move at the end of the next step)
+        The transitions moved by an event of this module (`on=` one of its transitions), at the end of each step: the share of each
+        source state and group the step's event happened to moves then, as a delivery's people do (triggers on conditions are
+        passed straight through instead: see `update_targets()` and `sweep_triggers()`)
         """
-        for tr in self.triggers:
+        for tr in self.event_triggers:
             srcs = [s for s in tr.src if s.people]
             frac = np.asarray(self.selector.select(tr.trigger.x), dtype=float)*self.selector.in_states([s.name for s in srcs])
             if tr.where is not None and tr.where is not tr.trigger.x:
@@ -827,14 +942,206 @@ class Compartmental(Engine):
         """ The compartment of a state for people who stay in it with no exit of their own """
         return next(track.first for track in self.tracks[name] if getattr(track, 'stay', False))
 
+    #%% Synchronized flows: a transition of another module triggered by one of this module's
+
+    def init_syncs(self):
+        """
+        Synchronized flows (proposal 03 §2.3): a transition of another module triggered by a transition of this one
+        (`ss.on(a.tr)`, or a branch, `ss.on(a.tr.to(X))`). The two modules are tracked jointly (`ss.solvers.Crossing`),
+        so this module's flow also carries the other's coordinate from the source of its transition to its destination,
+        in the same flow: exact. Each has a row of its own after the transitions, which the flow credits, and which the
+        other module records as its transition's flow (see `pass_syncs()`)
+        """
+        sim = self.sim
+        self.syncs = []
+        self._sync_maps = {}
+        moved = {id(flow.tr) for flow in self.flows}
+        for mod in sim.declared:
+            for otr in (mod.graph.transitions.values() if mod is not self.mod else []):
+                ev = synced_event(otr, sim, mod.name)
+                if ev is None or ev.mod != self.mod.name:
+                    continue
+                tr = self.graph.transitions[ev.tr]
+                where = f'"{mod.name}.{otr.name}" (triggered by {otr.trigger.x.label}) cannot run with solver="{sim.solver}"'
+                if self.cross is None or mod.name not in self.cross.names:
+                    raise ss.CapabilityError(f'{where}: "{mod.name}" and "{self.mod.name}" are not tracked jointly. Run with solver="abm".')
+                if otr.where is not None:
+                    raise ss.CapabilityError(f'{where} with where=: a synchronized flow moves everyone in its source. Put the condition in the source states, or run with solver="abm".')
+                if id(tr) not in moved:
+                    raise ss.CapabilityError(f'{where}: "{self.mod.name}.{tr.name}" moves people with no wait (passed through on entry), so it has no flow of its own to synchronize with. Run with solver="abm".')
+                if not otr.dst or any(not st.people for st in otr.src + otr.dst):
+                    raise ss.CapabilityError(f'{where}: a synchronized flow moves people between states of people (not to ss.null or a count). Run with solver="abm".')
+                self.syncs.append(Bunch(tr=tr, to=ev.to, mod=mod, otr=otr, row=self.n_trans, S=None, mask=None, rec=None))
+                self.n_trans += 1
+                ss.note(f'{mod.name}.{otr.name} is triggered by {otr.trigger.x.label}: a synchronized flow, which moves people in {mod.name} as {self.mod.name}.{tr.name} moves them (exact)'
+                        + (f'; with solver="{sim.solver}" its count is drawn apart from the move, so agrees with it on average' if self.integer and len(tr.dst) > 1 else ''), sim=sim)
+        return
+
+    def syncs_of(self, tr, dst):
+        """ The synchronized flows of a transition (to a destination), with their maps worked out """
+        return [self.sync_maps(sy) for sy in getattr(self, 'syncs', []) if sy.tr is tr and sy.to in [None, dst]]
+
+    def sync_maps(self, sy):
+        """
+        For a synchronized flow: the map between groups that moves the other module's coordinate (its dimension in the
+        crossing) from the levels of its transition's source to those of its destination (entry, split by its branches),
+        the share of each group that it moves, and where the flow is recorded in the other module's groups
+        """
+        if sy.S is not None:
+            return sy
+        sim = self.sim
+        groups = sim.groups
+        other = sy.mod.engine
+        if not hasattr(other, 'entry'):
+            other.update_targets()
+        d, a = groups.dim_index(sy.mod.name), groups.dim_index(self.mod.name)
+        strat = groups.strats[d]
+        coords, mults = groups.group_coords, groups.group_mults
+        ng = self.n_groups
+        level = lambda ind: other.people_comps.index(ind)
+        def scalar(w, what):
+            w = np.broadcast_to(np.asarray(w, dtype=float), (ng,))
+            if np.ptp(w) > 1e-12:
+                raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr.trigger.x.label}, and {what} differs between groups, which a synchronized flow cannot carry yet. Run with solver="abm".')
+            return float(w[0])
+        dst = sc.ddict(float) # Level of the other's dimension -> share, for people leaving the source
+        ps = [scalar(p, 'its branch probability') for p in other.branch_probs(sy.otr)]
+        for state,p in zip(sy.otr.dst, ps):
+            comps, credits = other.entry[state.name]
+            if credits:
+                raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr.trigger.x.label}, and its destination "{state.name}" is passed straight through, which a synchronized flow cannot carry yet. Run with solver="abm".')
+            for ind,w in comps:
+                dst[level(ind)] += p*scalar(w, 'where its destination is entered')
+        stay = 1 - sum(ps)
+        S = np.zeros((ng, ng))
+        mask = np.zeros(ng)
+        src = {l:(state.name, l) for state in sy.otr.src for l in strat.state_levels[state.name]}
+        for g in range(ng):
+            b = coords[g, d]
+            if b not in src:
+                S[g, g] = 1.0
+                continue
+            mask[g] = 1 - stay
+            for l,w in dst.items():
+                S[g, g + (l - b)*int(mults[d])] += w
+            if stay > 1e-12: # ss.stay: to the source state's compartment with no exit of its own
+                held = [t for t in other.tracks[src[b][0]] if getattr(t, 'stay', False)]
+                l = level(held[0].first) if held else b
+                S[g, g + (l - b)*int(mults[d])] += stay
+        own = sc.ddict(float) # This module's level after the move, where the other's flow is recorded
+        for state,p in zip(sy.tr.dst, self.branch_probs(sy.tr)):
+            if sy.to in [None, state.name]:
+                for ind,w in self.entry[state.name][0]:
+                    if ind in self.people_comps:
+                        own[self.people_comps.index(ind)] += float(np.mean(p))*float(np.mean(w))
+        total = sum(own.values()) or 1.0
+        rec = [(g, groups.folded(g - coords[g, d]*int(mults[d]) + (l - coords[g, a])*int(mults[a])), w/total) for g in np.flatnonzero(mask) for l,w in own.items()] # From each of this module's groups to the other's
+        sy.S, sy.mask = groups.fold_matrix(S), mask
+        sy.rec = tuple(np.array(v) for v in zip(*rec)) if rec else (np.zeros(0, int), np.zeros(0, int), np.zeros(0))
+        return sy
+
+    def synced(self, dim_map, syn):
+        """ The map of a flow along a transition that other modules' transitions are triggered by: its own, then moving their coordinates """
+        if not syn:
+            return dim_map
+        key = (id(dim_map),) + tuple(sy.row for sy in syn)
+        if key not in self._sync_maps:
+            out = dim_map
+            for sy in syn:
+                out = sy.S if out is None else out @ sy.S
+            self._sync_maps[key] = (dim_map, out) # The map is kept with it, so its id is not reused
+        return self._sync_maps[key][1]
+
+    @staticmethod
+    def sync_rec(sy, val):
+        """ A synchronized flow by this module's groups (the last axis), as the other module's """
+        gi, gj, w = sy.rec
+        out = np.zeros(val.shape)
+        np.add.at(out.T, gj, (val[..., gi]*w).T)
+        return out
+
+    def pass_syncs(self, flows):
+        """ After a step, or a move by an intervention: give each module whose transition is triggered by one of this one's the people its flow moved, as its transition's flow """
+        for sy in self.syncs:
+            if isinstance(flows, dict) and sy.row not in flows:
+                continue
+            val = np.asarray(flows[sy.row], dtype=float)
+            if not val.any():
+                continue
+            val = self.sync_rec(sy, val)
+            other = sy.mod.engine
+            name = sy.otr.name
+            other.flowcounts[name] += val.sum()
+            if getattr(other, 'stepped', None) == other.mod.ti: # It has taken its step already: add to what it recorded
+                other.last_flows[name] = other.last_flows.get(name, 0) + val
+                if other.n_groups > 1:
+                    other.flow_groups[name] = other.flow_groups.get(name, 0) + val
+            else:
+                other.forced[name] = other.forced.get(name, 0) + val
+        return
+
+    def init_triggers(self):
+        """ Triggers (`ss.on()`): on states and strata, the compartments where they hold vanish; on time or counts, they are applied at each step """
+        sim = self.sim
+        self.triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and not tr.trigger.event and not tr.trigger.outcome]
+        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None] # An event of this module: moved at the end of the step, see step_triggers()
+        for tr in self.triggers:
+            tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
+            if not tr.static:
+                ss.note(f'{tr.name} is triggered by {tr.trigger}, which is not only on states and strata; applied at each step', sim=sim)
+            else:
+                ss.note(f'{tr.name} is triggered by {tr.trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dst)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
+        return
+
+    def trigger_frac(self, tr):
+        """ Where a trigger holds, as the fraction of each state (rows) and group (columns) it selects """
+        sel = self.selector
+        out = np.asarray(sel.select(tr.trigger.x), dtype=float)
+        if tr.where is not None:
+            out = out*np.asarray(sel.select(tr.where), dtype=float)
+        return np.broadcast_to(out, (len(sel.states), self.n_groups))
+
+    def trigger_mask(self, tr, name):
+        """ The groups of a state where a trigger on states and strata holds (1) or not (0); 0 for one on time or counts, which is applied at each step instead: see sweep_triggers() """
+        if not tr.static:
+            return np.zeros(self.n_groups)
+        return np.clip(self.trigger_frac(tr)[self.selector.states.index(name)], 0, 1)
+
+    def sweep_triggers(self):
+        """ At each step: move the people a trigger holds for who are still in its source (who arrived by aging, a transfer, or another disease's move, or for whom a condition on time or counts has come to hold) """
+        for tr in self.triggers:
+            frac = np.array(self.trigger_frac(tr))
+            rows = [self.selector.states.index(s.name) for s in tr.src if s.people]
+            keep = np.zeros(frac.shape[0], dtype=bool)
+            keep[rows] = True
+            frac = np.where(keep[:, None], frac, 0.0)
+            if not np.any(frac > 0):
+                continue
+            rest = 1.0
+            for dst,p in zip(tr.dst, self.branch_probs(tr)):
+                share = np.divide(p, rest, out=np.zeros(np.broadcast(p, rest).shape), where=np.asarray(rest) > 0)
+                self.force(frac*share, tr, dst)
+                frac = frac*(1 - share)
+                rest = rest - p
+        return
+
     def update_targets(self):
         """ Work out where each flow's arrivals go; done once per step, since branch probabilities can change (and only worked out again if they have) """
         probs = sc.objdict()
         for name,tracks in self.tracks.items():
-            apart = [track for track in tracks if getattr(track, 'apart', False)]
-            ps = self.apart_shares(name, apart) if apart else [None if tr.p is None else self.eval(tr.p) for tr in tracks]
-            mults = [self.branch_mult(tr.tr) for tr in tracks]
-            probs[name] = self.branch_shares([tr.tr for tr in tracks], ps, mults)
+            plain = [tr for tr in tracks if not getattr(tr, 'trigger', False)]
+            apart = [track for track in plain if getattr(track, 'apart', False)]
+            ps = self.apart_shares(name, apart) if apart else [None if tr.p is None else self.eval(tr.p) for tr in plain]
+            mults = [self.branch_mult(tr.tr) for tr in plain]
+            probs[name] = self.branch_shares([tr.tr for tr in plain], ps, mults)
+            if len(plain) < len(tracks): # Triggers on states and strata: in the groups where one holds, arrivals pass straight through (the compartments vanish)
+                left = np.ones(self.n_groups)
+                masks = []
+                for track in tracks[len(plain):]:
+                    mask = self.trigger_mask(track.tr, name)*left
+                    masks.append(mask)
+                    left = left - mask
+                probs[name] = [p*left for p in probs[name]] + masks
         key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and tr.split and tr.name not in self.slotted for p in self.branch_probs(tr)]
         slot_probs = {name:[np.broadcast_to(p, (n, self.n_groups)) for p in self.branch_probs(self.graph.transitions[name], ps)] for name,(n,ps) in self.slot_ps.items()} # For every slot at once
         key += [p for probs in slot_probs.values() for p in probs]
@@ -881,8 +1188,9 @@ class Compartmental(Engine):
                 ps = self.branch_probs(flow.tr) if flow.row is None else [p[flow.row] for p in slot_probs[flow.tr.name]]
                 for dst,p in zip(flow.tr.dst, ps):
                     comps, credits = self.entry[dst.name]
+                    syn = self.syncs_of(flow.tr, dst.name)
                     for ind,w in comps:
-                        dim_map = self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr))
+                        dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr)), syn) # Moving other modules' coordinates too (a synchronized flow)
                         if dim_map is not None and np.ndim(w): # A branch share decided on entry, by the groups people land in, which can have a dimension the source lacks (TL16: it was read at the first level)
                             landed = dim_map*w
                             total = landed.sum(axis=1)
@@ -892,6 +1200,7 @@ class Compartmental(Engine):
                             flow.targets.append((ind, w*p, dim_map)) # (compartment, share, where in it)
                     flow.recs += [self.tr_index[f'{flow.tr.name}.{dst.name}'] if flow.named and len(flow.tr.dst) > 1 else -1]*len(comps) # Also counted in the flow to this destination
                     flow.credits += [(ind, w*p) for ind,w in credits]
+                    flow.credits += [(sy.row, p*sy.mask) for sy in syn] # Moved in another module too
                 if flow.tr.stays and src is not None: # Those who took ss.stay go to the state's compartment with no exit of its own, and are not in the flow
                     flow.targets.append((self.stay_comp(src), 1 - sum(ps), None))
                     if flow.kind != 'stage' or flow.to is None:
@@ -1507,6 +1816,12 @@ class Compartmental(Engine):
         sim = self.sim
         mod = self.mod
         graph = self.graph
+        if self.syncs: # Recorded in the other module after each step
+            return f'"{self.syncs[0].mod.name}.{self.syncs[0].otr.name}" is a synchronized flow of "{self.mod.name}.{self.syncs[0].tr.name}"'
+        if self.triggers: # Applied in Python at each step, for those who come to meet them other than by a transition
+            return f'"{self.triggers[0].name}" is triggered by {self.triggers[0].trigger}, which is applied at each step'
+        if self.event_triggers: # Moved in Python at the end of each step
+            return f'"{self.event_triggers[0].name}" is triggered by {self.event_triggers[0].trigger}, which is applied at each step'
         stepped = [m for mods in sim.modifiers.values() for m in mods if not getattr(m, 'tabulated', False)]
         if stepped:
             return f'the modifier "{stepped[0].name}" is applied each step (it has where=, when=, or a function as its amount, or changes a value that varies by person)'
@@ -1539,8 +1854,9 @@ class Compartmental(Engine):
                 self.whole = f'"{name}" of "{mod.name}" is a function of the sim, so is called each step'
             elif transfers:
                 self.whole = f'the transfer "{transfers[0]}" of "{mod.name}" has a rate that changes'
-            elif self.triggers:
-                self.whole = f'"{self.triggers[0].name}" of "{mod.name}" is triggered by {self.triggers[0].trigger}, so moves people between steps'
+            elif self.triggers or self.event_triggers:
+                trig = (self.triggers + self.event_triggers)[0]
+                self.whole = f'"{trig.name}" of "{mod.name}" is triggered by {trig.trigger}, so moves people between steps'
             elif mod.t.npts != sim.t.npts:
                 self.whole = f'"{mod.name}" has a timestep of its own'
         return self.whole or None
@@ -2096,6 +2412,10 @@ class Compartmental(Engine):
 
     def step(self):
         """ Advance the compartments by one timestep """
+        if self.triggers: # Those who came to meet a trigger since the last step
+            self.cache.clear()
+            self.update_targets()
+            self.sweep_triggers()
         if self.cross is not None: # Together with the other diseases in the crossing, once each has worked out its rates
             return self.cross.step(self)
         self.cache.clear() # The interventions have run since the step started
@@ -2124,8 +2444,10 @@ class Compartmental(Engine):
             self.last_flows[name] = flow
             if self.n_groups > 1:
                 self.flow_groups[name] = flow
-        if self.triggers: # At the end of the step, after its flows, so nobody a trigger holds for is left in its source
+        if self.triggers or self.event_triggers: # At the end of the step, after its flows: those its events happened to, and those a trigger now holds for who are still in its source (e.g. moved by a transfer), as agents move them in the step
             self.step_triggers()
+            self.cache.clear() # The flows have moved people since the rates were worked out
+            self.sweep_triggers()
             for name in list(self.forced):
                 self.last_flows[name] = self.last_flows[name] + self.forced.pop(name)
                 if self.n_groups > 1:
@@ -2135,4 +2457,7 @@ class Compartmental(Engine):
                 self.flowcounts[mover.name] += flows[self.n_trans + i].sum()
                 self.flow_groups[mover.name] = flows[self.n_trans + i]
         self.record_stocks()
+        self.stepped = self.mod.ti
+        if self.syncs and self.cross is None:
+            self.pass_syncs(flows)
         return

@@ -3,6 +3,8 @@ Test interventions on declared models: modifiers, conditions, products, and thei
 """
 
 # %% Imports and settings
+import os
+import tempfile
 import pytest
 import numpy as np
 import networkx as nx
@@ -513,6 +515,18 @@ def test_cascade():
         assert np.isclose(df.eligible.iloc[2], res.confirm.positive.sum(), rtol=1e-6)
     text = sim.describe(output=True)
     assert 'care (cascade of 3 steps)' in text and 'on screening.positive' in text
+
+    # The steps are registered for a subclass of ss.Sim that passes the modules in pars
+    class SubSim(ss.Sim):
+        def __init__(self, interventions=None, **kwargs):
+            super().__init__(pars=dict(interventions=interventions), **kwargs)
+    rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
+    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
+    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
+    sub = SubSim(interventions=ss.cascade(screening, confirm, treatment, name='care'), diseases=make_sis(), solver='abm', stop=120, **kw).run()
+    assert 'confirm' in sub.interventions and np.array_equal(sub.results.sis.n_I, sim.results.sis.n_I)
     assert sim.results.care.plot() is not None
 
     # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)
@@ -559,7 +573,7 @@ def test_memory():
 
     # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.1, name='sis')
-    preg = ss.Pregnancy(fertility_rate=50)
+    preg = ss.LegacyPregnancy(fertility_rate=50)
     anc_visit = ss.visit(who=preg.conception, coverage=0.85)
     anc_a = ss.screen(ss.Diagnostic(sensitivity=0.9, name='rdt'), who=anc_visit)
     anc_b = ss.screen(ss.Diagnostic(sensitivity=0.8, name='rpr'), who=anc_visit)
@@ -1134,6 +1148,28 @@ def test_coded_disease():
             clear_infection = property(lambda self: (_ for _ in ()).throw(AttributeError('clear_infection')))
         ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, interval=1), verbose=0).init()
     return res
+def test_save_load():
+    """ A cascade with memory and a delayed test, saved and loaded mid-run, ends as if it had not been """
+    sc.heading('Testing save and load of a cascade mid-run')
+    def make():
+        rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+        pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+        screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
+        confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
+        treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
+        return ss.Sim(make_sis(), interventions=ss.cascade(screening, confirm, treatment, name='care'), solver='abm', stop=120, **kw)
+    sim = make()
+    sim.init()
+    sim.run(until=60)
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, 'care.sim')
+        sim.save(path)
+        loaded = ss.load(path)
+    loaded.run()
+    sim.run()
+    assert np.array_equal(sim.results.sis.n_I.values, loaded.results.sis.n_I.values)
+    assert np.array_equal(sim.results.treatment.delivered.values, loaded.results.treatment.delivered.values)
+    return loaded
 
 
 if __name__ == '__main__':
