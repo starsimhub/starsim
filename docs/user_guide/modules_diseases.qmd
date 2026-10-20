@@ -158,7 +158,7 @@ This works under every solver. For realistic demographics (fertility and mortali
 
 ### States that are not people
 
-Some of what a disease model tracks is not people: bacteria in water, a mosquito population. These are ordinary states in the same disease. A state that no transition connects to the disease's first state is a count, not people: it is never represented as agents, is not part of the population size, and is used in rates as a count (`W.n`). Here is Codeço's cholera model, with bacteria shed into the water by infectious people:
+Some of what a disease model tracks is not people: bacteria in water, a mosquito population. These are ordinary states in the same disease. A state that transitions fill or empty, but that no transition connects to the disease's first state, is a count, not people (a state that no transition touches at all is people, like the first): it is never represented as agents, is not part of the population size, and is used in rates as a count (`W.n`). Here is Codeço's cholera model, with bacteria shed into the water by infectious people:
 
 ```{python}
 beta = 0.5 # Infection hazard per day at saturating exposure

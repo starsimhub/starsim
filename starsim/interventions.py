@@ -778,7 +778,44 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
                 frac = now*tgt.selector.in_states([s.name for s in srcs])
                 if cond is not None:
                     frac = frac*tgt.selector.select(cond)
+                counts = tgt.state_counts()
                 tgt.move_share(tr, frac, srcs)
+                if tgt is eng: # The event's people who moved are found where they are now, by steps that read it later in the step
+                    carry_moved(owner, outcome, eng, counts)
+    return
+
+
+def carry_moved(owner, outcome, eng, before):
+    """
+    In a compartmental run: carry the events of this step along a move of the people of one of them (by a transition that
+    event triggered: see `trigger_moves()`), from the people it took out of each state and group to those it put in, so a step
+    that reads them later in the step finds them where they are now. An event with the same people (e.g. a delivery's
+    outcome, and its product's) moves as they did; any other, the same share as of everyone in their state and group
+    """
+    sim = owner.sim
+    after = eng.state_counts()
+    left, came = np.maximum(before - after, 0), np.maximum(after - before, 0)
+    share = np.divide(left, before, out=np.zeros_like(before), where=before>0)
+    entries = [e for e in owner.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti and e[3] is eng]
+    if not entries:
+        return
+    mine = entries[-1][1]*(before if entries[-1][2] is None else entries[-1][2]) # The people of the event that triggered the move
+    for m in [m for m in list(sim.interventions()) + list(sim.products()) if m.__dict__.get('_live')]:
+        for out,es in m._live.items():
+            for entry in es:
+                t, sel, b, e = entry
+                if t != sim.ti or e is not eng:
+                    continue
+                people = sel*(before if b is None else b)
+                if np.allclose(people, mine):
+                    new = np.maximum(people - left, 0) + came
+                else:
+                    moved = people*share
+                    new = people - moved
+                    total = moved.sum()
+                    if total > 0 and came.sum() > 0:
+                        new = new + came*(total/came.sum())
+                entry[1:3] = [np.clip(np.divide(new, after, out=np.zeros_like(after), where=after>0), 0, 1), after]
     return
 
 
@@ -795,8 +832,9 @@ def order_steps(mods):
         if isinstance(obj, str):
             return [m for m in mods if isinstance(m, Delivery) and (m.name == obj or getattr(m.product, 'name', None) == obj)]
         elif isinstance(obj, ss.Product):
-            return [m for m in mods if isinstance(m, Delivery) and m.product is obj]
-        return [obj] if id(obj) in index else []
+            found = [m for m in mods if isinstance(m, Delivery) and m.product is obj]
+            return found or find(obj.name) # A copy of the product (conditions keep the object they were written with, and the engines read them by name)
+        return [obj] if id(obj) in index else find(obj.name) if getattr(obj, 'name', None) else [] # Or a copy of the delivery, e.g. after a deep copy of the interventions
     deps = {}
     for i,m in enumerate(mods):
         deps[i] = set()
@@ -808,11 +846,11 @@ def order_steps(mods):
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions= (or to the cascade)'
                         raise ValueError(errormsg)
                     deps[i] |= {index[id(d)] for d in found if d is not m}
-            if any(leaf.op == 'event' and leaf.args[0] is m for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)):
+            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)):
                 errormsg = f'"{m.name}" is triggered by its own event ({m.on}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
                 raise ValueError(errormsg)
         elif isinstance(m, cascade):
-            deps[i] = {index[id(s)] for s in m.steps if id(s) in index}
+            deps[i] = {index[id(d)] for s in m.steps for d in ([s] if id(s) in index else find(s.name))}
     out, done = [], set()
     while len(out) < len(mods):
         ready = [i for i in range(len(mods)) if i not in done and deps[i] <= done]
@@ -1380,6 +1418,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def init_pre(self, sim):
         declared = [mod.name for mod in sim.declared]
+        ss.conditions.check_path_events(sim, self.on, self.name)
         if self.disease_list is not None: # Several diseases: their names now, as the sim has them, and the product keyed by them
             names = [d if isinstance(d, str) else d.name for d in self.disease_list]
             names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.Strains) else [n])] # A family by name

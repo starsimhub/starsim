@@ -9,7 +9,7 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
 
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
-(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged) and of `ss.Pregnancy` (to `ss.LegacyPregnancy`), a `beta` pair on
+(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), a `beta` pair on
 `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those
 networks transmit one way), and the time index: in
@@ -39,7 +39,8 @@ renames = [
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
     (r'''(\bverbose['"]?\s*[=:]\s*)(1\s*/\s*\d+(\.\d*)?|0?\.\d+)\b''', r'\g<1>1', 'a fractional verbose (print every n steps) is verbose=1, which prints the progress about ten times a run'),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
-    (r'\bss\.Test\(',             'ss.Diagnostic(',                 'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic'),
+    (r'\bss\.Test\b',             'ss.Diagnostic',                  'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic, the same class, so a subclass of it needs only the rename'),
+    (r'\bss\.(demographics\.Pregnancy|LegacyPregnancy)\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments, attributes, results, and callbacks)"),
     (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
     (r'\beligible=',              'where=',                         'eligible= of a delivery (a Starsim 4 prerelease) is where='),
 ]
@@ -63,6 +64,8 @@ flags = [
     (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
     (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
+    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's attributes, results and callbacks), and Starsim 3's pregnancy written as code was removed: instead of overriding its methods, add transitions (ss.on(preg.conception), ss.on(preg.delivery)), or use its callbacks (add_conception_callback(), add_delivery_callback())"),
+    (r'\.(make_embryos|make_pregnancies|make_p_conceive|select_conceivers|process_delivery|process_newborns|process_maternal_deaths|process_neonatal_deaths|process_prenatal_deaths|progress_pregnancies|update_breastfeeding|update_maternal_deaths|set_breastfeeding|set_rel_sus|draw_dur_pregnancy|updates_pre)\(', "a method of Starsim 3's pregnancy written as code, which was removed; ss.Pregnancy does this with its transitions and events (preg.conception, preg.delivery, preg.birth), or add_conception_callback()/add_delivery_callback()"),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
     (r'\bss\.seasonality\b', 'ss.modify(dis.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), in connectors='),
@@ -70,7 +73,6 @@ flags = [
     (r'\bss\.rate\(', 'ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time)'),
     (r'^\s*[\w.]+\.(reduce|mean|median)\(\)\s*(#.*)?$', 'if this reduces a MultiSim in place: its results have a run axis first, e.g. res = msim.results.sis.prevalence; res.median(), res.mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]) (the flattened msim.results.sis_prevalence is gone)'),
     (r'\bss\.Sim\(.*\b(birth|death)_rate\s*=', 'demographics=[ss.Births(birth_rate=...), ss.Deaths(death_rate=...)] (per 1,000, as before), or ss.birth(rate=ss.peryear(...)) per person'),
-    (r'\bss\.Pregnancy\(', "ss.Pregnancy is now declared, with Starsim 3's parameters, results, attributes and callbacks, and fetuses as agents when something reads them; if this code reads the coded module's own arrays or methods, or relies on its unborn agents always existing, use ss.LegacyPregnancy (Starsim 3's module, unchanged)"),
     (r'\bss\.MFNet\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
     (r'\bfloat\([^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
 ]
@@ -218,8 +220,6 @@ def migrate_ast(text, analyzers=None):
                 new = agent_bases[name]
                 uses_ssl = True
                 edits.add(b, new, f'Starsim 3\'s ss.{name}, written as code, is {new} (ss.{name} is now declared)')
-            elif name == 'Pregnancy' and not is_declared(cls):
-                edits.add(b, 'ss.LegacyPregnancy', 'a subclass of Starsim 3\'s ss.Pregnancy, written as code, subclasses ss.LegacyPregnancy (ss.Pregnancy is now declared)')
         for stmt in cls.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit_func(stmt, analyzer)

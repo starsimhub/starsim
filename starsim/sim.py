@@ -315,6 +315,9 @@ class Sim(ss.Base):
         self._made = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
+        ivs = sc.tolist(self.pars.interventions) # Steps of a cascade are added in __init__(), before the modules are copied; these are any put in pars later (e.g. by a subclass of ss.Sim)
+        if any(all(step is not mod for mod in ivs) for casc in ivs if isinstance(casc, ss.cascade) for step in casc.steps):
+            self.pars.interventions = self._add_steps(ivs)
         self.pars.validate() # Validate parameters
         for mod in self.pars.diseases.values(): # A state that only a delivery moves people into is not where they start
             if getattr(mod, 'graph', None) is not None:
@@ -433,6 +436,23 @@ class Sim(ss.Base):
     def _init_solver(self):
         """ Work out the sim's unit and solver: see `ss.solvers.choose_solver()` """
         return ss.solvers.choose_solver(self)
+
+    def _resolve_path_triggers(self):
+        """
+        A trigger on a transition of another module by its path (`on=ss.state('pregnancy.delivery')`, for a module declared
+        before that one exists) is that transition's event, as `ss.on(preg.delivery)` is, not the condition of having gone through
+        it: so it happens once, in the step, and to whoever the event also happens to (e.g. the fetuses at a delivery)
+        """
+        mods = {mod.name:mod for mod in self.declared}
+        for mod in self.declared:
+            for tr in mod.graph.transitions.values():
+                x = getattr(tr.trigger, 'x', None)
+                if tr.trigger is None or tr.trigger.event or not isinstance(x, ss.conditions.Cond) or x.op != 'state' or not isinstance(x.args[0], str):
+                    continue
+                other, name = x.args[0], x.args[1]
+                if other != mod.name and other in mods and name in mods[other].graph.transitions:
+                    tr.trigger = ss.on(ss.conditions.Event('tr', ss.conditions.Named(other, name)))
+        return
 
     def _init_lifetables(self):
         """ In a compartmental run, a life table (`ss.death(lifetable=)`) is a death rate for each age group; as agents, each person's age at death is drawn (see `ss.solvers.Agents.step_lifetables()`) """
@@ -782,8 +802,9 @@ class Sim(ss.Base):
         if unit_given and sc.isnumber(pars.start) and time.assume_cal_year(pars.start): # Read in the unit given, as it says, but it looks like a year
             ss.note(f"start={pars.start} is {pars.start} {pars.unit.removesuffix('s')}s, since unit='{pars.unit}'; for a calendar year, give a date, e.g. start='{int(pars.start)}-01-01'", sim=self)
         durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
-        units = [u.removesuffix('s') for mod in self.declared for u in mod.graph.unit_values()]
-        units += [base(mod.t.dt) for mod in self.declared if is_dur(mod.t.dt)]
+        setters = [mod for mod in self.declared if getattr(mod, 'sets_unit', True)] # A module with typed defaults of its own (ss.Pregnancy's weeks and years) says nothing of the user's bare numbers
+        units = [u.removesuffix('s') for mod in setters for u in mod.graph.unit_values()]
+        units += [base(mod.t.dt) for mod in setters if is_dur(mod.t.dt)]
         if pars.unit is not None:
             unit = pars.unit.removesuffix('s')
         elif units:
@@ -792,7 +813,7 @@ class Sim(ss.Base):
             source = 'the typed values in the model'
             if len(set(units)) > 1:
                 self.units_disagree = sorted(set(units), key=order.index)
-                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in self.declared for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw)]
+                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] # 0 is 0 in any unit
                 if bare: # Which unit they are in cannot be guessed
                     raise ss.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
         elif dates:
@@ -1968,12 +1989,25 @@ class Sim(ss.Base):
 
     def check_time_index(self):
         """ Warn about results of modules written as code that look written to Starsim 3's time index: a flow at the first time point (before any step), or a last point left empty """
+        def is_multiple(vals, other):
+            """ Whether one series is a constant multiple of another """
+            if other.shape != vals.shape or other.dtype.kind not in 'biuf' or len(np.unique(other)) < 3: # A multiple of a series that is all one value (and zeros) says nothing
+                return False
+            other = other.astype(float)
+            k = vals[np.flatnonzero(other)[0]] / other[np.flatnonzero(other)[0]]
+            return k != 0 and np.allclose(vals, k*other)
+
         found = []
         for mod in self.modules:
             if getattr(mod, 'graph', None) is not None or type(mod).__module__.startswith('starsim.'): # Only code written outside Starsim
                 continue
+            own = [np.asarray(r.values) for r in mod.results.values() if isinstance(r, ss.Result) and r.name in getattr(mod, '_starsim_results', ())]
             for res in mod.results.values():
+                if getattr(res, 'name', None) in getattr(mod, '_starsim_results', ()): # Defined and written by Starsim's own classes, e.g. the results of a subclass of ss.screen
+                    continue
                 vals = np.asarray(res.values) if isinstance(res, ss.Result) else None
+                if vals is not None and any(is_multiple(vals, o) for o in own): # A copy of one of those, e.g. under an older name, or a multiple of one
+                    continue
                 if vals is None or vals.ndim != 1 or vals.dtype.kind not in 'biuf' or len(vals) < 5: # Only series of numbers
                     continue
                 vals = np.nan_to_num(vals.astype(float))

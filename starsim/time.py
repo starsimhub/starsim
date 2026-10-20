@@ -1407,7 +1407,7 @@ class peract:
         if self.value is not None:
             return [self.value]*max(len(dirs), 1)
         if not dirs:
-            errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides='
+            errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides (sides= when it is made, or in its class, e.g. sides = dict(m="male", f="female"))'
             raise ss.RouteMismatch(errormsg)
         sides = f"{name}'s {net.sides_str()}"
         for key in self.directions:

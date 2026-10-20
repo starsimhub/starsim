@@ -461,6 +461,17 @@ def standardize_netkey(key):
     return re.sub(r'net(_\d+)?$', r'\1', key.lower())
 
 
+def route_beta(betas, route):
+    """
+    The value of a beta for each route (a dict by route name) on one route, or None if it has none
+
+    The dict may give `default`, the value of every route it does not name, e.g.
+    `dict(mfnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
+    """
+    keys = {standardize_netkey(k):v for k,v in betas.items() if k != 'default'}
+    return keys.get(standardize_netkey(route), betas.get('default'))
+
+
 # Alternative column names accepted for standard data columns, used only if the configured
 # column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
 # rather than "Year"). Keep this list short and explicit; anything else can be handled by

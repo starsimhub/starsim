@@ -1,6 +1,7 @@
 """
 Test Starsim features not covered by other test files
 """
+import warnings
 import pytest
 import numpy as np
 import sciris as sc
@@ -31,7 +32,7 @@ def test_microsim(do_plot=False):
     sim = ss.Sim(
         people=ss.People(small),
         networks=[ss.MFNet(), ss.PrenatalNet()],
-        demographics=ss.LegacyPregnancy(),
+        demographics=ss.Pregnancy(),
         diseases=hiv,
         copy_inputs = False, # So we can reuse hiv
     )
@@ -146,16 +147,47 @@ class Counter(ss.Module):
                 sim.run()
         assert sim.results.counter.seen.sum() == seen
 
+    # A subclass of a Starsim delivery: Starsim's own results are not flagged, but a result the subclass writes the Starsim 3 way is
+    S, I = ss.states('S I')
+    def make_screen(cls):
+        d = ss.Disease(infection=S >> I @ ss.permonth(0.3)*I, recovery=I >> S @ ss.months(6), init_prev=0.1, name='d')
+        return ss.Sim(d, interventions=cls(ss.Diagnostic(sensitivity=0.9), coverage=ss.probperyear(0.5), name='scr'), n_agents=500, start=2000, stop=2005, dt=ss.months(1), verbose=0)
+    class MyScreen(ss.screen):
+        pass
+    class OldScreen(ss.screen):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('steps', dtype=int, scale=False))
+        def step(self):
+            super().step()
+            self.results.steps[self.ti] += 1 # Starsim 3: the step's index
+    class AliasScreen(ss.screen): # A copy of one of Starsim's results under an older name, as STIsim keeps its Starsim 3 names
+        def finalize_results(self):
+            super().finalize_results()
+            self.results += ss.Result('new_tests', values=sc.dcp(self.results.delivered.values), timevec=self.results.delivered.timevec, module=self.name)
+            self.results += ss.Result('new_doses', values=14*self.results.delivered.values, timevec=self.results.delivered.timevec, module=self.name) # Or a multiple of one
+    for cls in [MyScreen, AliasScreen]:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', RuntimeWarning)
+            make_screen(cls).run()
+    with pytest.warns(RuntimeWarning, match=r'time index \(scr\.steps\)'):
+        make_screen(OldScreen).run()
+
     # Renames, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
-    assert migrate_text('class MyPreg(ss.Pregnancy): pass')[0] == 'class MyPreg(ss.LegacyPregnancy): pass' # A pregnancy written as code
-    assert 'ss.LegacyPregnancy' in migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2][0][1] # A use of the declared one is flagged
+    for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
+        assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'
+    todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
+    assert any('add_conception_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
+    assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
     assert migrate_text('d = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.people.age < 1))')[0] == 'd = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.ppl.age < 1))' # Starsim 4 prerelease names
     assert migrate_text('tx = ss.treat(ss.Treatment(), eligible=sis.I)')[0] == 'tx = ss.treat(ss.Treatment(), where=sis.I)'
     assert migrate_text('ppl = ss.people.People(10)')[0] == 'ppl = ss.people.People(10)' # Starsim 3's module, left alone
+    assert migrate_text('class Pap(ss.Test):\n    pass\nok = isinstance(t, ss.Test)')[0] == 'class Pap(ss.Diagnostic):\n    pass\nok = isinstance(t, ss.Diagnostic)' # ss.Test as a name, e.g. a base class
+    assert migrate_text('ss.Tests(); ss.Testing')[0] == 'ss.Tests(); ss.Testing'
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names (N7, HP3)
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 

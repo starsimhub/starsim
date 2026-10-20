@@ -121,12 +121,12 @@ class Presentation:
                 rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
                 how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]
                 how += [f'a row, one column for each of {sc.strjoin(d.name for d in tr.dst)}, normalized'] if any(isinstance(p, ss.expressions.Column) for p in tr.p) else []
-                stays = [] if not tr.stays else ['stay: ' + ('the rest' if tr.p_stay is None else format_expr(tr.p_stay, values=True))]
+                stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('null', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
                 add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in ps] + stays)}', '; '.join(how) or at_exit)
             elif 'p' in tr.guessed:
                 add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
-            if tr.dst is not None and len(tr.dst) > 1: # A result for each destination, e.g. res.cin.X
-                add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{d.name}' for d in tr.dst]))
+            if tr.ends: # A result for each destination, e.g. res.cin.X
+                add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{end}' for end in tr.ends]))
             for key,what in [('after', 'not before'), ('before', 'only before')]: # A minimum stay, or a limit
                 if getattr(tr, key, None) is not None:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
@@ -374,6 +374,10 @@ class Presentation:
             elif tr.rate is not None:
                 entry.rate = format_expr(tr.rate, exact=True)
             ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry (see Graph.expand_rows())
+            ends = [(name, p) for name,p,given in [('ss.null', tr.p_die, tr.dies), ('ss.stay', tr.p_stay, tr.stays)] if given] # Written after the states, as ss.Transition() takes them, only when given (so that other specs are unchanged)
+            if ends:
+                entry.dst = (entry.dst or []) + [name for name,_ in ends]
+                ps = None if ps is None else list(ps) + [p for _,p in ends]
             entry.p = None if ps is None else [None if p is None else format_expr(p, exact=True) for p in ps]
             entry.stages = tr.stages
             entry.label = tr.label
@@ -454,8 +458,7 @@ def beta_leaf(tr):
 def route_beta(raw, net):
     """ The value of a beta on one route """
     if isinstance(raw, dict):
-        keys = {ss.standardize_netkey(k):v for k,v in raw.items()}
-        return keys.get(ss.standardize_netkey(net.name))
+        return ss.utils.route_beta(raw, net.name)
     return raw
 
 
@@ -558,8 +561,8 @@ def quantity_json(raw, kind, unit):
         return format_expr(raw, exact=True)
     elif callable(raw):
         return func_json(raw)
-    elif isinstance(raw, dict):
-        return {k:quantity_json(v, kind, unit) for k,v in raw.items()}
+    elif isinstance(raw, dict): # A bare number as the default of a beta for each route stays bare, since it is per act on the routes with acts it applies to
+        return {k:quantity_json(v, None if k == 'default' and sc.isnumber(v) else kind, unit) for k,v in raw.items()}
     elif isinstance(raw, (list, tuple)):
         return [quantity_json(v, kind, unit) for v in raw]
     return raw

@@ -916,7 +916,9 @@ class Diagnostic(Product):
         specificity (float): the probability that someone without it tests negative
         results (dict): instead of sensitivity and specificity, the results in order of severity, most severe first, each with its
             probability for people in each state (a dict by state, of any disease, as for `sensitivity`; a number is for those with what
-            `detects=` says); the last is `None`, everyone the others do not take
+            `detects=` says); the last is `None`, everyone the others do not take. A key `None` in a result's dict is for people in
+            none of the states keyed in any result (of any disease the test is keyed by), e.g. a false positive: it is counted once,
+            whereas a result for a state (`susceptible=0.1`) is one for each disease, which `combine='worst'` then combines
         combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the most severe of them is theirs;
             for a positive and a negative result, each disease is detected independently), or 'max' (the highest probability of each result
             or a more severe one, so for a positive and a negative result, the highest sensitivity)
@@ -930,7 +932,7 @@ class Diagnostic(Product):
         pcr = ss.Diagnostic(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
         xpert = ss.Diagnostic(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
         hpv_dna = ss.Diagnostic(sensitivity={hpv16.I: 0.9, hpv16.CIN: 0.95, hpv18.I: 0.9}, specificity=0.97) # Across diseases
-        cytology = ss.Diagnostic(results=dict(high_grade=dict(cin=0.9, cancer=1.0), ascus=dict(susceptible=0.1, infected=0.1, cin=0.1), normal=None))
+        cytology = ss.Diagnostic(results=dict(high_grade=dict(cin=0.9, cancer=1.0), ascus={'cin': 0.1, None: 0.1}, normal=None)) # ASCUS for 10% of people with neither CIN nor cancer
         ```
     """
     compartmental = True
@@ -977,7 +979,7 @@ class Diagnostic(Product):
         def expand(vals):
             if not isinstance(vals, dict): # For the infected
                 return {f'{mod.name}.{st.name}':vals for mod in mods for st in mod.graph.infected if st.people}
-            if any(self.key_ref(k)[0] is not None for k in vals): # Keyed by disease already
+            if any(self.key_ref(k)[0] is not None for k in vals if k is not None): # Keyed by disease already (None is people in none of the states)
                 return vals
             return {f'{mod.name}.{k}':v for k,v in vals.items() for mod in mods if k in mod.graph.states} | ({None:vals[None]} if None in vals else {})
         if self.results_given is not None:

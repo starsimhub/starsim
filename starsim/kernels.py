@@ -235,6 +235,8 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
             for k in range(a, b):
                 total[g] += weights[k, g]
             whole = whole and abs(total[g] - 1) < 1e-9
+            if 0 < total[g] < 1 - 1e-9: # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.null, or the part of a flow a credit is not
+                total[g] = 1.0
         for k in range(a, b): # One multinomial draw, as a chain of conditional binomials
             for g in range(ng):
                 drawn[g] = binomial(rng, left[g], weights[k, g]/total[g]) if total[g] > 0 else 0.0
@@ -642,10 +644,12 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
             tot = 0.0
             for k in range(ka, kb):
                 tot += p.tgt_w[k, where]
+            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.null
+            tot = tot if whole else 1.0
             cum = 0.0
             for k in range(ka, kb):
                 cum += p.tgt_w[k, where]
-                if u*tot < cum or k == kb - 1:
+                if u*tot < cum or (whole and k == kb - 1):
                     y[p.tgt_comp[k], where] += 1
                     if p.tgt_rec[k] >= 0:
                         flows[p.tgt_rec[k], where] += 1
@@ -944,10 +948,12 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
             tot = 0.0
             for k in range(ka, kb):
                 tot += p.tgt_w[k, where]
+            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.null
+            tot = tot if whole else 1.0
             cum = 0.0
             for k in range(ka, kb):
                 cum += p.tgt_w[k, where]
-                if u*tot < cum or k == kb - 1:
+                if u*tot < cum or (whole and k == kb - 1):
                     c = p.tgt_comp[k]
                     if y[c, where] == 0: # Its compartment now holds someone
                         n_held = add_key(held, n_held, (j << cbits) | c)

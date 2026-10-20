@@ -123,7 +123,7 @@ class People:
         They are made on first use rather than in `__init__()`, so that a People not yet in
         a sim (such as the copy `sim.inputs` keeps for `sim.new()`) holds no arrays per agent.
         The slots read the UIDs, and the parents are all none, until one is set (see `shared`
-        in `ss.Arr`), so they take no memory unless something (e.g. `ss.LegacyPregnancy`) sets them.
+        in `ss.Arr`), so they take no memory unless something (e.g. `ss.Pregnancy`, with fetuses as agents) sets them.
         """
         uids = ss.uids(np.arange(int(self.n_agents_init)))
         self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as 32-bit integers
@@ -221,7 +221,7 @@ class People:
 
         This is not the same as `len(people)`: agents who died on the current timestep are
         not removed from `auids` until `finish_step()`, so that analyzers can still inspect
-        them, and the unborn (agents made at conception by `ss.LegacyPregnancy`) are not counted. Use
+        them, and the unborn (agents made at conception by `ss.Pregnancy`) are not counted. Use
         this rather than `len(people)` for any per-timestep denominator.
         """
         unborn = self.unborn_uids()
@@ -748,7 +748,7 @@ class People:
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
         unborn = self.unborn_uids()
-        if len(unborn): # Agents made at conception (by ss.LegacyPregnancy) are not yet people, so are not counted (ss.LegacyPregnancy counts them: pregnancy.n_unborn)
+        if len(unborn): # Agents made at conception (by ss.Pregnancy) are not yet people, so are not counted (ss.Pregnancy counts them: pregnancy.n_unborn)
             if counts is None:
                 counts = [state.count() for state in states] + list(count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti))
             w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
@@ -769,7 +769,7 @@ class People:
     def unborn_uids(self):
         """ The active agents not yet born: those made at conception by `ss.Pregnancy`, with a negative age, who are not counted among the people (e.g. in `n_alive`) """
         sim = self.sim
-        if sim.solver != 'abm' or not any(isinstance(mod, ss.LegacyPregnancy) or getattr(mod, 'fetus', False) is True for mod in sim.demographics()): # Made at conception by ss.LegacyPregnancy, or by ss.Pregnancy with fetuses as agents
+        if sim.solver != 'abm' or not any(getattr(mod, 'fetus', False) is True for mod in sim.demographics()): # Made at conception by ss.Pregnancy, with fetuses as agents
             return ss.uids()
         auids = self.auids
         return auids[self.age.raw[auids] < 0]

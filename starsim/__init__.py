@@ -107,7 +107,7 @@ from .results import Result, Results, data, compare
 
 t('demographics')
 from .demographics import (
-    Demographics, Births, Deaths, PregnancyPars, LegacyPregnancy,
+    Demographics, Births, Deaths, PregnancyPars,
 )
 
 t('products')
@@ -227,6 +227,7 @@ if debug:
 
 # Names that Starsim no longer exports, with what to write instead (see the migrate-starsim3 skill)
 _removed = {
+    'LegacyPregnancy':    "ss.Pregnancy (the declared pregnancy, with Starsim 3's arguments, attributes, results, and callbacks); Starsim 3's pregnancy written as code was removed",
     'rate':               "ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time); ss.rate was deprecated in Starsim 3",
     'time_prob':          "ss.probperyear(x); ss.time_prob was deprecated in Starsim 3",
     'rate_prob':          "ss.peryear(x); ss.rate_prob was deprecated in Starsim 3",

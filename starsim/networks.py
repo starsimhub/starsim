@@ -672,7 +672,13 @@ class SexualNetwork(DynamicNetwork):
     used (`condoms`, 0 unless set, e.g. by partnership type in `add_pairs()`). Condoms protect through
     a modifier of the transmission on the network, e.g.
     `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`.
+
+    Its partnerships are between men and women (`sides = dict(m='male', f='female')`), so a disease's
+    beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both. A subclass with other partnerships
+    declares its own sides, e.g. `sides = None` for one between men only (one beta, as `ssl.MSMNet`).
     """
+    sides = dict(m='male', f='female') # People's sex, so its directions are m2f and f2m
+
     def __init__(self, pars=None, edges=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
@@ -1600,8 +1606,6 @@ class MFNet(DegreeTargets, SexualNetwork):
             self.waiting = ss.uids() # People of one sex who looked for a partner and were left over, who look again
         return
 
-    sides = dict(m='male', f='female') # People's sex, so its directions are m2f and f2m
-
     def side_raw(self):
         """ Men are side m (0) and women side f (1) """
         return self.sim.people.female.raw.astype(np.int8)
@@ -1779,7 +1783,7 @@ class PrenatalNet(Network):
     """
     Prenatal transmission network
 
-    Although edges change over time, the edges are managed via ss.LegacyPregnancy as pregnancies start and finish.
+    Although edges change over time, the edges are managed by ss.Pregnancy as pregnancies start and finish (with fetuses as agents).
     The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
     It transmits one way only, from the mother (`p1`) to the child (`p2`), so its one direction is `mother2child`.
     """
@@ -1787,7 +1791,7 @@ class PrenatalNet(Network):
     one_way = True
 
     def step(self):
-        # Adding/removing edges is managed by ss.LegacyPregnancy
+        # Adding/removing edges is managed by ss.Pregnancy
         pass
 
     def add_pairs(self, mother_uids=None, unborn_uids=None):
@@ -1867,26 +1871,16 @@ class BreastfeedingNet(PostnatalNet):
         return
 
     def init_pre(self, sim):
-        # Connect the pregnancy module to this network; do this here rather than in init_post() since deliveries during the pregnancy burn-in call add_pairs()
+        """ Find the sim's ss.Lactation (added by ss.Pregnancy when there is a BreastfeedingNet), whose breastfeeding mothers it pairs """
         super().init_pre(sim)
-        self.pregnancy = next((mod for mod in self.sim.modules if isinstance(mod, ss.LegacyPregnancy)), None)
-        self.lactation = next((mod for mod in self.sim.modules if isinstance(mod, ss.Lactation)), None) # With the declared ss.Pregnancy, which pairs newborns itself
-        if self.pregnancy is None and self.lactation is None:
-            raise RuntimeError('BreastfeedingNet requires a Pregnancy module in the simulation to track breastfeeding status')
-        return
-
-    def add_pairs(self, mother_uids=None, newborn_uids=None):
-        """
-        Add pairs upon delivery if the mother is breastfeeding the newborn - called via Pregnancy.process_delivery()
-        """
-        if mother_uids is not None and self.pregnancy is not None:
-            mask = self.pregnancy.breastfeeding[mother_uids] & self.pregnancy.breastfed[newborn_uids]
-            super().add_pairs(mother_uids[mask], newborn_uids[mask])
+        self.lactation = next((mod for mod in self.sim.modules if isinstance(mod, ss.Lactation)), None) # ss.Pregnancy pairs each newborn with a breastfeeding mother
+        if self.lactation is None:
+            raise RuntimeError('BreastfeedingNet requires ss.Pregnancy (which adds an ss.Lactation) to track breastfeeding')
         return
 
     def end_pairs(self):
-        """Remove edges for mothers whose breastfeeding status has changed in the Pregnancy module"""
-        active = self.pregnancy.breastfeeding[self.p1] if self.pregnancy is not None else self.lactation.L[self.p1] # Until the mother leaves L
+        """ Remove edges for mothers who have stopped breastfeeding (left `L` of ss.Lactation) """
+        active = self.lactation.L[self.p1]
         for k in self.meta_keys():
             self.edges[k] = self.edges[k][active]
         return np.count_nonzero(active)

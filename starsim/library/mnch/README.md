@@ -26,7 +26,7 @@ import starsim.library as ssl
 # Congenital disease example
 sim = ss.Sim(
     diseases=ssl.mnch.CongenitalDisease(beta=0.2),
-    demographics=ss.LegacyPregnancy(),
+    demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],
 )
 
@@ -36,7 +36,7 @@ sim = ss.Sim(
     connectors=ssl.mnch.fetal_infection(),
     interventions=ssl.mnch.treat_pregnant(disease='sir'),
     custom=ssl.mnch.FetalHealth(),
-    demographics=ss.LegacyPregnancy(),
+    demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],
 )
 ```

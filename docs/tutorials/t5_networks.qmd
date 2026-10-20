@@ -109,7 +109,7 @@ hiv = ssl.diseases.HIV(
 )
 
 # Make demographic modules
-pregnancy = ss.LegacyPregnancy(fertility_rate=ss.peryear(20))
+pregnancy = ss.Pregnancy(fertility_rate=ss.peryear(20))
 death = ss.Deaths(death_rate=ss.peryear(15))
 
 # Make prenatal network

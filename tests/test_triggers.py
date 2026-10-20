@@ -119,6 +119,31 @@ def test_on_event():
 
 
 @sc.timer()
+def test_join_events():
+    sc.heading('Testing events joined with |: branches and whole transitions, in any order, before they are named')
+    def make(join):
+        S, P, C, X = ss.states('S P C X')
+        precin = ss.Transition(P, [C, S], p=[0.2, None], dur=ss.years(1.5))
+        cin = ss.Transition(C, [S, X], p=[0.5, None], dur=ss.years(2))
+        clear = ss.Transition(X, S, dur=ss.years(1))
+        on = join(precin, cin, clear, S)
+        kinds = sorted(e.args[0] for e in ss.expressions.events_in(on))
+        assert kinds == ['to', 'to', 'tr'], kinds
+        nab = ss.attr(ss.uniform(0.5, 0.95), on=on, combine='max', init=0)
+        return ss.Disease(S, P, C, X, infection=S >> P @ ss.peryear(0.4)*(P + C), precin=precin, cin=cin, clear=clear, nab=nab, init_prev=0.3, name='hpv')
+    joins = [
+        lambda a, b, tr, S: a.to(S) | b.to(S) | tr,
+        lambda a, b, tr, S: tr | a.to(S) | b.to(S),
+        lambda a, b, tr, S: tr | (a.to(S) | b.to(S)),
+        lambda a, b, tr, S: a.to(S) | tr | b.to(S),
+    ]
+    for join in joins:
+        sim = ss.Sim(make(join), networks='random', n_agents=2000, start=2000, stop=2010, unit='year', **kw).run()
+        assert (sim.diseases.hpv.nab.values > 0).sum() > 50
+    return sim
+
+
+@sc.timer()
 def test_hpv_cancel():
     sc.heading('Port: HPV, cancelling the other genotypes when one reaches cancer, with ss.on()')
     names = ['hpv16', 'hpv18']
@@ -387,6 +412,7 @@ if __name__ == '__main__':
     test_lazy()
     test_bv_debut()
     test_on_event()
+    test_join_events()
     test_hpv_cancel()
     test_syphilis_stay()
     test_ct_by_sex()

@@ -64,6 +64,7 @@ def choose_solver(sim):
     ss.pregnancy.add_lactation(sim)
     modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
+    sim._resolve_path_triggers() # A trigger on another module's transition by path is its event
     sim._init_flows()
     for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
         for name,tr in mod.graph.transitions.items():
@@ -237,16 +238,19 @@ def choose_solver(sim):
         pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
         pars.n_agents = sim.groups.n_groups
 
-    # A beta for each route names every route and nothing else; a route has no beta of its own
+    # A beta for each route names every route and nothing else, unless it gives a default for the routes it does not name; a route has no beta of its own
     nets = list(sim.mixed if solver != 'abm' else pars.networks.values())
     routes = [net.name for net in nets]
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, dict)]:
-                given = [ss.standardize_netkey(k) for k in p.raw]
-                unknown = [k for k in p.raw if ss.standardize_netkey(k) not in [ss.standardize_netkey(r) for r in routes]]
+                given = [ss.standardize_netkey(k) for k in p.raw if k != 'default']
+                unknown = [k for k in p.raw if k != 'default' and ss.standardize_netkey(k) not in [ss.standardize_netkey(r) for r in routes]]
                 missing = [r for r in routes if ss.standardize_netkey(r) not in given]
-                if unknown or missing:
+                if 'default' in p.raw: # Written for any sim, e.g. by a library: the routes it does not name take the default, and the names that are not routes of this sim are not used
+                    if unknown:
+                        ss.note(f'the beta of "{mod.name}.{tr.name}" names {sc.strjoin(unknown)}, which {"is not a route" if len(unknown) == 1 else "are not routes"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the routes are {sc.strjoin(routes) or "none"}, and those not named take the default', sim=sim)
+                elif unknown or missing:
                     raise ss.RouteMismatch(f'the beta of "{mod.name}.{tr.name}" is given for each route, as {sc.strjoin(p.raw.keys())}, but the routes are {sc.strjoin(routes) or "none (homogeneous mixing)"}: '
                                            f'{"no route is called " + sc.strjoin(unknown) if unknown else ""}{"; " if unknown and missing else ""}{sc.strjoin(missing) + " " + ("has" if len(missing) == 1 else "have") + " no value" if missing else ""}.')
     check_betas(sim, nets)
@@ -301,19 +305,18 @@ def check_betas(sim, nets):
     probability per contact. A pair has no direction names, a typed rate on a network with acts is not a hazard,
     and `ss.peract` needs acts.
     """
-    by_key = {ss.standardize_netkey(net.name):net for net in nets}
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par)]:
                 raw = p.raw
                 if isinstance(raw, dict):
-                    vals = [(by_key.get(ss.standardize_netkey(k)), v) for k,v in raw.items()]
+                    vals = [(net, ss.utils.route_beta(raw, net.name)) for net in nets] # The names that are not routes are checked above
                 elif isinstance(raw, (ss.peract, list, tuple)) or p.slot == 'rate': # The same beta on every route
                     vals = [(net, raw) for net in nets]
                 else:
                     continue
                 for net,val in vals:
-                    if net is None:
+                    if val is None:
                         continue
                     val = val.raw if isinstance(val, ss.par) else val
                     where = f'the beta of "{mod.name}.{tr.name}" on "{net.name}"'
@@ -630,6 +633,10 @@ def init_capabilities(sim, modules):
                 exact = fixed or slotted or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
                 auto = f'"{name}" has a {type(raw).__name__} dwell time, and approx=False' if approx is False and not exact else None
                 add(f'dwell time: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'a conveyor of whole steps' if fixed else 'a conveyor by time in state' if slotted else 'Erlang stages', auto=auto)
+            changers = [m for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()) if isinstance(m, ss.modify) and getattr(m.target_module, 'name', m.target_module) == mod.name
+                        and m.target_kind in ['par', None] and m.target_name == getattr(tr.dur, 'name', None)] if isinstance(ss.transitions.by_dist(raw), ss.Dist) else []
+            if changers: # A distribution laid out once as compartments: see Engine.dwell_mods()
+                add(f'modifier: {changers[0].name}', 'no', 'laid out once', auto=f'the modifier "{changers[0].name}" changes the dwell time of "{name}", a distribution, which is laid out once as compartments', fatal=True)
             if getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None:
                 if tr.contact or any(graph.exits[s.name].branches for s in tr.src): # See ss.solvers.Compartmental.stays()
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
@@ -659,9 +666,9 @@ def init_capabilities(sim, modules):
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
         for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state have a compartmental form if each is for other people (see ss.solvers.Compartmental.apart_shares()), which is tried
-            timed = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
-            if len(timed) > 1 and not exits.branches:
-                add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in timed)})', '?', 'a track for each, if each is for other people (where=)', probe=(mod.name, []))
+            dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
+            if len(dwells) > 1 and not exits.branches:
+                add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', '?', 'a track for each, if each is for other people (where=)', probe=(mod.name, []))
         for name,tf in graph.transfers.items(): # A time drawn for each person, as Erlang stages (see ss.dimensions.transfer_stages())
             raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
             if isinstance(raw, ss.Dist) and not isinstance(raw, ss.expon):
