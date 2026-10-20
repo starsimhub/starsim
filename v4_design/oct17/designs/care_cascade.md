@@ -347,7 +347,7 @@ They are quantities like a state's attributes, so they go anywhere a condition o
 | `on=`, `where=` | every step | as before; each joins `who=` by `&` |
 | `operator=` | a step whose `who=` (or `on=`) is a list | `'any'` (default) or `'all'` |
 | `delay=` | a triggered step | the time from the trigger to delivery: a duration, or a distribution of durations (agents); the people still eligible then receive it, and someone waiting is not triggered again |
-| `target=` | a routine step of a held product, or a move | the number to keep holding it among the eligible: a number, a share of the eligible (below 1), a time series, or `ss.by(...)` for one target per stratum |
+| `target=` | a routine step of a held product, or a move | the number to keep holding it among the eligible: a number of people, a time series, `ss.share(value, among=...)` for a share of some people, or `ss.by(...)` for one target per stratum (a bare number below 1 is a number of people, not a share) |
 | `above=` | with `target=` | what happens above the target: `'keep'` (default: nothing), `'stop'` (the product is stopped for the lowest-priority holders down to the target), or a rate (`ss.peryear(0.5)`: holders above the target stop at this rate, lowest priority first) |
 | `priority=` | with `target=`, `capacity=` or `uses=` | who is served first when there is not enough: a condition, or a list of them served in order; a number, one class for everyone the step reaches (across the steps that share a resource, 0 first); or a function of `(sim, uids)` returning a score, highest first (agents); ties are chosen at random, as now |
 | `disease=` | every step | now also a list, an `ss.Strains`, or `None` (counted, no effect) |

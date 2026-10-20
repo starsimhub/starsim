@@ -9,7 +9,7 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
 
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
-(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), a `beta` pair on
+(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged) and of `ss.Pregnancy` (to `ss.LegacyPregnancy`), a `beta` pair on
 `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those
 networks transmit one way), and the time index: in
@@ -70,6 +70,7 @@ flags = [
     (r'\bss\.rate\(', 'ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time)'),
     (r'^\s*[\w.]+\.(reduce|mean|median)\(\)\s*(#.*)?$', 'if this reduces a MultiSim in place: its results have a run axis first, e.g. res = msim.results.sis.prevalence; res.median(), res.mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]) (the flattened msim.results.sis_prevalence is gone)'),
     (r'\bss\.Sim\(.*\b(birth|death)_rate\s*=', 'demographics=[ss.Births(birth_rate=...), ss.Deaths(death_rate=...)] (per 1,000, as before), or ss.birth(rate=ss.peryear(...)) per person'),
+    (r'\bss\.Pregnancy\(', "ss.Pregnancy is now declared, with Starsim 3's parameters, results, attributes and callbacks, and fetuses as agents when something reads them; if this code reads the coded module's own arrays or methods, or relies on its unborn agents always existing, use ss.LegacyPregnancy (Starsim 3's module, unchanged)"),
     (r'\bss\.MFNet\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
     (r'\bfloat\([^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
 ]
@@ -217,6 +218,8 @@ def migrate_ast(text, analyzers=None):
                 new = agent_bases[name]
                 uses_ssl = True
                 edits.add(b, new, f'Starsim 3\'s ss.{name}, written as code, is {new} (ss.{name} is now declared)')
+            elif name == 'Pregnancy' and not is_declared(cls):
+                edits.add(b, 'ss.LegacyPregnancy', 'a subclass of Starsim 3\'s ss.Pregnancy, written as code, subclasses ss.LegacyPregnancy (ss.Pregnancy is now declared)')
         for stmt in cls.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit_func(stmt, analyzer)

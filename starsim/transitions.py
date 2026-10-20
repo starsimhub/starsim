@@ -345,6 +345,9 @@ class Transition(Nameable):
             errormsg = 'undriven=True is for a transition with no rate=, dur=, p=, or on=; it was given one'
             raise ValueError(errormsg)
         self.intended = bool(undriven) # Declared undriven on purpose, so not warned about (ss.UndrivenUnused)
+        if stages is not None and (isinstance(stages, bool) or not isinstance(stages, (int, np.integer)) or stages < 1):
+            errormsg = f'stages= is the number of sub-stages a dwell time is split into, a whole number of at least 1, not {stages!r}'
+            raise ValueError(errormsg)
         if stages is not None and rate is not None:
             errormsg = 'stages= splits a dwell time, so it goes with dur=, not rate=; e.g. dur=10, stages=3 for a rate of 0.1'
             raise ValueError(errormsg)
@@ -1125,6 +1128,8 @@ def numeric_pars(dist, convert, per_agent=None):
                 raise ValueError(errormsg)
             unit = dist.unit if key not in shape_pars else None
             pars[key] = per_agent(val if unit is None else val.map(lambda v: unit(v) if sc.isnumber(v) else v))
+        elif key == 'a' and isinstance(dist, ss.choice) and dist.unit is not None and not isinstance(val, ss.TimePar): # The values a choice draws from are the durations, in its unit (e.g. ss.choice(a=[38, 40], unit='weeks'))
+            pars[key] = np.array([convert(dist.unit(v)) for v in np.atleast_1d(np.asarray(val, dtype=float))])
         elif key in shape_pars and not isinstance(val, ss.TimePar):
             pars[key] = val
         elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn

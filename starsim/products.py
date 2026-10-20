@@ -953,6 +953,10 @@ class Diagnostic(Product):
             if bad:
                 errormsg = f'results= of a test cannot be called {sc.strjoin(bad)}, which is how an event\'s memory is read'
                 raise ValueError(errormsg)
+            clash = [k for k in names if k in ['positive', 'negative']]
+            if clash:
+                errormsg = f'results= of a test cannot be called {sc.strjoin(clash)}: every test has the outcomes positive (any result but the last) and negative (the last); name the results otherwise, e.g. abnormal and normal'
+                raise ValueError(errormsg)
             if sensitivity != 1.0 or specificity != 1.0:
                 errormsg = 'sensitivity= and specificity= are another way of giving results=: give one or the other'
                 raise ValueError(errormsg)
@@ -984,12 +988,13 @@ class Diagnostic(Product):
 
     def outcome_names(self):
         results = self.__dict__.get('results_given')
-        return ['positive', 'negative'] if results is None else list(results)
+        return ['positive', 'negative'] if results is None else list(results) + ['positive', 'negative'] # With several results, positive is any but the last, and negative the last
 
     @property
     def result_names(self):
         """ The names of its results from the least severe to the most (the order of `tails()`): for a positive and a negative result, negative first """
-        return self.outcome_names()[::-1]
+        results = self.__dict__.get('results_given')
+        return ['negative', 'positive'] if results is None else list(results)[::-1]
 
     def tables(self):
         """ The probability of each result but the least severe, from the next to the most severe, as {key: value}: a key is a state, None (people in none of the states), or 'detects' (people with what `detects=` says) """

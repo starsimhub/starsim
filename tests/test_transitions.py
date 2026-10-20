@@ -1909,9 +1909,8 @@ def test_cascade():
     return res
 
 
-@pytest.mark.xfail(reason='Phase B, task B2: moves through a transition with no wait are not all counted under binomial', strict=True)
 def test_cascade_binomial():
-    """ Under the chain-binomial solver, the moves through a transition with no wait are counted with a draw of their own """
+    """ Under the stochastic compartmental solvers, the moves through transitions with no wait are counted as the people who passed through them """
     sc.heading('Testing the same-step cascade')
     def make():
         S, X, E, P, A, Q, R = ss.states('S X E P A Q R')
@@ -1925,9 +1924,11 @@ def test_cascade_binomial():
             rec_q     = Q >> R @ ss.days(5),
             rec_a     = A >> R @ ss.days(5),
             init=dict(E=50), name='d')
-    res = ss.Sim(make(), solver='binomial', unit='day', stop=60, total_pop=5000, **kw).run().results.d
-    into = res.infection[1:] + res.entry[1:]
-    assert np.isclose((res.split_p + res.split_a).sum(), into.sum(), rtol=0.03)
+    for solver in ['binomial', 'gillespie']: # Each person once, through one branch, and on from P only (they were drawn as exclusive, so onward took from the others)
+        res = ss.Sim(make(), solver=solver, unit='day', stop=60, total_pop=5000, **kw).run().results.d
+        into = res.infection[1:] + res.entry[1:]
+        assert np.isclose((res.split_p + res.split_a).sum(), into.sum(), rtol=0.03), solver
+        assert res.onward.sum() == res.split_p.sum() and np.isclose(res.split_p.sum(), 0.3*into.sum(), rtol=0.1), solver
     return res
 
 

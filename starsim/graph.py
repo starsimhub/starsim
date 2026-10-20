@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Column, Count, did_you_mean, Dwell, Expr, is_one, linear, par, Row, Share, to_pars
+from .expressions import as_expr, BinOp, Clock, Column, Count, did_you_mean, Dwell, Expr, is_one, linear, par, Row, Share, to_pars
 from .parameters import by, TimeValue
 from .transitions import bound_names, find_name, FlowSum, outcome, State, Transition, update
 from .presentation import Presentation, TransitionTable
@@ -857,6 +857,10 @@ class Graph(Presentation):
                     raise ss.CapabilityError(f'"{name}" ({tr.arrow}) reads {state.name}.dwell, the time in {state.name}, which only people leaving {state.name} have. {where}')
                 self.dwell_states.add(state.name)
                 self.dwell_trs.add(name)
+            for expr in [tr.rate] + (sc.tolist(tr.p) if len(tr.dst) > 1 else []): # The time in its own state (X.time) is X.dwell here, so is followed as it is under compartments
+                if any(isinstance(leaf, Clock) and leaf.own(own) for leaf in (expr.leaves if isinstance(expr, Expr) else [])):
+                    self.dwell_states.add(own.name)
+                    self.dwell_trs.add(name)
             if len(tr.dst) <= 1 and any(dwells(p) for p in sc.tolist(tr.p)):
                 state = dwells(tr.p[0])[0]
                 raise ss.CapabilityError(f'"{name}" has p= with {state.name}.dwell, but a branch with p= is decided when people enter {state.name}, when no time has passed. '

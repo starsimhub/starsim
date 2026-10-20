@@ -483,6 +483,10 @@ class Clock(Expr):
     def names(self):
         return [s[1] if isinstance(s, tuple) else s.name for s in self.states]
 
+    def own(self, state):
+        """ Whether this is the time in one state (`X.time`), which for the people leaving it is `X.dwell` (see `ss.graph.Graph.check_dwell()`) """
+        return state is not None and self.kind == 'time' and len(self.states) == 1 and self.states[0] is state
+
     @property
     def module(self):
         mods = [s[0] if isinstance(s, tuple) else s.module for s in self.states]
@@ -551,6 +555,12 @@ class Since(Expr):
 
     def to_str(self, parent=False):
         return f'{ss.conditions.modname(self.module)}.since_{self.event}'
+
+    names = [] # As a clock (see clocks_in()), of no state
+    kind = 'since'
+
+    def own(self, state):
+        return False
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
@@ -803,7 +813,7 @@ def clocks_in(obj, out=None, seen=None):
     if id(obj) in seen:
         return out
     seen.add(id(obj))
-    if isinstance(obj, Clock):
+    if isinstance(obj, (Clock, Since)): # The time since an event is kept per agent too
         out.append(obj)
     elif isinstance(obj, attr): # What a derived one is worked out from (one set at an event has the value it had then)
         if obj.kind == 'derived':
@@ -1065,7 +1075,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
         elif isinstance(e, Column):
             return f'{fmt(e.p)}[{e.i}]'
-        elif isinstance(e, Clock):
+        elif isinstance(e, (Clock, Since)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)
