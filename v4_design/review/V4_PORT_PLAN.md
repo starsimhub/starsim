@@ -148,7 +148,7 @@ PR #1438 was merged into `v4` (`ee7123a1`) through `v4-rs-ck3`; Cliff's choices 
 
 - [ ] Fire `failed` across a crossing (the port's `force_part`/`cure_groups`); extend the read check to transitions' `on=`; test the `on_fail=` TypeError.
 - [ ] Rewrite the three HPV acceptance tests (`test_hpv_vaccines`, `test_hpv_screen_treat`, `test_hpv_colposcopy`) in Cliff's spelling.
-- [ ] A `starsim.migrate` rule for when `ss.Pregnancy` should be `ss.LegacyPregnancy` (code reading unborn agents or the coded module's arrays).
+- [x] `ss.LegacyPregnancy` removed (Robyn, 2026-10-20: not to be carried); `starsim.migrate` rewrites it to `ss.Pregnancy` and flags overrides of the old module's methods.
 - [ ] B1 (the conveyor): still a question for Cliff.
 - [ ] B4, B6, B7, and `burnin=` as compartments, as above.
 - Cliff's to decide, or his code: `positive`/`negative` on tests with several results; the `increment=` and `lost_capacity` target bugs; `key_by()` changing a product in place; a test with `people_now = False`.
