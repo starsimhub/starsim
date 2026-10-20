@@ -177,6 +177,49 @@ def test_hpv_nab_ode():
     assert np.isclose(ode, abm, rtol=0.05), f'ODE {ode:n}, agents {abm:n}'
 
 
+class FirstNab(ss.Analyzer):
+    """ The step each person first gets antibodies in, and the value drawn for them then """
+    def init_post(self):
+        super().init_post()
+        self.when = dict()
+        self.val = dict()
+        return
+
+    def step(self):
+        d = self.sim.diseases.d
+        vals = d.nab.raw
+        for uid in d.nab.auids[vals[d.nab.auids] > 0]:
+            if uid not in self.when:
+                self.when[uid] = self.t.ti
+                self.val[uid] = vals[uid]
+        return
+
+
+@sc.timer()
+def test_attr_crn():
+    sc.heading('Attributes: reading one in a modifier does not change its draws (common random numbers)')
+    def run(rel=None):
+        S, I, R = ss.states('S I R')
+        recovery = I >> R @ ss.peryear(1)
+        nab = ss.attr(ss.uniform(0.5, 0.95), on=recovery, combine='max', init=0)
+        d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(2)*I, recovery=recovery, wane=R >> S @ ss.peryear(0.5), nab=nab, init_prev=0.05, name='d')
+        mods = ss.modify(d.rel_sus, multiply=rel(d), name='m') if rel else []
+        return ss.Sim(d, connectors=mods, analyzers=FirstNab(), n_agents=2000, start=2000, stop=2010, dt=ss.months(1), unit='year', rand_seed=1, **kw).run()
+    base = run()
+    same = run(lambda d: 1 - 0*d.nab) # Reads the attribute, and changes nothing
+    assert np.array_equal(base.diseases.d.nab.values, same.diseases.d.nab.values)
+    assert np.array_equal(base.results.d.infection, same.results.d.infection)
+
+    # A modifier that changes who is infected: people who first get antibodies in the same step in both runs get the same draw
+    less = run(lambda d: 1 - 0.5*d.nab)
+    assert less.results.d.infection.sum() < 0.95*base.results.d.infection.sum()
+    a, b = base.analyzers[0], less.analyzers[0]
+    both = [uid for uid in a.when if b.when.get(uid) == a.when[uid]]
+    assert len(both) > 100
+    assert all(a.val[uid] == b.val[uid] for uid in both)
+    return
+
+
 @sc.timer()
 def test_attr_rules():
     sc.heading('Attributes: counts, first and min, traits, events at placement, modifiers, hooks')
@@ -281,6 +324,7 @@ if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()
     test_hpv_nab()
+    test_attr_crn()
     test_attr_rules()
     test_spread()
     test_attr_errors()

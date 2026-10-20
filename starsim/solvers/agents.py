@@ -137,6 +137,14 @@ class Agents(Engine):
             mod.setattribute(f'rng_{key}', dist)
             self.dists[key] = dist
             return
+        def copy(dist):
+            """ A copy of a distribution of the model, for the engine to draw from: without the sim and module it may be linked to already (by a module that reads it, e.g. a modifier of an attribute), so it is this disease's, and steps with it """
+            sim, module = dist.sim, dist.module
+            dist.sim = dist.module = None
+            try:
+                return sc.dcp(dist)
+            finally:
+                dist.sim, dist.module = sim, module
         add('init', ss.random())
         add('seed_who', ss.random()) # Who is seeded, by an init_prev for each agent: see init_post()
         add('seed_where', ss.random()) # Where the seeded go, if a new infection has several destinations: see seed()
@@ -188,15 +196,15 @@ class Agents(Engine):
         for tr in graph.inflows: # Births driven by a flow: the number of children of each parent, and their sex (see step_per())
             if getattr(tr, 'per', None) is not None and tr.people:
                 if isinstance(tr.n_born, ss.Dist):
-                    add(f'n_{tr.name}', sc.dcp(tr.n_born))
+                    add(f'n_{tr.name}', copy(tr.n_born))
                 if tr.sex is not None:
-                    add(f'sex_{tr.name}', sc.dcp(tr.sex) if isinstance(tr.sex, ss.Dist) else ss.bernoulli(p=tr.sex))
+                    add(f'sex_{tr.name}', copy(tr.sex) if isinstance(tr.sex, ss.Dist) else ss.bernoulli(p=tr.sex))
         self.attr_dists = dict() # Each distribution an attribute is drawn from, and the key of its copy: see draw_attr()
         for a in self.attrs.values():
             if a.kind in ['drawn', 'trait']:
                 for i,p in enumerate(ss.expressions.dists_in(a.value)):
                     key = f'attr_{a.name}_{i}'
-                    add(key, sc.dcp(p.value))
+                    add(key, copy(p.value))
                     self.attr_dists[id(p.value)] = key
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
         for name,dw in self.dwells.items():
