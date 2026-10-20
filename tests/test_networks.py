@@ -744,7 +744,6 @@ def test_beta_readings():
 
 
 @sc.timer()
-@pytest.mark.xfail(reason='Known port issue: agents about 2% low on effective R0 since 24eedcd9 (schedule exits at entry); see the ledger', strict=False)
 def test_route_modifiers():
     sc.heading('Testing modifiers of a transmission on one route: condoms, needle programs')
 
@@ -777,7 +776,7 @@ def test_route_modifiers():
     ode = pool('ode', share())
     assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), route='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
     ratio = lambda solver, seeds: np.mean([pool(solver, share(), seed)[-1] for seed in seeds])/np.mean([pool(solver, None, seed)[-1] for seed in seeds])
-    ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(4)) # Each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26
+    ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(12)) # 12 seeds, since near its threshold one run's epidemic varies a lot (seeds 0-3 alone gave 0.22 here); each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26
     assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.1), (abm_ratio, ode_ratio)
     return
 
