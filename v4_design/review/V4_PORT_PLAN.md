@@ -168,3 +168,14 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 11 | 9570bc05 | ab2d6082 | Ported |
 | 12 | d15a4780 | — | Dropped: v4 reads start=2000 with unit="day" as days, with a note (test_transitions::test_time) |
 | 13 | b4f6086e | 7b7eaf38 | Ported to all of v4's call sites; test uses cure=, where= |
+| 14 | 2f61f27a | 81977dc5 | Ported; W209 is ss.UndrivenUnused (a warning class; E209 keeps ss.UndrivenTransition) |
+| 15 | f702a332 | 738e00b5 | Ported; test uses ss.Delivery(move=) (v4: ss.transfer is never a delivery) |
+| 16 | e58451c8 | 13bb390d | Ported on v4's Treatment: moves= takes cure as its default probability; on_fail=; transition=/to= keep v4's meaning; result parts are .by_edge (v4 uses .parts for coverage) |
+| 17 | 58641964 | 8842c462 | Test only: v4's per_person evaluates an ss.par |
+| 18 | eec567c2 | — | implementation.md only: merged in Task 6 |
+| 19 | 0546e094 | 24eedcd9 | Scheduling at entry (enter(), late_ flags feeding v4's catch-up draw); v4 already had rate-0 rescale, closed-branch waiting, and the late draw. Random streams move: baseline regenerated, 4 single-run thresholds loosened with multi-seed evidence |
+| 20 | e1fad3c3 | 8caad3ff | Cascade generalized from v4's junctions; TriggerLoop both engines; events infrastructure deferred to commit 22; binomial count xfail (B2) |
+| 21 | d02080e7 | f1911a4d | Test only; v4's spec already states the rule |
+| 22 | 421ac2af | 9be7a668 | Ported with commit 20's event recording (batches beside v4's events dict); sets of states as (A \| B).enter on Cond; test: last step's events are acted on after the run (v4 timing) |
+| 23 | e5e172f5 | 7f7cf835 | Ported; set clocks registered on ss.expressions.Clock.sets (v4's A \| B is a condition, so no State objects); ti_ kept for clocked states; tests use keep_times and ti_EL.floats() (v4's compact step arrays) |
+| 24 | 635b0fc2 | — | implementation.md only: merged in Task 6 |
