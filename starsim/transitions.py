@@ -274,7 +274,7 @@ class on:
     def outcome(self):
         """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.interventions.trigger_moves()`) """
         x = self.x
-        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x)) # Not an event a module written as code records (e.g. ss.LegacyPregnancy's conception)
+        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x)) # Not an event a module written as code records (e.g. an ss.Event of a coded module)
 
     def __repr__(self):
         return f'ss.on({getattr(self.x, "__name__", self.x)})'
@@ -1125,6 +1125,8 @@ def numeric_pars(dist, convert, per_agent=None):
                 raise ValueError(errormsg)
             unit = dist.unit if key not in shape_pars else None
             pars[key] = per_agent(val if unit is None else val.map(lambda v: unit(v) if sc.isnumber(v) else v))
+        elif key == 'a' and isinstance(dist, ss.choice) and dist.unit is not None and not isinstance(val, ss.TimePar) and np.issubdtype(np.asarray(val).dtype, np.number): # The values a choice is drawn from, e.g. durations in weeks
+            pars[key] = np.asarray(convert(dist.unit(np.asarray(val, dtype=float))), dtype=float)
         elif key in shape_pars and not isinstance(val, ss.TimePar):
             pars[key] = val
         elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn

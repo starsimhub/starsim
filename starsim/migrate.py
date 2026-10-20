@@ -40,6 +40,7 @@ renames = [
     (r'''(\bverbose['"]?\s*[=:]\s*)(1\s*/\s*\d+(\.\d*)?|0?\.\d+)\b''', r'\g<1>1', 'a fractional verbose (print every n steps) is verbose=1, which prints the progress about ten times a run'),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
     (r'\bss\.Test\(',             'ss.Diagnostic(',                 'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic'),
+    (r'\bss\.(demographics\.Pregnancy|LegacyPregnancy)\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments, attributes, results, and callbacks)"),
     (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
     (r'\beligible=',              'where=',                         'eligible= of a delivery (a Starsim 4 prerelease) is where='),
 ]
@@ -63,6 +64,8 @@ flags = [
     (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
     (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
+    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's attributes, results and callbacks), and Starsim 3's pregnancy written as code was removed: instead of overriding its methods, add transitions (ss.on(preg.conception), ss.on(preg.delivery)), or use its callbacks (add_conception_callback(), add_delivery_callback())"),
+    (r'\.(make_embryos|make_pregnancies|make_p_conceive|select_conceivers|process_delivery|process_newborns|process_maternal_deaths|process_neonatal_deaths|process_prenatal_deaths|progress_pregnancies|update_breastfeeding|update_maternal_deaths|set_breastfeeding|set_rel_sus|draw_dur_pregnancy|updates_pre)\(', "a method of Starsim 3's pregnancy written as code, which was removed; ss.Pregnancy does this with its transitions and events (preg.conception, preg.delivery, preg.birth), or add_conception_callback()/add_delivery_callback()"),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
     (r'\bss\.seasonality\b', 'ss.modify(dis.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), in connectors='),

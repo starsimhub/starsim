@@ -393,7 +393,7 @@ def test_dynamic_household():
     dhs_data = make_dhs_data(n=medium)
 
     household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
-    preg = ss.LegacyPregnancy()
+    preg = ss.Pregnancy()
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
 
@@ -419,14 +419,14 @@ def test_household_coarse_pregnancy_dt():
     Move-out is evaluated once per pregnancy, so the resulting number of households should be
     ~invariant to the pregnancy module's dt. Previously, HouseholdNet compared
     pregnancy.ti_delivery (an index in the pregnancy module's own timeline) against sim.ti; when
-    pregnancy ran on a coarser dt (e.g. ss.LegacyPregnancy(dt=ss.months(3))), pregnant non-heads became
+    pregnancy ran on a coarser dt (e.g. ss.Pregnancy(dt=ss.months(3))), pregnant non-heads became
     re-eligible far too often, greatly over-fragmenting households. """
     sc.heading('Testing HouseholdNet with a coarse-dt Pregnancy module...')
     dhs_data = make_dhs_data(n=medium)
 
     def run(preg_dt):
         household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True, prob_move_out=0.5)
-        preg = ss.LegacyPregnancy(dt=preg_dt)
+        preg = ss.Pregnancy(dt=preg_dt)
         sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
                      start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1, copy_inputs=False)
         sim.run()
@@ -744,7 +744,7 @@ def test_beta_readings():
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
     hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5))), init_prev=0.1, name='hiv')
-    sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.LegacyPregnancy(), **kw).run()
+    sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.Pregnancy(), **kw).run()
     assert sim.results.hiv.n_I[-1] > 0
     return
 

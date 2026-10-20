@@ -573,7 +573,7 @@ def test_memory():
 
     # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.1, name='sis')
-    preg = ss.LegacyPregnancy(fertility_rate=50)
+    preg = ss.Pregnancy(fertility_rate=50)
     anc_visit = ss.visit(who=preg.conception, coverage=0.85)
     anc_a = ss.screen(ss.Diagnostic(sensitivity=0.9, name='rdt'), who=anc_visit)
     anc_b = ss.screen(ss.Diagnostic(sensitivity=0.8, name='rpr'), who=anc_visit)

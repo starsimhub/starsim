@@ -85,7 +85,7 @@ class Disease(ss.Module):
     """
     graph = None # The declared states and transitions; None for a disease written as code
     standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
-    code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.LegacyPregnancy's fertility rates)
+    code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
     _coded = False # Whether the class is written as code (ss.Infection and its subclasses), so that the check in __init_subclass__() does not apply
     _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital', 'step_congenital'] # Called only on a disease written as code

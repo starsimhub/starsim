@@ -196,7 +196,7 @@ class Agents(Engine):
             if a.kind in ['drawn', 'trait']:
                 for i,p in enumerate(ss.expressions.dists_in(a.value)):
                     key = f'attr_{a.name}_{i}'
-                    add(key, sc.dcp(p.value))
+                    add(key, ss.transitions.numeric_dist(p.value, self.convert, per_agent=self.agent_values)) # In the sim's unit, as a dwell time is (a distribution of typed values would draw them in steps)
                     self.attr_dists[id(p.value)] = key
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
         for name,dw in self.dwells.items():
@@ -432,6 +432,19 @@ class Agents(Engine):
         if log and mod.infection_log is not None:
             self.log_infections(uids, seeds=True)
         return uids
+
+    def put_first(self, uids):
+        """ Put some agents in the first state, and in no other (e.g. fetuses made after the start, whose states would otherwise be their arrays' defaults) """
+        if not len(uids) or not self.graph.people_states:
+            return
+        mod = self.mod
+        for state in self.graph.people_states:
+            mod[state.name][uids] = False
+            self.clear_exit(state.name, uids)
+        first = self.graph.first.name
+        mod[first][uids] = True
+        mod[f'ti_{first}'][uids] = mod.ti
+        return
 
     def place_newcomers(self):
         """ Put agents made by other modules since the last step (e.g. born of `ss.Births` or `ss.Pregnancy`), who are in no state, in the first state """
@@ -1362,6 +1375,8 @@ class Agents(Engine):
         people.parent[new] = order
         if f'sex_{tr.name}' in self.dists:
             people.female[new] = self.dists[f'sex_{tr.name}'].rvs(new)
+            self.sim.groups.set_sex(new) # A dimension called sex follows (it was set from the default when they were made)
+            self.sim.groups.groups_changed(new)
             sim.groups.groups_changed(new)
         if not born: # Fetuses, so that they are born at 0
             byplace = np.concatenate([np.flatnonzero(places == place) for place,k in enumerate(npl) if k])

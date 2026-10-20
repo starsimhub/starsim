@@ -31,7 +31,7 @@ def test_microsim(do_plot=False):
     sim = ss.Sim(
         people=ss.People(small),
         networks=[ss.MFNet(), ss.PrenatalNet()],
-        demographics=ss.LegacyPregnancy(),
+        demographics=ss.Pregnancy(),
         diseases=hiv,
         copy_inputs = False, # So we can reuse hiv
     )
@@ -151,6 +151,11 @@ class Counter(ss.Module):
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
+    for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
+        assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'
+    todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
+    assert any('add_conception_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
+    assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
     assert migrate_text('d = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.people.age < 1))')[0] == 'd = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.ppl.age < 1))' # Starsim 4 prerelease names
     assert migrate_text('tx = ss.treat(ss.Treatment(), eligible=sis.I)')[0] == 'tx = ss.treat(ss.Treatment(), where=sis.I)'
     assert migrate_text('ppl = ss.people.People(10)')[0] == 'ppl = ss.people.People(10)' # Starsim 3's module, left alone

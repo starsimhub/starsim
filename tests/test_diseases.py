@@ -363,7 +363,7 @@ def test_mtct():
         )
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
-    demographics = ss.LegacyPregnancy(fertility_rate=ss.time.freq(20, 'year'))
+    demographics = ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'))
     sim = ss.Sim(dt=ss.months(1), people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     sim.plot()
@@ -390,7 +390,7 @@ def test_fetal_health(do_plot=do_plot):
     )
     def demog():
         return [
-            ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ]
     sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.years(6), std=ss.years(1)), beta=0.1, init_prev=0.1)
@@ -502,9 +502,9 @@ def test_congenital():
     sc.heading('Testing congenital framework...')
 
     sim = ss.Sim(
-        n_agents=5_000,
+        n_agents=20_000, # Enough for a stable ratio of outcomes (about 30 of each)
         demographics=[
-            ss.LegacyPregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),

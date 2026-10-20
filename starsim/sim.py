@@ -782,8 +782,9 @@ class Sim(ss.Base):
         if unit_given and sc.isnumber(pars.start) and time.assume_cal_year(pars.start): # Read in the unit given, as it says, but it looks like a year
             ss.note(f"start={pars.start} is {pars.start} {pars.unit.removesuffix('s')}s, since unit='{pars.unit}'; for a calendar year, give a date, e.g. start='{int(pars.start)}-01-01'", sim=self)
         durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
-        units = [u.removesuffix('s') for mod in self.declared for u in mod.graph.unit_values()]
-        units += [base(mod.t.dt) for mod in self.declared if is_dur(mod.t.dt)]
+        setters = [mod for mod in self.declared if getattr(mod, 'sets_unit', True)] # A module with typed defaults of its own (ss.Pregnancy's weeks and years) says nothing of the user's bare numbers
+        units = [u.removesuffix('s') for mod in setters for u in mod.graph.unit_values()]
+        units += [base(mod.t.dt) for mod in setters if is_dur(mod.t.dt)]
         if pars.unit is not None:
             unit = pars.unit.removesuffix('s')
         elif units:
@@ -792,7 +793,7 @@ class Sim(ss.Base):
             source = 'the typed values in the model'
             if len(set(units)) > 1:
                 self.units_disagree = sorted(set(units), key=order.index)
-                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in self.declared for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw)]
+                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw)]
                 if bare: # Which unit they are in cannot be guessed
                     raise ss.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
         elif dates:

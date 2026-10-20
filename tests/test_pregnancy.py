@@ -300,40 +300,56 @@ def test_hiv_vertical_ode():
 
 
 @sc.timer()
-def test_legacy():
-    sc.heading('Testing back-compatibility: ss.LegacyPregnancy fires the same events, and ss.Pregnancy has the Starsim 3 names')
-    out = sc.objdict()
-    for cls in [ss.Pregnancy, ss.LegacyPregnancy]:
-        preg = cls(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.01), burnin=False)
-        S, I, C, F = ss.states('S I C F')
-        d = ss.Disease(S, I, C, F,
-            infection = S >> I @ ss.peryear(0.1),
-            mtct      = S >> C @ ss.peryear(3)*ss.mother(I),
-            flag      = S >> F @ ss.on(preg.conception),
-            unflag    = F >> S @ ss.on(preg.delivery), name='d')
-        sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=5000, **kw).run()
-        r, p = sim.results, sim.demographics.pregnancy
-        out[cls.__name__] = r
-        assert r.d.flag.sum() > 0.5*r.pregnancy.pregnancies.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
-        assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
-        assert np.all(p.pregnant[p.pregnant.uids]) and np.all(p.ti_delivery[p.pregnant.uids] >= p.ti - 1) # Within a step: ss.LegacyPregnancy keeps fractional due times
-        assert np.nanmax(p.gestation[p.pregnant.uids]) < 45 and np.all(p.parity >= 0)
-        tris = [p.tri1_uids, p.tri2_uids, p.tri3_uids] # Starsim 3 names read by STIsim (e.g. BV, PMTCT)
-        assert all(len(t) for t in tris) and sum(len(t) for t in tris) == len(p.pregnant.uids)
-        if cls is ss.Pregnancy:
-            with pytest.warns(RuntimeWarning): # No preterm births yet: rel_ptb is kept for code that writes it
-                p.set_ptb()
-            assert np.all(p.rel_ptb[p.pregnant.uids] >= 1)
-    a, b = out.Pregnancy.pregnancy, out.LegacyPregnancy.pregnancy
-    for key in ['pregnancies', 'births']:
-        assert np.isclose(a[key].sum(), b[key].sum(), rtol=0.15), key
+def test_starsim3():
+    sc.heading('Testing back-compatibility: ss.Pregnancy has the Starsim 3 names, results, and callbacks')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.01), burnin=False)
+    S, I, C, F = ss.states('S I C F')
+    d = ss.Disease(S, I, C, F,
+        infection = S >> I @ ss.peryear(0.1),
+        mtct      = S >> C @ ss.peryear(3)*ss.mother(I),
+        flag      = S >> F @ ss.on(preg.conception),
+        unflag    = F >> S @ ss.on(preg.delivery), name='d')
+    seen = sc.objdict(conceived=0, delivered=0)
+    def count(sim):
+        if sim.ti == 0: # Starsim 3 callbacks, for modules written as code
+            p = sim.demographics.pregnancy
+            p.add_conception_callback(lambda uids: seen.__setitem__('conceived', seen.conceived + len(uids)))
+            p.add_delivery_callback(lambda moms, kids: seen.__setitem__('delivered', seen.delivered + len(kids)))
+    sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), analyzers=count, n_agents=5000, **kw).run()
+    r, p = sim.results, sim.demographics.pregnancy
+    assert r.d.flag.sum() > 0.5*r.pregnancy.pregnancies.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
+    assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
+    assert np.all(p.pregnant[p.pregnant.uids]) and np.all(p.ti_delivery[p.pregnant.uids] >= p.ti)
+    assert np.nanmax(p.gestation[p.pregnant.uids]) < 45 and np.all(p.parity >= 0)
+    tris = [p.tri1_uids, p.tri2_uids, p.tri3_uids] # Starsim 3 names read by STIsim (e.g. BV, PMTCT)
+    assert all(len(t) for t in tris) and sum(len(t) for t in tris) == len(p.pregnant.uids)
+    p.set_ptb()
+    assert np.all(p.rel_ptb[p.pregnant.uids] > 0)
+    assert seen.conceived > 0.8*r.pregnancy.pregnancies.sum() and seen.delivered > 0.8*r.pregnancy.births.sum()
+    born = (sim.people.age > 0) & np.isfinite(p.gestation_at_birth)
+    assert born.sum() > 100 and np.isclose(r.pregnancy.n_preterm.sum(), np.sum(p.gestation_at_birth[born.uids] < 37), rtol=0.2)
 
-    # A Starsim 3 disease that transmits over the maternal network, with the declared pregnancy
+    # A Starsim 3 disease that transmits over the maternal network
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), diseases=ss.SIS(beta=dict(maternalnet=1.0, random=0.05)),
                  networks=[ss.MaternalNet(), ss.RandomNet()], n_agents=3000, **kw).run()
     assert sim.demographics.pregnancy.fetus and sim.results.sis.new_infections.sum() > 0
-    with pytest.warns(FutureWarning):
-        ss.Pregnancy().add_delivery_callback(lambda m, n: None)
+    return sim
+
+
+def test_delivery_shift():
+    """ Setting ti_delivery reschedules deliveries, as code written for Starsim 3 does (e.g. ssl.mnch.FetalHealth) """
+    sc.heading('Testing rescheduled deliveries')
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=False), n_agents=3000, **kw)
+    sim.init()
+    sim.run(until=24)
+    p = sim.demographics.pregnancy
+    uids = p.P.uids
+    due = p.ti_delivery[uids]
+    later = uids[due > p.ti + 3]
+    p.ti_delivery[later] = p.ti + 1 # Due at the next step
+    assert np.all(p.ti_delivery[later] == p.ti + 1)
+    sim.run(until=sim.ti + 2)
+    assert not np.any(p.P[later]) and np.all(p.ti_delivered[later] >= p.ti - 2), 'Every rescheduled delivery happened'
     return sim
 
 
@@ -467,7 +483,8 @@ if __name__ == '__main__':
     fetus = test_fetus()
     lact = test_lactation()
     hiv = test_hiv_vertical()
-    legacy = test_legacy()
+    starsim3 = test_starsim3()
+    shift = test_delivery_shift()
     syph = test_syphilis()
     pp = test_postpartum()
     T.toc()
