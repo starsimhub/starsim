@@ -221,16 +221,19 @@ def choose_solver(sim):
         pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
         pars.n_agents = sim.groups.n_groups
 
-    # A beta for each route names every route and nothing else; a route has no beta of its own
+    # A beta for each route names every route and nothing else, unless it gives a default for the routes it does not name; a route has no beta of its own
     nets = list(sim.mixed if solver != 'abm' else pars.networks.values())
     routes = [net.name for net in nets]
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, dict)]:
-                given = [ss.standardize_netkey(k) for k in p.raw]
-                unknown = [k for k in p.raw if ss.standardize_netkey(k) not in [ss.standardize_netkey(r) for r in routes]]
+                given = [ss.standardize_netkey(k) for k in p.raw if k != 'default']
+                unknown = [k for k in p.raw if k != 'default' and ss.standardize_netkey(k) not in [ss.standardize_netkey(r) for r in routes]]
                 missing = [r for r in routes if ss.standardize_netkey(r) not in given]
-                if unknown or missing:
+                if 'default' in p.raw: # Written for any sim, e.g. by a library: the routes it does not name take the default, and the names that are not routes of this sim are not used
+                    if unknown:
+                        ss.note(f'the beta of "{mod.name}.{tr.name}" names {sc.strjoin(unknown)}, which {"is not a route" if len(unknown) == 1 else "are not routes"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the routes are {sc.strjoin(routes) or "none"}, and those not named take the default', sim=sim)
+                elif unknown or missing:
                     raise ss.RouteMismatch(f'the beta of "{mod.name}.{tr.name}" is given for each route, as {sc.strjoin(p.raw.keys())}, but the routes are {sc.strjoin(routes) or "none (homogeneous mixing)"}: '
                                            f'{"no route is called " + sc.strjoin(unknown) if unknown else ""}{"; " if unknown and missing else ""}{sc.strjoin(missing) + " " + ("has" if len(missing) == 1 else "have") + " no value" if missing else ""}.')
     check_betas(sim, nets)
@@ -285,19 +288,18 @@ def check_betas(sim, nets):
     probability per contact. A pair has no direction names, a typed rate on a network with acts is not a hazard,
     and `ss.peract` needs acts.
     """
-    by_key = {ss.standardize_netkey(net.name):net for net in nets}
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par)]:
                 raw = p.raw
                 if isinstance(raw, dict):
-                    vals = [(by_key.get(ss.standardize_netkey(k)), v) for k,v in raw.items()]
+                    vals = [(net, ss.utils.route_beta(raw, net.name)) for net in nets] # The names that are not routes are checked above
                 elif isinstance(raw, (ss.peract, list, tuple)) or p.slot == 'rate': # The same beta on every route
                     vals = [(net, raw) for net in nets]
                 else:
                     continue
                 for net,val in vals:
-                    if net is None:
+                    if val is None:
                         continue
                     val = val.raw if isinstance(val, ss.par) else val
                     where = f'the beta of "{mod.name}.{tr.name}" on "{net.name}"'

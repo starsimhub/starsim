@@ -661,7 +661,9 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
 
     Args:
         arrow (str): the source and destination states, e.g. `'S -> I'`
-        beta (any): the transmission rate (per contact, if networks are given); a dict gives one value per network
+        beta (any): the transmission rate (per contact, if networks are given); a dict gives one value per network, by name, and must name each network of the sim and no other,
+            unless it gives `default`, the value of the networks it does not name, e.g. `beta=dict(mfnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`, in which case
+            the names that are not networks of the sim are not used (with a note); this is for a disease written for any sim, e.g. by a library
         source (str/list/dict): the infectious state(s); or a dict of a weight for each, e.g. `source=dict(P=1, EL=0.55)`, the same as `beta * (P + 0.55*EL)`; if not given, the states declared `infectious=True`, else the destination
         p (list): branch probabilities, if there are several destinations
         where (Cond/func): who it applies to (see `ss.Transition`)

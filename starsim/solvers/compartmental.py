@@ -1268,10 +1268,9 @@ class Compartmental(Engine):
         betas = [leaf for leaf in flow.expr.leaves if isinstance(leaf, ss.par) and (isinstance(leaf.raw, (dict, ss.peract)) or (acts and leaf.slot == 'rate'))]
         if betas:
             raw = betas[0].raw
-            vals = {ss.standardize_netkey(k):v for k,v in raw.items()} if isinstance(raw, dict) else None # The keys are checked when the sim is initialized
-            def route(term, state=None):
+            def route(term, state=None): # The keys of a dict are checked when the sim is initialized
                 key = ss.standardize_netkey(term.name)
-                val = vals[key] if vals is not None else raw
+                val = ss.utils.route_beta(raw, term.name) if isinstance(raw, dict) else raw
                 net = nets.get(key)
                 if 'partnership' in term:
                     return self.partnership_chance(val, net, term, flow, state)
