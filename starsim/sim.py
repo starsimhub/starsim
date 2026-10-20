@@ -816,7 +816,7 @@ class Sim(ss.Base):
                 bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] # 0 is 0 in any unit
                 if bare: # Which unit they are in cannot be guessed
                     raise ss.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
-        elif dates:
+        elif dates and self.declared: # A model written as code keeps its step in years, as in Starsim 3
             unit, source = 'day', 'start and stop dates'
         elif is_dur(pars.dt) or isinstance(pars.dt, str):
             unit, source = (base(pars.dt) if is_dur(pars.dt) else pars.dt.removesuffix('s')), 'dt'
@@ -824,6 +824,8 @@ class Sim(ss.Base):
             unit, source = base(durs[0]), 'start and stop'
         elif years:
             unit, source = 'year', 'start and stop years'
+        elif not self.declared: # A model written as code, with nothing to say otherwise: years, as in Starsim 3
+            unit, source = 'year', 'the default'
         if years and pars.unit is None and unit not in [None, 'year'] and sc.isnumber(pars.dt) and not isinstance(pars.dt, bool): # A bare step beside calendar years is in years, as start and stop are
             ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.UnitInferred)
             pars.dt = ss.years(pars.dt)
@@ -843,7 +845,8 @@ class Sim(ss.Base):
         dur_class = time.get_dur_class(self.unit_base)
         if pars.dt is None or sc.isnumber(pars.dt):
             pars.dt = dur_class(sc.ifelse(pars.dt, 1.0))
-        if not dates and not years:
+        coded_years = not self.declared and unit == 'year' and pars.start is None # A model written as code in years starts in the year 2000 by default, as in Starsim 3 (see ss.Timeline)
+        if not dates and not years and not coded_years:
             if pars.start is None or sc.isnumber(pars.start):
                 pars.start = dur_class(sc.ifelse(pars.start, 0))
             if sc.isnumber(pars.stop):

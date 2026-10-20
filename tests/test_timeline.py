@@ -388,6 +388,23 @@ def test_step_count():
     return sim
 
 
+@sc.timer()
+def test_coded_unit():
+    sc.heading('Test that the unit of a sim with only coded modules is honored')
+
+    class Step(ss.Module): # A module written as code, with no declared states or transitions
+        def step(self):
+            pass
+
+    sim = ss.Sim(connectors=Step(), unit='day', dt=1, start=0, stop=30, verbose=0).init()
+    assert sim.unit == 'day' and sim.t.dt == ss.days(1) and len(sim.t) == 31
+    sim = ss.Sim(connectors=Step(), unit='week', stop=10, verbose=0).init()
+    assert sim.t.dt == ss.weeks(1) and len(sim.t) == 11
+    sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing says otherwise: years from 2000, as in Starsim 3
+    assert sim.unit == 'year' and sim.t.start == 2000 and sim.t.dt == ss.years(1)
+    return sim
+
+
 # Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -403,5 +420,6 @@ if __name__ == '__main__':
     o6 = test_mixed_timesteps()
     o7 = test_units(do_plot)
     o8 = test_step_count()
+    o9 = test_coded_unit()
 
     T.toc()

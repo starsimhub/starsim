@@ -137,6 +137,7 @@ def choose_solver(sim):
     sim.groups.init()
     sim.mixing = solvers.Mixing(sim)
     if not sim.declared:
+        sim._init_unit()
         if solver not in ['auto', 'abm']:
             raise ss.CapabilityError(f'cannot run with solver="{solver}": the model is written as code (it has no declared states and transitions), so it runs as agents.\n'
                                      f'     Leave the solver as "auto", or declare the model\'s states and transitions to run it as compartments.')
