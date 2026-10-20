@@ -555,8 +555,8 @@ class Compartmental(Engine):
         if any(sp.get('share') is not None for sp in self.spreads): # Phase B: a module's own burn-in (ss.Pregnancy's burnin=) as compartments
             ss.note(f'{self.mod.name}: burnin= has no compartmental form yet, so nobody starts part way through (as agents they do)', sim=self.sim)
             self.spreads = [sp for sp in self.spreads if sp.get('share') is None]
-        if self.spreads: # Phase B: the natural history fed a constant inflow over the window, stepped to the start
-            raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}" has no compartmental form yet. Run with solver="abm".')
+        if self.spreads and self.cross is not None:
+            raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}", which is tracked jointly with {sc.strjoin(n for n in self.cross.names if n != self.mod.name)}, cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
         self.update_targets()
         amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
         first = self.graph.first.name if self.graph.people_states else None
@@ -568,6 +568,8 @@ class Compartmental(Engine):
             self.arrive(name, amount, self.y, before=name in infected)
         for name,count in counts.items():
             self.arrive(name, count*self.state_split[name], self.y, before=name in infected)
+        if self.spreads: # People who start part way through their natural history
+            self.backfill_spreads()
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
         if any(not tr.static for tr in self.triggers) and self.cross is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
@@ -580,6 +582,70 @@ class Compartmental(Engine):
         self.record_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
+        return
+
+    def backfill_spreads(self):
+        """
+        People who start part way through their natural history (`ss.spread`): the model with nobody to infect and no
+        inflows, fed a constant inflow over the window (or until the people still there settle, with no `over=`), and
+        stepped to the start in the kernels, so they spread over the stages and slots of its dwell times; scaled to the
+        share given in the target, and taken from the first state. The values are those at the start (as are the ages)
+        """
+        mod = self.mod
+        sim = self.sim
+        saved = self.y.copy()
+        first = self.graph.first.name
+        out = np.zeros_like(self.y)
+        self._mover_rates = [np.zeros_like(np.asarray(r, dtype=float)) for r in self.mover_rates()] # Nobody moves between places (or ages) before the start
+        if self.program is None:
+            self.init_program()
+        p = self.program
+        inflows = [i for i,flow in enumerate(self.flows) if flow.src is None]
+        kept = (p.fixed.copy(), p.mult.copy())
+        self.refresh_program()
+        p.fixed[inflows] = 0 # No births or immigration before the start
+        p.mult[inflows] = 0
+        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else 'rk4'] # The expected numbers, whatever the solver
+        rng = self.make_rng(stream=3)
+        try:
+            for sp in self.spreads:
+                window = sp.spread.window(self.convert)
+                lo, hi = (0, 2000) if window is None else [int(round(v/self.dt)) for v in window]
+                hi = max(hi, lo)
+                if sp.tr is not None: # Where a new infection goes
+                    entry = list(zip(sp.tr.dst, [np.asarray(x, dtype=float) for x in self.branch_probs(sp.tr)]))
+                else:
+                    entry = [(sp.entry, 1.0)]
+                self.y = np.zeros_like(saved)
+                targets = [c for name in sp.target for c in self.state_comps[name]]
+                last = None
+                for k in range(-hi - 1, 0):
+                    if -k - 1 >= lo: # Entered in this step
+                        for dst,share in entry:
+                            self.arrive(dst.name, share*self.state_split[first], self.y)
+                    self.y, _ = ss.kernels.one_step(rng, self.y, p, self.dt, solver, self.substeps(), no_tables, -1)
+                    if window is None: # Until those still there settle
+                        now = self.y[targets].sum(axis=0)
+                        if last is not None and np.allclose(now, last, rtol=1e-7, atol=0):
+                            break
+                        last = now
+                x = sp.spread.value
+                want = (x if x <= 1 else x/self.total_pop)*self.total_pop*self.state_split[first]
+                have = self.y[targets].sum(axis=0)
+                scale = np.divide(want, have, out=np.zeros_like(have), where=have > 0)
+                out[targets] += self.y[targets]*scale
+                what = 'infected' if sp.tr is not None else f'in {sp.entry.name}'
+                when = '[' + ', '.join(f'{v*self.dt:n}' for v in [lo, hi]) + ']' + (f' {sim.pars.unit}s' if sim.pars.get('unit') else ' steps') if window is not None else 'long enough to be stationary'
+                ss.note(f'{mod.name}: {x:n} {what}, back-dated over {when} (natural history only; values and ages as at the start)', sim=sim)
+        finally:
+            p.fixed[:], p.mult[:] = kept
+            self.cache.clear()
+        firsts = self.state_comps[first] # Those back-dated are taken from the first state
+        total = saved[firsts].sum(axis=0)
+        taken = out.sum(axis=0)
+        keep = np.divide(np.maximum(total - taken, 0), total, out=np.zeros_like(total), where=total > 0)
+        saved[firsts] *= keep
+        self.y = saved + out
         return
 
     def restart(self):

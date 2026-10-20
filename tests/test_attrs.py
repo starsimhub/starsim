@@ -247,7 +247,6 @@ def test_spread():
     r = ss.Sim(make_spread_ab(), n_agents=10_000, start=0, stop=20, unit='day', **kw).run().results.d
     assert np.isclose(r.n_B[0], 1000, atol=2) and np.isclose(r.bc[1:11].sum(), 1000, atol=5) and r.bc[11:].sum() == 0
     assert np.allclose(r.bc[1:11], 100, atol=40), r.bc[:12]
-    assert ss.Sim(make_spread_ab(), start=0, stop=20, unit='day', **kw).init().solver == 'abm', 'solver="auto" runs ss.spread as agents'
     return out
 
 
@@ -256,7 +255,6 @@ def make_spread_ab():
     return ss.Disease(A, B, C, ab=A >> B @ 0, bc=ss.Transition(B, C, dur=ss.constant(ss.days(10))), init=dict(B=ss.spread(0.1)), name='d')
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B: ss.spread as compartments (the natural history fed a constant inflow over the window) is deferred')
 def test_spread_ode():
     r = ss.Sim(make_spread_ab(), solver='ode', total_pop=10_000, start=0, stop=20, unit='day', **kw).run().results.d
     assert np.isclose(r.n_B[0], 1000) and np.allclose(r.bc[1:11], 100, atol=1e-6), r.bc[:12]
