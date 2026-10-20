@@ -527,6 +527,19 @@ def test_cascade():
     treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
     sub = SubSim(interventions=ss.cascade(screening, confirm, treatment, name='care'), diseases=make_sis(), solver='abm', stop=120, **kw).run()
     assert 'confirm' in sub.interventions and np.array_equal(sub.results.sis.n_I, sim.results.sis.n_I)
+
+    # And for a subclass that puts the modules in its parameters itself, after ss.Sim.__init__()
+    class LateSim(ss.Sim):
+        def __init__(self, interventions=None, **kwargs):
+            super().__init__(**kwargs)
+            self.pars.interventions = interventions
+    rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7), name='screening')
+    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9, name='confirm')
+    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50), name='treatment')
+    late = LateSim(interventions=[ss.cascade(screening, confirm, treatment, name='care')], diseases=make_sis(), solver='abm', stop=120, **kw).run()
+    assert 'confirm' in late.interventions and np.array_equal(late.results.sis.n_I, sim.results.sis.n_I)
     assert sim.results.care.plot() is not None
 
     # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)

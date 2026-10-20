@@ -315,6 +315,9 @@ class Sim(ss.Base):
         self._made = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
+        ivs = sc.tolist(self.pars.interventions) # Steps of a cascade are added in __init__(), before the modules are copied; these are any put in pars later (e.g. by a subclass of ss.Sim)
+        if any(all(step is not mod for mod in ivs) for casc in ivs if isinstance(casc, ss.cascade) for step in casc.steps):
+            self.pars.interventions = self._add_steps(ivs)
         self.pars.validate() # Validate parameters
         for mod in self.pars.diseases.values(): # A state that only a delivery moves people into is not where they start
             if getattr(mod, 'graph', None) is not None:
@@ -1974,6 +1977,8 @@ class Sim(ss.Base):
             if getattr(mod, 'graph', None) is not None or type(mod).__module__.startswith('starsim.'): # Only code written outside Starsim
                 continue
             for res in mod.results.values():
+                if getattr(res, 'name', None) in getattr(mod, '_starsim_results', ()): # Defined and written by Starsim's own classes, e.g. the results of a subclass of ss.screen
+                    continue
                 vals = np.asarray(res.values) if isinstance(res, ss.Result) else None
                 if vals is None or vals.ndim != 1 or vals.dtype.kind not in 'biuf' or len(vals) < 5: # Only series of numbers
                     continue

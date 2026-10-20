@@ -1,6 +1,7 @@
 """
 Test Starsim features not covered by other test files
 """
+import warnings
 import pytest
 import numpy as np
 import sciris as sc
@@ -145,6 +146,26 @@ class Counter(ss.Module):
             with pytest.warns(RuntimeWarning, match='time index'):
                 sim.run()
         assert sim.results.counter.seen.sum() == seen
+
+    # A subclass of a Starsim delivery: Starsim's own results are not flagged, but a result the subclass writes the Starsim 3 way is
+    S, I = ss.states('S I')
+    def make_screen(cls):
+        d = ss.Disease(infection=S >> I @ ss.permonth(0.3)*I, recovery=I >> S @ ss.months(6), init_prev=0.1, name='d')
+        return ss.Sim(d, interventions=cls(ss.Diagnostic(sensitivity=0.9), coverage=ss.probperyear(0.5), name='scr'), n_agents=500, start=2000, stop=2005, dt=ss.months(1), verbose=0)
+    class MyScreen(ss.screen):
+        pass
+    class OldScreen(ss.screen):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('steps', dtype=int, scale=False))
+        def step(self):
+            super().step()
+            self.results.steps[self.ti] += 1 # Starsim 3: the step's index
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning)
+        make_screen(MyScreen).run()
+    with pytest.warns(RuntimeWarning, match=r'time index \(scr\.steps\)'):
+        make_screen(OldScreen).run()
 
     # Renames, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
