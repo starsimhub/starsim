@@ -778,7 +778,44 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
                 frac = now*tgt.selector.in_states([s.name for s in srcs])
                 if cond is not None:
                     frac = frac*tgt.selector.select(cond)
+                counts = tgt.state_counts()
                 tgt.move_share(tr, frac, srcs)
+                if tgt is eng: # The event's people who moved are found where they are now, by steps that read it later in the step
+                    carry_moved(owner, outcome, eng, counts)
+    return
+
+
+def carry_moved(owner, outcome, eng, before):
+    """
+    In a compartmental run: carry the events of this step along a move of the people of one of them (by a transition that
+    event triggered: see `trigger_moves()`), from the people it took out of each state and group to those it put in, so a step
+    that reads them later in the step finds them where they are now. An event with the same people (e.g. a delivery's
+    outcome, and its product's) moves as they did; any other, the same share as of everyone in their state and group
+    """
+    sim = owner.sim
+    after = eng.state_counts()
+    left, came = np.maximum(before - after, 0), np.maximum(after - before, 0)
+    share = np.divide(left, before, out=np.zeros_like(before), where=before>0)
+    entries = [e for e in owner.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti and e[3] is eng]
+    if not entries:
+        return
+    mine = entries[-1][1]*(before if entries[-1][2] is None else entries[-1][2]) # The people of the event that triggered the move
+    for m in [m for m in list(sim.interventions()) + list(sim.products()) if m.__dict__.get('_live')]:
+        for out,es in m._live.items():
+            for entry in es:
+                t, sel, b, e = entry
+                if t != sim.ti or e is not eng:
+                    continue
+                people = sel*(before if b is None else b)
+                if np.allclose(people, mine):
+                    new = np.maximum(people - left, 0) + came
+                else:
+                    moved = people*share
+                    new = people - moved
+                    total = moved.sum()
+                    if total > 0 and came.sum() > 0:
+                        new = new + came*(total/came.sum())
+                entry[1:3] = [np.clip(np.divide(new, after, out=np.zeros_like(after), where=after>0), 0, 1), after]
     return
 
 
@@ -2700,34 +2737,41 @@ class Delivery(ss.products.EventSource, Intervention):
         In a compartmental run, a treatment of several diseases: the people chosen in each compartment and group are moved as a
         population of their own (with `force()`), so the share forced is chosen × probability in each, and the rest of them have
         failed. Diseases tracked jointly (see `ss.solvers.Crossing`) pass the same people on, by way of the joint array, so each
-        sees those the others treated. Its outcomes are results but not events, since they are not kept by person
+        sees those the others treated. Its outcomes `cured` and `failed` are events too, as shares of each state and group of
+        the delivery's disease (someone cured of one disease and failed by another has both)
         """
         sim = self.sim
-        read = [o for o in ['cured', 'failed', 'unneeded'] if o in self.__dict__.get('_needs', {}) or any(o == leaf.args[1] for mod in sim.interventions() if isinstance(mod, Delivery) for leaf in ss.conditions.event_leaves(mod.on) if leaf.op == 'event' and leaf.args[0] is self)]
-        if read:
-            raise ss.CapabilityError(f'the outcome {sc.strjoin(read)} of "{self.name}", a treatment of several diseases, is read by another step, which cannot run with solver="{sim.solver}" yet. Run with solver="abm".')
         home = self.eng
         cross = home.cross
         rows = home.people_comps
         state_of = [home.selector.states.index(home.comps[i].state.name) for i in rows]
         C = home.take(home.y[rows], chosen[state_of]) # The people chosen, by compartment and group
         cur = home
+        parts = [] # Each disease's engine, and those it cured and failed, by its compartment and group
         for dis in diseases:
             eng = sim.get_declared(dis).engine
             if eng is not cur:
                 if cross is None or eng.cross is not cross:
                     raise ss.CapabilityError(f'"{self.name}" treats "{dis}" and "{cur.mod.name}", whose states are not tracked jointly, with solver="{sim.solver}". Run with solver="abm".')
                 C = cross.local(cross.joint(cur, C), eng)
-            C = self.force_part(eng, C, [e for e in self.edges if e.dis == dis])
+            C, cured, failed = self.force_part(eng, C, [e for e in self.edges if e.dis == dis])
+            parts.append((eng, cured, failed))
             cur = eng
         if cur is not home: # Where the people treated are now, by state and group of this disease
             C = cross.local(cross.joint(cur, C), home)
-        moved = np.array([C[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
+        by_state = lambda X: np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
         N = home.state_counts()
-        return [(np.clip(np.divide(moved, N, out=np.zeros_like(N), where=N>0), 0, 1), None)]
+        share = lambda X: np.clip(np.divide(by_state(X), N, out=np.zeros_like(N), where=N>0), 0, 1)
+        for outcome,k in [('cured', 1), ('failed', 2)]:
+            total = 0.0
+            for eng,*X in parts: # In this disease's compartments, by way of the joint array
+                X = X[k-1]
+                total = total + (X if eng is home else cross.local(cross.joint(eng, X), home))
+            self.fire(outcome, share(total))
+        return [(share(C), None)]
 
     def force_part(self, eng, C, edges):
-        """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after """
+        """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and those it cured and those it failed (by compartment and group, after the move) """
         rows = eng.people_comps
         full = eng.y.copy()
         cross, eng.cross = eng.cross, None # Moved as a population of their own, which the crossing takes once they are back with the rest
@@ -2736,6 +2780,7 @@ class Delivery(ss.products.EventSource, Intervention):
             eng.y[rows] = C
             states = eng.selector.states
             treated = 0.0
+            failed = np.zeros_like(C)
             for e in edges:
                 comps = [c for s in e.srcs for c in eng.state_comps[s.name]]
                 frac = eng.selector.nobody()
@@ -2748,14 +2793,16 @@ class Delivery(ss.products.EventSource, Intervention):
                 self.add('cured', groups=before - after, part=part)
                 self.add('failed', groups=after, part=part)
                 treated = treated + before
+                failed[[rows.index(c) for c in comps]] = eng.y[comps] # Still in the states it would have moved them from
             self.add('unneeded', groups=C.sum(axis=0) - treated, part=(eng.mod.name, None))
             after = eng.y[rows].copy()
+            cured = np.maximum(after - C, 0) # Arrived where it moved them
             eng.y[:] = full
             eng.y[rows] += after - C
         finally:
             eng.cross = cross
         eng.changed()
-        return after
+        return after, cured, failed
 
     def test(self, chosen):
         """ Work out the result of each test (one draw per person, from the probability of each result: see `ss.Diagnostic.tails()`), and either act on it or wait for it """
