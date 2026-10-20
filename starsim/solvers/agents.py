@@ -1835,10 +1835,34 @@ class Agents(Engine):
         dw = self.dwells[name]
         active = [m for m in dw.mods if m.active]
         sets = [m for m in active if m.op == 'set']
-        new = dw.sets[id(sets[-1])] if sets else sc.objdict(key=f'dwell_{name}', mean=dw.mean)
+        new = dw.sets[id(sets[-1])] if sets else sc.objdict(key=f'dwell_{name}', mean=dw.mean if dw.mean is not None else self.agent_dwell_mean(name, self._uids))
         mult = ss.connectors.combine([m for m in active if m.op == 'multiply'], 1.0, self)
         add = ss.connectors.combine([m for m in active if m.op == 'add'], 0.0, self)
         return new.key, new.mean, mult, add
+
+    def attach_dwell_mods(self):
+        """ Attach the modifiers of dwell times that are distributions once every module has registered its own (a module made before them, e.g. a connector, missed them: see `Engine.dwell_mods()`) """
+        for name,dw in self.dwells.items():
+            if getattr(dw, 'mods', None) or not hasattr(dw, 'mod_args'):
+                continue
+            self.dwell_mods(name, *dw.mod_args[:1], dw, dw.mod_args[1])
+            for new in getattr(dw, 'sets', {}).values(): # The distributions a modifier sets it to, initialized with the others
+                new.dist.name = f'rng_{new.key}'
+                self.mod.setattribute(new.dist.name, new.dist)
+                self.dists[new.key] = new.dist
+        return
+
+    def agent_dwell_mean(self, name, uids):
+        """ The mean of a dwell time whose distribution has parameters by group (see `Engine.varying_dwell()`), for each of some agents """
+        dw = self.dwells[name]
+        trans = ss.transitions
+        varying = trans.varying_pars(dw.raw)
+        pars = {k:v for k,v in trans.numeric_pars(dw.raw, dw.to_unit, per_agent=lambda val: None).items() if k not in varying}
+        keys = list(varying.keys())
+        vals = np.column_stack([np.broadcast_to(self.by_agent(varying[k], uids), len(uids)) for k in keys]) if len(uids) else np.zeros((0, len(keys)))
+        rows, which = np.unique(vals, axis=0, return_inverse=True) # Once for each set of values, e.g. each age group
+        means = [trans.dwell_stats(type(dw.raw)(**pars, **dict(zip(keys, row))), lambda v: v)[0] for row in rows]
+        return np.asarray(means, dtype=float)[which.ravel()] if len(uids) else np.zeros(0)
 
     def dwell_mean(self, name):
         """ The current mean dwell time of a transition, in the sim's unit, including the modifiers of a distribution (see `dist_dwell()`) """
