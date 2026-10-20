@@ -538,6 +538,20 @@ def test_save_load():
     return loaded
 
 
+def test_two_sims():
+    """ Each sim's pregnancy drives its births by its own delivery: ss.birth(per=) kept the class's transition, so a second sim reached into the first sim's objects """
+    sc.heading('Testing two pregnancy sims in a row')
+    sims = []
+    for i in range(2):
+        sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=300, start=2000, stop=2002, verbose=0).run()
+        trs = sim.demographics.pregnancy.graph.transitions
+        assert trs.birth.per.tr is trs.delivery and trs.delivery is not ss.Pregnancy.delivery
+        assert trs.delivery.dur.raw.sim is sim
+        sims.append(sim)
+    assert sims[0].results.pregnancy.birth.sum() > 0 and sims[1].results.pregnancy.birth.sum() > 0
+    return sims
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()

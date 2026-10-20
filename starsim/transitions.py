@@ -14,6 +14,7 @@ the values that vary (`ss.by`, `ss.timeseries`, `ss.seasonal`) in `parameters.py
 `presentation.py`, and its stratifications in `dimensions.py`; their names are also found here.
 """
 import re
+import copy
 import math
 import inspect
 import itertools
@@ -720,7 +721,14 @@ class Per:
         return f'per({self.tr.name})'
 
     def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
+
+    def __deepcopy__(self, memo):
+        """ Its transition goes with it when it is copied in the same copy (a class's members, or a sim's modules), and is otherwise kept by reference, as another module's """
+        tr = self.tr
+        mod = getattr(tr, 'module', None)
+        if id(tr) in memo or mod is None or id(mod) in memo:
+            return Per(copy.deepcopy(tr, memo))
+        return self
 
 
 def birth(arrow=None, rate=None, per=None, n=1, sex=None, name=None, label=None):
