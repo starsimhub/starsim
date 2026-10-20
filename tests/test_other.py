@@ -165,6 +165,7 @@ class Counter(ss.Module):
         def finalize_results(self):
             super().finalize_results()
             self.results += ss.Result('new_tests', values=sc.dcp(self.results.delivered.values), timevec=self.results.delivered.timevec, module=self.name)
+            self.results += ss.Result('new_doses', values=14*self.results.delivered.values, timevec=self.results.delivered.timevec, module=self.name) # Or a multiple of one
     for cls in [MyScreen, AliasScreen]:
         with warnings.catch_warnings():
             warnings.simplefilter('error', RuntimeWarning)

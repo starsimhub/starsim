@@ -175,6 +175,18 @@ class par(Nameable, Expr):
         infection = S >> I @ beta * I
         ```
     """
+    def __eq__(self, other):
+        """ A parameter is only equal to itself; compared with a number it raises, rather than silently being False """
+        if isinstance(other, (int, float, np.number)) and not isinstance(other, bool):
+            errormsg = f'Cannot compare the parameter "{self.name or self}" with the number {other}: it is a parameter, not its value. Use mod.value("{self.name}") for its current value'
+            raise TypeError(errormsg)
+        return self is other
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    __hash__ = Expr.__hash__
+
     def __init__(self, value=None, bounds=None, prior=None, source=None, doc=None, name=None, label=None, literal=False):
         if bounds is not None and isinstance(value, (dict, list, tuple)): # One pair of bounds cannot fit several values
             errormsg = f'ss.par() has bounds={bounds} for several values ({value}); to fit them, give each its own ss.par with bounds, e.g. dict(home=ss.par(0.1, bounds=[0.01, 1]), ...), or ss.par(ss.by(...), bounds=...) for a value for each level'

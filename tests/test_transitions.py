@@ -2376,6 +2376,20 @@ def test_split_null():
         ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
     return
 
+def test_state_as_result():
+    sc.heading('Testing a state under another name as a result: the number in it, stratified like n_<state>, with the state keeping its name')
+    class D(ss.Disease):
+        S, I = ss.states('S I')
+        infection = S >> I @ 0.1*I
+        n_infected = I
+    d = D(init_prev=0.1, name='d')
+    assert list(d.graph.states.keys()) == ['S', 'I']
+    sim = ss.Sim(d, n_agents=500, start=2000, stop=2005, stratify=dict(sex=['female', 'male']), verbose=0).run()
+    r = sim.results.d
+    assert np.array_equal(r.n_infected.values, r.n_I.values)
+    assert np.array_equal(r.n_infected.select(sex='female'), r.n_I.select(sex='female'))
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

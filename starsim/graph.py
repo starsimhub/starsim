@@ -139,6 +139,9 @@ class Graph(Presentation):
                     raise ValueError(errormsg)
                 self.add(self.attrs if isinstance(obj, ss.expressions.attr) else self.hooks, obj.name, obj)
                 continue
+            if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
+                self.add(self.exprs, name, obj)
+                continue
             if isinstance(obj, (Transition, outcome, par, State, update)):
                 if name is not None:
                     obj.name = name

@@ -1989,6 +1989,14 @@ class Sim(ss.Base):
 
     def check_time_index(self):
         """ Warn about results of modules written as code that look written to Starsim 3's time index: a flow at the first time point (before any step), or a last point left empty """
+        def is_multiple(vals, other):
+            """ Whether one series is a constant multiple of another """
+            if other.shape != vals.shape or other.dtype.kind not in 'biuf' or len(np.unique(other)) < 3: # A multiple of a series that is all one value (and zeros) says nothing
+                return False
+            other = other.astype(float)
+            k = vals[np.flatnonzero(other)[0]] / other[np.flatnonzero(other)[0]]
+            return k != 0 and np.allclose(vals, k*other)
+
         found = []
         for mod in self.modules:
             if getattr(mod, 'graph', None) is not None or type(mod).__module__.startswith('starsim.'): # Only code written outside Starsim
@@ -1998,7 +2006,7 @@ class Sim(ss.Base):
                 if getattr(res, 'name', None) in getattr(mod, '_starsim_results', ()): # Defined and written by Starsim's own classes, e.g. the results of a subclass of ss.screen
                     continue
                 vals = np.asarray(res.values) if isinstance(res, ss.Result) else None
-                if vals is not None and any(o.shape == vals.shape and np.array_equal(o, vals) for o in own): # A copy of one of those, e.g. under an older name
+                if vals is not None and any(is_multiple(vals, o) for o in own): # A copy of one of those, e.g. under an older name, or a multiple of one
                     continue
                 if vals is None or vals.ndim != 1 or vals.dtype.kind not in 'biuf' or len(vals) < 5: # Only series of numbers
                     continue
