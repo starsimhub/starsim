@@ -200,3 +200,16 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 43 | 824232d3 | c8f49a3b | Phase B1: ss.clock(within, bins=) ported; the conveyor (compartmental clocks, whole-step dwells) deferred, its tests in test_conveyor.py xfail(run=False) |
 | 44 | c99f5438 | c18cd54e | Ported (agents and ragged Erlang stages as compartments); by sex alone skips the build-time dimension check as agents |
 | 45 | ada9334d | — | implementation.md only: merged in Task 6 |
+| 46 | d8b1d689 | 4d896abf | Ported; v4-rs's follow() is follow_up() (v4 has a follow() for a held product that cures), and its offer() is choose() |
+| 47 | 8419867d | — | Docs for the conveyor: with B1 (implementation.md in Task 6) |
+| 48 | c5058c4e | ab3493b9 | HIV ART rate typed ss.permonth (v4 asks for a unit; v4-rs's bare numbers were per step); agent queue balance to 5% (known coverage bias); routine-by-age skip only when it remembers |
+| 49 | 8db7df80 | — | implementation.md only: merged in Task 6 |
+| 50 | 50bb85ce | b9cc5289 | Agents half passes as is; compartmental conveyor with ss.stay and clocks in a crossing are a strict xfail for B1/B2; init of everyone written as a count (in v4, 1 or more is people) |
+| 51 | fe356e4a | b2432223 | Ported to v4's draw_competing/finish_moves cascade; new agents-only test_entry_hazard in test_clocks.py (weekly vs monthly within 3%; was 15% apart), as test_conveyor is B1; baseline regenerated (draws moved, <1.2%) |
+| 52 | 270f35ee | b60e7d0e | Ported; E505 is ss.UnknownEffect; v4's disease= list TypeError now points to keying efficacy by disease |
+| 53 | 4266fedc | 3315ce62 | Ported (edge_refs -> refs; E505 is ss.UnknownEffect; crossing-size note in choose.py); ODE rtol 1e-5, as v4's joint stepping moves marginals ~1e-6 (ruling) |
+| 54 | 46f5d303 | 830539df | Ported (by_edge holds the outcome parts; E505 is ss.UnknownEffect); every result with a delay is waited for, as v4; shifts the last result first (v4's draws); agents rtol 0.08, cross-solver 0.25 (v4's own agents gap: rulings) |
+| 55 | 2f0c10fc | 3a52a244 | Ported as is |
+| 56 | a6e2c3de | fbab710f | Ported (E306 is ss.InvalidAdjustment); the test declares kind='strain', as in v4 the name genotype only suggests a kind |
+| 57 | ef453e07 | 60519d39 | Agents half ported (ss.Pregnancy, ss.mother, ss.child, named events); P.time as compartments is a strict xfail for B1; birth(per=) left for 59 (v4 has offspring=); no stages='step' (v4 conveys a constant dwell); docs building a Starsim 3 pregnancy use ss.LegacyPregnancy (rulings) |
+| merge | origin/v4 92902b20 | 0d709392 | Cliff's delivery redesign merged; v4's deliveries taken whole, v4-rs delivery features xfailed for re-port (see the merge message) |
