@@ -765,6 +765,25 @@ def check_undriven(sim):
     return
 
 
+class share:
+    """
+    A target that is a share of some people, as the `target=` of a delivery: `target=ss.share(0.8, among=men15_49)`
+
+    Only the people in `among` are counted against it, and only they are given it.
+
+    Args:
+        value (float/func): the share (a number, a time series, or a function of the sim; `ss.by(...)` for one per stratum)
+        among (Cond): the people it is a share of
+    """
+    def __init__(self, value, among=None):
+        self.value = value
+        self.among = None if among is None else ss.conditions.as_cond(among)
+        return
+
+    def __repr__(self):
+        return f'share({self.value!r}, among={self.among!r})'
+
+
 def order_steps(mods):
     """
     The interventions in the order they run: each delivery after the deliveries whose events trigger it (and a cascade after
@@ -865,6 +884,12 @@ class Delivery(ss.products.EventSource, Intervention):
         disease (str): the disease the product acts on (default: the only one)
         count_events (bool/list): keep the memory of every event of this delivery (`True`), or of those listed (e.g.
             `[screening.positive]`), whether or not something reads it; as agents, also a log of each person's events (see `events_df()`)
+        target (float/func/ss.share/ss.by): a stock to keep: the number of people in the delivery's end state (holding the
+            product, or in the destination of what a treatment moves people along), as a number, a time series, a function of the
+            sim, `ss.share(x, among=cond)` (that share of the people in `among`), or `ss.by(...)` (one target per stratum). Each step,
+            the gap is delivered (after coverage, within capacity), chosen at random
+        remove (Transition/bool): with `target=`, what happens to people over it: moved along this transition, or (True) the product taken away
+        of (Cond): with `target=`, what is counted instead of the end state
         name (str): the name; if not given, taken from the variable the delivery is assigned to
 
     Examples:
@@ -889,7 +914,7 @@ class Delivery(ss.products.EventSource, Intervention):
     product_keys = [] # The keywords of the product, with which the delivery makes its own
 
     def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, on=None, operator='any', when=None, deliver=None, trace=None, disease=None, at_age=None, count_events=None, name=None, label=None, **kwargs):
+                 capacity=None, on=None, operator='any', when=None, deliver=None, trace=None, disease=None, at_age=None, count_events=None, target=None, remove=None, of=None, name=None, label=None, **kwargs):
         for key in [key for key in kwargs if key in renamed_keys]:
             errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
             raise TypeError(errormsg)
@@ -956,6 +981,12 @@ class Delivery(ss.products.EventSource, Intervention):
         self.eligible = None if eligible is None else ss.conditions.as_cond(eligible)
         self.coverage = coverage
         self.capacity = capacity
+        if (remove is not None or of is not None) and target is None:
+            errormsg = 'remove= and of= are for a stock target: give target= too'
+            raise ValueError(errormsg)
+        self.target = target
+        self.remove = remove
+        self.of = None if of is None else ss.conditions.as_cond(of)
         self.on = trigger # The event part of who=
         self.when = when
         self.deliver = deliver
@@ -970,6 +1001,7 @@ class Delivery(ss.products.EventSource, Intervention):
         self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.FloatArr('result', label='Test result, waited for'))
         self.rng_cov = ss.random()
         self.rng_cap = ss.random()
+        self.rng_target = ss.random() # Who is given it, or removed, to meet a target
         self.rng_test = ss.random()
         self.rng_eff = ss.random()
         return
@@ -1030,7 +1062,7 @@ class Delivery(ss.products.EventSource, Intervention):
         full = self.coverage is None and self.capacity is None and self.when is None
         lost = self.holds and self.product.loses # Once lost, they would be eligible again, and given it again at the next step
         rate = isinstance(self.coverage, ss.TimePar) # Typed coverage is a rate among those eligible, offered at every step
-        return self.routine and not rate and (self.by_age or not ((self.holds or self.move) and full and not lost))
+        return self.routine and not rate and self.target is None and (self.by_age or not ((self.holds or self.move) and full and not lost))
 
     @property
     def by_age(self):
@@ -1183,7 +1215,21 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}": a product acts on one disease.\n'
                         f'     Make one product for each disease, e.g. vx_{self.disease} = ss.Vaccine(...), and deliver each with its own ss.vaccinate(..., disease=\'{self.disease}\').')
             raise ss.UnknownDisease(errormsg)
-        self.edges, self.fail_edge = self.product.resolve(sim, self.disease) if getattr(self.product, 'moves', None) is not None else ([], None) # What a treatment with moves= moves people along (before the results, which are kept for each)
+        self.edges, self.fail_edge = self.product.resolve(sim, self.disease) if getattr(self.product, 'moves', None) is not None else ([], None)
+        self.remove_edge = None # With target=, the transition people over it are moved along
+        if self.remove is not None and self.remove is not True:
+            name = ss.Treatment.edge_disease(self.remove) or self.disease
+            graph = sim.get_declared(name).graph
+            trname = self.remove.rpartition('.')[2] if isinstance(self.remove, str) else self.remove.name
+            if trname not in graph.transitions:
+                raise ss.UnknownEffect(f'"{self.name}" has remove="{trname}", which "{name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+            self.remove_edge = sc.objdict(dis=name, tr=graph.transitions[trname], dst=graph.transitions[trname].dst[0])
+        if self.target is not None:
+            counts = self.of if self.of is not None else f'has_{self.product.name}' if getattr(self.product, 'holds', False) else sc.strjoin(f'{e.dis}.{e.dst.name}' for e in self.edges) if self.edges else self.move
+            ss.note(f'the target of "{self.name}" counts {counts}', sim=sim)
+        if self.remove is True and not getattr(self.product, 'holds', False):
+            errormsg = f'remove=True takes away a product people hold, but "{self.name}" delivers one they do not; give the transition to remove people along'
+            raise ValueError(errormsg) # What a treatment with moves= moves people along (before the results, which are kept for each)
         self.init_events(sim)
         super().init_pre(sim)
         self.started = False
@@ -1271,6 +1317,13 @@ class Delivery(ss.products.EventSource, Intervention):
         ]
         if self.cost is not None:
             results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', summarize_by='sum')]
+        if self.target is not None:
+            results += [
+                ss.Result('target', dtype=float, scale=abm, label='Target'),
+                ss.Result('n_end', dtype=float, scale=abm, label='Number counted against the target'),
+                ss.Result('removed', dtype=float, scale=abm, label='Number removed, over the target', summarize_by='sum', auto_plot=False),
+                ss.Result('shortfall', dtype=float, scale=abm, label='Shortfall from the target', auto_plot=False),
+            ]
         if self.capacity is not None:
             results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', summarize_by='sum', auto_plot=False)]
         labels = dict(positive='Number testing positive', negative='Number testing negative', cured='Number cured', failed='Number treated and not cured', unneeded='Number treated who were not infected')
@@ -1502,15 +1555,16 @@ class Delivery(ss.products.EventSource, Intervention):
             self.product.step_waning()
             self.step_stages()
         self.step_results()
-        if not self.due():
-            return
-        if self.routine and self.by_age and not self.started:
-            self.skip_past()
-        selector = self.selector
-        if self.deliver is not None:
-            self.give(self.delivered_by_function())
-        else:
-            self.receive(selector.everyone() if self.on is None else selector.select(self.on))
+        if self.due():
+            if self.routine and self.by_age and not self.started:
+                self.skip_past()
+            selector = self.selector
+            if self.deliver is not None:
+                self.give(self.delivered_by_function())
+            else:
+                self.receive(selector.everyone() if self.on is None else selector.select(self.on))
+        if self.target is not None:
+            self.record_target()
         return
 
     def skip_past(self):
@@ -1614,12 +1668,127 @@ class Delivery(ss.products.EventSource, Intervention):
         else:
             chosen = sel*np.clip(cov, 0, 1)
 
-        # Capacity
+        # Capacity, and a target
         if self.capacity is not None:
             sel, chosen = self.cap(sel, chosen)
+        if self.target is not None:
+            chosen = self.meet_target(chosen)
         if self.remembers:
             chosen = self.mark_offered(sel, chosen)
         self.give(chosen, capped=True)
+        return
+
+    def meet_target(self, chosen):
+        """ Of those chosen, those who are given it to meet the target: up to the gap in each stratum, at random; and those over it removed (`remove=`) """
+        selector = self.selector
+        abm = selector.abm
+        among = self.among()
+        cands = chosen*among
+        strata, targets = self.strata_targets()
+        end = self.end_now()*among
+        gaps = [t - self.people(end*m) for m,t in zip(strata, targets)]
+        served = selector.nobody()
+        for m,g in zip(strata, gaps):
+            w = min(max(g, 0.0), self.people(cands*m))
+            if w > 0:
+                part = self.take_random(cands*m, w)
+                served = (served | part) if abm else served + part
+        if self.remove is not None: # Over the target: removed, at random
+            for m,g in zip(strata, gaps):
+                if g < 0:
+                    self.take_away(self.take_random(end*m*selector.everyone(), -g))
+        self._target = (self.sim.ti, sum(targets))
+        return served
+
+    def take_random(self, sel, n):
+        """ About n people of those selected, at random (as agents, whole agents) """
+        if self.selector.abm:
+            uids = self.uids(sel)
+            k = min(int(round(n/self.sim._current_scale)), len(uids))
+            out = self.selector.nobody()
+            out[uids[np.argsort(self.rng_target.rvs(uids), kind='stable')[:k]]] = True
+            return out
+        total = float((sel*self.eng.state_counts()).sum())
+        return sel*min(1.0, n/total) if total > 0 else sel*0
+
+    def people(self, sel):
+        """ The number of people selected, whatever the results count in """
+        return self.n_agents(sel)*self.sim._current_scale if self.selector.abm else float((sel*self.eng.state_counts()).sum())
+
+    def among(self):
+        """ Who a target is a share of (`ss.share(among=)`), or everyone """
+        among = getattr(self.target, 'among', None)
+        return self.selector.everyone() if among is None else self.selector.select(among)
+
+    def end_now(self):
+        """ Who is counted against the target: `of=`, or those in the delivery's end state """
+        selector = self.selector
+        if self.of is not None:
+            return selector.select(self.of)
+        if self.holds:
+            return (selector.dim(self.product.dim) > 0)*selector.everyone()
+        if self.edges:
+            cond = None
+            for e in self.edges:
+                c = ss.conditions.Cond('state', e.dis, e.dst.name)
+                cond = c if cond is None else cond | c
+            return selector.select(cond)
+        if getattr(self, 'cure_dst', None) is not None:
+            return selector.in_states([self.cure_dst.name])*selector.everyone()
+        if self.changes:
+            out = selector.everyone()
+            for d,level in self.changes.items():
+                out = out*(selector.dim(self.sim.groups.strats[d].name) == level)
+            return out
+        errormsg = f'"{self.name}" has a target, but nothing to count against it: give of='
+        raise ValueError(errormsg)
+
+    def strata_targets(self):
+        """ The strata a target is kept in (as selections), and the target in each, in people """
+        sim = self.sim
+        selector = self.selector
+        target = self.target
+        val = target.value if isinstance(target, share) else target
+        if isinstance(val, ss.by): # One target per stratum: the combinations of the levels of its dimensions
+            ds, grid = val.grid(sim, convert=lambda v: v(sim) if callable(v) else v)
+            levels = [np.broadcast_to(selector.dim(sim.groups.strats[d].name), selector.shape) for d in ds]
+            strata, targets = [], []
+            for index in np.ndindex(grid.shape):
+                m = np.logical_and.reduce([lv == i for lv,i in zip(levels, index)])
+                strata.append(m if selector.abm else m.astype(float))
+                targets.append(float(grid[index]))
+        else:
+            if isinstance(val, ss.par):
+                val = val.raw
+            val = float(val(sim) if callable(val) else val)
+            strata, targets = [selector.everyone()], [val]
+        if isinstance(target, share):
+            n = self.among()
+            targets = [t*self.people(n*m) for m,t in zip(strata, targets)]
+        return strata, targets
+
+    def take_away(self, sel):
+        """ Remove people over the target: along remove=, or (remove=True) taking the product from them """
+        sim = self.sim
+        if self.remove_edge is not None:
+            e = self.remove_edge
+            eng = sim.get_declared(e.dis).engine
+            eng.force(self.uids(sel) if self.selector.abm else sel, e.tr, e.dst)
+        else:
+            self.shift(sel, {sim.groups.dim_index(self.product.dim):0})
+        self.tally('removed', sel)
+        return
+
+    def record_target(self):
+        """ After delivery: the target, the number counted against it, and the shortfall, in people """
+        ti = self.sim.ti
+        if getattr(self, '_target', (None,))[0] != ti:
+            self._target = (ti, sum(self.strata_targets()[1]))
+        w = ss.results.people_scale(self.sim)/self.sim._current_scale if self.selector.abm else 1.0 # Results are written in people, or in agents and scaled at the end
+        res = self.results
+        res.target[ti] = self._target[1]*w
+        res.n_end[ti] = self.people(self.end_now()*self.among())*w
+        res.shortfall[ti] = max(res.target[ti] - res.n_end[ti], 0.0)
         return
 
     def offer(self, sel):
@@ -1669,7 +1838,7 @@ class Delivery(ss.products.EventSource, Intervention):
         watched = self.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, Delivery) for leaf in ss.conditions.event_leaves(mod.on)] or self._needs # Its events are read, which the kernels do not keep
         static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
         past = self.routine and self.by_age # The people past the age are left out on the first step: see skip_past()
-        return moves and scheduled and static and self.capacity is None and self.when is None and not watched and not past
+        return moves and scheduled and static and self.capacity is None and self.target is None and self.when is None and not watched and not past
 
     def shifts(self):
         """

@@ -51,7 +51,7 @@ def test_people():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: priority= (633fb9c3)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: priority=, with v4\'s shared-resource design (ss.Resource, priority=, queue=) (633fb9c3)', strict=True)
 def test_priority():
     sc.heading('Testing priority: tiers, a key highest first, and a per-agent key')
     ppl = ss.People(1)
@@ -90,7 +90,7 @@ def make_sis(name='sis', beta=0.25):
     return ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ ss.days(20), cure=I >> S, init_prev=0.01, name=name)
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: queue= (9f64b987)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: queue=, with v4\'s shared-resource design (ss.Resource, priority=, queue=) (9f64b987)', strict=True)
 def test_queue():
     sc.heading('Testing queues: dropped, waiting up to a limit, and leaving when no longer eligible')
     def make(queue=None, **kwargs):
@@ -120,7 +120,7 @@ def test_queue():
     return out
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: ss.Capacity (fe8e9d7d)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: ss.Capacity shared by deliveries, with v4\'s shared-resource design (ss.Resource) (fe8e9d7d)', strict=True)
 def test_capacity():
     sc.heading('Testing a capacity shared by deliveries: by their priority, then pro rata')
     def make(ranks=(1, 2), **kwargs):
@@ -158,7 +158,6 @@ def make_tx(name='tx'):
     return ss.Disease(infection=S >> I @ 0.002*(I + T), start=I >> T, dropout=T >> I @ ss.days(200), init=dict(I=0.4), name=name)
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: target=/remove= (00515859)', strict=True)
 def test_target():
     sc.heading('Testing stock targets: the gap delivered each step, removal over it, by stratum, and as a share')
     n_on = ss.timeseries({0: 0, 50: 8000, 100: 4000}, mode='linear') # People
@@ -185,7 +184,7 @@ def test_target():
         assert np.allclose(n_T[2:29], [1000, 3000], rtol=0.02), f'{solver}: {n_T[2:5]}' # Less those who stopped in the step (about 0.5%), give or take an agent of 5 people
     def shared(**kwargs):
         sir = make_sir().stratify(age=[0, 15, 65])
-        adults = ss.People.age >= 15
+        adults = ss.ppl.age >= 15
         vmmc = ss.vaccinate(ss.Vaccine(efficacy=0.6), target=ss.share(ss.timeseries({0: 0.2, 20: 0.6}, mode='linear'), among=adults), coverage=0.5)
         return ss.Sim(sir, interventions=vmmc, **kwargs)
     for solver,sim in run_both(shared, stop=30).items():
@@ -282,7 +281,7 @@ def test_then():
 
 # %% Acceptance tests: the worked examples of proposal 02, small
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: target=, priority=, Treatment(moves=) (ab3493b9)', strict=True)
+@pytest.mark.xfail(reason='For Robyn and Cliff: priority= (lowest CD4 first), with v4\'s shared-resource design (ss.Resource, priority=, queue=) (ab3493b9)', strict=True)
 def test_hiv_art():
     sc.heading('Acceptance: HIV ART as a stock target, lowest CD4 first, with removal over the target (hiv/port.py art_deliver)')
     def make(prioritize=True, **kwargs):

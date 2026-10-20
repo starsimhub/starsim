@@ -140,7 +140,7 @@ DynamicNetwork Event FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComp
 Pregnancy LegacyPregnancy PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
 check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink single_run standardize_data standardize_netkey state any child mother attr func on stay clock style to_code treat_num uids warn
+show shrink single_run standardize_data standardize_netkey state any child mother attr func on share stay clock style to_code treat_num uids warn
 """.split()
 
 
