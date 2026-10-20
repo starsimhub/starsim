@@ -1119,6 +1119,8 @@ def numeric_pars(dist, convert, per_agent=None):
     shape_pars = ['a', 'c', 'n', 'p']
     pars = dict()
     for key,val in dist.pars.items():
+        if isinstance(val, par): # A named parameter, e.g. ss.bernoulli(ss.par(0.6, name='sero')): its current value, which the sim's pars= or a calibration sets
+            val = val.raw
         if isinstance(val, by):
             if per_agent is None:
                 errormsg = f'The parameter "{key}" of {dist} has a value for each group ({val}), so has no single value here'

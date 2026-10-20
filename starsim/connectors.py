@@ -430,8 +430,12 @@ class modify(Connector):
         """ Apply the modifier to a value, for the people it applies to """
         amount = self.current(engine)
         mask = None if self.where is None else engine.selector.select(self.where)
-        if np.ndim(amount) and np.isnan(amount).any() and np.isnan(amount[mask > 0] if mask is not None else amount).any(): # A clock read where it has no value: see ss.conditions.check_clocks()
-            raise ss.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: it reads a clock outside the states it is kept for. Give it a where= inside them.')
+        if np.ndim(amount) and np.isnan(amount).any(): # A clock or an attribute read where it has no value: see ss.conditions.check_clocks()
+            check = amount if mask is None else np.where(mask > 0, amount, 0.0)
+            if engine.selector.abm: # Only the people alive now: the spare slots in the arrays, for people not yet born, hold NaN
+                check = check[engine.sim.people.auids]
+            if np.isnan(check).any():
+                raise ss.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
         if mask is not None and self.hold is not None:
             mask = self.held_mask(mask, engine)
         if mask is None:
@@ -440,6 +444,23 @@ class modify(Connector):
         if   self.op == 'set':      return np.where(mask, amount, value)
         elif self.op == 'multiply': return value*np.where(mask, amount, 1.0)
         else:                       return value + np.where(mask, amount, 0.0)
+
+    def nan_sources(self):
+        """ What in the amount can have no value for some people, and how to give it one """
+        exprs = [self.amount] if isinstance(self.amount, ss.expressions.Expr) else []
+        clocks = ss.expressions.clocks_in(exprs)
+        attrs = [leaf for leaf in (exprs[0].leaves if exprs else []) if isinstance(leaf, ss.expressions.attr) and (leaf.kind == 'derived' or np.isnan(leaf.default))]
+        out = []
+        if clocks:
+            out.append(f'it reads {sc.strjoin(str(c) for c in clocks)}, which has a value only in the states it is kept for; give it a where= inside them')
+        for a in attrs:
+            if a.kind == 'derived':
+                out.append(f'it reads the attribute "{a.name}", which is NaN in the states it gives no value for; give it a where= inside them')
+            else:
+                out.append(f'it reads the attribute "{a.name}", which is NaN for people it has not been set for; give it an init=, e.g. ss.attr(..., init=0), or a where= for the people it has been set for')
+        if not out:
+            out.append('the value it is given is NaN for them; check what it reads, or give it a where= for the people it has a value for')
+        return '; '.join(out) + '.'
 
     def try_groups(self):
         """ Check that the modifier's condition and amount can be evaluated on groups """

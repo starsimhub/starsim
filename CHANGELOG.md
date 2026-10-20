@@ -9,6 +9,8 @@ This version adds a way to write a model as declared states and transitions, whi
 ### Fixes
 - *Regression*: a duration drawn from `ss.choice` of typed values (`ss.choice(a=ss.weeks([...]))`, as `dur_pregnancy` is) was read as bare numbers in the sim's unit, so it was right only when that unit was the values' own; it is now converted.
 - *Regression*: a drawn attribute (`ss.attr(dist, on=)`) with typed values was drawn in steps rather than in the sim's unit, so a comparison with a clock (`preg.P.time >= anc_ga`) was off by the step size.
+- A distribution with a named parameter (`ss.bernoulli(ss.par(0.6, name='sero'))`) can be drawn in an attribute (it raised a `TypeError`); the parameter is a parameter of the module, so `pars=` and a calibration set it.
+- A modifier that reads an attribute with `init=` no longer raises `ClockOutsideDomain` in a sim with births: the check for a NaN amount looked at the spare slots in the arrays, for people not yet born, as well as at the people alive. The error now says what has no value (a clock, or an attribute with no `init=`), and how to give it one.
 - A newborn's level of a dimension called sex now follows the sex drawn at birth by `ss.birth()` (they could disagree).
 - `ss.Pregnancy` and `ss.Lactation` no longer set the unit of a model's bare numbers from their own typed defaults (weeks and years), which made a model with a bare `beta` and a pregnancy raise `IncompatibleTypes`.
 

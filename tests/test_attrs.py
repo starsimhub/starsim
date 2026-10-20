@@ -277,6 +277,50 @@ def test_attr_errors():
     return
 
 
+def make_nab(dist, combine='max', init=0, rate=ss.peryear(1)):
+    """ A disease whose recovery sets an attribute, drawn from a distribution """
+    S, I = ss.states('S I')
+    rec = ss.Transition(I, S, dur=ss.years(1))
+    nab = ss.attr(dist, on=rec, combine=combine, init=init)
+    return ss.Disease(S, I, infection=S >> I @ rate*I, rec=rec, nab=nab, init_prev=0.1, name='d')
+
+
+def test_attr_dist_par():
+    """ A distribution with a named parameter (ss.par) can be drawn in an attribute, and the parameter can be set on the sim """
+    ss.Sim(make_nab(ss.bernoulli(ss.par(0.6, name='sero'))), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised a TypeError when drawn
+    means = []
+    for sero in [0.2, 0.8]:
+        d = make_nab(ss.bernoulli(ss.par(0.6, name='sero')), combine='last', init=None)
+        sim = ss.Sim(d, n_agents=2000, start=2000, stop=2005, pars=dict(sero=sero), **kw).run()
+        d = sim.diseases.d
+        assert 'sero' in d.pars
+        vals = d.nab.raw[sim.people.auids]
+        vals = vals[~np.isnan(vals)] # Those who have recovered
+        assert len(vals) > 200
+        means.append(vals.mean())
+    assert abs(means[0] - 0.2) < 0.07 and abs(means[1] - 0.8) < 0.07, means
+    return
+
+
+def test_attr_births():
+    """ An attribute with init= read by a modifier, in a sim with births: newborns have the init, and spare slots in the arrays are not read """
+    d = make_nab(ss.uniform(0.5, 0.95), rate=ss.peryear(2))
+    demog = lambda: [ss.Births(birth_rate=25), ss.Deaths(death_rate=10)]
+    sim = ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised ss.ClockOutsideDomain at the first step
+    nab = sim.diseases.d.nab
+    auids = sim.people.auids
+    born = auids[auids >= 1000]
+    assert len(born) > 50
+    assert not np.isnan(nab.raw[auids]).any()
+    assert (nab.raw[born] == 0).any() # Newborns who have not recovered have the init
+
+    # With no init=, people who have not recovered have no value, which the error names
+    d = make_nab(ss.uniform(0.5, 0.95), init=None, rate=ss.peryear(2))
+    with pytest.raises(ss.ClockOutsideDomain, match='nab'):
+        ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run()
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()
@@ -284,3 +328,5 @@ if __name__ == '__main__':
     test_attr_rules()
     test_spread()
     test_attr_errors()
+    test_attr_dist_par()
+    test_attr_births()
