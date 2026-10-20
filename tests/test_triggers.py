@@ -110,10 +110,10 @@ def test_on_event():
     assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
     assert path.dx0.delivered.sum() > 100 and np.array_equal(path.dx0.delivered.values, direct.dx0.delivered.values)
 
-    with pytest.raises(ss.CapabilityError): # Not yet as compartments
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
-        b = ss.Disease(flag=ss.progression('S -> F', on=a.sa), name='b')
-        ss.Sim([a, b], solver='ode', **kw).init()
+    with pytest.raises(ss.CapabilityError): # An event of its own module: agents only
+        S, F, G = ss.states('S F G')
+        a = ss.Disease(S, F, G, sa=(sa := S >> F @ ss.peryear(0.5)), flag=F >> G @ ss.on(sa), name='a')
+        ss.Sim(a, solver='ode', **kw).init()
     return sim
 
 
@@ -314,7 +314,6 @@ def test_treated_event():
     return r
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B3: synchronized flows (ss.on(other.tr) as compartments, also for moves by an intervention) are deferred')
 def test_on_event_ode():
     for order in [True, False]:
         ode = make_on_event(order, solver='ode') # First, so that it fails fast until B3
@@ -354,7 +353,6 @@ def test_hpv_cancel_event():
     return abm
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B3: synchronized flows (ss.on(other.tr) as compartments) are deferred')
 def test_hpv_cancel_event_ode():
     names = ['hpv16', 'hpv18']
     common = dict(start=2000, stop=2020, unit='year', **kw)

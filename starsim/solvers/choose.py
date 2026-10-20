@@ -346,6 +346,12 @@ def init_crossings(sim):
                     links[name] = group
     for mod in sim.declared: # A trigger on another disease's state: the compartments where it holds are those of the joint states
         for tr in mod.graph.transitions.values():
+            ev = ss.solvers.compartmental.synced_event(tr, sim, mod.name) if tr.trigger is not None else None
+            if ev is not None: # A trigger on another disease's transition: a synchronized flow, in the joint states
+                group = links[mod.name] | links[ev.mod]
+                for name in group:
+                    links[name] = group
+                continue
             if tr.trigger is None or tr.trigger.event or not isinstance(tr.trigger.x, ss.conditions.Cond):
                 continue
             for other,state in ss.conditions.leaf_states(tr.trigger.x):
@@ -519,8 +525,10 @@ def init_capabilities(sim, modules):
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
                 else:
                     add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
-            if tr.trigger is not None and tr.trigger.event:
-                add(f'transition: {name}', 'no', 'a trigger on an event (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, an event, which runs as agents for now', fatal=True)
+            if tr.trigger is not None and tr.trigger.event and ss.solvers.compartmental.synced_event(tr, sim, mod.name) is not None:
+                add(f'transition: {name}', 'yes', 'a synchronized flow of another module\'s transition')
+            elif tr.trigger is not None and tr.trigger.event:
+                add(f'transition: {name}', 'no', 'a trigger on an event (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, an event of its own module or one that only agents record, which runs as agents for now', fatal=True)
             elif tr.trigger is not None:
                 add(f'transition: {name}', 'yes', 'a trigger (ss.on): where it holds, arrivals pass straight through')
             if getattr(tr, 'offspring', None) is not None:
