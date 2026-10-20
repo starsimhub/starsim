@@ -192,6 +192,9 @@ class UnknownDataColumn(CodedError, KeyError):
     result that is not kept by group, or kept by group only every few steps
     """
 
+class OverlappingSources(CodedError):
+    """ A treatment moves people in one state along two transitions of the same disease (`ss.Treatment(moves=)`); each person treated can move along only one transition of a disease """
+
 class CapabilityError(CodedError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,

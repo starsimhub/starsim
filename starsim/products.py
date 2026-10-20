@@ -433,12 +433,23 @@ class Treatment(Held):
     A treatment can cure (`cure=`, once, when it is given), change rates for as long as it is held
     (`efficacy=`), or both. By default it is given to the people who are infected.
 
+    A treatment can instead name the transitions it moves people along (`moves=`), usually undriven
+    ones (`cure = A + C >> S`, with no `@`). Each person treated who is in a source of one of them
+    moves along it with probability `cure` (cured); one in a source who does not move has failed
+    (`on_fail=`), and one in no source is overtreated. The transitions can be of several diseases,
+    and the probability for each can differ; a modifier of a transition (`ss.modify(ng.cure, multiply=0.5, where=...)`)
+    multiplies the probability for it for the people it applies to. It is then given to the people in their sources.
+
     Args:
         cure (float): the probability that treatment cures: the person leaves whichever infected state they are in for the
             state the disease's recovery leads to (or `to=`, or the destination of `transition=`); 1 if neither `cure` nor `efficacy` is given
         efficacy (dict): the effects while it is held, as for `ss.Vaccine` (e.g. `dict(transmission=0.96, mortality=0.9)`)
         transition (str): the transition a cured person leaves by (its flow counts them), if the disease has recoveries to more than one state
         to (str): the state cured people go to, if the disease has recoveries to more than one state
+        moves (Transition/str/list/dict): the transitions people move along, or a dict of the probability for each (a number,
+            `ss.by`, a time series, or a function of the sim; otherwise `cure`); a person must not be in the sources of two of one disease's
+        on_fail (Transition/Delivery/func): what happens to people treated who are in a source and did not move: a transition
+            they are moved along instead, a delivery (e.g. `ss.Delivery(move=dict(strain='sens -> res'), coverage=0.25)`), or a function of `(sim, uids)`; by default they stay
         waning (dur/func): as for `ss.Vaccine`, for the effects while held
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the treatment is assigned to
@@ -448,11 +459,13 @@ class Treatment(Held):
         drug = ss.Treatment(cure=0.95, cost=120.0)
         art = ss.Treatment(efficacy=dict(transmission=0.96, mortality=0.9))
         both = ss.Treatment(cure=0.3, efficacy=dict(transmission=0.9))
+        bpg = ss.Treatment(moves={syph.cure_early: 0.98, syph.cure_late: 0.95})
+        kit = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95}) # Two diseases, one product
         ```
     """
     spec_keys = ['cure', 'efficacy', 'transition', 'to', 'waning', 'cost']
 
-    def __init__(self, cure=None, efficacy=None, transition=None, to=None, **kwargs):
+    def __init__(self, cure=None, efficacy=None, transition=None, to=None, moves=None, on_fail=None, **kwargs):
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
             raise ValueError(errormsg)
@@ -462,8 +475,95 @@ class Treatment(Held):
         self.cure = cure
         self.transition = transition if transition is None or isinstance(transition, str) else transition.name
         self.to = to if to is None or isinstance(to, str) else to.name
+        if moves is not None and (transition is not None or to is not None):
+            errormsg = 'moves= names the transitions a treatment moves people along, so it takes neither transition= nor to=, which say how a cure leaves the infected states'
+            raise ValueError(errormsg)
+        self.moves = moves
+        self.on_fail = on_fail
         self.cures = None # What a cure does, once the disease is known: see recovery()
         return
+
+    def edge_specs(self):
+        """ The transitions as given, each with its probability: (transition or name, probability) """
+        moves = self.moves
+        default = 1.0 if self.cure is None else self.cure
+        if isinstance(moves, dict):
+            return list(moves.items())
+        return [(tr, default) for tr in sc.tolist(moves)]
+
+    @staticmethod
+    def edge_disease(tr):
+        """ The name of the disease a transition (as given) belongs to, if it says """
+        if isinstance(tr, str):
+            return tr.rpartition('.')[0] or None
+        mod = getattr(tr, 'module', None)
+        return None if mod is None else mod.name
+
+    @property
+    def diseases(self):
+        """ The names of the diseases whose transitions the treatment names """
+        return list(dict.fromkeys(name for tr,_ in self.edge_specs() if (name := self.edge_disease(tr)) is not None))
+
+    def edge_refs(self):
+        """ The source states of the transitions it moves people along, as (disease, state), for tracking diseases jointly (see `ss.Crossing`) """
+        out = []
+        for tr,_ in self.edge_specs():
+            name = self.edge_disease(tr)
+            if name is not None and not isinstance(tr, str):
+                out += [(name, s.name) for s in tr.src]
+        return out
+
+    def resolve(self, sim, disease):
+        """
+        The moves of a treatment that cures in a sim: for each, its disease, transition (or None, if no flow counts it), destination,
+        source states, and probability; and the move of on_fail=, if it is a transition. Empty for a treatment that does not cure.
+
+        Args:
+            sim (`ss.Sim`): the sim
+            disease (str): the disease of a transition given by name alone, and of the cure if `moves=` is not given
+        """
+        if self.moves is None and self.cure is None:
+            return [], None
+        edges = []
+        if self.moves is None:
+            dis = sim.get_declared(disease)
+            tr, dst, srcs = self.recovery(dis)
+            edges.append(sc.objdict(dis=dis.name, tr=tr, dst=dst, srcs=list(srcs), eff=self.cure))
+        for spec,eff in (self.edge_specs() if self.moves is not None else []):
+            name = self.edge_disease(spec) or disease
+            dis = sim.get_declared(name)
+            graph = dis.graph
+            trname = spec.rpartition('.')[2] if isinstance(spec, str) else spec.name
+            if trname not in graph.transitions:
+                raise ss.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+            tr = graph.transitions[trname]
+            if len(tr.dst) != 1 or not tr.people:
+                raise ss.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
+            edges.append(sc.objdict(dis=dis.name, tr=tr, dst=tr.dst[0], srcs=[s for s in tr.src if s.people], eff=eff))
+        for i,a in enumerate(edges): # Each person treated moves along at most one transition of each disease
+            for b in edges[i+1:]:
+                both = [s.name for s in a.srcs if a.dis == b.dis and s in b.srcs]
+                if both:
+                    raise ss.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
+                                                f'each person treated can move along only one transition of a disease, so give the sources of each once.')
+        fail = self.on_fail
+        fail_edge = None
+        if fail is not None and not isinstance(fail, ss.Delivery) and not (callable(fail) and not isinstance(fail, ss.Transition)):
+            name = self.edge_disease(fail) or (edges[0].dis if len(set(e.dis for e in edges)) == 1 else disease)
+            graph = sim.get_declared(name).graph
+            trname = fail.rpartition('.')[2] if isinstance(fail, str) else fail.name
+            if trname not in graph.transitions:
+                raise ss.UnknownEffect(f'the treatment "{self.name}" has on_fail="{trname}", which "{name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+            tr = graph.transitions[trname]
+            fail_edge = sc.objdict(dis=name, tr=tr, dst=tr.dst[0])
+        return edges, fail_edge
+
+    def agent_reasons(self):
+        out = super().agent_reasons()
+        fail = self.on_fail
+        if callable(fail) and not isinstance(fail, (ss.Delivery, ss.Transition)):
+            out = out + [f'on_fail= of "{self.name}" is a function of (sim, uids)']
+        return out
 
     @property
     def holds(self):
@@ -516,6 +616,12 @@ class Treatment(Held):
         return tr, dst, srcs
 
     def describe(self):
+        if self.moves is not None:
+            name = lambda tr: tr if isinstance(tr, str) else f'{self.edge_disease(tr)}.{tr.name}' if self.edge_disease(tr) else tr.name
+            moves = sc.strjoin([f'{name(tr)} (probability {eff})' for tr,eff in self.edge_specs()])
+            fail = '' if self.on_fail is None else f'; on failure, {getattr(self.on_fail, "name", None) or getattr(self.on_fail, "__name__", self.on_fail)}'
+            out = f'{self.name}: treatment that moves people along {moves}{fail}'
+            return (super().describe() + '; ' + out.split(': ', 1)[1]) if self.holds else out
         cures = f'cures with probability {self.cure}' + (f', {self.cures}' if self.cures else '') if self.cure is not None else ''
         if self.holds:
             return super().describe() + (f'; {cures}' if cures else '')

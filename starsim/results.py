@@ -192,8 +192,13 @@ class Result(ss.BaseArr):
             res.n_I.select(age=0) # The youngest age group
             res.n_I.select(sex='female', risk='high')
             msim.results.sir.n_I.select(beta=0.3).quantiles() # The runs with beta = 0.3
+            res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             ```
         """
+        pick = {key:dims.pop(key) for key in ['disease', 'edge'] if key in dims}
+        if pick:
+            out = self._select_parts(pick)
+            return out.select(run=run, **dims) if (dims or run is not None) else out
         out = self
         if self.runs is not None:
             named = {str(col).rpartition('.')[2]:col for col in self.runs.columns if '.' in str(col)} # A parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3)
@@ -363,10 +368,16 @@ class Result(ss.BaseArr):
         Split a stratified result by one dimension, summing over the rest; returns a 2D result with one column per level
 
         Args:
-            dim (str): the dimension, e.g. 'age'
+            dim (str): the dimension, e.g. 'age'; or, for the results of a treatment of several diseases or transitions, 'disease' or 'edge'
 
         For a result across runs, returns a dict of results across runs instead, one per level.
         """
+        if dim in ['disease', 'edge']:
+            i = ['disease', 'edge'].index(dim)
+            levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
+            values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
+            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
+                          values=values, shape=values.shape[0], columns=levels, kind=self.kind)
         strats = self._check_strata()
         if self.runs is not None:
             self._check_dim(dim)
@@ -426,6 +437,30 @@ class Result(ss.BaseArr):
         """ The time points of the values by group: every one, or the end of every few steps (see `select()`) """
         group_ti = getattr(self, 'group_ti', None)
         return self.timevec if group_ti is None or self.timevec is None else self.timevec[group_ti]
+
+    def _parts(self, dim):
+        """ The results of a treatment for each (disease, transition) it acts on: see `ss.Delivery` """
+        parts = getattr(self, 'by_edge', None)
+        if not parts:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}": only the results of a treatment of several diseases or transitions do'
+            raise KeyError(errormsg)
+        return parts
+
+    def _select_parts(self, pick):
+        """ The sum of the parts for some diseases and transitions """
+        parts = self._parts(sc.strjoin(pick.keys()))
+        keep = [res for key,res in parts.items() if all(key[i] in sc.tolist(pick[dim]) for i,dim in enumerate(['disease', 'edge']) if dim in pick)]
+        if not keep:
+            errormsg = f'The result "{self.name}" has no part with {pick}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in parts)}'
+            raise KeyError(errormsg)
+        out = Result(name=self.name, label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in pick.items())})', module=self.module, scale=False, timevec=self.timevec,
+                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), kind=self.kind)
+        if getattr(self, 'strata', None) is not None and all(getattr(res, 'strata', None) is not None for res in keep):
+            out.strata = np.sum([res.strata for res in keep], axis=0)
+            for attr in ['strats', 'dims', 'group_ti']:
+                setattr(out, attr, getattr(self, attr, None))
+            out.denom = None
+        return out
 
     def _check_strata(self):
         if getattr(self, 'strata', None) is None:

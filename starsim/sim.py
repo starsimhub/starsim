@@ -196,6 +196,9 @@ class Sim(ss.Base):
                     for i,child in enumerate(children):
                         if isinstance(child, ss.Delivery):
                             add(child, mod, key if len(children) == 1 else f'{key}{i+1}')
+                fail = getattr(mod.product, 'on_fail', None) # What happens to people a treatment did not cure
+                if isinstance(fail, ss.Delivery):
+                    add(fail, mod, 'fail')
             return
         for mod in sc.tolist(interventions):
             add(mod)
