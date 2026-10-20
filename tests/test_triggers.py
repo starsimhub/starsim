@@ -291,6 +291,43 @@ def test_with_conveyor_ode():
     return test_with_conveyor(solvers=('abm', 'ode'))
 
 
+def make_on_event(order, solver='abm'):
+    a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+    S, F, G = ss.states('S F G')
+    b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b')
+    mods = [a, b] if order else [b, a]
+    size = dict(n_agents=3000) if solver == 'abm' else dict(total_pop=3000)
+    return ss.Sim(mods, solver=solver, start=2000, stop=2005, dt=ss.months(1), unit='year', **size, **kw).run()
+
+
+def treated_event(solver):
+    a = ss.Disease(inf=ss.progression('S -> I', rate=ss.peryear(0.5)), cure=ss.progression('I -> S'), name='a')
+    S, F = ss.states('S F')
+    b = ss.Disease(S, F, flag=S >> F @ ss.on(a.cure), unflag=F >> S @ ss.years(0.5), name='b')
+    tx = ss.treat(ss.Treatment(moves=a.cure), where=a.I, coverage=ss.peryear(1.0), name="tx")
+    size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+    return ss.Sim([a, b], interventions=tx, solver=solver, start=2000, stop=2005, dt=ss.months(1), unit='year', **size, **kw).run().results
+
+
+def test_treated_event():
+    sc.heading('A move by a treatment is the event of its transition, for ss.on() in another module')
+    r = treated_event('abm')
+    assert r.b.flag.sum() > 1000 and r.b.flag.sum() <= r.a.cure.sum()
+    return r
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B3: synchronized flows (ss.on(other.tr) as compartments, also for moves by an intervention) are deferred')
+def test_on_event_ode():
+    for order in [True, False]:
+        ode = make_on_event(order, solver='ode') # First, so that it fails fast until B3
+        res = make_on_event(order).results
+        r = ode.results
+        assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
+        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.n_F[-1], rtol=1e-6) # The flow is the move
+    ro, ra = treated_event('ode'), treated_event('abm')
+    assert np.isclose(ra.b.flag.sum(), ro.b.flag.sum(), rtol=0.1)
+
+
 def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
     states = {g:ss.states('S P C X Z') for g in names}
     cin = {g:ss.Transition(st[2], [st[3], st[0]], p=[0.4, None], dur=ss.years(3)) for g,st in states.items()} # To cancer, or cleared
