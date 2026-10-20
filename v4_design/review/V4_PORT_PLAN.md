@@ -179,3 +179,24 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 | 22 | 421ac2af | 9be7a668 | Ported with commit 20's event recording (batches beside v4's events dict); sets of states as (A \| B).enter on Cond; test: last step's events are acted on after the run (v4 timing) |
 | 23 | e5e172f5 | 7f7cf835 | Ported; set clocks registered on ss.expressions.Clock.sets (v4's A \| B is a condition, so no State objects); ti_ kept for clocked states; tests use keep_times and ti_EL.floats() (v4's compact step arrays) |
 | 24 | 635b0fc2 | — | implementation.md only: merged in Task 6 |
+| 25 | 546fba17 | — | Dropped: v4 already uses tmp_path in test_samples (P12) |
+| 26 | fb5d3c6c | 1c7b507b | Ported; plus a branch-kind modifier so a branch for some levels (move= arrow) is never drawn at others (v4's where= acts on the rate) |
+| 27 | 5ba93f75 | — | Dropped: v4 makes a finished transition × number a share of its flow, never a change of rate; flag the FPsim pattern {k: v*0.8} (now an unknown-outcome-source error) to Cliff |
+| 28 | 102f6432 | f2ede7a1 | ss.state and ss.any ported (second tier); lazy ss.people dropped: v4's ss.people is named populations, and ss.People.female is v4's lazy form |
+| 29 | 86d8d0e1 | ac8dfe3c | Ported; E215 is ss.PeopleAndCounts |
+| 30 | 50011fc7 | 96fd89d2 | Ported (switch ss.results.people_now); scale applied as values are written, and to values by group in store_group (v4 keeps them every few steps) |
+| 31 | d769486a | — | Dropped: v4 allows set=/add= on parameters only (use multiply= on a branch); flag to Cliff |
+| 32 | bf1675d7 | 633fb9c3 | Ported; ss.desc in the second tier; per-agent priority as compartments is ss.CapabilityError, else ignored with a note |
+| 33 | e6075676 | c26f5f46 | Ported (now in dimensions.Groups) |
+| 34 | e52ef390 | 9f64b987 | Ported; eligibility now from v4's offer() split into eligible_now(); a queue keeps a delivery out of whole-run kernels |
+| 35 | 17f7ca50 | 8c335b7b | Agents ported (triggers in v4's cascade, notify, event batches); compartments CapabilityError, ODE tests xfail (B2); ss.on second tier |
+| 36 | 9955193e | f6467626 | Ported; E310 is ss.InitWhereNobodyIs, W311 a plain note |
+| 37 | 07fdfef7 | fe8e9d7d | Ported; v4-rs's Delivery.offer (eligible + coverage) is choose() here, since v4's offer() is eligibility |
+| 38 | ce4d80fa | 4068576a | Ported (rebind in expressions.py) |
+| 39 | aa86237f | — | implementation.md only: merged in Task 6 |
+| 40 | 6bb88d2f | 00515859 | Ported; a target keeps a delivery out of v4's whole-run kernels; three single-step tolerances in its test loosened (dropout within a step plus agent granularity) |
+| 41 | d4126b5a | 6cc36026 | ss.stay ported in full; the implicit rest is behind ss.transitions.rest_stay (default False, v4's error now suggests ss.stay) pending decision 03 Q1 |
+| 42 | 5bbeaafa | f0f61715 | Ported into v4's give() (record_memory, hold for doses); a held product does not end a spell (v4 keeps memory for waning products); memory/doses keep deliveries out of whole-run kernels; 4 single-run tolerances in its test widened; known ~4% typed-coverage bias as agents also on v4-rs |
+| 43 | 824232d3 | c8f49a3b | Phase B1: ss.clock(within, bins=) ported; the conveyor (compartmental clocks, whole-step dwells) deferred, its tests in test_conveyor.py xfail(run=False) |
+| 44 | c99f5438 | c18cd54e | Ported (agents and ragged Erlang stages as compartments); by sex alone skips the build-time dimension check as agents |
+| 45 | ada9334d | — | implementation.md only: merged in Task 6 |
