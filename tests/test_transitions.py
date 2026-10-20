@@ -511,6 +511,16 @@ def test_counts():
     assert sim2.solver == 'abm'
     assert np.isclose(res2.n_W.max(), res.n_W.max(), rtol=0.2)
 
+    # A state that no transition touches is people, as the first state is (not a count): it is where people are put, e.g. by init=
+    S, I, R, Q = ss.states('S I R Q')
+    sir = ss.Disease(S, I, R, Q, infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(10), init=dict(I=0.01, Q=0.1), name='sir')
+    assert [s.name for s in sir.graph.people_states] == ['S', 'I', 'R', 'Q'] and 'people' not in sir.graph.states.Q.guessed
+    for solver in ['ode', 'abm']:
+        sim = ss.Sim(sir, solver=solver, total_pop=10_000, unit='day', stop=50, **kw).run()
+        res = sim.results.sir
+        assert np.allclose(res.n_S + res.n_I + res.n_R + res.n_Q, 10_000, rtol=0.01) and np.isclose(res.n_Q[-1], 1000, rtol=0.1)
+        assert not any('treated as a count' in note for note in sim.notes)
+
     # A fixed delay with a competing exit (a mosquito's incubation, and its mortality), which acts over the whole delay in the ODE as in the chain binomial: exactly 5,020 infectious (it was 5,279, half a step of mortality short)
     def eip():
         Sh, Ih = ss.states(2)
@@ -2130,8 +2140,8 @@ def test_tlo_review():
 
     # A product's efficacy against a transition given as a duration acts as agents, as a modifier does (TL17: 2,252 AIDS onsets with and without it; the ODE gave 0)
     def onsets(how):
-        S, I, A = ss.states('S I A')
-        hiv = ss.Disease(S, I, A, aids=I >> A @ ss.years(2.66), init=dict(I=0.5), name='hiv')
+        I, A = ss.states('I A')
+        hiv = ss.Disease(I, A, aids=I >> A @ ss.years(2.66), init=dict(I=0.5), name='hiv')
         art = ss.treat(ss.Treatment(efficacy=dict(aids=1.0), name='art'), at=[2011], coverage=1.0, where=hiv.I, name='art_delivery') if how == 'product' else None
         con = ss.modify(hiv.aids, multiply=0, start=2011) if how == 'modify' else None
         sim = ss.Sim(hiv, interventions=art, connectors=con, n_agents=5000, start=2010, stop=2013, dt=ss.months(1), verbose=0).run()
