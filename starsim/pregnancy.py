@@ -69,8 +69,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in v3 or k in declared and not isinstance(kwargs[k], ss.par)})
         kwargs.setdefault('name', 'pregnancy')
         super().__init__(**kwargs)
-        own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph, which its code reads
-        self.code_pars = own
+        own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph, which its code reads (so they are in code_pars: see ss.Disease.define_pars())
         self.define_pars(**{k:v3[k] for k in own})
         self.update_pars({k:v for k,v in given.items() if k in own})
         graph = {k:v for k,v in given.items() if k not in own}
@@ -656,7 +655,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
 
 
 def _preg(name):
-    """ An event of the sim's pregnancy module (named "pregnancy"), for a module declared before it exists """
+    """ An event of the sim's pregnancy module, for a module declared before it exists; named "pregnancy" until `Lactation.link()` names the sim's own """
     return ss.conditions.Event('tr', ss.conditions.Named('pregnancy', name))
 
 
@@ -664,7 +663,7 @@ class Lactation(ss.Demographics, ss.Disease):
     """
     Lactation, as declared states: `N` (not breastfeeding) and `L` (breastfeeding)
 
-    A sibling of `ss.Pregnancy` (named "pregnancy"), since lactation overlaps the next pregnancy. A live birth starts it
+    A sibling of `ss.Pregnancy` (or of a subclass of it, by any name), since lactation overlaps the next pregnancy. A live birth starts it
     (with `p_breastfeed`), or restarts it for a woman breastfeeding already; it ends after `dur_breastfeed`, or at once
     if a child of hers dies before the age of 1. A `BreastfeedingNet` pairs each newborn with a mother who is in `L`
     and ends the pair when she leaves it. Added by `ss.Pregnancy` when the sim has a `BreastfeedingNet`
@@ -673,6 +672,7 @@ class Lactation(ss.Demographics, ss.Disease):
     Args:
         p_breastfeed (float): chance a mother breastfeeds a newborn
         dur_breastfeed (dur/Dist): duration of breastfeeding
+        pregnancy (str/Pregnancy): the pregnancy module whose events drive it, or its name (default: the sim's only `ss.Pregnancy`, of any subclass)
 
     Examples:
         ```python
@@ -691,7 +691,7 @@ class Lactation(ss.Demographics, ss.Disease):
 
     sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, pars=None, pregnancy=None, **kwargs):
         declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in declared and not isinstance(kwargs[k], ss.par)})
         if isinstance(given.get('p_breastfeed'), ss.bernoulli): # As in Starsim 3
@@ -699,6 +699,24 @@ class Lactation(ss.Demographics, ss.Disease):
         kwargs.setdefault('name', 'lactation')
         super().__init__(**kwargs)
         self.pars.update(given)
+        self.pregnancy = pregnancy # The pregnancy module, or its name; found by link() if None
+        return
+
+    def link(self, mods):
+        """ Find the pregnancy module whose events drive this one (`pregnancy=`, else the only `ss.Pregnancy` in `mods`), and point the triggers of the transitions at it by name """
+        preg = self.pregnancy
+        if preg is None:
+            pregs = [m for m in mods if isinstance(m, Pregnancy)]
+            if len(pregs) > 1:
+                errormsg = f'"{self.name}" is driven by the events of a pregnancy module, but the sim has several ({sc.strjoin([m.name for m in pregs])}); give the one to use, e.g. ss.Lactation(pregnancy="{pregs[0].name}")'
+                raise ValueError(errormsg)
+            preg = pregs[0] if pregs else None
+        name = ss.conditions.modname(preg) if preg is not None else 'pregnancy'
+        for tr in self.graph.transitions.values():
+            trig = tr.trigger
+            if trig is not None and trig.event and isinstance(trig.x.args[1], ss.conditions.Named): # A copy, since the class's trigger is shared by every instance
+                tr.trigger = sc.cp(trig)
+                tr.trigger.x = ss.conditions.Event('tr', ss.conditions.Named(name, trig.x.args[1].name))
         return
 
     def step(self):
@@ -708,16 +726,24 @@ class Lactation(ss.Demographics, ss.Disease):
 
 
 def add_lactation(sim):
-    """ `lactation='auto'`: add an `ss.Lactation` to a sim whose `ss.Pregnancy` has none, if it has a `BreastfeedingNet` (or `lactation=True`), with the pregnancy's breastfeeding parameters """
+    """
+    `lactation='auto'`: add an `ss.Lactation` to a sim whose `ss.Pregnancy` has none, if it has a `BreastfeedingNet`
+    (or `lactation=True`), with the pregnancy's breastfeeding parameters; and link each `ss.Lactation` to its pregnancy
+    module (see `Lactation.link()`)
+    """
     pars = sim.pars
-    mods = list(pars.demographics.values())
-    if any(isinstance(m, Lactation) for m in mods):
-        return
-    for preg in mods:
-        if isinstance(preg, Pregnancy) and preg.lactation_opt is not False:
-            if preg.lactation_opt is True or any(isinstance(net, ss.BreastfeedingNet) for net in pars.networks.values()):
-                pars.demographics.append(Lactation(p_breastfeed=preg.pars.p_breastfeed, dur_breastfeed=preg.pars.dur_breastfeed))
-            return
+    mods = [m for key in ss.modules.module_types() + ['custom'] for m in pars[key].values()]
+    if not any(isinstance(m, Lactation) for m in mods):
+        for preg in mods:
+            if isinstance(preg, Pregnancy) and preg.lactation_opt is not False:
+                if preg.lactation_opt is True or any(isinstance(net, ss.BreastfeedingNet) for net in pars.networks.values()):
+                    lact = Lactation(p_breastfeed=preg.pars.p_breastfeed, dur_breastfeed=preg.pars.dur_breastfeed, pregnancy=preg)
+                    pars.demographics.append(lact)
+                    mods.append(lact)
+                break
+    for lact in mods:
+        if isinstance(lact, Lactation):
+            lact.link(mods)
     return
 
 
