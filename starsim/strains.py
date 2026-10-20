@@ -299,7 +299,12 @@ class Strains(ss.Module):
             parts = [self.states_of(mod, key) for mod in members]
             if all(parts):
                 self.stocks[key] = parts
-        self.flows = self.common(members, 'transitions') + self.common(members, 'outcomes') # The results that are sums
+        self.flows = [] # The results that are sums: each transition, the flow to each destination of one with several (e.g. cin.CA), and each outcome
+        for key in self.common(members, 'transitions'):
+            self.flows.append(key)
+            dests = [sc.tolist(mod.graph.destinations()) for mod in members]
+            self.flows += [dest for dest in dests[0] if dest.rpartition('.')[0] == key and all(dest in d for d in dests)]
+        self.flows += self.common(members, 'outcomes')
         self.rng_seed = ss.random(name='rng_seed') # Who is seeded
         self.rng_split = ss.random(name='rng_split') # Which member each of them gets
         self.prot = dict() # The protection of each agent from each ss.immunity, on each quantity, against each member: see start_step()
@@ -467,7 +472,7 @@ class Strains(ss.Module):
     def init_results(self):
         super().init_results()
         results = [ss.Result(key, dtype=float, scale=True, label=f'{key} (any member)', kind='stock') for key in self.stocks]
-        results += [ss.Result(key, dtype=float, scale=True, label=f'{key} (all members)', kind='flow') for key in self.flows]
+        results += [ss.Result(key, dtype=float, scale=True, label=f'{key} (all members)', kind='flow', auto_plot='.' not in key) for key in self.flows] # The flow to each destination is res.<transition>.<state>
         self.define_results(*results)
         return
 
