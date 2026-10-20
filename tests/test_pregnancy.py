@@ -334,6 +334,49 @@ def test_lactation():
     return sim
 
 
+@sc.timer()
+def test_lactation_subclass():
+    sc.heading('Testing ss.Lactation with a subclass of ss.Pregnancy that has another name')
+    class FP(ss.Pregnancy):
+        def __init__(self, **kwargs):
+            kwargs.setdefault('name', 'fp')
+            super().__init__(**kwargs)
+    sim = ss.Sim(demographics=FP(fertility_rate=ss.freqperyear(150)), networks=[ss.MaternalNet(), ss.BreastfeedingNet()], n_agents=5000, **kw).run()
+    r = sim.results
+    assert 'lactation' in sim.demographics # lactation='auto', found by type rather than by the name "pregnancy"
+    assert r.fp.birth.sum() > 100
+    assert np.isclose(r.lactation.start.sum() + r.lactation.restart.sum(), r.fp.birth.sum(), rtol=0.05) # Driven by fp's live births
+    assert r.lactation.wean.sum() > 50
+    for given in ['fp', None]: # By name, or as the module
+        fp = FP(fertility_rate=ss.freqperyear(150))
+        named = ss.Sim(demographics=[fp, ss.Lactation(pregnancy=given or fp)], n_agents=2000, **kw).run()
+        assert named.results.lactation.start.sum() > 0
+    with pytest.raises(ValueError, match='pregnancy='): # Two pregnancy modules, and neither given
+        ss.Lactation().link([FP(), ss.Pregnancy()])
+    return sim
+
+
+@sc.timer()
+def test_code_pars():
+    sc.heading('Testing parameters a subclass of a declared module defines and reads in its own code')
+    class FP(ss.Pregnancy):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(age_scale=0.5) # Read by conception_rate(), not by the graph
+        def conception_rate(self, sim):
+            return super().conception_rate(sim)*self.pars.age_scale
+    base = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
+    half = ss.Sim(demographics=FP(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
+    assert half.results.pregnancy.conception.sum() < 0.7*base.results.pregnancy.conception.sum()
+    with pytest.raises(ss.UnknownParameter): # A misspelled parameter from the user is still an error
+        FP(age_scal=0.3)
+    preg = ss.Pregnancy()
+    preg.pars['rel_fertilty'] = 2 # ... and so is one added later that nothing reads
+    with pytest.raises(ss.UnknownParameter, match='nothing would read it'):
+        ss.Sim(demographics=preg, n_agents=500, **kw).init()
+    return half
+
+
 def make_hiv_vertical(bf=True):
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
     S, I = ss.states('S I')
@@ -559,6 +602,8 @@ if __name__ == '__main__':
     events = test_events()
     fetus = test_fetus()
     lact = test_lactation()
+    lact_sub = test_lactation_subclass()
+    code = test_code_pars()
     hiv = test_hiv_vertical()
     starsim3 = test_starsim3()
     shift = test_delivery_shift()

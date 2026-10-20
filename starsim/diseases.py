@@ -116,6 +116,19 @@ class Disease(ss.Module):
             self.update_pars(pars, **kwargs)
         return
 
+    def define_pars(self, inherit=True, **kwargs):
+        """
+        Create or merge parameters; see `ss.Module.define_pars()`
+
+        For a declared disease, a parameter defined here that is not one of its graph's (e.g. by a subclass, after
+        `super().__init__()`, for its own code to read) is added to `code_pars`, so the sim does not reject it as one
+        that nothing reads. A parameter set any other way (e.g. a misspelling in `pars=`) is still rejected.
+        """
+        out = super().define_pars(inherit=inherit, **kwargs)
+        if self.graph is not None:
+            self.code_pars = list(self.code_pars) + [k for k in kwargs if k not in self.graph.pars and k not in self.code_pars]
+        return out
+
     @staticmethod
     def reuse(args, members, frame=None):
         """ States and transitions that already belong to another disease are copied (together, so they refer to each other), so one set can build several diseases; parameters stay shared """
@@ -499,6 +512,40 @@ class Disease(ss.Module):
         dst = graph.states[name(to)]
         srcs = [graph.states[name(s)] for s in sc.tolist(src)] if src is not None else [s for s in graph.people_states if s is not dst]
         return self.engine.move_states(ss.uids(uids), srcs, dst)
+
+    def current_state(self, states=None):
+        """
+        The state each agent is in, as a read-only `ss.IntArr` (by UID) of its index among `states`, or -1 for none
+
+        The names of the states, in order, are its `.labels`, so `arr.labels[i]` is the name of index `i`.
+
+        Args:
+            states (list): the states to look in, as names or states (default: the module's states of people, in order)
+
+        **Example**::
+
+            cs = sir.current_state() # 0 for S, 1 for I, 2 for R
+            cs.labels[cs[uid]] # The name of an agent's state
+        """
+        graph = getattr(self, 'graph', None)
+        if graph is None or self.engine is None:
+            raise ss.CapabilityError(f'"{self.name}" is not a declared disease (or the sim is not initialized), so it has no states to look in')
+        if self.sim.solver != 'abm':
+            raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.n_S) instead')
+        names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
+        unknown = [name for name in names if name not in graph.states]
+        if unknown:
+            raise ss.UnknownState(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+        age = self.sim.people.age # A plain array of the people, to copy
+        raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
+        for i,name in enumerate(names):
+            raw[self[name].raw] = i
+        raw.flags.writeable = False
+        out = age.asnew(raw, cls=ss.IntArr, name='current_state', copy=False)
+        out.label = f'Current state of {self.name}'
+        out.nan = out.default = -1 # In none of the states
+        out.labels = names
+        return out
 
     def make_naive(self, uids, skip_states=None):
         """

@@ -832,6 +832,30 @@ def test_strains_errors():
     return
 
 
+@sc.timer()
+def test_current_state():
+    sc.heading('Testing current_state(): the index of the state each agent is in')
+    sir = ss.Disease(name='sir', infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4))
+    sim = ss.Sim(diseases=sir, n_agents=100, stop=2001, verbose=0).init()
+    sir = sim.diseases.sir
+    sir.move_to(ss.uids([0, 1]), 'I')
+    sir.move_to(ss.uids([2]), 'R')
+    cs = sir.current_state()
+    assert isinstance(cs, ss.IntArr) and cs.labels == ['S', 'I', 'R']
+    assert cs[ss.uids([0, 1, 2, 3])].tolist() == [1, 1, 2, 0]
+    assert [cs.labels[i] for i in cs[ss.uids([0, 2])]] == ['I', 'R']
+    sub = sir.current_state(['R', sir.I]) # Some of them, by name or as states
+    assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
+    with pytest.raises(ValueError): # Read-only
+        cs.raw[0] = 2
+    with pytest.raises(ss.UnknownState):
+        sir.current_state(['X'])
+    ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4)), stop=2001, verbose=0).init()
+    with pytest.raises(ss.CapabilityError, match='agents'):
+        ode.diseases.sir.current_state()
+    return cs
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -845,6 +869,7 @@ if __name__ == '__main__':
     multi = test_multidisease()
     mtct  = test_mtct()
     fetal = test_fetal_health(do_plot=do_plot)
+    current = test_current_state()
     cong  = test_congenital()
     strains = test_strains_results()
     immune = test_strains_immunity()
