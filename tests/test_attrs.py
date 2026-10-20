@@ -247,6 +247,7 @@ def test_spread():
     r = ss.Sim(make_spread_ab(), n_agents=10_000, start=0, stop=20, unit='day', **kw).run().results.d
     assert np.isclose(r.n_B[0], 1000, atol=2) and np.isclose(r.bc[1:11].sum(), 1000, atol=5) and r.bc[11:].sum() == 0
     assert np.allclose(r.bc[1:11], 100, atol=40), r.bc[:12]
+    assert ss.Sim(make_spread_ab(), start=0, stop=20, unit='day', **kw).init().solver == 'abm', 'solver="auto" runs ss.spread as agents'
     return out
 
 

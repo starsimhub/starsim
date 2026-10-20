@@ -415,6 +415,10 @@ def init_capabilities(sim, modules):
         graph = getattr(mod, 'graph', None)
         for name in (graph.hooks if graph is not None else []): # Agents only (see ss.func)
             add(f'hook: {mod.name}.{name}', 'no', 'a function of the agents an event happens to', auto=f'"{name}" is a function of the agents an event happens to (ss.func)', fatal=True)
+        if graph is not None: # Seeds back-dated and run forward: agents only, for now (see ss.spread)
+            spread = [f'init_prev' if isinstance(getattr(graph.init_prev, 'raw', graph.init_prev), ss.spread) else None] + [f'init of {state.name}' for state in graph.states.values() if isinstance(getattr(state.init, 'raw', state.init), ss.spread)]
+            for what in [w for w in spread if w]:
+                add(f'module: {mod.name}', 'no', 'seeds back-dated (ss.spread)', auto=f'the {what} of "{mod.name}" is ss.spread(), which back-dates seeds as agents for now', fatal=True)
         if graph is not None and graph.attrs: # Agents only, for now (see ss.attr)
             add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(graph.attrs.keys())}) have no compartmental form yet', fatal=True)
         if approx is False and isinstance(mod, ss.Delivery) and mod.holds and mod.product.staged: # Kept as levels of time since delivery otherwise: see ss.Held.init_stages()
