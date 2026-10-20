@@ -552,9 +552,9 @@ def init_capabilities(sim, modules):
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
         for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state have a compartmental form if each is for other people (see ss.solvers.Compartmental.apart_shares()), which is tried
-            timed = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
-            if len(timed) > 1 and not exits.branches:
-                add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in timed)})', '?', 'a track for each, if each is for other people (where=)', probe=(mod.name, []))
+            dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
+            if len(dwells) > 1 and not exits.branches:
+                add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', '?', 'a track for each, if each is for other people (where=)', probe=(mod.name, []))
         for name,tf in graph.transfers.items(): # A time drawn for each person, as Erlang stages (see ss.dimensions.transfer_stages())
             raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
             if isinstance(raw, ss.Dist) and not isinstance(raw, ss.expon):
