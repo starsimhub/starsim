@@ -32,6 +32,25 @@ def make_sim_pars():
     return pars
 
 
+def test_capabilities_two_modules():
+    """ Choosing the solver for a module with a non-exponential dwell time, then one with a function as a rate (the first's list of dwell times shadowed the types the second was checked against) """
+    sc.heading('Testing solver capabilities over several modules')
+    class A(ss.Disease):
+        S, I = ss.states('S I')
+        recover = ss.Transition(I, S, dur=ss.lognorm_ex(ss.years(1), ss.years(1)))
+        catch = ss.Transition(S, I, rate=ss.peryear(0.1))
+    class B(ss.Disease):
+        X, Y = ss.states('X Y')
+        h = ss.par(None)
+        go = ss.Transition(X, Y, rate=h)
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.pars.update(h=lambda sim: ss.peryear(0.1))
+    sim = ss.Sim(diseases=[A(name='a'), B(name='b')], n_agents=100, start=2000, stop=2001, verbose=0).run()
+    assert sim.results.b.go.sum() >= 0
+    return sim
+
+
 @sc.timer()
 def test_demo(do_plot=do_plot):
     """ Test Starsim's demo run """
