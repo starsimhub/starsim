@@ -595,13 +595,13 @@ class Transition(Nameable):
 
     def __or__(self, other):
         if self.src is not None and not isinstance(other, State): # As events: the people who went through either, e.g. who=a.infection | b.infection
-            return ss.conditions.as_cond(self) | other
+            return ss.conditions.as_cond(ss.conditions.tr_event(self, other)) | other
         errormsg = 'Several sources are a sum of states: write S + I + R >> D @ rate (| on states is a condition, for where=)'
         raise TypeError(errormsg)
 
     def __ror__(self, other):
         if self.src is not None and not isinstance(other, State):
-            return other | ss.conditions.as_cond(self)
+            return other | ss.conditions.as_cond(ss.conditions.tr_event(self, other))
         return self.__or__(other)
 
     def __and__(self, other): # As an event: the people who went through it, among those meeting a condition (or in another event too)
