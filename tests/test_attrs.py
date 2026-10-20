@@ -34,7 +34,7 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         cd4_latent    = ss.attr(ss.normal(500, 50), on=infection, bins=3)
         cd4_preart    = ss.attr('cd4', on=start_art) # CD4 just before starting
         cd4_potential = ss.attr(cd4_preart*(1 + (cd4_max - cd4_preart)/cd4_healthy*np.log(cd4_max/cd4_preart)), on=start_art, combine='first') # Set at the first start only
-        cd4_stop      = ss.attr('cd4', on=dropout)
+        cd4_stop      = ss.attr('cd4', on=dropout, bins=[0, 50, 200, 350, 500, 650, 800]) # Finer than the stratification at the top, where most stop (bins are for a compartmental run)
         gain = cd4_potential - cd4_preart
         cd4 = ss.attr({
             acute:    cd4_start - (cd4_start - cd4_latent)*acute.progress,
@@ -164,6 +164,17 @@ def test_hpv_nab():
         assert sim.results[name].infection.sum() < 0.9*none.results[name].infection.sum()
         assert (none.diseases[name].nab.values > 0).mean() > seropos*0.9 # Antibodies are set the same way without the modifier
     return sim
+
+
+@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B6: a recorded value (antibodies, combine="max") as levels in compartments is deferred')
+def test_hpv_nab_ode():
+    def one(**opts): # One genotype, its own antibodies, combine='max' as transitions between 3 levels as compartments
+        h = make_hpv('hpv', beta=ss.peryear(0.6))
+        h.graph.attrs.nab.bins = 3
+        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(3), unit='year', **opts, **kw).run().results.hpv.infection.sum()
+    ode = one(solver='ode', total_pop=20_000) # First, so that it fails fast until B6
+    abm = np.mean([one(n_agents=20_000, rand_seed=seed) for seed in range(2)])
+    assert np.isclose(ode, abm, rtol=0.05), f'ODE {ode:n}, agents {abm:n}'
 
 
 @sc.timer()
