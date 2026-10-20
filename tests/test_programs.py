@@ -29,7 +29,6 @@ def check_close(sims, func, rtol=0.1):
 
 # %% Define the tests
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: numbers are people for deliveries (96fd89d2)', strict=True)
 def test_people():
     sc.heading('Testing numbers are people: capacity and results read during a run')
     seen = sc.objdict()

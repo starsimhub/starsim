@@ -1239,6 +1239,7 @@ class Delivery(ss.products.EventSource, Intervention):
         labels = dict(positive='Number testing positive', negative='Number testing negative', cured='Number cured', failed='Number treated and not cured', unneeded='Number treated who were not infected')
         results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number {o}'), summarize_by='sum', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
         self.define_results(*results)
+        ss.results.in_people(*results) # Written in people, as agents, so read in people during the run: see ss.results.people_scale()
         self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the share of everyone eligible who received it
         ng = self.sim.groups.n_groups
         self.rows = self.group_ti = None # As for a disease: see ss.Sim.group_rows()
@@ -1267,7 +1268,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if getattr(res, 'strata', None) is not None and n:
             if self.selector.abm:
                 uids = self.uids(sel)
-                res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight
+                res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight*ss.results.people_scale(self.sim)
             else:
                 res.strata[self.row(ti)] += (sel*self.eng.state_counts()).sum(axis=0)*weight
         return n
@@ -1289,10 +1290,14 @@ class Delivery(ss.products.EventSource, Intervention):
         return auids[sel[auids]]
 
     def n_selected(self, sel):
-        """ The number of people (or agents) selected """
+        """ The number of people selected, as results count them (see `ss.results.people_scale()`) """
         if self.selector.abm:
-            return float(np.count_nonzero(sel[self.sim.people.auids]))
+            return self.n_agents(sel)*ss.results.people_scale(self.sim)
         return float((sel*self.eng.state_counts()).sum())
+
+    def n_agents(self, sel):
+        """ As agents, the number of agents selected """
+        return float(np.count_nonzero(sel[self.sim.people.auids]))
 
     def shift(self, sel, changes, mover=None):
         """ Move the selected people to other levels of some dimensions (`mover` is the event they are, if known: see `carry_events()`) """
@@ -1663,9 +1668,9 @@ class Delivery(ss.products.EventSource, Intervention):
         cap = self.capacity(self.sim) if callable(self.capacity) else self.capacity
         if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
             cap = self.convert(cap)*self.span
-        n = self.n_selected(chosen)
+        n = self.n_agents(chosen) if selector.abm else self.n_selected(chosen)
         if selector.abm:
-            cap = cap/self.sim.current_scale + self.carry # In agents
+            cap = cap/self.sim._current_scale + self.carry # In agents
             k = int(cap)
             self.carry = cap - k if n >= k else 0.0
             if n > k:
