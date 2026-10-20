@@ -201,6 +201,8 @@ class Agents(Engine):
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
         for name,dw in self.dwells.items():
             add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.gamma(a=dw.k, scale=1/dw.k)) # A unit-mean Erlang, scaled by the mean when used
+            for new in getattr(dw, 'sets', {}).values(): # The distributions a modifier sets it to: see Engine.dwell_mods()
+                add(new.key, new.dist)
         return
 
     def init_pre(self):
@@ -1728,7 +1730,7 @@ class Agents(Engine):
     def varies(self, dw):
         """ Whether the mean of a dwell time can change during the run: a duration or rate that is a function or varies in time, or a parameter with modifiers """
         if dw.dist is not None:
-            return False
+            return bool(getattr(dw, 'mods', None)) # A distribution with modifiers: see dist_dwell()
         p = dw.par
         if callable(p.raw):
             return True
@@ -1778,10 +1780,36 @@ class Agents(Engine):
                 mod[f'mult_{name}'][sel] = now
         return
 
+    def dist_dwell(self, name):
+        """
+        For a dwell time that is a distribution whose parameter has modifiers (see `Engine.dwell_mods()`): the key of the distribution drawn
+        from now (that of the last set= that is active, else its own) and its mean, and the multiplier and addend from multiply= and add=
+        (each a scalar, or one value per agent)
+        """
+        dw = self.dwells[name]
+        active = [m for m in dw.mods if m.active]
+        sets = [m for m in active if m.op == 'set']
+        new = dw.sets[id(sets[-1])] if sets else sc.objdict(key=f'dwell_{name}', mean=dw.mean)
+        mult = ss.connectors.combine([m for m in active if m.op == 'multiply'], 1.0, self)
+        add = ss.connectors.combine([m for m in active if m.op == 'add'], 0.0, self)
+        return new.key, new.mean, mult, add
+
+    def dwell_mean(self, name):
+        """ The current mean dwell time of a transition, in the sim's unit, including the modifiers of a distribution (see `dist_dwell()`) """
+        if getattr(self.dwells[name], 'mods', None):
+            key, mean, mult, add = self.dist_dwell(name)
+            return mean*mult + add
+        return super().dwell_mean(name)
+
     def sample_dwell(self, tr, uids):
         """ Sample a dwell time for each agent, in the sim's unit """
         dw = self.dwells[tr.name]
-        rvs = self.draw(f'dwell_{tr.name}', uids)
+        if getattr(dw, 'mods', None): # A distribution whose parameter has modifiers
+            key, mean, mult, add = self.dist_dwell(tr.name)
+            pick = lambda val: val if np.ndim(val) == 0 or len(val) == len(uids) else np.asarray(val)[uids]
+            rvs = np.maximum(self.draw(key, uids)*pick(mult) + pick(add), 0)
+        else:
+            rvs = self.draw(f'dwell_{tr.name}', uids)
         if dw.dist is None:
             self._uids = uids
             mean = self.dwell_mean(tr.name)
