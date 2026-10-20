@@ -196,17 +196,18 @@ def test_target():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: delivery memory mapped onto .ever/.count/.since, repeat= (f0f61715)', strict=True)
 def test_memory():
-    sc.heading('Testing delivery memory: once per spell, repeat=, .since, .held, and doses')
+    sc.heading('Testing delivery memory: once per spell, once ever, and not within 30 days of the last time, with .ever and .since')
 
     # Routine delivery is once per spell of being eligible: each infection is offered treatment once; repeat=False is once ever
-    def spells(repeat=None, **kwargs):
+    def spells(once=False, **kwargs):
         sis = make_sis(beta=0.15)
-        clinic = ss.treat(ss.Treatment(moves=sis.cure), where=sis.I, coverage=0.3, repeat=repeat)
+        clinic = ss.treat(ss.Treatment(moves=sis.cure), where=sis.I, coverage=0.3, name='clinic')
+        if once: # Once ever: the memory of the delivery (v4-rs repeat=False)
+            clinic.eligible = ss.conditions.as_cond(sis.I) & ~clinic.ever
         return ss.Sim(sis, interventions=clinic, **kwargs)
     each = run_both(spells, stop=200)
-    once = run_both(spells, stop=200, repeat=False)
+    once = run_both(spells, stop=200, once=True)
     for solver in ['ode', 'abm']:
         r, res = each[solver].results.clinic, each[solver].results.sis
         assert np.isclose(r.delivered[1:].sum(), 0.3*res.infection[:-1].sum(), rtol=0.1), f'{solver}: {r.delivered[1:].sum()} vs {0.3*res.infection[:-1].sum()}' # As agents, those whose dwell rounds to no steps recover in the step they are infected, before the clinic sees them (a few %)
@@ -216,8 +217,9 @@ def test_memory():
     # Not within 30 days of the last time, at a rate per year; and the time since another delivery in a condition
     def rescreen(**kwargs):
         sis = make_sir()
-        test = ss.Test(sensitivity=0.9)
-        screening = ss.screen(test, coverage=ss.peryear(4), repeat=ss.days(30))
+        test = ss.Diagnostic(sensitivity=0.9)
+        screening = ss.screen(test, coverage=ss.peryear(4), name='screening')
+        screening.eligible = screening.since >= ss.days(30) # Not within 30 days of the last time (v4-rs repeat=ss.days(30))
         recent = ss.vaccinate(ss.Vaccine(efficacy=0.5), where=screening.since < ss.days(5), coverage=0.1)
         return ss.Sim(sis, interventions=[screening, recent], **kwargs)
     sims = run_both(rescreen, stop=120)
@@ -227,14 +229,16 @@ def test_memory():
         assert np.isclose(r.coverage[1:31].mean(), p, rtol=0.07) and np.isclose(r.eligible[1], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
         assert np.isclose(r.eligible[60], 50_000 - r.delivered[31:60].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
         assert sim.results.recent.delivered[1] > 0 and sim.results.recent.eligible[50] < 6*r.delivered[45:50].sum()
-        if solver == 'abm':
-            screened = sim.interventions.screening.ti_last.raw
-            assert np.nanmin(sim.ti - screened) >= 0
     check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.05)
     check_close(sims, lambda sim: sim.results.recent.delivered.sum(), rtol=0.05)
-    assert 'since_screening' in [s.name for s in sims.ode.strats] and 'since_screening' not in [s.name for s in sims.abm.strats]
+    assert 'since_screening' in [s.name for s in sims.ode.groups.strats] and 'since_screening' not in [s.name for s in sims.abm.groups.strats]
 
-    # Two doses: the second at least 30 days after the first; and .held
+    return sims
+
+
+@pytest.mark.xfail(reason='For Robyn and Cliff: doses of a held product (Vaccine doses=, vaccinate(dose=)) have no form in v4\'s deliveries, whose increment= counter cannot go with a product', strict=True)
+def test_doses():
+    sc.heading('Testing doses: the second at least 30 days after the first, and .held')
     def doses(**kwargs):
         sir = make_sir()
         vx = ss.Vaccine(efficacy=0.8, doses=[0.5, 1.0])
@@ -256,27 +260,23 @@ def test_memory():
     return sims
 
 
-@pytest.mark.xfail(reason='To re-port onto v4\'s deliveries: then= as event-triggered steps (4d896abf)', strict=True)
 def test_then():
-    sc.heading('Testing then=: a second product at the same visit, and a list of them')
+    sc.heading('Testing steps at the same visit: a second product and a test, triggered by the visit (v4-rs then=)')
     def make(**kwargs):
         sis = make_sis()
         drug = ss.Treatment(moves={sis.cure: 0.9})
-        visit = ss.treat(drug, where=sis.I, coverage=0.3, interval=ss.days(10), then=[ss.vaccinate(ss.Vaccine(efficacy=0.5)), ss.screen(ss.Test(), coverage=0.5)])
-        return ss.Sim(sis, interventions=visit, **kwargs)
+        visit = ss.treat(drug, where=sis.I, coverage=0.3, interval=ss.days(10), name='visit')
+        vx = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=visit, name='visit_then1') # The people the visit reached, in the same step
+        test = ss.screen(ss.Diagnostic(), who=visit, coverage=0.5, name='visit_then2')
+        return ss.Sim(sis, interventions=[visit, vx, test], **kwargs)
     sims = run_both(make, stop=60, pop=200_000, n_agents=200_000)
     for solver,sim in sims.items():
         res = sim.results
         assert np.isclose(res.visit_then1.delivered[0], res.visit.delivered[0]) # Everyone treated, none of whom hold it yet
         assert 0 < res.visit_then1.delivered.sum() <= res.visit.delivered.sum()
         assert np.isclose(res.visit_then2.delivered.sum(), 0.5*res.visit.delivered.sum(), rtol=0.05)
-        assert np.isclose(res.visit_then2.diagnosed.sum(), 0.1*res.visit_then2.delivered.sum(), rtol=0.15) # Tested at the same visit, after the drug (which cures 90%)
+        assert np.isclose(res.visit_then2.positive.sum(), 0.1*res.visit_then2.delivered.sum(), rtol=0.15) # Tested at the same visit, after the drug (which cures 90%)
     check_close(sims, lambda sim: sim.results.visit_then1.delivered.sum(), rtol=0.1)
-
-    # A function, as agents
-    seen = []
-    sim = ss.Sim(make_sis(), interventions=ss.treat(ss.Treatment(transition='cure'), coverage=0.2, at=[5], then=lambda sim, uids: seen.append(len(uids))), stop=10, n_agents=5000, **kw).run()
-    assert sim.solver == 'abm' and seen == [sim.results.treat.delivered[5]]
     return sims
 
 

@@ -885,6 +885,7 @@ class Delivery(ss.products.EventSource, Intervention):
     """
     compartmental = True
     kind = None # The kind of product this delivers
+    spells = True # Routine delivery is once per spell of being eligible (proposal 02 §2.4; pending a decision: False is once per life, as before)
     product_keys = [] # The keywords of the product, with which the delivery makes its own
 
     def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
@@ -1028,7 +1029,8 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good """
         full = self.coverage is None and self.capacity is None and self.when is None
         lost = self.holds and self.product.loses # Once lost, they would be eligible again, and given it again at the next step
-        return self.routine and (self.by_age or not ((self.holds or self.move) and full and not lost))
+        rate = isinstance(self.coverage, ss.TimePar) # Typed coverage is a rate among those eligible, offered at every step
+        return self.routine and not rate and (self.by_age or not ((self.holds or self.move) and full and not lost))
 
     @property
     def by_age(self):
@@ -1427,6 +1429,22 @@ class Delivery(ss.products.EventSource, Intervention):
         after = self.eng.state_counts()
         return np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
 
+    def new_spells(self, sel):
+        """ For routine delivery once per spell (see `spells`): forget that people were offered it once they are no longer eligible """
+        selector = self.selector
+        sim = self.sim
+        offered = selector.dim(self.offered) > 0
+        ended = offered*(1 - (sel > 0)) if selector.abm else offered*(1 - sel)
+        if not np.any(ended):
+            return
+        if selector.abm:
+            uids = self.uids(ended > 0)
+            sim.people[sim.groups.strats[sim.groups.dim_index(self.offered)].attr][uids] = False
+            sim.groups.groups_changed(uids)
+        else:
+            self.shift(ended, {sim.groups.dim_index(self.offered):0})
+        return
+
     def mark_offered(self, sel, chosen):
         """ Record that the selected people have been offered the product; returns those chosen, as they now are """
         return self.follow(sel, chosen, {self.sim.groups.dim_index(self.offered):1})
@@ -1613,6 +1631,7 @@ class Delivery(ss.products.EventSource, Intervention):
             contacts = [net.find_contacts(uids) for net in self.trace_nets]
             sel = selector.to_selection(ss.uids(np.unique(np.concatenate(contacts))))
         sel = sel*(selector.select(self.eligible) if self.eligible is not None else self.default_eligible())
+        base = sel # Eligible as the delivery says, whatever they hold: what a spell is of (see new_spells())
         if self.move_states is not None: # Only the people in the state they move from
             sel = sel*selector.in_states([self.move_states[0]])
         if self.holds: # Not to people who already hold it
@@ -1623,6 +1642,8 @@ class Delivery(ss.products.EventSource, Intervention):
         for d,level in self.sources.items():
             sel = sel*(selector.dim(self.sim.groups.strats[d].name) == level)
         if self.remembers:
+            if self.spells and self.routine and not self.by_age: # Once per spell of being eligible: whoever was offered it and is eligible no longer may be offered it again in their next spell
+                self.new_spells(base)
             sel = sel*(selector.dim(self.offered) == 0)
         if self.waits: # Not to people still waiting for the result of an earlier test
             sel = sel & np.isnan(self.ti_result.raw) if abm else sel*(selector.dim(self.pending) == 0)
@@ -1902,7 +1923,6 @@ class Delivery(ss.products.EventSource, Intervention):
         sim = self.sim
         home = self.eng
         cross = home.cross
-        before = home.state_counts() # Those treated as they were, for the delivery's event
         rows = home.people_comps
         state_of = [home.selector.states.index(home.comps[i].state.name) for i in rows]
         C = home.take(home.y[rows], chosen[state_of]) # The people chosen, by compartment and group
@@ -1923,7 +1943,10 @@ class Delivery(ss.products.EventSource, Intervention):
         counts = np.array([F[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
         n = home.state_counts()
         self.fire('failed', np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1))
-        return [(chosen, before)]
+        if cur is not home: # Those treated as they now are, by state and group of this disease, for the delivery's event (steps triggered by it find them where the treatment moved them)
+            C = cross.local(cross.joint(cur, C), home)
+        counts = np.array([C[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
+        return [(np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1), None)]
 
     def force_part(self, eng, C, edges):
         """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and those who failed """
