@@ -1776,6 +1776,35 @@ def test_branch_where():
         assert men[-1] < 0.01*men[0], f'{solver}: men should all clear (the remainder), not {men[-1]/men[0]:.2f} of them stay'
         assert np.isclose(women[-1], 0.9*women[0], rtol=0.05), f'{solver}: 90% of women persist, not {women[-1]/women[0]:.2f}'
     return r
+def test_dwell_expressions():
+    """ A dwell time that is an expression of named parameters keeps their names: two of them clashed with the name made for the slot (DuplicateDeclaration), and ss.par(dist)*1 raised AttributeError """
+    sc.heading('Testing dwell times as expressions of parameters')
+    S, I, J = ss.states('S I J')
+    k = ss.attr(ss.uniform(0.5, 1.5))
+    dur_rec = ss.par(ss.lognorm_ex(ss.years(1), ss.years(1)), name='dur_rec')
+    dur_go = ss.par(ss.lognorm_ex(ss.years(1), ss.years(1)), name='dur_go')
+    d = ss.Disease(S, I, J, infection=S >> I @ ss.peryear(1)*I, rec=ss.Transition(I, J, dur=dur_rec*k), go=ss.Transition(J, S, dur=dur_go*k), k=k, init_prev=0.1, name='d')
+    sim = ss.Sim(d, n_agents=1000, start=2000, stop=2003, verbose=0, pars=dict(dur_rec=ss.lognorm_ex(ss.years(2), ss.years(1)))).run()
+    assert 'dur_rec' in sim.diseases.d.pars and 'dur_go' in sim.diseases.d.pars and sim.results.d.rec.sum() > 0
+    A, B = ss.states('A B')
+    one = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.par(ss.lognorm_ex(ss.years(1), ss.years(1)), name='dur_ab')*1), init=dict(B=0), name='one')
+    assert ss.Sim(one, n_agents=500, start=2000, stop=2002, verbose=0).run().results.one.ab.sum() > 0
+
+    # A distribution times a factor scales each draw, so keeps its shape: times an attribute equal to 1, it is the distribution itself (it was an exponential of the same mean)
+    def still_in(mode, factor=1.0, years=(1, 5, 20, 50)):
+        S, I, R = ss.states('S I R')
+        k = ss.attr(factor)
+        d0 = ss.lognorm_ex(ss.years(5), ss.years(20))
+        dur = dict(plain=d0, attr=d0*k, par=ss.par(ss.lognorm_ex(ss.years(5), ss.years(20)), name='dd')*k)[mode]
+        d = ss.Disease(S, I, R, rec=ss.Transition(I, R, dur=dur), k=k, init=dict(I=20_000), name='d')
+        n = ss.Sim(d, n_agents=20_000, start=2000, stop=2060, dt=0.25, verbose=0).run().results.d.n_I
+        return np.array([n[int(y/0.25)]/20_000 for y in years])
+    plain = still_in('plain')
+    for mode in ['attr', 'par']:
+        assert np.allclose(still_in(mode), plain, atol=0.02), f'{mode}: {still_in(mode)} against {plain}'
+    doubled = still_in('attr', factor=2.0, years=(2, 10, 40))
+    assert np.allclose(doubled, plain[:3], atol=0.02), f'Twice as long, so at twice the times: {doubled} against {plain[:3]}'
+    return sim
 
 
 @sc.timer()

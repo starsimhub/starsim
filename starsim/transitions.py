@@ -20,7 +20,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, closest, Count, count_power, did_you_mean, dimension, Dwell, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
+from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, Dwell, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 from .networks import geo, gravity, Mobility
 
@@ -504,7 +504,7 @@ class Transition(Nameable):
         if isinstance(current, par) and current.module is not None and not isinstance(value, Expr): # Once the model is built, a new value is the parameter's value, e.g. sir.recovery.dur = ss.erlang(k=3, mean=10)
             current.value = value
         else:
-            self.__dict__['_dur'] = None if value is None else value if isinstance(value, par) else par(value, literal=True) if isinstance(value, Expr) and any(isinstance(leaf, ss.expressions.attr) for leaf in value.leaves) else as_expr(value) # An expression of attributes is the mean, worked out for each person
+            self.__dict__['_dur'] = None if value is None else value if isinstance(value, par) else par(value, literal=True) if isinstance(value, Expr) else as_expr(value) # An expression (e.g. of attributes, or a distribution times a factor) is held as a parameter, as the other values in the slot are
         return
 
     def __matmul__(self, driver):
@@ -1071,6 +1071,29 @@ class FlowSum:
 
 
 #%% Dwell times
+
+def scaled_dist(expr):
+    """
+    A dwell time written as a distribution times a factor (e.g. `dur_cin*ramp`, or `ss.lognorm_ex(...)*(1 - sev)`), as
+    (the parameter holding the distribution, the factor); or None. A product with one distribution, which may be divided
+    by something that is not one; each draw is scaled by the factor, so the distribution keeps its shape
+    """
+    def split(e):
+        if isinstance(e, par) and isinstance(e.raw, ss.Dist):
+            return e, None # None: a factor of 1
+        if isinstance(e, BinOp) and e.op == '*':
+            for d,other in [(e.a, e.b), (e.b, e.a)]:
+                found = split(d)
+                if found is not None and not dists_in(other):
+                    return found[0], other if found[1] is None else BinOp('*', found[1], other)
+        if isinstance(e, BinOp) and e.op == '/':
+            found = split(e.a)
+            if found is not None and not dists_in(e.b):
+                return found[0], BinOp('/', 1 if found[1] is None else found[1], e.b)
+        return None
+    out = split(expr) if isinstance(expr, BinOp) else None
+    return out if out is not None and out[1] is not None else None
+
 
 def dwell_stats(dist, convert):
     """

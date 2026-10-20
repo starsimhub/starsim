@@ -1803,6 +1803,8 @@ class Agents(Engine):
         """ Sample a dwell time for each agent, in the sim's unit """
         dw = self.dwells[tr.name]
         rvs = self.draw(f'dwell_{tr.name}', uids)
+        if dw.dist is not None and getattr(dw, 'scale', None) is not None: # A distribution times a factor: each person's draw, scaled by theirs
+            rvs = np.asarray(rvs, dtype=float)*self.values_for(dw.scale, uids)
         if dw.dist is None:
             self._uids = uids
             mean = self.dwell_mean(tr.name)
