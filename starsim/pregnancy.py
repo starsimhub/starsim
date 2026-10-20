@@ -193,9 +193,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
         def share():
             rate = np.asarray(engine.convert(self.conception_rate(engine.sim)), dtype=float)
             return -np.expm1(-rate*dt*steps)
-        def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman; and the fetuses of those pregnant at the start are there at the start
-            if 'parity' in before:
-                self.parity[kept] += np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0)
+        def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman, and in her pregnancies with the one she has at the start (a loss before the start counts in neither, so deliveries plus losses are pregnancies); and the fetuses of those pregnant at the start are there at the start
+            delivered = np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0) if 'parity' in before else 0
+            self.parity[kept] += delivered
+            self.n_pregnancies[kept] += delivered + self.P.raw[kept]
             if self.fetus and self.abm:
                 self.conceive(kept, self.ti)
                 for mod in self.sim.declared: # The start is counted again, with them in each module's first state
@@ -289,10 +290,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
                 fed = lact.L.raw[moms]
                 for net in nets:
                     ss.PostnatalNet.add_pairs(net, ss.uids(moms[fed]), kids[fed])
-        new = self.engine.fresh('ptb', 'conception') # Before the fetuses are made, since their ages count down to the delivery
+        new = self.engine.fresh('ptb', 'conception', unique=False) # Before the fetuses are made, since their ages count down to the delivery
         if len(new):
-            self.n_pregnancies[new] += 1
-            self.preterm_risk(new)
+            np.add.at(self.n_pregnancies.raw, new, 1) # Each conception, including a second in a step after an abortion at once
+            self.preterm_risk(new.unique())
         if self.fetus:
             new = self.engine.fresh('fetus', 'conception')
             if len(new):
@@ -484,6 +485,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         return
 
     v3_results = dict(pregnancies='conception', births='birth', miscarriages='miscarriage', stillbirths='stillbirth', abortions='abortion') # Starsim 3 names, as aliases of flows
+    v3_counts = dict(n_fecund='Women of childbearing age', n_fertile='Fecund women not infertile', n_susceptible='Fertile women not pregnant') # Starsim 3 counts (agents only)
 
     def init_results(self):
         super().init_results()
@@ -497,6 +499,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', summarize_by='sum', auto_plot=False, **kw),
             ss.Result('cbr', label='Crude birth rate', summarize_by='mean', **kw),
             ss.Result('tfr', label='Total fertility rate', summarize_by='sum', **kw),
+            ss.Result('mmr', label='Maternal mortality ratio (per 100,000 births)', summarize_by='mean', auto_plot=False, **kw),
+            *[ss.Result(k, label=v, auto_plot=False, **kw) for k,v in self.v3_counts.items()],
         )
         self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
         return
@@ -507,7 +511,21 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self._nnd = 0
         if self.abm and self.fetus:
             self.results.n_unborn[self.ti] = np.count_nonzero(self.fetal.raw & self.sim.people.alive.raw)*self.sim._current_scale
+        if self.abm:
+            self.count_women()
         self.compute_asfr()
+        return
+
+    def count_women(self):
+        """ As agents: the counts of Starsim 3, of women of childbearing age (`min_age` to `max_age`, inclusive), those not infertile, and those also not pregnant """
+        ppl = self.sim.people
+        age = ppl.age.raw
+        fecund = ppl.alive.raw & ppl.female.raw & (age >= self.pars.min_age) & (age <= self.pars.max_age)
+        fertile = fecund & ~self.infertile.raw
+        susceptible = fertile & ~self.P.raw
+        scale = self.sim._current_scale
+        for key,mask in zip(self.v3_counts, [fecund, fertile, susceptible]):
+            self.results[key][self.ti] = np.count_nonzero(mask)*scale
         return
 
     def compute_asfr(self):
@@ -550,6 +568,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         for k,v in self.v3_results.items():
             res[k][:] = res[v][:]
         res.maternal_deaths[:] += res.antepartum[:]
+        res.mmr[:] = sc.safedivide(res.maternal_deaths[:], res.births[:], default=0)*100e3 # Antepartum deaths and deaths at delivery, per 100,000 births
         res.preterm_rate[:] = sc.safedivide(res.n_preterm[:], res.birth[:], default=0)
         inds = self.match_time_inds()
         units = self.pars.rate_units*self.t.dt_year
