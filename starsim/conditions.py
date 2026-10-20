@@ -635,6 +635,32 @@ def join(op, conds):
     return out
 
 
+def path_events(cond):
+    """ In on=, which is an event, a path (`ss.state('pregnancy.birth')`, for a module made before that one exists) is the event of going through that transition """
+    if isinstance(cond, StatePath):
+        event = Event('tr', Named(*cond.args))
+        event.path = cond # Checked when the sim is initialized: see check_path_events()
+        return event
+    if isinstance(cond, Cond) and cond.op not in leaves:
+        return Cond(cond.op, *[path_events(arg) for arg in cond.args])
+    return cond
+
+
+def check_path_events(sim, cond, owner):
+    """ Check that each path made an event in on= (see path_events()) is a transition of a module in the sim """
+    for leaf in event_leaves(cond) if isinstance(cond, Cond) else []:
+        path = getattr(leaf, 'path', None)
+        if path is None:
+            continue
+        modname, name = path.args
+        mod = next((m for m in sim.declared if m.name == modname), None)
+        if mod is None or name not in mod.graph.transitions:
+            what = f'"{modname}" is not a declared module in the sim' if mod is None else f'"{name}" is not a transition of "{modname}"{"; for entering the state, use ss.state(" + repr(modname + "." + name) + ").enter" if name in mod.graph.states else ""}'
+            errormsg = f'on=ss.state("{modname}.{name}") of "{owner}" is the event of going through a transition, but {what}'
+            raise ValueError(errormsg)
+    return
+
+
 def split_who(who, operator='any', where=None, on=None):
     """
     Split who= of a delivery into its trigger (the events in it) and its condition (the rest)
@@ -660,6 +686,7 @@ def split_who(who, operator='any', where=None, on=None):
             raise TypeError(errormsg)
         parts.append(val)
     who, on, where = parts
+    on = path_events(on)
     if on is not None and isinstance(on, Cond) and not has_event(on):
         errormsg = f'on= of a delivery is an event: a transition (e.g. on=sir.infection), a delivery or one of its outcomes (e.g. on=screening.positive), or a function of the sim; for the people in a state or meeting a condition, use where= (e.g. where=sir.I, interval=1), not on={on}'
         raise TypeError(errormsg)

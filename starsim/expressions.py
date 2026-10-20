@@ -546,7 +546,7 @@ def mother(x, born=False):
     Examples:
         ```python
         mtct = S >> C @ beta_m2c * ss.mother(Pv | Ph | S2 | EL | LL)
-        fetal_eff = ss.where(ss.mother(preg.P.time) > ss.weeks(27), 0.75, 0.98)
+        fetal_eff = 0.98 - 0.23*(ss.mother(preg.P.time) > ss.weeks(27)) # 0.75 after 27 weeks; a comparison is 1 or 0
         newborn = ss.screen(test, who=preg.birth & ss.mother(anc.positive.since <= ss.years(1), born=True))
         ```
     """

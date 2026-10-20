@@ -244,8 +244,29 @@ def test_mother_cond():
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
     S, I = ss.states('S I')
     d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), name='d')
+    for by_path in [False, True]: # With the event itself, or by its path, for a module made before the pregnancy module exists
+        seen = mother_cond(by_path)
+    with pytest.raises(ValueError, match=r"not a transition.*ss.state\('pregnancy.P'\).enter"): # A path in on= is a transition's event, so a state is an error
+        ss.Sim(demographics=ss.Pregnancy(), diseases='sis', networks='random', interventions=ss.screen(ss.Diagnostic(), on=ss.state('pregnancy.P'), name='scr'), n_agents=100, **kw).init()
+    def make(solver): # Nothing else here needs agents
+        S, I = ss.states('S I')
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth('-> S', rate=ss.peryear(0.03)), name='d')
+        nb = ss.screen(ss.Diagnostic(sensitivity=1.0), who=d.births & ss.mother(I, born=True), disease='d')
+        return ss.Sim(diseases=d, interventions=nb, solver=solver, total_pop=1000, **kw)
+    with pytest.raises(ss.CapabilityError, match='mother'): # Agents only: compartments do not know anyone's mother
+        make('ode').run()
+    assert make('auto').init().solver == 'abm'
+    return seen
+
+
+def mother_cond(by_path):
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
+    S, I = ss.states('S I')
+    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), name='d')
     screening = ss.screen(ss.Diagnostic(sensitivity=dict(I=1.0), specificity=1.0, name='dx'), where=preg.P, coverage=0.5, disease='d', name='screening')
-    newborn = ss.screen(ss.Diagnostic(sensitivity=1.0, name='nbdx'), who=preg.birth & ss.mother(screening.positive.since <= ss.years(1), born=True), disease='d', name='newborn')
+    tested = ss.mother(screening.positive.since <= ss.years(1), born=True)
+    trigger = dict(on=ss.state('pregnancy.birth') & tested) if by_path else dict(who=preg.birth & tested)
+    newborn = ss.screen(ss.Diagnostic(sensitivity=1.0, name='nbdx'), **trigger, disease='d', name='newborn')
     seen = sc.objdict(last={}, n=0)
     def check(sim): # Run after both screens, so it sees their events
         ppl = sim.people
@@ -260,13 +281,6 @@ def test_mother_cond():
         seen.n += len(reached)
     ss.Sim(demographics=preg, diseases=d, interventions=[screening, newborn, check], n_agents=10_000, **kw).run()
     assert seen.n > 50
-    def make(solver): # Nothing else here needs agents
-        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth('-> S', rate=ss.peryear(0.03)), name='d')
-        nb = ss.screen(ss.Diagnostic(sensitivity=1.0), who=d.births & ss.mother(I, born=True), disease='d')
-        return ss.Sim(diseases=d, interventions=nb, solver=solver, total_pop=1000, **kw)
-    with pytest.raises(ss.CapabilityError, match='mother'): # Agents only: compartments do not know anyone's mother
-        make('ode').run()
-    assert make('auto').init().solver == 'abm'
     return seen
 
 

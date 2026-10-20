@@ -1418,6 +1418,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def init_pre(self, sim):
         declared = [mod.name for mod in sim.declared]
+        ss.conditions.check_path_events(sim, self.on, self.name)
         if self.disease_list is not None: # Several diseases: their names now, as the sim has them, and the product keyed by them
             names = [d if isinstance(d, str) else d.name for d in self.disease_list]
             names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.Strains) else [n])] # A family by name
