@@ -3,6 +3,8 @@ Test the declared ss.Pregnancy: states, conception, outcomes by gestational age,
 """
 import numpy as np
 import sciris as sc
+import os
+import tempfile
 import pytest
 import starsim as ss
 
@@ -437,6 +439,24 @@ def test_postpartum_ode():
     ode = ss.Sim(demographics=make_postpartum(), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
     a, o = by(abm), by(ode)
     assert np.allclose(a[1:], o[1:], rtol=0.1), (a, o)
+
+
+def test_save_load():
+    """ A pregnancy model saved and loaded mid-run (fetuses, events, memory, the engine's state) ends as if it had not been """
+    sc.heading('Testing save and load of a pregnancy model mid-run')
+    sim = ss.Sim(**make_syphilis(), n_agents=5000, **syph_kw)
+    sim.init()
+    sim.run(until=12)
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, 'preg.sim')
+        sim.save(path)
+        loaded = ss.load(path)
+    loaded.run()
+    sim.run()
+    for key in ['mtct', 'stillbirth', 'born_cs']:
+        assert np.array_equal(sim.results.syph[key].values, loaded.results.syph[key].values), key
+    assert np.array_equal(sim.results.pregnancy.delivery.values, loaded.results.pregnancy.delivery.values)
+    return loaded
 
 
 if __name__ == '__main__':

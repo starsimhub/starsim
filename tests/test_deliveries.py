@@ -3,6 +3,8 @@ Test interventions on declared models: modifiers, conditions, products, and thei
 """
 
 # %% Imports and settings
+import os
+import tempfile
 import pytest
 import numpy as np
 import networkx as nx
@@ -1097,6 +1099,30 @@ def test_whole_run():
         up, down = [make(solver='ode').new(pars=dict(beta=0.3 + d)).run().results.sir.n_I.values for d in [h, -h]]
         assert np.allclose(grad, (up - down)/(2*h), rtol=1e-4, atol=1e-3*np.abs(grad).max())
     return whole
+
+
+def test_save_load():
+    """ A cascade with memory and a delayed test, saved and loaded mid-run, ends as if it had not been """
+    sc.heading('Testing save and load of a cascade mid-run')
+    def make():
+        rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+        pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+        screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
+        confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
+        treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
+        return ss.Sim(make_sis(), interventions=ss.cascade(screening, confirm, treatment, name='care'), solver='abm', stop=120, **kw)
+    sim = make()
+    sim.init()
+    sim.run(until=60)
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, 'care.sim')
+        sim.save(path)
+        loaded = ss.load(path)
+    loaded.run()
+    sim.run()
+    assert np.array_equal(sim.results.sis.n_I.values, loaded.results.sis.n_I.values)
+    assert np.array_equal(sim.results.treatment.delivered.values, loaded.results.treatment.delivered.values)
+    return loaded
 
 
 if __name__ == '__main__':
