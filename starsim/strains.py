@@ -46,12 +46,15 @@ class immunity:
     quantity, multiply.
 
     In a family of diseases (`ss.Strains`), the strains are its members, and `protected=` names the
-    states (or a named sum of states) of each member whose holders are protected. In a strain
+    states (or a named sum of states) of each member whose holders are protected, or an attribute of
+    each member (`ss.attr`, e.g. an antibody level between 0 and 1): then the protection from member k
+    against g is `m[k, g]` times the person's value of k's attribute (0 where it is NaN), read when the
+    quantity is, as a modifier reads it. Attributes need agents for now. In a strain
     dimension (`stratify(strain=..., immunity=ss.immunity(rel_sus=...))`), the strains are the levels
     and a person holds every strain they have had, so there is no `protected=`.
 
     Args:
-        protected (str/list): in a family, the states of each member whose holders are protected, e.g. `'nab'` (a state, a named sum of states, or a list of them)
+        protected (str/list): in a family, the states of each member whose holders are protected, e.g. `'R'` (a state, a named sum of states, or a list of them), or the name of an attribute of each member that scales the protection, e.g. `'nab'`
         rel_sus (array/float): the protection against being infected
         rel_trans (array/float): the protection against infecting others (how much less infectious)
         dur (dict): the protection against time spent in states, by the state's name, e.g. `dict(In=m_sev, Ic=m_sev)` (shorter stays: severity immunity)
@@ -63,9 +66,11 @@ class immunity:
     Examples:
         ```python
         hpv = ss.Strains('hpv', [hpv16, hpv18], immunity=[
-            ss.immunity(protected='nab', rel_sus=m_sus, combine='sum'), # rel_sus of each genotype × (1 − min(1, Σ_k m_sus[k, g]·[in k's nab]))
+            ss.immunity(protected='R', rel_sus=m_sus, combine='sum'), # rel_sus of each genotype × (1 − min(1, Σ_k m_sus[k, g]·[in k's R]))
             ss.immunity(protected='cleared', dur=dict(In=m_sev, Ic=m_sev), combine='sum'), # Shorter stays in In and Ic: severity immunity
         ])
+        # Antibodies drawn at clearance, an attribute of each genotype: nab = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
+        hpv = ss.Strains('hpv', [hpv16, hpv18], immunity=ss.immunity(protected='nab', rel_sus=m_sus, combine='sum')) # rel_sus × (1 − min(1, Σ_k m_sus[k, g]·nab_k))
         flu.stratify(strain=['A', 'B'], immunity=ss.immunity(rel_sus=[[1, 0.5], [0.5, 1]], combine='multiply'))
         ```
     """
@@ -269,7 +274,7 @@ class Strains(ss.Module):
                 errormsg = f'immunity= of "{name}" takes ss.immunity() objects, e.g. ss.immunity(protected="nab", rel_sus=matrix); not {type(imm).__name__}'
                 raise TypeError(errormsg)
             if imm.protected is None:
-                errormsg = f'an ss.immunity of "{name}" needs protected=, the states of each member whose holders are protected (e.g. protected="nab")'
+                errormsg = f'an ss.immunity of "{name}" needs protected=, the states of each member whose holders are protected (e.g. protected="R"), or an attribute of each member that scales the protection (e.g. protected="nab")'
                 raise ValueError(errormsg)
         self.init_prev = init_prev
         self.split = None if split is None else np.array(split, dtype=float)
@@ -335,6 +340,16 @@ class Strains(ss.Module):
                 return None
         return out
 
+    @staticmethod
+    def attr_of(mod, name):
+        """ The attribute of a member that a name refers to, or None if it is not the name of one """
+        if isinstance(name, str):
+            return mod.graph.attrs.get(name)
+        if any(isinstance(n, str) and n in mod.graph.attrs for n in sc.tolist(name)):
+            errormsg = f'protected={name!r} mixes an attribute of "{mod.name}" with other names; an attribute is given alone, e.g. protected="nab"'
+            raise ValueError(errormsg)
+        return None
+
     def __getattr__(self, attr):
         """ A state or named sum of states that every member has is a condition: the people in it in any member, e.g. `where=hpv.infected` """
         stocks = self.__dict__.get('stocks')
@@ -377,10 +392,23 @@ class Strains(ss.Module):
 
         # Protection: one multiplier for each quantity of each member that it lowers
         n = len(members)
-        self.sources = [] # For each ss.immunity, the states of each member whose holders are protected (None for a member that protects against nothing)
+        self.sources = [] # For each ss.immunity, the states of each member whose holders are protected, or the attribute that scales the protection (None for a member that protects against nothing)
         for i,imm in enumerate(self.immunity):
             sources = []
+            attrs = [self.attr_of(mod, imm.protected) for mod in members]
+            if any(a is not None for a in attrs):
+                if not all(a is not None for a in attrs):
+                    which = lambda has: sc.strjoin([mod.name for mod,a in zip(members, attrs) if (a is not None) == has])
+                    errormsg = f'an ss.immunity of "{self.name}" is protected by "{imm.protected}", which is an attribute of {which(True)} but not of {which(False)}; it needs to be an attribute of every member, or states of every member, not both'
+                    raise ValueError(errormsg)
+                if sim.solver != 'abm': # Attributes are kept per agent for now (see ss.attr), so choose_solver() refuses first; this is a safeguard
+                    raise ss.CapabilityError(f'an ss.immunity of "{self.name}" is scaled by the attribute "{imm.protected}", which has no compartmental form yet; run with solver="abm"')
+                for k,a in enumerate(attrs):
+                    gives = any(np.any(imm.matrix(key, n)[k] > 0) for key in imm.values)
+                    sources.append(a if gives else None)
             for k,mod in enumerate(members):
+                if attrs[k] is not None:
+                    continue
                 states = self.states_of(mod, imm.protected)
                 gives = any(np.any(imm.matrix(key, n)[k] > 0) for key in imm.values)
                 if states is None and gives:
@@ -512,7 +540,7 @@ class Strains(ss.Module):
         return
 
     def start_step(self):
-        """ Who is protected, by each source, from the members' states at the start of the step (before anything moves) """
+        """ Who is protected, by each source, from the members' states at the start of the step (before anything moves); an attribute is read when the quantity is (see protection()) """
         super().start_step()
         if not self.immunity:
             return
@@ -528,6 +556,8 @@ class Strains(ss.Module):
                         self.prot[(i, key, g)] = combine_protection(imm.matrix(key, n)[:, g][:, None, None]*held, imm.combine)
             return
         for i,imm in enumerate(self.immunity):
+            if self.by_attr(i): # Read when the quantity is, as a modifier reads it: see protection()
+                continue
             held = np.zeros((n, len(members[0].rel_sus.raw)))
             for k,(mod,states) in enumerate(zip(members, self.sources[i])):
                 for state in states or []:
@@ -539,8 +569,24 @@ class Strains(ss.Module):
                         self.prot[(i, key, g)] = combine_protection(matrix[:, g][:, None]*held, imm.combine)
         return
 
+    def by_attr(self, index):
+        """ Whether an ss.immunity is scaled by an attribute of each member, rather than by the states they are in """
+        return any(isinstance(source, ss.expressions.attr) for source in self.sources[index])
+
+    def attr_level(self, mod, a, n_agents):
+        """ The value of a member's attribute for each agent (by UID), as a level of protection between 0 and 1; none (0) where it is NaN """
+        vals = np.nan_to_num(mod.engine.attr_values(a, ss.uids(np.arange(n_agents))), nan=0.0)
+        if np.any(vals < 0) or np.any(vals > 1):
+            raise ss.OutOfBounds(f'the attribute "{a.name}" of "{mod.name}" scales a protection of "{self.name}", so it needs to be between 0 and 1, but it is {vals.min():n} to {vals.max():n}; scale it, e.g. with a derived attribute')
+        return vals
+
     def protection(self, index, key, g):
-        """ The protection of each agent (by UID) against one member, from one `ss.immunity` on one quantity; none from an immunity that gives that member none, or before the first step (people moved before a run) """
+        """ The protection of each agent (by UID) against one member, from one `ss.immunity` on one quantity; none from an immunity that gives that member none, or before the first step (people moved before a run); from an attribute, its values now """
+        if self.sim.solver == 'abm' and self.by_attr(index): # m[k, g] times each member's attribute, as it is now
+            n_agents = len(self.members[0].rel_sus.raw)
+            held = np.array([self.attr_level(mod, a, n_agents) if a is not None else np.zeros(n_agents) for mod,a in zip(self.members, self.sources[index])])
+            imm = self.immunity[index]
+            return combine_protection(imm.matrix(key, len(held))[:, g][:, None]*held, imm.combine)
         out = getattr(self, 'prot', {}).get((index, key, g))
         if out is None:
             return 0.0 if self.sim.solver != 'abm' else np.zeros(len(self.members[0].rel_sus.raw))
@@ -688,7 +734,9 @@ class Strains(ss.Module):
                 what = f'time in {key.split(".", 1)[1]}' if key.startswith('dur.') else key
                 largest = imm.largest(key, n).max() if not callable(imm.combine) else None
                 shape = f'{n}×{n} matrix' if imm.values[key].ndim else f'{float(imm.values[key]):n} from any member against each'
-                lines.append(f'  immunity: {what} of each member × (1 − protection), the protection being {imm.rule()} of m[k, g] over the members k whose {sc.strjoin(sc.tolist(imm.protected))} they are in ({shape}' +
+                attr = self.attr_of(self.members[0], imm.protected) is not None
+                over = f'm[k, g]·{imm.protected}_k over the members k' if attr else f'm[k, g] over the members k whose {sc.strjoin(sc.tolist(imm.protected))} they are in'
+                lines.append(f'  immunity: {what} of each member × (1 − protection), the protection being {imm.rule()} of {over} ({shape}' +
                              (f', largest protection {largest:.3g})' if largest is not None else ')'))
         if self.init_prev is not None:
             prev = getattr(self.init_prev, '__name__', None) if callable(self.init_prev) and not isinstance(self.init_prev, (ss.Dist, ss.by)) else None
@@ -700,6 +748,9 @@ class Strains(ss.Module):
             lines.append(f'  exclusive: entering {self.exclusive} of one member moves the person to {to} in the others')
         stocks = [f'{key} (union of the members\' {key})' for key in self.stocks if not key.startswith('n_')]
         lines.append(f'  results: {", ".join(stocks + [f"n_{key[2:]}" for key in self.stocks if key.startswith("n_")])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.name}") for each member')
-        lines.append('  compartmental solvers: members side by side; ' + ('protection, one course at a time, ' if self.coupled else '') + 'unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)')
+        if any(self.attr_of(self.members[0], imm.protected) is not None for imm in self.immunity):
+            lines.append('  compartmental solvers: none (protection from an attribute is kept per agent for now)')
+        else:
+            lines.append('  compartmental solvers: members side by side; ' + ('protection, one course at a time, ' if self.coupled else '') + 'unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)')
         text = '\n'.join(lines)
         return text if output else print(text)
