@@ -143,6 +143,21 @@ def test_sti_failure():
     return sims
 
 
+def test_efficacy_forms():
+    sc.heading('Testing efficacy as anything a parameter accepts, and a modifier of the undriven transition for some people')
+    for eff,expected in [(ss.by(amr=[0.9, 0.3]), [0.9, 0.15]), (ss.par(0.7), [0.7, 0.35]), (lambda sim: 0.6, [0.6, 0.3])]:
+        def make(**kwargs):
+            ng = make_sti().stratify(amr=['sens', 'res'], split=[0.5, 0.5])
+            drug = ss.Treatment(moves={ng.cure: eff})
+            return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'),
+                          connectors=ss.modify(ng.cure, multiply=0.5, where=ng.amr == 'res'), **kwargs)
+        for solver,sim in run_both(make).items():
+            r = sim.results.clinic
+            shares = [r.cured.select(amr=lvl).sum()/(r.cured.select(amr=lvl).sum() + r.failed.select(amr=lvl).sum()) for lvl in ['sens', 'res']]
+            assert np.allclose(shares, expected, atol=0.04), f'{solver}: {shares} for {expected}'
+    return sim
+
+
 def test_syphilis_stages():
     sc.heading('Testing a treatment with a destination for each stage: early and late syphilis')
     def make_syph():
@@ -242,6 +257,7 @@ if __name__ == '__main__':
     sc.options(interactive=False)
     undriven = test_undriven()
     failure  = test_sti_failure()
+    forms    = test_efficacy_forms()
     syph     = test_syphilis_stages()
     synd     = test_syndromic()
     bv       = test_bv()
