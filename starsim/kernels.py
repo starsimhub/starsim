@@ -2406,9 +2406,10 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
         if not sh.due[k, ti]:
             continue
         for c in range(nc):
+            before = y[c].copy() # Each group's people as they were, so nobody moved into a group is moved on again (a counter up a level)
             for g in range(ng):
                 e = sh.sel[k, c, g]
-                n = y[c, g]
+                n = before[g]
                 if e <= 0 or n <= 0:
                     continue
                 p = sh.cov[k, c, g]

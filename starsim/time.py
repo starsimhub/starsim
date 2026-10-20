@@ -199,11 +199,15 @@ class TimePar:
 
     @classmethod
     def _defer_ops(cls):
-        """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n, and a function of the sim, which is a parameter in one (ss.peryear(0.02) * trend) """
+        """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n, and a function of the sim, which is a parameter in one (ss.peryear(0.02) * trend); with an ss.by, it applies to each of its values (ss.peryear(0.02) * ss.by(sex=...)) """
         def defer(func, swap):
             def wrapper(self, other):
-                if getattr(other, '_is_expr', False):
+                if isinstance(other, ss.Arr) and not other.initialized or getattr(other, '_is_cond', False): # A module's array before the sim exists (hiv.cd4), or a property of people: a term of a rate
+                    return getattr(ss.transitions.as_expr(ss.conditions.as_cond(other)), swap)(self)
+                elif getattr(other, '_is_expr', False):
                     return NotImplemented
+                elif isinstance(other, ss.by):
+                    return other.map(lambda v: func(self, v))
                 elif isinstance(other, (types.FunctionType, ft.partial)):
                     return getattr(ss.transitions.as_expr(other), swap)(self)
                 return func(self, other)
@@ -1035,11 +1039,13 @@ class prob(Rate):
     probability of 96% representing the chance of the event occurring at least
     once over the new duration of two years.
 
-    However, the behavior is different when a `prob` object is multiplied
-    by a scalar or array. In this case, the probability is simply scaled. This scaling
-    may result in a value greater than 1, which is not valid. For example,
+    When a `prob` object is multiplied by a number, the underlying rate is
+    scaled, not the probability, so the result is always a valid probability:
     >>> p * 2
-    raises an AssertionError because the resulting probability (160%) exceeds 100%.
+    is `ss.prob(0.96, ss.years(1))`, the same as `p + p` (two competing hazards),
+    and `p * 0.2` is 0.275, not 0.16. A probability of 1 is an infinite rate,
+    so it stays 1 whatever it is multiplied by, and cannot be used as the rate
+    of a declared transition.
 
     Use `per` instead if `prob` if you would prefer to directly
     specify the instantaneous rate.
@@ -1306,6 +1312,119 @@ class freq(Rate):
 
     def __mul__(self, other):
         return self._mul(other, self.to_events)
+
+
+#%% Probabilities per act
+
+class peract:
+    """
+    A probability per act, for a transmission over a network that defines acts (e.g. `ss.MFNet`)
+
+    It is not a time value: it has no unit and no conversion, so it means the same at any
+    timestep. A partnership with `a` acts per unit time transmits over a step `dt` with
+    probability `1 − (1 − p)^(a·dt)`. Modifiers, `rel_trans`, `rel_sus`, and source weights
+    multiply the per-act hazard `−ln(1 − p)`, so `beta=0.03` with `rel_trans=10` is
+    `1 − 0.97^10 = 0.263` per act.
+
+    Args:
+        value (float/par/dict): one probability for every direction of the network; or a dict of a value for each direction, keyed as below
+        **directions: a value for each direction of the network, named `<side>2<side>` from the network's sides (`net.directions`), e.g. `m2f` and `f2m` on `ss.MFNet`
+
+    Each value is a number in [0, 1], an `ss.par`, an expression of them, an `ss.timeseries`, or an
+    `ss.by` over a dimension of the susceptible. A direction can also be written as a pair of sides,
+    `{('m', 'f'): 0.3}`, which is the same as `m2f=0.3`. Every direction of the network needs a value
+    (unless one is given for all), and a direction it does not have raises; both are checked when the sim
+    is initialized. On a route without acts (`ss.RandomNet`, mixing pools), it raises `ss.RouteMismatch`.
+
+    Examples:
+        ```python
+        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(m2f=0.001, f2m=0.0005), needles=ss.peract(0.006))))
+        syph = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15})))
+        ```
+    """
+    def __init__(self, value=None, **directions):
+        if isinstance(value, dict):
+            directions = {**value, **directions}
+            value = None
+        if value is not None and directions:
+            errormsg = f'ss.peract() takes one value for every direction, or a value for each direction, not both ({value} and {directions})'
+            raise ValueError(errormsg)
+        if value is None and not directions:
+            errormsg = 'ss.peract() needs a probability per act, e.g. ss.peract(0.01), or one for each direction of the network, e.g. ss.peract(m2f=0.3, f2m=0.15)'
+            raise ValueError(errormsg)
+        self.value = value
+        self.directions = {}
+        for key,val in directions.items():
+            if isinstance(key, tuple):
+                if len(key) != 2 or not all(isinstance(k, str) for k in key):
+                    errormsg = f'A direction of ss.peract() given as a pair is two sides, e.g. ("m", "f"), not {key}'
+                    raise ValueError(errormsg)
+                key = f'{key[0]}2{key[1]}'
+            if key in self.directions:
+                errormsg = f'ss.peract() has the direction {key} twice (as a name and as a pair of sides)'
+                raise ValueError(errormsg)
+            self.directions[key] = val
+        for val in self.values:
+            self.check(val)
+        return
+
+    @property
+    def values(self):
+        """ The values, one or one for each direction """
+        return [self.value] if self.value is not None else list(self.directions.values())
+
+    @property
+    def pars(self):
+        """ The parameters in its values, so they can be fitted """
+        leaves = [leaf for val in self.values if isinstance(val, ss.transitions.Expr) for leaf in val.leaves if isinstance(leaf, ss.par) and not leaf.literal]
+        return list({id(leaf):leaf for leaf in leaves}.values())
+
+    @staticmethod
+    def check(val, where=''):
+        """ A probability per act must be in [0, 1] """
+        if isinstance(val, ss.TimePar):
+            errormsg = f'ss.peract() takes a probability per act, which has no time unit, not {val}{where}'
+            raise ss.WrongDimension(errormsg)
+        raw = val.raw if isinstance(val, ss.par) else val
+        raw = raw.values if isinstance(raw, ss.by) else raw
+        try:
+            vals = np.asarray(raw, dtype=float) # A number or numbers; an expression or a function is checked when it is worked out
+        except (TypeError, ValueError):
+            return
+        if np.any(vals < 0) or np.any(vals > 1):
+            errormsg = f'A probability per act must be between 0 and 1, not {val}{where}'
+            raise ss.OutOfBounds(errormsg)
+        return
+
+    def resolve(self, net):
+        """ The value for each direction of a network, in the order of `net.directions`; checks the keys against them """
+        name = getattr(net, 'name', net)
+        dirs = net.directions
+        if self.value is not None:
+            return [self.value]*max(len(dirs), 1)
+        if not dirs:
+            errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides='
+            raise ss.RouteMismatch(errormsg)
+        sides = f"{name}'s {net.sides_str()}"
+        for key in self.directions:
+            if key not in dirs:
+                errormsg = f'beta for "{name}" has a direction "{key}", which {name} does not have; its directions are {sc.strjoin(dirs, sep=" and ")} ({sides}: see {name}.directions)'
+                raise ss.RouteMismatch(errormsg)
+        missing = [d for d in dirs if d not in self.directions]
+        if missing:
+            errormsg = f'beta for "{name}" has no value for the direction{"s" if len(missing) > 1 else ""} {sc.strjoin(missing, sep=" and ")}; its directions are {sc.strjoin(dirs, sep=" and ")} ({sides}). Give each one, or one value for all, e.g. ss.peract(0.01)'
+            raise ss.RouteMismatch(errormsg)
+        return [self.directions[d] for d in dirs]
+
+    def __repr__(self):
+        if self.value is not None:
+            return f'ss.peract({ss.expressions.value_str(self.value)})'
+        return f'ss.peract({", ".join(f"{k}={ss.expressions.value_str(v)}" for k,v in self.directions.items())})'
+
+    def __eq__(self, other):
+        return isinstance(other, peract) and self.value == other.value and self.directions == other.directions
+
+    __hash__ = object.__hash__
 
 
 #%% Convenience classes

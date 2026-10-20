@@ -402,7 +402,12 @@ class Result(ss.BaseArr):
             dim (str): the dimension, e.g. 'age'
 
         For a result across runs, returns a dict of results across runs instead, one per level.
+        For a result of a family of diseases (`ss.Strains`), the family's name gives each member's own result.
         """
+        family = self.__dict__.get('family')
+        if family is not None and dim == family[0]: # Each member's own
+            name, members, values = family
+            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind)
         strats = self._check_strata()
         if self.runs is not None:
             self._check_dim(dim)

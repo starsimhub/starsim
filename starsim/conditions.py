@@ -21,7 +21,8 @@ ops = {
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
 ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.ppl.age)
-leaves = ['people', 'state', 'dim', 'array', 'incidence']
+leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory']
+memory_kinds = ['ever', 'count', 'since']
 
 
 class Cond:
@@ -33,7 +34,7 @@ class Cond:
     states, and on stratifications.
 
     Args:
-        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence'), an operator, '~', or 'isin'
+        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence', 'event', 'memory'), an operator, '~', or 'isin'
         args (list): the operands
 
     Examples:
@@ -65,6 +66,8 @@ class Cond:
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
+        elif op == 'event': return modname(args[0]) + (f'.{args[1]}' if args[1] is not None else '')
+        elif op == 'memory': return f'{args[0]!r}.{args[1]}'
         elif op == '~':    return f'~{args[0]!r}'
         elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
         return f'({args[0]!r} {op} {args[1]!r})'
@@ -91,6 +94,27 @@ class Cond:
     def __rand__(self, other): return Cond('&', other, self)
     def __ror__(self, other):  return Cond('|', other, self)
     def __invert__(self):     return Cond('~', self)
+
+    @property
+    def ever(self):
+        """ For an event (e.g. `screening.positive`): whether it has happened to each person, as a condition """
+        return self.memory('ever')
+
+    @property
+    def count(self):
+        """ For an event: how many times it has happened to each person, e.g. `screening.count >= 2` """
+        return self.memory('count')
+
+    @property
+    def since(self):
+        """ For an event: the time since it last happened to each person (infinite if never), e.g. `cytology.since >= ss.years(5)` """
+        return self.memory('since')
+
+    def memory(self, kind):
+        if self.op != 'event':
+            errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, or an ss.Event), not of {self}'
+            raise TypeError(errormsg)
+        return Cond('memory', self, kind)
 
     def __rshift__(self, other):
         errormsg = 'A condition is not states: several sources of a transition are a sum of states, S + I + R >> D @ rate (| on states is a condition, for where=)'
@@ -144,6 +168,8 @@ class Cond:
             a, b = a_val, b_val
         a, b = evaluate(a, ctx), evaluate(b, ctx)
         if op in ['&', '|']:
+            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group
+                return ctx.combine(op, args[0], args[1], np.asarray(a, dtype=float), np.asarray(b, dtype=float))
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
 
@@ -200,7 +226,7 @@ def is_static(cond, sim):
         name = args[1]
         mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]
         return any(name in m.graph.states for m in mods) and not any(name in m.graph.transitions for m in mods)
-    elif op in ['array', 'incidence']:
+    elif op in ['array', 'incidence', 'event', 'memory']:
         return False
     elif op == 'isin':
         return is_static(args[0], sim)
@@ -225,15 +251,129 @@ def as_cond(obj):
     """ Convert the things that can stand for a condition (a declared state, an uninitialized array) to one """
     if isinstance(obj, Cond):
         return obj
-    elif isinstance(obj, (ss.State, ss.Transition)): # Looked up by name when the sim runs, since the sim works on copies
-        return Cond('state', getattr(obj, 'module', None), obj.name)
+    elif isinstance(obj, (ss.Delivery, ss.Product)): # A delivery (or product) as an event: the people who received it this step
+        return Cond('event', obj, None)
+    elif isinstance(obj, ss.Event):
+        return Cond('event', obj.mod, obj.name)
+    elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Transfer)): # Looked up by name when the sim runs, since the sim works on copies
+        out = Cond('state', getattr(obj, 'module', None), obj.name)
+        if not isinstance(obj, ss.State):
+            out.kind = 'transfer' if isinstance(obj, ss.transitions.Transfer) else 'transition' # An event, since people go through it
+        return out
     elif isinstance(obj, ss.Arr):
         return from_arr(obj)
     return obj
 
 
+def is_event(cond):
+    """ Whether a condition is an event (or events combined): the people something happened to on this step """
+    if not isinstance(cond, Cond):
+        return False
+    if cond.op in leaves:
+        return cond.op == 'event' or getattr(cond, 'kind', None) is not None
+    return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
+
+
+def has_event(cond):
+    """ Whether a condition has an event in it """
+    if not isinstance(cond, Cond):
+        return False
+    if cond.op in leaves:
+        return is_event(cond)
+    return any(has_event(arg) for arg in cond.args)
+
+
+def event_leaves(cond):
+    """ The event leaves of a condition, including those that its memory is read from """
+    if not isinstance(cond, Cond):
+        return []
+    if cond.op == 'memory':
+        return [cond.args[0]]
+    elif cond.op in leaves:
+        return [cond] if is_event(cond) else []
+    return [leaf for arg in cond.args for leaf in event_leaves(arg)]
+
+
+def memory_leaves(cond, out=None):
+    """ The memory leaves of a condition (e.g. `cytology.since`), each with the values it is compared with """
+    out = [] if out is None else out
+    if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
+        return out
+    if cond.op == 'memory':
+        out.append((cond, []))
+    elif cond.op in comparisons and any(isinstance(arg, Cond) and arg.op == 'memory' for arg in cond.args):
+        mem, other = cond.args if isinstance(cond.args[0], Cond) and cond.args[0].op == 'memory' else cond.args[::-1]
+        out.append((mem, [other]))
+    else:
+        for arg in cond.args:
+            memory_leaves(arg, out)
+    return out
+
+
+def join(op, conds):
+    """ Several conditions joined by an operator, or None if there are none """
+    conds = [c for c in conds if c is not None]
+    out = None
+    for c in conds:
+        out = c if out is None else Cond(op, out, c)
+    return out
+
+
+def split_who(who, operator='any', where=None, on=None):
+    """
+    Split who= of a delivery into its trigger (the events in it) and its condition (the rest)
+
+    who= takes a condition, an event, or a combination with &, |, or a list (with `operator='any'`, the same as |, or `'all'`, the same as &).
+    With an event in it, delivery is triggered: it reaches the people the event happened to on this step who meet the condition parts.
+    `on=` and `where=` are the same thing, joined to it by &. Returns (trigger, condition), either of which may be None.
+    """
+    if operator not in ['any', 'all']:
+        errormsg = f'operator= is "any" (the default: anyone in any of them, the same as |) or "all" (the same as &), not {operator!r}'
+        raise ValueError(errormsg)
+    parts = []
+    for val in [who, on, where]:
+        if isinstance(val, (list, tuple)):
+            if any(isinstance(v, (list, tuple)) for v in val):
+                errormsg = 'who= takes a list of events or conditions, not a list of lists; write the inner ones with | or &, e.g. who=[(a | b), c]'
+                raise TypeError(errormsg)
+            val = join('|' if operator == 'any' else '&', [as_cond(v) for v in val])
+        elif val is not None:
+            val = as_cond(val)
+        if val is not None and not isinstance(val, Cond) and not callable(val):
+            errormsg = f'who=, on=, and where= of a delivery take conditions and events (e.g. who=sir.infection, who=ss.ppl.age < 5), or a function of the sim; not {val!r}'
+            raise TypeError(errormsg)
+        parts.append(val)
+    who, on, where = parts
+    if on is not None and isinstance(on, Cond) and not has_event(on):
+        errormsg = f'on= of a delivery is an event: a transition (e.g. on=sir.infection), a delivery or one of its outcomes (e.g. on=screening.positive), or a function of the sim; for the people in a state or meeting a condition, use where= (e.g. where=sir.I, interval=1), not on={on}'
+        raise TypeError(errormsg)
+    def split(cond):
+        if not has_event(cond):
+            return None, cond
+        elif is_event(cond):
+            return cond, None
+        elif cond.op == '&':
+            (ta, ca), (tb, cb) = split(cond.args[0]), split(cond.args[1])
+            return join('&', [ta, tb]), join('&', [ca, cb])
+        elif cond.op == '|':
+            errormsg = (f'who={cond} joins an event and a condition with |, so it is neither triggered (by an event) nor routine (a condition): '
+                        f'use & for "the event, among those meeting the condition" (e.g. who=screening.positive & ss.ppl.female), or make two steps')
+            raise TypeError(errormsg)
+        errormsg = f'who={cond} applies "{cond.op}" to an event; an event is the people something happened to on this step, so it can be joined to others with | and &, and narrowed with & a condition, but not negated or compared'
+        raise TypeError(errormsg)
+    trigger, cond = split(who) if isinstance(who, Cond) else (None, who)
+    if on is not None and not isinstance(on, Cond): # A function of the sim returning the people
+        trigger = on if trigger is None else Cond('&', trigger, on)
+    elif on is not None:
+        t, c = split(on)
+        trigger, cond = join('&', [trigger, t]), join('&', [cond, c])
+    return trigger, join('&', [cond, where])
+
+
 def from_arr(arr):
-    """ The leaf for an array that has not been initialized: one of the people's own arrays, or a module's """
+    """ The leaf for an array that has not been initialized: one of the people's own arrays, or a module's (an event, for an `ss.Event`) """
+    if isinstance(arr, ss.Event):
+        return Cond('event', arr.mod, arr.name)
     people = getattr(arr, 'people', None)
     if people is not None and people.states.get(arr.name) is arr:
         return Cond('people', arr.name)
@@ -326,10 +466,18 @@ class Selector:
             return self.dim(args[0])
         elif op == 'incidence':
             return self.incidence(cond)
+        elif op == 'event':
+            return ss.interventions.fired(self, cond)
+        elif op == 'memory':
+            return ss.interventions.remembered(self, cond)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):
                 return self.dim(name)
+            elif name in dims and not self.abm and name != 'age': # A binned property, in a compartmental run: each group's worth (see ss.dimensions.Strat.worth())
+                d = dims.index(name)
+                strat = sim.groups.strats[d]
+                return sim.groups.group_vals(d, strat.worth(), outside=strat.worth() @ strat.split)[None, :]
             arr = sim.people[name] # In a compartmental run this is one value per group, and stops with a message if people are not stratified by it
             return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.groups.n_groups]
         name = args[1]
@@ -346,6 +494,11 @@ class Selector:
                 raise ValueError(errormsg)
             return self.in_states([name])
         elif graph is not None and name in graph.transitions:
+            return self.event(mod, name)
+        elif graph is not None and name in graph.transfers: # The people who moved along a stratification this step
+            if not self.abm:
+                raise ss.CapabilityError(f'the condition {cond} is the transfer "{name}" of "{mod.name}" as an event, which cannot run with solver="{sim.solver}" yet.\n'
+                                         f'     Run with solver="abm", or leave the solver as "auto".')
             return self.event(mod, name)
         elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.solvers.Crossing
             return np.isin(self.dim(mod.name), self.dim_strat(mod.name).state_levels[name])
@@ -383,7 +536,58 @@ class Selector:
             out = np.zeros(self.shape, dtype=bool)
             out[engine.events.get(name, ss.uids())] = True
             return out
+        if self.mod is not None and mod is not self.mod: # TL37: crashed with a broadcasting error, or with as many states in each, gave a wrong answer
+            raise ss.CapabilityError(f'the event {mod.name}.{name} cannot select people of "{self.mod.name}" with solver="{self.sim.solver}": a compartmental run does not follow which state of "{self.mod.name}" '
+                                     f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
         return engine.event_frac(name)
+
+    def combine(self, op, ca, cb, a, b):
+        """
+        In a compartmental run: `|` or `&` of two selections of which at least one is an event, a share of each state and group
+
+        Two outcomes of one step (or events that follow from them) are disjoint; an event that follows from another is
+        within it (`triage.positive` within `screening.ascus`); otherwise they are taken as independent within each state and group.
+        """
+        rel = self.relation(ca, cb)
+        if op == '|':
+            out = a + b if rel == 'disjoint' else b if rel == 'a_in_b' else a if rel == 'b_in_a' else a + b - a*b
+        else:
+            out = 0*(a + b) if rel == 'disjoint' else a*np.ones_like(b) if rel == 'a_in_b' else b*np.ones_like(a) if rel == 'b_in_a' else a*b
+        return np.clip(out, 0, 1)
+
+    def lineage(self, cond, depth=0):
+        """ The events that the people of an event are all within: itself, the delivery it is an outcome of, the product, and what triggered the delivery, as (module name, outcome) """
+        if not isinstance(cond, Cond) or depth > 50:
+            return set()
+        if cond.op == 'event':
+            name, outcome = modname(cond.args[0]), cond.args[1]
+            out = {(name, outcome), (name, None)}
+            mod = self.module(name)
+            if isinstance(mod, ss.Delivery):
+                if mod.product is not None:
+                    out |= {(mod.product.name, outcome), (mod.product.name, None)}
+                out |= self.lineage(mod.on, depth + 1)
+            return out
+        elif cond.op in leaves:
+            return {(modname(cond.args[0]), cond.args[1])} if is_event(cond) else set()
+        elif cond.op == '&':
+            return self.lineage(cond.args[0], depth + 1) | self.lineage(cond.args[1], depth + 1)
+        elif cond.op == '|':
+            return self.lineage(cond.args[0], depth + 1) & self.lineage(cond.args[1], depth + 1)
+        return set()
+
+    def relation(self, ca, cb):
+        """ How the people of two events are related: 'disjoint', 'a_in_b', 'b_in_a', or None if not known """
+        la, lb = self.lineage(ca), self.lineage(cb)
+        for name,o1 in la:
+            if o1 is not None and isinstance(self.module(name), ss.Delivery) and any(n == name and o2 is not None and o2 != o1 for n,o2 in lb):
+                return 'disjoint'
+        key = lambda c: (modname(c.args[0]), c.args[1]) if isinstance(c, Cond) and c.op in leaves else None
+        if key(cb) is not None and key(cb) in la:
+            return 'a_in_b'
+        elif key(ca) is not None and key(ca) in lb:
+            return 'b_in_a'
+        return None
 
     def dim_strat(self, name):
         """ The stratification of the sim with a given name, if there is one """
@@ -394,7 +598,9 @@ class Selector:
         return sim.groups.strats[sim.groups.dim_index(name)].edges is not None
 
     def level(self, cond, value):
-        """ A label of a stratification (e.g. 'high', or True) becomes its position """
+        """ A label of a stratification (e.g. 'high', or True) becomes its position; a duration compared with the time since an event, a number in the sim's unit """
+        if isinstance(cond, Cond) and cond.op == 'memory' and isinstance(value, ss.TimePar):
+            return ss.solvers.convert(value, self.sim.unit_base)
         if isinstance(cond, Cond) and cond.op in leaves and isinstance(value, (str, bool, np.bool_)):
             name = cond.args[-1]
             dims = [strat.name for strat in self.sim.groups.strats]

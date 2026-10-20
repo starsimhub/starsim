@@ -607,6 +607,8 @@ class Module(Base):
             # Add it to the list of auto states, if needed
             if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
+            elif isinstance(state, ss.Event): # With the count of how often it happened to each person
+                self.define_states(state.counts, lock=lock, overwrite=overwrite)
 
         # Handle any aliases
         if kwargs:

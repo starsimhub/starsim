@@ -47,6 +47,24 @@ Sizes: S is under a day of agent work, M a few days, L more. **SWA** marks a sil
 - **`rel_trans=10` with `beta=0.03`** (per-act D5). In the proposal, `rel_trans` multiplies the per-act hazard: `1 − (1 − 0.03)^10 = 0.263`, not 0.30. The two readings are close when `beta·rel` is small: at `beta=0.003` they give 0.0296 against 0.03. The hazard form never passes 1 (`rel_trans=40` gives 0.70 where the linear form gives 1.2), and factors compose (`rel 2` then `rel 5` is the same as `rel 10`). Multiplying the probability gives Cliff's 0.3, but then needs a clip at 1. This is a decision now: see "Waiting on Cliff".
 - **`ss.MFNet`** stays.
 
+### Cliff's answers on H0's open decisions (2026-10-19, second round)
+
+| Design | Answer | Action |
+|---|---|---|
+| Behavior vocabulary | **A**: (d), renamed `increment=`; `increment='parity'` is `increment=dict(parity=1)`, and the dict gives +2, −1, and several counters. **B**: `ss.People` stays the class, but `ss.People.age` etc. are not references; `ss.ppl` only. **C**: ok | Behavior steps 5 to 8, and B, in progress |
+| `ss.Strains` | D8, D10 to D13 ok (D10 with a `members=` keyword too). **D9**: "why `reduces='rel_sus'` and not `rel_sus=0.5`?", and D8 "not sure I like this structure overall" | D9 revised to `ss.immunity(protected='nab', rel_sus=m_sus, combine='sum')`, `dur=dict(In=..., Ic=...)` for time in states; built that way, for Cliff to confirm (see the design's D9 row). Steps 0 to 4 in progress |
+| Per-act | **R1**: both `'m2f'` and `('m', 'f')`. **R2**: "I like efficacy, for some interventions": `ss.modify(..., efficacy=0.9, share=use, route=...)` beside `multiply=`. R3 to R6 ok | Steps 1 to 8 in progress |
+| Care cascade | **10**: dislikes `who >> what`; his spelling is `ss.screen(who=due, what=cytology, ...)`, with `ss.cascade(screening, triage, treatment)`. **11**: the cascade is agnostic about its steps. Asked how `interventions=cervical` differs from a list. `cure=0.936` should work as a scalar. **16**: `count_events=` also takes a list. **17**: (a), or (b) if it comes up a lot. 12 to 15 ok | Third draft (with the TLO review folded in) in progress; steps 1 to 4 in progress in Cliff's spelling |
+
+### Thanzi la Onse review
+
+[tlo_review.md](tlo_review.md) (2026-10-19, TL1 to TL72, 24 of them silent) replaces Stage 8's "review for the cascade". Where each finding goes:
+- **Stage 1 (silent), in progress**: TL23 to TL27, TL29, TL30 (and TL28, TL31 if small) in `ss.Deaths`, `ss.Pregnancy`, `ss.Births`; TL4, TL6, TL12, TL13, TL16, TL17, TL35, TL52, TL54, TL58 in the engine; TL38 with the cascade. TL3 is fixed and gets a test.
+- **Stage 2 (crashes), in progress**: TL8, TL37's crash, TL51, TL65, TL66; TL47 with the cascade.
+- **Phase H**: TL9 and TL11 with the behavior vocabulary; TL41, TL43, TL45, TL46, TL48 with the cascade; TL39, TL40, TL42, TL44 are the shared resource (`ss.Resource`, a visit's footprint, `queue=`, `priority=`, `record=`), now a section of the cascade's third draft; TL36 (re-dosing) with MA15 in Stage 4.
+- **Two new design passes** (after Phase H's current designs): **people as data** (TL1 `init=` functions and `ss.People.from_df()`, TL2 time already spent, TL5 several conditional splits, TL10 a module of properties, TL7 the full grid of groups as agents); **the burden of disease** (TL50, TL51: `ss.disability`, `ss.Burden`, a time-integral result).
+- **Stage 4 or 2, the rest**: TL14 (FP26's duplicate), TL15, TL18 to TL22, TL32 to TL34, TL53, TL55 to TL57, TL59 to TL64, TL67 to TL72.
+
 ## Stage 0: close what decision 16 settled, and fix the records (S; first, one agent)
 
 - [x] Spec 12 (line 329 still calls item 18 "an open question") and the user guide: say that the methods differ by design, and give the sizes from the canon review (KR 6.3 at a daily step: agents peak 25% low and 9 days late, binomial 23% high) and from PB's set (contact and count SIRs, an SEIR, cholera, a capped rate, a fixed dwell). Give the W102 note a size. The natural home for this is D-T3's recorded table of solver differences.
@@ -157,11 +175,12 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 ### After H0
 
-- [ ] **Per-act steps 1 to 4** (about 2 days; after D3 and D5): ST2, ST3, HP3, N7 (all **SWA**). Then steps 5 to 7 (condoms as in the revision, ST17, ST23), step 8 (the two-mode network, ST22), and step 9 (the partnership approximation for the compartmental solvers, now in scope; also DF16/X23).
-- [ ] **Strains steps 0 to 4** (agents exact: what the HPV port needs): HP15's single-disease part, members, unions, `ss.immunity` (and KI15, where the compartmental solvers keep only the last strain, **SWA**), joint seeding, `exclusive=`. Then step 5 (side by side for the compartmental solvers, M to L; HP29), step 6 (with the cascade), and step 7.
-- [ ] **Care cascade steps 1 to 3** (events, memory, peers replace nesting), then **4 to 8** in parallel (`delay=`, categorical tests and cure by state, values by disease, `target=`/`priority=`, coded diseases as `disease=`, stratified `prevalence`). These close ST12 to ST16, ST20, HP7, HP24 to HP26, and D23's delivery part.
-- [ ] **Care cascade steps 9 and 10** (L): the delivery program in the Numba kernels, then JAX. This closes DF1, PL2, PL3, PL7, KI23, and C12c's delivery part, and lets cascades be fitted by gradients and NUTS.
-- [ ] **Behavior steps 5 to 9**: `p=` with a `to` axis, counters (in the chosen spelling), clocks, the saved form, and the FPsim contraception port as the test. This closes FP24 to FP28 and FP38's regression part.
+- [x] **Per-act steps 1 to 8** (done 2026-10-19; step 9, the partnership approximation, is still open as its own item below. Annual chance per partnership 0.552 monthly, 0.542 weekly (exact 0.552); f2m 0.275/0.472/0.729 at 2/4/8 acts; condom case 0.441 against 0.440. Departures: `ss.SIS()`/`ss.SIR()` typed betas on `ss.MFNet` now raise `WrongDimension` (the baseline sim uses per-act betas; baseline regenerated with `save_baseline()`); coded diseases still take positional pairs; `ss.MFNet(acts=<rate>)` sets the lognormal mean. Left: modifying network parameters other than `n_contacts` (opioid substitution); docs pages `modules_networks.qmd`, `modules_connectors.qmd`, `t4_diseases.qmd`, `modules_diseases.qmd` use the old beta forms.) Was: **Per-act steps 1 to 4** (about 2 days; after D3 and D5): ST2, ST3, HP3, N7 (all **SWA**). Then steps 5 to 7 (condoms as in the revision, ST17, ST23), step 8 (the two-mode network, ST22).
+- [ ] **Per-act step 9** (the partnership approximation for the compartmental solvers, now in scope; also DF16/X23).
+- [x] **Strains steps 0 to 4** (done 2026-10-19, `starsim/strains.py`, with `ss.immunity(protected=, rel_sus=, rel_trans=, dur=, combine=)` as revised for D9. HP22 0.35 exact; unions equal the OR at every step; KI15 now refuses under compartmental solvers (the exact `2^k` form stays deferred). The HPV port as a family: cross-immunity effect 0.687 at 2 genotypes (HPVsim 0.659), 0.483 at 4 (0.428), about 2.5 times faster than the port. Left: steps 5 to 7; the family is not in the spec or the hash yet; `docs/tutorials/solutions.qmd` says its strain example runs as an ODE (it runs as agents).) Was: **Strains steps 0 to 4** (agents exact: what the HPV port needs): HP15's single-disease part, members, unions, `ss.immunity` (and KI15, where the compartmental solvers keep only the last strain, **SWA**), joint seeding, `exclusive=`. Then step 5 (side by side for the compartmental solvers, M to L; HP29), step 6 (with the cascade), and step 7.
+- [x] **Care cascade steps 1 to 4** (done 2026-10-19 in Cliff's `who=`/`what=` spelling, with `ss.cascade()`, `ss.visit()`, memory and `count_events=`, `ss.Diagnostic`, `positive`, nesting removed, TL38, TL43, TL47. ODE and binomial results unchanged; agents differ by noise (follow-ups' streams are named after themselves). Departures: memory includes an event once its step has run, so first-time positives are `x.positive.count == 1`; `count_events=` adds no levels under compartments. Left: steps 5 on, including `delay=`, categorical tests (`screening.ascus`), `priority=`/`target=`/`above=`, memory of transitions, resistance with `on=`, TL49; the docs still use `ss.Test` and `on_positive=`.) Then steps 5 to 8. Was: **Care cascade steps 1 to 3** (events, memory, peers replace nesting), then **4 to 8** in parallel (`delay=`, categorical tests and cure by state, values by disease, `target=`/`priority=`, coded diseases as `disease=`, stratified `prevalence`). These close ST12 to ST16, ST20, HP7, HP24 to HP26, and D23's delivery part.
+- [ ] **Care cascade, third draft's open decisions 18 to 23, then steps 5 to 10 and the shared resource (steps 13 to 17 of the design)**. **Care cascade steps 11 and 12** (L; were 9 and 10): the delivery program in the Numba kernels, then JAX. This closes DF1, PL2, PL3, PL7, KI23, and C12c's delivery part, and lets cascades be fitted by gradients and NUTS.
+- [x] **Behavior steps 5 to 8, and a contract test for 9** (done 2026-10-19: `increment=`, clocks (`none` is the last level), `p=` with a `to` axis, `ss.People.<x>` removed, properties in distribution parameters, `hiv.cd4` in a rate as agents, outer products of tables, TL9, TL11. Parity by age agents within 0.7% of the ODE. Also fixed: the kernels moved a delivery's people twice. Left: `ss.change` on a table with a `to` column; FPsim comparison (FPsim not installed); notes on binned properties; the two FPsim lines that use `ss.People.age`.) Was: **Behavior steps 5 to 9**: `p=` with a `to` axis, counters (in the chosen spelling), clocks, the saved form, and the FPsim contraception port as the test. This closes FP24 to FP28 and FP38's regression part.
 
 ## Stage 4: other missing capabilities (M each; after the Phase H pieces they lean on)
 
@@ -204,7 +223,7 @@ One agent revises each document in place, keeping what is approved. Each documen
 
 ## Stage 8: reviews, tests, and records (any time; some gate the end)
 
-- [ ] **Thanzi la Onse**: a review for the cascade, after Cliff's own work on TLO with the lingua franca library (`/home/cliffk/idm/git/TLOmodel`; leave it alone until then).
+- [x] **Thanzi la Onse**: reviewed ([tlo_review.md](tlo_review.md)); its findings are placed under "Thanzi la Onse review" above.
 - [ ] **Canon**: the 38 short canon models into a docs gallery and `tests/corpus.py`. Move `canon_review/tests/` into `tests/` as each item is fixed. Add a docs line that the book's k-regular network is `ss.StaticNet` over networkx, not `ss.RandomNet`.
 - [ ] **Naive review**: move the remaining strict xfails into `tests/` once fixed. Rerun the benchmark after the docs are rewritten, with the harder tasks listed. Fix `check_notebooks.py` so it can run `coming_from/` (it runs `eval: false` cells and writes `numpy.py` into the folder).
 - [ ] **Real models at full complexity** ([next-reviews.md](../oct17/next-reviews.md) item 5): after Phase H, since it would mostly rediscover the gaps Phase H fills.
@@ -224,9 +243,11 @@ Answered on 2026-10-19 (his `[CK:]` notes, folded in):
 - **R27**: drop `ss.Samples` for now (restore it later if needed): Stage 2, with a `deferred.md` entry. `ss.Dataset` was not mentioned, so it stays until asked.
 - **The downstream CI gate**: waits.
 
+H0's open decisions were answered on 2026-10-19 (second round, above); `ss.People.<x>` is behavior decision B (removed).
+
 Still open:
-1. **H0's open decisions**, in a table at the end of each design: care cascade 10 to 17, `ss.Strains` D8 to D13, per-act R1 to R6, behavior vocabulary A to C (A is the counter spelling).
-1. **`ss.People.<x>`**: keep it beside `ss.ppl`, or drop it? 25 lines in this repo use it (one test on purpose) and 2 in FPsim. `ss.ppl` takes the vocabulary count from 105 to 106.
+1. **`ss.Strains` D9**: confirm the revised `ss.immunity(protected='nab', rel_sus=m_sus)` structure.
+1. **Care cascade, third draft**: open decisions 18 to 23 (the footprint as `uses=`, `ss.Resource`, `queue=`, whether `on=`/`where=` stay documented, an event `|` a condition raising, `sim.new(resources='unlimited')`).
 1. **R27, `ss.Samples`**: gavi-outbreaks uses it (tests, docs, and about six analysis notebooks: Ebola, yellow fever, measles, cholera, meningitis). Still drop it?
 1. **ST19, a branch to stay**: `ss.Transition(I, L, dur=1, p=0.05)` alone raises (sum 0.05, not 1). Allowing the rest to stay put would hide typos in branch sums; a keyword (e.g. `rest='stay'`), or keep the error?
 2. **NR13**: no progress bar for very short runs, and naming a clashing product after its delivery (this changes result keys).

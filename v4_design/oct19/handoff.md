@@ -55,6 +55,20 @@ Tests after these (latest): `test_*.py -n 4` 400 passed, 11 skipped; `switching 
 
 Tests after the merge: `test_*.py -n 4` 405 passed, 11 skipped; `switching -n 3` 44 passed, 1 skipped, 8 xfailed. Agents' worklogs are kept in the session scratchpad as `WORKLOG_<dest|dwell|behav>.md` (worktrees removed).
 
+## Done (third session, 2026-10-19, evening)
+
+After Cliff's second-round answers on H0 and the TLO review ([tlo_review.md](tlo_review.md)); both are placed in [implementation.md](implementation.md) ("Cliff's answers on H0's open decisions", "Thanzi la Onse review"). The answers are recorded in the behavior, per-act and strains designs' last tables; the care cascade has a third draft (Cliff's `who=`/`what=` spelling, the TLO health system, a shared-resource proposal, open decisions 18 to 23).
+
+Six agents in detached worktrees from `710a5f71`, merged file by file (worklogs in the session scratchpad as `WORKLOG_<tlodemog|strains|tloengine|behav2|peract|cascade>.md`; worktrees removed):
+- **TLO demography** (TL23 to TL31, MA18's rest): see the CHANGELOG. Decisions: a cause of death is the module's name; a bare `p_loss` is per week; a contested death is given to one module at random; a split by age with rows summing to 1 is shares within age groups.
+- **TLO engine** (TL3, TL4, TL6, TL8, TL12, TL13, TL16, TL17, TL35, TL37's crash, TL51, TL52, TL54, TL58, TL65, TL66). TL12 kept the spec (a number times a probability scales the hazard); TL16 on one transition with several destinations keeps scaling the dwell, with a note.
+- **`ss.Strains` steps 0 to 4**, KI15 (refused). **Per-act steps 1 to 8.** **Behavior steps 5 to 8** and the contract test. **Cascade steps 1 to 4.** What each left is beside its item in implementation.md.
+- Merge fixes: maternal one-way kept from both sides; `ss.Test`/`diagnosed` in the other agents' new tests renamed; vocabulary counts 111 `ss.` names (47 new), 159 in all.
+
+Tests after all merges: `test_*.py -n 4` 435 passed, 11 skipped; `switching -n 3` 44 passed, 1 skipped, 8 xfailed. Spec synced to LFD (all files). CHANGELOG updated.
+
+**Docs now out of date** (not edited, since docs wait for the final implementation): pages using `ss.Test`, `on_positive=`, beta pairs on `ss.MFNet`, or `ss.People.age` will fail to run.
+
 ## Not started (next, in plan order)
 
-Stages 1 and 2 are done except as noted (ST19 and R27 wait on Cliff; FP39 rest, FP29, MA20, FP8 open). Next: Cliff's answers on H0's open decisions, then the per-act steps 1 to 4, strains steps 0 to 4, and the cascade, in plan order ("After H0").
+Stages 1 and 2 are done except as noted (ST19 and R27 wait on Cliff; FP39 rest, FP29, MA20, FP8 open). Next: Cliff's answers on the cascade's decisions 18 to 23 and on `ss.Strains` D9; meanwhile per-act step 9 (the partnership approximation), strains steps 5 to 7, cascade step 5 (`dur=0`) and steps 6 to 10, the two new design passes from TLO (people as data; the burden of disease), and Stage 4.

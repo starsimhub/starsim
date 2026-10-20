@@ -63,13 +63,19 @@ where the outer sum is over routes `r`, `c[r,i,j]` is route `r`'s contact rate, 
 
 ### Per-edge form
 
-On a network that keeps individual contacts, the same quantities apply per edge. For an edge between infectious `u` and susceptible `v` carrying `acts` acts per unit time (1 if the network does not define acts):
+On a network that keeps individual contacts, the same quantities apply per edge. On a network with acts (`ss.MFNet`, `ss.PartnerNet(acts=...)`, a subclass of `ss.SexualNetwork`), for an edge `e` from infectious `u` to susceptible `v` with `a[e]` acts per unit time and edge weight `w[e]`:
 
 ```
-hazard[e] = β · acts[e] · rel_trans[u] · rel_sus[v]
-p[e]      = 1 − exp(−hazard[e] · dt)
-p[v]      = 1 − Π_e (1 − p[e])         over all edges into v
+h[d]      = −ln(1 − p[d])                         the hazard per act, for the edge's direction d (from u's side to v's)
+M[e]      = Π_k (1 − s_k · (1 − m_k))             the modifiers of the transmission on this route (s_k = 1 without share=)
+hazard[e] = w[e] · a[e] · h[d] · w_s · rel_trans[u] · rel_sus[v] · M[e]     (w_s the weight of u's state in source=)
+p[e]      = 1 − exp(−hazard[e] · dt)            (= 1 − (1 − p[d])^(a[e]·dt) when nothing else applies)
+p[v]      = 1 − Π_e (1 − p[e])                    over all edges into v
 ```
+
+`rel_trans`, `rel_sus`, source weights, edge weights, and modifiers (of `beta`, of the transmission, with or without `route=`) all multiply the hazard of each act, so `beta=0.03` with `rel_trans=10` is `1 − 0.97^10 = 0.263` per act; the product never passes 1, and factors compose in any order. Over a year the edge transmits with `1 − (1 − p)^a`, whatever the step. A network written as code that overrides `net_beta()` keeps Starsim 3's contract instead: it is called once for each direction with the probability per act and the edges of that direction, and what it returns is the probability for the partnership in the step, which `rel_trans` and `rel_sus` then multiply.
+
+On a network without acts, `β` is a probability (or rate) per contact: `p[e] = 1 − exp(−β·dt)` times the edge weight, `rel_trans[u]`, and `rel_sus[v]`.
 
 The product form for `p[v]` MUST be used; adding the per-edge probabilities overcounts for people with many contacts.
 
@@ -79,19 +85,21 @@ Infectiousness belongs to the disease and contact to the routes, but infectiousn
 
 <!-- fragment -->
 ```python
-infection = ss.transmission('S -> I', beta=dict(mf=[0.008, 0.004], needles=0.03))
+infection = ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)))
 sim = ss.Sim(hiv, networks=[ss.MFNet(), needles])
 ```
 
-- A single number applies to every route.
+- A single value applies to every route.
 - A dict is keyed by network or layer name, and names every route: a key that matches no route, or a route with no key, raises `RouteMismatch` when the sim is initialized. Under every solver the dict is applied in one place, to the exposure through each route.
 - A route has no `beta` of its own in a declared model (`ss.MixingPool(beta=...)` other than 1 raises `RouteMismatch`; `ss.contacts()` takes none): the `beta` belongs to the transmission.
-- A pair is the two directions of a directed network (for `ss.MFNet`, male to female and then female to male).
+- On a network with acts, `beta` is a probability per act: `ss.peract(p)`, or a bare number (as in Starsim 3). A typed rate there (`ss.permonth(b)`, `ss.probpermonth(b)`) raises `WrongDimension`, since a rate per unit time times acts per unit time is not a hazard. `ss.peract` on a route without acts raises `RouteMismatch`: there is no act to be per.
+- Directions are named, never positional. A network says what its **sides** are (`sides=`, a dict of a label to a condition over people, or a class attribute): `ss.MFNet` has `m` and `f` (people's sex), `ss.PartnerNet(sides='sex')` has `m` and `f` with partnerships between anyone, `ss.PartnerNet(between=('fsw', 'client'))` has its two groups, and the mother-to-child networks have `mother` (`p1`) and `child` (`p2`). Its directions, `net.directions`, are `<side of the infectious partner>2<side of the susceptible one>` for each pair of sides its edges can join: `m2f` and `f2m` on `ss.MFNet`; `m2f`, `f2m`, `m2m`, `f2f` with `sides='sex'`; `fsw2client` and `client2fsw`; and `mother2child` only, since the mother-to-child networks transmit one way. A network with no sides has no directions and takes one value. `ss.peract(m2f=0.3, f2m=0.15)` gives one for each (a direction may also be written as a pair of sides, `{('m', 'f'): 0.3}`); every direction needs a value, unless one is given for all, and a direction the network does not have raises `RouteMismatch`, listing those it has. The engine labels each edge's ends by side once a step, so the order of a network's partners does not matter.
+- A pair (`[b1, b2]`) raises `RouteMismatch`, giving the `ss.peract` spelling.
 - The operator form takes the same dict as its `beta`.
 
 ### Units
 
-`beta` times the contact rate is a hazard. Bare numbers always work: a bare `beta` with the default mixing is a rate in the sim's unit; with a route it is a probability per contact, and a bare `n_contacts` is contacts per unit time. One of the two may carry a time unit (`beta=ss.perday(0.03)` with `n_contacts=10`, or `beta=0.03` with `n_contacts=ss.perday(10)`). If both carry one, the product is not a hazard and `WrongDimension` is raised.
+`beta` times the contact rate is a hazard. Bare numbers always work: a bare `beta` with the default mixing is a rate in the sim's unit; with a route it is a probability per contact (per act, on a network with acts), and a bare `n_contacts` is contacts per unit time. On a network with acts, `acts=` is acts per unit time in each partnership: a rate (`ss.freqperweek(2)`), or a distribution of rates drawn once for each partnership (`ss.lognorm_ex(ss.freqperyear(80), ss.freqperyear(30))`, the default of `ss.MFNet`); the edge keeps its acts in a step, `a·dt`, as a real number, never truncated. A bare number, or a whole number of acts per step drawn once (`ss.poisson(lam=ss.freqperyear(80))`), would depend on the step, so raises on lasting partnerships. One of the two may carry a time unit (`beta=ss.perday(0.03)` with `n_contacts=10`, or `beta=0.03` with `n_contacts=ss.perday(10)`). If both carry one, the product is not a hazard and `WrongDimension` is raised.
 
 ## Counts used literally
 
@@ -177,6 +185,8 @@ Routes are passed with Starsim's keyword `networks=`, which accepts networks and
 | `ss.MixingPools(...)`, `ss.contacts('Kenya')` | a contact matrix between groups | exact | exact |
 | `ss.RandomNet(n_contacts=c)` | individual contacts, redrawn or persisting for `dur` | exact | approximated by homogeneous mixing with `c` contacts; exact as the population grows when contacts are redrawn every step |
 | `ss.MFNet(...)`, `ss.PartnerNet(...)`, and other networks of partnerships | partnerships with durations and acts; `beta` is per act | exact | none yet: `CapabilityError` |
+| `ss.PartnerNet(between=(a, b), n_contacts=dict(b=rate))` with no `dur=` | one-off contacts between two groups, with acts per contact | exact | exact: a contact matrix between the two groups (levels of one stratification), with `1 − E[exp(−K·h)]` per contact for `K` acts |
+| `ss.contacts(matrix, dims=['sex', 'risk'])` | a contact matrix over several stratifications together | exact | exact |
 | `ss.StaticNet(graph=...)` | a fixed set of contacts | exact | approximated by homogeneous mixing with the mean degree of its graph (or, for a random graph made when the sim starts, its mean number of contacts); `CapabilityError` for a graph made by another function |
 | counts used literally (`W.n`, `Iv.n`) | nothing; the rate is the hazard | exact | exact |
 
@@ -217,7 +227,7 @@ A network is usually described by how it is generated, since that is what modele
 ss.MFNet(
     n_contacts  = ss.poisson(0.7),     # how many partners at a time
     dur         = ss.days(50),         # how long partnerships last
-    acts        = ss.perweek(2),       # how often, within a partnership
+    acts        = ss.freqperweek(2),   # how often, within a partnership (acts per unit time)
     concurrency = 0.22,                # the share of people with more than one partner at once
 )
 ```
@@ -234,7 +244,7 @@ A one-mode network of partnerships is described the same way, by `ss.PartnerNet`
 ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)   # 175 partnerships among 500, 110 people with two or more, nobody with four or more
 ```
 
-The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target. Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`), and `net.check()` reports the share realized. `n_contacts` can be given for each level of a property of people (`n_contacts=ss.by(risk=[0.4, 1.6])`, EpiModel's nodefactor), and `acts=` (a number, a distribution, or a rate such as `ss.perweek(2)`) makes `beta` per act, so a partnership transmits with probability `1 − (1 − beta)^acts` in a step (EpiModel's act rate). Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
+The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target. Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`), and `net.check()` reports the share realized. `n_contacts` can be given for each level of a property of people (`n_contacts=ss.by(risk=[0.4, 1.6])`, EpiModel's nodefactor), and `acts=` (acts per unit time: a rate such as `ss.freqperweek(2)`, or a distribution of rates drawn once for each partnership) makes `beta` per act, so a partnership transmits with probability `1 − (1 − beta)^(a·dt)` in a step (EpiModel's act rate). `where=` (a condition over people) limits who takes part, e.g. a needle-sharing network among people who inject. `between=(a, b)` makes a two-mode network: each partnership joins one person of each group (levels of a stratification or boolean properties of people), which are its sides; `n_contacts` can be a number for each (`dict(fsw=3, client=0.5)`), whose targets balance only in the mean, the surplus of one group waiting as in `ss.MFNet`. With `between=` and no `dur=`, contacts are one-off: they last a step, `n_contacts` is a rate for one group (`dict(client=ss.permonth(1))`), whose contacts are each with someone of the other group at random, and `acts=` is acts per contact (default 1). Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
 
 ## Frequency and density dependence
 

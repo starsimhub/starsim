@@ -96,7 +96,7 @@ def vaccination(**kwargs):
 
 def coinfection(**kwargs):
     """ 9. HIV and syphilis, each modifying the other, over a sexual network """
-    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.002, 0.001])), init_prev=0.05, name='hiv')
+    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.002, f2m=0.001))), init_prev=0.05, name='hiv')
     syph = ss.Disease(infection=ss.transmission('S -> I', beta=0.01), cure=ss.progression('I -> S', dur=ss.years(3)), init_prev=0.05, name='syph')
     connectors = [
         ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'),
@@ -107,7 +107,7 @@ def coinfection(**kwargs):
 
 def network(**kwargs):
     """ 10. An SIS over a sexual network, which 'auto' runs as agents """
-    sis = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.08, 0.05])), recovery=ss.progression('I -> S', dur=ss.years(5)), init_prev=0.05, name='sis')
+    sis = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.08, f2m=0.05))), recovery=ss.progression('I -> S', dur=ss.years(5)), init_prev=0.05, name='sis')
     return make_sim(sis, kwargs, networks=ss.MFNet(), n_agents=2_000, start=2000, stop=2010)
 
 
@@ -149,10 +149,11 @@ def malaria(**kwargs):
 def screening(**kwargs):
     """ 13. Screening in rounds, with treatment of those who test positive """
     sis = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=10), init_prev=0.01, name='sis')
-    test = ss.Test(sensitivity=0.9, specificity=0.95)
+    test = ss.Diagnostic(sensitivity=0.9, specificity=0.95)
     drug = ss.Treatment(cure=0.95)
-    screen = ss.screen(test, coverage=0.4, interval=7, start=30, on_positive=ss.treat(drug, coverage=0.8), name='screen')
-    return make_sim(sis, kwargs, unit='day', stop=150, total_pop=10_000, interventions=screen)
+    screen = ss.screen(test, coverage=0.4, interval=7, start=30, name='screen')
+    treatment = ss.treat(drug, who=screen.positive, coverage=0.8, name='treatment')
+    return make_sim(sis, kwargs, unit='day', stop=150, total_pop=10_000, interventions=[screen, treatment])
 
 
 def custom(**kwargs):

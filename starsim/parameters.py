@@ -519,9 +519,11 @@ class SimPars(Pars):
         """
         name = mod.name
         if name in names:
-            if mod._default_name:
+            if mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. vaccine = ss.vaccinate(ss.Vaccine(...)), where the delivery takes the name of its variable: the product is vaccine_vaccine
+                mod.name = mod.label = sc.uniquename(f'{name}_{type(mod).__name__.lower()}', list(names), style='_%d')
+            elif mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
-                if isinstance(mod, ss.Product): # e.g. vaccine = ss.vaccinate(ss.Vaccine(...)), where the delivery takes the name of its variable
+                if isinstance(mod, ss.Product): # Another product of the same default name
                     ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. ss.Vaccine(..., name="{name}_product")')
                 elif not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
                     ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
@@ -767,6 +769,9 @@ class by:
 
     A value may itself vary in time (`ss.timeseries` or `ss.seasonal`), in the keyword and table forms.
 
+    In `p=` of a transition with several destinations, a dimension called `to` is the destination: its labels are
+    the names of destination states, and the entry of `p=` it is in is normalized over them (see `ss.Transition`).
+
     Examples:
         ```python
         beta = ss.by(age=[0.08, 0.05, 0.03])
@@ -776,6 +781,7 @@ class by:
         beta = ss.by(age=[ss.timeseries({2020: 0.08, 2021: 0.04}), 0.05, 0.03]) # Children's value changes in 2021
         mu = ss.by(sex=dict(female=0.008, male=0.011)) # From people.female, with or without a dimension by sex
         p = ss.by(dict(age=range(15, 50), value=vals)) # By single year of age (bins with these lower edges)
+        mix = ss.by(dict(age=[15, 15, 25, 25], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6])) # A switching row by age, over the destinations
         ```
     """
     def __init__(self, table=None, dims=None, **kwargs):
@@ -832,6 +838,10 @@ class by:
             return self.map(lambda v: func(v, other))
         elif isinstance(other, by) and self.given and other.given and not set(self.dims) & set(other.dims) and op == '*': # A product over different dimensions, given as keywords, e.g. by(age=...) * by(sex=...)
             return by(**self.given, **other.given)
+        elif isinstance(other, by) and op == '*' and not set(self.dims) & set(other.dims) and self.as_table() is not None and other.as_table() is not None: # Tables (or values by label) over different dimensions: every combination of their rows
+            rows = self.as_table().merge(other.as_table(), how='cross', suffixes=('', '_other'))
+            rows['value'] = [func(a, b) for a,b in zip(rows['value'], rows['value_other'])]
+            return by(rows.drop(columns='value_other'))
         elif isinstance(other, by) and self.dim is not None and other.dim == self.dim and isinstance(self.values, dict) and isinstance(other.values, dict):
             if self.values.keys() != other.values.keys():
                 errormsg = f'Cannot combine an ss.by() of {sc.strjoin(self.values.keys())} with one of {sc.strjoin(other.values.keys())}'
@@ -891,6 +901,50 @@ class by:
             return f'by(table of {len(self.table)} rows by {sc.strjoin(self.dims)})'
         return f'by({", ".join(f"{k}={v}" for k,v in self.given.items())})'
 
+    def as_table(self):
+        """ The values as a table, if they are one or are given by label over one dimension (`ss.by(sex=dict(...))`); else None """
+        if self.table is not None:
+            return pd.DataFrame(self.table)
+        vals = self.given.get(self.dim) if self.given and self.dim is not None else None
+        if isinstance(vals, dict):
+            return pd.DataFrame({self.dim:list(vals.keys()), 'value':list(vals.values())})
+        return None
+
+    def to_labels(self):
+        """ The destinations of a value with a `to` axis, if it names them (a table's column, or a dict by name); None if it gives them by position """
+        if self.table is not None:
+            return list(dict.fromkeys(str(v) for v in self.table['to']))
+        vals = self.given.get('to') if self.given else None
+        return [str(k) for k in vals] if isinstance(vals, dict) else None
+
+    def at(self, to, labels):
+        """
+        The value for one destination of a value with a `to` axis: a value, or an `ss.by` over its other dimensions
+
+        Args:
+            to (str): the destination
+            labels (list): the destinations of the entry it is in, in order, for values given by position
+        """
+        others = [dim for dim in self.dims if dim != 'to']
+        def position(n):
+            if n != len(labels):
+                raise ss.ShapeError(f'{self} gives {n} values over "to" by position, but the entry of p= it is in covers {len(labels)} destinations ({sc.strjoin(labels)})')
+            return labels.index(to)
+        if self.array is not None:
+            axis = self.dims.index('to')
+            arr = np.take(self.array, position(self.array.shape[axis]), axis=axis)
+            return by(arr, dims=others) if others else float(arr)
+        if self.table is not None:
+            rows = self.table[[str(v) == to for v in self.table['to']]].drop(columns='to').reset_index(drop=True)
+            if not len(rows): # A destination it does not name has none
+                return 0.0
+            return by(rows) if others else rows['value'].iloc[0]
+        vals = self.given['to']
+        val = {str(k):v for k,v in vals.items()}.get(to, 0.0) if isinstance(vals, dict) else sc.tolist(vals)[position(len(sc.tolist(vals)))]
+        if others: # A product with values by other dimensions
+            return as_expr(by(**{dim:self.given[dim] for dim in others}))*as_expr(val)
+        return val
+
     def keys(self, dim):
         """ How the values along one dimension are given: ('edges', array) for a table's column of numbers (lower bin edges), ('keys', labels) for a table's column of labels or a dict of values by label, or None for values by position """
         if self.table is not None:
@@ -906,6 +960,8 @@ class by:
     def check(self, sim, note=False):
         """ Check the values against the sim's dimensions (`ss.ShapeError`), and that a property of people that is not one is given by value (with `note=True`, when the sim is built, also note a table averaged over groups); returns the positions of the sim's dimensions it is by, and those dimensions """
         names = [strat.name for strat in sim.groups.strats]
+        if 'to' in self.dims: # Over the destinations of a transition, which is taken a destination at a time (see at())
+            return [], []
         for dim in self.dims:
             if dim not in names and self.keys(dim) is None: # By position, which needs the dimension's levels
                 if dim == 'sex':
@@ -924,14 +980,15 @@ class by:
         elif self.table is None:
             for strat in strats:
                 vals = self.given[strat.name]
+                labels = strat.coarse_labels if strat.coarse is not None else strat.labels # A clock's levels as given, when they are steps
                 if isinstance(vals, dict):
-                    missing = [str(label) for label in strat.labels if str(label) not in [str(k) for k in vals]]
+                    missing = [str(label) for label in labels if str(label) not in [str(k) for k in vals]]
                     if missing:
-                        raise ss.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(strat.labels)}).')
+                        raise ss.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
                     continue
-                n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else strat.n # One value is for every level, e.g. ss.by(subpop=2.2)
-                if n != strat.n:
-                    raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else len(labels) # One value is for every level, e.g. ss.by(subpop=2.2)
+                if n != len(labels):
+                    raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
         if note and sim.solver != 'abm':
             for strat in strats:
                 kind = self.keys(strat.name)
@@ -969,7 +1026,9 @@ class by:
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
                 if isinstance(vals, dict): # By label, in the order of the levels
                     vals = {str(k):v for k,v in vals.items()}
-                    vals = [vals[str(label)] for label in strat.labels]
+                    vals = [vals[str(label)] for label in (strat.coarse_labels if strat.coarse is not None else strat.labels)]
+                if strat.coarse is not None and isinstance(vals, (list, tuple)) and len(vals) == len(strat.coarse_labels): # A clock whose levels are steps: each step takes the value of the level as given that it is in
+                    vals = [vals[c] for c in strat.coarse]
                 if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
                     single, items = False, vals
                 else:
@@ -1009,14 +1068,17 @@ class by:
                     if str(val) not in labels:
                         raise ss.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                     parts.append([(labels.index(str(val)), 1.0)])
+                elif isnull(val) and strat.kind == 'clock': # People who have not had the event: a clock's level none
+                    parts.append([(strat.n - 1, 1.0)])
                 elif isnull(val) or strat.edges is None: # People with no value, who are in no group
                     parts.append([])
                 else:
-                    cap = max(keys[-1], strat.edges[-1]) + 1 # The last bin of each is open-ended
+                    edges = strat.edges[:-1] if strat.kind == 'clock' else strat.edges # A clock's last level is none, with no time
+                    cap = max(keys[-1], edges[-1]) + 1 # The last bin of each is open-ended
                     lo = float(val)
                     hi = keys[keys > lo][0] if np.any(keys > lo) else cap
-                    ends = np.append(strat.edges[1:], cap)
-                    overlap = np.maximum(np.minimum(hi, ends) - np.maximum(lo, strat.edges), 0)
+                    ends = np.append(edges[1:], cap)
+                    overlap = np.maximum(np.minimum(hi, ends) - np.maximum(lo, edges), 0)
                     parts.append([(i, w) for i,w in enumerate(overlap) if w > 0])
             value = float(convert(row['value']))
             for combo in itertools.product(*parts):
@@ -1024,7 +1086,12 @@ class by:
                 weight = np.prod([w for i,w in combo])
                 num[index] += weight*value
                 den[index] += weight
-        return np.divide(num, den, out=np.zeros_like(num), where=den > 0)
+        out = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
+        for i,strat in enumerate(strats): # A clock with no row for none: the mean over its other levels, as agents take it (weighted by the people at each)
+            if strat.kind == 'clock' and not np.take(den, [strat.n - 1], axis=i).any():
+                inner = np.take(out, range(strat.n - 1), axis=i)
+                np.put_along_axis(out, np.full([1 if j == i else s.n for j,s in enumerate(strats)], strat.n - 1), inner.mean(axis=i, keepdims=True), axis=i)
+        return out
 
     def on_people(self, sim):
         """ Whether, as agents, it is read from each person's own values rather than by group: over a property that is not a dimension of the sim, or a table whose numbers are bin edges other than the dimension's (e.g. single years of age, against age groups) """
@@ -1190,9 +1257,11 @@ class timeseries(TimeValue):
     Before the first time the first value is used, and after the last time the last.
 
     Args:
-        data (dict/str/dataframe): the value at each time, as a dict, a dataframe (the first column is
-            the time, the second the value), or the name of a file holding one. A time is a date, or a
-            number, which is a time in the sim's unit (in a sim with dates, that long after the start)
+        data (dict/str/dataframe/list): the value at each time, as a dict, a dataframe (the first column is
+            the time, the second the value), or the name of a file holding one; or the times, with the values
+            as the second argument (`ss.timeseries(times, values)`). A time is a date, or a number, which is
+            a time in the sim's unit (in a sim with dates, that long after the start)
+        values (list): the values, if `data` is the times
         mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings), or 'spline'
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
 
@@ -1204,7 +1273,14 @@ class timeseries(TimeValue):
         sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
         ```
     """
-    def __init__(self, data, mode='constant', period=None):
+    def __init__(self, data, values=None, mode='constant', period=None):
+        if isinstance(values, str): # ss.timeseries(data, 'linear'): the mode
+            values, mode = None, values
+        if values is not None: # ss.timeseries(times, values), as np.interp() takes them (TL65: the values were read as mode=)
+            if len(data) != len(values):
+                errormsg = f'ss.timeseries() was given {len(data)} times but {len(values)} values; give one value for each time'
+                raise ValueError(errormsg)
+            data = dict(zip(data, values))
         if isinstance(data, str):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if not isinstance(data, dict):

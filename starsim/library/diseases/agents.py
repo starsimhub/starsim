@@ -76,7 +76,7 @@ class AgentSIR(ss.Infection):
         # Trigger deaths
         deaths = (self.ti_dead <= self.ti).uids
         if len(deaths):
-            sim.people.request_death(deaths)
+            sim.people.request_death(deaths, cause=self)
         return
 
     def set_prognoses(self, uids, sources=None):

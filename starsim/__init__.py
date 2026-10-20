@@ -68,7 +68,7 @@ from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dis
 
 t('time')
 from .time import (
-    TimePar, dur, Rate, prob, per, freq,
+    TimePar, dur, Rate, prob, per, freq, peract,
     years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
     probperday, probperweek, probpermonth, probperyear,
@@ -111,13 +111,13 @@ from .demographics import (
 )
 
 t('products')
-from .products import Product, Dx, Tx, Vx, Vaccine, Treatment, Test
+from .products import Product, Dx, Tx, Vx, Vaccine, Treatment, Diagnostic
 
 t('interventions')
 from .interventions import (
     Intervention, RoutineDelivery, CampaignDelivery,
     BaseTest, BaseScreening, BaseTriage, BaseTreatment, treat_num, BaseVaccination,
-    Delivery, vaccinate, treat, screen,
+    Event, Delivery, vaccinate, treat, screen, visit, cascade,
 )
 
 t('analyzers')
@@ -145,6 +145,7 @@ from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.s
 
 t('diseases')
 from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
+from .strains import immunity, Strains
 
 t('loop')
 from .loop import Loop
@@ -227,10 +228,11 @@ _removed = {
     'simple_vx':          "ss.Vaccine(efficacy=e) (leaky, as by default in Starsim 3; ss.Vaccine(efficacy=e, leaky=False) for all-or-nothing)",
     'routine_vx':         "ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) (leaky, as by default in Starsim 3; ss.Vaccine(efficacy=e, leaky=False) for all-or-nothing)",
     'campaign_vx':        "ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, at=[y1, y2]) (leaky, as by default in Starsim 3; ss.Vaccine(efficacy=e, leaky=False) for all-or-nothing)",
-    'routine_screening':  "ss.screen(ss.Test(sensitivity=..., specificity=...), coverage=p, start=y, interval=ss.years(1))",
-    'campaign_screening': "ss.screen(ss.Test(sensitivity=..., specificity=...), coverage=p, at=[...])",
-    'routine_triage':     "a follow-up test: ss.screen(test1, ..., on_positive=ss.screen(test2, ...))",
-    'campaign_triage':    "a follow-up test: ss.screen(test1, ..., on_positive=ss.screen(test2, ...))",
+    'routine_screening':  "ss.screen(ss.Diagnostic(sensitivity=..., specificity=...), coverage=p, start=y, interval=ss.years(1))",
+    'campaign_screening': "ss.screen(ss.Diagnostic(sensitivity=..., specificity=...), coverage=p, at=[...])",
+    'routine_triage':     "a follow-up test, as a step of its own: screening = ss.screen(test1, ...); triage = ss.screen(test2, who=screening.positive, ...)",
+    'campaign_triage':    "a follow-up test, as a step of its own: screening = ss.screen(test1, ...); triage = ss.screen(test2, who=screening.positive, ...)",
+    'Test':               "ss.Diagnostic(sensitivity=..., specificity=...) (renamed, so that no product and delivery differ only by case)",
     'seasonality':        "ss.modify(flu.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), passed in connectors=",
     'multi_run':          "ss.parallel(sim, n_runs=n) (or sim.run(n_runs=n)); its .sims are the list multi_run returned",
     'RandomExactNet':     "ss.RandomNet(method='exact')",

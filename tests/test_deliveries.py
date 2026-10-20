@@ -150,8 +150,9 @@ def test_conditions():
     cond = (ppl.age < 15) & sir.S
     assert isinstance(cond, ss.conditions.Cond)
     assert str(cond) == '((people.age < 15) & sir.S)'
-    assert str((ss.People.age < 15) & sir.S) == str(cond) # The same condition from the class, with no people made
-    assert str(ppl.age + 1 > 3) == str(ss.People.age + 1 > 3) and str(ppl.age.isin([1, 2])) == str(ss.People.age.isin([1, 2])) # Arithmetic and isin() are lazy too
+    assert str((ss.ppl.age < 15) & sir.S) == str(cond) # The same condition with no people made
+    assert str(ppl.age + 1 > 3) == str(ss.ppl.age + 1 > 3) and str(ppl.age.isin([1, 2])) == str(ss.ppl.age.isin([1, 2])) # Arithmetic and isin() are lazy too
+    assert not hasattr(ss.People, 'age') # ss.People is the class only: the lazy references are ss.ppl
     with pytest.raises(TypeError):
         bool(cond)
 
@@ -265,7 +266,7 @@ def test_vaccinate():
     with pytest.raises(ss.UnknownEffect):
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
     with pytest.raises(TypeError):
-        ss.vaccinate(ss.Test())
+        ss.vaccinate(ss.Diagnostic())
     a, b = [ss.Disease(infection=ss.transmission('S -> I', beta=0.3), init_prev=0.01, name=name) for name in 'ab']
     vx = ss.Vaccine(efficacy=0.9)
     with pytest.raises(ss.UnknownDisease): # A product acts on one disease, so delivered for a second it would protect against nothing
@@ -371,11 +372,11 @@ def test_screen():
     # Screen in rounds, and treat most of those who test positive
     def rounds(**kwargs):
         sis = make_sis()
-        test = ss.Test(sensitivity=0.9, specificity=0.95)
+        test = ss.Diagnostic(sensitivity=0.9, specificity=0.95)
         drug = ss.Treatment(cure=0.95)
-        treatment = ss.treat(drug, coverage=0.8)
-        screening = ss.screen(test, coverage=0.4, interval=7, start=30, on_positive=treatment)
-        return ss.Sim(sis, interventions=screening, **kwargs)
+        screening = ss.screen(test, coverage=0.4, interval=7, start=30)
+        treatment = ss.treat(drug, who=screening.positive, coverage=0.8)
+        return ss.Sim(sis, interventions=[treatment, screening], **kwargs) # In any order: the follow-up runs after the test
     sims = run_each(rounds)
     for solver,sim in sims.items():
         res = sim.results
@@ -384,58 +385,177 @@ def test_screen():
         n_I = res.sis.n_I[ti] # At the time
         expected = 0.4*(0.9*n_I + 0.05*(50_000 - n_I)) # True positives and false positives
         assert np.isclose(res.screening.delivered[ti], 20_000, rtol=0.03)
-        assert np.isclose(res.screening.diagnosed[ti], expected, rtol=rtol)
-        assert np.isclose(res.treatment.delivered[ti], 0.8*res.screening.diagnosed[ti], rtol=0.05) # The follow-up is a module of its own, named from its variable (it was screening_positive)
+        assert np.isclose(res.screening.positive[ti], expected, rtol=rtol)
+        assert np.isclose(res.treatment.delivered[ti], 0.8*res.screening.positive[ti], rtol=0.05) # The follow-up is a step of its own, on the step of the test
+        assert np.isclose(res.screening.positive[ti] + res.screening.negative[ti], res.screening.delivered[ti])
+        assert np.isclose(res.treatment.cured[ti] + res.treatment.failed[ti] + res.treatment.unneeded[ti], res.treatment.delivered[ti])
         assert 'test' not in res and 'drug' not in res # Products have no results of their own
         assert np.isclose(sim.summarize()['screening_coverage'], 0.4, rtol=0.03) # Over the rounds, not averaged with the steps between them (was 0.06)
-    check_close(sims, lambda sim: sim.results.screening.diagnosed.sum())
+    check_close(sims, lambda sim: sim.results.screening.positive.sum())
 
     # Test half of new infections, and cure those found
     def events(**kwargs):
         sir = make_sir()
-        test = ss.Test(sensitivity=0.8)
+        test = ss.Diagnostic(sensitivity=0.8)
         drug = ss.Treatment(cure=1.0)
-        symptomatic = ss.screen(test, on=sir.infection, coverage=0.5, on_positive=ss.treat(drug))
-        return ss.Sim(sir, interventions=symptomatic, **kwargs)
+        symptomatic = ss.screen(test, who=sir.infection, coverage=0.5)
+        treatment = ss.treat(drug, who=symptomatic.positive)
+        return ss.Sim(sir, interventions=[symptomatic, treatment], **kwargs)
     sims = run_each(events)
     for sim in sims.values():
         res = sim.results
         assert np.isclose(res.symptomatic.delivered.sum(), 0.5*res.sir.infection[:-1].sum(), rtol=0.05)
-        assert np.isclose(res.symptomatic.diagnosed.sum(), 0.8*res.symptomatic.delivered.sum(), rtol=0.08) # As agents, a few have already recovered by the time they are tested
+        assert np.isclose(res.symptomatic.positive.sum(), 0.8*res.symptomatic.delivered.sum(), rtol=0.08) # As agents, a few have already recovered by the time they are tested
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1])
 
     # A test with a delay: the follow-ups happen when the result arrives (in a compartmental run, people wait in levels of one step each)
-    def delay(on_negative=None, **kwargs):
+    def delay(**kwargs):
         sis = make_sis()
-        test = ss.Test(sensitivity=0.9, specificity=0.9, delay=ss.days(3))
+        test = ss.Diagnostic(sensitivity=0.9, specificity=0.9, delay=ss.days(3))
         drug = ss.Treatment(cure=1.0)
-        slow = ss.screen(test, coverage=0.5, at=[40], on_positive=ss.treat(drug), on_negative=on_negative)
-        return ss.Sim(sis, interventions=slow, **kwargs)
-    sims = run_each(delay, stop=60, on_negative=ss.vaccinate(ss.Vaccine(efficacy=0.5)))
+        slow = ss.screen(test, coverage=0.5, at=[40])
+        cure = ss.treat(drug, who=slow.positive)
+        protect = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=slow.negative)
+        return ss.Sim(sis, interventions=[slow, cure, protect], **kwargs)
+    sims = run_each(delay, stop=60)
     for sim in sims.values():
         res = sim.results
-        assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.diagnosed)) == [43]
-        assert np.isclose(res.slow_positive.delivered[43], res.slow.diagnosed[43])
-        assert np.isclose(res.slow.diagnosed[43] + res.on_negative.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other (the follow-up is named from the variable that holds it)
-    check_close(sims, lambda sim: sim.results.slow.diagnosed.sum()) # As agents, the prevalence of an SIS model is about 6% lower at a step of a day
+        assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.positive)) == [43]
+        assert np.isclose(res.cure.delivered[43], res.slow.positive[43])
+        assert np.isclose(res.slow.positive[43] + res.protect.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other
+    check_close(sims, lambda sim: sim.results.slow.positive.sum()) # As agents, the prevalence of an SIS model is about 6% lower at a step of a day
 
     # Someone waiting for a result is not tested again, so a test repeated more often than its delay still returns results
     for solver in ['ode', 'abm']:
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=0), recovery=ss.progression('I -> R', dur=ss.days(1e6)), init_prev=1.0, name='sir')
-        daily = ss.screen(ss.Test(sensitivity=1.0, specificity=1.0, delay=ss.days(3)), interval=1, name='daily')
+        daily = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0, delay=ss.days(3)), interval=1, name='daily')
         res = ss.Sim(sir, interventions=daily, solver=solver, total_pop=100, **(dict(n_agents=100) if solver == 'abm' else {}), unit='day', stop=20, verbose=0).run().results.daily
-        assert np.isclose(res.delivered.sum(), 700) and np.isclose(res.diagnosed.sum(), 600, rtol=1e-3) # Each person every 3 days, the last result after the end; not 2,000 tests and 0 diagnosed
+        assert np.isclose(res.delivered.sum(), 700) and np.isclose(res.positive.sum(), 600, rtol=1e-3) # Each person every 3 days, the last result after the end; not 2,000 tests and 0 positive
 
-    # A follow-up happens when the result arrives, so cannot have a schedule of its own
-    with pytest.raises(ValueError):
-        ss.Sim(make_sis(), interventions=ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment(), at=[100], start=200)), **kw).init()
+    # Nested follow-ups are removed, with a message that says how to write them as steps; and ss.Test is now ss.Diagnostic
+    for key in ['on_positive', 'on_negative']:
+        with pytest.raises(TypeError, match='step of its own'):
+            ss.screen(ss.Diagnostic(), interval=7, **{key:ss.treat(ss.Treatment())})
+    with pytest.raises(AttributeError, match='Diagnostic'):
+        ss.Test()
+    return sims
 
-    # A follow-up can be a function, which needs agents
-    negatives = []
-    sim = delay(stop=60, on_negative=lambda sim, uids: negatives.append(len(uids)), **kw).run()
-    assert sim.solver == 'abm' and negatives[0] > 0
-    with pytest.raises(ss.CapabilityError):
-        delay(solver='ode', stop=60, on_negative=lambda sim, uids: None, **kw).run()
+
+def test_cascade():
+    sc.heading('Testing a cascade: steps triggered by each other\'s events, and its table')
+
+    # A union of events fires once per person, written as | or as a list; an intersection is those in both
+    for solver in ['ode', 'abm']:
+        out = {}
+        for key,who in dict(union=lambda a,b: a.positive | b.positive, list=lambda a,b: [a.positive, b.positive], both=lambda a,b: [a.positive, b.positive]).items():
+            a = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_a'), coverage=0.5, at=[20], name='a')
+            b = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_b'), coverage=0.5, at=[20], name='b')
+            tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), operator='all' if key == 'both' else 'any', name='tx')
+            res = ss.Sim(make_sir(), interventions=[tx, a, b], solver=solver, stop=30, **kw).run().results # In any order: each step after its triggers
+            out[key] = res.tx.delivered[20]/res.sir.n_I[20]
+        print(f'{solver}: {out}')
+        assert np.isclose(out['union'], 0.75, atol=0.03) and out['list'] == out['union'] # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
+        assert np.isclose(out['both'], 0.25, atol=0.03)
+
+    # Several steps on the same event, in the step of the test, under agents and the ODE (each finds the people where the others moved them)
+    for solver in ['ode', 'abm']:
+        s = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9), coverage=0.5, at=[20], name='s')
+        cure = ss.treat(ss.Treatment(cure=0.5), who=s.positive, name='cure')
+        v1 = ss.vaccinate(ss.Vaccine(efficacy=0.5, name='vx1'), who=s.positive, name='v1')
+        v2 = ss.vaccinate(ss.Vaccine(efficacy=0.5, name='vx2'), who=s.positive, name='v2')
+        res = ss.Sim(make_sir(), interventions=[s, cure, v1, v2], solver=solver, stop=30, **kw).run().results
+        n = res.s.positive[20]
+        assert n > 0 and np.allclose([res.cure.delivered[20], res.v1.delivered[20], res.v2.delivered[20]], n) # Not fewer for the later steps
+        assert np.isclose(res.cure.cured[20] + res.cure.failed[20] + res.cure.unneeded[20], n)
+
+    # A cascade runs as its steps would as a list, and adds a table of who each step reached and lost
+    def make(as_cascade=True, **kwargs):
+        sis = make_sis()
+        rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+        pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+        screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
+        confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
+        treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50)) # Its treatment is called treatment_treatment
+        care = ss.cascade(screening, confirm, treatment)
+        return ss.Sim(make_sis(), interventions=care if as_cascade else [treatment, confirm, screening], **kwargs)
+    for solver in ['ode', 'abm']:
+        sim = make(solver=solver, stop=120, **kw).run()
+        plain = make(as_cascade=False, solver=solver, stop=120, **kw).run()
+        assert np.array_equal(sim.results.sis.n_I, plain.results.sis.n_I) # Identical
+        df = sim.results.care.to_df()
+        res = sim.results
+        assert list(df.step) == ['screening', 'confirm', 'treatment'] # Named from their variables
+        assert np.allclose(df.reached + df.lost_coverage + df.lost_capacity, df.eligible)
+        assert df.lost_capacity.iloc[2] > 0 and np.isclose(df.eligible.iloc[1], res.screening.positive.sum()) # Each step's eligible are its trigger's outcome
+        assert np.isclose(df.eligible.iloc[2], res.confirm.positive.sum(), rtol=1e-6)
+    text = sim.describe(output=True)
+    assert 'care (cascade of 3 steps)' in text and 'on screening.positive' in text
+    assert sim.results.care.plot() is not None
+
+    # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)
+    a = ss.screen(ss.Diagnostic(), interval=7, name='a')
+    b = ss.screen(ss.Diagnostic(), who=a.positive, name='b')
+    a.on = b.positive # A retest triggered by the test it follows
+    with pytest.raises(ValueError, match='cycle'):
+        ss.Sim(make_sis(), interventions=[a, b], **kw)
+    a = ss.screen(ss.Diagnostic(), interval=7, name='a')
+    with pytest.raises(ValueError, match='not delivered in the sim'):
+        ss.Sim(make_sis(), interventions=ss.treat(ss.Treatment(), who=a.positive), **kw)
+    with pytest.raises(TypeError, match='use &'):
+        ss.treat(ss.Treatment(), who=a.positive | (ss.ppl.age > 5))
+    with pytest.raises(TypeError, match='use &'):
+        ss.treat(ss.Treatment(), who=[a.positive, ss.ppl.age > 5])
+    with pytest.raises(AttributeError, match='positive, negative'):
+        a.postive
+    with pytest.raises(ValueError, match='capacity is a total'):
+        sis = make_sis().stratify(risk=['lo', 'hi'])
+        ss.Sim(sis, interventions=ss.treat(ss.Treatment(), who=sis.infection, capacity=ss.by(risk=[1, 2])), **kw).init()
+    return sim
+
+
+def test_memory():
+    sc.heading('Testing the memory of events: .ever, .count, .since, and count_events=')
+
+    # Nobody screened twice within five years; the time since as levels against agents; first-time positives by count
+    def make(**kwargs):
+        sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(2)), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='sis')
+        cytology = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+        screening = ss.screen(cytology, who=cytology.since >= ss.years(5), coverage=0.3, interval=ss.years(1), count_events=True)
+        retest = ss.screen(ss.Diagnostic(sensitivity=0.9, name='pcr'), who=screening.positive & (screening.positive.count == 1), coverage=0.5)
+        return ss.Sim(sis, interventions=ss.cascade(screening, retest, name='care'), start=2000, stop=2030, total_pop=20_000, verbose=0, **kwargs)
+    sims = sc.objdict(abm=make(n_agents=20_000).run(), ode=make(solver='ode').run())
+    df = sims.abm.interventions.screening.events_df()
+    tested = df[df.event == 'screening'].sort_values(['uid', 'time'])
+    assert len(tested) == sims.abm.results.screening.delivered.sum() # The log has one row per event per person
+    assert tested.groupby('uid').time.diff().dropna().min() >= np.timedelta64(5*365, 'D')
+    scr = sims.abm.interventions.screening
+    assert (scr.count_positive.raw > 0).sum() == df[df.event == 'screening.positive'].uid.nunique() # Positives over the run are those ever positive
+    assert 'since_cytology' in sims.ode.describe(output=True)
+    for key in ['screening', 'retest']:
+        assert np.isclose(sims.ode.results[key].delivered.sum(), sims.abm.results[key].delivered.sum(), rtol=0.05)
+
+    # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
+    sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.1, name='sis')
+    preg = ss.Pregnancy(fertility_rate=50)
+    anc_visit = ss.visit(who=preg.conception, coverage=0.85)
+    anc_a = ss.screen(ss.Diagnostic(sensitivity=0.9, name='rdt'), who=anc_visit)
+    anc_b = ss.screen(ss.Diagnostic(sensitivity=0.8, name='rpr'), who=anc_visit)
+    newborn = ss.treat(ss.Treatment(cure=1.0, name='tx'), who=preg.delivery & anc_a.positive.ever)
+    sim = ss.Sim(sis, demographics=preg, interventions=[anc_visit, anc_a, anc_b, newborn], n_agents=5000, start=2000, stop=2010, dt=1/12, verbose=0).run()
+    res = sim.results
+    assert sim.solver == 'abm' and res.anc_visit.delivered.sum() > 0 and res.newborn.delivered.sum() > 0
+    assert np.array_equal(res.anc_a.delivered.values, res.anc_visit.delivered.values) and np.array_equal(res.anc_b.delivered.values, res.anc_visit.delivered.values)
+
+    # A transfer triggers a delivery, as agents (TL43); a state that only a delivery moves people into is not where they start (TL38)
+    S, I = ss.states('S I')
+    d = ss.Disease(name='d', infection=S >> I @ 0.1)
+    d.stratify(sym=[False, True], onset=ss.transfer(sym=True, rate=0.2, states=['I']))
+    sim = ss.Sim(diseases=d, interventions=ss.screen(ss.Diagnostic(), who=d.onset, coverage=0.8, name='scr'), n_agents=2000, start=2000, stop=2005, dt=0.25, verbose=0).run()
+    assert sim.solver == 'abm' and sim.results.scr.delivered.sum() > 0
+    S, M, H = ss.states(3)
+    dis = ss.Disease(S >> M @ ss.peryear(0.5), M >> S @ ss.days(10), H >> S @ ss.days(5), name='dis')
+    sim = ss.Sim(dis, interventions=ss.Delivery(move='M -> H', who=M, interval=ss.days(1)), n_agents=1000, stop=ss.days(30), dt=ss.days(1), verbose=0).init()
+    assert sim.diseases.dis.graph.first.name == 'S' # Was H, so everyone started in hospital
     return sims
 
 
@@ -490,7 +610,7 @@ def test_deliver():
 def test_coinfection():
     sc.heading('Testing two diseases that modify each other')
     def make(coinfect=True):
-        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.002, 0.001])), init_prev=0.05)
+        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.002, f2m=0.001))), init_prev=0.05)
         syph = ss.Disease(infection=ss.transmission('S -> I', beta=0.01), cure=ss.progression('I -> S', dur=ss.years(3)), init_prev=0.05)
         coinfection = [
             ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'), # Both diseases have a state called I, so each condition remembers its own
@@ -501,7 +621,7 @@ def test_coinfection():
     base = make(coinfect=False).run()
     assert list(sim.diseases.keys()) == ['hiv', 'syph'] # Named from their variables
     assert sim.results.hiv.n_I[-1] > base.results.hiv.n_I[-1]
-    assert sim.results.syph.infection.cum[-1] > 1.1*base.results.syph.infection.cum[-1]
+    assert sim.results.syph.infection.cum[-1] > 1.05*base.results.syph.infection.cum[-1] # 8% more with seed 1 (14% before rel_sus scaled the hazard per act rather than the chance per partnership-step)
     assert 'where=syph.I' in sim.what_modifies('hiv.rel_trans', output=True)
     assert 'where=hiv.I' in sim.what_modifies('syph.rel_sus', output=True)
     return sim
@@ -568,10 +688,11 @@ def test_coinfection_compartments():
 def test_loop_order():
     sc.heading('Testing moving a module in the loop')
     def make():
-        test = ss.Test(sensitivity=0.9, specificity=0.98)
+        test = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
         drug = ss.Treatment(cure=0.95)
-        screen = ss.screen(test, coverage=0.2, interval=1, on_positive=ss.treat(drug))
-        sim = ss.Sim(make_sir(), interventions=screen, n_agents=5000, stop=60, verbose=0, unit='day')
+        screen = ss.screen(test, coverage=0.2, interval=1)
+        treatment = ss.treat(drug, who=screen.positive)
+        sim = ss.Sim(make_sir(), interventions=[screen, treatment], n_agents=5000, stop=60, verbose=0, unit='day')
         return sim, screen
     sim, screen = make()
     sim.run()
@@ -586,7 +707,7 @@ def test_loop_order():
     labels = df.label.tolist()
     assert labels.index('screen.step') == labels.index('sir.step') + 1
     assert (df.label == 'screen.step').sum() == (df.label == 'sir.step').sum() # Moved, not added
-    assert moved.results.screen.diagnosed.sum() > 0
+    assert moved.results.screen.positive.sum() > 0
     assert not np.array_equal(moved.results.sir.n_I, sim.results.sir.n_I)
     return moved
 
@@ -610,7 +731,7 @@ def test_newborns_and_events():
     for solver in ['ode', 'abm']:
         sir = make_sir()
         cure = ss.treat(ss.Treatment(cure=1.0, transition='recovery'), where=sir.I, coverage=0.2, interval=1, name='cure')
-        after = ss.screen(ss.Test(sensitivity=1.0), on=sir.recovery, name='after')
+        after = ss.screen(ss.Diagnostic(sensitivity=1.0), who=sir.recovery, name='after')
         sim = ss.Sim(sir, interventions=[after, cure], solver=solver, stop=150, n_agents=20_000, **kw).run() # The delivery that reads is first, so it sees them a step later
         res = sim.results
         assert np.isclose(res.after.delivered.sum(), res.sir.recovery[:-1].sum(), rtol=0.01) # Everyone who recovered, but on the last step
@@ -743,7 +864,7 @@ def test_sensitivity_by_state():
     def make(**kwargs):
         S, E, I, R = ss.states(4)
         seir = ss.Disease(S >> E @ 0.3*I, E >> I @ ss.days(4), I >> R @ ss.days(8), init=dict(I=0.01), name='seir').stratify(age=[0, 15])
-        test = ss.Test(sensitivity=dict(I=ss.by(age=[0.5, 0.9]), E=0.2), specificity=1.0)
+        test = ss.Diagnostic(sensitivity=dict(I=ss.by(age=[0.5, 0.9]), E=0.2), specificity=1.0)
         screening = ss.screen(test, coverage=0.5, interval=10, start=20)
         return ss.Sim(seir, interventions=screening, stop=60, **sc.mergedicts(dict(total_pop=50_000), kwargs))
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=50_000))]:
@@ -751,10 +872,10 @@ def test_sensitivity_by_state():
         ti = 30
         before = lambda name, **sel: res.seir[f'n_{name}'].select(**sel)[ti] if sel else res.seir[f'n_{name}'][ti]
         expected = 0.5*(0.5*before('I', age=0) + 0.9*before('I', age=1) + 0.2*before('E')) # Nobody else tests positive
-        print(f'{solver}: {res.screening.diagnosed[ti]:.0f} diagnosed, expected {expected:.0f}')
-        assert np.isclose(res.screening.diagnosed[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
+        print(f'{solver}: {res.screening.positive[ti]:.0f} positive, expected {expected:.0f}')
+        assert np.isclose(res.screening.positive[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
     with pytest.raises(ss.UnknownEffect):
-        ss.Sim(make_sis(), interventions=ss.screen(ss.Test(sensitivity=dict(X=0.5)), interval=10), stop=20, **kw).run()
+        ss.Sim(make_sis(), interventions=ss.screen(ss.Diagnostic(sensitivity=dict(X=0.5)), interval=10), stop=20, **kw).run()
     return res
 
 
@@ -798,7 +919,7 @@ def test_trace():
         ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.infection, trace='net'), solver='ode', **kw).init()
     with pytest.raises(ss.CapabilityError, match='solver="gillespie"'): # The solver asked for, not the ODE that estimates its cost
         ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.infection, trace='net'), solver='gillespie', **kw).init()
-    with pytest.raises(ValueError, match='on='):
+    with pytest.raises(ValueError, match='an event in who='):
         ss.Sim(sir, networks=ss.RandomNet(name='net'), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), trace='net'), solver='abm', n_agents=1000, **kw).init()
     with pytest.raises(TypeError): # on= is an event; the people in a state are where=sir.I, interval=1
         ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.I)
@@ -952,6 +1073,8 @@ if __name__ == '__main__':
     trans  = test_transfer()
     treat  = test_treat()
     screen = test_screen()
+    casc   = test_cascade()
+    memory = test_memory()
     sens   = test_sensitivity_by_state()
     msim   = test_deliver()
     coinf  = test_coinfection()

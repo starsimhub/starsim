@@ -1297,16 +1297,17 @@ def test_functions():
     assert sim2.solver == 'abm' and 'clearance' in sim2.solver_reason
     assert 'no (takes uids)' in sim2.solvers(output=True)
 
-    # A sexual network, with a transmission probability for each direction
-    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.08, 0.04])), init_prev=0.05, name='hiv')
+    # A sexual network, with a transmission probability per act for each direction
+    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.008, f2m=0.004))), init_prev=0.05, name='hiv')
     sim3 = ss.Sim(hiv, networks=ss.MFNet(), start=2000, stop=2020, **kw).run()
     assert sim3.solver == 'abm' and 'MFNet' in sim3.solver_reason
     assert sim3.unit == 'year'
     n_I = sim3.results.hiv.n_I
     assert n_I[-1] > 1.5*n_I[0]
-    monthly = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=[0.08, 0.04])), init_prev=0.05, name='hiv')
-    with pytest.warns(RuntimeWarning, match='Starsim 3'): # Bare numbers in a beta dict were probabilities per step in Starsim 3, so a verbatim port is 12x too low at monthly steps
-        ss.Sim(monthly, networks=ss.MFNet(), start=2000, stop=2002, dt=ss.years(1/12), **kw).init()
+    monthly = ss.Disease(infection=ss.transmission('S -> I', beta=dict(random=0.08, mf=0.008)), init_prev=0.05, name='hiv')
+    with pytest.warns(RuntimeWarning, match='Starsim 3') as record: # Bare numbers in a beta dict were probabilities per step in Starsim 3, so a verbatim port is 12x too low at monthly steps
+        ss.Sim(monthly, networks=['random', ss.MFNet()], start=2000, stop=2002, dt=ss.years(1/12), **kw).init()
+    assert "'random'" in str(record[0].message) and "'mf'" not in str(record[0].message) # Not on a network with acts, where a bare number is per act, as in Starsim 3
     with pytest.raises(ss.RouteMismatch):
         other = ss.Disease(infection=ss.transmission('S -> I', beta=dict(needles=0.1)), init_prev=0.05, name='hiv')
         ss.Sim(other, networks=ss.MFNet(), start=2000, stop=2005, **kw).run()
@@ -1706,7 +1707,7 @@ def test_messages_and_crashes():
         assert np.allclose(res.n_A.by('risk').values[0], [100, 400])
 
     # ss.change on a beta for each route, with a pair of directions on one (HP27: crashed)
-    d = ss.Disease(infection=ss.transmission('S -> I', beta=dict(random=ss.peryear(0.3), mfnet=[0.1, 0.2])), init_prev=0.05, name='d')
+    d = ss.Disease(infection=ss.transmission('S -> I', beta=dict(random=ss.peryear(0.3), mfnet=ss.peract(m2f=0.1, f2m=0.2))), init_prev=0.05, name='d')
     ss.Sim(d, networks=['random', ss.MFNet()], interventions=ss.change('d.pars.beta', at=2001, by=0.5), **kw).run()
 
     # A module's array as a modifier's amount (HP17: crashed, saying a state was already added)
@@ -1792,6 +1793,167 @@ def test_given_dwell():
         ss.Disease(P, C, R, a=ss.Transition(P, C, dur=ss.years(3), p=P.dwell/10), b=ss.Transition(P, R, dur=ss.years(3), p=None), init=dict(P=10))
     return
 
+@sc.timer()
+def test_init_prev_forms():
+    sc.heading('Testing init_prev as a function and by people\'s properties: for each agent, or for each group')
+    def make(**kwargs):
+        S, Ic, In, R = ss.states('S Ic In R')
+        return ss.Disease(infection=S >> (0.3*Ic + 0.7*In) @ 0.1*(Ic + In), clear_c=Ic >> R @ ss.years(1), clear_n=In >> R @ ss.years(1), name='d', **kwargs)
+    by_age = ss.by(dict(age=[0, 20], value=[0.0, 0.2])) # By each person's own age
+    for kwargs in [dict(init_prev=by_age), dict(init_prev=lambda sim, uids: np.where(sim.people.age[uids] >= 20, 0.2, 0.0)), dict(init=dict(Ic=by_age))]:
+        sim = ss.Sim(make(**kwargs), n_agents=20_000, stop=2001, **kw).init()
+        uids = sim.people.auids
+        old = sim.people.age.raw[uids] >= 20
+        seeded = sim.diseases.d.Ic.raw[uids] | sim.diseases.d.In.raw[uids]
+        assert sim.solver == 'abm' and seeded[~old].sum() == 0 and np.isclose(seeded[old].mean(), 0.2, atol=0.01)
+        if 'init_prev' in kwargs: # Through the transmission, in its shares
+            assert np.isclose(sim.diseases.d.Ic.raw[uids].sum()/seeded.sum(), 0.3, atol=0.03)
+        with pytest.raises(ss.CapabilityError): # A property of each person that is not a dimension, or the agents, have no compartmental form
+            ss.Sim(make(**kwargs), solver='ode', stop=2001, **kw).init()
+    ode = ss.Sim(make(init_prev=lambda sim: 0.1), solver='ode', total_pop=1000, stop=2001, **kw).init() # A function of the sim alone works on groups
+    assert np.isclose(ode.diseases.d.engine.count(ode.diseases.d.graph.people_states[1:3]), 100)
+    by_risk = ss.Sim(make(init_prev=ss.by(risk=[0.0, 0.2])).stratify(risk=['low', 'high']), solver='ode', total_pop=1000, stop=2001, **kw).init() # By a dimension, for each group
+    assert np.isclose(by_risk.diseases.d.engine.count(by_risk.diseases.d.graph.people_states[1:3]), 100)
+    return sim
+
+
+def test_tlo_review():
+    sc.heading('Testing the silent wrong answers and crashes found by the Thanzi la Onse review')
+    kw = dict(start=2000, stop=2001, verbose=0)
+
+    # A number times a probability scales its rate (TL12): 0.275 of people a year, not 0.16; a probability of 1 is an infinite rate and raises (agents moved nobody, the ODE gave NaN)
+    S, I = ss.states('S I')
+    res = ss.Sim(ss.Disease(S, I, onset=S >> I @ ss.probperyear(0.8)*0.2, name='d'), total_pop=10_000, solver='ode', **kw).run().results.d
+    assert np.isclose(res.n_I[-1], 10_000*(1 - 0.2**0.2), rtol=1e-3)
+    for solver in ['abm', 'ode']:
+        with pytest.raises(ValueError, match='infinite rate'):
+            ss.Sim(ss.Disease(S, I, onset=S >> I @ ss.probperyear(1)*0.8, name='d'), n_agents=1000, solver=solver, **kw).run()
+
+    # A branch probability over 1 raises, as a sum over 1 does at build (TL13: was used as 1, killing 5,854 of 5,901)
+    for solver in ['abm', 'ode']:
+        S, D, R = ss.states('S D R')
+        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.progression('D -> ', dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.progression('D -> R', dur=ss.days(5)), name='d')
+        d.stratify(type=['watery', 'bloody'], states=[D])
+        with pytest.raises(ss.BadBranchSplit, match='1.5'):
+            ss.Sim(d, n_agents=1000, solver=solver, **kw).run()
+
+    # adjust= on a branch chosen with p= scales its probability, as ss.modify does, under every solver (TL16: it divided the dwell; the ODE read a share by a dimension split on entry at its first level)
+    def make(solver, adjust=None, modify=False):
+        S, D, R = ss.states('S D R')
+        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.progression('D -> ', dur=ss.days(10), p=0.1), recovery=ss.progression('D -> R', dur=ss.days(10)), back=R >> S @ ss.days(5), name='d')
+        d.stratify(type=['watery', 'bloody'], states=[D], adjust=adjust)
+        con = ss.modify(d.death, multiply=5, where=d.type == 'bloody') if modify else None
+        res = ss.Sim(d, connectors=con, n_agents=20_000, total_pop=20_000, solver=solver, dt=ss.days(1), **kw).run().results.d
+        return res.death.by('type').values.sum(0)/res.onset.by('type').values.sum(0)
+    for solver in ['ode', 'binomial', 'abm']:
+        for share in [make(solver, adjust={'death': [1, 5]}), make(solver, modify=True)]:
+            assert np.allclose(share, [0.1, 0.5], atol=0.02), f'{solver}: {share}'
+
+    # On one transition with several destinations and a dwell, a modifier changes the dwell, and a note names the destinations that change a branch (TL16)
+    G, A, B = ss.states('G A B')
+    d = ss.Disease(G, A, B, go=ss.Transition(G, [A, B], dur=ss.weeks(4), p=[0.95, 0.05]), init=dict(G=10_000), name='d')
+    sim = ss.Sim(d, connectors=ss.modify('d.go', multiply=4), total_pop=10_000, solver='ode', **kw).run()
+    assert any("'d.go.B'" in note for note in sim.notes)
+    sim = ss.Sim(d, connectors=ss.modify('d.go.B', multiply=4), total_pop=10_000, solver='ode', **kw).run()
+    assert np.isclose(sim.results.d.n_B[-1], 2000, rtol=1e-3)
+
+    # A product's efficacy against a transition given as a duration acts as agents, as a modifier does (TL17: 2,252 AIDS onsets with and without it; the ODE gave 0)
+    def onsets(how):
+        S, I, A = ss.states('S I A')
+        hiv = ss.Disease(S, I, A, aids=I >> A @ ss.years(2.66), init=dict(I=0.5), name='hiv')
+        art = ss.treat(ss.Treatment(efficacy=dict(aids=1.0), name='art'), at=[2011], coverage=1.0, where=hiv.I, name='art_delivery') if how == 'product' else None
+        con = ss.modify(hiv.aids, multiply=0, start=2011) if how == 'modify' else None
+        sim = ss.Sim(hiv, interventions=art, connectors=con, n_agents=5000, start=2010, stop=2013, dt=ss.months(1), verbose=0).run()
+        return sim.results.hiv.aids[13:].sum()
+    none, product, modify = [onsets(how) for how in ['none', 'product', 'modify']]
+    assert product == modify < 0.1*none
+
+    # In a staged condition with no transmission, every stage is infected, so a test with no detects= finds them all (TL52: it found stage 1 only, 649 of 1,637)
+    def screen(**kwargs):
+        none, s1, s2, s3 = ss.states('none s1 s2 s3')
+        cancer = ss.Disease(none, s1, s2, s3, onset=ss.Transition(none, s1, rate=0.02, **kwargs), p2=s1 >> s2 @ 0.3, p3=s2 >> s3 @ 0.3, name='cancer')
+        scr = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0), at=[9], coverage=1.0, name='scr')
+        return ss.Sim(cancer, interventions=scr, n_agents=5000, start=0, stop=10, dt=1, verbose=0).run()
+    sim = screen()
+    r = sim.results.cancer
+    assert [s.name for s in sim.diseases.cancer.graph.infected] == ['s1', 's2', 's3']
+    assert sim.results.scr.positive.sum() == r.n_s1[9] + r.n_s2[9] + r.n_s3[9]
+    with pytest.raises(ValueError, match='no infected states'): # Not 0 positives with no message
+        screen(acquisition=False)
+
+    # Starting values set through pars after the disease is made raise, rather than being ignored (TL58: nobody was seeded)
+    A, B = ss.states('A B')
+    d = ss.Disease(A, B, go=A >> B @ 0.1, name='d')
+    d.pars.init = dict(B=100.0)
+    with pytest.raises(ss.UnknownParameter, match='init='):
+        ss.Sim(d, n_agents=1000, **kw).init()
+
+    # A rate given as a function of the sim with one value per person alive, once people have died (TL8: IndexError)
+    A, B = ss.states('A B')
+    d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.5)*(lambda sim: 1.0*np.asarray(sim.people.female)), name='d')
+    sim = ss.Sim(d, demographics=ss.Deaths(death_rate=ss.peryear(200)), n_agents=5000, dt=0.25, **kw).run()
+    inB = sim.diseases.d.B.uids
+    assert len(inB) > 100 and sim.people.female[inB].all()
+
+    # An outcome weighted by age group or by a function of each person, as agents (TL51: crashed); the ODE takes the weight by group
+    def yll(weight, solver='abm'):
+        S, I, R = ss.states('S I R')
+        death = I >> ss.null @ ss.peryear(2)
+        d = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.2)*I, recovery=I >> R @ ss.days(20), death=death, init=dict(I=0.05), yll=ss.outcome(weight*death), name='d')
+        d.stratify(age=[0, 15, 50, 70])
+        return ss.Sim(d, n_agents=2000, total_pop=2000, solver=solver, dt=ss.days(7), **kw).run().results.d
+    res = yll(ss.by(age=[60, 50, 30, 10]))
+    deaths, lost = res.death.by('age').values.sum(0), res.yll.by('age').values.sum(0)
+    assert deaths.sum() > 100 and np.allclose(lost, deaths*[60, 50, 30, 10])
+    res = yll(lambda sim, uids: np.maximum(90 - sim.people.age[uids], 0))
+    assert 0 < res.yll.sum() < 90*res.death.sum()
+    ode = yll(ss.by(age=[60, 50, 30, 10]), solver='ode')
+    assert np.isclose(ode.yll.sum()/ode.death.sum(), lost.sum()/deaths.sum(), rtol=0.1)
+
+    # A time series from its times and values, as np.interp takes them (TL65: crashed)
+    ts = ss.timeseries(['2010-01-01', '2010-07-01'], [0.5, 0.9])
+    assert repr(ts) == repr(ss.timeseries({'2010-01-01': 0.5, '2010-07-01': 0.9}))
+    assert ss.timeseries([0, 10], [1, 2], mode='linear').mode == ss.timeseries({0: 1, 10: 2}, 'linear').mode == 'linear'
+
+    # A branch probability set after building: a new value for one that was given, and a clear error for one that was not (TL66: 'by' object has no attribute 'leaves')
+    S, I, R = ss.states('S I R')
+    d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1), death=ss.Transition(I, ss.null, dur=ss.days(20), p=0.1), rec=ss.Transition(I, R, dur=ss.days(20)), name='d')
+    d.death.p = ss.by(age=[0.5, 0.0])
+    d.stratify(age=[0, 15])
+    res = ss.Sim(d, n_agents=5000, use_aging=False, **kw).run().results.d
+    assert res.death.by('age').values.sum(0)[1] == 0 and res.death.sum() > 0
+    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.1), death=I >> ss.null @ ss.days(20), name='d')
+    with pytest.raises(ValueError, match='when the transition is made'):
+        d.death.p = ss.by(age=[0.1, 0.01])
+
+    # A test on one disease's event detecting another's state runs as agents, and is refused clearly as an ODE (TL37: a broadcasting error)
+    def make(solver):
+        c0, c1, c2 = ss.states('c0 c1 c2')
+        cancer = ss.Disease(c0, c1, c2, p1=c0 >> c1 @ 0.05, p2=c1 >> c2 @ 0.05, name='cancer')
+        no, yes = ss.states('no yes')
+        symptom = ss.Disease(no, yes, onset=no >> yes @ 0.2, name='symptom')
+        test = ss.screen(ss.Diagnostic(sensitivity=1, specificity=1, detects=cancer.c1), on=symptom.onset, coverage=0.8, disease='cancer', name='scr')
+        return ss.Sim(diseases=[cancer, symptom], interventions=test, n_agents=1000, total_pop=1000, solver=solver, start=2000, stop=2010, dt=0.25, verbose=0)
+    assert make('abm').run().results.scr.positive.sum() > 0
+    with pytest.raises(ss.CapabilityError, match='symptom.onset'):
+        make('ode').run()
+    return
+
+
+def test_source_weights():
+    sc.heading('Testing weights on the sources of infection: source=dict(...), the same as beta * (P + 0.55*EL)')
+    def make(form, beta):
+        stages = dict(latent=ss.progression('P -> EL', dur=ss.years(1)), clear=ss.progression('EL -> S', dur=ss.years(2)))
+        if form == 'dict':
+            return ss.Disease(infection=ss.transmission('S -> P', beta=beta, source=dict(P=1, EL=0.55)), **stages, init=dict(P=0.05), name='syph')
+        S, P, EL = ss.states('S P EL')
+        return ss.Disease(S, P, EL, infection=S >> P @ ss.par(beta, name='beta') * (P + 0.55*EL), **stages, init=dict(P=0.05), name='syph')
+    for beta, net, solver in [(ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'ode'), (ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'abm'), (dict(mfnet=ss.peract(m2f=0.05, f2m=0.03)), ss.MFNet(), 'abm')]: # A dict or ss.peract times a weighted sum (ST17: a TypeError before)
+        res = [ss.Sim(make(form, beta), networks=net, n_agents=3000, total_pop=3000, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0).run().results.syph.n_P.values for form in ['dict', 'op']]
+        assert np.array_equal(res[0], res[1]) and res[0][-1] > 0, f'{solver}: {res[0][-1]} against {res[1][-1]}'
+    assert 'source P + 0.55 EL' in make('dict', 0.3).describe(output=True)
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1824,3 +1986,8 @@ if __name__ == '__main__':
     chg   = test_change_in_function()
     msgs  = test_messages_and_crashes()
     dwell = test_given_dwell()
+    inits = test_init_prev_forms()
+    tlo   = test_tlo_review()
+
+
+    weights = test_source_weights()

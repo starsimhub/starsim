@@ -13,7 +13,8 @@ There are two ways to write an interaction, and both are first-class:
 
 <!-- fragment -->
 ```python
-ss.modify(target, multiply=None, add=None, set=None,     # exactly one of these three
+ss.modify(target, multiply=None, add=None, set=None,     # exactly one of these three (or efficacy=, which is multiply=1 - efficacy)
+          efficacy=None, share=None, route=None,
           where=None, start=None, stop=None, when=None, hold=None, name=None)
 ```
 
@@ -28,11 +29,24 @@ Read as: *for people with active syphilis, multiply HIV transmissibility by 2.*
 |---|---|
 | `target` | the quantity to change |
 | `multiply=`, `add=`, `set=` | what to do to it; exactly one |
+| `efficacy=` | for protection (a condom, a needle program, a microbicide), the share of the risk it removes: the same as `multiply=1 - efficacy`; giving both raises |
+| `share=` | with `multiply=` or `efficacy=`, the share of acts (or, on a route without acts, of contacts) it acts on: since hazards add, the hazard is multiplied by `1 − share·(1 − multiply)`, exactly. A number, an `ss.timeseries`, an `ss.by`, or, with `route=` and as agents only, a function of the network returning one value per edge (`lambda net: net.edges.condoms`) |
+| `route=` | for a modifier of a transmission, the network or networks (by name) it applies on, e.g. condoms on the sexual network and not the needle-sharing one; a name that is not a route raises `RouteMismatch`, and a target that is not a transmission raises. `where=` is then of the people who would be infected. Under the compartmental solvers it multiplies the contacts through that route's term of the mixing, by group |
 | `where=` | who it applies to: a [condition](#conditions). Omitted means everyone |
 | `start=`, `stop=` | the period it applies in: from the step at `start` up to, but not including, the step at `stop`. Times are dates, durations since the start of the sim, or numbers in the sim's unit, as for `at=` of [`ss.change`](08-interventions.md#sschange). A `start` outside the sim raises `TimeOutsideSim`; a `stop` after the end never stops it. Omitted means always |
 | `when=` | a function of the sim returning `True` or `False`, for anything `start`/`stop` cannot say. The modifier applies on exactly the steps where it returns `True` |
 | `hold=` | once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long (a bare number is in the sim's unit). This is the one memory a modifier has; any other rule with memory is `step()` code ([08-interventions.md](08-interventions.md#triggers)) |
 | `name=` | used in `describe()` and `what_modifies()`; defaults to the variable name, else to what it does (`beta_multiply`) |
+
+Condoms and similar per-act protection are modifiers of each disease's transmission on a route, with the share of acts they are used in; the efficacy differs by pathogen, so there is one modifier for each disease:
+
+<!-- fragment -->
+```python
+use = ss.timeseries({2000: 0.05, 2020: 0.3})                                       # share of acts with a condom
+condoms = [ss.modify(ng.infection, efficacy=0.9, share=use, route='mfnet'),        # gonorrhea
+           ss.modify(ct.infection, efficacy=0.4, share=use, route='mfnet')]        # chlamydia
+nsp = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2005)   # needle and syringe programs
+```
 
 A modifier is passed to the sim like any other module, in `connectors=` (interactions that are part of the biology) or `interventions=` (policy). Which list holds it does not change what it does, `when=` included: a modifier is evaluated where the engine reads the quantity it acts on in a step, whichever list it is in (the lists differ in order only for modules with a `step()` of their own). There is no separate `modifiers=` list.
 
@@ -83,7 +97,27 @@ that is, **set, then multiply, then add**. The rule does not depend on the order
 - A rate, duration, or multiplier that the modifiers make negative is set to 0 where it is, and branch probabilities that they make sum to more than 1 are scaled to sum to 1, with the note `ClippedToRange` (once per quantity); `what_modifies()` says so too.
 - `add=` and `set=` are for parameters only. On a per-person quantity (`sir.rel_sus`, `sir.rel_trans`) or a transition, the modifier acts on a multiplier of each person's own value, which `set=` or `add=` would replace, so they raise and only `multiply=` is accepted.
 
-Stratification adjustments ([05-dimensions.md](05-dimensions.md)) and product efficacies ([08-interventions.md](08-interventions.md)) are multipliers of this kind and combine with `ss.modify` by the same rule.
+Stratification adjustments ([05-dimensions.md](05-dimensions.md)), product efficacies ([08-interventions.md](08-interventions.md)), and protection between strains (`ss.immunity`, below) are multipliers of this kind and combine with `ss.modify` by the same rule.
+
+### Protection between strains: `ss.immunity`
+
+Protection from several strains a person holds is combined by a rule before it multiplies, which a set of modifiers cannot do (each has one target and one condition; HPVsim's `(1 − clip(Σ))·(1 − vaccine)` is 0.35 where modifiers give 0.2). `ss.immunity` is that rule:
+
+<!-- fragment -->
+```python
+ss.immunity(protected=None, rel_sus=None, rel_trans=None, dur=None, combine='max')
+```
+
+The quantity the protection lowers is the keyword, and the protection is its value: `rel_sus=` (being infected), `rel_trans=` (infecting others), and `dur=dict(In=m, Ic=m)` (time spent in states, by the state's name: every exit of the state is faster by `1/(1 − protection)`, HPVsim's severity immunity). Several keywords may be given together. A value is a matrix, `m[k][g]` the protection that holding strain `k` gives against strain `g` (rows from, columns against; 1 is complete), or one number, the same from any strain against every strain. For each strain `g` and person, the protection is the combination over the strains `k` they hold of `m[k][g]`, by `combine=`:
+
+| `combine=` | Protection |
+|---|---|
+| `'max'` (the default) | the strongest |
+| `'sum'` | the sum, at most 1 (HPVsim) |
+| `'multiply'` | independent sources: `1 − Π(1 − p)` |
+| a function | of one array of protections, with the sources on the first axis (0 for those not held), returning the protection; e.g. the strongest plus half the rest, `lambda p: np.minimum(1, p.max(0) + 0.5*(p.sum(0) - p.max(0)))`. It needs agents and has no gradient (`sim.gradient()` and a NUTS fit raise `CapabilityError`) |
+
+The quantity is multiplied by `1 − protection`, and several `ss.immunity` objects, `ss.modify`, and product efficacies on the same quantity multiply, so a vaccine's `1 − efficacy` multiplies it, which is HPVsim's rule exactly. In a family of diseases (`ss.Strains`, [05-dimensions.md](05-dimensions.md#strain)), the strains are the members and `protected=` names the states (or a named sum of states) of each member whose holders are protected (`protected='nab'`); the protection is worked out from the members' states at the start of each step, before anything moves. In a strain dimension (`stratify(strain=..., immunity=ss.immunity(rel_sus=m, combine=...))`), a person holds every strain they have had, so there is no `protected=`, and the protection is on `rel_sus` only; a bare matrix is the matrix with the default rule. A protection on a time spent that the matrix can bring to 1 raises (an infinite rate). `what_modifies()` lists each protection with the modifiers of its quantity.
 
 ### Base and effective values
 
@@ -189,7 +223,7 @@ eligible = (ppl.age > 65) & ~sir.vaccinated
 
 This works because a state array that has not been initialized builds an expression instead of computing a value. The exact rule:
 
-- **An array is uninitialized** until the sim it belongs to has been initialized (`sim.init()`, or the start of `sim.run()`). `ppl.age`, `ppl.female`, and every state of a module (`sir.vaccinated`, `hiv.cd4`, `syphilis.active`) are such arrays; so are properties built from them. The people's own properties can also be had with no people made: `ss.ppl.age > 65` is the same condition as `ppl.age > 65`, and is the usual form in a compartmental model, which has no people object. `ss.ppl.<name>` works for any property, checked when the sim is built; Starsim 3's `ss.People.age` (and `.female`, `.alive`) is the same.
+- **An array is uninitialized** until the sim it belongs to has been initialized (`sim.init()`, or the start of `sim.run()`). `ppl.age`, `ppl.female`, and every state of a module (`sir.vaccinated`, `hiv.cd4`, `syphilis.active`) are such arrays; so are properties built from them. The people's own properties can also be had with no people made: `ss.ppl.age > 65` is the same condition as `ppl.age > 65`, and is the usual form in a compartmental model, which has no people object. `ss.ppl.<name>` works for any property, checked when the sim is built. `ss.People` is the class only (`sim.people = ss.People(...)`): Starsim 3's `ss.People.age` is now `ss.ppl.age`.
 - **On an uninitialized array, these operations are lazy**: comparisons (`>`, `<`, `>=`, `<=`, `==`, `!=`), logical operators (`&`, `|`, `~`), arithmetic (`+`, `-`, `*`, `/`), and `.isin([...])`. The result is a lazy condition: an unevaluated expression that remembers which arrays it refers to, by module and name. Combining a lazy condition with a number or with another lazy condition is lazy.
 - **A lazy condition is evaluated each time it is needed during a run**, against the sim it is running in, using the current values at that point in the loop. It refers to arrays by module and name, so the same condition works in every copy of a sim made by `ss.parallel` or calibration.
 - **On an initialized array, the same operations evaluate immediately**, as in Starsim today. Inside `step()`, `self.sim.people.age > 65` is an ordinary boolean array.
@@ -239,14 +273,14 @@ def diagnose(sim, uids):                           # what a positive test does
 
 <!-- fragment -->
 ```python
-hiv_test = ss.Test(sensitivity=0.99, specificity=0.99)
+hiv_test = ss.Diagnostic(sensitivity=0.99, specificity=0.99)
 
 anc_testing = ss.screen(hiv_test,
-    on          = anc.visit,                        # delivered to people at an ANC visit this step
-    eligible    = hiv.infected & ~hiv.diagnosed,    # a lazy condition
-    coverage    = p_test,
-    on_positive = diagnose,                         # a delivery, or a function of (sim, uids)
+    who      = anc.visit & hiv.infected & ~hiv_test.positive.ever,  # people at an ANC visit this step (an event), HIV-positive and not yet diagnosed (conditions)
+    coverage = p_test,
 )
+diagnosed = hiv_test.positive.ever                  # remembered per person by the test's outcome, so no state is written
+treatment = ss.treat(art, who=anc_testing.positive) # what a positive test leads to is a step of its own
 ```
 
 **As a module with `step()`**:
@@ -309,3 +343,5 @@ What this means for interactions:
 - **`min_duration=` on `ss.modify`, or any other memory inside a modifier.** A modifier is a function of the current state of the sim, plus `hold=` (stay on for at least this long once selected, as MEmilio's dynamic NPIs do). Any other rule that remembers is a few lines of `step()`, where the memory is visible.
 - **Write tracking on by default.** It has a cost on every assignment, and most runs never ask the question.
 - **A separate object for protective measures** (a "tool" carrying fixed multipliers). A product's efficacy is a modifier on the people who hold it.
+- **`add=` on `rel_sus` for cross-immunity.** It would replace each person's own value; the combination rule is in `ss.immunity`.
+- **`ss.immunity(matrix, reduces='rel_sus')`.** The quantity lowered is the keyword (`rel_sus=matrix`), so several quantities can be given at once and none needs a second name.

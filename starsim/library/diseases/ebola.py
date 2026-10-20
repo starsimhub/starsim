@@ -115,7 +115,7 @@ class Ebola(AgentSEIR):
         self.severe[self.ti_dead <= ti] = False
         buried = (self.ti_buried <= ti).uids
         self.buried[buried] = True
-        self.sim.people.request_death(buried)
+        self.sim.people.request_death(buried, cause=self)
 
         # Update transmissibility: severe agents and unburied bodies are more infectious
         self.rel_trans[:] = 1.0

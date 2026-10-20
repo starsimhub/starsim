@@ -16,7 +16,7 @@ ss.Module                   lifecycle: init → step → finalize; owns states, 
  ├── ss.Network             who contacts whom: ss.RandomNet, ss.MFNet, ss.StaticNet, ss.PartnerNet, ...
  ├── ss.MixingPool          group-level mixing; also ss.MixingPools, which ss.contacts makes
  ├── ss.Demographics        births, deaths, pregnancy, migration
- ├── ss.Product             ss.Vaccine, ss.Test, ss.Treatment (08-interventions.md)
+ ├── ss.Product             ss.Vaccine, ss.Diagnostic, ss.Treatment (08-interventions.md)
  ├── ss.Intervention        deliveries: ss.vaccinate, ss.screen, ss.treat (08-interventions.md)
  ├── ss.Connector           cross-module code in step(); ss.modify and ss.change make one
  └── ss.Analyzer            extra results
@@ -34,11 +34,11 @@ ss.Result                   a named time series, with a dimension per stratifica
 
 ## Naming conventions
 
-**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names. Products (`ss.Vaccine`, `ss.Test`, `ss.Treatment`) are CamelCase because they are modules, as Starsim's `ss.Product` is; the deliveries that hand them out (`ss.vaccinate`, `ss.screen`, `ss.treat`) are pieces and are lowercase.
+**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names. Products (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`) are CamelCase because they are modules, as Starsim's `ss.Product` is; the deliveries that hand them out (`ss.vaccinate`, `ss.screen`, `ss.treat`, and `ss.visit`, which hands out nothing), and `ss.cascade`, which groups them, are pieces and are lowercase. No product and delivery differ only by case.
 
 | | Examples |
 |---|---|
-| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.Calibration`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Test`, `ss.Treatment` |
+| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.Calibration`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
 | lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.compare_models` |
 
 Methods that describe the model are `describe()`, `diagram()`, `equations()`, and `solvers()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.

@@ -192,7 +192,12 @@ class modify(Connector):
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)` or a function of the sim
         add (float): add this to the quantity (a parameter only)
         set (float): replace the quantity with this (a parameter only)
-        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), or a function of the sim (default: everyone)
+        efficacy (float): for protection such as a condom or a needle program, the share of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
+        share (float): with `multiply=` or `efficacy=`, the share of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
+            `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `route=`, as agents) a function of
+            the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
+        route (str/list): for a modifier of a transmission, the network or networks (by name) it applies on; by default, every route
+        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), or a function of the sim (default: everyone); with `route=`, the people who would be infected
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
         when (func): a function of the sim returning True on the steps it applies
@@ -207,6 +212,10 @@ class modify(Connector):
 
         # Each place on its own: contacts cut by 40% for at least 14 days once a week's cases pass 200 per 100,000
         npi = ss.modify(sir.pars.beta, multiply=0.6, where=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, hold=ss.days(14))
+
+        # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
+        use = ss.timeseries({2000: 0.05, 2020: 0.3})
+        condoms = ss.modify(ng.infection, efficacy=0.9, share=use, route='mfnet')
         ```
     """
     compartmental = True # It works on groups as well as on agents
@@ -214,13 +223,21 @@ class modify(Connector):
 
     timepar_skip = ['where', 'when', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
-    def __init__(self, target, multiply=None, add=None, set=None, where=None, start=None, stop=None, when=None, hold=None, name=None, **kwargs):
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, route=None, where=None, start=None, stop=None, when=None, hold=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
-        given = [key for key,val in dict(multiply=multiply, add=add, set=set).items() if val is not None]
+        given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
         if len(given) != 1:
-            errormsg = f'ss.modify() takes exactly one of multiply=, add=, or set=; you supplied {given or "none"}'
+            errormsg = f'ss.modify() takes exactly one of multiply=, add=, set=, or efficacy= (which is multiply=1 - efficacy); you supplied {given or "none"}'
+            raise ValueError(errormsg)
+        if share is not None and given[0] not in ['multiply', 'efficacy']:
+            errormsg = f'share= of ss.modify() is the share of acts (or contacts) a multiplier acts on, so it goes with multiply= or efficacy=, not {given[0]}='
             raise ValueError(errormsg)
         self.target_module, self.target_kind, self.target_name = parse_target(target) # Resolved by name when the sim is built, since the sim works on copies
+        self.efficacy = efficacy
+        if efficacy is not None:
+            given, multiply = ['multiply'], efficacy
+        self.share = share
+        self.route = None if route is None else sc.tolist(route)
         self.op = given[0]
         if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
             self.name = self.label = f'{self.target_name or self.target_kind}_{self.op}'
@@ -259,7 +276,7 @@ class modify(Connector):
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
-        coded = {key:dis for key,dis in sim.diseases.items() if dis.graph is None}
+        coded = {key:dis for key,dis in sim.diseases.items() if dis.graph is None and not isinstance(dis, ss.Strains)}
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
             found = kind in [None, 'par'] and name == 'n_contacts'
             kind = 'par'
@@ -278,12 +295,24 @@ class modify(Connector):
             raise ss.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
             kind = graph.modifier_kind(name)
+            msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)
+            if msg:
+                ss.note(msg, sim=sim)
+        if self.route is not None:
+            if kind != 'transition' or modname not in mods or not mods[modname].graph.transitions[name].contact:
+                raise ValueError(f'route= of the modifier "{self.name}" limits a modifier of a transmission to some routes, so its target is a transmission (e.g. {modname}.infection), not {self.target}')
+            routes = list(sim.all_networks())
+            for route in self.route:
+                if route not in routes:
+                    raise ss.RouteMismatch(f'route= of the modifier "{self.name}" names "{route}", which is not a route of the sim; the routes are {sc.strjoin(routes) or "none"}')
+            kind = 'route'
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
             errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta)'
             raise ValueError(errormsg)
         self.target_module, self.target_kind = modname, kind
-        sim.modifiers[(modname, kind, name)].append(self)
+        for key in [name] if self.route is None else [f'{name}@{route}' for route in self.route]: # On a route, under the transmission's name and the route's (see Engine.route_mult())
+            sim.modifiers[(modname, kind, key)].append(self)
         for time in self.times or [self.start]: # Each must be within the sim
             if time is not None:
                 to_ti(sim, time, name=f'the {"time" if self.times else "start"} of "{self.name}"')
@@ -347,10 +376,29 @@ class modify(Connector):
         out = np.where(until > ti, np.maximum(mask, value), mask)
         return out.astype(mask.dtype)
 
-    def current(self, engine):
-        """ The amount on this step: a scalar, or one value per agent or group """
+    def current(self, engine, share=True):
+        """ The amount on this step: a scalar, or one value per agent or group; with share=, the multiplier on the hazard, 1 − share·(1 − multiply) """
         convert = None if self.op == 'multiply' else engine.convert # A value that is set or added is in the target's own type
-        return engine.selector.per_person(self.amount, convert=convert)
+        amount = engine.selector.per_person(self.amount, convert=convert)
+        if self.efficacy is not None:
+            amount = 1 - amount
+        if share and self.share is not None:
+            amount = 1 - self.share_of(engine)*(1 - amount)
+        return amount
+
+    def share_of(self, engine, net=None):
+        """ The share of acts (or contacts) it acts on this step: a scalar, or one value per agent or group; or, given a network, a function of it gives one per edge """
+        share = self.share
+        if self.per_edge:
+            if net is None:
+                raise ss.CapabilityError(f'share= of the modifier "{self.name}" is a function of the network, one value per edge, which only a run as agents has; give a number, an ss.timeseries, or an ss.by over a dimension, or run with solver="abm"')
+            return np.asarray(share(net), dtype=float)
+        return engine.selector.per_person(share)
+
+    @property
+    def per_edge(self):
+        """ Whether its share is a function of the network, one value per edge """
+        return self.route is not None and callable(self.share) and not isinstance(self.share, (ss.transitions.TimeValue, ss.Dist))
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
@@ -376,7 +424,11 @@ class modify(Connector):
     def describe(self):
         """ One line saying what the modifier does """
         amount = self.amount.__name__ if callable(self.amount) and hasattr(self.amount, '__name__') else self.amount
-        out = f'{self.name:<16s} {self.op}={amount}'
+        out = f'{self.name:<16s} ' + (f'efficacy={amount}' if self.efficacy is not None else f'{self.op}={amount}')
+        if self.share is not None:
+            out += f'   share={getattr(self.share, "__name__", self.share)}'
+        if self.route is not None:
+            out += f'   route={sc.strjoin(self.route)}'
         if self.where is not None:
             out += f'   where={getattr(self.where, "__name__", self.where)}'
         for key in ['start', 'stop']:
@@ -396,7 +448,11 @@ class modify(Connector):
         out.update(type=type(self).__name__, target=self.target, multiply=None, add=None, set=None,
                    start=None if self.start is None else str(self.start), stop=None if self.stop is None else str(self.stop))
         spec = lambda val: ss.transitions.func_json(val) if inspect.isfunction(val) else str(getattr(val, '__name__', val)) # A function with its source, as in a disease
-        out[self.op] = self.amount if sc.isnumber(self.amount) else spec(self.amount)
+        out['efficacy' if self.efficacy is not None else self.op] = self.amount if sc.isnumber(self.amount) else spec(self.amount)
+        if self.share is not None:
+            out['share'] = self.share if sc.isnumber(self.share) else ss.presentation.quantity_json(self.share, None, None) if isinstance(self.share, (ss.transitions.TimeValue, ss.by)) else spec(self.share)
+        if self.route is not None:
+            out['route'] = self.route
         if self.where is not None:
             out['where'] = spec(self.where)
         if self.when is not None:

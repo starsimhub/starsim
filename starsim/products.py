@@ -9,13 +9,157 @@ import pandas as pd
 
 
 
-class Product(ss.Module):
+class EventSource:
+    """
+    What a delivery and a product share as events: the people it reached on the step (`screening`), its outcomes (`screening.positive`), and their memory
+
+    Each is a condition that triggers a delivery (`ss.treat(who=screening.positive)`), and remembers per person whether
+    (`.ever`), how often (`.count`), and how long ago (`.since`) it happened, including on the current step once the delivery
+    that fired it has run. The memory is kept only for the events that something in the sim reads, or with `count_events=`.
+    """
+    def outcome_names(self):
+        """ The names of its outcomes, e.g. ['positive', 'negative'] for a test """
+        return []
+
+    @property
+    def event(self):
+        return ss.conditions.Cond('event', self, None)
+
+    @property
+    def ever(self):
+        """ Whether it has happened to each person, as a condition """
+        return self.event.ever
+
+    @property
+    def count(self):
+        """ How many times it has happened to each person """
+        return self.event.count
+
+    @property
+    def since(self):
+        """ The time since it last happened to each person (infinite if never) """
+        return self.event.since
+
+    def __or__(self, other): return self.event | other
+    def __ror__(self, other): return other | self.event
+    def __and__(self, other): return self.event & other
+    def __rand__(self, other): return other & self.event
+    def __invert__(self): return ~self.event
+
+    def outcome_attr(self, attr):
+        """ An outcome as an event, e.g. `screening.positive`; called for an attribute that is not otherwise found """
+        if attr.startswith('_'):
+            return None
+        try:
+            names = self.outcome_names()
+        except Exception:
+            names = []
+        return ss.conditions.Cond('event', self, attr) if attr in names else None
+
+    def no_outcome(self, attr):
+        """ The error for a misspelled outcome """
+        names = self.outcome_names()
+        name = self.__dict__.get('name')
+        return AttributeError(f'"{name}" has no attribute or outcome "{attr}"; its outcomes (events) are {sc.strjoin(names) if names else "none"}{ss.transitions.did_you_mean(attr, names)}')
+
+    def init_events(self, sim):
+        """ Before a run: the people of each event on the current step, and the memory and log the sim needs (as agents, arrays of each person's last time and count) """
+        self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
+        self._pending = [] # Fired, not yet in the memory: (outcome, entry)
+        self._log = [] # (time index, outcome, UIDs) for count_events=
+        needs = ss.interventions.memory_needs(sim)
+        self._needs = {o:needs[(self.name, o)] for o in [None] + self.outcome_names() if (self.name, o) in needs}
+        self._mem = {}
+        if sim.solver == 'abm':
+            for o,need in self._needs.items():
+                key = 'event' if o is None else o
+                last, count = ss.FloatArr(f'last_{key}', label=f'Time index of the last {key}'), ss.FloatArr(f'count_{key}', default=0, label=f'Number of times: {key}')
+                for arr in [last, count]:
+                    if arr.name not in self.__dict__:
+                        self.define_states(arr)
+                self._mem[o] = (getattr(self, last.name), getattr(self, count.name))
+        return
+
+    def fire(self, outcome, sel, eng=None, before=None):
+        """ Record that an event happened to some people now: a boolean per agent, or the share of each state and group (as they were in `before`, if given) """
+        sim = self.sim
+        ti = sim.ti
+        if sim.solver == 'abm':
+            entry = [ti, ss.uids(np.flatnonzero(sel)) if not isinstance(sel, ss.uids) else sel, None, None]
+        else:
+            entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.Delivery.carry_events()
+        live = self._live.setdefault(outcome, [])
+        if live and live[0][0] != ti:
+            live.clear()
+        live.append(entry)
+        if outcome in self._needs:
+            self._pending.append((outcome, entry))
+            if self._needs[outcome].log and sim.solver == 'abm':
+                self._log.append((ti, outcome, entry[1]))
+        return
+
+    def current(self, outcome, selector):
+        """ The people an event happened to on this step, as a selection for a module's selector """
+        sim = self.sim
+        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti]
+        if selector.abm:
+            out = selector.nobody()
+            for e in entries:
+                out[e[1]] = True
+            return out
+        out = None
+        for _,sel,before,eng in entries:
+            after = eng.state_counts()
+            now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, now that others may have moved
+            if eng.mod is not selector.mod:
+                if not np.allclose(now, now[0]):
+                    raise ss.CapabilityError(f'the event "{self.name}{"." + outcome if outcome else ""}" selects people by their state in "{eng.mod.name}", which cannot be carried over to "{selector.mod.name}" with solver="{sim.solver}". Run with solver="abm".')
+                now = np.broadcast_to(now[0], selector.shape).astype(float)
+            out = now if out is None else out + now - out*now
+        return selector.nobody() if out is None else out
+
+    def flush(self, ti):
+        """ Put the people events happened to, up to and including time index ti, into the memory """
+        keep = []
+        for outcome,entry in self._pending:
+            t, sel, before, eng = entry
+            if t > ti:
+                keep.append((outcome, entry))
+            elif self.sim.solver == 'abm':
+                last, count = self._mem[outcome]
+                last[sel] = t
+                count[sel] = count[sel] + 1
+            else:
+                ss.interventions.remember_levels(self, outcome, t, sel, before, eng, ti)
+        self._pending = keep
+        return
+
+    def events_df(self):
+        """ The log of events kept with count_events=, as agents: one row for each person and event """
+        rows = [(int(uid), self.sim.t.timevec[t] if t < len(self.sim.t.timevec) else t, self.name if o is None else f'{self.name}.{o}') for t,o,uids in self.__dict__.get('_log', []) for uid in uids]
+        return sc.dataframe(rows, columns=['uid', 'time', 'event'])
+
+
+class Product(EventSource, ss.Module):
     """
     Generic product base class; subclasses implement administer().
 
     Products represent diagnostic tests, treatments, or vaccines that can be
-    administered to agents by an Intervention.
+    administered to agents by an Intervention. A product is an event too: the people any delivery of it reached on the
+    step (`cytology`), with its outcomes (`cytology.positive`), and their memory (`cytology.since`): see `ss.products.EventSource`.
     """
+    def __getattr__(self, attr):
+        """ An outcome of the product over all its deliveries, as an event: e.g. `hiv_rdt.positive` """
+        out = self.outcome_attr(attr)
+        if out is not None:
+            return out
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            if not attr.startswith('_') and self.outcome_names():
+                raise self.no_outcome(attr) from None
+            raise
+
     def init_pre(self, sim):
         """ Initialize the product; skips if already initialized """
         if not self.initialized:
@@ -38,11 +182,11 @@ class Product(ss.Module):
 
 class Dx(Product):
     """
-    Generic class for diagnostics, written as code: test outcomes from a table of probabilities by disease state (for declared models, see `ss.Test`)
+    Generic class for diagnostics, written as code: test outcomes from a table of probabilities by disease state (for declared models, see `ss.Diagnostic`)
     """
     def __init__(self, df=None, hierarchy=None, *args, **kwargs):
         if df is None:
-            raise TypeError('ss.Dx is the Starsim 3 diagnostic written as code, and needs df=, a table of test outcomes by disease state; for a declared model, use ss.Test(sensitivity=..., specificity=...)')
+            raise TypeError('ss.Dx is the Starsim 3 diagnostic written as code, and needs df=, a table of test outcomes by disease state; for a declared model, use ss.Diagnostic(sensitivity=..., specificity=...)')
         super().__init__(*args, **kwargs)
         self.df = df
         self.health_states = df.state.unique()
@@ -333,6 +477,7 @@ class Held(Product):
         if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
             return
         self.linked = True
+        self.init_events(sim)
         super().init_pre(sim)
         if not self.holds:
             return
@@ -448,11 +593,14 @@ class Treatment(Held):
     A treatment: what `ss.treat()` delivers
 
     A treatment can cure (`cure=`, once, when it is given), change rates for as long as it is held
-    (`efficacy=`), or both. By default it is given to the people who are infected.
+    (`efficacy=`), or both. By default it is given to the people who are infected. A treatment that cures
+    has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not infected), which are
+    results and events of its deliveries.
 
     Args:
-        cure (float): the probability that treatment cures: the person leaves whichever infected state they are in for the
-            state the disease's recovery leads to (or `to=`, or the destination of `transition=`); 1 if neither `cure` nor `efficacy` is given
+        cure (float/dict): the probability that treatment cures: the person leaves whichever infected state they are in for the
+            state the disease's recovery leads to (or `to=`, or the destination of `transition=`); 1 if neither `cure` nor `efficacy` is given.
+            A dict gives one for each state (each a number or an `ss.by`), and people in other states are not cured
         efficacy (dict): the effects while it is held, as for `ss.Vaccine` (e.g. `dict(transmission=0.96, mortality=0.9)`)
         transition (str): the transition a cured person leaves by (its flow counts them), if the disease has recoveries to more than one state
         to (str): the state cured people go to, if the disease has recoveries to more than one state
@@ -463,6 +611,7 @@ class Treatment(Held):
     Examples:
         ```python
         drug = ss.Treatment(cure=0.95, cost=120.0)
+        ablation = ss.Treatment(cure=dict(infected=0.936, cin=0.936)) # By state
         art = ss.Treatment(efficacy=dict(transmission=0.96, mortality=0.9))
         both = ss.Treatment(cure=0.3, efficacy=dict(transmission=0.9))
         ```
@@ -485,6 +634,9 @@ class Treatment(Held):
     @property
     def holds(self):
         return self.efficacy is not None
+
+    def outcome_names(self):
+        return ['cured', 'failed', 'unneeded'] if self.__dict__.get('cure') is not None else []
 
     def recovery(self, dis):
         """
@@ -529,19 +681,30 @@ class Treatment(Held):
         srcs = [s for s in srcs if s is not dst]
         if self.transition is not None and not any(s is i for s in tr.src for i in infected): # A transition out of states that are not infected, e.g. S -> P: a move along it
             srcs = list(tr.src)
+        if isinstance(self.cure, dict): # The states named are cured too, if they are not already
+            for name in self.cure:
+                state = graph.states.get(name)
+                if state is None or not state.people:
+                    raise ss.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                if state is not dst and not any(s is state for s in srcs):
+                    srcs.append(state)
         self.cures = f'from {sc.strjoin(s.name for s in srcs)} to {dst.name}' + (f' (counted in {tr.name})' if tr is not None else '')
         return tr, dst, srcs
 
     def describe(self):
-        cures = f'cures with probability {self.cure}' + (f', {self.cures}' if self.cures else '') if self.cure is not None else ''
+        prob = sc.strjoin(f'{k} {ss.expressions.value_str(v)}' for k,v in self.cure.items()) if isinstance(self.cure, dict) else f'with probability {self.cure}'
+        cures = f'cures {prob}' + (f', {self.cures}' if self.cures else '') if self.cure is not None else ''
         if self.holds:
             return super().describe() + (f'; {cures}' if cures else '')
         return f'{self.name}: treatment that {cures}'
 
 
-class Test(Product):
+class Diagnostic(Product):
     """
     A diagnostic test: what `ss.screen()` delivers
+
+    Its outcomes are `positive` and `negative`: results of each delivery of it, and events (`screening.positive` for one
+    delivery, `hiv_rdt.positive` for any delivery of the product), which trigger the steps that follow.
 
     Args:
         sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`), and the test then detects being in those states
@@ -553,15 +716,14 @@ class Test(Product):
 
     Examples:
         ```python
-        pcr = ss.Test(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
-        xpert = ss.Test(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
+        pcr = ss.Diagnostic(sensitivity=0.9, specificity=0.98, cost=4.00, delay=ss.days(2))
+        xpert = ss.Diagnostic(sensitivity=dict(symptomatic=0.91, asymptomatic=ss.by(age=[0.73, 0.78]))) # By state, and by age group within a state
         ```
     """
     compartmental = True
     holds = False
     waning = None
     spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
-    __test__ = False # So pytest does not collect it
 
     def __init__(self, sensitivity=1.0, specificity=1.0, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
@@ -573,6 +735,14 @@ class Test(Product):
         self.disease = None
         return
 
+    def outcome_names(self):
+        return ['positive', 'negative']
+
+    @property
+    def tabulated(self):
+        """ A test has no step of its own (its deliveries give it), so it does not stop a whole run in the kernels """
+        return self.sim.solver != 'abm'
+
     def agent_reasons(self):
         out = []
         detects = self.detects
@@ -583,6 +753,7 @@ class Test(Product):
     def init_pre(self, sim):
         if not getattr(self, 'linked', False):
             self.linked = True
+            self.init_events(sim)
             super().init_pre(sim)
         return
 

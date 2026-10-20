@@ -73,8 +73,9 @@ class IncompatibleTypes(CodedError, TypeError):
 class WrongDimension(CodedError, TypeError):
     """
     Typed arithmetic whose result has no type (a rate times a rate, a duration times a duration), or typed values that give a
-    slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; or both `beta`
-    and `n_contacts` carry a time unit
+    slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; both `beta`
+    and `n_contacts` carry a time unit; or a typed rate as `beta` on a network with acts (acts per unit time times a rate per
+    unit time is not a hazard), or inside `ss.peract`
     """
 
 class ReservedName(CodedError):
@@ -143,7 +144,12 @@ class NoGeography(CodedError):
     """ A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances """
 
 class RouteMismatch(CodedError):
-    """ A key of a per-layer `beta` dict matches no network or layer, or a network or layer has no key; or a route has a `beta` of its own in a declared model """
+    """
+    A key of a per-layer `beta` dict matches no network or layer, or a network or layer has no key; a route has a `beta` of its own in a
+    declared model; a `beta` is a positional pair (directions are named: `ss.peract(m2f=..., f2m=...)`); `ss.peract` is used on a route
+    without acts, or names a direction the network does not have (or leaves one out, or has keys on a network with no sides), listing
+    its directions; or a modifier's `route=` names no route
+    """
 
 class UnmodifiableTarget(CodedError):
     """
@@ -174,7 +180,7 @@ class UnknownLocation(CodedError, KeyError):
     """ A place name cannot be resolved by the data provider (`starsim_data`), or a source has no contact matrix for it. Says where it can be found, if anywhere """
 
 class OutOfBounds(CodedError):
-    """ A parameter's value is outside its `bounds` """
+    """ A parameter's value is outside its `bounds`; or a probability per act (`ss.peract`) is outside 0 to 1 """
 
 class UnknownOutcomeSource(CodedError, KeyError):
     """ The source of an `ss.outcome` names nothing in the model """

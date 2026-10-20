@@ -252,8 +252,8 @@ def test_independence(do_plot=False, thresh=0.1):
     sim = ss.Sim(
         n_agents = 1000,
         diseases = [
-            dict(type='sir', init_prev=0.1),
-            dict(type='sis', init_prev=0.1),
+            dict(type='sir', init_prev=0.1, beta=dict(random=0.1, mf=ss.peract(0.01))), # A probability per act on ss.MFNet
+            dict(type='sis', init_prev=0.1, beta=dict(random=0.05, mf=ss.peract(0.01))),
             ssl.diseases.HIV(init_prev=0.1),
         ],
         networks = [

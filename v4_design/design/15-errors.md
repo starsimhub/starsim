@@ -49,7 +49,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | Name | Kind | When |
 |---|---|---|
 | `IncompatibleTypes` | error (also a `TypeError`) | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq`, or a number to a rate; names both types |
-| `WrongDimension` | error (also a `TypeError`) | Typed arithmetic whose result has no type (a rate times a rate, a duration times a duration), or typed values that give a slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; or both `beta` and `n_contacts` carry a time unit |
+| `WrongDimension` | error (also a `TypeError`) | Typed arithmetic whose result has no type (a rate times a rate, a duration times a duration), or typed values that give a slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; both `beta` and `n_contacts` carry a time unit; or a typed rate as `beta` on a network with acts (acts per unit time times a rate per unit time is not a hazard), or inside `ss.peract` |
 | `ReservedName` | error | A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) |
 | `UnknownState` | error (also a `KeyError`) | States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred |
 | `BadBranchSplit` | error | Constant branch probabilities out of one state do not sum to 1, or `ss.null` is one of several destinations (a branch out of the model is a transition of its own) |
@@ -66,7 +66,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `PartialStratificationMixing` | error | Contacts are given by a dimension that some of the people who mix do not have: a state the dimension does not apply to (`states=`) is the origin or the source of a transmission, or the dimension has `where=`. There is no coordinate for those people to mix as |
 | `InconsistentDimension` | error | Two modules in one sim are stratified by the same people property (age, sex, place) with different groups. Names both modules and their groups, and suggests stratifying the sim: `sim.stratify(age=[...])` |
 | `NoGeography` | error | A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances |
-| `RouteMismatch` | error | A key of a per-layer `beta` dict matches no network or layer, or a network or layer has no key; or a route has a `beta` of its own in a declared model |
+| `RouteMismatch` | error | A key of a per-layer `beta` dict matches no network or layer, or a network or layer has no key; a route has a `beta` of its own in a declared model; a `beta` is a positional pair (directions are named: `ss.peract(m2f=..., f2m=...)`); `ss.peract` is used on a route without acts, or names a direction the network does not have (or leaves one out, or has keys on a network with no sides), listing its directions; or a modifier's `route=` names no route |
 | `UnmodifiableTarget` | error | The target of `ss.modify` or `ss.change` cannot be resolved to a named numeric quantity (a plain number, a boolean state, a name that does not exist). Lists the closest names |
 | `UnknownEffect` | error (also a `KeyError`) | A product names something it cannot act on: a key of a product's `efficacy` that is not something it can act on in the disease, a `transition=` of a treatment that the disease does not have (or a cure with no single transition to leave by), or a sensitivity of a test for a state the disease does not have. Lists the valid names |
 | `UnknownDisease` | error (also a `KeyError`) | An intervention needs to know which disease it is for: `disease=` names one that is not a declared disease in the sim, or is not given and the sim has more than one |
@@ -74,7 +74,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `ShapeError` | error | A value's length does not match its stratification (four values for three age groups). Names the parameter, the transition, and both lengths |
 | `UnvaluedParameter` | error | An `ss.par` has no value, no bounds to start from, and nothing supplied through `pars=` |
 | `UnknownLocation` | error (also a `KeyError`) | A place name cannot be resolved by the data provider (`starsim_data`), or a source has no contact matrix for it. Says where it can be found, if anywhere |
-| `OutOfBounds` | error | A parameter's value is outside its `bounds` |
+| `OutOfBounds` | error | A parameter's value is outside its `bounds`; or a probability per act (`ss.peract`) is outside 0 to 1 |
 | `UnknownOutcomeSource` | error (also a `KeyError`) | The source of an `ss.outcome` names nothing in the model |
 | `OutcomeCycle` | error | Outcomes chain back to themselves |
 | `DataMisaligned` | error | The data lies entirely outside the simulated period. (Data partly outside is used where it overlaps, with a note) |

@@ -58,8 +58,12 @@ def available():
 
 def reason(sim):
     """ Why the sim cannot be run in JAX, in a few words, or None if it can """
+    families = [mod for mod in sim.diseases() if isinstance(mod, ss.Strains)]
     if not available():
         return 'JAX is not installed'
+    elif families: # Agents only for now; a combine= function would have no gradient in any case
+        funcs = [getattr(imm.combine, '__name__', 'function') for fam in families for imm in fam.immunity if callable(imm.combine)]
+        return f'"{families[0].name}" is a family of diseases (ss.Strains), which runs as agents for now' + (f', and combines protection with a function ({funcs[0]}), which has no gradient; the rules "max", "sum", and "multiply" do' if funcs else '')
     elif sim.solver != 'ode':
         return f'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'
     elif not sim.kernel_only():
@@ -777,7 +781,7 @@ def of_results(sim, results=None, pars=None):
     why = reason(sim)
     if why:
         errormsg = f'Gradients need a sim that runs in JAX, and this one cannot, since {why}'
-        raise ValueError(errormsg)
+        raise ss.CapabilityError(errormsg)
     found = find_pars(sim, None if pars is None else sc.tolist(pars))
     types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in found.values()]
     x0 = np.array([p.raw.value if cls is not None else p.raw for p,cls in zip(found.values(), types)], dtype=float)
@@ -827,6 +831,12 @@ class Context:
         if kept is not None: # Rows by groups, as in the engine's tables
             return kept[1]
         return self.engine.value(p)
+
+    def prop(self, cond):
+        """ A property of people, which is fixed for each group: as the engine has it """
+        if self.n is not None: # In a result
+            return ss.solvers.engine.StockCtx.prop(self, cond)
+        return self.engine.prop(cond)
 
     def stock(self, state):
         return self.n[state.name]
@@ -1195,7 +1205,7 @@ class LogDensity:
         why = reason(sim)
         if why:
             errormsg = f'The log-density in JAX needs a sim that runs in JAX, and this one cannot, since {why}'
-            raise ValueError(errormsg)
+            raise ss.CapabilityError(errormsg)
         fitted = find_pars(sim, None if pars is None else sc.tolist(pars))
         self.names = list(fitted.keys())
         self.x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)

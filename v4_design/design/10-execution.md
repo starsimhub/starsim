@@ -71,20 +71,22 @@ sir    = ss.Disease(
     recovery  = ss.progression('I -> R', dur=10),
     init_prev = 0.01,
 )
-test   = ss.Test(sensitivity=0.9, specificity=0.98)
+test   = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
 drug   = ss.Treatment(cure=0.95)
-screen = ss.screen(test, coverage=0.2, on_positive=ss.treat(drug))
+screen = ss.screen(test, coverage=0.2)
+treat  = ss.treat(drug, who=screen.positive)
 
-sim = ss.Sim(sir, interventions=screen, unit='day', dt=1, stop=100)
+sim = ss.Sim(sir, interventions=[screen, treat], unit='day', dt=1, stop=100)
 ```
 
-Testing and treatment happen in the same step: the follow-up given as `on_positive=` is a module of its own (`screen_positive`), placed right after the screening in row 8, and it acts on the people who tested positive in that step. Follow-ups chain to any depth this way.
+Testing and treatment happen in the same step: the treatment is a step of its own, triggered by the test's outcome `screen.positive`, and it acts on the people who tested positive in that step. Within row 8, the deliveries run in the order of their triggers: each after the deliveries whose events trigger it, whatever order they are given in (otherwise in the order given), and a cycle of triggers raises, naming it. Steps chain to any depth this way ([08-interventions.md](08-interventions.md#cascades)).
 
 Infection is at row 9, after interventions, so with the default order a person infected today is first eligible for screening tomorrow. To put screening after transmission, so that infection, testing, and treatment can all happen in one step, move it in the loop:
 
 ```python
 sim.init()
 sim.loop.insert(screen, label='sir.step')   # run screening right after sir's transmission
+sim.loop.insert(treat, label='screen.step') # and the treatment it triggers after it
 sim.run()
 ```
 
@@ -149,7 +151,7 @@ Details:
 
 ## Removals are deferred
 
-Nobody is removed in the middle of a step. A module that kills an agent calls `sim.people.request_death(uids)`, which only records the request; the deaths take effect at row 10 (`step_die()`), after every module has run, and the agents are removed from the active population at row 14. This is Starsim's behavior, kept. A declared `ss.death` transition, and `I >> ss.null @ rate` out of a state of people, do the same thing.
+Nobody is removed in the middle of a step. A module that kills an agent calls `sim.people.request_death(uids, cause=self)`, which only records the request; the deaths take effect at row 10 (`step_die()`), after every module has run, and the agents are removed from the active population at row 14. This is Starsim's behavior, kept. A declared `ss.death` transition, and `I >> ss.null @ rate` out of a state of people, do the same thing, with the disease as the cause. Each person dies once, of one cause: when several modules request the death of the same person in the same step, `step_die()` chooses one of them, each equally likely whatever the order of the modules (one random number per person, so common random numbers hold), and keeps it in `people.cause_of_death` (a position in `people.causes`). Each module counts its deaths after that, from `people.died_of(module)` (a declared death flow takes out those who died of something else), so the deaths by cause add up to the sim's deaths.
 
 Consequences: an agent who is requested to die earlier in the step can still transmit at row 9 of that step and is still counted by any module that runs before row 10; two modules requesting the same death do not conflict; and custom code never sees arrays change length partway through a step. Emigration and other non-death removals use the same mechanism (`request_removal`).
 

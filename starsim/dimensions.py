@@ -8,7 +8,7 @@ import starsim as ss
 from .expressions import as_expr, did_you_mean
 from .parameters import by
 from .networks import geo, gravity, Mobility
-from .transitions import parse_arrow
+from .transitions import parse_arrow, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
 
@@ -32,12 +32,18 @@ class Strat:
         name (str): the dimension, e.g. 'age'
         levels (list): bin edges (for a continuous property such as age) or labels
         split (list): the share of the population in each level (if not given: from an `ss.geo`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
-        adjust (dict): multipliers on named transitions, one per level
-        kind (str): 'age', 'space', 'strain', or 'plain'; if not given, 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for a dimension called age, and otherwise 'plain'
+        adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
+        kind (str): 'age', 'space', 'strain', 'clock', or 'plain'; if not given, 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for a dimension called age, and otherwise 'plain'
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
         mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
-        immunity (array): for a strain, the protection that past infection with each strain (rows) gives against each strain (columns); 1 is complete
+        immunity (array/immunity): for a strain, the protection that past infection with each strain (rows) gives against each strain (columns), 1 being complete; or `ss.immunity(rel_sus=matrix, combine=...)`, to say how the protection from several strains adds up (the strongest, by default)
+
+    A dimension of kind 'clock' holds the time since an event, which advances with time as age does: its levels are
+    the lower edges of bins of time (e.g. `ss.months([0, 1, 2, 3, 6, 12, 24])`), and a last level `none` holds the
+    people who have not had the event (whose value is NaN). An event sets it with `move=` (e.g. `move=dict(since_birth=0)`).
+    As agents, each person's value is the time since it was set; in a compartmental run, the levels are whole steps
+    up to the last edge (people move along them a step at a time, which is exact), with the last open-ended.
     """
     def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None, immunity=None):
         self.name = name
@@ -70,16 +76,24 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
+        self.clock_unit = None # For a clock: the unit of time its values are in (None for the sim's), and its levels as given
+        self.declared = None
+        if self.kind == 'clock':
+            self.declared, self.clock_unit = clock_values(name, levels)
+            levels = []
         levels = list(levels)
-        numeric = all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
+        numeric = self.kind != 'clock' and all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
         self.edges = None
-        if numeric: # Bin edges; the last bin is open-ended
+        if self.kind == 'clock':
+            self.set_clock(self.declared)
+        elif numeric: # Bin edges; the last bin is open-ended
             self.edges = np.array(levels, dtype=float)
             ends = list(levels[1:]) + [None]
             self.labels = [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(levels, ends)] # e.g. 0, 1-4, 5+
         else:
             self.labels = levels
         self.n = len(self.labels)
+        self.coarse = None # For a clock in whole steps: the level as given that each step is in
         self.female = None # For a dimension called sex, which is people.female: the position of the level for women
         if name == 'sex' and kind is None: # kind= says it is something else, e.g. a place
             women = [i for i,label in enumerate(self.labels) if str(label).lower() in ['female', 'females', 'f', 'women', 'woman']]
@@ -102,6 +116,15 @@ class Strat:
                 raise ss.InvalidAdjustment(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
         self.immunity = None
+        self.combine = 'max' # How the protection from several strains a person has had adds up: see ss.immunity
+        if isinstance(immunity, ss.immunity):
+            if immunity.protected is not None or list(immunity.values.keys()) != ['rel_sus']:
+                given = ['protected='] if immunity.protected is not None else []
+                given += [f'{key.split(".")[0]}=' for key in immunity.values if key != 'rel_sus']
+                errormsg = f'immunity= of the strain dimension "{name}" is protection against being infected again, so it takes ss.immunity(rel_sus=..., combine=...), without {sc.strjoin(given)} (a person is protected by every strain they have had)'
+                raise ValueError(errormsg)
+            self.combine = immunity.combine
+            immunity = immunity.matrix('rel_sus', self.n) if self.kind == 'strain' else immunity.values['rel_sus']
         if immunity is not None:
             immunity = np.array(immunity, dtype=float)
             if self.kind != 'strain':
@@ -123,6 +146,9 @@ class Strat:
             if not np.isclose(split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {split.sum():n}'
                 split = split/split.sum()
+        elif self.kind == 'clock': # Nobody has had the event
+            split = self.at_none()
+            self.guessed['split'] = 'everyone at none, since nobody has had the event yet'
         elif self.kind == 'age' and self.edges is not None: # As the people of a declared model, unless the sim has a named population
             world = ss.named.world
             split = ss.named.age_split(self.edges, world.ages, world.counts)
@@ -136,11 +162,55 @@ class Strat:
         self.split = split
         return
 
+    def set_clock(self, vals, coarse=None):
+        """ A clock's levels: bins with these lower edges (in its own unit), then none """
+        vals = np.asarray(vals, dtype=float)
+        ends = list(vals[1:]) + [None]
+        self.edges = np.append(vals, np.inf) # Nobody's value reaches the last edge, so a value of NaN (none) is in the last level
+        self.labels = [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(vals, ends)] + ['none']
+        self.n = len(self.labels)
+        self.coarse = coarse
+        return
+
+    def clock_dt(self, sim):
+        """ For a clock: the length of a step, in the clock's unit """
+        dt = ss.solvers.convert(sim.pars.dt, sim.unit_base)
+        if self.clock_unit is None:
+            return float(dt)
+        return float(ss.time.get_dur_class(sim.unit_base)(dt).to(self.clock_unit).value)
+
+    def clock_steps(self, sim):
+        """ For a clock in a compartmental run: its levels made whole steps (from 0 to its last edge, rounded to a step), each in the level as given that it is in """
+        self.set_clock(self.declared) # As given, if it was made steps before
+        dt = self.clock_dt(sim)
+        top = int(round(self.declared[-1]/dt))
+        steps = np.arange(top + 1)*dt
+        if not np.allclose(self.declared/dt, np.round(self.declared/dt), atol=1e-6):
+            ss.note(f'the clock "{self.name}" has levels ({sc.strjoin(self.labels[:-1])}) that are not whole steps, so a compartmental run rounds them to the nearest step', ss.LargeStep, sim=sim)
+        coarse = np.clip(np.searchsorted(self.declared, steps + dt/2, side='right') - 1, 0, len(self.declared) - 1)
+        labels = list(self.labels)
+        self.set_clock(steps, coarse=np.append(coarse, len(self.declared))) # The last of the given levels is none
+        self.coarse_labels = labels
+        self.split = self.at_none()
+        return
+
+    def worth(self):
+        """ The value of the property for each level, as a compartmental run takes it in an expression: the lower edge for a clock (none is NaN) or for whole numbers (a counter), and otherwise the middle of the bin """
+        if self.kind == 'clock':
+            return np.where(np.isinf(self.edges), np.nan, self.edges)
+        elif self.edges is not None and np.allclose(self.edges, np.round(self.edges)):
+            return self.edges.copy()
+        return self.mids
+
     def first(self):
         """ A split with everyone at the first level """
         out = np.zeros(self.n)
         out[0] = 1
         return out
+
+    def at_none(self):
+        """ For a clock: a split with everyone at none, the last level """
+        return self.first()[::-1].copy()
 
     def init_carriage(self):
         """
@@ -202,14 +272,42 @@ class Strat:
         return f'{self.name}_group' if (self.name == 'age' and self.edges is None) else self.name
 
     def value(self, index):
-        """ The value people hold for a level, given its position: the level's lower edge for a numeric dimension (people hold values, which are binned into levels), the position itself otherwise """
-        return index if self.edges is None else self.edges[np.asarray(index, dtype=int)]
+        """ The value people hold for a level, given its position: the level's lower edge for a numeric dimension (people hold values, which are binned into levels), the position itself otherwise; for a clock's none, NaN """
+        if self.edges is None:
+            return index
+        out = self.edges[np.asarray(index, dtype=int)]
+        return np.where(np.isinf(out), np.nan, out) if self.kind == 'clock' else out
+
+    def moved(self, vals, level):
+        """ As agents: the values of people moved along this dimension: to a level (its position), up a counter (`('+', k)`), or to a time on a clock (`('=', t)`) """
+        if isinstance(level, tuple):
+            op, x = level
+            return self.add(vals, x) if op == '+' else np.full(len(vals), x, dtype=float)
+        return self.value(level)
+
+    def target(self, level):
+        """ Where people at each level go when moved along this dimension: as `moved()`, a level for each level """
+        if isinstance(level, tuple):
+            op, x = level
+            return self.shifted(x) if op == '+' else np.full(self.n, self.clock_level(x))
+        return np.full(self.n, level)
+
+    def move_level(self, level):
+        """ A level that people are moved to, as given in `move=`: its position, or for a clock, the time it is set to (`('=', t)`, in the clock's unit) """
+        if self.kind == 'clock':
+            return ('=', float(clock_values(self.name, [level], self.clock_unit)[0][0]))
+        return self.index(level)
+
+    def clock_level(self, value):
+        """ For a clock: the level of a value (a time in its unit, or a duration) """
+        value = clock_values(self.name, [value], self.clock_unit)[0][0]
+        return int(np.clip(np.digitize(value, self.edges) - 1, 0, self.n - 1))
 
     def people_arr(self):
         """ The property of people that holds each agent's level, when they do not have it already: for a dimension with labels, the level itself, as 16-bit integers (so with one dimension it is also the group: see `Groups.group_raw()`); for a binned one, floats """
         if self.edges is None:
             return ss.Arr(self.attr, dtype=level_dtype(self.n), default=0, nan=-1, label=self.name)
-        return ss.FloatArr(self.attr, default=0, label=self.name)
+        return ss.FloatArr(self.attr, default=np.nan if self.kind == 'clock' else 0, label=self.name)
 
     @property
     def spec(self):
@@ -218,7 +316,10 @@ class Strat:
         named = dict(geo=self.geo.ref) if self.geo is not None and self.geo.ref is not None else {} # Where a named geography came from; only when there is one, so that the hash of every other model is as it was
         if getattr(self, 'split_from', None): # A split taken from a named population (ss.people)
             named['split_from'] = self.split_from
-        return dict(**named, name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
+        if self.kind == 'clock': # Its levels as given, in their unit; everyone starts at none, so there is no split
+            levels = self.declared.tolist()
+            named['unit'] = None if self.clock_unit is None else self.clock_unit.base.removesuffix('s')
+        return dict(**named, name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
                     mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else self.mobility.away.name if isinstance(self.mobility.away, ss.par) and self.mobility.away.name else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
 
     @property
@@ -228,6 +329,18 @@ class Strat:
             return np.arange(self.n, dtype=float)
         ends = np.append(self.edges[1:], max(100, self.edges[-1] + 10) if self.kind == 'age' else self.edges[-1] + 1)
         return (self.edges + ends)/2
+
+    def shifted(self, k):
+        """ For a counter (`increment=`): the level that people at each level reach when it goes up by k (or down, for k < 0), staying in the last (open-ended) level or the first """
+        if self.edges is None:
+            return np.clip(np.arange(self.n) + k, 0, self.n - 1)
+        return np.clip(np.digitize(self.edges + k, self.edges) - 1, 0, self.n - 1)
+
+    def add(self, vals, k):
+        """ As agents: the values of a counter after it goes up by k: a value past the last edge stays in the last level, and none goes below the first """
+        if self.edges is None: # The property is the level
+            return np.clip(vals + k, 0, self.n - 1)
+        return np.maximum(vals + k, self.edges[0])
 
     def index(self, level):
         """ The position of a level, given by position or by label """
@@ -248,6 +361,26 @@ class Strat:
         return same and all(np.allclose(self.adjust[key], other.adjust[key]) for key in self.adjust)
 
 
+def clock_values(name, levels, unit=None):
+    """ The times of a clock's levels as numbers, and their unit: from durations (`ss.months([0, 1, 2])`, or a list of them), in the unit given or their own; or numbers, in the sim's unit (None) """
+    if isinstance(levels, ss.dur):
+        unit = unit or type(levels)
+        vals = np.atleast_1d(levels.to(unit).value if unit is not type(levels) else levels.value)
+    elif len(levels) and all(isinstance(v, ss.dur) for v in levels):
+        unit = unit or type(levels[0])
+        vals = [v.to(unit).value for v in levels]
+    elif all(sc.isnumber(v) and not isinstance(v, bool) for v in levels):
+        vals = levels
+    else:
+        errormsg = f'A clock ("{name}") has levels that are times since its event: durations such as ss.months([0, 1, 2, 3, 6, 12]), or numbers in the sim\'s unit; not {levels}'
+        raise TypeError(errormsg)
+    vals = np.asarray(vals, dtype=float)
+    if np.any(np.diff(vals) <= 0):
+        errormsg = f'The levels of the clock "{name}" are the lower edges of bins of time, so they increase, e.g. ss.months([0, 1, 2, 3, 6, 12]); not {vals.tolist()}'
+        raise ValueError(errormsg)
+    return vals, unit
+
+
 class Transfer:
     """
     Movement between the levels of a stratification, without a change of disease state
@@ -257,6 +390,7 @@ class Transfer:
         dur (any): the mean time before moving (instead of `rate`)
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword it is passed under
+        increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
         kwargs (dict): the dimension, and an arrow between two of its levels (e.g. `risk='low -> high'`),
             or the level people move to (e.g. `vaccinated=True`)
 
@@ -264,16 +398,23 @@ class Transfer:
         ```python
         ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
         ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
+        ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # Down a level at a time
         ```
     """
-    def __init__(self, rate=None, dur=None, states=None, name=None, label=None, **kwargs):
-        if len(kwargs) != 1:
-            errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(risk="low -> high", rate=0.1), not {list(kwargs.keys())}'
+    def __init__(self, rate=None, dur=None, states=None, name=None, label=None, increment=None, **kwargs):
+        increment = parse_increment(increment, 'ss.transfer()')
+        if len(kwargs) + len(increment or {}) != 1:
+            errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(risk="low -> high", rate=0.1) or ss.transfer(increment="doses", rate=0.1), not {list(kwargs.keys()) + list(increment or {})}'
             raise ValueError(errormsg)
         if (rate is None) == (dur is None):
             errormsg = 'ss.transfer() takes exactly one of rate= or dur='
             raise ValueError(errormsg)
-        self.dim, target = list(kwargs.items())[0]
+        self.increment = None # For a counter: the amount people move up it
+        if increment:
+            self.dim, self.increment = list(increment.items())[0]
+            target = None
+        else:
+            self.dim, target = list(kwargs.items())[0]
         if isinstance(target, str) and re.search(r'->|>>', target):
             src, dst = parse_arrow(target)
             self.src, self.dst = src, dst[0]
@@ -287,10 +428,17 @@ class Transfer:
         return
 
     def __repr__(self):
+        if self.increment is not None:
+            return f'transfer({self.name}: {self.dim} {self.increment:+d})'
         return f'transfer({self.name}: {self.dim} {self.src or "*"} -> {self.dst})'
 
+    def __or__(self, other): return ss.conditions.as_cond(self) | other # As an event: the people who moved this step
+    def __ror__(self, other): return other | ss.conditions.as_cond(self)
+    def __and__(self, other): return ss.conditions.as_cond(self) & other
+    def __rand__(self, other): return other & ss.conditions.as_cond(self)
 
-def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
+
+def transfer(rate=None, dur=None, states=None, name=None, label=None, increment=None, **kwargs):
     """
     Movement between the levels of a stratification, without a change of disease state
 
@@ -303,6 +451,7 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
         dur (any): the mean time before moving (instead of `rate`)
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
+        increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
         kwargs (dict): the dimension, and an arrow between two of its levels (e.g. `risk='low -> high'`),
             or the level people move to (e.g. `vaccinated=True`)
 
@@ -310,6 +459,7 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
         ```python
         ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
         ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
+        ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # A counter, down a level at a time
         ```
     """
     opts = [key for key in kwargs if key in ss.interventions.delivery_keys + list(ss.interventions.renamed_keys) + ['disease']]
@@ -318,7 +468,7 @@ def transfer(rate=None, dur=None, states=None, name=None, label=None, **kwargs):
         errormsg = (f'ss.transfer() is movement that happens all the time, at a rate (rate= or dur=); {sc.strjoin(f"{key}=" for key in opts)} {"is" if len(opts) == 1 else "are"} for a delivery. '
                     f'A move delivered to some people is ss.Delivery(move=dict({dim}=...), ...), e.g. ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[2021])')
         raise TypeError(errormsg)
-    return Transfer(rate=rate, dur=dur, states=states, name=name, label=label, **kwargs)
+    return Transfer(rate=rate, dur=dur, states=states, name=name, label=label, increment=increment, **kwargs)
 
 
 strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility', 'immunity']
@@ -410,8 +560,13 @@ class Groups:
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         return
 
-    def init(self):
-        """ Collect the stratifications of the sim and its modules, and work out the groups they give """
+    def init(self, steps=False):
+        """
+        Collect the stratifications of the sim and its modules, and work out the groups they give
+
+        Args:
+            steps (bool): for a compartmental run, once its unit is known: a clock's levels are whole steps (see `ss.dimensions.Strat.clock_steps()`)
+        """
         sim = self.sim
         strats = sc.objdict()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
@@ -455,12 +610,12 @@ class Groups:
                     strat.owner = mod.name # Part of the scenario, not of the model
                     strats.setdefault(strat.name, strat)
                 self.dim_moves += [move for move in mod.dim_moves() if move.dim not in [m.dim for m in self.dim_moves]]
-                for dim in (mod.move or {}):
+                for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
                     if dim not in strats:
                         raise ss.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         moved = [tf.dim for mod in sim.declared for tf in mod.graph.transfers.values()] # A dimension that people are moved along, with no split of its own, starts with everyone at its first level
-        moved += [dim for mod in sim.declared for tr in mod.graph.transitions.values() for dim in (getattr(tr, 'move', None) or {})]
-        moved += [dim for mod in sim.pars.interventions.values() for dim in (getattr(mod, 'move', None) or {})]
+        moved += [dim for mod in sim.declared for tr in mod.graph.transitions.values() for dim in list(getattr(tr, 'move', None) or {}) + list(getattr(tr, 'increment', None) or {})]
+        moved += [dim for mod in sim.pars.interventions.values() for dim in list(getattr(mod, 'move', None) or {}) + list(getattr(mod, 'increment', None) or {})]
         for name in moved:
             strat = strats.get(name)
             if strat is not None and strat.guessed.get('split') == 'equal across levels':
@@ -471,6 +626,15 @@ class Groups:
                 raise ss.DuplicateStructuralDimension(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
+        for strat in self.strats: # A clock's levels: as given, or whole steps
+            if strat.kind == 'clock':
+                if 'split' not in strat.guessed:
+                    raise ss.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
+                if steps:
+                    strat.clock_steps(sim)
+                elif strat.coarse is not None:
+                    strat.set_clock(strat.declared)
+                    strat.split = strat.at_none()
         for strat in self.strats: # The kind comes from the value, not the name; a name that suggests another kind is noted
             if strat.hint:
                 ss.note(f'the dimension "{strat.name}" is {strat.guessed["kind"]}', sim=sim)
@@ -502,18 +666,39 @@ class Groups:
         self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
         if joints:
             ds, grid = joints[0].grid(sim)
+            ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
+            within = [] # A split over age and other dimensions whose rows each sum to 1 is the share at each level of the others within each age group, so people keep their ages (otherwise it is the share at each combination, and sets the ages)
+            if ages:
+                a = ages[0]
+                totals = grid.sum(axis=tuple(j for j in range(len(ds)) if j != a), keepdims=True)
+                if np.allclose(totals, 1):
+                    within = ages
+                    grid = grid*self.strats[ds[a]].split.reshape([-1 if j == a else 1 for j in range(len(ds))])
             grid = grid/grid.sum()
             for i,d in enumerate(ds): # Each dimension's own split is the total over the others
-                self.strats[d].split = grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
-                self.strats[d].guessed.pop('split', None)
+                if i not in within:
+                    strat, total = self.strats[d], grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
+                    if strat.joint is None and strat.split_given and 'split' not in strat.guessed and not np.allclose(strat.split, total, atol=1e-6): # TL4: the given split was silently replaced
+                        others = [self.strats[dd].name for dd in ds if dd != d]
+                        raise ss.InconsistentDimension(f'"{strat.name}" is given the split {np.round(strat.split, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
+                                                       f'a split over several dimensions is the share at each combination of their levels. For rows that are the shares of {sc.strjoin(others)} given "{strat.name}", '
+                                                       f'multiply them by the share at each level of "{strat.name}" ({np.round(strat.split, 4).tolist()}) first, or leave out one of the two splits.')
+                    strat.split = total
+                    self.strats[d].guessed.pop('split', None)
+                    if within:
+                        self.strats[d].guessed['split'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
             self.joint = (ds, grid)
             split *= grid[tuple(self.group_coords[:, d] for d in ds)]
+            born = grid[tuple(0 if i in ages else slice(None) for i in range(len(ds)))] # Newborns are in the youngest age group, so take its share of the others (or everyone's, if it has nobody)
+            born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
+            births *= (born/born.sum())[tuple(self.group_coords[:, d] for i,d in enumerate(ds) if i not in ages)]
         for d,strat in enumerate(self.strats):
             if self.joint is None or d not in self.joint[0]:
                 split *= strat.split[self.group_coords[:, d]]
             first = np.zeros(strat.n)
             first[0] = 1
-            births *= (first if strat.kind == 'age' else strat.split)[self.group_coords[:, d]] # People are born into the youngest group
+            if strat.kind == 'age' or self.joint is None or d not in self.joint[0]:
+                births *= (first if strat.kind == 'age' else strat.split)[self.group_coords[:, d]] # People are born into the youngest group
         for d,strat in enumerate(self.strats): # A split of a dimension of some states only, given the levels of others (e.g. clinical severity by age): normalized over this dimension
             if strat.joint is not None and strat.states is not None:
                 ds, grid = strat.joint.grid(sim)
@@ -541,6 +726,33 @@ class Groups:
             if not sim.pars.use_aging and any(strat.kind == 'age' and strat.edges is not None for strat in self.strats):
                 ss.note('people do not age between the age groups, since nobody is born or dies; pass use_aging=True to age them', sim=sim)
         return
+
+    def moved_by(self, strat):
+        """ For describe(): what moves people along a dimension, e.g. '; counter: +1 by delivery; +2 by twins' or '; clock: set to 0 by delivery' """
+        sim = self.sim
+        events = [] # (what, amount or level)
+        for mod in getattr(sim, 'declared', []):
+            for name,tr in mod.graph.transitions.items():
+                if strat.name in (getattr(tr, 'increment', None) or {}):
+                    events.append((name, f'{tr.increment[strat.name]:+d}'))
+                elif strat.name in (getattr(tr, 'move_given', None) or {}):
+                    events.append((name, str(tr.move_given[strat.name])))
+            for name,tf in mod.graph.transfers.items():
+                if tf.dim == strat.name:
+                    events.append((name, f'{tf.increment:+d}' if tf.increment is not None else str(tf.dst)))
+        for mod in sim.pars.interventions.values():
+            if strat.name in (getattr(mod, 'increment', None) or {}):
+                events.append((mod.name, f'{mod.increment[strat.name]:+d}'))
+            elif strat.name in (getattr(mod, 'move', None) or {}):
+                events.append((mod.name, str(mod.move[strat.name])))
+        if not events:
+            return ''
+        amounts = {}
+        for name,amount in events:
+            amounts.setdefault(amount, []).append(name)
+        verb = lambda amount: amount if amount[0] in '+-' else f'set to {amount}' if strat.kind == 'clock' else f'to {amount}'
+        what = 'clock' if strat.kind == 'clock' else 'counter' if any(amount[0] in '+-' for amount in amounts) else 'moved'
+        return f'; {what}: ' + '; '.join(f'{verb(amount)} by {sc.strjoin(names)}' for amount,names in amounts.items())
 
     def init_ragged(self):
         """
@@ -688,7 +900,7 @@ class Groups:
                     old_level[uids] = after
                     old_raw[uids] = raw[uids]
                     if not shared:
-                        out[uids] += (after - before)*int(mult)
+                        out[uids] += (after.astype(out.dtype) - before)*int(mult) # In the groups' integers, which may be wider than the levels'
                 levels.append(kept[strat.name][1])
             kept[''] = out
             self._group_cache = (sim.ti, self.folded(out), levels)
@@ -730,17 +942,17 @@ class Groups:
         elif rebuild:
             out = np.zeros(n, dtype=dtype)
             for level,mult in zip(levels, mults):
-                out += level*int(mult)
+                out += level.astype(dtype)*int(mult) # Widened first: a level times its stride may not fit in the level's integers
             kept[''] = out
         else:
             out = kept['']
             if n0 < n:
                 tail = np.zeros(n - n0, dtype=dtype)
                 for level,mult in zip(levels, mults):
-                    tail += level[n0:]*int(mult)
+                    tail += level[n0:].astype(dtype)*int(mult)
                 out = np.concatenate([out, tail])
             for idx,before,after,mult in updates:
-                out[idx] += (after - before)*mult
+                out[idx] += (after.astype(dtype) - before)*mult
             kept[''] = out
         self._group_cache = (sim.ti, self.folded(kept['']), levels)
         return self._group_cache[1]
@@ -771,18 +983,8 @@ class Groups:
                 counts = ss.solvers.Compartmental.round_preserving(strat.split*len(uids)).astype(int)
                 levels = np.repeat(np.arange(strat.n, dtype=level_dtype(strat.n)), counts) # As they are kept, to save memory
                 people[strat.attr][uids[order]] = strat.value(levels)
-        if joint: # The levels of a joint split, together, given the age group if age is one of them
-            ds, grid = self.joint
-            ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
-            others = [i for i in range(len(ds)) if i not in ages]
-            grid = np.moveaxis(grid, ages + others, list(range(len(ds)))).reshape(len(ages) and self.strats[ds[ages[0]]].n or 1, -1) # Rows: the age group (one row if no age); columns: the other levels together
-            row = np.clip(np.digitize(people.age[uids], self.strats[ds[ages[0]]].edges) - 1, 0, grid.shape[0] - 1) if ages else np.zeros(len(uids), dtype=int)
-            cdf = np.cumsum(grid, axis=1)
-            cdf = cdf/np.maximum(cdf[:, -1:], 1e-300)
-            rvs = getattr(sim, f'rng_strat_{self.strats[ds[others[0]]].name}').rvs(uids)
-            cell = np.minimum((cdf[row] <= rvs[:, None]).sum(axis=1), grid.shape[1] - 1)
-            for i,level in zip(others, np.unravel_index(cell, [self.strats[ds[i]].n for i in others])):
-                people[self.strats[ds[i]].attr][uids] = self.strats[ds[i]].value(level)
+        if joint:
+            self.draw_joint(uids)
         for strat in self.strats: # A split given the levels of other dimensions, once those are known
             if strat.cond is not None:
                 self.groups_changed()
@@ -790,14 +992,45 @@ class Groups:
         if joint or any(strat.cond is not None for strat in self.strats): # A sex drawn with other dimensions sets people.female
             self.set_sex(uids, from_level=True)
         self.groups_changed()
+        self.vals_set = True # Agents added from now on are placed as they are made: see place_new()
+        return
+
+    def draw_joint(self, uids):
+        """ In an agent-based run: the levels of a split over several dimensions at once, together, for some agents, given their age group if age is one of them """
+        sim = self.sim
+        people = sim.people
+        ds, grid = self.joint
+        ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
+        others = [i for i in range(len(ds)) if i not in ages]
+        grid = np.moveaxis(grid, ages + others, list(range(len(ds)))).reshape(len(ages) and self.strats[ds[ages[0]]].n or 1, -1) # Rows: the age group (one row if no age); columns: the other levels together
+        row = np.clip(np.digitize(people.age[uids], self.strats[ds[ages[0]]].edges) - 1, 0, grid.shape[0] - 1) if ages else np.zeros(len(uids), dtype=int)
+        cdf = np.cumsum(grid, axis=1)
+        cdf = cdf/np.maximum(cdf[:, -1:], 1e-300)
+        rvs = getattr(sim, f'rng_strat_{self.strats[ds[others[0]]].name}').rvs(uids)
+        cell = np.minimum((cdf[row] <= rvs[:, None]).sum(axis=1), grid.shape[1] - 1)
+        for i,level in zip(others, np.unravel_index(cell, [self.strats[ds[i]].n for i in others])):
+            people[self.strats[ds[i]].attr][uids] = self.strats[ds[i]].value(level)
         return
 
     def place_new(self, uids):
-        """ In an agent-based run: the levels of agents added by a module written as code (e.g. `ss.Births`), drawn from each dimension's split, as the declared births draw them (see `ss.solvers.Agents.add_people()`) """
+        """
+        In an agent-based run: the levels of agents added by a module written as code (e.g. `ss.Births`), drawn from each dimension's split, as the declared births draw them (see `ss.solvers.Agents.add_people()`)
+
+        A newborn with a parent (`people.parent`) is in the parent's place (a dimension of kind "space"), and a split over age and
+        other dimensions is drawn from the newborn's age group.
+        """
         sim = self.sim
         people = sim.people
-        for strat in self.strats:
-            if strat.kind in ['age', 'strain', 'disease'] or strat.female is not None: # Ages are their own, a sex dimension is people.female (see set_sex()), and newborns have no strain
+        joint = self.joint[0] if self.joint is not None else []
+        if len(joint):
+            self.draw_joint(uids)
+        parent = people.parent.raw[uids]
+        has_parent = parent >= 0
+        for d,strat in enumerate(self.strats):
+            if strat.kind in ['age', 'strain', 'disease'] or strat.female is not None or d in joint: # Ages are their own, a sex dimension is people.female (see set_sex()), newborns have no strain, and a joint split is drawn above
+                continue
+            if strat.kind == 'space' and has_parent.all() and strat.cond is None: # Born where the parent is
+                people[strat.attr][uids] = people[strat.attr].raw[parent.astype(int)]
                 continue
             rvs = getattr(sim, f'rng_strat_{strat.name}').rvs(uids)
             if strat.cond is not None:

@@ -200,7 +200,7 @@ sim.run()
 print(f'Children vaccinated: {sim.results.children.delivered.sum():n}')
 ```
 
-A condition such as `ppl.age < 15` (or `ss.People.age < 15`, with no people made) is not computed when it is written: it is evaluated each time it is needed, against the sim it is running in, so the same condition works in every copy of a sim made by `ss.parallel()` or calibration.
+A condition such as `ppl.age < 15` (or `ss.ppl.age < 15`, with no people made) is not computed when it is written: it is evaluated each time it is needed, against the sim it is running in, so the same condition works in every copy of a sim made by `ss.parallel()` or calibration.
 
 ## Adding multiple interventions
 

@@ -453,6 +453,53 @@ def test_rescale():
     return rescaled
 
 
+@sc.timer()
+def test_copied_modules():
+    """ Test that functions given to a sim read the sim's copies of the modules they name (TL35) """
+    sc.heading('Testing closures over copied modules')
+    class HS(ss.Intervention):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.served_now = ss.uids()
+        def step(self):
+            self.served_now = self.sim.diseases.toy.I.uids[:5]
+        def serve(self): # A factory method, returning a closure over the module
+            return lambda sim: self.served_now
+
+    def treated(how):
+        S, I = ss.states('S I')
+        toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
+        hs = HS(name='hs')
+        deliver = dict(closure=hs.serve(), lambda_=lambda sim: hs.served_now, by_name=lambda sim: sim.interventions.hs.served_now)[how]
+        sim = ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), deliver=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run()
+        return sim.results.tx.delivered.values.sum()
+    expected = treated('by_name')
+    assert expected > 400
+    for how in ['closure', 'lambda_']:
+        assert treated(how) == expected, how # Were 0: they read the module passed in, which never ran
+    return
+
+
+@sc.timer()
+def test_init_order():
+    """ Test that a custom module is initialized after the modules it may read (TL54) """
+    sc.heading('Testing the order modules are initialized in')
+    class Demography(ss.Demographics):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.FloatArr('district', default=-1))
+        def init_post(self):
+            super().init_post()
+            self.district[self.sim.people.auids] = np.arange(len(self.sim.people.auids)) % 32
+    class Lifestyle(ss.Module):
+        def init_post(self):
+            super().init_post()
+            self.unset = np.mean(self.sim.demographics[0].district[self.sim.people.auids] < 0)
+    sim = ss.Sim(n_agents=1000, demographics=Demography(), custom=Lifestyle(name='life'), start=2010, stop=2011, verbose=0).init()
+    assert sim.custom.life.unset == 0 # Was 1: the custom module came first
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -472,6 +519,8 @@ if __name__ == '__main__':
     sim11 = test_rescale()
     sim12 = test_add_module()
     sim13 = test_locked_pars()
+    test_copied_modules()
+    test_init_order()
 
     T.toc()
 

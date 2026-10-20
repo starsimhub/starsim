@@ -107,7 +107,7 @@ The top-level parts:
 | `networks` | Networks, mixing pools, and mobility, as passed to `networks=`: each as its `type`, `name`, `label`, and `pars` (typed values and distributions written as elsewhere in the spec), and, for named data such as `ss.contacts('Kenya')`, a `data` reference saying where it came from |
 | `stratify` | Stratifications applied to the whole sim (`sim.stratify(age=...)` or `ss.Sim(..., stratify=...)`), in the order applied, in the same form as a module's `stratifications`, with the split resolved (`split_from` says where it came from). They apply to every module; a module's own list holds the dimensions and adjustments that belong to it alone |
 | `modifiers` | `ss.modify` objects passed to `connectors=`: interactions that are part of the model |
-| `interventions` | Everything passed to `interventions=`: deliveries, `ss.change`, and modifiers that are policy. These define the scenario |
+| `interventions` | Everything passed to `interventions=`: deliveries, `ss.change`, and modifiers that are policy. These define the scenario. They are in the order they run: each delivery after those whose events trigger it. A delivery's trigger (`on`) and condition (`where`) are written as the text of the expression (`"screening.positive"`, `"(cytology.since >= years(5))"`), and a cascade as the names of its steps. The properties of people that memory adds are derived, not stored, so the hash depends only on what was written |
 | `config` | Run settings. `solver` is what was asked for (`"auto"` unless the user chose one); the solver actually used is in `meta`. `integrator` is the ODE scheme (`"rk4"` or `"euler"`), or `null` for the default. `approx` is `null` (approximations are made and noted), `true` (made silently), or `false` (an error). `unit` is the sim's unit, or `null` when time is counted in timesteps; `dt` is a number in that unit |
 | `meta` | Things that describe the document or the run and do not change the model: the library version, the chosen solver and its reason, and the notes made while building it |
 
@@ -155,7 +155,9 @@ A result that is a ratio or a sum of states (`prev = I / (S + I + R)`) is writte
 
 ### Stratifications
 
-A model stores its stratifications as a list, in the order they were applied, and does not write out the strata, the aging transfers, or the sub-stages they generate. Those follow from the rules in [05-dimensions.md](05-dimensions.md) and [03-states-and-transitions.md](03-states-and-transitions.md), and a model with 4,512 compartments per state should still be a readable file.
+A model stores its stratifications as a list, in the order they were applied, and does not write out the strata, the aging transfers, or the sub-stages they generate. Those follow from the rules in [05-dimensions.md](05-dimensions.md) and [03-states-and-transitions.md](03-states-and-transitions.md), and a model with 4,512 compartments per state should still be a readable file. A clock is written with `"kind": "clock"`, its levels as given (not the steps a compartmental run keeps it in), their `"unit"`, and no split: `{"unit": "month", "name": "since_birth", "kind": "clock", "levels": [0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0], "split": null, ...}`.
+
+A transition that moves people along a dimension carries, only when it does, `"move"` (the level, arrow, or clock time as given, `{"since_birth": 0.0}`) and `"increment"` (the amount for each counter, `{"parity": 2}`); a transfer along a counter carries `"increment"` as a number, and a delivery `"increment"` as a dict. An entry of `p=` with a `to` axis is written as given (`"p": ["1 - p_use", "p_use * mix * w"]`), its tables among the parameters.
 
 ### Guessed values
 
@@ -177,6 +179,7 @@ Rates, branch probabilities, result sources, and conditions are written as strin
 | `where=(ss.ppl.age > 65) & ~sir.I` | `"((people.age > 65) & ~sir.I)"` |
 | `rate=ss.peryear(1)*expit(b0 + b_urban*ss.ppl.urban)` | `"peryear(1) * expit(b0 + b_urban * people.urban)"` |
 | `ss.by(sex=dict(female=0.02, male=0.05))` | `{"by": ["sex"], "values": {"keyed": {"female": 0.02, "male": 0.05}}}` |
+| `increment=dict(parity=2), move=dict(since_birth=0)` | `"increment": {"parity": 2}, "move": {"since_birth": 0}` |
 
 What can appear: the names of the module's states, parameters, and transitions (a transition in a result's source is its flow); a bare state, which means contact with people in that state (its presence is what makes a transition contact-mediated); `.n` (the count in a state or a set of states, summed), `.frac` (that count as a fraction of the module's population), `.total` (the count over every place), and `.dwell` (the time each person has spent in a state, in `p=` and rates of the transitions out of it: `"1 - exp(-k * P.dwell)"`); `+`, `-`, `*`, `/`, `**`; comparisons; `&`, `|`, and `~` in conditions; attributes of the people (`people.age`), in conditions and in rates (`ss.ppl.age` in code); and the functions `exp`, `log`, `sqrt`, `absolute`, `sin`, `cos`, `expit` (SciPy's, imported by `to_code()` from `scipy.special`), `minimum`, and `maximum`. A set of states is written as their sum, and `np.clip` as `minimum` and `maximum`. Numbers are written at full precision, with the parentheses the expression needs, so the string means exactly what was written. A state in another module is written with its module's name (`hiv.I`); inside its own module the short name is used.
 
@@ -191,7 +194,11 @@ Typed quantities, using Starsim's type names:
 {"type": "per", "value": 0.05, "unit": "day"}
 {"type": "prob", "value": 0.1, "unit": "day"}
 {"type": "freq", "value": 2.0, "unit": "week"}
+{"type": "peract", "value": 0.01}
+{"type": "peract", "m2f": 0.3, "f2m": 0.15}
 ```
+
+`peract` is a probability per act (`ss.peract`), with one value or one for each direction of the network; it has no unit. A bare number used as `beta` on a network with acts is written as `{"type": "peract", "value": 0.01}`, with `transitions.<name>.beta` in `guessed`, so the spec is read the same without knowing the network. A source weight (`source=dict(...)`) is written in the rate text, as the operator form is (`"rate": "beta * (P + 0.55*EL)"`). A modifier's `efficacy`, `share`, and `route` are written with it. The acts, sides, and two-mode groups of networks are not in the spec (networks other than contact matrices are not; `to_code()` lists them under `LossyExport`); a contact matrix over several dimensions is (`"contacts": {"matrix": [...], "dims": ["sex", "risk"]}`).
 
 A plain JSON number is a number with no time dimension (a probability, a multiplier, a count). A value keeps the unit it was written with. A bare number in a rate or duration slot is written as a quantity in the sim's unit. Where that unit was inferred (from the typed values or the dates) rather than given with `unit=`, the note that says so is in `meta.notes` (`unit='day' (from the typed values in the model)`).
 
@@ -282,7 +289,7 @@ Each part is a plain string or number, so `sim.hash().pars` can go in a file nam
 
 ## Saved forms
 
-A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). What `to_code()` cannot write (the attached data, a network of agents, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand; deliveries with their products, contact matrices (by name or as numbers), transfers, and priors that are distributions are written. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`. There is no third form: the spec itself is not read back.
+A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). What `to_code()` cannot write (the attached data, a network of agents, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand; deliveries with their products (each as a variable, so a step can refer to another's events), cascades, contact matrices (by name or as numbers), transfers, and priors that are distributions are written. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`. There is no third form: the spec itself is not read back.
 
 ## Export to other formats
 

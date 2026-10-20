@@ -206,8 +206,8 @@ class Disease(ss.Module):
 
         Args:
             split (list): the share of the population in each level (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
-            adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`
-            kind (str): 'age', 'space', 'strain', or 'plain'; if not given, from the value: 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for `age=`, and otherwise 'plain' (whatever the name)
+            adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`: on its rate (a duration is divided), or on its probability for a branch chosen with p=
+            kind (str): 'age', 'space', 'strain', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for `age=`, and otherwise 'plain' (whatever the name)
             states (list): the states the dimension applies to (default: every state that is people; for a strain, every state reached only through infection)
             where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
             mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.gravity()`, `ss.Mobility()`, or a matrix
@@ -349,6 +349,10 @@ class Disease(ss.Module):
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         if self.graph is not None:
+            unknown = [key for key in self.pars if key not in self.graph.pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
+            if unknown:
+                hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=100)), and cannot be set through pars.' if 'init' in unknown else ''
+                raise ss.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
             self.engine = ss.solvers.make_engine(self, sim)
             self.engine.define()
         elif not self.state_list and type(self).step is Disease.step and type(self).step_state is Disease.step_state:
@@ -595,7 +599,9 @@ class Infection(Disease):
         if self.pars.init_prev is None:
             return
 
-        initial_cases = self.pars.init_prev.filter()
+        people = self.sim.people
+        unborn = people.unborn_uids() if isinstance(people, ss.People) else ss.uids() # E.g. the fetuses of pregnancies that ss.Pregnancy starts before the start, who are not seeded
+        initial_cases = self.pars.init_prev.filter() if not len(unborn) else self.pars.init_prev.filter(people.auids[people.age.raw[people.auids] >= 0])
         if len(initial_cases):
             self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
         return initial_cases
@@ -620,9 +626,27 @@ class Infection(Disease):
         def scalar_beta(β):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
 
+        nets = {ss.standardize_netkey(k):net for k,net in sim.networks.items()}
+        def both_ways(k, β): # A single beta applies in both directions, except on a maternal network: from mother to child only
+            net = nets.get(ss.standardize_netkey(k))
+            return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
+
+        def as_pair(β, nkey):
+            """ A probability per act is [p1 to p2, p2 to p1], as Starsim 3's pair: on ss.MFNet, whose p1 are men, [m2f, f2m] """
+            if not isinstance(β, ss.peract):
+                return β
+            net = nets.get(nkey)
+            vals = β.resolve(net) if net is not None else β.values
+            if len(vals) == 1:
+                return vals*2
+            elif isinstance(net, ss.MFNet):
+                return vals
+            errormsg = f'"{self.name}" is written as code, so its beta on "{nkey}" is a pair [p1 to p2, p2 to p1], or one value; {β} has directions, which only ss.MFNet (men in p1) maps to a pair'
+            raise ss.RouteMismatch(errormsg)
+
         # If beta is a scalar, apply this bi-directionally to all networks
-        if scalar_beta(β):
-            betamap = {ss.standardize_netkey(k):[β,β] for k in sim.networks.keys()}
+        if scalar_beta(β) or isinstance(β, ss.peract):
+            betamap = {ss.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.standardize_netkey(k)) for k in sim.networks.keys()}
 
         # If beta is a dict, check all entries are bi-directional
         elif isinstance(β, dict):
@@ -630,9 +654,9 @@ class Infection(Disease):
             for k,thisbeta in β.items():
                 nkey = ss.standardize_netkey(k)
                 if scalar_beta(thisbeta):
-                    betamap[nkey] = [thisbeta, thisbeta]
+                    betamap[nkey] = both_ways(nkey, thisbeta)
                 else:
-                    betamap[nkey] = thisbeta
+                    betamap[nkey] = as_pair(thisbeta, nkey)
 
         else:
             errormsg = f'Invalid type {type(β)} for beta'
@@ -815,7 +839,7 @@ class Infection(Disease):
                 edges = route.edges
                 p1_to_p2 = [edges.p1, edges.p2, betas[0]]  # p1→p2 direction, beta 0
                 p2_to_p1 = [edges.p2, edges.p1, betas[1]]  # p2→p1 direction, beta 1
-                for src, trg, beta in [p1_to_p2, p2_to_p1]:
+                for src, trg, beta in [p1_to_p2] if route.one_way else [p1_to_p2, p2_to_p1]: # Mother-to-child networks transmit one way
                     if beta: # Skip networks with no transmission
                         disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
                         beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
@@ -998,7 +1022,7 @@ class Infection(Disease):
             due = (vals.notnan & (vals <= self.ti)).uids
             if len(due):
                 if key in death_keys:
-                    self.sim.people.request_death(due)
+                    self.sim.people.request_death(due, cause=self)
                 elif hasattr(self, key):
                     getattr(self, key)[due] = True
                 vals[due] = np.nan  # Clear after firing
@@ -1233,10 +1257,9 @@ class NCD(Infection):
     def step_state(self):
         ti = self.ti
         deaths = (self.ti_dead <= ti).uids # <= since a prognosis that rounds to 0 is only caught on the next step
-        self.sim.people.request_death(deaths)
+        self.sim.people.request_death(deaths, cause=self) # Counted once resolved: see update_results()
         if self.infection_log:
             self.infection_log.add_data(deaths, died=True)
-        self.results.new_deaths[ti + 1] = len(deaths) # Log deaths attributable to this module, at the end of the step (ti is its start)
         return
 
     def step(self):
@@ -1264,6 +1287,8 @@ class NCD(Infection):
     def update_results(self):
         ss.Module.update_results(self)
         ti = self.ti
+        if ti + 1 < len(self.results.new_deaths):
+            self.results.new_deaths[ti + 1] = len(self.sim.people.died_of(self)) # Deaths attributable to this module, at the end of the step (ti is its start), once each has one cause
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
         return

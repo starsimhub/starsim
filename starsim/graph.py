@@ -5,12 +5,21 @@ import types
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, did_you_mean, Dwell, Expr, is_one, linear, par
+from .expressions import as_expr, BinOp, Column, Count, did_you_mean, Dwell, Expr, is_one, linear, par, Row, Share, to_pars
 from .parameters import by, TimeValue
 from .transitions import bound_names, find_name, FlowSum, outcome, State, Transition, update
 from .presentation import Presentation, TransitionTable
 
 __all__ = ['Graph']
+
+
+def inner_pars(val):
+    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`) or a probability per act (`ss.peract(m2f=b)`), also within a beta for each route """
+    if isinstance(val, (TimeValue, ss.peract)):
+        return val.pars
+    elif isinstance(val, dict):
+        return [q for v in val.values() for q in inner_pars(v)]
+    return []
 
 
 class Graph(Presentation):
@@ -59,6 +68,7 @@ class Graph(Presentation):
             self._add_par(init_prev, name=init_prev.name)
         self.resolve_states(frame)
         self.resolve_transitions()
+        self.expand_rows()
         self.resolve_people()
         self.resolve_acquisition()
         self.resolve_pars(frame)
@@ -69,7 +79,7 @@ class Graph(Presentation):
 
     def guess_init(self):
         """ When the sim is built: with no initial values at all, 1% start infected, since nobody infected would mean no epidemic """
-        if self.init_prev is None and not self.init and self.transmissions and all(s.init is None for s in self.states.values()):
+        if self.init_prev is None and not self.init and self.transmissions and all(s.init is None for s in self.states.values()) and getattr(self, 'seeded_by', None) is None: # A member of a family that seeds it (ss.Strains) is not seeded on its own
             self.init_prev = 0.01
             self.guessed['init'] = 'nothing given'
         return
@@ -192,7 +202,7 @@ class Graph(Presentation):
                             if id(s) not in found:
                                 self._refs.append(s)
             if tr._pending is not None: # The source of a transmission, if given
-                strings += [s for s in sc.tolist(tr._pending[1]) if isinstance(s, str)]
+                strings += [s for s in (list(tr._pending[1]) if isinstance(tr._pending[1], dict) else sc.tolist(tr._pending[1])) if isinstance(s, str)]
             if getattr(tr, 'offspring', None) is not None: # The state newborns go into, which may be in no arrow
                 kid = tr.offspring[0]
                 if isinstance(kid, State): found[id(kid)] = kid
@@ -260,7 +270,7 @@ class Graph(Presentation):
             if tr.dst is not None: tr.dst = [lookup(end) for end in tr.dst]
             if tr._pending is not None and tr._pending[1] is not None:
                 beta, source = tr._pending
-                tr._pending = (beta, [lookup(end) for end in sc.tolist(source)])
+                tr._pending = (beta, {lookup(end):w for end,w in source.items()} if isinstance(source, dict) else [lookup(end) for end in sc.tolist(source)]) # A dict gives a weight for each state
         for upd in self.updates.values():
             upd.state = lookup(upd.state)
 
@@ -307,9 +317,11 @@ class Graph(Presentation):
                         if latent:
                             raise ss.SourceNeeded(f'"{name}" ({tr.arrow}) leads to {tr.dst[0].name}, from which people move on to {sc.strjoin(s.name for s in latent)} and then on again, so whether they infect others in {tr.dst[0].name} (as in an SIR with hospital care) or in {latent[0].name} (as in an SEIR) cannot be guessed.\n'
                                                   f'     Give the source, e.g. ss.transmission("{tr.arrow}", beta=..., source="{latent[0].name}").')
-                source = sources[0]
-                for s in sources[1:]:
-                    source = source + s
+                weights = sources if isinstance(sources, dict) else {s:1 for s in sources} # source=dict(P=1, EL=0.55) is beta * (P + 0.55*EL)
+                terms = [s if (sc.isnumber(w) and w == 1) else as_expr(w)*s for s,w in weights.items()]
+                source = terms[0]
+                for term in terms[1:]:
+                    source = source + term
                 tr.rate = as_expr(beta) * source
                 tr._pending = None
 
@@ -323,6 +335,36 @@ class Graph(Presentation):
                 if not state.infectious: # Not declared, so a guess
                     state.guessed['infectious'] = name
                 state.infectious = True
+        return
+
+    def expand_rows(self):
+        """
+        Entries of `p=` with a `to` axis (an `ss.by` over `to`, whose labels are destination states): one `Share` of the entry for each destination it covers
+
+        Entries without one are one destination each, in order, skipping the destinations that a `to` axis names; an entry whose
+        `to` axis gives values by position only covers the destinations left. The entries as given are kept as `tr.p_given`.
+        """
+        for name,tr in self.transitions.items():
+            if not tr.p or len(tr.dst or []) < 2 or not any(to_pars(p) for p in tr.p):
+                continue
+            names = [s.name for s in tr.dst]
+            rows = {i:[lab for q in to_pars(p) for lab in (q.raw.to_labels() or [])] for i,p in enumerate(tr.p) if to_pars(p)}
+            named = [lab for labs in rows.values() for lab in labs]
+            for lab in named:
+                if lab not in names:
+                    raise ss.UnknownState(f'p= of "{name}" has a value over "to" for "{lab}", which is not one of its destinations ({sc.strjoin(names)}){did_you_mean(lab, names)}')
+            plain = [i for i in range(len(tr.p)) if i not in rows]
+            free = [n for n in names if n not in named]
+            unlabeled = [i for i,labs in rows.items() if not labs]
+            if len(unlabeled) > 1 or (not unlabeled and len(free) != len(plain)) or len(free) < len(plain):
+                raise ss.BadBranchSplit(f'"{name}" has {len(names)} destinations, but its p= has {len(plain)} entries of one destination each and values over "to" for {sc.strjoin(named) or "the others"}; give one entry for each destination that no value over "to" names')
+            for i in unlabeled:
+                rows[i] = free[len(plain):]
+            covered = {lab:i for i,labs in rows.items() for lab in dict.fromkeys(labs)}
+            built = {i:Row(tr.p[i], list(dict.fromkeys(labs))) for i,labs in rows.items()}
+            entries = iter(plain)
+            tr.p_given = list(tr.p)
+            tr.p = [Share(built[covered[n]], n) if n in covered else tr.p[next(entries)] for n in names]
         return
 
     def anchor(self, states, connected):
@@ -352,6 +394,7 @@ class Graph(Presentation):
             group = max(groups, key=lambda g: (bool(g & allowed), len(g)), default=set())
         members = [s for s in states if id(s) in group] or states
         entered = {id(st) for tr in self.transitions.values() for st in (tr.dst or []) if isinstance(st, State)}
+        entered |= {id(self.states[name]) for name in self.__dict__.get('delivered', []) if name in self.states} # Moved into by a delivery (move='Sev -> H'): see delivered_to()
         entered |= {id(self.states[kid] if isinstance(kid, str) else kid) for kid in [tr.offspring[0] for tr in self.transitions.values() if getattr(tr, 'offspring', None) is not None]} # Newborns enter theirs
         sources = [s for s in members if any(tr.contact and any(src is s for src in tr.src or []) for tr in self.transitions.values())] # In declared order
         if sources:
@@ -362,6 +405,15 @@ class Graph(Presentation):
                 self.guessed['first'] = f'{first.name}, of the sources of contact-mediated transitions {sc.strjoin(s.name for s in candidates)}'
             return first
         return next((s for s in members if id(s) not in entered), members[0])
+
+    def delivered_to(self, names):
+        """ When the sim is built: the states that its deliveries move people into (`ss.Delivery(move='Sev -> H')`), which are not the first state unless given as it """
+        if self.first_given is not None or self.first.name not in names:
+            return
+        self.delivered = list(names)
+        self.resolve_people()
+        self.resolve_acquisition()
+        return
 
     def resolve_people(self):
         """ Work out which states are people: the ones connected by transitions to the first state """
@@ -484,7 +536,8 @@ class Graph(Presentation):
             elif name not in self.pars:
                 raise ss.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
-                                          f'     If another module reads it from this disease (as STIsim\'s networks read disease.pars.eff_condom), add it after making the disease: {self.module.name}.define_pars({name}={value!r}).')
+                                          f'     If another module reads it from this disease, add it after making the disease: {self.module.name}.define_pars({name}={value!r}).' +
+                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, route="mfnet").' if 'condom' in name else ''))
             self.pars[name].value = value
         return
 
@@ -529,13 +582,13 @@ class Graph(Presentation):
         counts = sc.objdict()
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
-        inner = {q.name or find_name(q, frame) for tr,slot,p in slots if isinstance(p.value, TimeValue) for q in p.value.pars} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), which are registered below
+        inner = {q.name or find_name(q, frame) for tr,slot,p in slots for q in inner_pars(p.value)} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), or inside a probability per act, which are registered below
         for tr,slot,p in anon:
             clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions or slot in inner
             self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None))]
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -545,7 +598,7 @@ class Graph(Presentation):
         used += [(f'init of {state.name}', state.init) for state in self.states.values() if isinstance(state.init, Expr)] # So an initial count can be fitted
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] # And a parameter in the rate of a transfer
         used += [(name, upd.value) for name,upd in self.updates.items()] # And in the value of an update
-        used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, TimeValue) for inner in leaf.value.pars] # And a parameter inside a value that varies in time
+        used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
         for name,expr in used:
             if expr is not None:
                 for leaf in expr.leaves:
@@ -619,6 +672,9 @@ class Graph(Presentation):
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dst) == 2: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
+                elif len(ps) == 1 and isinstance(ps[0], par) and callable(ps[0].raw) and not isinstance(ps[0].raw, (ss.Dist, TimeValue)): # A function giving a row, one column per destination
+                    tr.p_given = list(ps)
+                    ps = tr.p = [Column(ps[0], i, len(tr.dst)) for i in range(len(tr.dst))]
                 if len(ps) != len(tr.dst):
                     raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but {len(ps)} branch probabilities.')
                 given = [p for p in ps if p is not None]
@@ -761,12 +817,30 @@ class Graph(Presentation):
 
     @property
     def infected(self):
-        """ The states counted in prevalence: the states people are infected into, and the sources of infection (of people, or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes) """
-        out = {id(s):s for tr in self.acquisitions for s in tr.dst}
-        out.update({id(s):s for s in self.infectious})
+        """
+        The states counted in prevalence: the states people are infected into, and the sources of infection (of people, or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
+
+        In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
+        people reach from those without passing through a state they can be in without having been infected (TL52: only
+        the first stage was counted, so a test found 649 of 1,637 people with cancer)
+        """
+        sources = {id(s):s for s in self.infectious}
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:
-                out.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
+                sources.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
+        out = {id(s):s for tr in self.acquisitions for s in tr.dst}
+        if not sources:
+            stop = set(self.uninfected)
+            todo = list(out.values())
+            while todo:
+                state = todo.pop()
+                for tr in self.transitions.values():
+                    if state in (tr.src or []) and tr.people and not tr.acquisition:
+                        for dst in tr.dst or []:
+                            if dst.people and dst.name not in stop and id(dst) not in out:
+                                out[id(dst)] = dst
+                                todo.append(dst)
+        out.update(sources)
         return sorted(out.values(), key=lambda s: s.order)
 
     def unit_values(self):
@@ -803,6 +877,14 @@ class Graph(Presentation):
         if self.destination(name) is not None:
             return 'branch'
         return 'transition'
+
+    def dwell_not_branch(self, name, how, modname):
+        """ For a multiplier (`how`, e.g. 'the modifier "m"') on a transition with several destinations chosen with p= and a dwell time: a note that it changes the dwell, not a branch (TL16), naming the destinations that would; otherwise None """
+        tr = self.transitions.get(name)
+        if tr is None or tr.p is None or tr.dst is None or len(tr.dst) < 2 or tr.dur is None:
+            return None
+        dsts = sc.strjoin([f"'{modname}.{name}.{dst.name}'" for dst in tr.dst])
+        return f'{how} on "{name}" changes how long people take to leave {sc.strjoin(s.name for s in tr.src)}, not which destination they go to; to change the probability of one destination, name it instead: {dsts}'
 
     def destination(self, name):
         """ For the name of one destination of a transition with several, `'<transition>.<state>'` (e.g. `'progression.C'`): the transition; otherwise None """

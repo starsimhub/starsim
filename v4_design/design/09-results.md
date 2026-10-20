@@ -36,6 +36,8 @@ A flow has one name, the transition's, which matches the model text, `ss.modify(
 
 A state that is not people (a water reservoir, a mosquito population; [03-states-and-transitions.md](03-states-and-transitions.md)) gets the same results: `n_W` is the count it holds.
 
+A family of diseases (`ss.Strains`, [05-dimensions.md](05-dimensions.md#strain)) has results made from its members' results of the same name: for a state or a named sum of states that every member has (a stock), the number in it in at least one member, a union that counts each person once (`sim.results.hpv.infected` is the number infected with any genotype, where a sum would count the co-infected twice); for a transition (or outcome) that every member has (a flow), the sum, since each event belongs to one member (`sim.results.hpv.cancer`). `res.by('<family>')` gives each member's own result (`sim.results.hpv.infected.by('hpv')`). The members keep their own results (`sim.results.hpv16.infected`). An outcome over unrelated diseases is still not declared.
+
 `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases, so their results are named after their states (`sim.results.sir.n_I`, not Starsim 3's `n_infected`), with the three standard results above added. Starsim 3's versions, written as code (`ssl.AgentSIR` and the others), keep Starsim 3's names.
 
 ## `ss.Result`
@@ -147,7 +149,7 @@ An outcome is a shortcut for an observation process that the model does not repr
 | The situation | Use |
 |---|---|
 | Testing and reporting are not in the model: "about half of infections are reported, five days later" | An outcome |
-| Testing is modeled, by one or more interventions | The interventions' own results. Each testing intervention reports the diagnoses it made, and reported cases are their sum: `cases = symptomatic_testing.diagnosed + screening.diagnosed` |
+| Testing is modeled, by one or more interventions | The interventions' own results. Each testing intervention reports the diagnoses it made, and reported cases are their sum: `cases = symptomatic_testing.positive + screening.positive` |
 | Being counted changes what happens to the person (hospitalized people are isolated and stop transmitting) | A state, with transitions in and out |
 
 So an outcome never competes with a testing intervention over who produces `cases`: if the model has tests, the tests produce the cases ([08-interventions.md](08-interventions.md)), and `ss.outcome` is not used for them.
