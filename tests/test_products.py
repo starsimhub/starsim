@@ -216,6 +216,30 @@ def test_any():
     return sims
 
 
+def test_result_none():
+    sc.heading('Testing the None key of results=: people in none of the states keyed, once however many diseases, unlike a result by state for each')
+    seen = sc.objdict()
+    def run(abn):
+        g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
+        keyed = [x for x in abn if x is not None]
+        def look(sim): # The expected abnormal results, from each agent's states when tested
+            d, u = sim.diseases, sim.people.auids
+            p = [sum(d[g][x].raw[u]*abn[x] for x in keyed) for g in ['hpv16', 'hpv18']]
+            none = np.prod([~np.any([d[g][x].raw[u] for x in keyed], axis=0) for g in ['hpv16', 'hpv18']], axis=0)
+            seen.expected = (1 - (1 - p[0])*(1 - p[1]) + none*abn.get(None, 0)).sum()
+            seen.n_sus = (d.hpv16.S.raw[u] & d.hpv18.S.raw[u]).sum() # Susceptible to both
+            return True
+        prog = ss.screen(ss.Diagnostic(results=dict(abnormal=abn, normal=None)), disease=[g16, g18], at=[2005], when=look, name='prog')
+        r = ss.Sim([g16, g18], interventions=prog, solver='abm', n_agents=10_000, **kw).run().results.prog
+        k = int(np.flatnonzero(r.delivered)[0])
+        assert np.isclose(r.abnormal[k], seen.expected, rtol=0.05), f'{r.abnormal[k]:.0f} abnormal, not {seen.expected:.0f}'
+        return seen.expected, seen.n_sus
+    by_state, n_sus = run(dict(CIN=0.9, S=0.1, I=0.1)) # 0.1 for each disease: about 0.19 for someone susceptible to both
+    by_none, _ = run({'CIN': 0.9, 'CA': 0.0, None: 0.1}) # 0.1 for someone in neither CIN nor CA of either
+    assert by_state - by_none > 0.05*n_sus
+    return
+
+
 def test_strain_efficacy():
     sc.heading('Testing an efficacy by a strain that susceptibles do not carry: an error, pointing to efficacy by disease')
     def make(eff, **kwargs):
@@ -277,5 +301,6 @@ if __name__ == '__main__':
     tests = test_test_diseases()
     outcomes = test_outcomes()
     any_ = test_any()
+    test_result_none()
     strain = test_strain_efficacy()
     dlist  = test_disease_list()
