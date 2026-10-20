@@ -896,7 +896,44 @@ class Engine:
             tr.guessed.pop('dwell', None)
             if dw.family == 'exponential' and not isinstance(raw, ss.Dist) and tr.stages is None and tr.dur is not None:
                 tr.guessed['dwell'] = 'scalar duration'
+            self.dwell_mods(name, raw, dw, to_unit)
             self.dwells[name] = dw
+        return
+
+    def dwell_mods(self, name, raw, dw, to_unit):
+        """
+        The modifiers of a dwell time's parameter when it is a distribution (e.g. `ss.modify('sir.pars.dur_inf', set=ss.constant(ss.years(5)))`), as agents:
+        `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from (a duration is the mean of an exponential, as for dur=), with its mean.
+        People who enter the state while one is active draw from it; those already there have what is left of their dwell rescaled by the change in its mean (see `Agents.rescale_exits()`).
+        """
+        p = dw.par
+        mods = getattr(self.sim, 'modifiers', {}).get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
+        if not mods:
+            return
+        path = f'{self.mod.name}.pars.{p.name}'
+        if dw.dist is None and not getattr(dw, 'varying', False): # A duration or rate, which value() modifies
+            for m in mods:
+                if m.op == 'set' and isinstance(m.amount, ss.Dist):
+                    raise ValueError(f'the modifier "{m.name}" sets {path} to a distribution ({m.amount}), but {path} is a duration, the mean of an exponential dwell time for "{name}", so it can only be set to another duration.\n'
+                                     f'     Give a duration (e.g. set=ss.years(5)), or make the parameter a distribution (e.g. ss.expon(ss.years(1))) so it can be set to another.')
+            return
+        if self.sim.solver != 'abm':
+            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.sim.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
+                                     f'     Run with solver="abm", or modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)), which scales its rate.')
+        if getattr(dw, 'varying', False) or np.isnan(dw.mean):
+            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", whose distribution ({raw}) differs between people, which a modifier cannot change yet; modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)).')
+        dw.mods = mods
+        dw.sets = {}
+        for i,m in enumerate(mods):
+            if m.op != 'set':
+                continue
+            if m.where is not None or m.hold is not None:
+                raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", with where= or hold=, which is not supported yet for a dwell time that is a distribution; set it for everyone, or use multiply= with where=.')
+            new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(scale=m.amount) if isinstance(m.amount, ss.TimePar) or sc.isnumber(m.amount) else None
+            if new is None or ss.transitions.varying_pars(new):
+                raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", to {m.amount}; a dwell time that is a distribution can be set to another distribution with fixed parameters, or to a duration (the mean of an exponential).')
+            mean, std = ss.transitions.dwell_stats(new, to_unit)
+            dw.sets[id(m)] = Bunch(key=f'dwell_{name}_{i}', dist=ss.transitions.numeric_dist(new, to_unit), mean=mean)
         return
 
     def transfer_dist(self, tf, per_agent=None):

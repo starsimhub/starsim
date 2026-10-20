@@ -530,6 +530,10 @@ def init_capabilities(sim, modules):
                 exact = fixed or slotted or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
                 auto = f'"{name}" has a {type(raw).__name__} dwell time, and approx=False' if approx is False and not exact else None
                 add(f'dwell time: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'a conveyor of whole steps' if fixed else 'a conveyor by time in state' if slotted else 'Erlang stages', auto=auto)
+            changers = [m for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()) if isinstance(m, ss.modify) and getattr(m.target_module, 'name', m.target_module) == mod.name
+                        and m.target_kind in ['par', None] and m.target_name == getattr(tr.dur, 'name', None)] if isinstance(ss.transitions.by_dist(raw), ss.Dist) else []
+            if changers: # A distribution laid out once as compartments: see Engine.dwell_mods()
+                add(f'modifier: {changers[0].name}', 'no', 'laid out once', auto=f'the modifier "{changers[0].name}" changes the dwell time of "{name}", a distribution, which is laid out once as compartments', fatal=True)
             if getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None:
                 if tr.contact or any(graph.exits[s.name].branches for s in tr.src): # See ss.solvers.Compartmental.stays()
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')

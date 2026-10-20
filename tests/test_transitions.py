@@ -2390,6 +2390,49 @@ def test_state_as_result():
     assert np.array_equal(r.n_infected.select(sex='female'), r.n_I.select(sex='female'))
     return
 
+
+@sc.timer()
+def test_modify_dist_dwell():
+    sc.heading('Testing modifiers on a dwell-time parameter that is a distribution')
+    def make(raw=ss.constant(ss.years(1)), mod=None, solver='abm'):
+        A, B = ss.states('A B')
+        dis = ss.Disease(A, B, go=ss.Transition(A, B, rate=ss.peryear(2)), back=ss.Transition(B, A, dur=ss.par(raw, name='d')), name='c')
+        size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
+        return ss.Sim(dis, interventions=mod, start=2000, stop=2006, dt=ss.years(0.25), solver=solver, rand_seed=1, **size, **kw)
+
+    # After the start, everyone entering B leaves it after the new dwell time, 5 years, by set=, multiply= or add=; before it, after 1 year
+    def dwells(sim):
+        c = sim.diseases.c
+        entered, left = c.ti_B.raw.astype(float), c.ti_exit_B.raw.astype(float)
+        dwell = (left - entered)*sim.t.dt.value # In years
+        start = 4 # 2001
+        inB = c.B.raw & sim.people.alive.raw
+        return dwell[inB & (entered >= start)], dwell[inB & (entered < start)]
+    for kwargs in [dict(set=ss.constant(ss.years(5))), dict(multiply=5), dict(add=ss.years(4))]:
+        sim = make(mod=ss.modify('c.pars.d', start='2001', **kwargs)).run()
+        after, _ = dwells(sim)
+        assert len(after) > 100 and np.allclose(after, 5, atol=0.25), f'{kwargs}: dwell times of later entrants {np.unique(after)}'
+        assert sim.results.c.back[-12:].sum() < 0.5*make().run().results.c.back[-12:].sum()
+    _, before = dwells(make().run())
+    assert np.allclose(before, 1, atol=0.25)
+
+    # set= with a duration replaces the distribution with an exponential of that mean, as dur= of a transition does
+    sim = make(mod=ss.modify('c.pars.d', set=ss.years(5), start='2001')).run()
+    after, _ = dwells(sim)
+    assert after.std() > 2 and 4 < after.mean() < 12 # Of those still in B, so longer than the mean
+
+    # What cannot change raises: as compartments, a distribution laid out at the start; a distribution set on a duration that is a mean; set= of a distribution for only some people
+    with pytest.raises(ss.CapabilityError, match='solver="abm"'):
+        make(mod=ss.modify('c.pars.d', set=ss.constant(ss.years(5)), start='2001'), solver='ode').init()
+    with pytest.raises(ss.CapabilityError, match='solver="abm"'):
+        make(mod=ss.modify('c.pars.d', multiply=5, start='2001'), solver='binomial').init()
+    with pytest.raises(ValueError, match='distribution'):
+        make(raw=ss.years(1), mod=ss.modify('c.pars.d', set=ss.constant(ss.years(5)), start='2001')).init()
+    with pytest.raises(ss.CapabilityError, match='where='):
+        make(mod=ss.modify('c.pars.d', set=ss.constant(ss.years(5)), where=lambda sim: sim.people.age > 30)).init()
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -2423,6 +2466,7 @@ if __name__ == '__main__':
     chg   = test_change_in_function()
     msgs  = test_messages_and_crashes()
     dwell = test_given_dwell()
+    ddist = test_modify_dist_dwell()
     inits = test_init_prev_forms()
     tlo   = test_tlo_review()
 
