@@ -64,6 +64,7 @@ def choose_solver(sim):
     ss.pregnancy.add_lactation(sim)
     modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
+    sim._resolve_path_triggers() # A trigger on another module's transition by path is its event
     sim._init_flows()
     for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
         for name,tr in mod.graph.transitions.items():
