@@ -173,7 +173,7 @@ class Null:
         return Transition(dst=self) @ driver
 
     def __mul__(self, other):
-        errormsg = 'ss.null cannot be part of a weighted destination (e.g. 0.1*ss.null). Write the way out of the model as a transition of its own, each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).'
+        errormsg = 'ss.null cannot be part of a weighted destination (e.g. 0.1*ss.null). Give it as one destination of a split, with p=, e.g. ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=10).'
         raise ss.BadBranchSplit(errormsg)
 
     __rmul__ = __mul__
@@ -400,7 +400,9 @@ class Transition(Nameable):
         self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
         self.stays = False # Whether ss.stay is one of the destinations, kept out of dst: what the other branches leave over stays (see split)
         self.p_stay = None # Its probability, if given (otherwise the rest)
-        self._stay_at = None
+        self.dies = False # Whether ss.null is one of several destinations, kept out of dst: those who take it die, as by an outflow
+        self.p_die = None # Its probability, if given (otherwise the rest)
+        self._ends_at = {} # Where ss.stay and ss.null were among the destinations given, so their entries of p= can be taken out
         self.guessed = sc.objdict() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)
@@ -408,8 +410,12 @@ class Transition(Nameable):
             self._set_dst(dst)
         if p is not None:
             self.p = sc.tolist(p)
-            if self._stay_at is not None and len(self.p) == len(self.dst) + 1:
-                self.p_stay = self.p.pop(self._stay_at)
+            if self.dies and len(self.p) == 1 and len(self.dst) + len(self._ends_at) == 2: # With two destinations, a single value is the first one's probability
+                self.p = [self.p[0], None]
+            if self._ends_at and len(self.p) == len(self.dst) + len(self._ends_at):
+                popped = {key:self.p.pop(i) for key,i in sorted(self._ends_at.items(), key=lambda item: -item[1])} # From the last, so the earlier positions still hold
+                self.p_stay = popped.get('stay')
+                self.p_die = popped.get('die')
         self.check_dimensions()
         return
 
@@ -439,8 +445,21 @@ class Transition(Nameable):
 
     @property
     def split(self):
-        """ Whether it splits between several destinations when it is taken (ss.stay counts as one) """
-        return self.dst is not None and (len(self.dst) > 1 or self.stays)
+        """ Whether it splits between several destinations when it is taken (ss.stay and ss.null count as one each) """
+        return self.dst is not None and (len(self.dst) > 1 or self.stays or self.dies)
+
+    @property
+    def ends(self):
+        """ The names of the destinations whose flows are recorded apart, as res.<transition>.<name>: its states, and 'null' for ss.null, if there are two or more """
+        names = [d.name for d in self.dst or []] + ['null']*self.dies
+        return names if len(names) > 1 else []
+
+    @property
+    def deaths(self):
+        """ The name of the flow that counts the people who die by this transition: the transition's own, or its flow to ss.null in a split with a state; None if nobody dies by it """
+        if self.outflow or (self.dies and not self.dst):
+            return self.name
+        return f'{self.name}.null' if self.dies else None
 
     @property
     def immediate(self):
@@ -465,13 +484,15 @@ class Transition(Nameable):
             self.p = list(terms.values())
         else:
             self.dst = sc.tolist(dst)
-            if any(d is stay for d in self.dst): # Kept out of the destinations, so they are all states
-                self._stay_at = next(i for i,d in enumerate(self.dst) if d is stay)
-                self.dst = [d for d in self.dst if d is not stay]
-                self.stays = True
-            if len(self.dst) > 1 and any(d is null for d in self.dst):
-                raise ss.BadBranchSplit('ss.null cannot be one of several destinations. Write the branch out of the model as a transition of its own, '
-                                        'each with p=, e.g. ss.Transition(I, R, p=0.9, dur=10) and ss.Transition(I, ss.null, p=0.1, dur=10).')
+            if len(self.dst) > 1: # ss.stay and ss.null are kept out of the destinations, so they are all states
+                self._ends_at = {key:i for i,d in enumerate(self.dst) for key,end in [('stay', stay), ('die', null)] if d is end}
+                self.stays = 'stay' in self._ends_at
+                self.dies = 'die' in self._ends_at
+                self.dst = [d for d in self.dst if d is not stay and d is not null]
+            elif self.dst and self.dst[0] is stay: # Alone, an error once the module is built (see Graph.check())
+                self.dst, self.stays = [], True
+            elif self.dst and self.dst[0] is null: # [ss.null] is ss.null
+                self.dst = []
         return self
 
     @property
@@ -626,7 +647,7 @@ class Transition(Nameable):
 
     @property
     def outflow(self):
-        return self.dst is not None and len(self.dst) == 0
+        return self.dst is not None and len(self.dst) == 0 and not self.split
 
     @property
     def arrow(self):

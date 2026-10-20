@@ -1166,21 +1166,25 @@ class Agents(Engine):
                 self._uids, self._leaving = uids, (uids, frm) # Decided as they leave: P.dwell is the time they spent there, and so is the time in a clock (see clock_values())
                 try:
                     ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
+                    if tr.dies:
+                        ps.append(np.broadcast_to(self.die_share(tr, ps, lambda p: self.eval_for(p, uids)), len(uids)))
                 finally:
                     self._leaving = None
                 rvs = self.draw(f'dst_{name}', uids)
                 edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
-                masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(tr.dst))]
+                masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(ps))]
                 dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dst, masks)]
+                if tr.dies: # Those who took ss.null die, as by an outflow
+                    self.split_deaths(tr, srcs[name], uidlist, uids[masks[-1]], frm[masks[-1]])
                 if tr.stays: # What the others leave over stays: the move is cancelled
                     stayed = rvs >= edges[-1]
                     self.stay(tr, uids[stayed], frm[stayed])
-                if len(tr.dst) > 1: # The flow to each destination
+                if tr.ends: # The flow to each destination
                     ng = self.sim.groups.n_groups
                     entering = ng > 1 and any(self.enters(tr, src) for src in srcs[name])
                     left = np.concatenate([self.groups(u, src) for u,src in zip(uidlist, srcs[name])]) if ng > 1 and not entering else None # The groups they left, where the total is recorded (see move()), before any change of level
-                    for (dst,inds,_),mask in zip(dsts, masks):
-                        key = f'{name}.{dst.name}'
+                    for (dst,inds,_),mask in zip(dsts + [(ss.transitions.null, uids[masks[-1]], None)]*tr.dies, masks):
+                        key = f'{name}.{"null" if dst is ss.transitions.null else dst.name}'
                         self.flowcounts[key] += self.n_of(inds)
                         if left is not None:
                             self.flow_groups[key] = self.flow_groups.get(key, 0) + np.bincount(left[mask], weights=self.weights(inds), minlength=ng)
@@ -1196,7 +1200,7 @@ class Agents(Engine):
                 self.call_hooks(tr, inds, came, self.state_index[dst.name])
                 if self.sim.groups.n_groups > 1 and any(self.enters(tr, src) for src in srcs[name]) and not (tr.contact and self.strain is not None): # Recorded at the level they arrived at
                     self.flow_groups[name] = self.flow_groups.get(name, 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
-                    if len(tr.dst) > 1:
+                    if tr.ends:
                         self.flow_groups[f'{name}.{dst.name}'] = self.flow_groups.get(f'{name}.{dst.name}', 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
                 if len(inds) and (dst.name in self.scheduled or (self._row is not None and self.competing[dst.name])):
                     arrived[dst.name].append(inds)
@@ -1502,6 +1506,17 @@ class Agents(Engine):
             sim.people.parent[new] = parents
         return new
 
+    def split_deaths(self, tr, srcs, uidlist, uids, src_idx):
+        """ People who took ss.null in a split: they die, as by an outflow, and are counted in its flow to ss.null (see uncount_deaths()) """
+        if not len(uids):
+            return
+        if self.on_event or self.hooks:
+            self.fire(tr, uids, src_idx, -1)
+            self.call_hooks(tr, uids, src_idx, -1)
+        self.sim.people.request_death(uids, cause=self.mod)
+        self._died.append((tr, srcs, [u[np.isin(u, uids)] for u in uidlist]))
+        return
+
     def stay(self, tr, uids, src_idx):
         """ People who took ss.stay in a split: back in the state they left, with no new dwell time and no exit scheduled, so `X.time` keeps running; not counted in the flow """
         if not len(uids):
@@ -1540,7 +1555,7 @@ class Agents(Engine):
             raise ss.CapabilityError(f'p= of "{tr.name}" gave a row of probabilities for each person, but each entry of p= is one destination\'s probability (one value per person); '
                                      f'give one per destination, e.g. p=[f_{tr.dst[0].name}, None], where each function returns one value per person')
 
-        return self.dest_shares(tr, ps, uids, stay=0.0 if tr.p_stay is None else self.eval_for(tr.p_stay, uids)) # With ss.stay, what they leave over stays
+        return self.dest_shares(tr, ps, uids, stay=self.ends_given(tr, lambda p: self.eval_for(p, uids))) # With ss.stay or ss.null, what the states leave over stays or dies
 
     def draw(self, key, uids):
         """ Uniform draws from one of the engine's distributions, which can be called more than once in a step, since people can move more than once in a step """
@@ -2165,9 +2180,10 @@ class Agents(Engine):
             for src,uids in zip(srcs, uidlist):
                 other = uids[people.cause_of_death.raw[uids] != mine]
                 if len(other):
-                    self.flowcounts[tr.name] -= self.n_of(other)
-                    if tr.name in self.flow_groups:
-                        self.flow_groups[tr.name] = self.flow_groups[tr.name] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
+                    for key in dict.fromkeys([tr.name, tr.deaths]): # A split with a state counts its deaths in its flow to ss.null too
+                        self.flowcounts[key] -= self.n_of(other)
+                        if key in self.flow_groups:
+                            self.flow_groups[key] = self.flow_groups[key] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
         return
 
     def update_results(self):

@@ -1173,7 +1173,24 @@ class Engine:
         if not tr.split:
             return [1.0]*len(tr.dst)
         ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
-        return self.dest_shares(tr, ps, stay=0.0 if tr.p_stay is None else self.eval(tr.p_stay)) # With ss.stay, what they leave over stays
+        return self.dest_shares(tr, ps, stay=self.ends_given(tr, self.eval)) # With ss.stay or ss.null, what the states leave over stays or dies
+
+    @staticmethod
+    def ends_given(tr, ev):
+        """ The probabilities given to ss.stay and ss.null in a split, together: the destination that takes the rest does not get them """
+        return sum((ev(p) for p in [tr.p_stay, tr.p_die] if p is not None), 0.0)
+
+    def die_share(self, tr, shares, ev=None):
+        """ The probability of ss.null in a split (0 if it is not one of the destinations): what the shares of the states leave over, less what ss.stay takes """
+        if not tr.dies:
+            return 0.0
+        ev = ev or self.eval
+        left = 1.0 - sum(shares, 0.0)
+        if not tr.stays:
+            return left
+        elif tr.p_die is not None:
+            return np.minimum(ev(tr.p_die), left)
+        return np.maximum(left - ev(tr.p_stay), 0.0)
 
     def eval(self, expr):
         return ss.transitions.evaluate(expr, self)
@@ -1193,8 +1210,9 @@ class Engine:
         for name,tr in graph.transitions.items():
             scale = abm and tr.people
             results += ss.Result(name, dtype=float, scale=scale, label=tr.label or name, kind='flow')
-            for dst in (tr.dst if len(tr.dst or []) > 1 else []): # A flow for each destination, e.g. res.cin.X, whose sum is the total
-                results += ss.Result(f'{name}.{dst.name}', dtype=float, scale=scale, label=f'{tr.label or name} to {dst.label or dst.name}', kind='flow', auto_plot=False)
+            for end in tr.ends: # A flow for each destination, e.g. res.cin.X, whose sum is the total
+                dst = graph.states.get(end)
+                results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', kind='flow', auto_plot=False)
         taken = list(graph.transitions.keys()) + list(graph.exprs.keys()) + list(graph.outcomes.keys())
         self.standard = bool(graph.transmissions) and mod.standard_results
         if self.standard:
@@ -1233,8 +1251,8 @@ class Engine:
                 dims[f'n_{state.name}'] = self.applies[state.name]
             for name,tr in graph.transitions.items():
                 dims[name] = np.any([self.applies[state.name] for state in tr.src + tr.dst], axis=0)
-                for dst in (tr.dst if len(tr.dst or []) > 1 else []):
-                    dims[f'{name}.{dst.name}'] = dims[name]
+                for end in tr.ends:
+                    dims[f'{name}.{end}'] = dims[name]
             for name in graph.transfers:
                 dims[name] = np.ones(len(names), dtype=bool)
             if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
