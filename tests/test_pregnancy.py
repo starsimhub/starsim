@@ -17,7 +17,7 @@ def test_states(ode=False):
     sc.heading('Testing ss.Pregnancy: conception, abortion, and losses by gestational age, as agents and compartments')
     thr = ss.weeks(20)
     def make():
-        return ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(0.02), loss_threshold=thr)
+        return ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), loss_threshold=thr)
 
     ga = sc.objdict(miscarriage=[], stillbirth=[], seen=set())
     def check(sim): # Each loss is classified by the gestational age it happened at
@@ -26,7 +26,7 @@ def test_states(ode=False):
             key = (b.tr, b.key, tuple(b.uids))
             if b.tr in ['miscarriage', 'stillbirth'] and key not in ga.seen:
                 ga.seen.add(key)
-                uids = b.uids[~preg.P.raw[b.uids]] # Not those pregnant again in the same step, whose time of conception is the new one
+                uids = b.uids[preg.ti_P[b.uids] < b.key[0]] # Not those who conceived again in the same step, whose time of entering P is now that of the new pregnancy
                 ga[b.tr] += list((b.key[0] - preg.ti_P[uids])*preg.t.dt.weeks) # At the step it happened
         assert not np.any(preg.P & ~sim.people.female), 'only women are pregnant'
 

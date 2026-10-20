@@ -135,6 +135,7 @@ class Engine:
         self._routes = None # For a transmission with a beta for each route, the beta of each term of the mixing: see Compartmental.route_betas()
         self._route = None # As agents, the route (its name and itself) a transmission's beta is being worked out for: see Agents.route_beta()
         self.routed = set() # In a compartmental run, the ids of the betas applied to the exposure through each route instead: see Compartmental.route_betas()
+        self.partnership_info = dict() # Under the partnership approximation, the chance a partnership transmits, by transmission, source state, network, and side of the partner: see Compartmental.partnership_chance()
         self.register = None # The movement register, as arrays for the kernels
         self.year = None # The year in the step that values that vary in time are taken at, for its stages (None for its start)
         self.immunity = None # Protection between strains, and the states whose people it applies to: see init_immunity()
@@ -193,6 +194,8 @@ class Engine:
             factors = []
             for d,strat in enumerate(sim.groups.strats):
                 names = own[strat.name].states if strat.name in own else ([] if strat.states is not None else None)
+                if getattr(strat, 'stages_of', None) is not None: # The stages of a transfer: for its own module's states only
+                    names = (strat.states or [s.name for s in graph.people_states]) if strat.stages_of[0] == self.mod.name else []
                 flag = bool(state.people or strat.kind == 'space') if names is None else state.name in names # A place applies to everything; other properties of people, to people
                 if strat.kind == 'disease': # The compartments of another disease, tracked jointly with this one: see ss.solvers.Crossing
                     flag = bool(state.people) and self.mod.name in strat.holders
@@ -533,12 +536,12 @@ class Engine:
             out = out*(adjust if uids is None else adjust[self.sim.groups.group_raw()[uids]])
         return out
 
-    def dest_shares(self, tr, ps, uids=None):
-        """ The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`), as `branch_shares()` does for branches """
+    def dest_shares(self, tr, ps, uids=None, stay=0.0):
+        """ The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`), as `branch_shares()` does for branches; `stay` is the probability of `ss.stay`, if given """
         mults = [self.branch_mult_of(f'{tr.name}.{dst.name}', uids) for dst in tr.dst]
-        return self.branch_shares([f'{tr.name}.{dst.name}' for dst in tr.dst], ps, mults)
+        return self.branch_shares([f'{tr.name}.{dst.name}' for dst in tr.dst], ps, mults, stay=stay)
 
-    def branch_shares(self, trs, ps, mults):
+    def branch_shares(self, trs, ps, mults, stay=0.0):
         """
         The probability of each branch out of a state, with their modifiers
 
@@ -550,12 +553,12 @@ class Engine:
             trs (list): the transitions (or their names)
             ps (list): the probability of each, or None for the one that takes the rest
             mults (list): the multiplier of each, or None for those with no modifiers
+            stay (float): the probability of `ss.stay` among the destinations, if given, which the one that takes the rest does not get
         """
-        given = sum(p for p in ps if p is not None)
-        open_ = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) # Leaving out a branch where a modifier closes it (e.g. outside the level a move= arrow limits it to)
-        if np.any(np.asarray(open_) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # TL13: was used as 1 (or as a negative remainder) with no note
+        given = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) + stay # A branch its modifiers rule out (e.g. one for another level of a move= arrow) does not count
+        if np.any(np.asarray(given) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # TL13: was used as 1 (or as a negative remainder) with no note
             names = sc.strjoin([getattr(tr, 'name', tr) for tr,p in zip(trs, ps) if p is not None])
-            raise ss.BadBranchSplit(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(open_):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
+            raise ss.BadBranchSplit(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(given):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
         rest = 1.0 - given
         ps = [rest if p is None else p for p in ps]
         if all(m is None for m in mults):
@@ -825,12 +828,12 @@ class Engine:
         to_unit = lambda val: convert(val, unit) # As self.convert, but without holding the engine, since a function parameter of a dwell time keeps it
         for name,tr in self.graph.transitions.items():
             p = tr.dur if tr.dur is not None else tr.rate if (isinstance(tr.rate, trans.par) and not tr.contact) else None
-            if p is None:
+            if p is None or tr.immediate: # dur=0 has no dwell: see Graph.resolve_exits()
                 continue
-            raw = p.raw
-            if isinstance(raw, ss.by) and tr.dur is not None and raw.items and all(isinstance(v, ss.Dist) for v in raw.items): # A distribution for each level
-                self.dwells[name] = self.dwell_by(name, tr, p, to_unit)
-                continue
+            raw = trans.by_dist(p.raw) if tr.dur is not None else p.raw
+            if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # ST18: a function's value is the mean of an exponential, not each person's own time
+                fname = getattr(raw, '__name__', 'the function')
+                ss.warn(f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
             dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None)
             if isinstance(raw, ss.Dist) and tr.dur is not None and any(isinstance(v, ss.by) for v in trans.varying_pars(raw).values()): # Parameters by group
                 self.varying_dwell(name, tr, raw, dw, to_unit)
@@ -866,37 +869,13 @@ class Engine:
             self.dwells[name] = dw
         return
 
-    def dwell_by(self, name, tr, p, to_unit):
-        """
-        A dwell time with a distribution for each level, e.g. `dur=ss.by(sex=dict(female=ss.lognorm_ex(...), male=ss.lognorm_ex(...)))`
-
-        As agents, it is one distribution whose parameters are read from each person (see
-        `ss.by.lookup()`); in a compartmental run, each group has the mean of its own, with one
-        number of Erlang stages for all, from the mean and standard deviation over the groups.
-        """
-        by = p.raw
-        dists = by.items
-        family = type(dists[0])
-        if any(type(d) is not family for d in dists):
-            errormsg = f'The dwell time of "{name}" is {by}, with distributions of different kinds ({sc.strjoin(sorted({type(d).__name__ for d in dists}))}); give one kind, with its parameters for each level'
-            raise TypeError(errormsg)
-        shape = ['a', 'c', 'n', 'p'] # Parameters that are not durations, as in ss.transitions.numeric_pars()
-        def par_by(key): # The value of one parameter for each level, as a duration where it is one
-            return by.map(lambda d: d.unit(d.pars[key]) if d.unit is not None and key not in shape and sc.isnumber(d.pars[key]) else d.pars[key])
-        dw = Bunch(par=p, k=tr.stages or 1, exact=True, is_rate=False, family=family.__name__, fixed=False, staged=True)
-        if self.sim.solver == 'abm':
-            pars = {key:(lambda b: lambda module, sim, uids: module.engine.by_people(b, uids))(par_by(key)) for key in dists[0].pars}
-            dw.dist = family(**pars)
-            dw.mean = dw.std = np.nan
-        else:
-            stats = [by.map(lambda d: ss.transitions.dwell_stats(d, to_unit)[i]).per_group(self.sim) for i in [0, 1]]
-            dw.mean, dw.std = stats
-            dw.dist = dists[0] # Not drawn from: the mean is by group
-            if tr.stages is None:
-                dw.k = ss.transitions.erlang_stages(np.mean(dw.mean), np.mean(dw.std))
-                dw.exact = False
-                ss.note(f'the dwell time of "{name}" has a distribution for each level ({by}); a compartmental run gives each group its own mean, with {dw.k} Erlang stages for all, from the mean and standard deviation over the groups', sim=self.sim)
-        return dw
+    def transfer_dist(self, tf, per_agent=None):
+        """ The distribution of a transfer's dur= as numbers in the sim's unit, if it is not exponential (None if it is a rate, a scalar, or exponential): agents draw it for each person (see `Agents.step_transfers()`) """
+        raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
+        if not isinstance(raw, ss.Dist) or isinstance(raw, ss.expon):
+            return None
+        unit = self.sim.unit_base
+        return ss.transitions.numeric_dist(raw, lambda val: convert(val, unit), per_agent=per_agent)
 
     def note_beta(self):
         """
@@ -1086,6 +1065,11 @@ class Engine:
 
         # Initial prevalence is seeded through the transmission, so people start wherever a new infection starts
         init_prev = graph.init_prev
+        share = 1.0
+        family = getattr(graph, 'seeded_by', None)
+        if family is not None and self.sim.solver != 'abm': # A member of a family that seeds it (ss.Strains): the family's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
+            family = self.sim.diseases[family]
+            init_prev, share = family.init_prev, family.split[family.member_names.index(self.mod.name)]
         if isinstance(getattr(init_prev, 'raw', init_prev), ss.spread): # Seeded through the first transmission, back-dated
             tr = graph.transmissions[0] if graph.transmissions else None
             if tr is None:
@@ -1110,6 +1094,7 @@ class Engine:
                 raise ss.OutOfBounds(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
             elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
                 init_prev = init_prev/self.total_pop
+            init_prev = init_prev*share
             trs = graph.transmissions
             if not trs:
                 errormsg = f'"{self.mod.name}" has no contact-mediated transition to seed init_prev through; use init= on a state instead'
@@ -1188,10 +1173,7 @@ class Engine:
         if not tr.split:
             return [1.0]*len(tr.dst)
         ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
-        if tr.stays: # With ss.stay, what they leave over stays
-            rest = 1.0 - sum(p for p in ps if p is not None) - (0.0 if tr.p_stay is None else self.eval(tr.p_stay))
-            ps = [rest if p is None else p for p in ps]
-        return self.dest_shares(tr, ps)
+        return self.dest_shares(tr, ps, stay=0.0 if tr.p_stay is None else self.eval(tr.p_stay)) # With ss.stay, what they leave over stays
 
     def eval(self, expr):
         return ss.transitions.evaluate(expr, self)
@@ -1232,9 +1214,9 @@ class Engine:
         for name,tf in graph.transfers.items():
             results += ss.Result(name, dtype=float, scale=abm, label=tf.label or name, kind='flow')
             self.flowcounts[name] = 0.0
-            dur = getattr(tf.dur, 'raw', tf.dur)
-            if isinstance(dur, ss.Dist) and not isinstance(dur, ss.expon): # A transfer is a rate, so its people leave at a constant rate whatever the distribution
-                ss.note(f'the transfer "{name}" moves people at a constant rate, one over the mean of its dur= ({type(dur).__name__}), so the time before it is exponential, not that distribution', sim=self.sim)
+            stages = next((strat for strat in self.sim.groups.strats if getattr(strat, 'stages_of', None) == (mod.name, name)), None)
+            if stages is not None and not stages.dwell.exact: # Erlang stages: see ss.dimensions.transfer_stages()
+                self.note_stages(name, stages.dwell)
         mod.define_results(*results)
         ss.results.in_people(*[r for r in mod.results.values() if isinstance(r, ss.Result)]) # Scaled when written: see update_results()
 
@@ -1275,6 +1257,12 @@ class Engine:
                         self.ratios[name] = parts
                         if not all(np.array_equal(x, flags[0][0]) for x in flags[1]): # E.g. infection/S with a strain, which susceptibles do not carry
                             self.denom_dims[name] = [n for n,flag in zip(names, den) if flag]
+            if self.standard and 'prevalence' in mod.results and 'prevalence' not in graph.exprs: # The standard prevalence, as the declared ratio of the infected over people, so it is by group as one is (ST20)
+                parts = [sum(states[1:], states[0]) for states in [[s for s in graph.infected if s.people], graph.people_states] if states]
+                flags = [self.applies[leaf.name] for part in parts for leaf in part.leaves]
+                if len(parts) == 2 and all(np.array_equal(f, flags[0]) for f in flags):
+                    dims['prevalence'] = flags[0]
+                    self.ratios['prevalence'] = parts
             for name,info in self.outcomes.items(): # An outcome has the dimensions of what it is counted from (in order, since outcomes can chain)
                 dims[name] = np.any([dims[key] for key,weight in info.sources if key in dims], axis=0)
                 if f'n_{name}' in mod.results:
@@ -1515,6 +1503,9 @@ class Engine:
             if 'prevalence' in res and 'prevalence' not in graph.exprs:
                 n = sum(self.stocks[s.name] for s in graph.people_states)
                 res.prevalence[ti] = sum(self.stocks[s.name] for s in graph.infected)/n if n else 0
+                if getattr(res.prevalence, 'strata', None) is not None: # By group, as a declared ratio is
+                    row = ti if self.rows is None else self.rows[ti]
+                    res.prevalence.strata[row], res.prevalence.denom[row] = [sum(self.stock_groups[leaf.name] for leaf in part.leaves) for part in self.ratios['prevalence']]
         if graph.exprs:
             ctx = StockCtx(self)
             for name,expr in graph.exprs.items():

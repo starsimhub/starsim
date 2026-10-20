@@ -1,5 +1,5 @@
 """
-Test products over several diseases and multi-outcome tests (proposal 02 §2.2-2.3)
+Test products over several diseases, and tests with several results
 """
 
 # %% Imports and settings
@@ -110,7 +110,7 @@ def test_test_diseases():
 
     g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
     bad = ss.screen(ss.Diagnostic(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
-    with pytest.raises(ss.UnknownEffect, match='"hpv18.X", but "hpv18" has no state "X"; its states are S, I, CIN, CA'):
+    with pytest.raises(ss.UnknownEffect, match='for "X", which is not a state of "hpv18". Its states are S, I, CIN, CA'):
         ss.Sim([g16, g18], interventions=bad, solver='abm', **kw).run()
     return sims
 
@@ -121,8 +121,8 @@ def test_outcomes():
     seen = sc.objdict()
     def make(delay=None, **kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
-        outcomes = dict(normal=None) | {res:{g[x]:p for g in genos for x,p in probs.items()} for res,probs in table.items()}
-        colpo = ss.Diagnostic(outcomes=outcomes, combine='worst', delay=delay)
+        results = {res:{g[x]:p for g in genos for x,p in probs.items()} for res,probs in reversed(table.items())} | dict(normal=None) # Most severe first
+        colpo = ss.Diagnostic(results=results, combine='worst', delay=delay)
         excise = ss.Treatment(moves={g.excised: 0.9 for g in genos}) # Across genotypes, with no fan-out
         def look(sim): # As agents: each result expected, from each agent's states when tested
             if sim.solver == 'abm':
@@ -137,9 +137,9 @@ def test_outcomes():
                 seen.expected = (tails[:, :-1] - tails[:, 1:]).sum(axis=0)
             return True
         prog = ss.screen(colpo, at=[2005], when=look)
-        tx = ss.treat(excise, who=prog.hsil, name='prog_hsil') # Steps triggered by a result
-        biopsy = ss.screen(ss.Diagnostic(name='biopsy'), who=prog.cancer, name='prog_cancer')
-        return ss.Sim(genos, interventions=[prog, tx, biopsy], **kwargs)
+        prog_hsil = ss.treat(excise, who=prog.hsil) # A follow-up of some results
+        prog_cancer = ss.screen(ss.Diagnostic(name='biopsy'), who=prog.cancer)
+        return ss.Sim(genos, interventions=[prog, prog_hsil, prog_cancer], **kwargs)
     def expected(sim):
         """ As an ODE: from the marginals of independent genotypes, P(worst ≥ k) = 1 − ∏(1 − P_g(≥ k)) """
         if sim.solver == 'abm':
@@ -158,33 +158,33 @@ def test_outcomes():
     for solver,sim in sims.items():
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
-        got = np.array([r.prog[name][k] for name in ['normal', 'lsil', 'hsil', 'cancer']]) # Each result is a result of the delivery, and an event
+        got = np.array([r.prog[name][k] for name in ['normal', 'lsil', 'hsil', 'cancer']])
         assert np.allclose(got, expected(sim), rtol=1e-6 if solver == 'ode' else 0.08), f'{solver}: {got} vs {expected(sim)}' # As agents, about 3% sampling noise for the smallest result (seeds 1-6)
-        assert np.isclose(got.sum(), r.prog.delivered[k]) and np.isclose(got[1:].sum(), r.prog.positive[k])
-        assert np.isclose(r.prog_hsil.delivered[k], got[2]) and np.isclose(r.prog_cancer.delivered[k], got[3]) # Triggered by prog.hsil and prog.cancer
+        assert np.isclose(got.sum(), r.prog.delivered[k])
+        assert np.isclose(r.prog_hsil.delivered[k], got[2]) and np.isclose(r.prog_cancer.delivered[k], got[3]) # The follow-ups
         cured, failed = r.prog_hsil.cured.sum(), r.prog_hsil.failed.sum()
         assert np.isclose(cured, 0.9*(cured + failed), rtol=1e-6 if solver == 'ode' else 0.05) and r.prog_hsil.unneeded.sum() > 0 # Some with HSIL from cancer
-    check_close(sims, lambda sim: sim.results.prog.positive.sum(), rtol=0.25) # At 3-month steps, agents have about 20% fewer people in CIN than the ODE (v4's own agents too)
+    check_close(sims, lambda sim: sum(sim.results.prog[name].sum() for name in ['lsil', 'hsil', 'cancer']), rtol=0.25) # At 3-month steps, agents have about 20% fewer people in CIN than the ODE (v4's own agents too)
 
     sims = run_both(make, delay=dict(hsil=ss.months(3))) # A delay for one result: its follow-up a step later
     for solver,sim in sims.items():
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
         assert list(np.flatnonzero(r.prog_hsil.delivered)) == [k + 1] and list(np.flatnonzero(r.prog_cancer.delivered)) == [k], solver
-        assert np.isclose(r.prog_hsil.delivered[k + 1], r.prog.hsil[k + 1], rtol=0.02 if solver == 'ode' else 0.05) # Counted when the result comes
+        assert np.isclose(r.prog_hsil.delivered[k + 1], r.prog.hsil[k + 1], rtol=0.02 if solver == 'ode' else 0.05) # The result is counted when it comes
     assert [s.labels for s in sims.ode.groups.strats if s.name == 'pending_prog'] == [['none', 'hsil 1']]
 
-    # positive is every result but the first; an outcome has to be a result; probabilities above 1 are an error
+    # A follow-up of any result but the last; a result's name has to be one; probabilities above 1 are an error
     g = make_hpv('hpv')
-    colpo = ss.Diagnostic(outcomes=dict(normal=None, abnormal={g.CIN: 0.9}, cancer={g.CA: 0.9}))
-    screen = ss.screen(colpo, at=[2005], name='screen')
-    refer = ss.screen(ss.Diagnostic(name='biopsy'), who=screen.positive, name='refer')
-    sim = ss.Sim(g, interventions=[screen, refer], solver='ode', **kw).run()
-    assert np.isclose(sim.results.refer.delivered.sum(), sim.results.screen.positive.sum())
-    with pytest.raises(AttributeError, match='hsil'):
-        screen.hsil
+    colpo = ss.Diagnostic(results=dict(cancer={g.CA: 0.9}, abnormal={g.CIN: 0.9}, normal=None))
+    screening = ss.screen(colpo, at=[2005])
+    refer = ss.screen(ss.Diagnostic(name='biopsy'), who=screening.cancer | screening.abnormal)
+    sim = ss.Sim(g, interventions=[screening, refer], solver='ode', **kw).run()
+    assert np.isclose(sim.results.refer.delivered.sum(), sim.results.screening.cancer.sum() + sim.results.screening.abnormal.sum())
+    with pytest.raises(AttributeError, match='its outcomes .events. are cancer, abnormal, normal'):
+        screening.hsil
     with pytest.raises(ValueError, match='sum to at most 1'):
-        ss.Sim(g, interventions=ss.screen(ss.Diagnostic(outcomes=dict(a=None, b={g.CIN: 0.6}, c={g.CIN: 0.6}))), solver='abm', **kw).init().run()
+        ss.Sim(g, interventions=ss.screen(ss.Diagnostic(results=dict(c={g.CIN: 0.6}, b={g.CIN: 0.6}, a=None))), solver='abm', **kw).init().run()
     return sims
 
 
@@ -200,7 +200,7 @@ def test_any():
                 ca = d.hpv16.CA.raw[u] | d.hpv18.CA.raw[u]
                 seen.update(eligible=np.count_nonzero(~ca), found=0.9*np.count_nonzero((d.hpv16.CIN.raw[u] | d.hpv18.CIN.raw[u]) & ~ca))
             return True
-        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), where=~any_ca, at=[2005], when=look) # No disease=
+        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), who=~any_ca, at=[2005], when=look) # No disease=
         return ss.Sim(genos, interventions=prog, **kwargs)
     sims = run_both(make)
     for solver,sim in sims.items():
@@ -224,120 +224,58 @@ def test_strain_efficacy():
         hpv.stratify(genotype=['hpv16', 'hpv18'], kind='strain') # In v4 a name only suggests a kind
         return ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=eff), at=[2005]), **kwargs)
     for solver in ['abm', 'ode']:
-        with pytest.raises(ss.InvalidAdjustment, match='"genotype", but people in S of "hpv" have no level of it.*efficacy=\\{hpv16: 0.95'):
+        with pytest.raises(ss.InvalidAdjustment, match='"genotype", but people in S of "hpv" have no level of it.*efficacy=dict.hpv16=0.95'):
             make(ss.by(genotype=[0.95, 0.0]), solver=solver, **kw).init()
     sim = make(dict(transmission=ss.by(genotype=[0.5, 0.0])), solver='abm', **kw).run() # Infectious people do carry a genotype
     assert sim.results.vaccinate.delivered.sum() > 0
     return sim
 
 
-# %% Acceptance: hpvsim_interventions/port.py, with genotypes as diseases
-
-def hpv_vaccine(name, genos):
-    """ port.py vaccine(): one product over the genotype diseases, efficacy by genotype (HPVsim's products_vx.csv) times the dose """
-    rel = dict(bivalent=dict(hpv16=1.0, hpv18=1.0, hi5=0.5), nonavalent=dict(hpv16=1.0, hpv18=1.0, hi5=1.0))[name]
-    return ss.Vaccine(efficacy={g:0.95*rel[g.name] for g in genos}, doses=[0.85, 1.0], cost=5.0, name=name)
-
-
-@pytest.mark.xfail(reason='For Robyn and Cliff: doses of a held product (Vaccine doses=, vaccinate(dose=)), which have no form in v4\'s deliveries (820932c0)', strict=True)
-def test_hpv_vaccines():
-    sc.heading('Acceptance: bivalent vs nonavalent over genotype diseases, two doses 6 months apart (port.py vaccination())')
-    def make(product=None, **kwargs):
-        genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.3), make_hpv('hi5', beta=1.1)]
-        progs = []
-        if product:
-            vx = hpv_vaccine(product, genos) # The only change between the scenarios
-            progs = [ss.vaccinate(vx, dose=1, coverage=ss.probperyear(0.5), start=2002, name='dose1'),
-                     ss.vaccinate(vx, dose=2, eligible=vx.since >= ss.months(6), coverage=0.9, name='dose2')]
-        return ss.Sim(genos, interventions=progs, **kwargs)
-    inf = lambda sim, g: sim.results[g].infection[sim.t.yearvec >= 2002].sum()
-    out, drops = sc.objdict(), sc.objdict()
-    for key in ['base', 'bivalent', 'nonavalent']:
-        out[key] = run_both(make, product=None if key == 'base' else key)
-    for solver in ['ode', 'abm']:
-        base, bi, nona = [out[k][solver] for k in ['base', 'bivalent', 'nonavalent']]
-        drop = drops[solver] = sc.objdict({k:np.array([1 - inf(sim, g)/inf(base, g) for g in ['hpv16', 'hpv18', 'hi5']]) for k,sim in dict(bi=bi, nona=nona).items()})
-        assert drop.bi[2] < 0.75*drop.nona[2] and abs(drop.bi[0] - drop.nona[0]) < 0.05, f'{solver}: {drop}' # Less against hi5, the same against hpv16
-        r = bi.results
-        start = int(np.flatnonzero(r.dose1.delivered)[0])
-        assert r.dose2.delivered[:start + 2].sum() == 0 and r.dose2.delivered[start + 2] > 0 # 6 months at quarterly steps
-        assert len(bi.modifiers[('hi5', 'rel_sus', None)]) == 1
-        assert 'bivalent' in str(bi.what_modifies('hi5.rel_sus', output=True))
-    for key in ['bi', 'nona']: # The infections averted agree (the numbers left differ by order dt, as without vaccination)
-        assert np.allclose(drops.ode[key], drops.abm[key], atol=0.07), f'{key}: {drops}'
-    for key in ['bivalent', 'nonavalent']:
-        check_close(out[key], lambda sim: sim.results.dose2.delivered.sum(), rtol=0.02)
-    return out
-
-
-@pytest.mark.xfail(reason='For Robyn and Cliff: queue=, with v4\'s shared-resource design (ss.Resource); then rewritten with steps triggered by events (820932c0)', strict=True)
-def test_hpv_screen_treat():
-    sc.heading('Acceptance: HPV DNA across genotypes -> ablation-eligible? -> ablation or excision across genotypes, with capacity and a queue (port.py algo_a)')
-    def make(**kwargs):
-        genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.3)]
-        tx = lambda name, eff: ss.Treatment(moves={g.excised: eff for g in genos}, name=name) # port.py treat_all_genotypes(), with no fan-out
-        hpv_dna = ss.Test(sensitivity={getattr(g, x):p for g in genos for x,p in dict(I=0.9, CIN=0.95).items()}, specificity=0.97)
-        any_ca = ss.any(g.CA for g in genos)
-        tx_visit = ss.screen(ss.Test(sensitivity=0.9, specificity=0.9, detects=~any_ca, name='abl_elig'), coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6),
-                             on_positive=ss.treat(tx('ablation', 0.936)), on_negative=ss.treat(tx('excision', 0.81)), name='tx_visit')
-        primary = ss.screen(hpv_dna, coverage=ss.probperyear(0.3), start=2005, repeat=ss.years(5), on_positive=tx_visit, name='primary')
-        return ss.Sim(genos, interventions=primary, **kwargs)
+def test_disease_list():
+    sc.heading('Testing disease= as a list or an ss.Strains (HP7): a bivalent vaccine, a test and a cure of each, and their counts')
+    def make(dis=None, vx=True, **kwargs):
+        g16, g18 = make_geno('hpv16'), make_geno('hpv18')
+        diseases = ss.Strains('hpv', [g16, g18]) if dis == 'strains' else [g16, g18]
+        given = diseases if dis == 'strains' else [g16, g18]
+        ivs = [ss.vaccinate(ss.Vaccine(efficacy=0.95 if vx else 0.0), coverage=0.8, at=[2001], disease=given, name='vx')]
+        if kwargs.get('solver') == 'abm':
+            dna = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=1.0), coverage=0.5, at=[2005], disease=given, name='dna')
+            ivs += [dna, ss.treat(ss.Treatment(cure=1.0), who=dna.positive, disease=given, name='tx')]
+        return ss.Sim(diseases, interventions=ivs, **kwargs)
+    base = run_both(lambda **k: make(vx=False, **k))
     sims = run_both(make)
-    cap = 10*365.25/4/7 # 10 a week, about 13 weeks a quarter
-    for solver,sim in sims.items():
-        r = sim.results
-        q = r.tx_visit
-        assert np.all(q.delivered <= cap + 1.1) and q.waiting.max() > 0 and q.dropped.sum() > 0, solver
-        assert np.isclose(r.tx_visit_positive.delivered.sum() + r.tx_visit_negative.delivered.sum(), q.delivered.sum(), rtol=0.01)
-        cured = r.tx_visit_positive.cured.by('disease').values.sum(axis=0)
-        assert np.all(cured > 0) and r.tx_visit_positive.overtreated.sum() > 0 # Ablation cures CIN of each genotype; HPV+ without CIN is overtreated
-        assert r.primary.delivered[:-1].sum() < 2*10_000 # Nobody screened twice in 5 years
-    assert any('tracked jointly: 4 × 4' in note for note in sims.ode.notes)
-    check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.05)
-    check_close(sims, lambda sim: sim.results.tx_visit.delivered.sum(), rtol=0.05)
-    check_close(sims, lambda sim: sim.results.tx_visit_positive.cured.sum(), rtol=0.2)
-    return sims
+    for solver,sim in sims.items(): # The vaccine protects against both
+        r, r0 = sim.results, base[solver].results
+        assert r.hpv16.n_I[8] < 0.5*r0.hpv16.n_I[8] and r.hpv18.n_I[8] < 0.5*r0.hpv18.n_I[8], solver
+    r = sims.abm.results
+    assert r.dna.positive.sum() > 0 and r.tx.cured.select(disease='hpv16').sum() > 0 and r.tx.cured.select(disease='hpv18').sum() > 0 # Detected and cured in each
+    assert sims.abm.results.hpv18.n_I[21] < sims.abm.results.hpv18.n_I[20]
+    family = make('strains', solver='abm', n_agents=10_000, **kw).run().results # The same as the list
+    assert np.array_equal(family.hpv18.n_I, r.hpv18.n_I) and family.tx.cured.sum() == r.tx.cured.sum()
 
+    # A scalar cure is the dict over every infected state; a test's count and cost are one per person tested
+    def cure(c, **kwargs):
+        g = make_hpv('hpv16')
+        cyto = ss.Diagnostic(results=dict(high=dict(CIN=0.9, CA=1.0), low=dict(I=0.5), normal=None), cost=10)
+        screening = ss.screen(cyto, at=[2005], name='screening')
+        return ss.Sim(g, interventions=[screening, ss.treat(ss.Treatment(cure=c, to='S'), who=screening.high, name='tx')], solver='abm', n_agents=20_000, **kw, **kwargs).run().results
+    scalar, bystate = cure(0.936), cure(dict(I=0.936, CIN=0.936)) # Its infected states
+    assert np.array_equal(scalar.hpv16.n_I, bystate.hpv16.n_I) and scalar.tx.cured.sum() == bystate.tx.cured.sum() > 0
+    assert scalar.screening.delivered.sum() == 20_000 and scalar.screening.cost.sum() == 200_000
 
-@pytest.mark.xfail(reason='For Robyn and Cliff: queue=, with v4\'s shared-resource design (ss.Resource); then rewritten with steps triggered by events (820932c0)', strict=True)
-def test_hpv_colposcopy():
-    sc.heading('Acceptance: HPV DNA -> colposcopy with four results -> excision for HSIL (queued) and referral for cancer')
-    def make(**kwargs):
-        genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.3)]
-        hpv_dna = ss.Test(sensitivity={getattr(g, x):p for g in genos for x,p in dict(I=0.9, CIN=0.95, CA=0.95).items()}, specificity=0.97)
-        colpo = ss.Test(outcomes=dict( # From HPVsim's products_dx.csv
-            normal = None,
-            lsil   = {g.CIN: 0.05 for g in genos},
-            hsil   = {g.CIN: 0.9 for g in genos} | {g.CA: 0.1 for g in genos},
-            cancer = {g.CA: 0.9 for g in genos},
-        ), combine='worst')
-        excision = ss.Treatment(moves={g.excised: 0.81 for g in genos})
-        triage = ss.screen(colpo, coverage=0.9, on_result=dict(hsil=ss.treat(excision, capacity=ss.perweek(10), queue=ss.months(6)), cancer=ss.screen(ss.Test(name='refer'))), name='triage')
-        primary = ss.screen(hpv_dna, coverage=ss.probperyear(0.3), start=2005, on_positive=triage, name='primary')
-        return ss.Sim(genos, interventions=primary, **kwargs)
-    sims = run_both(make)
-    for solver,sim in sims.items():
-        r = sim.results
-        by = r.triage.outcome.by('result')
-        assert list(by.columns) == ['normal', 'lsil', 'hsil', 'cancer'] and np.isclose(by.values.sum(), r.triage.delivered.sum())
-        assert np.isclose(r.triage.delivered.sum(), 0.9*r.primary.diagnosed.sum(), rtol=1e-6 if solver == 'ode' else 0.03)
-        assert np.isclose(r.triage_cancer.delivered.sum(), r.triage.outcome.select(result='cancer').sum())
-        hsil = r.triage.outcome.select(result='hsil').sum()
-        treated = r.triage_hsil
-        n = treated.eligible.sum() # Those with HSIL, but not those already waiting
-        assert n < hsil and np.isclose(treated.delivered.sum() + treated.dropped.sum() + treated.left.sum() + treated.waiting[-2], n, rtol=1e-6 if solver == 'ode' else 0.03), solver
-    check_close(sims, lambda sim: sim.results.triage.outcome.select(result='hsil').sum(), rtol=0.15) # The natural history differs by order dt (10% at quarterly steps)
-    check_close(sims, lambda sim: sim.results.triage_hsil.cured.sum(), rtol=0.15)
+    # One product for one disease, delivered for another, says to give both
+    g16, g18 = make_geno('hpv16'), make_geno('hpv18')
+    test = ss.Diagnostic(sensitivity=0.9)
+    with pytest.raises(ss.UnknownDisease, match=r"disease=\['hpv16', 'hpv18'\]"):
+        ss.Sim([g16, g18], interventions=[ss.screen(test, at=[2005], disease=g16, name='a'), ss.screen(test, at=[2006], disease=g18, name='b')], solver='abm', **kw).init()
     return sims
 
 
 if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
-    test = test_test_diseases()
+    tests = test_test_diseases()
     outcomes = test_outcomes()
     any_ = test_any()
     strain = test_strain_efficacy()
-    vaccines = test_hpv_vaccines()
-    screen_treat = test_hpv_screen_treat()
-    colposcopy = test_hpv_colposcopy()
+    dlist  = test_disease_list()

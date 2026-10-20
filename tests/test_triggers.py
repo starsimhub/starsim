@@ -110,10 +110,11 @@ def test_on_event():
     assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
     assert path.dx0.delivered.sum() > 100 and np.array_equal(path.dx0.delivered.values, direct.dx0.delivered.values)
 
-    with pytest.raises(ss.CapabilityError): # An event of its own module: agents only
-        S, F, G = ss.states('S F G')
-        a = ss.Disease(S, F, G, sa=(sa := S >> F @ ss.peryear(0.5)), flag=F >> G @ ss.on(sa), name='a')
-        ss.Sim(a, solver='ode', **kw).init()
+    # An event of its own module, as compartments: those it happened to move at the end of the step
+    S, F, G = ss.states('S F G')
+    a = ss.Disease(S, F, G, sa=(sa := S >> F @ ss.peryear(0.5)), flag=F >> G @ ss.on(sa), name='a')
+    res = ss.Sim(a, solver='ode', **kw).run().results.a
+    assert res.flag.sum() > 0 and np.isclose(res.flag.sum(), res.sa.sum(), rtol=0.01) and res.n_F.max() < 1e-6*res.n_S[0]
     return sim
 
 
@@ -212,11 +213,11 @@ def test_ct_by_sex():
         if form == 'pars': # A Dist whose parameters are values by group
             onset = ss.lognorm_ex(mean=ss.by(sex=dict(female=ss.months(ms[0][0]), male=ss.months(ms[1][0]))), std=ss.by(sex=dict(female=ss.months(ms[0][1]), male=ss.months(ms[1][1]))))
         else: # A value by group that is a Dist: the same
-            onset = ss.by(sex=dict(zip(['female', 'male'], [ss.lognorm_ex(ss.months(m), ss.months(sd)) for m,sd in ms])))
+            onset = ss.by(sex={sex:ss.lognorm_ex(ss.months(m), ss.months(sd)) for sex,(m,sd) in zip(['female', 'male'], ms)})
         p_symp = ss.by(sex=dict(female=0.2, male=0.54))
         return ss.Disease(E, P, A, Y, S,
-            latency_P = ss.Transition(E, P, p=p_symp), # Was one transition per sex, with p=by_sex(...) and sync_sex()
-            latency_A = ss.Transition(E, A, p=1 - p_symp),
+            symp    = ss.Transition(E, P, p=p_symp), # Was one transition per sex, with p=by_sex(...) and sync_sex()
+            asymp   = ss.Transition(E, A, p=1 - p_symp),
             onset   = P >> Y @ onset,
             clear_a = A >> S @ ss.months(6),
             clear_y = Y >> S @ ss.months(3),
@@ -241,7 +242,7 @@ def test_ct_by_sex():
     for sex in ['female', 'male']:
         assert np.allclose(r.n_P.select(sex=sex)[::4], a.n_P.select(sex=sex)[::4], atol=150), sex
     assert any('4|36 Erlang stages' in note for note in ode.notes)
-    with pytest.raises(ss.CapabilityError, match='stratify'): # By sex given by name, with no dimension of sex: to stratify, to run as compartments
+    with pytest.raises(ss.CapabilityError, match='stratify by it'): # As compartments, sex needs a stratification
         ss.Sim(make(), solver='ode', **kw2).init()
 
     # A Dist with a function as a parameter (FPsim: duration of use by age), and typed rates inside ss.by
@@ -281,6 +282,22 @@ def test_with_conveyor(solvers=('abm',)):
         out = [ss.Sim(make(clock), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
         for key in ['n_I', 'n_Z']:
             assert np.allclose(out[0][key], out[1][key], atol=300), f'clock={clock}, {key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
+    return
+
+
+@sc.timer()
+def test_after_event():
+    sc.heading('Testing an exact dwell until an event of another module, and a time after it (ST18)')
+    A, B = ss.states('A B')
+    def make(**kw):
+        a = ss.Disease(A, B, go=ss.progression('A -> B', dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
+        X, Y = ss.states('X Y')
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, after=a.go, **kw), name='b')]
+    for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
+        res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
+        assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
+    with pytest.warns(RuntimeWarning, match='ss.constant'): # A function as dur= is the mean of an exponential
+        ss.Sim(ss.Disease(A, B, go=ss.progression('A -> B', dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
     return
 
 
@@ -375,3 +392,4 @@ if __name__ == '__main__':
     test_syphilis_stay()
     test_ct_by_sex()
     test_with_conveyor()
+    test_after_event()

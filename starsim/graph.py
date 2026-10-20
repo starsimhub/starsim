@@ -607,7 +607,7 @@ class Graph(Presentation):
         slots = [(tr, slot, p) for tr in self.transitions.values() for slot,p in self.set_slots(tr)] # (transition, slot name, parameter)
 
         # Name the anonymous ones after their slot, qualified by the transition where two would clash
-        anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or (p.name is None and find_name(p, frame) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1])
+        anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or getattr(p, 'slot_named', False) or (p.name is None and find_name(p, frame) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1]), and one named after its slot before (in a class this one subclasses), which is named again
         counts = sc.objdict()
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
@@ -615,6 +615,7 @@ class Graph(Presentation):
         for tr,slot,p in anon:
             clash = counts[slot] > 1 or slot in self.pars or slot in self.states or slot in self.transitions or slot in inner
             self._add_par(p, name=f'{slot}_{tr.name}' if clash else slot)
+            p.slot_named = True
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
         used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None))]
@@ -625,7 +626,7 @@ class Graph(Presentation):
                 if isinstance(val, par) and not val.literal and val.name is None and find_name(val, frame) is None:
                     val.name = f'{oc.name}_{key}'
         used += [(f'init of {state.name}', state.init) for state in self.states.values() if isinstance(state.init, Expr)] # So an initial count can be fitted
-        used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] # And a parameter in the rate of a transfer
+        used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] # And a parameter in the rate of a transfer
         used += [(name, upd.value) for name,upd in self.updates.items()] # And in the value of an update
         used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
         used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
@@ -646,7 +647,7 @@ class Graph(Presentation):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
         self.exits = sc.objdict()
         for state in self.states.values():
-            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], triggered=[], stay=0)
+            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[], stay=0)
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
@@ -654,6 +655,8 @@ class Graph(Presentation):
                 tr.const, tr.terms = linear(tr.rate)
             if tr.inflow:
                 self.inflows.append(tr)
+            if tr.immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr.split): # dur=0 with where=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until where= holds instead)
+                tr.trigger = ss.transitions.Trigger(tr.where)
             for state in tr.src:
                 exits = self.exits[state.name]
                 if tr.contact:
@@ -662,19 +665,25 @@ class Graph(Presentation):
                     exits.triggered.append(tr)
                 elif tr.p is not None and not tr.split: # One branch of several out of this state
                     exits.branches.append(tr)
-                elif tr.dur is not None:
+                elif tr.dur is not None and not tr.immediate:
                     exits.timed.append(tr)
-                elif tr.rate is None and len(tr.dst) > 1: # Several destinations and no wait: say how to write an immediate split
+                elif tr.rate is None and len(tr.dst) > 1 and not tr.immediate: # Several destinations and no wait: say how to write an immediate split
                     names = [d.name for d in tr.dst]
-                    example = ', '.join(f'{tr.name}_{n}=ss.Transition({state.name}, {n}, p={p})' for n,p in zip(names, [str(v) if v is not None else 'None' for v in sc.tolist(tr.p)]))
                     raise ss.UndrivenTransition(f'the transition "{tr.name}" ({state.name} -> {sc.strjoin(names)}) has p= but no rate and no duration (dur=), so nothing says when people leave. '
-                                                f'For a split as soon as people arrive, write one transition for each destination: {example}; or give it dur=.')
+                                                f'For a split as soon as people arrive, give it dur=0, e.g. ss.Transition({state.name}, [{", ".join(names)}], dur=0, p={[None if v is None else v.raw if isinstance(v, par) else v for v in tr.p]}); or give it a duration.')
+                elif tr.rate is None: # Immediate: dur=0, one destination and ss.stay, or what the branches leave over
+                    exits.rest.append(tr)
                 else:
                     exits.hazards.append(tr)
 
-        # A single timed transition with no p= takes whatever the branches leave over: the only one, or the only one for the same people (the same where=) as the branches
+        # A single timed transition with no p= (or an immediate split) takes whatever the branches leave over: the only one, or the only one for the same people (the same where=) as the branches; one with no driver and no p= is undriven, not the remainder
         for name,exits in self.exits.items():
             exits.remainder = None
+            rest = exits.pop('rest')
+            if len(rest) > 1:
+                raise ss.BadBranchSplit(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
+            elif rest:
+                exits.remainder = rest[0]
             apart = [] # Timed exits for other people (another where=), which compete as before
             if exits.branches and len(exits.timed) > 1:
                 wheres = {id(getattr(tr, 'where', None)) for tr in exits.branches}
@@ -701,7 +710,7 @@ class Graph(Presentation):
                         group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
                         driven = [tr for tr in exits.hazards if not tr.undriven]
-                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give it p={1 - total:n}, as one transition for each destination.' if undriven else ''
+                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. "{name} -> A | B" with p=[{total:n}, None].' if undriven else ''
                         why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
                         why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
@@ -729,7 +738,7 @@ class Graph(Presentation):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr.check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1 and not tr.stays)): # A split with ss.stay is a split, though ss.stay is not a destination
+            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1 and not tr.trigger.outcome and not tr.stays)): # On an outcome, p= is the share of its people who move; a split with ss.stay is a split, though ss.stay is not a destination
                 raise ss.BadBranchSplit(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
@@ -854,7 +863,7 @@ class Graph(Presentation):
                                          f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({state.name}, [{tr.dst[0].name}, ...], dur=..., p=[f({state.name}.dwell), None])')
             if dwells(tr.dur):
                 raise ss.CapabilityError(f'the dwell time of "{name}" reads {dwells(tr.dur)[0].name}.dwell; {where}')
-        others = [(name, upd.value) for name,upd in self.updates.items()] + [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur]] + list(self.exprs.items())
+        others = [(name, upd.value) for name,upd in self.updates.items()] + [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] + list(self.exprs.items())
         others += [(oc.name, w) for oc in self.outcomes.values() for w in oc.weights] + [(f'init of {s.name}', s.init) for s in self.states.values()]
         for name,expr in others:
             if dwells(expr):

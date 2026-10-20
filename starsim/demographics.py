@@ -281,6 +281,35 @@ class Births(Demographics):
         return
 
 
+def lifetable_rates(tables):
+    """ Life tables (`ss.lifetable`), by year and sex (see `ss.Deaths(lifetable=)`), as a death rate per person for each age band of each: a table, and its columns """
+    def by_sex(tables, year):
+        if isinstance(tables, ss.lifetable):
+            return [(year, None, tables)]
+        if not isinstance(tables, dict) or not tables or not all(isinstance(t, ss.lifetable) for t in tables.values()):
+            errormsg = f'lifetable= takes an ss.lifetable, a dict of one for each sex (dict(female=..., male=...)), or a dict of either for each year ({{2000: ..., 2010: ...}}), not {tables}'
+            raise TypeError(errormsg)
+        sexes = {str(k).lower()[0]:t for k,t in tables.items()}
+        if sorted(sexes) != ['f', 'm']:
+            errormsg = f'A life table for each sex is given for female and male, e.g. dict(female=..., male=...), not for {list(tables)}'
+            raise ValueError(errormsg)
+        return [(year, 'female' if k == 'f' else 'male', t) for k,t in sexes.items()]
+    if isinstance(tables, dict) and tables and all(sc.isnumber(k) for k in tables):
+        rows = [row for year,t in tables.items() for row in by_sex(t, year)]
+    else:
+        rows = by_sex(tables, None)
+    if len({sex is None for _,sex,_ in rows}) > 1:
+        errormsg = 'Give a life table for each sex in every year, or one for both sexes in every year'
+        raise ValueError(errormsg)
+    out = sc.ddict(list)
+    for year,sex,table in rows:
+        ages = table.edges[:-1]
+        for key,vals in dict(year=[year]*len(ages), sex=[sex]*len(ages), age=ages, value=table.hazards(ages)).items():
+            out[key] += list(vals)
+    cols = {key:key for key in ['year', 'sex', 'age', 'value'] if not all(v is None for v in out[key])}
+    return {key:out[key] for key in cols}, cols
+
+
 class Deaths(Demographics):
     """
     Configure disease-independent "background" deaths.
@@ -303,16 +332,24 @@ class Deaths(Demographics):
         pars: dict with arguments including:
             rel_death: constant used to scale all death rates
             death_rate: float, dict, or pandas dataframe/series containing mortality data
+            lifetable: instead of death_rate, life tables (`ss.lifetable`): one, one for each sex (`dict(female=..., male=...)`), or one (or one for each sex) for each year from which it holds (`{2000: ..., 2010: ...}`); each is the death rate of each of its age bands, per person, so deaths follow the table of the year and each person's sex and age as time goes on (`ss.death(lifetable=)` instead draws each person's age at death once, from one table)
             rate_units: what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude mortality rate result (`cmr`) is in the same units.
 
         metadata: data about the data contained within the data input.
             "data_cols" is is a dictionary mapping standard keys, like "year" to the
             corresponding column name in data. Similar for "sex_keys".
     """
-    def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
+    def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, lifetable=None, **kwargs):
         if isinstance(death_rate, str): # A named place: its UN death rates by year, sex, and age, per person
             death_rate = ss.named.rates(death_rate, 'deaths')
             rate_units = 1 if rate_units is _ else rate_units
+        if lifetable is not None: # The death rate of each age band of each table, by year and sex, per person
+            if death_rate is not _:
+                errormsg = 'ss.Deaths() takes death_rate= or lifetable=, not both'
+                raise ValueError(errormsg)
+            death_rate, cols = lifetable_rates(lifetable)
+            rate_units = 1
+            metadata = sc.mergedicts(dict(data_cols=cols, sex_keys=dict(female='f', male='m')), metadata)
         super().__init__()
         self.define_pars(
             rel_death = 1,

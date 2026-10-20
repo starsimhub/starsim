@@ -21,7 +21,7 @@ ops = {
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
 ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.ppl.age)
-leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory']
+leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory', 'move']
 memory_kinds = ['ever', 'count', 'since']
 
 
@@ -34,7 +34,7 @@ class Cond:
     states, and on stratifications.
 
     Args:
-        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence', 'event', 'memory'), an operator, '~', or 'isin'
+        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence', 'event', 'memory', 'move'), an operator, '~', or 'isin'
         args (list): the operands
 
     Examples:
@@ -65,8 +65,9 @@ class Cond:
         if op == 'people': return f'people.{args[0]}'
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
+        elif op == 'move': return self.label
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
-        elif op == 'event': return self.label if isinstance(self, Event) else modname(args[0]) + (f'.{args[1]}' if args[1] is not None else '') # A transition's event, or a delivery's, a product's, or a coded module's
+        elif op == 'event': return modname(args[0]) + (f'.{args[1]}' if args[1] is not None else '')
         elif op == 'memory': return f'{args[0]!r}.{args[1]}'
         elif op == '~':    return f'~{args[0]!r}'
         elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
@@ -218,7 +219,7 @@ class Event(Cond):
         if kind == 'to' and not any(dst is d or getattr(dst, 'name', dst) == d.name for d in (obj.dst or [])):
             errormsg = f'{getattr(dst, "name", dst)} is not a destination of {obj.name} ({obj.arrow})'
             raise ValueError(errormsg)
-        super().__init__('event', kind, obj, dst)
+        super().__init__('move', kind, obj, dst)
         return
 
     def __or__(self, other): # A transition joined to an event is the event of going through it, e.g. on=precin.to(S) | cin
@@ -310,7 +311,7 @@ class Child(Event):
         if not isinstance(event, Event):
             errormsg = f'ss.child() takes an event (a transition, or e.g. preg.birth), not {event}'
             raise TypeError(errormsg)
-        Cond.__init__(self, 'event', 'child', event, under)
+        Cond.__init__(self, 'move', 'child', event, under)
         return
 
     @property
@@ -522,7 +523,7 @@ def is_static(cond, sim):
         return True
     op, args = cond.op, cond.args
     dims = [strat.name for strat in sim.groups.strats]
-    if op in ['dim', 'memory']: # Delivery memory is a stratification too: see ss.Delivery.memory_dims()
+    if op == 'dim':
         return True
     elif op == 'people':
         return args[0] in dims or (args[0] == 'female' and any(getattr(strat, 'female', None) is not None for strat in sim.groups.strats)) # people.female is the level of women of a sex stratification
@@ -530,7 +531,7 @@ def is_static(cond, sim):
         name = args[1]
         mods = [m for m in sim.declared if modname(args[0]) in [None, m.name]]
         return any(name in m.graph.states for m in mods) and not any(name in m.graph.transitions for m in mods)
-    elif op in ['array', 'incidence', 'event', 'memory']:
+    elif op in ['array', 'incidence', 'event', 'memory', 'move']:
         return False
     elif op == 'isin':
         return is_static(args[0], sim)
@@ -576,7 +577,7 @@ def is_event(cond):
     if not isinstance(cond, Cond):
         return False
     if cond.op in leaves:
-        return cond.op == 'event' or getattr(cond, 'kind', None) is not None
+        return cond.op in ['event', 'move'] or getattr(cond, 'kind', None) is not None
     return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
 
 
@@ -773,9 +774,11 @@ class Selector:
         elif op == 'incidence':
             return self.incidence(cond)
         elif op == 'event':
-            return self.event_of(cond) if isinstance(cond, Event) else ss.interventions.fired(self, cond) # A transition's event (see ss.conditions.Event), or a delivery's, a product's, or a coded module's
+            return ss.interventions.fired(self, cond)
         elif op == 'memory':
             return ss.interventions.remembered(self, cond)
+        elif op == 'move':
+            return self.event_of(cond)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):
@@ -847,22 +850,6 @@ class Selector:
                                      f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
         return engine.event_frac(name)
 
-    def event_of(self, event):
-        """ The people an event (`tr.to(B)`, `X.enter`, `X.exit`) happened to """
-        mod = self.mod if event.module is None else self.module(modname(event.module))
-        engine = mod.engine
-        if self.abm:
-            out = np.zeros(self.shape, dtype=bool)
-            uids = engine.event_uids(**event.spec())
-            out[event.mothers(self.sim, uids) if isinstance(event, Child) else uids] = True
-            return out
-        spec = event.spec()
-        if isinstance(event, Child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
-            raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
-        if 'tr' in spec:
-            return engine.event_frac(spec['tr'], to=spec.get('to'))
-        raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
-
     def combine(self, op, ca, cb, a, b):
         """
         In a compartmental run: `|` or `&` of two selections of which at least one is an event, a share of each state and group
@@ -910,6 +897,22 @@ class Selector:
         elif key(ca) is not None and key(ca) in lb:
             return 'b_in_a'
         return None
+
+    def event_of(self, event):
+        """ The people an event (`tr.to(B)`, `X.enter`, `X.exit`) happened to """
+        mod = self.mod if event.module is None else self.module(modname(event.module))
+        engine = mod.engine
+        if self.abm:
+            out = np.zeros(self.shape, dtype=bool)
+            uids = engine.event_uids(**event.spec())
+            out[event.mothers(self.sim, uids) if isinstance(event, Child) else uids] = True
+            return out
+        spec = event.spec()
+        if isinstance(event, Child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
+            raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
+        if 'tr' in spec:
+            return engine.event_frac(spec['tr'], to=spec.get('to'))
+        raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
 
     def dim_strat(self, name):
         """ The stratification of the sim with a given name, if there is one """

@@ -64,7 +64,7 @@ A model runs as agents under `'auto'` if it contains any of these:
 - a distribution on a per-person quantity other than a dwell time (`beta`, `rel_sus = ss.lognorm_ex(mean=1, std=0.3)`) that has not been binned into a dimension;
 - custom code (a function intervention or analyzer, or a `step()` override) that does not work on groups when it is tried on them (see [Functions](#functions-try-it)); a module written as code says outright that it works on groups, or does not, with the class attribute `compartmental = True` or `False`;
 - something that needs individual histories: contact tracing, transmission trees, the infection log (`analyzers='infection_log'`), or the strains each person has had (a strain dimension with partial immunity);
-- a family of diseases (`ss.Strains`), for now;
+- a family of diseases (`ss.Strains`) whose members affect each other (`immunity=`, `exclusive=`), unless `approx=True`: under the compartmental solvers these are worked out from each member's shares (below);
 - an initial value (`init_prev=` or `init=`) by a property of people that is not a dimension, or a function of the agents.
 
 Or the user asks: `solver='abm'` runs any model as agents, for example to study elimination with a simple model.
@@ -125,7 +125,7 @@ solver: ode (requested)
   note: acute has a lognorm_ex dwell time, approximated by 6 Erlang stages (mean 0.25 years kept; std 0.102 instead of 0.1 years)
 ```
 
-A network model run as an ODE is a different, coarser model, not an invalid one, and the user who typed `solver='ode'` has asked for it. A network of partnerships (`ss.MFNet`, `ss.PartnerNet`) has no approximation yet, so it raises `CapabilityError` under a compartmental solver.
+A network model run as an ODE is a different, coarser model, not an invalid one, and the user who typed `solver='ode'` has asked for it. A network of lasting partnerships (`ss.MFNet`, `ss.PartnerNet` with `dur=`) uses the partnership approximation of [`06-routes.md`](06-routes.md) ("Networks of partnerships"), with a note; `'auto'` keeps it as agents.
 
 `approx=` says what to do about approximations:
 
@@ -144,7 +144,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 | The model has | Solver | Approximated by | Reported |
 |---|---|---|---|
 | A random or static network (`ss.RandomNet`, `ss.StaticNet`) | compartmental, explicit | homogeneous mixing with the network's mean number of contacts (for a static network, the mean degree of its graph) | the contact rate and where it came from |
-| A network of partnerships (`ss.MFNet`, `ss.PartnerNet`) | compartmental, explicit | none yet: `CapabilityError` | |
+| A network of lasting partnerships (`ss.MFNet`, `ss.PartnerNet` with `dur=`) | compartmental, explicit | the partnership approximation ([`06-routes.md`](06-routes.md)): partnerships formed at `n/D̄` per person, each transmitting with its chance over its whole length, from partners drawn from the population; its sides, and the property it matches or counts partners by, must be dimensions. Against agents (20 runs of 10,000, prevalence at 10 and 20 years, ODE over agents): risk groups with 6-month partnerships 1.00 and 0.99; HIV-like, 5-year monogamous partnerships 1.11 and 1.25 (infection kept within pairs, which it spreads); gonorrhea-like with Poisson partners at a time, 0.19 and 0.13 (concurrency, which it leaves out; 1.0 and 1.5 near the threshold with one partner at a time) | the rate partnerships form, and under the route in `describe()`, the chance over a partnership in each direction |
 | A modifier of a transmission on a route with a share for each edge (`share=lambda net: ...`) | compartmental, explicit | none: `CapabilityError` (a share that is a number, a time series, or by a dimension is exact) | |
 | A dwell time that is not exponential, Erlang, or fixed (`ss.constant`) | compartmental, explicit or `'auto'` | Erlang stages matching the mean and, as closely as possible, the standard deviation; `stages=k` sets the number directly | the number of stages, and the mean and standard deviation that result |
 | A distribution on a per-person quantity that is not a dwell time (`beta`, `rel_sus`) | compartmental, explicit | its mean. To keep the variation, the user bins it into a dimension (`sir.stratify(rel_sus=[...])`), which is exact for the bins and needs no note | the mean used |
@@ -178,6 +178,17 @@ The stock at each time point is the same in each: exact for a delay of whole ste
 
 **By time in state.** A state whose exits read the time in it (`P.dwell`, in `p=` or a rate) is a conveyor of whole steps too, each slot holding the people who have been there that many steps, then one compartment for the rest. A dwell time out of it is followed exactly: from slot `j`, the share of those still there whose dwell ends nearest step `j` (from the distribution's quantiles, sped up by any multipliers on the transition), so people leave at the step agents would, and not in the step they arrive in; the rest leave at the rate of the mean time left. Each slot's `p=` and rate take the slot's time, as agents count it (`j` steps when leaving, `j + 1/2` for a rate), so `p` is exact to the step for any dwell distribution and any `p`. The conveyor follows people to the dwell's 99.9th percentile, or for the whole run for a rate, so HPV16's CIN at a quarterly step is about 400 compartments per group instead of 2; above 10,000 in all, a note says so. A dwell sped up by a multiplier that changes during a stay is approximate, as for any dwell. Branches with `p=`, a non-exponential dwell that does not read the time, or a minimum stay out of the same state have no compartmental form with it yet. On HPV16's natural history (10,000 women in `P`, quarterly steps), the ODE gives P(cancer) 0.0275 and a median time to cancer of 23.9 years, against 0.0275 and 24.2 as agents (20 runs), and 0.0274 and 23.8 by Monte Carlo of the continuous model; the ODE takes 0.2 s.
 
+### A family of diseases side by side
+
+A family (`ss.Strains`) is not crossed: its members run side by side, with the sum of their compartments (about 20 per HPV genotype, so 80 at 4 and 280 at 14) rather than the product. What ties them together is worked out at the start of each step from each member's share of each group, as if the members were independent given their shares (the row is `approx`, "members side by side, independent given their shares"):
+
+- protection (`ss.immunity`): against member `g`, the rule combines `m[k, g]·f_k` over the members `k`, with `f_k` the share of the group in `k`'s `protected=` states; `g`'s own states are taken by the state people are in, which is exact (so own immunity is exact). A `combine=` function is called on the shares in the same way;
+- the union results: `1 − Π_k (1 − f_k)` of each group, with the first member by state; the flows are sums, as agents;
+- the seeding (`init_prev=`, `split=`): each member seeds `init_prev × split_k` of each group, so some are seeded with two (at 10% and 4 members, about 0.4%);
+- one course at a time (`exclusive=`): the share of each group that entered the exclusive state of another member in the step moves to the member's state with no way out; those who die in one member die in the others (from its state with no way out, for deaths from the exclusive state), as shares.
+
+A family with none of `immunity=`, `exclusive=`, or `init_prev=` gives each member's results exactly as it would alone. Against the exact form (the crossing, which a member's `ss.modify(..., where=)` on another gives, here one that changes nothing), on a toy genotype with protection 0.3 from each other member and 0.9 from its own: 5 to 8% low on prevalence and cancers at 2 members, 1 to 5% at 3 and 4. When the members are tracked jointly anyway (births and deaths of everyone, or a modifier between them), the protection is taken from the joint state, which is exact. `auto` runs a family whose members affect each other as agents, saying why, unless `approx=True`; one whose members are only seeded together runs as compartments.
+
 ### What has no approximation
 
 These stop a compartmental run with `CapabilityError`:
@@ -186,7 +197,7 @@ These stop a compartmental run with `CapabilityError`:
 - transmission trees and individual histories (the infection log, `analyzers='infection_log'`);
 - custom code that only works on agents: a function taking `uids`, a `deliver=fn(sim) -> uids` delivery, a `step()` override that reaches for a per-agent attribute that is not a stratification;
 - a strain dimension with partial immunity and people who can be infected again: a person's level is their last strain, so the protection of the strains before it would be lost (the exact form, a history of strains had with `2^k` levels, is deferred);
-- a family of diseases (`ss.Strains`), for now: its members side by side, coupled through their shares, are the next step;
+- one course at a time (`exclusive=`) in a family whose members are tracked jointly (a crossing); and `approx=False` for a family whose members affect each other;
 - a value read from each person's own properties that is not a dimension, including an initial value (`init_prev=ss.by(dict(age=[0, 15], value=[0, 0.1]))`).
 
 ```text
@@ -209,7 +220,7 @@ For an HIV model with a sexual network, a lognormal dwell time, a function in a 
 ```text
 >>> sim.solvers()
                                  ode                                       binomial, gillespie                       abm
-network: MFNet                   no (no approximation)                     no (no approximation)                     yes
+network: mfnet                   approx (the partnership approximation)    approx (the partnership approximation)    yes
 function: care_seeking           no (the model does not run as ...)        no (the model does not run as ...)        yes
 dwell time: acute (lognorm_ex)   approx (Erlang stages)                    approx (Erlang stages)                    yes
 module: partner_notification     no ("partner_notification" traces ...)    no ("partner_notification" traces ...)    yes

@@ -89,7 +89,9 @@ class Presentation:
                 elif 'acquisition' in tr.guessed: # Out of the first state, alongside a transmission
                     kind += ', not an acquisition'
                 add(name, f'{tr.arrow}   {kind}', f'guessed: {guess}' if guess else None)
-                if not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
+                if tr.immediate:
+                    add('', 'immediately (dur=0), in the step people arrive')
+                elif not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
                     p = tr.dur if tr.dur is not None else tr.rate
                     raw = p.raw
                     dw = engine.dwells.get(name) if engine is not None else None
@@ -287,8 +289,10 @@ class Presentation:
             for track in engine.tracks[name]:
                 w = weight if track.p is None else f'{weight}{format_expr(track.p)} * '
                 if track.immediate:
-                    for dst in track.tr.dst:
-                        out += entry(dst.name, w)
+                    ps = track.tr.p if track.tr.split and track.tr.p else [None]*len(track.tr.dst)
+                    rest = ' - '.join(['1'] + [format_expr(p) for p in ps if p is not None]) # A destination with p=None takes the rest
+                    for dst,p in zip(track.tr.dst, ps):
+                        out += entry(dst.name, w if not track.tr.split else f'{w}{format_expr(p) if p is not None else f"({rest})"} * ')
                 else:
                     out.append((track.first, w))
             return out
@@ -409,7 +413,7 @@ class Presentation:
         out.functions = sorted([dict(name=name, source=func_source(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
         if self.transfers: # Likewise
             expr = lambda e: None if e is None else format_expr(e, exact=True)
-            out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, **({} if tf.increment is None else dict(increment=tf.increment))) for name,tf in self.transfers.items()]
+            out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, **({} if tf.increment is None else dict(increment=tf.increment)), **({} if tf.p is None else dict(p=[expr(v) for v in tf.p]))) for name,tf in self.transfers.items()]
         if self.updates: # Only when there are any, so that other specs are unchanged
             out.updates = [dict(name=name, state=self.updates[name].state.name, value=format_expr(self.updates[name].value, exact=True)) for name in sorted(self.updates.keys())]
         guessed = list(self.guessed.keys())
@@ -486,6 +490,10 @@ def route_lines(mod, tr, sim):
                 lines.append(f'    acts {quantity_str(acts, None, unit)} in each partnership')
             elif acts is not None:
                 lines.append(f'    acts per unit time in each partnership ~ {acts}, drawn once for each')
+            lines += partnership_lines(mod, tr, sim, name)
+        elif partnership_lines(mod, tr, sim, name):
+            lines.append(f'beta on {name}: {quantity_str(val, "rate", unit)} in each partnership')
+            lines += partnership_lines(mod, tr, sim, name)
         else:
             lines.append(f'beta on {name}: {quantity_str(val, "rate", unit) if not isinstance(val, ss.peract) else val} per contact')
         for m in sim.modifiers.get((mod.name, 'route', f'{tr.name}@{name}'), []) if hasattr(sim, 'modifiers') else []:
@@ -493,6 +501,28 @@ def route_lines(mod, tr, sim):
             factor = f'× (1 − {share} × efficacy {value_str(m.amount)})' if (m.efficacy is not None and share is not None) else f'× (1 − efficacy {value_str(m.amount)})' if m.efficacy is not None else f'× (1 − {share} × (1 − {value_str(m.amount)}))' if share is not None else f'× {value_str(m.amount)}'
             lines.append(f'    {factor}, "{m.name}"')
     return lines
+
+
+def partnership_lines(mod, tr, sim, name):
+    """ For describe(), under the partnership approximation (see `ss.solvers.Mixing.partnerships()`): how often partnerships form, and the chance one transmits in each direction, from each source state """
+    engine = getattr(mod, 'engine', None)
+    terms = [term for term in getattr(getattr(sim, 'mixing', None), 'terms', []) if term.name == name and 'partnership' in term]
+    if not terms or not hasattr(engine, 'partnership_info'):
+        return []
+    for flow in engine.flows: # Worked out once, when first needed
+        if flow.kind == 'contact' and flow.tr.name == tr.name and flow.routes is False:
+            engine.route_betas(flow)
+    info = engine.partnership_info
+    pt = terms[0].partnership
+    sides = list(pt.net.sides or {})
+    chances = sc.objdict()
+    for (trn,state,net,src),out in info.items():
+        if trn == tr.name and net == name:
+            for g in np.flatnonzero((pt.group_side >= 0) & (out > 0)):
+                key = f'{sides[src]}2{sides[pt.group_side[g]]}' if sides else 'each'
+                chances[f'{key} from {state}' if len(tr.terms) > 1 else key] = out[g]
+    chances = ', '.join(f'{k} {v:.2g}' for k,v in chances.items())
+    return [f'    partnership approximation (approx): partnerships formed at {pt.formed:.2g} a {sim.unit_name}; chance over a partnership {chances}']
 
 
 def seasonal_str(raw, mean):

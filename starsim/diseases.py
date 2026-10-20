@@ -85,6 +85,7 @@ class Disease(ss.Module):
     """
     graph = None # The declared states and transitions; None for a disease written as code
     standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
+    code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.LegacyPregnancy's fertility rates)
 
     _coded = False # Whether the class is written as code (ss.Infection and its subclasses), so that the check in __init_subclass__() does not apply
     _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital', 'step_congenital'] # Called only on a disease written as code
@@ -178,7 +179,7 @@ class Disease(ss.Module):
         first = kwargs.pop('first') if isinstance(kwargs.get('first'), str) else None # A state named "first" can still be declared by keyword
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not leaf.literal and getattr(leaf, 'slot', None) is None and not any(leaf is m for m in members.values())} # Not a value given inline (e.g. @ ss.permonth(0.05)), which is copied, and named for each instance
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values())}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
@@ -374,7 +375,7 @@ class Disease(ss.Module):
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         if self.graph is not None:
-            unknown = [key for key in self.pars if key not in self.graph.pars and key not in getattr(self, 'own_pars', ())] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored); a module can read some itself (own_pars, e.g. ss.Pregnancy's Starsim 3 parameters)
+            unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
             if unknown:
                 hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=100)), and cannot be set through pars.' if 'init' in unknown else ''
                 raise ss.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')

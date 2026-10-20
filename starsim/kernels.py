@@ -2574,7 +2574,7 @@ inline_step = nb.jit(nopython=True, cache=True, error_model='numpy', inline='alw
 
 
 @jit
-def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
+def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
     """
     Take steps start+1 to end of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers
 
@@ -2585,6 +2585,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
         first, last (int): the runs to take
         start, end (int): the time points to step from and to
         fixed, mult, consts, rel_trans (arrays): as for `run()`, with a first axis for the runs: one entry if every run has the same values, or one for each run (as each particle of IF2 has its own parameter values)
+        sh_vals (array): the time share between places (`sh_val` of the program) of each run, as runs by entries: one entry if every run has the program's own
         row0 (int): the row of the tables that their first row is (those with more than one), if they do not start at the start of the run
         state_of (array): the state that each compartment is part of
         stocks, flows (arrays): filled in at time points start+1 to end, as `run_many()` returns them (by group, or the
@@ -2606,6 +2607,8 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
         y = own[r - first]
         tables = (mine[0][r - first if len(fixed) > 1 else 0], mine[1][r - first if len(mult) > 1 else 0], mine[2][r - first if len(consts) > 1 else 0], mine[3][r - first if len(rel_trans) > 1 else 0])
         set_step(parts, 0, tables) # The values of this run, for those that are held for the whole run
+        if len(sh_vals) > 1:
+            p.sh_val[:] = sh_vals[r]
         wake(w) # Each run steps every place first
         for ti in range(start + 1, end + 1):
             if len(sh.to):
@@ -2637,14 +2640,14 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
 
 
 @nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
-def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
+def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
     """ `advance()` for every run, with the runs shared between threads: one program for each thread (progs, a typed list of copies), since a step changes the parts of it that vary in time """
     k = len(progs)
     bounds = np.arange(k + 1)*len(ys)//k # The runs of each thread
     threads = np.arange(k) # Indices as signed integers, which the typed list takes, since a prange index is unsigned
     for i in nb.prange(k):
         c = threads[i]
-        advance(rngs, progs[c], ys, bounds[c], bounds[c+1], dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, state_of, stocks, flows, per_step, row0)
+        advance(rngs, progs[c], ys, bounds[c], bounds[c+1], dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step, row0)
     return
 
 

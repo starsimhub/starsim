@@ -82,8 +82,8 @@ def check_close(sims, func, rtol=0.1):
     return vals
 
 
-def make_sti(name='ng', beta=0.015, fail=False, init_prev=0.1):
-    """ A bacterial STI as in STIsim (stisim_bacterial/port.py), with treatment as an undriven transition and no treated state """
+def make_sti(name='ng', beta=0.015, fail=None, init_prev=0.1, p_fail=None):
+    """ A bacterial STI as in STIsim (stisim_bacterial/port.py), with treatment as an undriven transition and no treated state; `fail` is the event of a treatment failing """
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     trs = dict(
         infection = S >> E @ beta*(A + P + Y + C),
@@ -94,18 +94,18 @@ def make_sti(name='ng', beta=0.015, fail=False, init_prev=0.1):
         clear_y   = (Y + C) >> S @ ss.days(200),
         cure      = (E + A + P + Y + C) >> S, # Undriven: moved only by treatment
     )
-    if fail: # Failures lose their symptoms and stop seeking care
-        trs['fail'] = (P + Y + C) >> A
+    if fail is not None: # Failures lose their symptoms and stop seeking care
+        trs['fail'] = ss.Transition(P + Y + C, A, on=fail, p=p_fail)
     return ss.Disease(**trs, init_prev=init_prev, name=name)
 
 
 def test_sti_failure():
-    sc.heading('Testing treatment with failure and no treated state: cured, failed, and overtreated')
+    sc.heading('Testing treatment with failure and no treated state: cured, failed, and unneeded')
     def make(**kwargs):
         ng = make_sti()
         drug = ss.Treatment(moves={ng.cure: 0.9})
         clinic = ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic')
-        mass = ss.treat(drug, where=ng.S | ng.A, coverage=0.05, interval=ss.days(30), name='mass') # Most of them uninfected: overtreated
+        mass = ss.treat(drug, where=ng.S | ng.A, coverage=0.05, interval=ss.days(30), name='mass') # Most of them uninfected: unneeded
         return ss.Sim(ng, interventions=[clinic, mass], **kwargs)
     sims = run_both(make)
     for solver,sim in sims.items():
@@ -121,10 +121,10 @@ def test_sti_failure():
     check_close(sims, lambda sim: sim.results.clinic.cured.sum(), rtol=0.15)
     check_close(sims, lambda sim: sim.results.mass.unneeded.sum(), rtol=0.05)
 
-    # Failure along another transition, and a modifier of the undriven transition, which multiplies the efficacy
+    # Failure along another transition, triggered by the outcome, and a modifier of the undriven transition, which multiplies the efficacy
     def make_fail(**kwargs):
-        ng = make_sti(fail=True)
-        drug = ss.Treatment(moves=ng.cure, cure=0.8, on_fail=ng.fail)
+        drug = ss.Treatment(moves='ng.cure', cure=0.8)
+        ng = make_sti(fail=drug.failed)
         return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'),
                       connectors=ss.modify(ng.cure, multiply=0.5, start=ss.days(100)), **kwargs)
     sims = run_both(make_fail)
@@ -136,11 +136,22 @@ def test_sti_failure():
         assert np.isclose(res.ng.fail.sum(), res.clinic.failed.sum()) # Every failure (in C) moved to A
     check_close(sims, lambda sim: sim.results.clinic.failed.sum(), rtol=0.15)
 
-    # A transfer for those who failed: resistance acquired
+    # With p=, that share of the failures move (resistance at failure)
+    def make_resist(**kwargs):
+        drug = ss.Treatment(moves='ng.cure', cure=0.8)
+        ng = make_sti(fail=drug.failed, p_fail=0.05)
+        return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'), **kwargs)
+    for solver,sim in run_both(make_resist).items():
+        res = sim.results
+        assert np.isclose(res.ng.fail.sum(), 0.05*res.clinic.failed.sum(), rtol=0.01 if solver == 'ode' else 0.3), f'{solver}: {res.ng.fail.sum()} of {res.clinic.failed.sum()} failures'
+
+    # A transfer for those who failed, as a step of its own: resistance acquired
     def make_amr(**kwargs):
         ng = make_sti().stratify(amr=['sens', 'res'], split=[1, 0])
-        drug = ss.Treatment(moves={ng.cure: 0.8}, on_fail=ss.Delivery(move=dict(amr='sens -> res'), coverage=0.5))
-        return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'), **kwargs)
+        drug = ss.Treatment(moves={ng.cure: 0.8})
+        clinic = ss.treat(drug, where=ng.C, interval=ss.days(30))
+        clinic_fail = ss.Delivery(move=dict(amr='sens -> res'), who=clinic.failed, coverage=0.5)
+        return ss.Sim(ng, interventions=[clinic, clinic_fail], **kwargs)
     sims = run_both(make_amr)
     for solver,sim in sims.items():
         res = sim.results
@@ -217,7 +228,7 @@ def test_syndromic():
         delivered = r.delivered.sum()
         for dis in ['ng', 'ct']:
             n = [r[key].select(disease=dis).sum() for key in ['cured', 'failed', 'unneeded']]
-            print(f'{solver} {dis}: delivered {delivered:.0f}, cured/failed/overtreated {np.round(n)}')
+            print(f'{solver} {dis}: delivered {delivered:.0f}, cured/failed/unneeded {np.round(n)}')
             assert np.isclose(sum(n), delivered) # Each disease sees every recipient: chosen once, before anyone moves
             assert np.isclose(n[0], sim.results[dis].cure.sum())
         assert r.unneeded.select(disease='ct').sum() > 0 # Treated for CT because of NG symptoms, and the reverse

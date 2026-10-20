@@ -262,12 +262,19 @@ class on:
             errormsg = f'ss.on() takes a condition, an event, or a function of the sim, not {x} ({type(x).__name__})'
             raise TypeError(errormsg)
         self.x = x
+        self.delay = None # For after= an event with dur=: the time after it (see ss.Transition)
         return
 
     @property
     def event(self):
         """ Whether it is an event (edge-triggered) rather than a condition (level-triggered) """
         return isinstance(self.x, ss.conditions.Event)
+
+    @property
+    def outcome(self):
+        """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.interventions.trigger_moves()`) """
+        x = self.x
+        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x)) # Not an event a module written as code records (e.g. ss.LegacyPregnancy's conception)
 
     def __repr__(self):
         return f'ss.on({getattr(self.x, "__name__", self.x)})'
@@ -298,7 +305,7 @@ class Transition(Nameable):
             (e.g. `move=dict(strain='A+B -> A')`, which applies only to people at the first), or the level people move to
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
-        after (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then); agents only
+        after (dur/event): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then); agents only. Or an event (`after=preg.delivery`): people in the source move when it happens to them, or `dur=` after it (a time drawn for each person), as agents
         before (dur): the opposite, for a rate: it applies only until people have been in its source state this long, as EMULSION's escape during a minimum stay; agents only
         offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
@@ -317,6 +324,7 @@ class Transition(Nameable):
         selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2), move=dict(since_birth=0)) # Parity goes up by 2, and a clock is set to 0
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
+        postpartum = ss.Transition(PP, NP, dur=ss.months(6), after=preg.delivery) # Six months after each woman's own delivery
         farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10)) # Ten piglets for each sow that farrows
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
@@ -324,6 +332,12 @@ class Transition(Nameable):
     def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False):
         if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
             rate, on = None, rate
+        delay = None # With after= an event: the time after it that people move, if dur= is given
+        if isinstance(after, (Transition, ss.conditions.Event, Trigger)): # e.g. after=preg.delivery: people move when it happens to them, or dur= after it
+            if on is not None or rate is not None:
+                errormsg = f'after={after} is the event people move after, so it takes dur= (the time after it) or nothing (at once), not rate= or on='
+                raise ValueError(errormsg)
+            on, after, delay, dur = after, None, dur, None
         if sum(x is not None for x in [rate, dur, on]) > 1:
             errormsg = 'A transition takes one of rate=, dur=, or on='
             raise ValueError(errormsg)
@@ -338,6 +352,8 @@ class Transition(Nameable):
         self.dst = None
         self.p = None
         self.trigger = None if on is None else Trigger(on)
+        if delay is not None:
+            self.trigger.delay = as_expr(delay) # A time drawn for each person when the event happens to them: see ss.solvers.Agents.triggered()
         self.rate = None if rate is None else as_expr(rate)
         self.dur = None if dur is None else as_expr(dur)
         self.stages = stages
@@ -357,8 +373,8 @@ class Transition(Nameable):
             state, n = offspring if isinstance(offspring, (tuple, list)) else (offspring, 1)
             self.offspring = (state, int(n))
         self.move = None # A change of level in some dimensions: {dim: level}
-        self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
         self.move_given = dict(move) if move else None # As given, for the model spec
+        self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
         if move:
             self.move = sc.objdict()
             for dim,level in move.items():
@@ -426,8 +442,15 @@ class Transition(Nameable):
         """ Whether it splits between several destinations when it is taken (ss.stay counts as one) """
         return self.dst is not None and (len(self.dst) > 1 or self.stays)
 
+    @property
+    def immediate(self):
+        """ Whether it has no wait (`dur=0`): people go through it in the step they arrive in its source, or, with `where=`, in the step the condition first holds for them """
+        raw = getattr(self.dur, 'raw', None)
+        raw = raw.value if isinstance(raw, ss.dur) else raw
+        return sc.isnumber(raw) and raw == 0
+
     def _set_src(self, src):
-        self.src = [] if src is null else [s for s in sc.tolist(src)]
+        self.src = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
         return self
 
     def _set_dst(self, dst):
@@ -1152,7 +1175,11 @@ def by_dist(raw):
     if raw.dim is None or len({type(d) for d in dists}) > 1:
         raise ss.CapabilityError(f'{raw} has distributions of {"several families" if raw.dim is not None else "several dimensions"}, which is not supported yet; give one family over one dimension, or its parameters as ss.by() values.')
     unit = lambda d,v: d.unit(v) if (d.unit is not None and sc.isnumber(v)) else v
-    pars = {key:by(**{raw.dim:[unit(d, d.pars[key]) for d in dists]}) for key in dists[0].pars.keys()}
+    given = raw.given.get(raw.dim)
+    if isinstance(given, dict): # By name, e.g. ss.by(sex=dict(female=..., male=...)), which is read from each person
+        pars = {key:by(**{raw.dim:{k:unit(d, d.pars[key]) for k,d in given.items()}}) for key in dists[0].pars.keys()}
+    else:
+        pars = {key:by(**{raw.dim:[unit(d, d.pars[key]) for d in dists]}) for key in dists[0].pars.keys()}
     return type(dists[0])(**pars)
 
 

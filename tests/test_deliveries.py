@@ -559,7 +559,7 @@ def test_memory():
         cytology = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
         screening = ss.screen(cytology, who=cytology.since >= ss.years(5), coverage=0.3, interval=ss.years(1), count_events=True)
         retest = ss.screen(ss.Diagnostic(sensitivity=0.9, name='pcr'), who=screening.positive & (screening.positive.count == 1), coverage=0.5)
-        return ss.Sim(sis, interventions=ss.cascade(screening, retest, name='care'), start=2000, stop=2030, total_pop=20_000, verbose=0, **kwargs)
+        return ss.Sim(sis, interventions=ss.cascade(screening, retest, name='care'), start=2000, stop=2030, dt=0.5, total_pop=20_000, verbose=0, **kwargs) # A step of half the dwell, so agents and the ODE differ little by whole steps
     sims = sc.objdict(abm=make(n_agents=20_000).run(), ode=make(solver='ode').run())
     df = sims.abm.interventions.screening.events_df()
     tested = df[df.event == 'screening'].sort_values(['uid', 'time'])
@@ -568,8 +568,8 @@ def test_memory():
     scr = sims.abm.interventions.screening
     assert (scr.count_positive.raw > 0).sum() == df[df.event == 'screening.positive'].uid.nunique() # Positives over the run are those ever positive
     assert 'since_cytology' in sims.ode.describe(output=True)
-    for key,rtol in [('screening', 0.05), ('retest', 0.08)]: # Retests as agents are about 6% below the ODE, whose memory of events is approximated (independent within each state and group)
-        assert np.isclose(sims.ode.results[key].delivered.sum(), sims.abm.results[key].delivered.sum(), rtol=rtol)
+    for key in ['screening', 'retest']:
+        assert np.isclose(sims.ode.results[key].delivered.sum(), sims.abm.results[key].delivered.sum(), rtol=0.05)
 
     # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.1, name='sis')
@@ -658,7 +658,7 @@ def test_coinfection():
     base = make(coinfect=False).run()
     assert list(sim.diseases.keys()) == ['hiv', 'syph'] # Named from their variables
     assert sim.results.hiv.n_I[-1] > base.results.hiv.n_I[-1]
-    assert sim.results.syph.infection.cum[-1] > base.results.syph.infection.cum[-1] # About 13% more on average, but from 3% to 26% between single runs
+    assert sim.results.syph.infection.cum[-1] > base.results.syph.infection.cum[-1] # About 11% more on average over 10 seeds, but from 2% (seed 1) to 21% between single runs
     assert 'where=syph.I' in sim.what_modifies('hiv.rel_trans', output=True)
     assert 'where=hiv.I' in sim.what_modifies('syph.rel_sus', output=True)
     return sim
@@ -1101,6 +1101,53 @@ def test_whole_run():
     return whole
 
 
+def test_delay():
+    sc.heading('Testing delay= on a triggered step: a treatment three months after the test, under every solver')
+    def make(solver, delay=ss.months(3)):
+        S, I = ss.states(2)
+        sis = ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(1), cure=I >> S, init_prev=0.1, name='sis')
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.3, interval=ss.months(3))
+        treatment = ss.treat(ss.Treatment(cure=0.9, transition='cure'), who=screening.positive, delay=delay)
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        return ss.Sim(sis, interventions=[screening, treatment], solver=solver, start=2000, stop=2005, dt=ss.months(1), verbose=0, **size)
+    for solver in solvers:
+        res = make(solver).run().results
+        pos, tx = res.screening.positive[:-4], res.treatment.delivered[3:-1] # Nothing is delivered at the last time point, which has no step
+        assert tx[0] > 0 and tx[1:3].sum() == 0
+        assert np.allclose(tx, pos, rtol=1e-6 if solver != 'binomial' else 0.05, atol=0 if solver != 'binomial' else 30), f'{solver}: {tx[::3]} treated against {pos[::3]} positive'
+    sim = make('abm', delay=ss.uniform(ss.months(1), ss.months(5))).run() # Drawn per person: 2 to 5 steps after the test
+    tx = sim.results.treatment.delivered
+    assert tx[:2].sum() == 0 and np.isclose(tx[2:5].sum(), 0.75*sim.results.screening.positive[0], rtol=0.1) # Those due after 2, 3, or 4 steps
+    assert 'after 3 months' in make('ode').init().interventions.treatment.describe()
+    with pytest.raises(ValueError, match='needs an event'):
+        ss.treat(ss.Treatment(cure=0.9), delay=ss.months(3))
+    with pytest.raises(ss.CapabilityError, match='drawn for each person'):
+        make('ode', delay=ss.uniform(ss.months(1), ss.months(5))).init()
+    return sim
+
+
+def test_coded_disease():
+    sc.heading('Testing deliveries for a disease written as code (PL2): screen, treat, and vaccinate on ssl.AgentSIR')
+    import starsim.library as ssl
+    def make(interventions, **kwargs):
+        sir = ssl.AgentSIR(beta=ss.peryear(0.5), init_prev=0.1, dur_inf=ss.years(5), p_death=0.0, **kwargs)
+        return ss.Sim(n_agents=5000, diseases=sir, networks='random', interventions=interventions, start=2000, stop=2010, verbose=0).run()
+    base = make([]).results.agentsir.n_infected
+    screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.2, interval=ss.years(1), name='screening')
+    treatment = ss.treat(ss.Treatment(cure=0.8), who=screening.positive, name='treatment')
+    res = make([screening, treatment]).results
+    t = res.treatment
+    assert t.delivered.sum() == res.screening.positive.sum() > 0 and t.unneeded.sum() > 0 # False positives are treated, and need not be
+    assert np.isclose(t.cured.sum()/(t.cured.sum() + t.failed.sum()), 0.8, atol=0.05)
+    assert res.agentsir.n_infected.max() < 0.9*base.max()
+    vx = ss.vaccinate(ss.Vaccine(efficacy=1.0), coverage=0.5, at=[2000])
+    assert make(vx).results.agentsir.n_infected.max() < 0.9*base.max() # Through rel_sus
+
+    with pytest.raises(ss.UnknownEffect, match='has no "clear_infection"'): # A part the product uses that the disease lacks
+        class NoCure(ssl.AgentSIR):
+            clear_infection = property(lambda self: (_ for _ in ()).throw(AttributeError('clear_infection')))
+        ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, interval=1), verbose=0).init()
+    return res
 def test_save_load():
     """ A cascade with memory and a delayed test, saved and loaded mid-run, ends as if it had not been """
     sc.heading('Testing save and load of a cascade mid-run')
@@ -1152,3 +1199,5 @@ if __name__ == '__main__':
     nets   = test_network_contacts()
     effective = test_effective()
     whole  = test_whole_run()
+    delay  = test_delay()
+    coded  = test_coded_disease()

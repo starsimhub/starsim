@@ -21,7 +21,7 @@ def did_you_mean(name, options):
     short = lambda opt: opt if '.' in name else opt.rpartition('.')[2]
     dists = sc.suggest(name, [short(opt) for opt in options], n=3, fulloutput=True) or {}
     best = min(dists.values(), default=0)
-    close = [key for key,dist in dists.items() if dist <= best + 1] # Not those much further away than the closest
+    close = [key for key,dist in dists.items() if dist <= best + 1 and dist < len(name)/2] # Not those much further away than the closest, nor any that differ in half the name or more (every one-letter state from another)
     matches = [opt for opt in options if short(opt) in close]
     return f'; did you mean {sc.strjoin(matches)}?' if matches else '.'
 
@@ -954,6 +954,8 @@ def evaluate(expr, ctx):
         return ctx.dwell(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
+    elif isinstance(expr, (Share, Column)):
+        return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
     elif isinstance(expr, attr):
@@ -962,8 +964,6 @@ def evaluate(expr, ctx):
         return ctx.mother(expr)
     elif isinstance(expr, Since):
         return ctx.since(expr)
-    elif isinstance(expr, (Share, Column)):
-        return expr.evaluate(ctx)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
     raise TypeError(errormsg)
 
@@ -1058,8 +1058,6 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             names = [s.label_name for s in e.states]
             inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}'
-        elif isinstance(e, Clock):
-            return e.to_str()
         elif isinstance(e, Dwell):
             return f'{e.state.label_name}.dwell'
         elif isinstance(e, Share):
@@ -1067,5 +1065,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
         elif isinstance(e, Column):
             return f'{fmt(e.p)}[{e.i}]'
+        elif isinstance(e, Clock):
+            return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

@@ -146,19 +146,40 @@ def combine(mods, value, engine):
 
 class AgentModifiers:
     """
-    Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own
+    Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own;
+    and is what a delivery for it uses as its engine (see `engine()`): its conditions, and a cure as `clear_infection()`
 
     The array becomes an `ss.ModifiableArr`, whose base values the disease's code sets as before, and
     whose `.effective` values (with the modifiers that are active applied) `ss.Infection.infect()` uses.
     """
+    cross = None # Never tracked jointly with another disease
+
     def __init__(self, mod, sim):
         self.mod = mod
         self.sim = sim
-        self.selector = ss.conditions.Selector(sim) # Over agents
+        self.selector = ss.conditions.Selector(sim, mod) # Over agents
         return
+
+    @staticmethod
+    def engine(mod, sim):
+        """ The one for a disease written as code, made once """
+        eng = mod.__dict__.get('_coded_engine')
+        if eng is None or eng.sim is not sim:
+            eng = mod.__dict__['_coded_engine'] = AgentModifiers(mod, sim)
+        return eng
 
     def convert(self, val):
         return ss.solvers.convert(val, self.sim.unit_base)
+
+    @property
+    def dt(self):
+        return self.mod.t.dt.to(self.sim.unit_base).value
+
+    def force(self, uids, tr, dst, srcs=None):
+        """ A cure by a delivery (see `ss.Delivery.cure()`): the disease's own `clear_infection()` """
+        if len(uids):
+            self.mod.clear_infection(uids)
+        return len(uids)
 
     def mult_raw(self, kind, name=None, state=None):
         """ The multiplier on `rel_sus` or `rel_trans` for each agent from the modifiers that are active (1 if there are none) """
@@ -174,7 +195,7 @@ class AgentModifiers:
         if not isinstance(arr, ss.ModifiableArr):
             arr.__class__ = ss.ModifiableArr # The same array and values, with .effective
         if arr.engine is None:
-            arr.engine = AgentModifiers(mod, sim)
+            arr.engine = AgentModifiers.engine(mod, sim)
         return
 
 

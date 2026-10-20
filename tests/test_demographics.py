@@ -495,27 +495,6 @@ def test_birth_data_cols():
 
 
 @sc.timer()
-def test_declared_newborns():
-    """ Agents added by ss.Births and ss.LegacyPregnancy (including the unborn) enter a declared disease, with a level of each dimension """
-    sc.heading('Testing newborns in a declared disease')
-    for dem in [ss.Births(birth_rate=40), ss.LegacyPregnancy(fertility_rate=40)]:
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=2), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
-        sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
-        sim.run()
-        r = sim.results
-        n_states = r.sis.n_S[-1] + r.sis.n_I[-1]
-        unborn = r.pregnancy.n_unborn[-1] if 'pregnancy' in r else 0 # The unborn are in the disease's states, though not among the people (as in test_mtct)
-        assert np.isclose(n_states, r.n_alive[-1] + unborn), f'{dem.name}: {n_states} in states but {r.n_alive[-1]} alive and {unborn} unborn'
-        new = sim.people.auids[sim.people.auids >= 2000]
-        assert len(new) > 100
-        share = sim.people.risk[new].mean()
-        assert 0.7 < share < 0.9, f'{dem.name}: {share:.2f} of newborns are high risk, not 0.8'
-        assert sim.diseases.sis.I[new].any() # Newborns can be infected
-    print('✓ (newborns in declared states)')
-    return
-
-
-@sc.timer()
 def test_period_rates():
     """ Rates labeled by the start of their period hold until the next label, and 5-year fertility data cover the last group whole """
     sc.heading('Testing rates by period...')
@@ -534,6 +513,37 @@ def test_period_rates():
     preg = ss.Sim(n_agents=100, demographics=ss.LegacyPregnancy(fertility_rate=data, rate_units=1), start=2010, stop=2011, verbose=0).init().demographics.pregnancy
     frd = preg.fertility_rate_data
     assert list(frd.columns[-2:]) == [45, 50] and frd[45].iloc[0] == 0.2 and frd[50].iloc[0] == 0
+    return sim
+
+
+@sc.timer()
+def test_lifetable_deaths():
+    """ Life tables by year and sex in ss.Deaths (FP33), and a death rate by its own ages, or a function, under both solvers (MA20) """
+    sc.heading('Testing life tables by year and sex, and death rates by single year of age...')
+    ages = np.arange(0, 105, 5)
+    table = lambda mx: ss.lifetable(ages, -np.diff(np.append(np.exp(-mx*ages), 0))) # A constant hazard, to age 105
+    tables = {2000: dict(female=table(0.01), male=table(0.03)), 2005: dict(female=table(0.02), male=table(0.06))}
+    sim = ss.Sim(n_agents=20_000, demographics=ss.Deaths(lifetable=tables), start=2000, stop=2010, verbose=0).run()
+    female, dead = sim.people.female.raw, ~sim.people.alive.raw
+    for sel,rates in [(female, [0.01, 0.02]), (~female, [0.03, 0.06])]:
+        expected = 1 - np.exp(-5*rates[0] - 5*rates[1]) # The 2000 table to 2005, then the 2005 one
+        assert abs(dead[sel].mean() - expected) < 4*np.sqrt(expected/sel.sum()), f'{dead[sel].mean():.3f} died, not {expected:.3f}'
+    with pytest.raises(ValueError, match='female and male'):
+        ss.Deaths(lifetable=dict(women=table(0.01), men=table(0.03)))
+
+    # A death rate by single year of age on 5-year age groups (a compartmental run averages it), and a function of the sim per year
+    mx = ss.by(dict(age=np.arange(100), value=[ss.peryear(0.001*np.exp(0.07*a)) for a in range(100)]))
+    def flat(sim): return 0.02
+    for rate,stratify in [(mx, True), (ss.peryear(flat), False)]:
+        n = []
+        for solver,pop in [('abm', dict(n_agents=50_000)), ('ode', dict(total_pop=50_000))]:
+            S, I = ss.states(2)
+            sim = ss.Sim(ss.Disease(S, I, inf=S >> I @ 0*I, death=ss.death(rate=rate), name='d'), solver=solver, start=2000, stop=2005, verbose=0, **pop)
+            if stratify:
+                sim.stratify(age=list(range(0, 100, 5)))
+            n.append(sim.run().results.d.death.sum())
+        assert np.isclose(n[0], n[1], rtol=0.06), f'{n[0]:n} deaths as agents, {n[1]:n} as compartments'
+    assert np.isclose(n[1], 50_000*(1 - np.exp(-0.02*5)), rtol=1e-3)
     return sim
 
 
@@ -643,6 +653,27 @@ def test_split_by_age():
     return sim
 
 
+@sc.timer()
+def test_declared_newborns():
+    """ Agents added by ss.Births and ss.LegacyPregnancy (including the unborn) enter a declared disease, with a level of each dimension """
+    sc.heading('Testing newborns in a declared disease')
+    for dem in [ss.Births(birth_rate=40), ss.LegacyPregnancy(fertility_rate=40)]:
+        sis = ss.Disease(infection=ss.transmission('S -> I', beta=2), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
+        sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
+        sim.run()
+        r = sim.results
+        n_states = r.sis.n_S[-1] + r.sis.n_I[-1]
+        alive = r.n_alive[-1] + (r.pregnancy.n_unborn[-1] if 'pregnancy' in r else 0) # The unborn are in the disease's states, but not counted among the people
+        assert np.isclose(n_states, alive), f'{dem.name}: {n_states} in states but {alive} alive'
+        new = sim.people.auids[sim.people.auids >= 2000]
+        assert len(new) > 100
+        share = sim.people.risk[new].mean()
+        assert 0.7 < share < 0.9, f'{dem.name}: {share:.2f} of newborns are high risk, not 0.8'
+        assert sim.diseases.sis.I[new].any() # Newborns can be infected
+    print('✓ (newborns in declared states)')
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
 
@@ -657,12 +688,13 @@ if __name__ == '__main__':
     s9 = test_nnd()
     s10 = test_count_based_births()
     s11 = test_birth_data_cols()
-    s12 = test_declared_newborns()
     s12 = test_period_rates()
+    s12b = test_lifetable_deaths()
     s13 = test_births_parents()
     s14 = test_unborn()
     s15 = test_pregnancy_risks()
     s16 = test_cause_of_death()
     s17 = test_split_by_age()
+    s12 = test_declared_newborns()
 
     T.toc()

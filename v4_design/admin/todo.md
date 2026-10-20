@@ -1,44 +1,50 @@
 # Todo
 
-## CK
+## CK 2/2 ✓
 
 - [x] Review reviews
 - [x] Review starsim_data changes
 
-## Reviews
+## Reviews 6/6 ✓
 
 - [x] Implement merged review recommendations
 - [x] Run additional reviews 1-2 (fuzz, stats)
 - [x] Implement additional review 1-2 findings
 - [x] Run additional review "textbook cannon"
 - [x] Run additional review "naive user"
-- [ ] Implement additional review findings
+- [x] Implement additional review findings
 
-## New use cases
+## New use cases 6/11
 
 - [x] STIsim
 - [x] HPVsim
 - [x] Covasim
 - [x] FPsim
 - [x] Malaria NGM -- ODE/ABM split for both humans and mosquitoes to test multiple populations
+- [x] Thanzi la Onse
 - [ ] More complex applications from other models included in the survey
 - [ ] Auto-import for EMOD (HIV?)
 - [ ] New TB model ensemble
-- [ ] Thanzi la Onse
 - [ ] Atomica applications
+- [ ] Additional camdl examples
 
-## Other
+## Refactoring 0/4
+
+- [ ] Figure out why sc.asd() doesn't work better for ODE models
+- [ ] Settle NUM_THREADS pros/cons across platforms
+- [ ] Use `sc.obj`
+- [ ] Replace Bunch with sc.obj()
+
+## Other 3/6
 
 - [x] Update docs
 - [x] Write remaining import/export/usage skills
 - [x] Write do/don't/how migration guide for each switching example
-- [ ] Decide on and implement library examples (camdl's, Keeling & Rohani, others)
 - [ ] Show example of pure NumPy and then stages of implementation moving to pure Starsim
-- [ ] Figure out why sc.asd() doesn't work better for ODE models
-- [ ] Settle NUM_THREADS pros/cons across platforms
-- [ ] Use `sc.obj`
+- [ ] Consider GPU support
+- [ ] Consider differentiable ABM
 
-## AI
+## AI 0/4
 
 - [ ] Rewrite/retake Starsim exam
 - [ ] Write AI chat/pipelines

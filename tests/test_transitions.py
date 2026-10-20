@@ -12,6 +12,7 @@ import itertools
 import pytest
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import sciris as sc
 import starsim as ss
 
@@ -111,7 +112,7 @@ def test_forms():
     assert base.hash().data is None and make(0.05, data=pd.DataFrame(dict(t=[10], n_I=[5]))).hash().data is not None
     # Several sources as a sum of states, in the explicit form
     S, I, R, D = ss.states(4)
-    death = ss.Transition([I, R], D, rate=0.01, name='death')
+    death = ss.Transition(I + R, D, rate=0.01, name='death')
     assert death.src == [I, R]
     many = ss.Disease(S >> I @ 0.05*I, I >> R @ 10, death, name='sir')
     assert [s.name for s in many.graph.transitions.death.src] == ['I', 'R']
@@ -954,6 +955,31 @@ def test_transfer():
         dis.stratify(v=[False, True])
         assert ss.Sim(dis, stop=20, solver=solver, pars=dict(c=1), **agents, **kw).run().results.dis.switch.sum() > 0
         assert ss.Sim(dis, stop=20, solver=solver, pars=dict(c=1), interventions=ss.modify(dis.switch, multiply=0), **agents, **kw).run().results.dis.switch.sum() == 0
+
+    # A transfer's dur= distribution is drawn for each person (X1): as agents exactly, as compartments by Erlang stages
+    S, I = ss.states(2)
+    wane = ss.Disease(inf=S >> I @ 0*I, init=dict(I=0.0), name='wane')
+    wane.stratify(rpr=[False, True], split=[0, 1], revert=ss.transfer(rpr=False, dur=ss.lognorm_ex(ss.years(15), ss.years(5))))
+    s2 = np.log(1 + (5/15)**2)
+    lognorm = stats.lognorm.cdf([8, 15], np.sqrt(s2), scale=15*np.exp(-s2/2))
+    erlang = stats.gamma.cdf([8, 15], 9, scale=15/9) # 9 stages for a CV of 1/3
+    for solver,expected,agents in [('abm', lognorm, dict(n_agents=5000)), ('ode', erlang, {})]:
+        sim = ss.Sim(wane, unit='year', dt=0.5, start=0, stop=16, solver=solver, **agents, **kw).run()
+        n = sim.results.wane.n_S.by('rpr').values
+        moved = n[[16, 30], 0]/n[0].sum()
+        assert np.allclose(moved, expected, atol=0.025), f'{solver}: {moved} moved by years 8 and 15, against {expected}' # Not the 0.41 and 0.63 of a rate of one over the mean
+    yearly = ss.Disease(inf=S >> I @ 0*I, init=dict(I=0.0), name='yearly').stratify(school=[0, 1, 2, 3], year=ss.transfer(increment='school', dur=ss.constant(ss.years(1))))
+    n = ss.Sim(yearly, unit='year', dt=0.25, start=0, stop=2.5, solver='abm', n_agents=200, **kw).run().results.yearly.n_S.by('school').values
+    assert np.array_equal(n[[3, 4, 7, 8]].argmax(axis=1), [0, 1, 1, 2]) and n[[3, 4, 7, 8]].max(axis=1).min() == 200 # Everyone up a year on each birthday of the run, exactly
+
+    # To one of several levels, with p= (FP29)
+    for solver,agents in [('abm', dict(n_agents=5000)), ('ode', {})]:
+        fp = ss.Disease(inf=S >> I @ 0*I, init=dict(I=0.0), name='fp')
+        fp.stratify(method=['none', 'pill', 'iud'], split=[1, 0, 0], start=ss.transfer(method='none -> pill | iud', p=[0.6, None], dur=ss.lognorm_ex(ss.years(2), ss.years(1))))
+        n = ss.Sim(fp, unit='year', dt=0.25, start=0, stop=10, solver=solver, **agents, **kw).run().results.fp.n_S.by('method').values[-1]
+        assert np.allclose(n/n.sum(), [0, 0.6, 0.4], atol=0.02), f'{solver}: {n/n.sum()}'
+    with pytest.raises(ss.BadBranchSplit, match='rate='): # One level to move to
+        ss.transfer(v=True, p=0.5, rate=0.1)
     return sims
 
 
@@ -1684,6 +1710,45 @@ def test_junction():
 
 
 @sc.timer()
+def test_immediate():
+    sc.heading('Testing dur=0: a move with no wait, on entry or as soon as a condition holds, under every solver')
+    size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+    for solver in ['ode', 'binomial', 'gillespie', 'abm']: # A junction holds nobody (HP2, HP16): a split, and a single destination
+        d = ss.Disease(go=ss.progression('S -> P', rate=ss.perday(0.1)), triage=ss.progression('P -> A | B', dur=0, p=[0.8, None]), name='d')
+        res = ss.Sim(d, unit='day', stop=10, solver=solver, **size(solver), **kw).run().results.d
+        assert res.n_P.max() == 0 and np.isclose(res.n_A[-1]/(res.n_A[-1] + res.n_B[-1]), 0.8, atol=0.03)
+        d = ss.Disease(go=ss.progression('S -> P', rate=ss.perday(0.1)), onward=ss.progression('P -> A', dur=0), name='d')
+        res = ss.Sim(d, unit='day', stop=10, solver=solver, **size(solver), **kw).run().results.d
+        assert res.n_P.max() == 0 and res.onward.sum() == res.go.sum()
+
+    # With where=, as soon as the condition holds: everyone moved to level b recovers at once, under compartments too
+    out = {}
+    for solver in ['ode', 'abm']:
+        I, R = ss.states('I R')
+        d = ss.Disease(I, R, drop=ss.Transition(I, R, dur=0, where=ss.conditions.Cond('dim', 'level') == 'b'), name='d')
+        d.stratify(level=['a', 'b'], split=[1, 0], move=ss.transfer(level='b', rate=ss.perday(0.1)))
+        out[solver] = ss.Sim(d, unit='day', stop=20, solver=solver, **size(solver), **kw).run().results.d.n_I[-1]/10_000
+    assert np.isclose(out['ode'], np.exp(-2), rtol=0.01) and np.isclose(out['abm'], out['ode'], atol=0.02)
+
+    # As an ODE, I -> X -> R with dur=0 out of X takes about as long as I -> R (ST26: X >> R @ ss.perday(1e6) took 48 s for 30 days)
+    def make(through):
+        trs = dict(infection=ss.transmission('S -> I', beta=0.3, source='I'), recovery=ss.progression('I -> X' if through else 'I -> R', dur=10))
+        trs.update(through=ss.progression('X -> R', dur=0)) if through else None
+        return ss.Disease(**trs, init_prev=0.01, name='sir')
+    times = {}
+    for through in [False, True, False, True]:
+        T = sc.timer()
+        res = ss.Sim(make(through), unit='day', stop=3650, **kw).run().results.sir
+        times.setdefault(through, []).append(T.toc(output=True))
+    assert res.n_X.max() == 0 and min(times[True]) < 2*min(times[False]) + 0.05, f'dur=0 took {min(times[True]):.3f} s, against {min(times[False]):.3f} s without it'
+
+    # A split with p= and no rate or duration still raises, saying dur=0
+    with pytest.raises(ss.UndrivenTransition, match='dur=0'):
+        ss.Disease(go=ss.progression('S -> P', rate=0.1), triage=ss.progression('P -> A | B', p=[0.8, None]), name='d')
+    return res
+
+
+@sc.timer()
 def test_level_change_dwell():
     sc.heading('Testing that a dwell drawn at one level follows a person who moves to another, where the transition runs at a different speed')
     out = {}
@@ -1700,8 +1765,8 @@ def test_branches():
     sc.heading('Testing immediate branches and remainders')
     def make(which):
         rest = dict(rec=ss.progression('P -> R', dur=5), rec2=ss.progression('A -> R', dur=5))
-        if which == 'split': # Branches with p= and no rate or duration: immediate
-            trs = dict(split_P=ss.progression('E -> P', p=0.3), split_A=ss.progression('E -> A', p=0.7)) # One transition for each destination
+        if which == 'split': # A branch to each destination, with p= and no rate or duration: immediate
+            trs = dict(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A', p=0.7))
         else: # One branch with p=None and a duration gets the remainder (with no duration either, it would be undriven)
             trs = dict(sev=ss.progression('E -> P', p=0.3, dur=2), mild=ss.progression('E -> A', p=None, dur=2))
         return ss.Disease(infection=ss.transmission('S -> E', beta=0.5, source=['P', 'A']), **trs, **rest, init_prev=0.01, name='d')
@@ -1803,8 +1868,8 @@ def test_cascade():
             infection = S >> E @ 0.4*(P + A + Q),
             onset     = ss.progression('S -> X', rate=ss.perday(0.002)), # Into an immediate split at row 5, not by transmission
             entry     = ss.progression('X -> E', dur=2),
-            split_P   = ss.Transition(E, P, p=0.3), # No driver: branches on entry, at once (one transition for each destination)
-            split_A   = ss.Transition(E, A, p=0.7),
+            split_p   = ss.Transition(E, P, p=0.3), # No driver: split on entry, at once
+            split_a   = ss.Transition(E, A, p=0.7),
             onward    = ss.Transition(P, Q, p=1.0), # And on again, in the same step
             rec_q     = Q >> R @ ss.days(5),
             rec_a     = A >> R @ ss.days(5),
@@ -1815,8 +1880,9 @@ def test_cascade():
         for name in ['E', 'P']: # Nobody is ever counted in a state with no wait, including at the start
             assert res[f'n_{name}'].max() == 0, f'{solver}: {res[f"n_{name}"].max()} people in {name}'
         into = res.infection[1:] + res.entry[1:]
-        assert np.allclose((res.split_P + res.split_A)[1:], into) # In the same step as whatever brought them
-        assert np.isclose(res.onward.sum(), 0.3*(res.split_P.sum() + res.split_A.sum()), rtol=0.1)
+        split = res.split_p + res.split_a
+        assert np.allclose(split[1:], into) # In the same step as whatever brought them
+        assert np.isclose(res.onward.sum(), 0.3*split.sum(), rtol=0.1)
 
     # As agents, seeds that move on at the start are events seen in the first step (on=), and are counted in its flows
     for onset in [ss.Transition('E', 'C', p=1.0), ss.progression('E -> C', dur=0)]: # Before the start (E is a junction), or in the first step
@@ -1853,15 +1919,15 @@ def test_cascade_binomial():
             infection = S >> E @ 0.4*(P + A + Q),
             onset     = ss.progression('S -> X', rate=ss.perday(0.002)), # Into an immediate split at row 5, not by transmission
             entry     = ss.progression('X -> E', dur=2),
-            split_P   = ss.Transition(E, P, p=0.3), # No driver: branches on entry, at once (one transition for each destination)
-            split_A   = ss.Transition(E, A, p=0.7),
+            split_p   = ss.Transition(E, P, p=0.3), # No driver: split on entry, at once
+            split_a   = ss.Transition(E, A, p=0.7),
             onward    = ss.Transition(P, Q, p=1.0), # And on again, in the same step
             rec_q     = Q >> R @ ss.days(5),
             rec_a     = A >> R @ ss.days(5),
             init=dict(E=50), name='d')
     res = ss.Sim(make(), solver='binomial', unit='day', stop=60, total_pop=5000, **kw).run().results.d
     into = res.infection[1:] + res.entry[1:]
-    assert np.isclose((res.split_P.sum() + res.split_A.sum()), into.sum(), rtol=0.03)
+    assert np.isclose((res.split_p + res.split_a).sum(), into.sum(), rtol=0.03)
     return res
 
 
@@ -1887,13 +1953,13 @@ def test_messages_and_crashes():
     sc.heading('Testing the crashes and unclear errors found by the model reviews')
     kw = dict(n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), verbose=0)
 
-    # An immediate split as one transition says how to write it (HP16: crashed); a source that is a sum of states says to write a list (FP36: crashed in its own error)
+    # An immediate split as one transition says how to write it (HP16: crashed); a source that is a sum of states is several sources, as in A + B >> C (FP36: crashed in its own error)
     S, J, A, B = ss.states('S J A B')
-    with pytest.raises(ss.UndrivenTransition, match='one transition for each destination'):
+    with pytest.raises(ss.UndrivenTransition, match='give it dur=0'):
         ss.Sim(ss.Disease(go=S >> J @ ss.peryear(1), branch=ss.Transition(J, [A, B], p=[0.5, 0.5]), name='d'), **kw).init()
-    with pytest.raises(TypeError, match=r'write \[A, B\]'):
-        A, B, C = ss.states('A B C')
-        ss.Disease(A, B, C, tr=ss.Transition(A + B, C, rate=ss.peryear(0.1)), name='d')
+    A, B, C = ss.states('A B C')
+    d = ss.Disease(A, B, C, tr=ss.Transition(A + B, C, rate=ss.peryear(0.1)), name='d')
+    assert [s.name for s in d.graph.transitions.tr.src] == ['A', 'B']
 
     # A remainder for the same people as the branches, beside an exit for others (HP21: raised)
     P, C, R = ss.states('P C R')
@@ -2187,8 +2253,8 @@ if __name__ == '__main__':
     seed  = test_seeded_stay()
     disc  = test_disconnected_groups()
     junc  = test_junction()
+    imm   = test_immediate()
     level = test_level_change_dwell()
-    branch = test_branches()
     chg   = test_change_in_function()
     msgs  = test_messages_and_crashes()
     dwell = test_given_dwell()
@@ -2197,3 +2263,4 @@ if __name__ == '__main__':
 
 
     weights = test_source_weights()
+    branch = test_branches()

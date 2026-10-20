@@ -301,6 +301,18 @@ Cliff: build it for the ODE and the other compartmental solvers too, since partn
 
 Step 9 measures it against agents on three cases (STIsim's risk groups, a short infection like gonorrhea, a long one like HIV) and writes the numbers into the docs and the spec's table of solver differences (D-T3).
 
+**Measured (step 9, 2026-10-20).** Prevalence at 10 and 20 years, the ODE over the mean of 20 agent runs of 10,000 people (`tests/test_networks.py::test_partnership_approx` checks the three cases with 4 runs of 5,000, against bands around these):
+
+| Case | ODE | Agents (sd) | ODE/agents |
+|---|---|---|---|
+| Risk groups: `ss.PartnerNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6))`, 80 acts a year, SI at 0.002 per act, split 0.8/0.15/0.05 | 0.205, 0.445 | 0.205 (0.007), 0.448 (0.008) | 1.00, 0.99 |
+| Gonorrhea-like: `ss.MFNet(n_contacts=1)` (Poisson partners at a time), 4-week lognormal partnerships, 2 acts a week, SIS of 4 months, m2f 0.05, f2m 0.03, weekly steps | 0.024, 0.017 | 0.126 (0.010), 0.126 (0.009) | 0.19, 0.13 |
+| The same, one partner at a time (`ss.MFNet()` with no `n_contacts`) | 0.024, 0.017 | 0.023 (0.011), 0.011 (0.010), 6 runs | 1.0, 1.5 |
+| The same with Poisson partners, 3-month partnerships, m2f 0.3, f2m 0.2 | 0.157, 0.158 | 0.677 (0.005), 0.678 (0.005) | 0.23, 0.23 |
+| HIV-like: `ss.MFNet()` (one partner at a time), 5-year lognormal partnerships (sd 3), 80 acts a year, SI, m2f 0.004, f2m 0.002 | 0.153, 0.379 | 0.138 (0.003), 0.304 (0.008) | 1.11, 1.25 |
+
+So it is close for risk groups with short partnerships, too high for long monogamous partnerships with a long infection (as predicted), and much too low with concurrency, where the predicted direction holds but the size is large: a newly infected person's other partnerships under way, which it leaves out, are a large share of the transmission (without concurrency the gonorrhea-like case matches, near its threshold). Partnerships under way when the run starts are also left out, so it starts slow. As built: `P` is worked out once, when the run starts (as the other betas by route are), `rel_trans`, `rel_sus`, and modifiers on the route multiply `P` rather than `H`, and a source state's exits that vary by group are averaged over groups.
+
 **How it is reported.** It is approximate, so it follows the `approx` rules: `describe()` prints, under the route, `partnership approximation (approx): partnerships formed at 0.5 a year; chance over a partnership m2f 0.42, f2m 0.25`; `approx=False` raises `CapabilityError` naming the solver and `solver='abm'`; and `sim.solvers()` lists it among what an ODE run approximates. Each side must be a dimension (`ss.MFNet` needs `sim.stratify(sex=['female', 'male'])`): without one it raises, naming the `stratify()` call, as for any property that is not a dimension.
 
 **Per-act against per-partnership.** Three quantities are easy to confuse, and `describe()` prints the first and derives the others:

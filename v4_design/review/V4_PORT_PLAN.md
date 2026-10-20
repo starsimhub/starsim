@@ -94,7 +94,7 @@ Births placed in declared modules; per-act beta; the sex dimension; owning modul
 - `d8b1d689`: `then=` as compartments.
 - `50bb85ce`: the conveyor with `ss.stay` (B1).
 - `2e9fc5fc`: births driven by a flow as compartments (B4).
-- `ef453e07`: the declared `ss.Pregnancy` goes in `starsim/pregnancy.py`. v4's `demographics.Pregnancy` is renamed `ss.LegacyPregnancy`, as on `v4-rs`.
+- `ef453e07`: the declared `ss.LegacyPregnancy` goes in `starsim/pregnancy.py`. v4's `demographics.Pregnancy` is renamed `ss.LegacyPregnancy`, as on `v4-rs`.
 
 - [ ] Replay each commit; full suite green; push; update PR.
 
@@ -137,7 +137,7 @@ Each task starts by reading the design in the `v4-rs` implementation log and the
 - **B2 Triggers:** `ss.on()` as compartments (`17f7ca50`): vanishing source compartments with per-group weights, and loop-time moves with a note.
 - **B3 Synchronized flows:** `ss.on(other.tr)` as compartments, in the kernels' crossing step and in `force()` (`e924ee52`, `ab75d5ad`).
 - **B4 Flow-driven births:** `ss.birth(per=)` as compartments, including births at the first step after back-dating (`2e9fc5fc`, `14c21d45`).
-- **B5 Back-dating:** `ss.spread` and `ss.Pregnancy(burnin=)` as compartments (`fc7c8bd5`, `15626732`). Back-dating must not disturb a crossing's other engines; that is the bug `14c21d45` fixed on `v4-rs`, and `test_hiv_vertical` covers it.
+- **B5 Back-dating:** `ss.spread` and `ss.LegacyPregnancy(burnin=)` as compartments (`fc7c8bd5`, `15626732`). Back-dating must not disturb a crossing's other engines; that is the bug `14c21d45` fixed on `v4-rs`, and `test_hiv_vertical` covers it.
 - **B6 Attributes and clocks as compartments:** `82057114`, `c9920adf`, `314e523c`, and clocks.
 - **B7 Fetal levels:** `ss.mother`, delivery routing, prenatal transmission, fetal deaths, `ss.Lactation` and `BreastfeedingNet` as mass action (`6ba95487`, `49140978`, `c27c2c6a`).
 - **B8 Programs as compartments:** water-filling by priority, the `waiting_` dimension, and `then=` (`bf1675d7`, `e52ef390`, `d8b1d689`), if Phase A found they needed removed stepping paths.

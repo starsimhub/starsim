@@ -29,14 +29,6 @@ def make_engine(module, sim):
     return Compartmental(module, sim)
 
 
-def clocks_of(mod):
-    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, amounts, or conditions read """
-    graph = getattr(mod, 'graph', None)
-    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
-    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
-    return ss.expressions.clocks_in(objs)
-
-
 class MixedNetworks(ss.ndict):
     """ The networks of a compartmental run, which are none: they became contact rates; asking for one by name says where it is """
     def __init__(self, names=None):
@@ -50,6 +42,14 @@ class MixedNetworks(ss.ndict):
             if attr in self.__dict__.get('_mixed_names', []):
                 raise AttributeError(f'"{attr}" is not run in a compartmental run: it became contact rates between groups. It is in sim.all_networks()["{attr}"]; sim.networks holds only the networks that are run') from None
             raise
+
+
+def clocks_of(mod):
+    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, amounts, or conditions read """
+    graph = getattr(mod, 'graph', None)
+    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
+    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
+    return ss.expressions.clocks_in(objs)
 
 
 def choose_solver(sim):
@@ -210,7 +210,8 @@ def choose_solver(sim):
         pars.pop_scale = 1.0
         pars.people_results = False
         clocks = any(strat.kind == 'clock' for strat in sim.groups.strats) # Whose levels are whole steps: see ss.dimensions.Strat.clock_steps()
-        if clocks or any(mod.staged(sim) or mod.memory_strats(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)): # Levels that the deliveries need now the solver is known: see ss.Delivery.dims()
+        staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
+        if clocks or staged or any(mod.staged(sim) or mod.memory_strats(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)): # Levels that the deliveries and transfers need now the solver is known: see ss.Delivery.dims()
             sim.groups.init(steps=True)
             sim.mixing = solvers.Mixing(sim)
 
@@ -333,9 +334,7 @@ def init_crossings(sim):
     if any(sim.flows_of(mod) for mod in sim.declared): # People born or dying, who are born or die once in every disease: see Sim._init_flows()
         links = {name:set(names) for name in names}
     for mod in list(sim.pars.connectors.values()) + list(sim.pars.interventions.values()):
-        home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) or next(iter(getattr(getattr(mod, 'product', None), 'diseases', None) or []), None) # The disease whose engine evaluates the conditions (for a delivery, as given, or the first its product names, or the first its conditions name)
-        if home is None and isinstance(mod, ss.Delivery):
-            home = next((m for m,_ in ss.conditions.state_refs(mod) if m in names), None)
+        home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) # The disease whose engine evaluates the conditions
         home = ss.conditions.modname(home)
         if home not in links:
             continue
@@ -439,12 +438,20 @@ def init_capabilities(sim, modules):
             add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(graph.attrs.keys())}) have no compartmental form yet', fatal=True)
         if approx is False and isinstance(mod, ss.Delivery) and mod.holds and mod.product.staged: # Kept as levels of time since delivery otherwise: see ss.Held.init_stages()
             add(f'module: {mod.name}', 'approx', 'levels of time since delivery', auto=f'the protection of "{mod.product.name}" fades by a function of time, and approx=False')
-        if isinstance(mod, ss.Strains):
-            add(f'family: {mod.name}', 'no', 'agents only, for now', auto=f'"{mod.name}" is a family of diseases (ss.Strains), which runs as agents for now', fatal=True)
+        if isinstance(mod, ss.Strains): # Its members side by side; what ties them together from their shares (see ss.Strains.shares())
+            if mod.coupled:
+                auto = None if approx else f'the members of "{mod.name}" protect each other or have one course at a time, which a compartmental run works out from each member\'s shares, as if independent (approx=True accepts it)'
+                add(f'family: {mod.name}', 'approx', 'members side by side, independent given their shares', auto=auto)
+            elif mod.init_prev is not None:
+                add(f'family: {mod.name}', 'approx', 'members side by side, each seeded with its share')
+            else:
+                add(f'family: {mod.name}', 'yes', 'members side by side')
             continue
         if graph is None:
             if isinstance(mod, ss.PartnerNet) and mod.one_off: # A contact matrix between its two groups, which is exact
                 add(f'network: {mod.name}', 'yes', 'a contact matrix between its two groups', auto=f'the one-off contacts of "{mod.name}" are between agents')
+            elif isinstance(mod, (ss.PartnerNet, ss.MFNet)): # Lasting partnerships: approximate, so 'auto' keeps agents (R4)
+                add(f'network: {mod.name}', 'approx', 'the partnership approximation', auto=f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
             elif isinstance(mod, ss.Network):
                 contacts = sim.mixing.net_contacts(mod)[0]
                 add(f'network: {type(mod).__name__}', 'approx' if contacts is not None else 'no', 'contact rates' if contacts is not None else 'no approximation', auto=f'{type(mod).__name__} is an individual-level network')
@@ -525,10 +532,17 @@ def init_capabilities(sim, modules):
                     add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
                 else:
                     add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
-            if tr.trigger is not None and tr.trigger.event and ss.solvers.compartmental.synced_event(tr, sim, mod.name) is not None:
+            if tr.trigger is not None and tr.trigger.outcome:
+                add(f'transition: {name}', 'yes', 'moved when the outcome of a delivery happens')
+            elif tr.trigger is not None and tr.trigger.event and ss.solvers.compartmental.synced_event(tr, sim, mod.name) is not None:
                 add(f'transition: {name}', 'yes', 'a synchronized flow of another module\'s transition')
+            elif tr.trigger is not None and tr.trigger.event and not (tr.trigger.x.args[0] in ['tr', 'to'] and ss.conditions.modname(getattr(tr.trigger.x.args[1], 'module', None)) in [None, mod.name]):
+                add(f'transition: {name}', 'no', 'a trigger on an event (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, an event that only agents record, which runs as agents for now', fatal=True)
+            elif tr.trigger is not None and ((callable(tr.trigger.x) and not isinstance(tr.trigger.x, ss.conditions.Cond))
+                                             or any(isinstance(leaf, ss.conditions.Child) or (isinstance(leaf, ss.conditions.Event) and leaf.args[0] not in ['tr', 'to']) for leaf in ss.conditions.event_leaves(tr.trigger.x))):
+                add(f'transition: {name}', 'no', 'a trigger on a function, or on entering or leaving states', auto=f'"{name}" is triggered by {tr.trigger}, which only agents can follow', fatal=True)
             elif tr.trigger is not None and tr.trigger.event:
-                add(f'transition: {name}', 'no', 'a trigger on an event (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, an event of its own module or one that only agents record, which runs as agents for now', fatal=True)
+                add(f'transition: {name}', 'yes', 'moved at the end of each step, the share its module\'s event happened to')
             elif tr.trigger is not None:
                 add(f'transition: {name}', 'yes', 'a trigger (ss.on): where it holds, arrivals pass straight through')
             if getattr(tr, 'offspring', None) is not None:
@@ -537,6 +551,20 @@ def init_capabilities(sim, modules):
                 add(f'transition: {name}', 'no', 'births driven by a flow', auto=f'"{name}" is a birth driven by the flow of "{tr.per.name}" (ss.birth(per=)), which runs as agents for now', fatal=True)
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
+        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state have a compartmental form if each is for other people (see ss.solvers.Compartmental.apart_shares()), which is tried
+            timed = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
+            if len(timed) > 1 and not exits.branches:
+                add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in timed)})', '?', 'a track for each, if each is for other people (where=)', probe=(mod.name, []))
+        for name,tf in graph.transfers.items(): # A time drawn for each person, as Erlang stages (see ss.dimensions.transfer_stages())
+            raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
+            if isinstance(raw, ss.Dist) and not isinstance(raw, ss.expon):
+                shape = raw.pars.get('a')
+                exact = type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape)
+                varying = bool(ss.transitions.varying_pars(raw))
+                if varying:
+                    add(f'transfer: {name} ({type(raw).__name__})', 'no', 'no compartmental form yet', auto=f'the transfer "{name}" has a {type(raw).__name__} dur= with parameters by group or person, drawn for each person', fatal=True)
+                else:
+                    add(f'transfer: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'Erlang stages', auto=f'the transfer "{name}" has a {type(raw).__name__} dur=, and approx=False' if approx is False and not exact else None)
         for strat in list(graph.strats) + list(sim.groups.strats):
             immunity = getattr(strat, 'immunity', None)
             if immunity is not None and not np.all(immunity == 1): # A compartmental run keeps only the last strain each person has had (KI15): see ss.solvers.Engine.init_immunity()

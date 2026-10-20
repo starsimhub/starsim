@@ -182,7 +182,10 @@ class Sim(ss.Base):
 
     @staticmethod
     def _add_steps(interventions):
-        """ The steps of a cascade are modules of their own, so are added to the list (before it); and the deliveries run in the order of their triggers (see `ss.interventions.order_steps()`) """
+        """
+        The steps of a cascade are modules of their own, so are added to the list (before it); the deliveries run in the order of
+        their triggers (see `ss.interventions.order_steps()`); and a resource that steps share runs just before the first of them
+        """
         if not any(isinstance(mod, (ss.Delivery, ss.cascade)) for mod in sc.tolist(interventions)):
             return interventions
         out = []
@@ -190,18 +193,14 @@ class Sim(ss.Base):
             for m in (mod.steps if isinstance(mod, ss.cascade) else []) + [mod]:
                 if not any(m is other for other in out):
                     out.append(m)
-        for mod in list(out): # A treatment's on_fail= that is a delivery: a step triggered by the failures of each delivery of it
-            fail = getattr(getattr(mod, 'product', None), 'on_fail', None)
-            if isinstance(mod, ss.Delivery) and isinstance(fail, ss.Delivery):
-                event = ss.conditions.Cond('event', mod, 'failed')
-                fail.on = event if fail.on is None or getattr(fail, '_fail_of', None) is None else fail.on | event
-                fail._fail_of = getattr(fail, '_fail_of', []) + [mod]
-                if fail._default_name:
-                    fail.name = fail.label = f'{mod.name}_fail'
-                    fail._default_name = False
-                if not any(fail is other for other in out):
-                    out.append(fail)
-        return ss.interventions.order_steps(out)
+        out = ss.interventions.order_steps([m for m in out if not isinstance(m, ss.Resource)])
+        placed = []
+        for mod in list(out):
+            for res in (getattr(mod, 'uses', None) or {}):
+                if not any(res is other for other in placed):
+                    out.insert(out.index(mod), res)
+                    placed.append(res)
+        return out
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -880,7 +879,7 @@ class Sim(ss.Base):
                 text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
-                    text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                    text += f'; where the people of each {strat.home.name} are now, who mix there' if strat.home is not None else f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
                     if strat.geo is not None and strat.geo.ref is not None: # Where a named geography came from
                         ref = strat.geo.ref
                         text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
@@ -907,7 +906,7 @@ class Sim(ss.Base):
             if nets:
                 for net in nets:
                     term = [term for term in self.mixing.terms if term.name == net.name] if self.solver != 'abm' else []
-                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': contact matrix by {self.groups.strats[term[0].dim].name}'
+                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partnership approximation (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {self.groups.strats[term[0].dim].name}'
                     add('mixing', f'{net.name} ({type(net).__name__}){how}')
             elif any(mod.graph.transmissions for mod in self.declared): # How a state in a rate is read is shown with each rate
                 add('mixing', f'homogeneous{place}, 1 contact per {unit}', 'guessed: no network given')
@@ -1132,7 +1131,7 @@ class Sim(ss.Base):
                 return [parspec(v) for v in val]
             return sc.jsonify(val)
         def modspec(mod):
-            if getattr(mod, 'graph', None) is not None:
+            if getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains):
                 return mod.to_spec()
             if isinstance(mod, (ss.modify, ss.Delivery, ss.cascade)):
                 return mod.to_json()
@@ -1910,10 +1909,10 @@ class Sim(ss.Base):
             before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
             self.set_par_values()
-            changed = [p.name for p,val in zip(moving, before) if float(p) != val]
-            if changed: # The mixing between places was worked out when the sim was built
-                errormsg = f'This sim cannot be restarted with a new value of "{changed[0]}", since it sets the movement between places, which is worked out when the sim is built; use sim.new(pars=...) instead'
-                raise ValueError(errormsg)
+            if any(float(p) != val for p,val in zip(moving, before)): # The movement between places, worked out again with the new values
+                self.mixing.init_movement()
+                for mod in self.declared:
+                    mod.engine.restart_movement()
             varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
                 timed = getattr(mod.engine, 'time_pars', None)

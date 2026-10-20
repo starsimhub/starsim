@@ -22,7 +22,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     `ss.birth(per=preg.delivery)` (or else its first state).
 
     Takes the parameters of the Starsim 3 module (see `ss.PregnancyPars`), with the same names and meanings,
-    plus `p_abortion`; for the Starsim 3 class, see `ss.LegacyPregnancy`.
+    plus `p_abortion`. It is `ss.Pregnancy` while `ss.LegacyPregnancy` is the module written as code, which has unborn agents and the maternal networks.
 
     Args:
         fertility_rate (rate/dataframe): age-specific fertility rates, or one rate (default per 1000: see `rate_units`)
@@ -31,7 +31,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         min_age (float): minimum age of conception
         max_age (float): maximum age of conception
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
-        p_loss (float/bernoulli): chance of a spontaneous loss per week of pregnancy (a number, or a bernoulli of one); a typed probability for another unit, e.g. `ss.probpermonth(0.04)`
+        p_loss (bernoulli): chance of a spontaneous loss in each step of the module
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_spread()`); agents only for now
@@ -66,8 +66,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in v3 or k in declared and not isinstance(kwargs[k], ss.par)})
         kwargs.setdefault('name', 'pregnancy')
         super().__init__(**kwargs)
-        own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph, which conception_rate() reads
-        self.own_pars = own
+        own = [k for k in v3 if k not in self.pars] # The Starsim 3 parameters that are not parameters of the graph, which its code reads
+        self.code_pars = own
         self.define_pars(**{k:v3[k] for k in own})
         self.update_pars({k:v for k,v in given.items() if k in own})
         graph = {k:v for k,v in given.items() if k not in own}
@@ -156,9 +156,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         if pars.fertility_rate is not None:
             self.fertility_rate_data = ss.LegacyPregnancy.standardize_fertility_data(self)
             self.pars.rate_units = ss.demographics.infer_rate_units(pars.rate_units, self.fertility_rate_data, 'fertility_rate')
-        p_loss = pars.p_loss.pars.p if isinstance(pars.p_loss, ss.bernoulli) else pars.p_loss # A chance per week of pregnancy (a bare number), or per its own unit (e.g. ss.probpermonth), as in ss.LegacyPregnancy
-        if not isinstance(p_loss, ss.TimePar):
-            p_loss = ss.probperweek(p_loss)
+        p_loss = pars.p_loss.pars.p if isinstance(pars.p_loss, ss.bernoulli) else pars.p_loss # A chance per week of pregnancy (a bare number is per week, as in ss.LegacyPregnancy) is a hazard
+        p_loss = p_loss if isinstance(p_loss, ss.TimePar) else ss.probperweek(p_loss)
         if np.any(np.asarray(p_loss.value) > 0): # Before the engine lays out the clocks, which depend on it
             self.pars.update(loss_rate=p_loss)
         if 'parity' in [strat.name for strat in sim.strats] and self.graph.transitions.delivery.increment is None: # Parity as a counter: up one at each delivery

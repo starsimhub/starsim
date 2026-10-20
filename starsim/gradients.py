@@ -59,11 +59,13 @@ def available():
 def reason(sim):
     """ Why the sim cannot be run in JAX, in a few words, or None if it can """
     families = [mod for mod in sim.diseases() if isinstance(mod, ss.Strains)]
+    funcs = [(fam.name, getattr(imm.combine, '__name__', 'function')) for fam in families for imm in fam.immunity if callable(imm.combine)]
     if not available():
         return 'JAX is not installed'
-    elif families: # Agents only for now; a combine= function would have no gradient in any case
-        funcs = [getattr(imm.combine, '__name__', 'function') for fam in families for imm in fam.immunity if callable(imm.combine)]
-        return f'"{families[0].name}" is a family of diseases (ss.Strains), which runs as agents for now' + (f', and combines protection with a function ({funcs[0]}), which has no gradient; the rules "max", "sum", and "multiply" do' if funcs else '')
+    elif funcs:
+        return f'"{funcs[0][0]}" combines protection with a function ({funcs[0][1]}), which has no gradient; the rules "max", "sum", and "multiply" do'
+    elif families: # Its step works out the couplings and unions in Python
+        return f'"{families[0].name}" is a family of diseases (ss.Strains), which is run a step at a time for now'
     elif sim.solver != 'ode':
         return f'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'
     elif not sim.kernel_only():

@@ -11,6 +11,19 @@ import matplotlib.pyplot as plt
 
 
 
+class Levels(sc.objdict):
+    """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
+    def plot(self, fig=None, ax=None, **kwargs):
+        """ Plot each level's median and interval on the same axes """
+        for label,res in self.items():
+            out = res.plot(fig=fig, ax=ax, label=label, **kwargs)
+            fig = out if fig is None else fig
+            ax = (fig.axes[0] if fig is not None and fig.axes else ax)
+        if ax is not None:
+            ax.legend()
+        return fig
+
+
 # Numbers are people (proposal 02 rule 1.2; pending a decision, so kept to this switch and the two functions below):
 # as agents, the results of declared modules and deliveries are scaled when written, so they are people when read
 # during a run, and capacities, targets, and counts given to deliveries are people. False scales results at the end, as before
@@ -30,19 +43,6 @@ def in_people(*results):
             if res.values is not None and res.values.dtype.kind in 'iu': # A count times a scale that need not be whole
                 res.init_values(dtype=float, force=True)
     return
-
-
-class Levels(sc.objdict):
-    """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
-    def plot(self, fig=None, ax=None, **kwargs):
-        """ Plot each level's median and interval on the same axes """
-        for label,res in self.items():
-            out = res.plot(fig=fig, ax=ax, label=label, **kwargs)
-            fig = out if fig is None else fig
-            ax = (fig.axes[0] if fig is not None and fig.axes else ax)
-        if ax is not None:
-            ax.legend()
-        return fig
 
 
 class Result(ss.BaseArr):
@@ -234,14 +234,10 @@ class Result(ss.BaseArr):
             res.n_I.select(age=0) # The youngest age group
             res.n_I.select(sex='female', risk='high')
             msim.results.sir.n_I.select(beta=0.3).quantiles() # The runs with beta = 0.3
-            res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             res.cin.select(to='X') # The flow to one destination of a transition with several, as res.cin.X is
+            res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             ```
         """
-        pick = {key:dims.pop(key) for key in self.part_dims if key in dims}
-        if pick:
-            out = self._select_parts(pick)
-            return out.select(run=run, **dims) if (dims or run is not None) else out
         if 'to' in dims: # The flow to some of the destinations of a transition with several
             to = sc.tolist(dims.pop('to'))
             dests = self.__dict__.get('dests')
@@ -256,6 +252,10 @@ class Result(ss.BaseArr):
             for name in to[1:]:
                 out = out + dests[name]
             return out.select(run=run, **dims)
+        pick = {key:dims.pop(key) for key in self.part_dims if key in dims}
+        if pick:
+            out = self._select_parts(pick)
+            return out.select(run=run, **dims) if (dims or run is not None) else out
         out = self
         if self.runs is not None:
             named = {str(col).rpartition('.')[2]:col for col in self.runs.columns if '.' in str(col)} # A parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3)
@@ -434,16 +434,16 @@ class Result(ss.BaseArr):
         For a result across runs, returns a dict of results across runs instead, one per level.
         For a result of a family of diseases (`ss.Strains`), the family's name gives each member's own result.
         """
+        family = self.__dict__.get('family')
+        if family is not None and dim == family[0]: # Each member's own
+            name, members, values = family
+            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind)
         if dim in self.part_dims:
             i = self.part_dims.index(dim)
             levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
             values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
             return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
                           values=values, shape=values.shape[0], columns=levels, kind=self.kind)
-        family = self.__dict__.get('family')
-        if family is not None and dim == family[0]: # Each member's own
-            name, members, values = family
-            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind)
         strats = self._check_strata()
         if self.runs is not None:
             self._check_dim(dim)
