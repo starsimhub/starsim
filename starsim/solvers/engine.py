@@ -924,6 +924,7 @@ class Engine:
         `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from (a duration is the mean of an exponential, as for dur=), with its mean.
         People who enter the state while one is active draw from it; those already there have what is left of their dwell rescaled by the change in its mean (see `Agents.rescale_exits()`).
         """
+        dw.mod_args = (raw, to_unit) # So they can be attached again once every modifier is known: see Agents.attach_dwell_mods()
         p = dw.par
         mods = getattr(self.sim, 'modifiers', {}).get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
         if not mods:
@@ -938,8 +939,9 @@ class Engine:
         if self.sim.solver != 'abm':
             raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.sim.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
                                      f'     Run with solver="abm", or modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)), which scales its rate.')
-        if getattr(dw, 'varying', False) or np.isnan(dw.mean):
-            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", whose distribution ({raw}) differs between people, which a modifier cannot change yet; modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)).')
+        funcs = [key for key,val in ss.transitions.varying_pars(raw).items() if not isinstance(val, ss.by)] if isinstance(raw, ss.Dist) else []
+        if funcs or (dw.mean is not None and np.ndim(dw.mean) == 0 and np.isnan(dw.mean)): # By group is fine, since each agent's mean is known (see Agents.agent_dwell_mean()); a function of the agents is not
+            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", whose distribution ({raw}) is a function of the agents, which a modifier cannot change yet; modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)).')
         dw.mods = mods
         dw.sets = {}
         for i,m in enumerate(mods):
@@ -1035,8 +1037,9 @@ class Engine:
         dw.family = type(raw).__name__
         dw.staged = True
         if isinstance(self, ss.solvers.Agents):
-            dw.mean = dw.std = None
+            dw.mean = dw.std = None # Each agent's: see Agents.agent_dwell_mean()
             dw.dist = trans.numeric_dist(raw, to_unit, per_agent=self.agent_values)
+            dw.raw, dw.to_unit = raw, to_unit
             return
         funcs = [key for key,val in trans.varying_pars(raw).items() if not isinstance(val, ss.by)]
         if funcs:

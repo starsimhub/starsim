@@ -2431,6 +2431,19 @@ def test_modify_dist_dwell():
         make(raw=ss.years(1), mod=ss.modify('c.pars.d', set=ss.constant(ss.years(5)), start='2001')).init()
     with pytest.raises(ss.CapabilityError, match='where='):
         make(mod=ss.modify('c.pars.d', set=ss.constant(ss.years(5)), where=lambda sim: sim.people.age > 30)).init()
+
+    # A distribution by group (each agent's mean is their group's), in a module made before the modifier is, as a connector is
+    class C(ss.Connector, ss.Disease):
+        A, B = ss.states('A B')
+        d = ss.par(ss.expon(scale=ss.by(age=[ss.years(1), ss.years(2)])))
+        go = ss.Transition(A, B, rate=ss.peryear(2))
+        back = ss.Transition(B, A, dur=d)
+    def run(mod=None):
+        c = C(name='c')
+        c.stratify(age=[0, 30])
+        return ss.Sim(connectors=c, interventions=mod, n_agents=2000, start=2000, stop=2006, dt=ss.years(0.25), rand_seed=1, **kw).run()
+    base, longer = run(), run(ss.modify('c.pars.d', set=ss.constant(ss.years(5)), start='2001'))
+    assert longer.results.c.back[-12:].sum() < 0.5*base.results.c.back[-12:].sum()
     return
 
 

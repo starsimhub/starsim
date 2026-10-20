@@ -1482,6 +1482,9 @@ class Sim(ss.Base):
         """ Initialize all the modules with the sim """
         for mod in self.modules:
             mod.init_pre(self)
+        for mod in self.declared: # Now that every modifier is known
+            if isinstance(mod.engine, ss.solvers.Agents):
+                mod.engine.attach_dwell_mods()
         return
 
     def _init_dists(self):
