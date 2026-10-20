@@ -84,6 +84,8 @@ class Compartmental(Engine):
             if getattr(tr, 'offspring', None) is not None:
                 raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" has offspring (offspring=), which are added for each person who goes through it, so it cannot run with solver="{self.sim.solver}".\n'
                                          f'     Run with solver="abm", or leave the solver as "auto".')
+            if tr.dies and tr.stays and self.integer:
+                ss.note(f'"{name}" of "{self.mod.name}" splits between ss.null and ss.stay: with solver="{self.sim.solver}", the count of its deaths is drawn apart from the move, so agrees with the number who died on average, not in each run; run with solver="abm" or "ode" for counts that agree in each run', sim=self.sim)
         self.init_dwells()
         self.init_immunity()
         self.build_layout()
@@ -1159,13 +1161,16 @@ class Compartmental(Engine):
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
                     dps = self.branch_probs(track.tr)
-                    credits.append((self.tr_index[track.tr.name], weight*p*(sum(dps) if track.tr.stays else 1)))
+                    die = self.die_share(track.tr, dps) # Those who took ss.null leave the model, as by an outflow
+                    credits.append((self.tr_index[track.tr.name], weight*p*(sum(dps) + die if track.tr.stays else 1)))
                     for dst,dp in zip(track.tr.dst, dps):
-                        if len(track.tr.dst) > 1:
+                        if track.tr.ends:
                             credits.append((self.tr_index[f'{track.tr.name}.{dst.name}'], weight*p*dp))
                         enter(dst.name, weight*p*dp, comps, credits, path + (name,))
+                    if track.tr.dies and track.tr.ends and track.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
+                        credits.append((self.tr_index[f'{track.tr.name}.null'], weight*p*die))
                     if track.tr.stays: # Those who took ss.stay
-                        comps.append((self.stay_comp(name), weight*p*(1 - sum(dps))))
+                        comps.append((self.stay_comp(name), weight*p*(1 - sum(dps) - die)))
                 elif getattr(track, 'starts', None) is not None:
                     inds, start = track.starts
                     for j in np.unique(start):
@@ -1198,13 +1203,17 @@ class Compartmental(Engine):
                             self._landed = True # The map changes with the shares, so the program is packed again whenever they do
                         else:
                             flow.targets.append((ind, w*p, dim_map)) # (compartment, share, where in it)
-                    flow.recs += [self.tr_index[f'{flow.tr.name}.{dst.name}'] if flow.named and len(flow.tr.dst) > 1 else -1]*len(comps) # Also counted in the flow to this destination
+                    flow.recs += [self.tr_index[f'{flow.tr.name}.{dst.name}'] if (flow.named or flow.tr.stays) and flow.tr.ends else -1]*len(comps) # Also counted in the flow to this destination
                     flow.credits += [(ind, w*p) for ind,w in credits]
                     flow.credits += [(sy.row, p*sy.mask) for sy in syn] # Moved in another module too
+                die = self.die_share(flow.tr, ps) # Those who took ss.null go to no compartment: they leave the model, as by an outflow
+                if flow.tr.dies and flow.tr.ends and flow.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
+                    flow.credits.append((self.tr_index[f'{flow.tr.name}.null'], die))
                 if flow.tr.stays and src is not None: # Those who took ss.stay go to the state's compartment with no exit of its own, and are not in the flow
-                    flow.targets.append((self.stay_comp(src), 1 - sum(ps), None))
+                    flow.targets.append((self.stay_comp(src), 1 - sum(ps) - die, None))
+                    flow.recs.append(-1) # One for each target, so those of the flows after it line up
                     if flow.kind != 'stage' or flow.to is None:
-                        flow.credits.append((flow.index, sum(ps)))
+                        flow.credits.append((flow.index, sum(ps) + die))
                 if flow.strain is not None:
                     flow.record = self.dim_map(src, src, flow.strain, record=True)
                 elif self.enters(flow.tr, flow.state): # Recorded at the level people arrive at, e.g. E -> I where only I has a clinical status
@@ -2024,6 +2033,7 @@ class Compartmental(Engine):
             for k,mod in enumerate(self.deliveries, start=len(self.clocks)):
                 mod.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
+        flows = self.count_deaths(flows)
         if (use_jax or tally is None) and getattr(self, 'deliveries', None): # A run taken in JAX: the deliveries' results, from the compartments at each time point they happened at
             self.store_replayed(stocks)
         if self.rows is not None:
@@ -2141,6 +2151,7 @@ class Compartmental(Engine):
                     if getattr(res.get(key), 'strata', None) is not None:
                         res[key].strata[:] = 0
         for start,stocks,flows in parts:
+            flows = self.count_deaths(flows)
             tis = start + np.arange(len(stocks))
             by_state = np.stack([stocks[:, self.state_comps[name]].sum(axis=1) for name in states], axis=1) # Time points by states by groups
             totals.stocks[:, tis] = by_state.sum(axis=-1).T
@@ -2440,8 +2451,18 @@ class Compartmental(Engine):
         self.step_clocks() # At the start of the next step, before its deliveries
         return
 
+    def count_deaths(self, flows):
+        """ For a split between states and ss.null (with no ss.stay): those who died are its flow less those who went to a state, so the two agree in each run; flows are by flow along the axis before the last (the groups) """
+        splits = [tr for tr in self.graph.transitions.values() if tr.dies and tr.ends and not tr.stays]
+        if splits:
+            flows = np.array(flows) # A copy, which can be written to
+            for tr in splits:
+                flows[..., self.tr_index[f'{tr.name}.null'], :] = flows[..., self.tr_index[tr.name], :] - sum(flows[..., self.tr_index[f'{tr.name}.{dst.name}'], :] for dst in tr.dst)
+        return flows
+
     def record_flows(self, flows):
         """ After a step: the flow along each transition and mover over it, by group, and the people at its end """
+        flows = self.count_deaths(flows)
         for name,ind in self.tr_index.items():
             self.flowcounts[name] += flows[ind].sum() # Moves by an intervention are counted already
             flow = flows[ind] + self.forced.pop(name, 0) # As the transition's own, for on= and the results by group

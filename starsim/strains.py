@@ -579,7 +579,7 @@ class Strains(ss.Module):
         for mod in members:
             engine, graph = mod.engine, mod.graph
             flows = engine.last_flows
-            died.append([sum(flows.get(tr.name, 0) for tr in graph.transitions.values() if tr.outflow and tr.people and ((self.exclusive is not None and self.exclusive in [s.name for s in tr.src]) == excl)) for excl in [True, False]])
+            died.append([sum(flows.get(tr.deaths, 0) for tr in graph.transitions.values() if tr.deaths and tr.people and ((self.exclusive is not None and self.exclusive in [s.name for s in tr.src]) == excl)) for excl in [True, False]])
             arrived = sum(flows.get(tr.name, 0)*p for tr in graph.transitions.values() if self.exclusive is not None and tr.dst is not None for dst,p in zip(tr.dst, engine.branch_probs(tr)) if dst.name == self.exclusive)
             size = engine.n_people(total=False)
             entered.append(np.divide(arrived, size, out=np.zeros(len(size)), where=size>0))

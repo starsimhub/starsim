@@ -23,6 +23,27 @@ def inner_pars(val):
     return []
 
 
+def bad_end(end, side):
+    """ The message for a source or destination of a transition that is not a state (or a state's name): what to write instead """
+    null, stay = ss.transitions.null, ss.transitions.stay
+    if end is null and side == 'source':
+        return 'ss.null cannot be one of several sources of a transition: for an inflow, give it alone, e.g. ss.Transition(ss.null, S, rate=0.1)'
+    elif end is stay and side == 'source':
+        return 'ss.stay is a destination, not a source: give it as one destination of a split, e.g. ss.Transition(I, [R, ss.stay], p=[0.3, None], dur=10)'
+    elif end is null or end is stay:
+        return f'{end} is one destination of a split, with at least one other, e.g. ss.Transition(I, [R, {end}], p=[0.9, 0.1], dur=10)'
+    if isinstance(end, ss.conditions.Cond):
+        names = [name for _,name in ss.conditions.leaf_states(end)]
+    else:
+        names = [leaf.name for leaf in getattr(end, 'leaves', []) if isinstance(leaf, State)]
+    names = list(dict.fromkeys(name for name in names if name is not None))
+    if not names:
+        return f'the {side} of a transition is a state or a list of states, not {end}'
+    elif side == 'source':
+        return f'the source of a transition is a state or a list of states, not {end}; for people moving out of any of them, write [{", ".join(names)}] or the sum {" + ".join(names)}'
+    return f'the destination of a transition is a state or a list of states (a split, with p=), not {end}; for a split between them, write [{", ".join(names)}] with p=[...]'
+
+
 class Graph(Presentation):
     """
     The states and transitions of one module
@@ -209,6 +230,10 @@ class Graph(Presentation):
         strings = sc.autolist()
         self._refs = [] # States used only inside a rate
         for tr in trs:
+            for side,ends in [('source', tr.src or []), ('destination', tr.dst or [])]:
+                for end in ends:
+                    if not isinstance(end, (State, str)):
+                        raise TypeError(bad_end(end, side))
             for end in (tr.src or []) + (tr.dst or []):
                 if isinstance(end, State): found[id(end)] = end
                 else:                      strings += end
@@ -254,10 +279,6 @@ class Graph(Presentation):
 
         # Either check the strings against the declared states, or infer the states from them
         names = [s.name for s in declared]
-        for string in strings:
-            if not isinstance(string, str): # e.g. ss.Transition(A + B, C): a sum of states is a count, for a rate, not where people move from
-                states = sc.strjoin(leaf.name for leaf in getattr(string, 'leaves', []) if isinstance(leaf, State)) or str(string)
-                raise TypeError(f'the source or destination of a transition is a state or a list of states, not {string}; for people moving out of either, write [{states}]')
         if declared:
             for string in strings:
                 if string not in names:
@@ -743,7 +764,7 @@ class Graph(Presentation):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr.check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and len(tr.dst) <= 1 and not tr.trigger.outcome and not tr.stays)): # On an outcome, p= is the share of its people who move; a split with ss.stay is a split, though ss.stay is not a destination
+            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and not tr.split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.null is a split, though neither is a state
                 raise ss.BadBranchSplit(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
@@ -756,7 +777,7 @@ class Graph(Presentation):
                     ex = self.exits[clock.names[0]]
                     if not (ex.branches or ex.remainder or ex.timed):
                         raise ss.NoScheduledDwell(f'"{name}" reads {clock}, but {clock.names[0]} has only rates out of it, so no dwell time is scheduled when people enter it.')
-            if tr.stays and not tr.dst:
+            if tr.stays and not tr.dst and not tr.dies:
                 raise ss.BadBranchSplit(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
             if tr.p is not None and tr.split:
                 ps = tr.p
@@ -765,14 +786,16 @@ class Graph(Presentation):
                 elif len(ps) == 1 and isinstance(ps[0], par) and callable(ps[0].raw) and not isinstance(ps[0].raw, (ss.Dist, TimeValue)): # A function giving a row, one column per destination
                     tr.p_given = list(ps)
                     ps = tr.p = [Column(ps[0], i, len(tr.dst)) for i in range(len(tr.dst))]
+                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
                 if len(ps) != len(tr.dst):
-                    raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst) + tr.stays} destinations but {len(ps) + (tr.p_stay is not None)} branch probabilities.')
-                given = [p for p in ps + [tr.p_stay] if p is not None]
-                if tr.stays and len(given) < len(ps):
-                    raise ss.BadBranchSplit(f'"{name}" leaves the rest to both ss.stay and another destination; give one of them a p=.')
+                    raise ss.BadBranchSplit(f'"{name}" has {len(ends)} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities.')
+                given = [p for p in ends if p is not None]
+                if len(given) < len(ends) - 1:
+                    which = [label for label,p in zip([d.name for d in tr.dst] + ['ss.stay']*tr.stays + ['ss.null']*tr.dies, ends) if p is None]
+                    raise ss.BadBranchSplit(f'"{name}" leaves the rest to {sc.strjoin(which)}; only one destination can take the rest, so give the others a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)
-                    if (len(given) == len(ps) + tr.stays and not np.isclose(total, 1)) or total > 1 + 1e-9:
+                    if (len(given) == len(ends) and not np.isclose(total, 1)) or total > 1 + 1e-9:
                         raise ss.BadBranchSplit(f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
             elif tr.p is None and tr.split:
                 raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
@@ -1062,7 +1085,7 @@ class Graph(Presentation):
 
     def destinations(self):
         """ The names of the destinations of the transitions with several, as `destination()` takes them """
-        return [f'{name}.{dst.name}' for name,tr in self.transitions.items() if tr.dst is not None and len(tr.dst) > 1 for dst in tr.dst]
+        return [f'{name}.{end}' for name,tr in self.transitions.items() for end in tr.ends]
 
     def leaves(self):
         """ The leaves of the rates and branch probabilities of its transitions """

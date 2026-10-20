@@ -189,10 +189,8 @@ def test_names():
         ss.Disease(recovery=ss.progression('I -> R', dur=3), births=ss.Transition(ss.null, 'S'))
     with pytest.raises(ss.BadBranchSplit):
         ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
-    with pytest.raises(ss.BadBranchSplit): # A branch out of the model is a transition of its own
+    with pytest.raises(ss.BadBranchSplit, match=r'\[R, ss.null\]'): # A weighted destination cannot leave the model: a split with ss.null can (it was a raw TypeError)
         S, I, R = ss.states('S I R')
-        ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=10)
-    with pytest.raises(ss.BadBranchSplit): # The same as a weighted destination (it was a raw TypeError)
         I >> (0.9*R + 0.1*ss.null) @ 0.1
     with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # Below 1, an error that suggests ss.stay (pending a decision: ss.transitions.rest_stay)
         ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
@@ -2325,6 +2323,49 @@ def test_cond_by_expr():
     return
 
 
+
+
+@sc.timer()
+def test_split_null():
+    sc.heading('Testing ss.null as one destination of a split: a share die when the transition is taken, as a death would')
+    def make(dst, p):
+        S, I, R = ss.states('S I R')
+        dst = [R if d == 'R' else d for d in dst]
+        return ss.Disease(S, I, R, infection=ss.Transition(S, I, rate=0.0), death=ss.Transition(I, dst, dur=ss.days(10), p=p), init=dict(S=0.5, I=0.5), name='d') # Nobody is infected: those in I at the start each take it once
+    out = sc.objdict()
+    for solver in ['abm', 'ode', 'binomial']:
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        sim = ss.Sim(make([ss.null, ss.stay], [0.05, None]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
+        r = sim.results.d
+        n0 = r.n_I[0]
+        died = r.death.values.sum()
+        assert np.isclose(died/n0, 0.05, rtol=0.15), f'{solver}: {died/n0:n} of those in I died, not 0.05'
+        assert np.isclose(r.n_I[-1]/n0, 0.95, rtol=0.01), f'{solver}: the rest should stay in I, never taking it again, but {r.n_I[-1]/n0:n} are left'
+        if solver == 'abm':
+            assert sim.results.new_deaths.values.sum() == died # Counted as deaths, as a transition to ss.null is
+        out[solver] = died/n0
+    assert np.isclose(out.abm, out.ode, rtol=0.15)
+
+    for solver in ['abm', 'ode', 'binomial']: # With a state: the deaths are res.<transition>.null
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        sim = ss.Sim(make(['R', ss.null], [0.9, 0.1]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
+        r = sim.results.d
+        n0 = r.n_I[0]
+        assert np.isclose(r['death.null'].values.sum()/n0, 0.1, rtol=0.1) and np.isclose(r.n_R[-1]/n0, 0.9, rtol=0.02), solver
+        assert np.isclose(r['death.null'].values.sum() + r['death.R'].values.sum(), r.death.values.sum())
+        assert np.isclose(r.n_S[-1] + r.n_I[-1] + r.n_R[-1] + r['death.null'].values.sum(), r.n_S[0] + n0), f'{solver}: everyone is in a state or dead'
+        if solver == 'abm':
+            assert sim.results.new_deaths.values.sum() == r['death.null'].values.sum()
+
+    # The messages for a source or destination that is not a state or a list of states
+    S, I = ss.states('S I')
+    with pytest.raises(TypeError, match=r'ss.null.*alone'):
+        ss.Sim(ss.Disease(S, I, x=ss.Transition([I, ss.null], S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
+    S, E, P, A = ss.states('S E P A')
+    with pytest.raises(TypeError, match=r'\[E, P, A\].*E \+ P \+ A'):
+        ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -2364,4 +2405,5 @@ if __name__ == '__main__':
 
     weights = test_source_weights()
     condby = test_cond_by_expr()
+    nulls = test_split_null()
     branch = test_branches()
