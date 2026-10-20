@@ -293,9 +293,10 @@ class Clock(Expr):
     """
     sets = [] # The names of the sets of states that clocks have been made for: their engines keep the time each person entered the set (see `ss.solvers.Agents.define()`)
 
-    def __init__(self, states, kind='time'):
+    def __init__(self, states, kind='time', bins=None):
         self.states = list(states)
         self.kind = kind
+        self.bins = bins # In a compartmental run, the width of each level of elapsed time
         names = tuple(self.names)
         if len(set(names)) > 1 and names not in Clock.sets:
             Clock.sets.append(names)

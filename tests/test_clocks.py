@@ -109,7 +109,7 @@ def test_clocks():
     sim = ss.Sim(d, interventions=vx, connectors=halve, n_agents=2000, unit='day', stop=40, **kw).run()
     assert sim.results.vx.delivered.sum() > 0 and sim.solver == 'abm'
 
-    # Errors: outside the domain (E212), no scheduled dwell (E213), and not yet as compartments (E804)
+    # Errors: outside the domain (E212), and no scheduled dwell (E213); as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
     with pytest.raises(ss.ClockOutsideDomain):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
@@ -123,7 +123,8 @@ def test_clocks():
     with pytest.raises(ss.CapabilityError):
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1), where=ab), solver='ode', **kw).init()
     d, ab = make()
-    assert ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1), where=ab), **kw).init().solver == 'abm' # The reason is printed
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0), where=d.B & (d.B.time >= ss.days(2)), name='vx')
+    assert ss.Sim(d, interventions=vx, **kw).init().solver == 'abm' # A delivery reading a clock: the reason is printed
     return sim
 
 

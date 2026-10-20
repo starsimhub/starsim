@@ -128,7 +128,7 @@ from .connectors import Connector, modify, change
 
 t('conditions')
 from . import conditions
-from .conditions import state, any_ as any # Conditions on a state by path, and on any of several
+from .conditions import clock, state, any_ as any # Conditions on a state by path, and on any of several
 from . import kernels
 
 t('transitions')

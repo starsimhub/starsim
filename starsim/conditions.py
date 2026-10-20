@@ -13,7 +13,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event', 'state', 'any_']
+__all__ = ['Cond', 'Event', 'clock', 'state', 'any_']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -223,6 +223,27 @@ def set_states(cond):
         parts = [set_states(as_cond(arg)) for arg in cond.args]
         return None if any(p is None for p in parts) else [s for p in parts for s in p]
     return None
+
+
+def clock(within, bins=None):
+    """
+    Time since entering some states from outside them: the longhand of `X.time` and `(A | B).time`, with options
+
+    Args:
+        within (State/Cond): the state, or a set of states (`A | B`)
+        bins (dur): in a compartmental run, the width of each level of elapsed time
+
+    Examples:
+        ```python
+        latent = ss.clock(syph.EL | syph.LL, bins=ss.months(3))
+        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=syph.EL | syph.LL)
+        ```
+    """
+    states = [within] if isinstance(within, ss.State) else set_states(as_cond(within))
+    if states is None:
+        errormsg = f'ss.clock() takes a state or a set of states (A | B), not {within!r}'
+        raise TypeError(errormsg)
+    return ss.expressions.Clock(states, bins=bins)
 
 
 def state(path):
