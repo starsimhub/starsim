@@ -1396,12 +1396,15 @@ class Agents(Engine):
                     out += [d.name for d in other.dst]
         return list(dict.fromkeys(out))
 
-    def fresh(self, key, tr):
-        """ The agents who went through a transition (or a recorded event) of this module since `key` last asked: for code that reacts to events once each """
+    def fresh(self, key, tr, unique=True):
+        """
+        The agents who went through a transition (or a recorded event) of this module since `key` last asked: for code that reacts to events once each.
+        With `unique=False`, an agent appears once for each time, e.g. a woman who conceived, had an abortion at once, and conceived again in a step
+        """
         seen = self._seen.get(key, {})
         fresh = [b for b in self.batches if id(b) not in seen and not b.get('also', False)] # Those the event happened to themselves
         self._seen[key] = {id(b):b for b in self.batches}
-        return self.event_uids(tr, batches=fresh) if fresh else ss.uids()
+        return self.event_uids(tr, batches=fresh, unique=unique) if fresh else ss.uids()
 
     def record_event(self, name, uids):
         """ Record an event that is not a transition (e.g. a live birth, for the mother), so it can be read by ss.on() and conditions """
@@ -1622,14 +1625,14 @@ class Agents(Engine):
                 self.batches.append(sc.objdict(tr=tr.name, uids=others, src=-1, dst=-1, key=(ti, phase), also=True))
         return
 
-    def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None):
+    def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None, unique=True):
         """
         The agents an event happened to, as UIDs: those who went through a transition (as `on=` sees them), or one of
         its branches (`to`), or who entered or left a set of states (given as names), from outside it
         """
         if tr is not None and to is None and batches is None and tr in self.graph.transitions: # As on= sees them
             uids = self.events.get(tr)
-            return ss.uids() if uids is None else ss.uids(uids).unique()
+            return ss.uids() if uids is None else ss.uids(uids).unique() if unique else ss.uids(uids)
         out = []
         index = self.state_index
         trs = tr if isinstance(tr, (tuple, list)) else (tr,) # Several events at once, e.g. preg.loss
@@ -1647,7 +1650,10 @@ class Agents(Engine):
                     out.append(b.uids)
             elif keep.any():
                 out.append(b.uids[keep])
-        return ss.uids.concatenate(out).unique() if out else ss.uids()
+        if not out:
+            return ss.uids()
+        out = ss.uids.concatenate(out)
+        return out.unique() if unique else out
 
     def schedule(self, state, members):
         """

@@ -137,6 +137,69 @@ def test_burnin_ode():
 
 
 @sc.timer()
+def test_burnin_pregnancies():
+    sc.heading('Testing burnin=: women pregnant at the start count their pregnancies, so deliveries plus losses are pregnancies')
+    seen = sc.objdict(start=None, lost=None)
+    def check(sim):
+        p = sim.demographics.pregnancy
+        if sim.ti == 0:
+            preg = p.P.uids
+            seen.start = (len(preg), p.n_pregnancies[preg], p.parity[preg])
+            seen.lost = np.zeros(len(sim.people.uid.raw) + 100_000)
+        for tr in ['abortion', 'miscarriage', 'stillbirth']: # Each woman's losses in the run
+            uids = p.engine.fresh(f'test_{tr}', tr, unique=False)
+            np.add.at(seen.lost, uids, 1)
+
+    # Women pregnant at the start count that pregnancy
+    ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), analyzers=check, n_agents=2000, verbose=0).init().run(until=0)
+    n, npreg, parity = seen.start
+    assert n > 10 and np.all(npreg == 1 + parity), f'Women pregnant at the start have {np.unique(npreg)} pregnancies'
+
+    # With deliveries before the start (short pregnancies), counted in parity, and losses in the run
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(600), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, p_loss=ss.bernoulli(0.01))
+    preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
+    sim = ss.Sim(demographics=preg, analyzers=check, n_agents=10_000, start=2000, stop=2004, dt=ss.months(1), verbose=0).run()
+    n, npreg, parity = seen.start
+    assert np.all(npreg == 1 + parity) and np.sum(parity > 0) > 10, 'A delivery before the start counts as a pregnancy too'
+    p, ppl = sim.demographics.pregnancy, sim.people
+    alive = ppl.alive.uids
+    lost = seen.lost[alive]
+    assert lost.sum() > 50
+    assert np.array_equal(p.n_pregnancies[alive], p.parity[alive] + lost + p.P[alive]), 'For each woman, deliveries plus losses (plus a current pregnancy) are her pregnancies'
+    return sim
+
+
+@sc.timer()
+def test_v3_results():
+    sc.heading('Testing the Starsim 3 results: the maternal mortality ratio and the counts of fecund, fertile, and susceptible women')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2))
+    counts = []
+    def check(sim):
+        p, ppl = sim.demographics.pregnancy, sim.people
+        fecund = ppl.alive & ppl.female & (ppl.age >= p.pars.min_age) & (ppl.age <= p.pars.max_age)
+        fertile = fecund & ~p.infertile
+        counts.append([fecund.sum(), fertile.sum(), (fertile & ~p.pregnant).sum()])
+    sim = ss.Sim(demographics=preg, analyzers=check, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
+    r = sim.results.pregnancy
+    counts = np.array(counts)
+    for i,key in enumerate(['n_fecund', 'n_fertile', 'n_susceptible']):
+        assert np.array_equal(r[key].values, counts[:,i]), key
+    assert np.all(r.n_fertile.values < r.n_fecund.values) and np.all(r.n_susceptible.values < r.n_fertile.values)
+
+    births, md = r.births.values, r.maternal_deaths.values
+    assert md.sum() > 30
+    assert np.allclose(r.mmr.values, sc.safedivide(md, births, default=0)*100e3), 'MMR: maternal deaths per 100,000 births'
+    assert r.mmr.summarize_by == 'mean'
+    mmr = md.sum()/births.sum()*100e3
+    assert 3500 < mmr < 6500, f'An MMR of {mmr:.0f} per 100,000 from a 5% chance of death at delivery'
+
+    # The reproduction: no KeyError
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=500, start=2000, stop=2002).run()
+    assert len(sim.results.pregnancy.mmr) == len(sim.timevec)
+    return sim
+
+
+@sc.timer()
 def test_events():
     sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, ss.child(), and ANC at a visit after conception')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
@@ -485,6 +548,8 @@ if __name__ == '__main__':
     hiv = test_hiv_vertical()
     starsim3 = test_starsim3()
     shift = test_delivery_shift()
+    npreg = test_burnin_pregnancies()
+    v3res = test_v3_results()
     syph = test_syphilis()
     pp = test_postpartum()
     T.toc()
