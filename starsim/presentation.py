@@ -454,8 +454,7 @@ def beta_leaf(tr):
 def route_beta(raw, net):
     """ The value of a beta on one route """
     if isinstance(raw, dict):
-        keys = {ss.standardize_netkey(k):v for k,v in raw.items()}
-        return keys.get(ss.standardize_netkey(net.name))
+        return ss.utils.route_beta(raw, net.name)
     return raw
 
 
@@ -558,8 +557,8 @@ def quantity_json(raw, kind, unit):
         return format_expr(raw, exact=True)
     elif callable(raw):
         return func_json(raw)
-    elif isinstance(raw, dict):
-        return {k:quantity_json(v, kind, unit) for k,v in raw.items()}
+    elif isinstance(raw, dict): # A bare number as the default of a beta for each route stays bare, since it is per act on the routes with acts it applies to
+        return {k:quantity_json(v, None if k == 'default' and sc.isnumber(v) else kind, unit) for k,v in raw.items()}
     elif isinstance(raw, (list, tuple)):
         return [quantity_json(v, kind, unit) for v in raw]
     return raw

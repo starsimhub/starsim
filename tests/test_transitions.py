@@ -322,6 +322,8 @@ def test_time():
         ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(1), R >> S @ ss.days(100), name='mixed'), **kw).init()
     with pytest.raises(ss.IncompatibleTypes, match='rate_deaths'): # As is a bare number in demographics=
         ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=ss.death(rate=0.01), **kw).init()
+    zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit
+    assert ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), R >> S @ zero, name='mixed'), **kw).init().unit == 'day'
 
     # A rate and its duration say the same thing, whatever the unit
     a = ss.Disease(recovery=ss.progression('I -> R', dur=ss.weeks(1)))

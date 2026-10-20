@@ -674,9 +674,14 @@ class Infection(Disease):
         if scalar_beta(β) or isinstance(β, ss.peract):
             betamap = {ss.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.standardize_netkey(k)) for k in sim.networks.keys()}
 
-        # If beta is a dict, check all entries are bi-directional
+        # If beta is a dict, check all entries are bi-directional; a default is the beta of every network it does not name, and the names that are not networks are not used
         elif isinstance(β, dict):
             betamap = dict()
+            if 'default' in β:
+                unknown = [k for k in β if k != 'default' and ss.standardize_netkey(k) not in nets]
+                if unknown:
+                    ss.note(f'the beta of "{self.name}" names {sc.strjoin(unknown)}, which {"is not a network" if len(unknown) == 1 else "are not networks"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the networks not named take the default', sim=sim)
+                β = {k:ss.utils.route_beta(β, k) for k in sim.networks.keys()}
             for k,thisbeta in β.items():
                 nkey = ss.standardize_netkey(k)
                 if scalar_beta(thisbeta):
@@ -1334,7 +1339,7 @@ class SIR(Disease):
     the infection unless `p_death` is given. The keywords are Starsim 3's.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 6 years; a number is in years), as an exponential; give a distribution (e.g. `ss.lognorm_ex(mean=ss.years(6))`) for another shape
         p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
@@ -1372,7 +1377,7 @@ class SEIR(Disease):
     An SEIR model: as `ss.SIR`, with an exposed (latent) state before people become infectious
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected, who start exposed, in `E` (or a number of people); to start people infectious, give `init=dict(I=10)` instead
         dur_exp (float/`ss.dur`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in years), as an exponential
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
@@ -1416,7 +1421,7 @@ class SIS(Disease):
     Declared from states and transitions (see `ss.Disease`), so it runs with any solver.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 10 years; a number is in years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`

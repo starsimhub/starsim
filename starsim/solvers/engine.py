@@ -716,11 +716,10 @@ class Engine:
         """
         nkey, route = self._route
         if isinstance(raw, dict):
-            keys = {ss.standardize_netkey(k):v for k,v in raw.items()}
-            key = ss.standardize_netkey(nkey)
-            if key not in keys:
+            val = ss.utils.route_beta(raw, nkey)
+            if val is None:
                 raise ss.RouteMismatch(f'beta for "{self.mod.name}" has keys {list(raw.keys())}, but there is a network called "{nkey}" with no value.')
-            raw = keys[key]
+            raw = val
         if getattr(route, 'has_acts', False):
             self._per_act = True
             return self.act_hazards(raw, route)
