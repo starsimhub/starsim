@@ -1742,6 +1742,27 @@ def test_schedule():
 
 
 @sc.timer()
+def test_split_timing():
+    """ Separate p= transitions out of a state split on entry; one transition with several destinations splits when it is taken """
+    sc.heading('Testing when a split is decided')
+    late = lambda sim: 1.0*(sim.ti >= 10) # Severe only from step 10
+    def make(shape):
+        I, H, R = ss.states('I H R')
+        if shape == 'entry': # Branch, then wait
+            trs = dict(severe=ss.Transition(I, H, p=late, dur=20), mild=ss.Transition(I, R, p=lambda sim: 1 - late(sim), dur=20))
+        else: # Wait, then branch
+            trs = dict(course=ss.Transition(I, [H, R], p=[late, None], dur=20))
+        return ss.Disease(I, H, R, **trs, name='d') # Everyone starts in I
+    for solver in ['ode', 'abm']:
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        entry = ss.Sim(make('entry'), solver=solver, stop=100, **size, **kw).run().results.d
+        exit = ss.Sim(make('exit'), solver=solver, stop=100, **size, **kw).run().results.d
+        assert entry.n_H[-1] == 0 # Everyone started before step 10, so was split then
+        assert np.isclose(exit.n_H[-1]/10_000, np.exp(-10/20), atol=0.03) # Those still in I at step 10
+    return exit
+
+
+@sc.timer()
 def test_cascade():
     """ Moves with no wait happen in the step that caused them, under every solver """
     sc.heading('Testing the same-step cascade')
