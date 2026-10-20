@@ -458,7 +458,7 @@ class Graph(Presentation):
         return
 
     def resolve_people(self):
-        """ Work out which states are people: the ones connected by transitions to the first state """
+        """ Work out which states are people: the ones connected by transitions to the first state, and the ones that no transition touches """
         states = list(self.states.values())
         links = {id(s):set() for s in states}
         for tr in self.transitions.values():
@@ -470,6 +470,8 @@ class Graph(Presentation):
             if not tr.src: # An inflow split between several states: its destinations are connected too
                 for a in tr.dst or []:
                     links[id(a)].update(id(b) for b in tr.dst if b is not a)
+
+        touched = {id(st) for tr in self.transitions.values() for st in (tr.src or []) + (tr.dst or []) if isinstance(st, State)} | {i for i,linked in links.items() if linked}
 
         # Start from the anchor, and from everything declared to be people
         lookup = {id(s):s for s in states}
@@ -488,7 +490,7 @@ class Graph(Presentation):
         self.separate = [s for s in states if s.people is True and id(s) not in joined] # People with no transition to or from the first state's, which are said when the sim is built
         for state in states:
             if state.people is None:
-                state.people = id(state) in seen
+                state.people = id(state) in seen or id(state) not in touched # A state that no transition touches is people, as the first state is: a count is filled and emptied by transitions of its own
                 if not state.people:
                     state.guessed['people'] = f'no transition connects {state.name} to {first.name}'
         self.people_states = [s for s in states if s.people]

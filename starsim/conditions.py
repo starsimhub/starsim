@@ -121,9 +121,9 @@ class Cond:
             raise TypeError(errormsg)
         return Event(kind, states)
 
-    def __or__(self, other):  return Cond('|', self, other)
+    def __or__(self, other):  return Cond('|', self, tr_event(other, self))
     def __rand__(self, other): return Cond('&', other, self)
-    def __ror__(self, other):  return Cond('|', other, self)
+    def __ror__(self, other):  return Cond('|', tr_event(other, self), self)
     def __invert__(self):     return Cond('~', self)
 
     @property
@@ -225,12 +225,6 @@ class Event(Cond):
             raise ValueError(errormsg)
         super().__init__('move', kind, obj, dst)
         return
-
-    def __or__(self, other): # A transition joined to an event is the event of going through it, e.g. on=precin.to(S) | cin
-        return Cond('|', self, Event('tr', other) if isinstance(other, ss.Transition) else other)
-
-    def __ror__(self, other):
-        return Cond('|', Event('tr', other) if isinstance(other, ss.Transition) else other, self)
 
     __hash__ = Cond.__hash__
 
@@ -583,6 +577,13 @@ def is_event(cond):
     if cond.op in leaves:
         return cond.op in ['event', 'move'] or getattr(cond, 'kind', None) is not None
     return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
+
+
+def tr_event(obj, other):
+    """ A transition joined with | to an event (or to another transition) is the event of going through it, e.g. on=precin.to(S) | cin.to(S) | clear """
+    if isinstance(obj, ss.Transition) and (isinstance(other, ss.Transition) or has_event(other)):
+        return Event('tr', obj)
+    return obj
 
 
 def has_event(cond):
