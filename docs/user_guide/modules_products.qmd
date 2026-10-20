@@ -16,7 +16,7 @@ There are three products, one for each kind of delivery:
 | Class | Represents | Delivered by | Main arguments |
 |-------|------------|--------------|----------------|
 | `ss.Vaccine` | Vaccines | `ss.vaccinate()` | `efficacy`, `waning`, `leaky`, `cost` |
-| `ss.Test` | Diagnostics | `ss.screen()` | `sensitivity`, `specificity`, `delay`, `detects`, `cost` |
+| `ss.Diagnostic` | Diagnostics | `ss.screen()` | `sensitivity`, `specificity`, `delay`, `detects`, `cost` |
 | `ss.Treatment` | Treatments | `ss.treat()` | `cure`, `efficacy`, `transition`, `cost` |
 
 They work with every solver: in an agent-based run the sim records who holds a product and since when, and in a compartmental run holding it becomes a stratification of the model. Starsim 3's product classes, `ss.Vx`, `ss.Dx`, and `ss.Tx`, remain as base classes for products written as code ([below](#products-written-as-code)).
@@ -49,17 +49,18 @@ A product is realized as modifiers on the people who hold it, so it combines wit
 
 ## Tests
 
-A test is defined by its `sensitivity` (the probability that someone with the condition tests positive) and `specificity` (the probability that someone without it tests negative). By default it detects infection with the disease it is delivered for; `detects=` takes a condition to say something else. `delay=` is the time from the test to its result. What happens to the people who test positive is a follow-up delivery, given with `on_positive=`:
+A test is defined by its `sensitivity` (the probability that someone with the condition tests positive) and `specificity` (the probability that someone without it tests negative). By default it detects infection with the disease it is delivered for; `detects=` takes a condition to say something else. `delay=` is the time from the test to its result. What happens to the people who test positive is a follow-up delivery, given them with `who=screening.positive`:
 
 ```{python}
-test = ss.Test(sensitivity=0.95, specificity=0.99)
+test = ss.Diagnostic(sensitivity=0.95, specificity=0.99)
 drug = ss.Treatment(cure=0.9)
-screening = ss.screen(test, coverage=0.5, interval=ss.years(1), start='2010', on_positive=ss.treat(drug))
+screening = ss.screen(test, coverage=0.5, interval=ss.years(1), start='2010')
+treatment = ss.treat(drug, who=screening.positive)
 
-sim = ss.Sim(**pars, interventions=screening)
+sim = ss.Sim(**pars, interventions=[screening, treatment])
 sim.run()
 sim.plot('sis')
-print(f'Positive tests: {sim.results.screening.diagnosed.sum():n}')
+print(f'Positive tests: {sim.results.screening.positive.sum():n}')
 ```
 
 ## Treatments
