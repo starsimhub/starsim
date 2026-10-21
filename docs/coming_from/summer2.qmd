@@ -69,10 +69,11 @@ import starsim as ss
 import starsim.interop
 ss.options(jupyter=True)
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection       = ss.transmission('S -> I', beta=2),
-    recovery        = ss.progression('I -> R', rate=1/3),
-    infection_death = ss.death('I ->', rate=0.05),
+    infection       = ss.Transition(S, I, rate=2 * I),
+    recovery        = ss.Transition(I, R, rate=1/3),
+    infection_death = ss.death(I, rate=0.05),
     init            = dict(I=10),
 )
 sir.stratify(age=['young', 'old'])

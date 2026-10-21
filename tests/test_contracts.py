@@ -23,21 +23,28 @@ def people_states(sim, mod):
 
 def guessed(text):
     """ The lines of describe() marked as guesses """
-    return [line for line in text.splitlines() if '[guessed' in line or 'inferred from' in line or 'nothing in the model has a unit' in line]
+    return [line for line in text.splitlines() if '[guessed' in line or 'nothing in the model has a unit' in line]
 
 
-def string_sir(**kwargs):
-    return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), name='sir', **kwargs)
+def plain_sir(**kwargs):
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), name='sir', **kwargs)
 
 
 def declared_sir(**kwargs):
-    S, I, R = ss.State(name='S'), ss.State(name='I', infectious=True), ss.State(name='R')
+    S, I, R = ss.states('S I R')
     return ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.erlang(mean=10, k=3, unit='days'), init_prev=0.01, name='sir', **kwargs)
 
 
 def lognormal(stages):
     dur = ss.lognorm_ex(mean=10, std=4, unit='days')
-    return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=dur, stages=stages), init_prev=0.01, name='sir')
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=dur, stages=stages), init_prev=0.01, name='sir')
+
+
+def fitted_sir(beta):
+    S, I = ss.states('S I')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), name='sir')
 
 
 def unnamed(named):
@@ -50,19 +57,15 @@ def unnamed(named):
 
 # Each row of the "what is guessed" table in 03-states-and-transitions.md: a sim that makes the guess, one that does not, and what describe() says
 guesses = dict(
-    states     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'inferred from the arrows'),
-    source     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'source is the destination'),
-    infectious = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'I infectious'),
-    dwell      = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
+    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
-    unit       = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(), unit='day'),             'unit'),
-    mixing     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),
+    unit       = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), unit='day'),             'unit'),
+    mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),
     names      = (lambda: ss.Sim(unnamed(False)),                    lambda: ss.Sim(unnamed(True)),                        'name built from'),
-    pop        = (lambda: ss.Sim(string_sir(), stop=50),             lambda: ss.Sim(string_sir(), total_pop=1000, stop=50), 'people'),
-    stop       = (lambda: ss.Sim(string_sir(), total_pop=1000),      lambda: ss.Sim(string_sir(), total_pop=1000, stop=50), 'to 50'),
-    acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(string_sir()),                         'acquisition'),
-    midpoint   = (lambda: ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=ss.par(bounds=[0.1, 0.5])), name='sir')),
-                  lambda: ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=ss.par(0.3, bounds=[0.1, 0.5])), name='sir')), 'middle of its bounds'),
+    pop        = (lambda: ss.Sim(plain_sir(), stop=50),             lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'people'),
+    stop       = (lambda: ss.Sim(plain_sir(), total_pop=1000),      lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'to 50'),
+    acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(plain_sir()),                         'acquisition'),
+    midpoint   = (lambda: ss.Sim(fitted_sir(ss.par(bounds=[0.1, 0.5]))), lambda: ss.Sim(fitted_sir(ss.par(0.3, bounds=[0.1, 0.5]))), 'middle of its bounds'),
 )
 not_marked = dict() # Guesses that describe() does not mark yet, with the reason
 
@@ -278,14 +281,16 @@ def test_identities():
     sc.heading('Testing constant-rate decay and a fixed branch share against their exact values')
 
     # Constant-rate decay is exponential
-    decay = ss.Disease(recovery=ss.progression('I -> R', rate=ss.perday(0.1)), name='decay')
+    I, R = ss.states('I R')
+    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), name='decay')
     res = ss.Sim(decay, total_pop=1e6, unit='day', stop=50, solver='ode', verbose=0).run().results.decay
     t = np.arange(51)
     assert np.allclose(res.n_I.values, 1e6*np.exp(-0.1*t), rtol=1e-5) # RK4's error is about 1e-7 a step at this rate
 
     # A fixed branch share is the share that leaves by each branch
     for solver in ['ode', 'binomial', 'abm']:
-        branch = ss.Disease(course=ss.progression('I -> R | D', dur=5, p=[None, 0.2]), name='branch')
+        I, R, D = ss.states('I R D')
+        branch = ss.Disease(course=ss.Transition(I, [R, D], dur=5, p=[None, 0.2]), name='branch')
         agents = dict(n_agents=50_000) if solver == 'abm' else {}
         res = ss.Sim(branch, total_pop=1e6, unit='day', stop=100, solver=solver, verbose=0, **agents).run().results.branch
         share = res.n_D[-1]/(res.n_R[-1] + res.n_D[-1])
@@ -440,8 +445,10 @@ def test_coded_beside():
 def test_joint_population():
     sc.heading('Testing diseases tracked jointly: the same people in each, as a joint model written by hand, within a budget')
     def pair(solver='auto', **kwargs):
-        a = ss.Disease(infection=ss.transmission('S -> I', beta=0.5), death=ss.Transition('I', ss.null, dur=2), init_prev=0.1, name='a')
-        b = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=3), init_prev=0.1, name='b')
+        S, I = ss.states(2)
+        a = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.5)*I, death=ss.Transition(I, ss.null, dur=2), init_prev=0.1, name='a')
+        S, I = ss.states(2)
+        b = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.3)*I, recovery=ss.Transition(I, S, dur=3), init_prev=0.1, name='b')
         return ss.Sim([a, b], total_pop=20_000, stop=2030, solver=solver, verbose=0, **kwargs)
 
     # Dying of one disease leaves the other too, though neither refers to the other (b kept all 20,000 people, with 1,642 left in a)

@@ -88,10 +88,11 @@ Now for the fun part - creating your own disease! In Starsim, a disease is a set
 Let's turn the SIR model into an SIRS model, where immunity wanes: recovered agents eventually become susceptible again. This is what lets a disease settle into endemic transmission rather than burning through the population once and disappearing. All it takes is one more transition, from `R` back to `S`:
 
 ```{python}
+S, I, R = ss.states('S I R')
 sirs = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.peryear(0.1)),
-    recovery = ss.progression('I -> R', dur=ss.years(10)),
-    waning = ss.progression('R -> S', dur=ss.years(5)), # Immunity lasts 5 years on average
+    infection = ss.Transition(S, I, rate=ss.peryear(0.1) * I),
+    recovery = ss.Transition(I, R, dur=ss.years(10)),
+    waning = ss.Transition(R, S, dur=ss.years(5)), # Immunity lasts 5 years on average
     init_prev = 0.01,
 )
 ```

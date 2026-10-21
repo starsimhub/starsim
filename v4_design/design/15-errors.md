@@ -44,21 +44,20 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-60 names: 44 errors, 7 warnings, and 9 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+59 names: 43 errors, 7 warnings, and 9 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
 | `IncompatibleTypes` | error (also a `TypeError`) | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq`, or a number to a rate; names both types |
 | `WrongDimension` | error (also a `TypeError`) | Typed arithmetic whose result has no type (a rate times a rate, a duration times a duration), or typed values that give a slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; both `beta` and `n_contacts` carry a time unit; or a typed rate as `beta` on a network with acts (acts per unit time times a rate per unit time is not a hazard), or inside `ss.peract` |
 | `ReservedName` | error | A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) |
-| `UnknownState` | error (also a `KeyError`) | States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred |
+| `UnknownState` | error (also a `KeyError`) | A state is named (in `init=`, `first=`, `states=`, a product, or a delivery) that the module does not have. Lists the closest names |
 | `BadBranchSplit` | error | Constant branch probabilities out of one state do not sum to 1, or `ss.null` is one of several destinations (a branch out of the model is a transition of its own) |
 | `DuplicateDeclaration` | error | Two members of a module are given the same explicit name, or a state is an endpoint of transitions in two modules |
 | `NonlinearExposure` | error | A rate is not linear in its bare states (`I ** 2`, `I / (I + K)`, or a term containing two bare states). Says to use `I.n` if a literal count was meant |
 | `UndrivenTransition` | error | A transition reaches build time with no rate, no duration, and no `p=` |
 | `UnnamedState` | error | A state made by `ss.states(3)` or `ss.State()` cannot be matched to a variable name when the module is built (two names for one object, a state built inline). Suggests `ss.states('S I R')` or `ss.State('S')` |
 | `ExposureToCount` | error | A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` |
-| `SourceNeeded` | error | The string form of a transmission has no `source=`, and its destination leads on to a state that people then leave, as in an SEIR (`'S -> E'` then `'E -> I'` and `'I -> R'`), so the source cannot be guessed. Suggests `source='I'` |
 | `UnknownTransition` | error (also a `KeyError`) | `adjust=` names a transition that does not exist. Lists the ones that do |
 | `BadSplit` | error | `split=` has the wrong number of entries. (A split that does not sum to 1 is normalized, and `describe()` says so) |
 | `DuplicateStructuralDimension` | error | A model or sim is stratified by a dimension it already has, in another way. `stratify` works in place, so a notebook cell that is run twice stratifies it in the same way again, which does nothing (with a note) and is not this error. (Stratifying a disease by a people property the sim already has, with the same levels, only adds the adjustments and is not an error) |
@@ -116,7 +115,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 Some mistakes are ordinary Python usage errors and raise a plain `TypeError` or `ValueError` with a message in the same shape. They can be given names later if they turn out to be common:
 
 - giving both `rate=` and `dur=` to a transition, or more than one of `multiply=`, `add=`, `set=` to `ss.modify`;
-- a positional value after an arrow string (`ss.transmission('S -> I', 0.05)`);
+- a state's name where the state is meant (`ss.Transition(I, 'R', dur=10)`), which says to declare the states;
 - a set of sources without parentheses (`S | I | R >> D @ mu`);
 - using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`.
 

@@ -94,14 +94,6 @@ def choose_solver(sim):
         sim.capabilities = []
         return
 
-    # States that nothing enters: a typo in an arrow string makes a new state
-    if sim.mixing.register is None: # A register can add people to any state
-        for mod in sim.declared:
-            for state in mod.graph.unentered():
-                others = [name for name in mod.graph.states if name != state.name]
-                raise ss.UnknownState(f'nothing moves people into the state "{state.name}" of "{mod.name}", and it starts empty, so it may be a typo{ss.transitions.did_you_mean(state.name, others)}\n'
-                                      f'     If it is meant to start empty, declare the states (S, I, R = ss.states("S I R")) or give it a value, e.g. init=dict({state.name}=0).')
-
     # The unit
     sim._init_unit()
 
@@ -259,7 +251,7 @@ def check_routes(sim):
         for net in nets:
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
             if not (sc.isnumber(beta) and beta == 1):
-                raise ss.RouteMismatch(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. ss.transmission("S -> I", beta=dict({net.name}=...)).')
+                raise ss.RouteMismatch(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
 
     # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure)
     for mod in sim.declared if routes else []:
@@ -637,7 +629,7 @@ def init_capabilities(sim, modules):
             elif tr.trigger is not None and tr.trigger.event and not (tr.trigger.x.args[0] in ['tr', 'to'] and ss.conditions.modname(getattr(tr.trigger.x.args[1], 'module', None)) in [None, mod.name]):
                 add(f'transition: {name}', 'no', 'a trigger on an event (ss.on)', auto=f'"{name}" is triggered by {tr.trigger}, an event that only agents record, which runs as agents for now', fatal=True)
             elif tr.trigger is not None and ((callable(tr.trigger.x) and not isinstance(tr.trigger.x, ss.conditions.Cond))
-                                             or any(isinstance(leaf, ss.conditions.Child) or (isinstance(leaf, ss.conditions.Event) and leaf.args[0] not in ['tr', 'to']) for leaf in ss.conditions.event_leaves(tr.trigger.x))):
+                                             or any(isinstance(leaf, ss.conditions.child) or (isinstance(leaf, ss.conditions.Event) and leaf.args[0] not in ['tr', 'to']) for leaf in ss.conditions.event_leaves(tr.trigger.x))):
                 add(f'transition: {name}', 'no', 'a trigger on a function, or on entering or leaving states', auto=f'"{name}" is triggered by {tr.trigger}, which only agents can follow', fatal=True)
             elif tr.trigger is not None and tr.trigger.event:
                 add(f'transition: {name}', 'yes', 'moved at the end of each step, the share its module\'s event happened to')

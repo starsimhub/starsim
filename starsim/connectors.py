@@ -286,7 +286,8 @@ class modify(Connector):
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         masks = ss.modify(sir.pars.beta, multiply=0.6, start=30)
         sim = ss.Sim(sir, interventions=masks, stop=100).run()
 
@@ -582,7 +583,8 @@ def change(target, at=None, by=None, to=None, name=None, **kwargs):
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         lockdown = ss.change(sir.pars.beta, at=[30, 60], by=[0.5, 1.0])
         sim = ss.Sim(sir, interventions=lockdown, stop=100).run()
         ```

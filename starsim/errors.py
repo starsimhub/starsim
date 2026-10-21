@@ -82,7 +82,7 @@ class ReservedName(CodedError):
     """ A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) """
 
 class UnknownState(CodedError, KeyError):
-    """ States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred """
+    """ A state is named (in `init=`, `first=`, `states=`, a product, or a delivery) that the module does not have. Lists the closest names """
 
 class BadBranchSplit(CodedError):
     """ Constant branch probabilities out of one state do not sum to 1, or `ss.null` is one of several destinations (a branch out of the model is a transition of its own) """
@@ -104,12 +104,6 @@ class UnnamedState(CodedError):
 
 class ExposureToCount(CodedError):
     """ A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` """
-
-class SourceNeeded(CodedError):
-    """
-    The string form of a transmission has no `source=`, and its destination leads on to a state that people then leave, as in
-    an SEIR (`'S -> E'` then `'E -> I'` and `'I -> R'`), so the source cannot be guessed. Suggests `source='I'`
-    """
 
 class UnknownTransition(CodedError, KeyError):
     """ `adjust=` names a transition that does not exist. Lists the ones that do """

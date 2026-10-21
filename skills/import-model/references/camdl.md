@@ -55,10 +55,11 @@ or `ss.load(m)` on a live pycamdl model, if pycamdl can be imported where Starsi
 contacts = [[12, 4, 1], [4, 8, 2], [1, 2, 3]]
 pop = ss.by([[3000, 1000], [5000, 2000], [2000, 500]], dims=['age', 'patch'])
 
+S, E, I, R = ss.states('S E I R')
 seir = ss.Disease(
-    infection = ss.transmission('S -> E', beta=ss.perday(0.04), source='I'),
-    onset     = ss.progression('E -> I', dur=ss.days(5)),
-    recovery  = ss.progression('I -> R', rate=ss.perday(0.1)),
+    infection = ss.Transition(S, E, rate=ss.perday(0.04) * I),
+    onset     = ss.Transition(E, I, dur=ss.days(5)),
+    recovery  = ss.Transition(I, R, rate=ss.perday(0.1)),
     init      = dict(I=ss.by(age=[10, 0, 0], patch=[1, 0])),
 )
 seir.stratify(age=[0, 5, 50]) # Children, adults, and elders, who age at 1/5 and 1/45 a year

@@ -7,13 +7,14 @@ In Starsim 4, a model is written as states and the transitions between them. The
 
 ## A model in two lines
 
-An SIR model: people are infected at rate `beta` times the share infectious, and recover after 10 steps on average. The states (`S`, `I`, `R`) are read from the arrow strings.
+An SIR model: people are infected at rate `beta` times the share infectious, and recover after 10 steps on average. The states (`S`, `I`, `R`) are declared first, and the transitions go between them.
 
 ```{python}
 import starsim as ss
 ss.options(jupyter=True) # This makes the plotting nicer
 
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
 sim = ss.Sim(sir, stop=100).run()
 sim.plot()
 ```
@@ -149,15 +150,17 @@ print(f'Median {np.median(totals):,.0f}, 90% interval {np.quantile(totals, 0.05)
 
 ## From R
 
-Starsim can be used from R through [reticulate](https://rstudio.github.io/reticulate/). R has no `>>` operator, and the names that Python takes from variables are not available from R, so from R a model is written with arrow strings (which name the states and transitions) and `name=` (which names the disease; without it, the disease is called `disease`):
+Starsim can be used from R through [reticulate](https://rstudio.github.io/reticulate/). R has no `>>` operator, and the names that Python takes from variables are not available from R, so from R a model is written with `ss$Transition()`, the states are named up front with `ss$states("S I R")`, the transitions by their keywords, and the disease with `name=` (without it, the disease is called `disease`):
 
 ```r
 library(reticulate)
 ss <- import("starsim")
 
+st <- ss$states("S I R")
+S <- st[[1]]; I <- st[[2]]; R <- st[[3]]
 sir <- ss$Disease(
-    infection = ss$transmission("S -> I", beta = 0.3),
-    recovery  = ss$progression("I -> R", dur = 10),
+    infection = ss$Transition(S, I, rate = 0.3 * I),
+    recovery  = ss$Transition(I, R, dur = 10),
     init_prev = 0.01,
     name = "sir"
 )

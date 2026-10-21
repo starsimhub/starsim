@@ -49,9 +49,10 @@ register = pd.DataFrame({
     'states': (events.event == 'enter').map({True:'S', False:None}),
 })
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.perday(0.16)),
-    recovery  = ss.progression('I -> R', rate=ss.perday(0.01)),
+    infection = ss.Transition(S, I, rate=ss.perday(0.16) * I),
+    recovery  = ss.Transition(I, R, rate=ss.perday(0.01)),
     init      = dict(I=ss.by(herd=u0.I.values)),
 )
 size = u0[['S', 'I', 'R']].sum(axis=1)
@@ -99,7 +100,7 @@ These are from Starsim's switching demo for SimInf users (`tests/switching/test_
 | The speed of the particle filter | **Works**: 0.57 ms per particle run on one thread, the same as SimInf's 0.57 ms (the demo asks for within 3 times), and 0.23 ms on four threads |
 | Fit by ABC-SMC (`abc()`) | **Works**: `method='abc-smc'`, below |
 | Speed on a national register | **Works**: see the timings above |
-| Build and run a model from R | **Works**: through reticulate, with arrow strings and `name=` |
+| Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` |
 | The same model as animals | **Works**: `sim.new(solver='abm', n_agents=...)` runs one agent per animal (196,169 animals in 108 s for `events_SIR()`) |
 
 SimInf's `?pmcmc` example in miniature, fitted by ABC-SMC: one herd of 1,000 with an SIR at `beta = 0.16` and `gamma = 0.077`, observed through the number infected every five days:
@@ -113,7 +114,8 @@ ss.options(jupyter=True)
 data = pd.DataFrame(dict(t=np.arange(5, 101, 5), n_I=[9, 9, 22, 25, 25, 56, 56, 83, 93, 113, 131, 152, 171, 162, 118, 128, 128, 107, 71, 76]))
 beta  = ss.par(ss.perday(0.2), bounds=[0.01, 1])
 gamma = ss.par(ss.perday(0.1), bounds=[0.01, 1])
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=gamma), init=dict(I=5))
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init=dict(I=5))
 sim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 
 fit = sim.calibrate(method='abc-smc', rand_seed=1, verbose=0)

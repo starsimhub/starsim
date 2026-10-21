@@ -360,27 +360,7 @@ def clock_values(name, levels, unit=None):
 
 
 class Transfer:
-    """
-    Movement between the levels of a stratification, without a change of disease state
-
-    Args:
-        rate (any): the per-person hazard
-        dur (any): the time before moving (instead of `rate`): a scalar is the mean of an exponential, and a distribution is drawn for each person when they reach a level it moves them from
-        p (list): with several levels to move to (`method='none -> pill | iud'`), the probability of each, decided as people move; one may be None, for the rest
-        states (list): the disease states it applies to (default: every state)
-        name (str): the name; if not given, taken from the keyword it is passed under
-        increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
-        kwargs (dict): the dimension, and an arrow between two of its levels (e.g. `risk='low -> high'`),
-            or the level people move to (e.g. `vaccinated=True`)
-
-    Examples:
-        ```python
-        ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
-        ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
-        ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # Down a level at a time
-        ss.transfer(method='none -> pill | iud', p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
-        ```
-    """
+    """ Movement between the levels of a stratification, without a change of disease state: see `ss.transfer()`, which makes it """
     def __init__(self, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
         increment = parse_increment(increment, 'ss.transfer()')
         if len(kwargs) + len(increment or {}) != 1:

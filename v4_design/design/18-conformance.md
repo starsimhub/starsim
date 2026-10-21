@@ -34,10 +34,9 @@ Each suite ends with what tests it now. "Not yet tested" means the claim is a ho
 
 ### 1. Form equivalence
 
-For every corpus model, the three spellings of its transitions (arrow-string constructors, operators, explicit `ss.Transition`) and the two ways of building the module (constructor and class) MUST produce the same model spec and the same model hash, once names agree. ([01-objects.md](01-objects.md#the-equivalence-rule)) The same holds for:
+For every corpus model, the two spellings of its transitions (operators and explicit `ss.Transition`) and the two ways of building the module (constructor and class) MUST produce the same model spec and the same model hash, once names agree. ([01-objects.md](01-objects.md#the-equivalence-rule)) The same holds for:
 
 - the ways of declaring states: `S, I, R = ss.states(3)`, `ss.states('S I R')`, and `S = ss.State()` one at a time;
-- the spellings of an arrow string: `'I -> R'`, `'I->R'`, `'I >> R'`, and `'I>>R'`;
 - results and outcomes passed as keywords and passed through `transitions=`, `results=`, and `outcomes=`.
 
 Tested by `test_transitions.py::test_forms` on the SIR (the spellings, a class, and the ways of declaring states, by their hashes). Not yet tested on the rest of the corpus.
@@ -193,7 +192,7 @@ The models are the functions of `tests/corpus.py`, each returning an unrun sim s
 | # | Model | What it tests |
 |---|---|---|
 | 1 | **SIR**, with no unit anywhere (simple); its spellings and a class are in `test_forms` | Form equivalence; every solver; time in timesteps when nothing has a unit |
-| 2 | **SEIR**, in the operator form and in the string form with `source='I'` (simple) | The source of infection; the printed guess when `source=` is left out |
+| 2 | **SEIR**, in the operator form (simple) | The source of infection, in the rate |
 | 3 | **SIR with an Erlang dwell time**, `ss.erlang(mean=10, k=3)` (simple) | Sub-stages, exact in every solver |
 | 4 | **SIR with a lognormal dwell time** | `'auto'` keeps it an ODE with fitted Erlang stages and prints `StagesUnderAuto`; `solver='ode'` prints the stage approximation; `approx=True` silences it; `solver='ode'` with `approx=False` raises `CapabilityError`; `'auto'` with `approx=False`, and `solver='abm'`, sample the dwell time directly; the difference is recorded |
 | 5 | **A branching model** with per-branch dwell times and a competing death hazard (simple) | Split on entry versus competing hazards |

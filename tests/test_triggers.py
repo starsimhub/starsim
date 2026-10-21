@@ -21,18 +21,18 @@ def test_lazy():
     ppl = new.sim.people
     assert np.all(ppl.female[new.I.uids]) and np.all(ppl.age[new.I.uids] >= 15)
 
-    # A state by path, for a module made before its siblings exist, and a union of several
+    # A state by path, for a module made before its siblings exist
     def pair(where):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.3)), name='a')
-        b = ss.Disease(sb=ss.progression('S -> I', rate=ss.peryear(1.0), where=where), name='b')
+        S, I = ss.states('S I')
+        a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.3)), name='a')
+        S, I = ss.states('S I')
+        b = ss.Disease(sb=ss.Transition(S, I, rate=ss.peryear(1.0), where=where), name='b')
         return ss.Sim([a, b], n_agents=2000, start=2000, stop=2005, unit='year', **kw).run()
-    sim = pair(ss.any(ss.state(f'{g}.I') for g in ['a']))
+    sim = pair(ss.state('a.I'))
     a, b = sim.diseases.a, sim.diseases.b
     assert np.all(a.I[b.I.uids]) and b.I.count() > 100
     with pytest.raises(ValueError):
         ss.state('X')
-    with pytest.raises(ValueError):
-        ss.any([])
     return sim
 
 
@@ -43,7 +43,7 @@ def test_bv_debut():
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
         return ss.Disease(U, CST1, CST4,
-            debut = ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
+            debut = ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
             name='bv')
@@ -72,7 +72,7 @@ def test_bv_debut_ode():
     """ As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step """
     adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     U, CST1, CST4 = ss.states('U CST1 CST4')
-    bv = ss.Disease(U, CST1, CST4, debut=ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
+    bv = ss.Disease(U, CST1, CST4, debut=ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
     ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
@@ -86,7 +86,8 @@ def test_bv_debut_ode():
 def test_on_event():
     sc.heading('Testing ss.on() with an event: edge-triggered, in the same step, whatever the module order')
     def make(order):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+        S, I = ss.states('S I')
+        a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), ia=ss.Transition(I, S, dur=ss.years(1)), name='a')
         S, F, G = ss.states('S F G')
         b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b') # Flagged when infected with a; level semantics would flag them again on return
         mods = [a, b] if order else [b, a]
@@ -100,7 +101,8 @@ def test_on_event():
 
     # The events of a state by path, for modules made from strings: the same as the state's own
     def by_path(path):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+        S, I = ss.states('S I')
+        a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), ia=ss.Transition(I, S, dur=ss.years(1)), name='a')
         S, F, G = ss.states('S F G')
         b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.state('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
         on = [ss.state('a.I').exit] if path else [a.I.exit] # A transition by path (ss.state('a.sa')) is not known to be an event when the delivery is made, so is not an on=
@@ -149,7 +151,7 @@ def test_hpv_cancel():
     names = ['hpv16', 'hpv18']
     def make(g):
         S, P, C, X, Z = ss.states('S P C X Z')
-        other = ss.any(ss.state(f'{o}.X') for o in names if o != g) # The siblings do not exist yet
+        [other] = [ss.state(f'{o}.X') for o in names if o != g] # The sibling does not exist yet
         return ss.Disease(S, P, C, X, Z,
             infection = S >> P @ ss.peryear(0.3),
             precin    = P >> C @ ss.years(2),
@@ -173,7 +175,7 @@ def test_hpv_cancel_ode():
     names = ['hpv16', 'hpv18']
     def make(g):
         S, P, C, X, Z = ss.states('S P C X Z')
-        other = ss.any(ss.state(f'{o}.X') for o in names if o != g)
+        [other] = [ss.state(f'{o}.X') for o in names if o != g]
         return ss.Disease(S, P, C, X, Z, infection=S >> P @ ss.peryear(0.3), precin=P >> C @ ss.years(2), clear=C >> S @ ss.years(4),
                           cancer=C >> X @ ss.years(4), cancelled=(S + P + C) >> Z @ ss.on(other), name=g)
     sim = ss.Sim([make(g) for g in names], n_agents=5000, start=2000, stop=2020, unit='year', **kw).run()
@@ -292,7 +294,8 @@ def test_with_conveyor(solvers=('abm',)):
         return
 
     def make(clock):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
+        S, I = ss.states('S I')
+        a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), name='a')
         E, I, Z = ss.states('E I Z')
         latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
         return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), init=dict(E=10_000), name='b')] # The trigger tracks a and b jointly
@@ -309,14 +312,14 @@ def test_after_event():
     sc.heading('Testing an exact dwell until an event of another module, and a time after it (ST18)')
     A, B = ss.states('A B')
     def make(**kw):
-        a = ss.Disease(A, B, go=ss.progression('A -> B', dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
+        a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
         X, Y = ss.states('X Y')
-        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, after=a.go, **kw), name='b')]
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, on=a.go, **kw), name='b')]
     for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
         res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
         assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
     with pytest.warns(RuntimeWarning, match='ss.constant'): # A function as dur= is the mean of an exponential
-        ss.Sim(ss.Disease(A, B, go=ss.progression('A -> B', dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
+        ss.Sim(ss.Disease(A, B, go=ss.Transition(A, B, dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
     return
 
 
@@ -325,7 +328,8 @@ def test_with_conveyor_ode():
 
 
 def make_on_event(order, solver='abm'):
-    a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+    S, I = ss.states('S I')
+    a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), ia=ss.Transition(I, S, dur=ss.years(1)), name='a')
     S, F, G = ss.states('S F G')
     b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b')
     mods = [a, b] if order else [b, a]
@@ -334,7 +338,8 @@ def make_on_event(order, solver='abm'):
 
 
 def treated_event(solver):
-    a = ss.Disease(inf=ss.progression('S -> I', rate=ss.peryear(0.5)), cure=ss.progression('I -> S'), name='a')
+    S, I = ss.states('S I')
+    a = ss.Disease(inf=ss.Transition(S, I, rate=ss.peryear(0.5)), cure=ss.Transition(I, S), name='a')
     S, F = ss.states('S F')
     b = ss.Disease(S, F, flag=S >> F @ ss.on(a.cure), unflag=F >> S @ ss.years(0.5), name='b')
     tx = ss.treat(ss.Treatment(moves=a.cure), where=a.I, coverage=ss.peryear(1.0), name="tx")

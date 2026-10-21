@@ -16,7 +16,7 @@ The user-facing version of this mapping, with the traps that change results, is 
 |---|---|---|
 | `BoolState('susceptible')`, `BoolState('infected')`, `BoolState('recovered')` | `S, I, R = ss.states('S I R')` (one state per mutually exclusive condition) | Exact |
 | A categorical `state` array with an `IntEnum` (tbsim's `TBS`) | One `ss.State` per value | Exact |
-| Transmission in `Infection.infect()` with `beta` | `infection = S >> I @ beta * I`, or `ss.transmission('S -> I', beta=dict(net1=..., net2=...))` over named networks | Exact for a typed `beta` (`ss.peryear(0.05)`); **not** for a dict of bare numbers, which changes meaning (below) |
+| Transmission in `Infection.infect()` with `beta` | `infection = S >> I @ beta * I`, with `beta=dict(net1=..., net2=...)` over named networks | Exact for a typed `beta` (`ss.peryear(0.05)`); **not** for a dict of bare numbers, which changes meaning (below) |
 | `set_prognoses` sampling `dur_inf`, `step_state` moving those with `ti_recovered <= ti` | `recovery = I >> R @ dur_inf` (a duration or distribution after `@` is a dwell time) | Exact in distribution |
 | `p_death` drawn at infection, death at the end of the same duration | Two transitions from `I` with the same `dur` and `p=`: `ss.Transition(I, R, dur=dur, p=0.99)`, `ss.Transition(I, ss.null, dur=dur, p=0.01)` | Exact in distribution (a branch to `ss.null` inside a list of destinations is not supported) |
 | `self.transition(uids, to={A: rate_a, B: rate_b})` (competing exits) | One transition per exit: `X >> A @ rate_a`, `X >> B @ rate_b` | Exact (competing hazards) |
@@ -69,7 +69,8 @@ add('latent_asy', 'infection', 'asymptomatic', p.inf_asy)
 if front: # The hazard falls with time since infection: recent, then remote
     add('remote', 'infection', 'infection_remote', p.k_latent)
     add('remote_asy', 'infection_remote', 'asymptomatic', p.inf_asy_remote)
-T.tb_death = ss.death('symptomatic ->', rate=p.sym_dead, name='tb_death')
+symptomatic = ss.State()
+T.tb_death = ss.death(symptomatic, rate=p.sym_dead, name='tb_death')
 T.diagnosis = ss.Transition([S.non_infectious, S.asymptomatic, S.symptomatic], S.treatment, rate=p.theta, name='diagnosis')
 
 bcg = ss.Vaccine(efficacy=dict(latent_asy=0.34, latent_non=0.34, tb_death=0.72), waning=ss.years(10), name='bcg')

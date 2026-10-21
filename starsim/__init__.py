@@ -126,14 +126,14 @@ from .connectors import Connector, modify, change
 
 t('conditions')
 from . import conditions
-from .conditions import state, any_ as any, child # Conditions on a state by path, on any of several, and on a mother when her child goes through an event
+from .conditions import state, child # Conditions on a state by path, and on a mother when her child goes through an event
 from . import kernels
 
 t('transitions')
 from .expressions import par, mother, attr
 from .transitions import (
     State, states, null, stay, on,
-    Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome,
+    Transition, birth, death, lifetable, immigration, emigration, outcome,
 )
 
 t('dimensions')

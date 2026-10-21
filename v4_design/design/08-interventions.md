@@ -157,7 +157,8 @@ ss.treat(art, deliver=to_busiest_clinics, capacity=ss.peryear(20_000))    # whil
 A cascade of care is steps that people flow through, each an ordinary delivery with its own trigger, coverage, and capacity (which is where people are lost), each producing events and memory that any later step can use. A follow-up is a step of its own, triggered by an outcome of the step it follows; it is not nested in it.
 
 ```python
-sis = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=ss.days(10)), init_prev=0.01)
+S, I = ss.states('S I')
+sis = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.01)
 rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
 pcr   = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
 drug  = ss.Treatment(cure=0.95)
@@ -257,7 +258,8 @@ ss.change(sir.pars.beta, at=[ss.days(30), ss.days(60)], to=[0.02, 0.05])
 "When" is usually `start=`, `stop=`, `at=`, or `interval=`: the same keywords for a delivery, `ss.change`, and `ss.modify`. Anything more complex is a function of the sim returning `True` or `False`, passed as `when=` to a delivery or to `ss.modify`:
 
 ```python
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=ss.days(10)), init_prev=0.01)
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01)
 home, school = ss.RandomNet(n_contacts=3, name='home'), ss.RandomNet(n_contacts=10, name='school')
 
 def many_cases(sim):

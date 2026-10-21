@@ -65,7 +65,8 @@ sim = ss.Sim(diseases=[hiv, syphilis], networks=ss.MFNet(), connectors=coinfecti
 The target is a named numeric quantity of a declared module, given as the object or as its path:
 
 ```python
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
 targets = [
     sir.pars.beta,              # a parameter
     sir.recovery.dur,           # a transition's inline value, which is a parameter too

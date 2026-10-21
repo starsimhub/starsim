@@ -8,12 +8,11 @@ agents in an agent-based run and on groups in a compartmental one. A function of
 the sim does the same job, for anything the operators cannot say.
 """
 import operator
-import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event', 'state', 'any_', 'child']
+__all__ = ['Cond', 'Event', 'state', 'child']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -40,7 +39,8 @@ class Cond:
     Examples:
         ```python
         ppl = ss.People(n_agents=10_000)
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
         eligible = (ppl.age > 65) & sir.S
         ```
     """
@@ -303,9 +303,9 @@ class Named:
     def __deepcopy__(self, memo): return self
 
 
-class Child(Event):
+class child(Event):
     """
-    `ss.child(event)`: an event on the mother, when one of her children goes through `event` (e.g. `preg.birth`), as agents
+    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
 
     Args:
         event (Event/Transition): the event that happens to the child
@@ -346,17 +346,6 @@ class Child(Event):
         return self.mothers(self.module.sim, self.args[1].uids)
 
 
-def child(event, under=None):
-    """
-    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
-
-    Args:
-        event (Event/Transition): the event that happens to the child
-        under (dur): only children younger than this
-    """
-    return Child(event, under=under)
-
-
 def set_states(cond):
     """ The states a condition is a set of (`A | B`, or one state), as (module, name) pairs; None if it is anything else """
     if cond.op == 'state':
@@ -394,7 +383,7 @@ def state(path):
 
     Examples:
         ```python
-        cancelled = (S | P | C | L) >> Z @ ss.on(ss.any(ss.state(f'{g}.X') for g in others))
+        cancelled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
         seek = ss.treat(drug, on=ss.state('ng.C').enter) # For a module made from a string
         ```
     """
@@ -403,15 +392,6 @@ def state(path):
         errormsg = f'ss.state() takes a path "module.state", e.g. "hpv18.X", not {path!r}'
         raise ValueError(errormsg)
     return StatePath('state', *parts)
-
-
-def any_(items):
-    """ `ss.any()`: true for anyone any of some conditions (or states) hold for, e.g. `ss.any(ss.state(f'{g}.X') for g in others)` """
-    items = [as_cond(item) for item in items]
-    if not items:
-        errormsg = 'ss.any() needs at least one condition'
-        raise ValueError(errormsg)
-    return functools.reduce(operator.or_, items)
 
 
 def module_refs(cond):
@@ -478,7 +458,7 @@ def state_refs(obj):
         if cond.op == 'state':
             if modname(cond.args[0]) is not None:
                 out.append((modname(cond.args[0]), cond.args[1]))
-        elif isinstance(cond, Event) and not isinstance(cond, Child): # The transition, or the states entered or left
+        elif isinstance(cond, Event) and not isinstance(cond, child): # The transition, or the states entered or left
             kind, obj, dst = cond.args
             name = modname(cond.module)
             if name is not None:
@@ -590,7 +570,7 @@ def group_reasons(cond, sim):
     state, a function of uids, events combined (`a.positive | b.positive`), or a binned property (e.g. an age)
     compared with a number inside a bin
     """
-    if isinstance(cond, ss.expressions.Mother):
+    if isinstance(cond, ss.expressions.mother):
         return [f'{cond} reads each person\'s mother, which only agents know']
     if callable(cond) and not isinstance(cond, (Cond, ss.expressions.Expr)):
         return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
@@ -612,7 +592,7 @@ def group_reasons(cond, sim):
 
 def event_leaves(cond):
     """ The event leaves of a condition, including those that its memory is read from """
-    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+    if isinstance(cond, ss.expressions.mother): # Read on the mother
         return event_leaves(cond.x)
     if not isinstance(cond, Cond):
         return []
@@ -626,7 +606,7 @@ def event_leaves(cond):
 def memory_leaves(cond, out=None):
     """ The memory leaves of a condition (e.g. `cytology.since`) """
     out = [] if out is None else out
-    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+    if isinstance(cond, ss.expressions.mother): # Read on the mother
         return memory_leaves(cond.x, out)
     if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
         return out
@@ -935,10 +915,10 @@ class Selector:
         if self.abm:
             out = np.zeros(self.shape, dtype=bool)
             uids = engine.event_uids(**event.spec())
-            out[event.mothers(self.sim, uids) if isinstance(event, Child) else uids] = True
+            out[event.mothers(self.sim, uids) if isinstance(event, child) else uids] = True
             return out
         spec = event.spec()
-        if isinstance(event, Child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
+        if isinstance(event, child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
             raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
         if 'tr' in spec:
             return engine.event_frac(spec['tr'], to=spec.get('to'))

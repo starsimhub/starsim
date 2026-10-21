@@ -513,7 +513,7 @@ class Treatment(Held):
     of several diseases, and the probability for each can differ; a modifier of an undriven transition
     (`ss.modify(ng.cure, multiply=0.5, where=...)`) multiplies the probability for the people it applies to.
     It is then given to the people in their sources. What happens at failure (resistance) is a transition of
-    the disease triggered by the outcome: `ss.Transition('I -> R_res', on=drug.failed, p=0.05)`.
+    the disease triggered by the outcome: `ss.Transition(I, R_res, on=drug.failed, p=0.05)`.
 
     Args:
         cure (float/dict): the probability that treatment cures: the person leaves whichever infected state they are in for the

@@ -1313,7 +1313,7 @@ class Agents(Engine):
         fresh = [b for b in engine.batches if id(b) not in seen]
         self._seen[tr.name] = {id(b):b for b in engine.batches} # Kept, so an id is not reused while it is remembered
         uids = engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
-        return event.mothers(self.sim, uids) if isinstance(event, ss.conditions.Child) else uids
+        return event.mothers(self.sim, uids) if isinstance(event, ss.conditions.child) else uids
 
     def step_per(self, ti):
         """ Births driven by a flow (`ss.birth(per=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once """

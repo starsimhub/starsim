@@ -801,7 +801,9 @@ def test_strains_errors():
     with pytest.raises(ss.OutOfBounds): # A protection of 1 on a time spent
         build(pair(immunity=ss.immunity(protected='R', dur=dict(I=0.6), combine='sum')))
     with pytest.raises(ss.UnknownState): # exclusive= with no state to move to
-        sis = lambda name: ss.Disease(infection=ss.transmission('S -> I', beta=0.1), recovery=ss.progression('I -> S', dur=10), name=name)
+        def sis(name):
+            S, I = ss.states('S I')
+            return ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, S, dur=10), name=name)
         build(ss.Strains('flu', [sis('a'), sis('b')], exclusive='I'))
     with pytest.raises(TypeError): # The protection is the value of what it lowers, not a positional matrix
         ss.immunity(np.eye(2), protected='R')
@@ -814,7 +816,8 @@ def test_strains_errors():
 @sc.timer()
 def test_current_state():
     sc.heading('Testing current_state(): the index of the state each agent is in')
-    sir = ss.Disease(name='sir', infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4))
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4))
     sim = ss.Sim(diseases=sir, n_agents=100, stop=2001, verbose=0).init()
     sir = sim.diseases.sir
     sir.move_to(ss.uids([0, 1]), 'I')
@@ -829,7 +832,8 @@ def test_current_state():
         cs.raw[0] = 2
     with pytest.raises(ss.UnknownState):
         sir.current_state(['X'])
-    ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4)), stop=2001, verbose=0).init()
+    S, I, R = ss.states('S I R')
+    ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):
         ode.diseases.sir.current_state()
     return cs

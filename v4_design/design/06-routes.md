@@ -22,7 +22,7 @@ There are two ways to mention a state in a rate, and they answer different quest
 So a bare state is written when people catch the infection from people, and `.n` when the formula needs the number itself (a reservoir, a vector, a threshold). Three consequences:
 
 - **Several infectious states are a sum of exposures**, each with its own coefficient: `S >> I @ beta * I + beta_vax * I_vax`, or `S >> E @ beta * (I + 0.5 * A)`.
-- **A rate with no state is not transmission.** `S >> I @ beta` is legal and is a constant hazard that does not depend on anyone being infectious (an importation rate, say), exactly as `I >> R @ gamma` is a constant hazard of recovery. In the short form, the word `transmission` in `ss.transmission('S -> I', beta=0.05)` is what stands for `* I`.
+- **A rate with no state is not transmission.** `S >> I @ beta` is legal and is a constant hazard that does not depend on anyone being infectious (an importation rate, say), exactly as `I >> R @ gamma` is a constant hazard of recovery.
 - **A bare state that is not people is an error.** There is no contact with a reservoir to work out, so `beta * W` (with `W` bacteria in water) raises `ExposureToCount`, which says to write `W.n`.
 
 `describe()` prints every rate with its bare states expanded, for example `rate = 0.3 × I.n / N  [homogeneous mixing]` under `infection`, so what a rate resolved to can always be checked.
@@ -33,8 +33,6 @@ What `beta` means follows from the mixing:
 - **Networks or mixing pools given** (`ss.Sim(sir, networks=...)`). They supply who meets whom and how often, and `beta` is the transmission probability per contact (per act, on a sexual network that defines acts).
 
 The two readings are the same rule: the hazard is `beta` times the contact rate times the fraction of contacts that are infectious, and the default contact rate is 1. Which reading applies is printed by `describe()`, with the resulting units of `beta`.
-
-In the string form the source is a keyword: `ss.transmission('S -> E', beta=0.05, source='I')` ([03-states-and-transitions.md](03-states-and-transitions.md)).
 
 ## The force of infection
 
@@ -68,7 +66,7 @@ On a network that keeps individual contacts, the same quantities apply per edge.
 ```
 h[d]      = −ln(1 − p[d])                         the hazard per act, for the edge's direction d (from u's side to v's)
 M[e]      = Π_k (1 − s_k · (1 − m_k))             the modifiers of the transmission on this route (s_k = 1 without share=)
-hazard[e] = w[e] · a[e] · h[d] · w_s · rel_trans[u] · rel_sus[v] · M[e]     (w_s the weight of u's state in source=)
+hazard[e] = w[e] · a[e] · h[d] · w_s · rel_trans[u] · rel_sus[v] · M[e]     (w_s the weight of u's state in the rate, 0.5 for A in beta * (I + 0.5 * A))
 p[e]      = 1 − exp(−hazard[e] · dt)            (= 1 − (1 − p[d])^(a[e]·dt) when nothing else applies)
 p[v]      = 1 − Π_e (1 − p[e])                    over all edges into v
 ```
@@ -85,7 +83,8 @@ Infectiousness belongs to the disease and contact to the routes, but infectiousn
 
 <!-- fragment -->
 ```python
-infection = ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)))
+S, I = ss.states('S I')
+infection = ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)) * I)
 sim = ss.Sim(hiv, networks=[ss.MFNet(), needles])
 ```
 
@@ -204,9 +203,10 @@ The table has one approximation per route. A network with strong variation in th
 Things that need to know who a person's contacts are (contact tracing, partner notification, the transmission tree) only work on routes that keep contacts, and so only in an agent-based run.
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=0.05 * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
     init_prev = 0.01,
 )
 

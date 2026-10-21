@@ -110,7 +110,7 @@ msim.plot()
 
 ## Declared births and deaths
 
-Births and deaths can be declared for the whole population, in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per person per unit time) into each disease's first state (or the state named, e.g. `ss.birth('-> S', rate=r)`), and `ss.death(rate=r)` removes people from every state at rate `r`:
+Births and deaths can be declared for the whole population, in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per person per unit time) into each disease's first state (or the state given, e.g. `ss.birth(sir.S, rate=r)`), and `ss.death(rate=r)` removes people from every state at rate `r`:
 
 ```{python}
 S, I = ss.states(2)
@@ -127,7 +127,7 @@ sim = ss.Sim(sis, demographics=demographics, start='2000', stop='2050', verbose=
 sim.results.sis.plot()
 ```
 
-The births and deaths become transitions of the disease (of the first one, if there are several), so they are its results (`sim.results.sis.births`, `sim.results.sis.deaths`) like any other transition. With several diseases, the same people are born into and die from every one of them: as agents, the diseases share the people, and in a compartmental run, their states are tracked jointly. A disease-specific death rate is a death from one state, declared in the disease: `ss.death('I ->', rate=ss.peryear(0.1))`. As agents, people age when the model has births or deaths, as with the demographics modules. For rates that vary by age or year, or pregnancy, use the demographics modules above, which can run on their own timestep.
+The births and deaths become transitions of the disease (of the first one, if there are several), so they are its results (`sim.results.sis.births`, `sim.results.sis.deaths`) like any other transition. With several diseases, the same people are born into and die from every one of them: as agents, the diseases share the people, and in a compartmental run, their states are tracked jointly. A disease-specific death rate is a death from one state, declared in the disease: `ss.death(I, rate=ss.peryear(0.1))`. As agents, people age when the model has births or deaths, as with the demographics modules. For rates that vary by age or year, or pregnancy, use the demographics modules above, which can run on their own timestep.
 
 ## Summary
 

@@ -12,9 +12,10 @@ Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-
 ```python
 import starsim as ss
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 ```
@@ -38,9 +39,10 @@ The solver is set with `solver=`, given to `ss.Sim(...)`, or to `sim.run(...)` b
 **The one approximation `'auto'` makes** is to represent a non-exponential dwell time by Erlang stages, and it says so (a fixed delay, `ss.constant`, is not approximated: it is a conveyor of whole steps, [below](#a-fixed-delay-and-a-minimum-stay)):
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=ss.weibull(c=1.4, scale=ss.days(8))),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=ss.weibull(c=1.4, scale=ss.days(8))),
     init_prev = 0.01,
 )
 ```
@@ -52,7 +54,7 @@ solver: ode (every part of the model has a compartmental form)
 sir: R0 = 2.19, with 100 infectious at the start
 ```
 
-A lognormal recovery time does not by itself turn a two-line model into an agent-based one. `'auto'` never approximates the mixing (a network stays a network) and never drops individual-level structure (per-person attributes, histories, custom per-agent code); a model with any of those runs as agents.
+A lognormal recovery time does not by itself turn a simple model into an agent-based one. `'auto'` never approximates the mixing (a network stays a network) and never drops individual-level structure (per-person attributes, histories, custom per-agent code); a model with any of those runs as agents.
 
 ### What makes a model agent-based
 
@@ -361,6 +363,6 @@ Some questions need most of a model to run as smooth flows while a few rare tran
 - **A separate module class for quantities that are not people.** They are ordinary states that hold counts.
 - **The diffusion approximation as the default stochastic solver.** It fails at small counts, which is where stochasticity matters.
 - **A menu of network-to-ODE closures.** One standard approximation per ingredient is enough. Someone who needs the network's exact behavior can run agents.
-- **Agent-based as the default for every model.** A two-line SIR should run as the three equations it is, instantly. Models that need agents get them automatically.
+- **Agent-based as the default for every model.** A simple SIR should run as the three equations it is, instantly. Models that need agents get them automatically.
 - **Analyzing user functions in advance.** Trying them is simpler and gives a clearer message.
 - **Making the user write the derivative function.** It is positional, unchecked, and cannot be stratified automatically.

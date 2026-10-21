@@ -85,10 +85,11 @@ dist   = [0] + [150]*5 + [50, 100]*5 # Distance from the city, in km
 angle  = [0] + list(angles) + list(np.repeat(angles, 2))
 places = ss.geo(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
 
+S, E, I, R = ss.states('S E I R')
 seir = ss.Disease(
-    infection = ss.transmission('S -> E', beta=ss.perday(2/14), source='I'),
-    onset     = ss.progression('E -> I', dur=ss.normal(7, 1, unit='days')),
-    recovery  = ss.progression('I -> R', dur=ss.normal(14, 2, unit='days')),
+    infection = ss.Transition(S, E, rate=ss.perday(2/14) * I),
+    onset     = ss.Transition(E, I, dur=ss.normal(7, 1, unit='days')),
+    recovery  = ss.Transition(I, R, dur=ss.normal(14, 2, unit='days')),
     init      = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
 )
 seir.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))
@@ -146,11 +147,12 @@ ages = np.arange(89)
 pyramid = np.exp(-0.017*ages) # The stable age pyramid for births of 0.017 a year
 places = ss.geo(names=[f'p{i}' for i in range(n)], pop=pop, x=rng.uniform(0, 300, n), y=rng.uniform(0, 300, n))
 
+S, E, I, R = ss.states('S E I R')
 measles = ss.Disease(
-    infection = ss.transmission('S -> E', beta=ss.perday(3.9), source='I'),
-    onset     = ss.progression('E -> I', dur=ss.erlang(k=40, mean=ss.days(10))),
-    recovery  = ss.progression('I -> R', dur=ss.normal(7, 2, unit='days')),
-    births    = ss.birth('-> S', rate=ss.peryear(0.017)),
+    infection = ss.Transition(S, E, rate=ss.perday(3.9) * I),
+    onset     = ss.Transition(E, I, dur=ss.erlang(k=40, mean=ss.days(10))),
+    recovery  = ss.Transition(I, R, dur=ss.normal(7, 2, unit='days')),
+    births    = ss.birth(S, rate=ss.peryear(0.017)),
     deaths    = ss.death(lifetable=ss.lifetable(ages, 0.017*pyramid)), # How many of a cohort die at each age
     init      = dict(I=ss.by(patch=[3]*n), R=0.95),
     name      = 'measles',

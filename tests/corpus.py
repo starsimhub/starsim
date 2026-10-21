@@ -23,8 +23,9 @@ def make_sim(model, kwargs, **defaults):
 
 
 def make_sir(beta=0.3, dur=10, name='sir', **kwargs):
-    """ The two-line SIR """
-    return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=dur), init_prev=0.01, name=name, **kwargs)
+    """ A simple SIR """
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=dur), init_prev=0.01, name=name, **kwargs)
 
 
 #%% The conformance corpus
@@ -36,10 +37,11 @@ def sir(**kwargs):
 
 def seir(**kwargs):
     """ 2. SEIR, with the source of infection given """
+    S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(
-        infection = ss.transmission('S -> E', beta=0.3, source='I'),
-        latency   = ss.progression('E -> I', dur=5),
-        recovery  = ss.progression('I -> R', dur=10),
+        infection = ss.Transition(S, E, rate=0.3 * I),
+        latency   = ss.Transition(E, I, dur=5),
+        recovery  = ss.Transition(I, R, dur=10),
         init_prev = 0.01,
         name = 'seir',
     )
@@ -60,11 +62,12 @@ def lognormal(**kwargs):
 
 def branching(**kwargs):
     """ 5. A branch on leaving I, with a dwell time in hospital and a competing death hazard """
+    S, I, R, H, D = ss.states('S I R H D')
     dis = ss.Disease(
-        infection = ss.transmission('S -> I', beta=0.3, source='I'),
-        course    = ss.progression('I -> R | H', dur=8, p=[None, 0.1]),
-        discharge = ss.progression('H -> R', dur=10),
-        death     = ss.progression('H -> D', rate=ss.perday(0.02)),
+        infection = ss.Transition(S, I, rate=0.3 * I),
+        course    = ss.Transition(I, [R, H], dur=8, p=[None, 0.1]),
+        discharge = ss.Transition(H, R, dur=10),
+        death     = ss.Transition(H, D, rate=ss.perday(0.02)),
         init_prev = 0.01,
         name = 'branching',
     )
@@ -82,7 +85,8 @@ def ages(**kwargs):
 def patches(mobility=True, **kwargs):
     """ 7. An SIR on three patches, with gravity mobility or with none """
     towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
     sir.stratify(patch=towns, mobility=ss.gravity(k=2e-4) if mobility else None)
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=100_000)
 
@@ -96,8 +100,10 @@ def vaccination(**kwargs):
 
 def coinfection(**kwargs):
     """ 9. HIV and syphilis, each modifying the other, over a sexual network """
-    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.002, f2m=0.001))), init_prev=0.05, name='hiv')
-    syph = ss.Disease(infection=ss.transmission('S -> I', beta=0.01), cure=ss.progression('I -> S', dur=ss.years(3)), init_prev=0.05, name='syph')
+    S, I = ss.states('S I')
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.002, f2m=0.001)) * I), init_prev=0.05, name='hiv')
+    S, I = ss.states('S I')
+    syph = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), cure=ss.Transition(I, S, dur=ss.years(3)), init_prev=0.05, name='syph')
     connectors = [
         ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'),
         ss.modify(syph.rel_sus, multiply=5.0, where=hiv.I, name='syph_sus'),
@@ -107,7 +113,8 @@ def coinfection(**kwargs):
 
 def network(**kwargs):
     """ 10. An SIS over a sexual network, which 'auto' runs as agents """
-    sis = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mf=ss.peract(m2f=0.08, f2m=0.05))), recovery=ss.progression('I -> S', dur=ss.years(5)), init_prev=0.05, name='sis')
+    S, I = ss.states('S I')
+    sis = ss.Disease(infection=ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.08, f2m=0.05)) * I), recovery=ss.Transition(I, S, dur=ss.years(5)), init_prev=0.05, name='sis')
     return make_sim(sis, kwargs, networks=ss.MFNet(), n_agents=2_000, start=2000, stop=2010)
 
 
@@ -149,7 +156,8 @@ def malaria(**kwargs):
 
 def screening(**kwargs):
     """ 13. Screening in rounds, with treatment of those who test positive """
-    sis = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=10), init_prev=0.01, name='sis')
+    S, I = ss.states('S I')
+    sis = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.01, name='sis')
     test = ss.Diagnostic(sensitivity=0.9, specificity=0.95)
     drug = ss.Treatment(cure=0.95)
     screen = ss.screen(test, coverage=0.4, interval=7, start=30, name='screen')
@@ -161,10 +169,11 @@ def custom(**kwargs):
     """ 14. A function of the sim in a rate slot, which works on age groups too """
     def severity(sim):
         return 0.1 + 0.3*(sim.people.age > 50)
+    S, I, H, R = ss.states('S I H R')
     dis = ss.Disease(
-        infection = ss.transmission('S -> I', beta=0.3, source='I'),
-        course    = ss.progression('I -> H | R', p=severity, dur=7),
-        discharge = ss.progression('H -> R', rate=0.1),
+        infection = ss.Transition(S, I, rate=0.3 * I),
+        course    = ss.Transition(I, [H, R], p=severity, dur=7),
+        discharge = ss.Transition(H, R, rate=0.1),
         init_prev = 0.01,
         name = 'custom',
     )
@@ -188,7 +197,8 @@ def outcomes(beta=0.3, likelihood=None, data=None, **kwargs):
 
 def threshold(**kwargs):
     """ 16. Distancing while more than 1,000 are infected, as a function of the sim """
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.001, name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.001, name='sir')
     distancing = ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.results.sir.n_I[sim.ti - 1] > 1000, name='distancing')
     return make_sim(sir, kwargs, unit='day', stop=200, total_pop=50_000, interventions=distancing)
 
@@ -218,7 +228,8 @@ def tb(**kwargs):
 def flu_rsv(**kwargs):
     """ 18. Two diseases in one sim, with age stratified on the sim """
     def make(name, beta, dur):
-        return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=dur), init_prev=0.01, name=name)
+        S, I = ss.states('S I')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=dur), init_prev=0.01, name=name)
     return make_sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], kwargs, unit='day', stop=100, total_pop=10_000, stratify=dict(age=[0, 5, 18, 65]))
 
 
@@ -229,7 +240,8 @@ def make_seasonal(b=0.5, dates=None):
     r = ss.timeseries(dict(zip(dates.strftime('%Y-%m-%d'), np.linspace(1.0, 0.3, len(dates)))))
     b = ss.par(b, bounds=[0.1, 1])
     season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
-    return ss.Disease(infection=ss.transmission('S -> I', beta=b*season*r), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=b*season*r * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
 
 def seasonal(b=0.5, data=None, **kwargs):
     """ The epydemix and summer2 pattern: beta as a fitted value times `ss.seasonal` times `ss.timeseries` """
@@ -248,7 +260,8 @@ def age_vaccine(**kwargs):
 
 def patch_matrix(dim='patch', **kwargs):
     """ The camdl and flepiMoP pattern: two places with an explicit contact matrix over the places, by a dimension called `patch` """
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.1), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(**{dim:[10, 0]})), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(**{dim:[10, 0]})), name='sir')
     sir.stratify(**{dim:['a', 'b']}, split=[0.5, 0.5])
     contacts = ss.contacts(**{dim:np.array([[4.0, 1.0], [1.0, 4.0]])})
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=20_000, networks=contacts)

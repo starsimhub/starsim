@@ -29,14 +29,12 @@ class Presentation:
 
         lines.append(f"{type(mod).__bases__[0].__name__ if type(mod).__bases__[0] is not ss.Module else type(mod).__name__} '{mod.name}': {len(self.states)} states, {len(self.transitions)} transitions")
         people = ', '.join(s.name for s in self.people_states)
-        add('states', people, self.guessed.get('states'))
+        add('states', people)
         for state in self.count_states:
             guess = state.guessed.get('people')
             add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
         for state in self.infectious:
-            sources = [name for name,tr in self.transitions.items() if state in tr.terms]
-            guessed = 'infectious' in state.guessed
-            add('', f'{state.name} infectious', f"guessed: source of {sc.strjoin(repr(s) for s in sources)}" if guessed else None)
+            add('', f'{state.name} infectious')
         infected = [s.name for s in self.infected if s.people]
         if infected and not self.transmissions: # With a transmission, they are its destination and its source, as above
             add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
@@ -54,9 +52,9 @@ class Presentation:
         for name,tr in self.transitions.items():
             if tr.contact:
                 leaf = beta_leaf(tr)
-                weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (source=dict(...))
+                weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (beta * (I + 0.5*A))
                 source = ' + '.join(f'{weight(coef)}{s.name}' for s,coef in tr.terms.items())
-                guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([tr.guessed['source']] if 'source' in tr.guessed else []), sep='; ')
+                guess = f'name {tr.guessed["name"]}' if 'name' in tr.guessed else None
                 add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
@@ -113,10 +111,9 @@ class Presentation:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
                 at_exit = f'decided as people leave, from their time in {tr.src[0].name}' if name in self.dwell_trs else None
-                ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis, or a function giving a row, is one entry
+                ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry
                 rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
                 how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]
-                how += [f'a row, one column for each of {sc.strjoin(d.name for d in tr.dst)}, normalized'] if any(isinstance(p, ss.expressions.Column) for p in tr.p) else []
                 stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('null', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
                 add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in ps] + stays)}', '; '.join(how) or at_exit)
             elif 'p' in tr.guessed:

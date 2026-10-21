@@ -197,7 +197,8 @@ def test_multi(do_plot=do_plot):
 def test_layers():
     sc.heading('Testing contact layers with a beta for each, under both engines')
     def run(beta, solver, layers=('home', 'school')):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
         nets = [ss.contacts('Kenya', layer=layer) for layer in layers]
         sim = ss.Sim(sir, networks=nets, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100, solver=solver, total_pop=10_000, verbose=0, **(dict(n_agents=10_000) if solver == 'abm' else {}))
         return sim.run().results.sir.infection.cum[-1]

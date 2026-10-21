@@ -469,13 +469,13 @@ def test_arithmetic():
 
     # The slot is checked: a rate times a duration, or a duration, is not a rate, and a rate is not a dwell time
     S, I, R = ss.states('S I R')
-    for slip in [lambda: ss.progression('I -> R', rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
-                 lambda: ss.progression('I -> R', rate=ss.days(10)), lambda: ss.progression('I -> R', dur=ss.prob(0.1, 'day')),
+    for slip in [lambda: ss.Transition(I, R, rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
+                 lambda: ss.Transition(I, R, rate=ss.days(10)), lambda: ss.Transition(I, R, dur=ss.prob(0.1, 'day')),
                  lambda: ss.Disease(S >> I @ ss.perday(0.3) * I * ss.days(3), I >> R @ ss.days(10), name='sir')]:
         with pytest.raises(ss.WrongDimension):
             slip()
     sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), I >> R @ (1/ss.days(10)), name='sir') # A duration that divides is fine
-    assert ss.progression('I -> R', dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
+    assert ss.Transition(I, R, dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
     return sir
 
 

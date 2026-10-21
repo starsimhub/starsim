@@ -9,9 +9,10 @@ Justified by [best-practices/parameters-and-distributions.md](../best-practices/
 A parameter used once lives in the transition that uses it. There is no parameter block to fill in.
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
     init_prev = 0.01,
 )
 ```
@@ -44,7 +45,7 @@ sir = ss.Disease(
 )
 ```
 
-An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates. In the string form it is passed the same way: `ss.transmission('S -> I', beta=beta)`.
+An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates.
 
 - **Names.** A named parameter is collected into the module's `pars`, Starsim's parameter container, under its name: `sir.pars.beta`. The name is the keyword if it was passed as one (`ss.Disease(beta=ss.par(0.05), ...)`), else the variable it is bound to, by the same lookup as for transitions ([01-objects.md](01-objects.md#names)). A plain Python number used in a rate is just a number; wrap it in `ss.par` to make it addressable by name.
 - **`bounds`** is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data, wherever it is used (a rate, an initial value, a seasonal mean, a modifier's amount) ([13-inference.md](13-inference.md)). Bounds that are positive and span a factor of 10 or more are searched on a log scale, and others on a linear one. Bounds given as bare numbers are in the unit of the value, and typed bounds are converted (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`). A value outside its bounds raises `OutOfBounds` when the sim is initialized.
@@ -103,7 +104,8 @@ Every solver handles every form or says that it cannot, and no solver freezes a 
 A distribution means two different things depending on where it is put, and the place decides:
 
 ```python
-ss.progression('I -> R', dur=ss.lognorm_ex(mean=10, std=3, unit='days'))    # variation between people
+I, R = ss.states('I R')
+ss.Transition(I, R, dur=ss.lognorm_ex(mean=10, std=3, unit='days'))    # variation between people
 ss.par(0.05, prior=ss.lognorm_ex(mean=0.05, std=0.01))                      # uncertainty about one number
 ```
 
@@ -157,9 +159,10 @@ Values live inline by default. They can also be supplied separately, which is us
 
 ```python
 beta = ss.par(bounds=[0.001, 2.0], doc='transmission rate')
+S, I, R = ss.states('S I R')
 sir  = ss.Disease(
-    infection = ss.transmission('S -> I', beta=beta),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=beta * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
 )
 sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
 ```

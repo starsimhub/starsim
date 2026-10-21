@@ -41,7 +41,8 @@ def make_beta(kind='both', b=0.5, init=100, data=None, **kwargs):
     b = ss.par(b, bounds=[0.1, 1])
     season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
     beta = dict(ts=b*r, season=b*season, both=b*season*r)[kind]
-    dis = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=init), name='sir')
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=init), name='sir')
     return corpus.make_sim(dis, kwargs, total_pop=1e6, unit='day', start=start, stop=stop, data=data)
 
 
@@ -329,7 +330,8 @@ def test_value_per_level():
     sc.heading('Testing a parameter with a value for each place, fitted and projected')
     def make(b, data=None):
         beta = ss.par(ss.by(patch=list(b)), bounds=[0.1, 0.8])
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=0.1), init=dict(I=ss.by(patch=[10, 10])), name='sir')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=0.1), init=dict(I=ss.by(patch=[10, 10])), name='sir')
         sir.stratify(patch=['a', 'b'])
         return ss.Sim(sir, stop=60, data=data, verbose=0)
     truth = make([0.25, 0.4]).run().results.sir.infection
@@ -349,7 +351,8 @@ def test_fitted_where_used():
     sc.heading('Testing parameters fitted where users put them: a modifier\'s amount, typed values and bounds')
     def make(effect, dur):
         beta = ss.par(0.3, name='beta')
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=dur), init=dict(I=10), name='sir')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=dur), init=dict(I=10), name='sir')
         masks = ss.modify(sir.pars.beta, multiply=effect, start=30) # A parameter used only by an intervention
         return ss.Sim(sir, interventions=masks, unit='day', stop=60, verbose=0)
     truth = make(0.4, ss.days(12)).run().results.sir.infection
@@ -369,7 +372,8 @@ def test_fitted_where_used():
 
     # A network's parameter, which a compartmental run turns into contact rates
     def netted(n_contacts):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
         return ss.Sim(sir, networks=ss.RandomNet(n_contacts=n_contacts), solver='ode', unit='day', stop=40, verbose=0)
     n_I = netted(6).run().results.sir.n_I
     sim = netted(ss.par(4, bounds=[2, 10]))

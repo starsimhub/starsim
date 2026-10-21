@@ -151,7 +151,7 @@ plt.legend()
 plt.show()
 ```
 
-For a declared disease, a seasonal `beta` can also be given directly: `ss.transmission('S -> I', beta=ss.seasonal(mean=ss.peryear(0.4), amplitude=0.6, peak='January'))`.
+For a declared disease, a seasonal `beta` can also be given directly: `S >> I @ ss.seasonal(mean=ss.peryear(0.4), amplitude=0.6, peak='January') * I`.
 
 ## Connectors written as code
 

@@ -622,7 +622,7 @@ def test_cause_of_death():
     """ Someone whose death two modules request in one step dies once, of one cause, counted once """
     sc.heading('Testing causes of death...')
     S, I = ss.states(2)
-    sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death('I ->', rate=ss.peryear(1.0)), init=dict(I=10_000), name='sis')
+    sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init=dict(I=10_000), name='sis')
     sim = ss.Sim(diseases=sis, demographics=ss.Deaths(death_rate=ss.peryear(1.0), rate_units=1), n_agents=10_000, start=2010, stop=2011, dt=ss.months(1), verbose=0).run()
     r = sim.results
     by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.new.sum(), r.new_deaths.sum()
@@ -656,7 +656,8 @@ def test_declared_newborns():
     """ Agents added by ss.Births and ss.Pregnancy (including the unborn) enter a declared disease, with a level of each dimension """
     sc.heading('Testing newborns in a declared disease')
     for dem in [ss.Births(birth_rate=40), ss.Pregnancy(fertility_rate=40)]:
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=2), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=2 * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
         sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
         sim.run()
         r = sim.results

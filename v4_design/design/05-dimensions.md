@@ -273,7 +273,8 @@ superinfection = latent >> latent @ ss.peryear(3) * active
 A transition can change a person's level as well as their state with `move=`, an arrow between two levels (which also limits the transition to people at the first) or the level people move to (for a clock, the time it is set to), and move them up a counter with `increment=` ([counters](#counters-and-clocks)). This is how one of two strains progresses alone, or resistance is acquired on progression:
 
 ```python
-ss.progression('latent -> active', rate=ss.peryear(0.1), move=dict(strain='A+B -> A'))
+latent, active = ss.states('latent active')
+ss.Transition(latent, active, rate=ss.peryear(0.1), move=dict(strain='A+B -> A'))
 ```
 
 tbsim's drug resistance (`tbsim.TB(drugs=['RIF', 'INH'])`) is built this way: the levels are the sets of strains people can carry, and treatment that fails is a transition that moves people to the strains that were not cured, with any resistance they acquired.

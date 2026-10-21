@@ -102,7 +102,7 @@ def is_declared(cls):
     for stmt in cls.body:
         if isinstance(stmt, ast.Assign) and isinstance(stmt.value, (ast.BinOp, ast.Call)):
             src = ast.unparse(stmt.value)
-            if '>>' in src or 'ss.states(' in src or 'ss.transmission(' in src or 'ss.progression(' in src:
+            if '>>' in src or 'ss.states(' in src or 'ss.State(' in src or 'ss.Transition(' in src:
                 return True
     return False
 

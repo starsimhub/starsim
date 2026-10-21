@@ -100,7 +100,7 @@ def test_odin_delay():
         onset     = E >> I @ ss.constant(ss.days(14)), # A conveyor of 14 steps, not stiff Erlang stages
         recovery  = I >> R @ ss.days(30),
         waning    = R >> S @ ss.days(60),
-        births    = ss.birth('-> S', rate=ss.peryear(b)),
+        births    = ss.birth(S, rate=ss.peryear(b)),
         deaths    = ss.death(rate=ss.peryear(b)),
         history   = ss.null >> I @ ss.timeseries({0: ss.perday(surv), 14: 0}), # odin's delay() takes the first 14 days from before the start (see the vignette's README)
         init      = dict(I=1),

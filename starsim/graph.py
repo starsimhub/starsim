@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Column, Count, did_you_mean, Expr, is_one, linear, par, Row, Share, to_pars
+from .expressions import as_expr, BinOp, Count, did_you_mean, Expr, is_one, linear, par, Row, Share, to_pars
 from .parameters import by, TimeValue
 from .transitions import FlowSum, outcome, State, Transition
 from .presentation import Presentation, TransitionTable
@@ -24,7 +24,7 @@ def inner_pars(val):
 
 
 def bad_end(end, side):
-    """ The message for a source or destination of a transition that is not a state (or a state's name): what to write instead """
+    """ The message for a source or destination of a transition that is not a state: what to write instead """
     null, stay = ss.transitions.null, ss.transitions.stay
     if end is null and side == 'source':
         return 'ss.null cannot be one of several sources of a transition: for an inflow, give it alone, e.g. ss.Transition(ss.null, S, rate=0.1)'
@@ -32,6 +32,8 @@ def bad_end(end, side):
         return 'ss.stay is a destination, not a source: give it as one destination of a split, e.g. ss.Transition(I, [R, ss.stay], p=[0.3, None], dur=10)'
     elif end is null or end is stay:
         return f'{end} is one destination of a split, with at least one other, e.g. ss.Transition(I, [R, {end}], p=[0.9, 0.1], dur=10)'
+    if isinstance(end, str):
+        return f'the {side} of a transition is a state, not its name "{end}": declare the states and give them, e.g. S, I, R = ss.states(3) and ss.Transition(S, I, rate=beta * I)'
     if isinstance(end, ss.conditions.Cond):
         names = [name for _,name in ss.conditions.leaf_states(end)]
     else:
@@ -48,10 +50,9 @@ class Graph(Presentation):
     """
     The states and transitions of one module
 
-    The graph is built when the module is constructed. It names everything, infers
-    states from arrow strings, works out the source of infection of each transmission
-    and which states are people, turns inline values into named parameters, and checks
-    the result. Every guess is recorded, in `graph.guessed` and in the `guessed` of each state and transition.
+    The graph is built when the module is constructed. It names everything, works out
+    which states are people and which transitions are transmissions (from their rates),
+    turns inline values into named parameters, and checks the result. Every guess is recorded, in `graph.guessed` and in the `guessed` of each state and transition.
 
     This class is not usually used directly: see `ss.Disease`.
 
@@ -83,7 +84,6 @@ class Graph(Presentation):
         self.attrs = sc.objdict() # Values for each person: see ss.attr
         self.derived = [] # Stratifications by a derived attribute, which add no groups: see stratify()
         self.guessed = sc.objdict()
-        self.inferred = False # Whether the states were inferred from arrow strings
         self.strats = [] # Stratifications, filled by stratify()
         self.transfers = sc.objdict() # Movement between the levels of a stratification
 
@@ -210,71 +210,40 @@ class Graph(Presentation):
         return
 
     def resolve_states(self):
-        """ Find the states: the ones declared, or else every name in an arrow string """
-        # Find all the state objects used in the transitions
+        """ Find the states: the ones declared, and those the transitions use """
         trs = list(self.transitions.values()) + self._unnamed
         found = {id(s):s for s in self._declared}
-        strings = sc.autolist()
         self._refs = [] # States used only inside a rate
         for tr in trs:
             for side,ends in [('source', tr.src or []), ('destination', tr.dst or [])]:
                 for end in ends:
-                    if not isinstance(end, (State, str)):
+                    if not isinstance(end, State):
                         raise TypeError(bad_end(end, side))
-            for end in (tr.src or []) + (tr.dst or []):
-                if isinstance(end, State): found[id(end)] = end
-                else:                      strings += end
+                    found[id(end)] = end
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
                 if expr is not None:
                     for leaf in expr.leaves:
                         for s in ([leaf] if isinstance(leaf, State) else leaf.states if isinstance(leaf, Count) else []):
                             if id(s) not in found:
                                 self._refs.append(s)
-            if tr._pending is not None: # The source of a transmission, if given
-                strings += [s for s in (list(tr._pending[1]) if isinstance(tr._pending[1], dict) else sc.tolist(tr._pending[1])) if isinstance(s, str)]
         for s in self._refs: # A state used only in a rate still belongs to this module unless another module has claimed it
             if s.module is None or s.module is self.module:
                 found[id(s)] = s
-        declared = sorted(found.values(), key=lambda s: s.order)
+        statelist = sorted(found.values(), key=lambda s: s.order)
 
-        # Name the declared states
-        for i,state in enumerate(declared):
+        # Name the states
+        for i,state in enumerate(statelist):
             if state.name is None:
                 state.name = self.names.get(id(state))
             if state.name is None:
                 used = [tr.name or tr.arrow for tr in trs if any(end is state for end in (tr.src or []) + (tr.dst or []))]
                 raise ss.UnnamedState(f'state number {i+1} of the module has no name. It is used in {used}, and no variable or keyword holding it was found.\n'
                                       f"     Give the names up front: S, I, R = ss.states('S I R').")
-
-        # Either check the strings against the declared states, or infer the states from them
-        names = [s.name for s in declared]
-        if declared:
-            for string in strings:
-                if string not in names:
-                    raise ss.UnknownState(f'no state named "{string}" was declared in "{self.module.name}". Declared states are {sc.strjoin(names)}{did_you_mean(string, names)}')
-            statelist = declared
-        else:
-            self.inferred = True
-            self.guessed['states'] = 'inferred from the arrows'
-            for string in strings:
-                if not string.isidentifier():
-                    raise ss.UnknownState(f'"{string}" in an arrow string of "{self.module.name}" is not a state name. Branches are written with "|", e.g. "I -> R | D".')
-            statelist = [State(name) for name in dict.fromkeys(strings)] # Unique names, in order of first appearance
         for state in statelist:
             if state.module is not None and state.module is not self.module:
                 raise ss.DuplicateDeclaration(f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
             state.module = self.module
             self.add(self.states, state.name, state)
-
-        # Replace strings with the states
-        def lookup(end):
-            return self.states[end] if isinstance(end, str) else end
-        for tr in trs:
-            if tr.src is not None: tr.src = [lookup(end) for end in tr.src]
-            if tr.dst is not None: tr.dst = [lookup(end) for end in tr.dst]
-            if tr._pending is not None and tr._pending[1] is not None:
-                beta, source = tr._pending
-                tr._pending = (beta, {lookup(end):w for end,w in source.items()} if isinstance(source, dict) else [lookup(end) for end in sc.tolist(source)]) # A dict gives a weight for each state
 
         # Initial conditions given on the module
         for name,val in self.init.items():
@@ -289,7 +258,7 @@ class Graph(Presentation):
         for tr in self._unnamed:
             src = '_'.join([s.name for s in tr.src or []]) or 'in'
             dst = '_'.join([s.name for s in tr.dst or []]) or 'out'
-            base = f'{src}_to_{dst}'
+            base = f'{src}_to_{dst}' if tr.dst is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later
             name = base
             count = 1
             while name in self.transitions:
@@ -300,32 +269,9 @@ class Graph(Presentation):
             self.add(self.transitions, name, tr)
 
         for name,tr in self.transitions.items():
-            if tr.dst is None:
+            if tr.dst is None and not (tr.inflow and not tr.state_given): # A birth with no state is into the first state (see resolve_people())
                 errormsg = f'The transition "{name}" has no destination'
                 raise ValueError(errormsg)
-
-            # ss.transmission(): the rate is beta times the source of infection
-            if tr._pending is not None:
-                beta, sources = tr._pending
-                if sources is None:
-                    infectious = [s for s in self.states.values() if s.infectious]
-                    if infectious:
-                        sources = infectious
-                        tr.guessed['source'] = 'the states declared infectious'
-                    else:
-                        sources = tr.dst[:1]
-                        tr.guessed['source'] = 'source is the destination'
-                        latent = self.latent_states(tr)
-                        if latent:
-                            raise ss.SourceNeeded(f'"{name}" ({tr.arrow}) leads to {tr.dst[0].name}, from which people move on to {sc.strjoin(s.name for s in latent)} and then on again, so whether they infect others in {tr.dst[0].name} (as in an SIR with hospital care) or in {latent[0].name} (as in an SEIR) cannot be guessed.\n'
-                                                  f'     Give the source, e.g. ss.transmission("{tr.arrow}", beta=..., source="{latent[0].name}").')
-                weights = sources if isinstance(sources, dict) else {s:1 for s in sources} # source=dict(P=1, EL=0.55) is beta * (P + 0.55*EL)
-                terms = [s if (sc.isnumber(w) and w == 1) else as_expr(w)*s for s,w in weights.items()]
-                source = terms[0]
-                for term in terms[1:]:
-                    source = source + term
-                tr.rate = as_expr(beta) * source
-                tr._pending = None
 
             if tr.undriven: # Built before (the same transition in another module): its rate of 0 is set again in resolve_exits()
                 tr.rate = None
@@ -338,8 +284,6 @@ class Graph(Presentation):
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
-                if not state.infectious: # Not declared, so a guess
-                    state.guessed['infectious'] = name
                 state.infectious = True
         return
 
@@ -389,6 +333,9 @@ class Graph(Presentation):
             self.first = self.states[name]
         else:
             self.first = (self.people_states or states)[0]
+        for tr in self.transitions.values(): # A birth or immigration with no state given
+            if tr.dst is None:
+                tr.dst = [self.first]
         self.resolve_rest()
 
         # Now that the people are known, fill in the things that depend on them
@@ -456,24 +403,13 @@ class Graph(Presentation):
         return
 
     def fill_people(self, tr):
-        """ Fill in what depends on which states are people: the sources of the deaths of everyone (`ss.death()` with no arrow), and the people a birth rate is per person of (`ss.birth()`) """
+        """ Fill in what depends on which states are people: the sources of the deaths of everyone (`ss.death()` with no state), and the people a birth rate is per person of (`ss.birth()`) """
         if tr.every_state:
             tr.src = list(self.people_states)
         if tr.per_capita:
             tr.rate = tr.rate * Count(list(self.people_states), kind='n')
             tr.const, tr.terms = linear(tr.rate)
         return
-
-    def latent_states(self, tr):
-        """ For a transmission whose source would be guessed as its destination: the states that people move on to from there and then leave for somewhere other than the susceptible state, as in an SEIR (in an SIR, SIS, or SIRS, there are none) """
-        def onward(state):
-            return [dst for t in self.transitions.values() if t is not tr and any(src is state for src in t.src or []) for dst in t.dst or []]
-        susceptible = tr.src or []
-        out = []
-        for state in onward(tr.dst[0]):
-            if any(dst is not state and not any(dst is s for s in susceptible) for dst in onward(state)):
-                out.append(state)
-        return out
 
     def set_keywords(self):
         """ A value given as a keyword sets the parameter of that name; there is nothing else for it to be """
@@ -580,7 +516,7 @@ class Graph(Presentation):
             if tr.inflow:
                 self.inflows.append(tr)
             if tr.immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr.split): # dur=0 with where=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until where= holds instead)
-                tr.trigger = ss.transitions.Trigger(tr.where)
+                tr.trigger = ss.on(tr.where)
             for state in tr.src:
                 exits = self.exits[state.name]
                 if tr.contact:
@@ -631,7 +567,7 @@ class Graph(Presentation):
                         group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
                         driven = [tr for tr in exits.hazards if not tr.undriven]
-                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. "{name} -> A | B" with p=[{total:n}, None].' if undriven else ''
+                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, [A, B], dur=0, p=[{total:n}, None]).' if undriven else ''
                         why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
                         why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
                         raise ss.BadBranchSplit(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
@@ -681,12 +617,9 @@ class Graph(Presentation):
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dst) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
-                elif len(ps) == 1 and isinstance(ps[0], par) and callable(ps[0].raw) and not isinstance(ps[0].raw, (ss.Dist, TimeValue)): # A function giving a row, one column per destination
-                    tr.p_given = list(ps)
-                    ps = tr.p = [Column(ps[0], i, len(tr.dst)) for i in range(len(tr.dst))]
                 ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
                 if len(ps) != len(tr.dst):
-                    raise ss.BadBranchSplit(f'"{name}" has {len(ends)} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities.')
+                    raise ss.BadBranchSplit(f'"{name}" has {len(tr.dst) + tr.stays + tr.dies} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
                 given = [p for p in ends if p is not None]
                 if len(given) < len(ends) - 1:
                     which = [label for label,p in zip([d.name for d in tr.dst] + ['ss.stay']*tr.stays + ['ss.null']*tr.dies, ends) if p is None]
@@ -809,11 +742,11 @@ class Graph(Presentation):
         if name in self.transitions:
             raise ss.DuplicateDeclaration(f'"{self.module.name}" already has a transition named "{name}"; give the one in demographics= another name, e.g. ss.birth(..., name="{name}2")')
         tr.name = name
-        if tr.inflow: # Born into (or arriving in) the state named, or else the state people are in unless they are put elsewhere
-            dst = tr.dst[0] if tr.arrow_given else self.first.name
-            if dst not in self.states or not self.states[dst].people:
-                raise ss.UnknownState(f'"{name}" in demographics= adds people to "{dst}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
-            tr.dst = [self.states[dst]]
+        if tr.inflow: # Born into (or arriving in) the state given, or else the state people are in unless they are put elsewhere
+            dst = tr.dst[0] if tr.state_given else self.first
+            if not any(s is dst for s in self.people_states):
+                raise ss.UnknownState(f'"{name}" in demographics= adds people to "{dst.name}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
+            tr.dst = [dst]
         if tr.rate is None and tr.dur is None:
             raise ss.UndrivenTransition(f'"{name}" in demographics= has no rate; give it one, e.g. ss.birth(rate=ss.peryear(0.02))')
         tr.const, tr.terms = linear(tr.rate) if tr.rate is not None else (None, {})
@@ -958,15 +891,6 @@ class Graph(Presentation):
             if expr is not None:
                 out.update({id(leaf):leaf for leaf in expr.leaves if isinstance(leaf, par)})
         return list(out.values())
-
-    def unentered(self):
-        """ The states inferred from arrow strings that nothing moves people into and that start empty, which are usually typos """
-        if not self.inferred:
-            return []
-        first = next(iter(self.states.values()))
-        entered = {id(first)} | {id(dst) for tr in self.transitions.values() for dst in tr.dst or []}
-        entered |= {id(self.states[key]) for key in self.init if key in self.states}
-        return [state for state in self.states.values() if id(state) not in entered]
 
     def spread_pars(self):
         """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognorm_ex(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """

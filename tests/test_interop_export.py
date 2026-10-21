@@ -13,7 +13,8 @@ kw = dict(verbose=0)
 
 
 def sir(name='sir'):
-    return ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(7)), init_prev=0.01, name=name)
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.01, name=name)
 
 
 def make_sir():
@@ -22,12 +23,13 @@ def make_sir():
 
 def make_seird():
     """ Births, deaths from every state, a branch, and a lognormal dwell time, which is written as Erlang stages """
+    S, E, I, R, D = ss.states('S E I R D')
     seird = ss.Disease(
-        births    = ss.birth('-> S', rate=ss.peryear(0.02)),
-        infection = ss.transmission('S -> E', beta=ss.perday(0.4), source='I'),
-        onset     = ss.progression('E -> I', dur=ss.days(4)),
-        outcome   = ss.progression('I -> R | D', dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
-        deaths    = ss.death('S | E | I | R ->', rate=ss.peryear(0.01)),
+        births    = ss.birth(S, rate=ss.peryear(0.02)),
+        infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
+        onset     = ss.Transition(E, I, dur=ss.days(4)),
+        outcome   = ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(seird, total_pop=1e5, unit='day', stop=120, **kw)
 

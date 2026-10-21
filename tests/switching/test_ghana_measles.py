@@ -31,8 +31,8 @@ def make_measles(d, beta=ss.perday(1.75), away=0.01, report=0.005):
     importation = S >> E @ ss.peryear(0.01/1000) * (S + E + I + R).n / S.n
     onset       = E >> I @ ss.days(6)
     recovery    = I >> R @ ss.days(8)
-    births      = ss.birth('-> S', rate=ss.peryear(0.027*0.3))
-    vaccinated  = ss.birth('-> R', rate=ss.peryear(0.027*0.7))
+    births      = ss.birth(S, rate=ss.peryear(0.027*0.3))
+    vaccinated  = ss.birth(R, rate=ss.peryear(0.027*0.7))
     deaths      = ss.death(rate=ss.peryear(0.007))
     cases       = ss.outcome(report*onset)
     measles = ss.Disease(infection, importation, onset, recovery, births, vaccinated, deaths, cases, init=dict(R=1 - 1/14), name='measles')
@@ -69,7 +69,7 @@ def test_ghana_measles_routine():
     sc.heading('Ghana measles: routine MCV1 at 9 months starts with newborns')
     ppl = ss.People(10_000, age_data=np.array([np.arange(80), np.exp(-0.035*np.arange(80))]).T)
     S, I, R = ss.states(3)
-    sir = ss.Disease(S >> I @ ss.perday(0.1)*I, I >> R @ ss.days(8), ss.birth('-> S', rate=ss.peryear(0.03)), init=dict(I=0.001), name='sir')
+    sir = ss.Disease(S >> I @ ss.perday(0.1)*I, I >> R @ ss.days(8), ss.birth(S, rate=ss.peryear(0.03)), init=dict(I=0.001), name='sir')
     ri = ss.vaccinate(ss.Vaccine(efficacy=0.85), coverage=0.833, at_age=ss.months(9), name='routine') # laser-measles: MCV1 274 days after birth
     sim = ss.Sim(sir, people=ppl, interventions=ri, start='2021-01-01', stop='2022-01-01', unit='day', **kw).run()
     delivered = sim.results.routine.delivered.values

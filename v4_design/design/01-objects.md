@@ -64,17 +64,7 @@ ss.Disease(
 )
 ```
 
-The short form is two lines, with states inferred from the arrows:
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
-    init_prev = 0.01,
-)
-```
-
-The operator form declares the ingredients first and then passes the transitions positionally:
+The operator form declares the ingredients first and then passes the transitions positionally (or as keywords, which name them):
 
 ```python
 beta = 0.3
@@ -157,7 +147,7 @@ A disease written entirely as code (per-agent arrays from `define_states()`, upd
 
 Starsim's `dict(type='sir', beta=0.1)` and `ss.SIR(beta=0.1)` are kept as the way to ask for a model from the library. A library model is an ordinary module: `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared in the class form, with Starsim 3's keywords, so `describe()` prints them in full and `equations()` works on them. Starsim 3's versions written as code are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.
 
-The dict *tuple* shorthand from the first draft, `dict(infection=('S -> I', 0.05))`, is not part of the language. Guessing the kind of transition from the type of a bare value was ambiguous (it misclassifies SIRS, for example), and the two-line constructor form is as short.
+The dict *tuple* shorthand from the first draft, `dict(infection=('S -> I', 0.05))`, is not part of the language. Guessing the kind of transition from the type of a bare value was ambiguous (it misclassifies SIRS, for example), and the operator form is as short.
 
 ### The equivalence rule
 
@@ -300,7 +290,7 @@ Modifiers made with `ss.modify` are always listed, because they are declared; di
 
 Every module implements `describe()`, and `sim.describe()` covers the whole sim. For a model it prints:
 
-1. every state, with its properties and whether it was declared or inferred, and which states are counts and not people;
+1. every state, with its properties, and which states are counts and not people;
 2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`dwell ~ exponential(mean = 10 days)`, not `dur=10`), its source of infection where there is one, and its rate with bare states expanded (`0.3 × I.n / N` under homogeneous mixing);
 3. every stratification, with its levels;
 4. the mixing: each network or pool, and how a state in a rate is read through it (homogeneous mixing is frequency-dependent: `I` is `I.n / N`);
@@ -320,11 +310,11 @@ solver       ode                                             [guessed: every par
 unit         none: time is in timesteps                      [nothing in the model has a unit]
 
 Disease 'sir': 3 states, 2 transitions
-states       S, I, R                                         [inferred from the arrows]
-             I infectious                                    [guessed: source of 'infection']
+states       S, I, R
+             I infectious
              init: init_prev = 0.01; the rest in S
 
-infection    S -> I   contact-mediated, source I             [guessed: source is the destination]
+infection    S -> I   contact-mediated, source I
              beta = 0.3 per step
              rate = 0.3 × I.n / N                            [homogeneous mixing]
 recovery     I -> R   spontaneous
@@ -348,7 +338,7 @@ Give the sim a unit (`unit='day'`, a typed `dt`, or dates) and the same lines re
 
 - **The dict tuple shorthand** and its coercion rules (above).
 - **Builder methods that change structure after construction** (`m.add_transition_flow(...)`). A model's states and transitions are given once, at construction; `stratify()` is the one operator applied afterwards.
-- **Positional values after an arrow.** `ss.transmission('S -> I', 0.3)` is not accepted; write `beta=0.3`. The arrow is the only positional argument of the shorthand constructors.
+- **States named in strings** (arrow strings, `ss.transmission('S -> I', beta=0.3)` and `ss.progression('I -> R', dur=10)`). A transition takes the states themselves, so nothing is inferred from a name, including the source of infection, which is in the rate (`S >> I @ beta * I`).
 - **Required `reads`/`writes` declarations, read-only views, and queued updates.** See the module contract and lifecycle above.
 - **A separate `Model` and `ModelBuilder`.** One class, constructed once.
 - **A module class for states that are not people** (the earlier `ss.Compartments`). A reservoir or a vector population is ordinary states in the disease ([03-states-and-transitions.md](03-states-and-transitions.md#states-that-are-not-people)).

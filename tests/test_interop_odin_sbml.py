@@ -211,7 +211,8 @@ def write(text, ext):
 
 def hand_sir(**kwargs):
     """ The same SIR, written by hand """
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', rate=ss.perday(0.1)), init=dict(I=kwargs.pop('I', 1)), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init=dict(I=kwargs.pop('I', 1)), name='sir')
     return ss.Sim(sir, unit='day', stop=ss.days(100), verbose=0, **kwargs).run().results.sir
 
 

@@ -63,9 +63,10 @@ When the unit comes from rules 2 to 5, it is a guess about what the bare numbers
 import starsim as ss
 ss.options(jupyter=True)
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, start='2020-03-01', stop='2020-09-01') # The unit is a day, from the dates
@@ -90,9 +91,10 @@ Such a sim has no calendar, so `sim.t.datevec` raises an error, as does a season
 A typed value keeps its own unit and is converted to the sim's timestep, so a model can mix units freely. Here the values are weekly, so the sim's unit is a week, and the steps are a day:
 
 ```{python}
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.perweek(2.1)),
-    recovery  = ss.progression('I -> R', dur=ss.weeks(1.5)),
+    infection = ss.Transition(S, I, rate=ss.perweek(2.1) * I),
+    recovery  = ss.Transition(I, R, dur=ss.weeks(1.5)),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, start='2020-01-01', stop='2020-07-01', dt=ss.days(1)) # Weekly values, daily steps

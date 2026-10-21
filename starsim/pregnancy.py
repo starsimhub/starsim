@@ -62,7 +62,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     stillbirth  = ss.Transition(P, NP, rate=loss_rate*(P.time >= loss_threshold))
     antepartum  = ss.Transition(P, ss.null, rate=maternal_rate)
     delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time is gestational age
-    birth       = ss.birth('-> NP', per=delivery, n=ss.PregnancyPars().embryos_per_pregnancy) # Children, linked to the mother (agents only, for now)
+    birth       = ss.birth(NP, per=delivery, n=ss.PregnancyPars().embryos_per_pregnancy) # Children, linked to the mother (agents only, for now)
 
     sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
 

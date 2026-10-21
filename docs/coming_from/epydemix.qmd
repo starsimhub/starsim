@@ -36,9 +36,10 @@ import starsim as ss
 import starsim.interop
 ss.options(jupyter=True)
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.04),
-    recovery  = ss.progression('I -> R', rate=0.1),
+    infection = ss.Transition(S, I, rate=0.04 * I),
+    recovery  = ss.Transition(I, R, rate=0.1),
     init      = dict(I=10),
 )
 sir.stratify(age=[0, 5, 20, 50, 65])
@@ -98,7 +99,8 @@ mobility = ss.timeseries(dict(zip(days.strftime('%Y-%m-%d'), np.linspace(1.0, 0.
 season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
 
 def make_sim(b, data=None):
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=b*season*mobility), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=b*season*mobility * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
     return ss.Sim(sir, total_pop=1e6, unit='day', start='2020-02-23', stop='2020-05-31', solver='binomial', data=data, verbose=0)
 
 # The data: weekly new infections from one run at b = 0.5

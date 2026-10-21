@@ -1193,8 +1193,9 @@ class peract:
 
     Examples:
         ```python
-        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(m2f=0.001, f2m=0.0005), needles=ss.peract(0.006))))
-        syph = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15})))
+        S, I = ss.states(2)
+        hiv = ss.Disease(infection=S >> I @ dict(mfnet=ss.peract(m2f=0.001, f2m=0.0005), needles=ss.peract(0.006))*I)
+        syph = ss.Disease(infection=S >> I @ ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15})*I)
         ```
     """
     def __init__(self, value=None, **directions):

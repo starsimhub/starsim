@@ -30,9 +30,10 @@ import starsim as ss
 ss.options(jupyter=True)
 
 # 1. Arrow strings: the states are read from the strings
+S, I, R = ss.states('S I R')
 sir1 = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
     init_prev = 0.01,
     name = 'sir',
 )
@@ -58,7 +59,7 @@ for sir in [sir1, sir2, sir3]:
 
 The first spelling is the short form for SIR-shaped models, the second is the one to use for everything else, and the third is for building models programmatically. States, transitions, and the disease take their names from the variables they are assigned to (or from the keyword they are passed under); give `name=` when a disease is built inline.
 
-A bare state inside a rate (`0.3 * I`) means contact with people in that state: with no network that is `I.n / N`, the share of the population who are infectious, so `S >> I @ beta * I` is the textbook `beta * S * I / N`. With a network or a contact matrix, the same expression is worked out from whom each person actually meets, and `beta` is per contact. `I.n` is the number of people in `I`, used exactly as written. In the arrow-string form the word `transmission` stands for "times the source": `ss.transmission('S -> I', beta=b)` is `S >> I @ b * I`.
+A bare state inside a rate (`0.3 * I`) means contact with people in that state: with no network that is `I.n / N`, the share of the population who are infectious, so `S >> I @ beta * I` is the textbook `beta * S * I / N`. With a network or a contact matrix, the same expression is worked out from whom each person actually meets, and `beta` is per contact. `I.n` is the number of people in `I`, used exactly as written.
 
 Every declared disease gets a result for each state (`n_S`, `n_I`, `n_R`) and a flow for each transition, named after it (`infection`, `recovery`), with its running total as `.cum`.
 
@@ -115,7 +116,7 @@ for label, recovery in recoveries.items():
     print(f'{label:12s} peak infected: {sim.results.sir.n_I.max():,.0f}')
 ```
 
-As agents, each person draws their own time in the state. In a compartmental run, an Erlang distribution is realized exactly as stages, and any other distribution is approximated by Erlang stages matched to its mean and variance, with a note. `stages=k` on a transition (`ss.progression('I -> R', dur=ss.days(10), stages=3)`) uses `k` stages under every solver, agents included.
+As agents, each person draws their own time in the state. In a compartmental run, an Erlang distribution is realized exactly as stages, and any other distribution is approximated by Erlang stages matched to its mean and variance, with a note. `stages=k` on a transition (`ss.Transition(I, R, dur=ss.days(10), stages=3)`) uses `k` stages under every solver, agents included.
 
 ### Branching
 
@@ -146,7 +147,7 @@ sirs = ss.Disease(
     infection = S >> I @ ss.peryear(20) * I,
     recovery  = I >> R @ ss.weeks(2),
     waning    = R >> S @ ss.years(5),
-    births    = ss.birth('-> S', rate=ss.peryear(0.03)),
+    births    = ss.birth(S, rate=ss.peryear(0.03)),
     deaths    = ss.death(rate=ss.peryear(0.02)),
     init_prev = 0.001,
 )
@@ -260,7 +261,7 @@ for intv in [None, bednet]:
     print(f'Bed nets: {intv is not None}; human infections in a year: {sim.results.malaria.infection.values.sum():,.0f}')
 ```
 
-`describe()` marks a spontaneous transition that it took as an acquisition, and lists the infected states. To say it outright, give `acquisition=` to the transition: `ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True)` for an importation alongside transmission, which `rel_sus` and vaccines should then reduce, or `ss.progression('Sh -> Vh', rate=ss.perday(0.01), acquisition=False)` for a vaccination in a model with no transmission.
+`describe()` marks a spontaneous transition that it took as an acquisition, and lists the infected states. To say it outright, give `acquisition=` to the transition: `ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True)` for an importation alongside transmission, which `rel_sus` and vaccines should then reduce, or `ss.Transition(Sh, Vh, rate=ss.perday(0.01), acquisition=False)` for a vaccination in a model with no transmission.
 
 :::{.callout-note}
 `beta` can be given per network and per direction. For sexually transmitted infections, for example, `beta={'mf': [0.25, 0.15]}` sets different male→female and female→male values on the `mf` network. See the [Networks](modules_networks.qmd) page for more.

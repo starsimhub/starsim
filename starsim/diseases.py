@@ -21,9 +21,10 @@ class Disease(ss.Module):
     No methods need to be defined, and the disease can be run with any solver
     (see `ss.Sim`):
 
+        S, I, R = ss.states(3)
         sir = ss.Disease(
-            infection = ss.transmission('S -> I', beta=0.3),
-            recovery  = ss.progression('I -> R', dur=10),
+            infection = S >> I @ 0.3 * I,
+            recovery  = ss.Transition(I, R, dur=10),
             init_prev = 0.01,
         )
 
@@ -276,7 +277,7 @@ class Disease(ss.Module):
         """ Raise `ss.CapabilityError` for something that needs the structure of a declared disease, if this one is written as code """
         if self.graph is None:
             raise ss.CapabilityError(f'{what} needs a disease declared from states and transitions, but "{self.name}" ({type(self).__name__}) is written as code.\n'
-                                     f'     Declare it with ss.Disease (e.g. ss.SIR, or ss.Disease(infection=ss.transmission("S -> I", beta=0.1), recovery=ss.progression("I -> R", dur=10))).')
+                                     f'     Declare it with ss.Disease (e.g. ss.SIR, or ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(10))).')
         return
 
     def describe(self, output=False):
@@ -313,7 +314,8 @@ class Disease(ss.Module):
 
         **Example**:
 
-            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
+            S, I, R = ss.states(3)
+            sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
             print(sir.diagram())
         """
         self.check_declared('diagram()')
@@ -338,7 +340,8 @@ class Disease(ss.Module):
 
         **Example**:
 
-            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
+            S, I, R = ss.states(3)
+            sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
             sir.R0() # 3.0
         """
         self.check_declared('R0()')
@@ -379,7 +382,7 @@ class Disease(ss.Module):
             self.engine.define()
         elif not self.state_list and type(self).step is Disease.step and type(self).step_state is Disease.step_state:
             raise ss.CapabilityError(f'"{type(self).__name__}" declares no states or transitions, and defines no states or step(). A declared disease gives its transitions,\n'
-                                     f'     e.g. ss.Disease(infection=ss.transmission("S -> I", beta=0.1), recovery=ss.progression("I -> R", dur=10)); a disease written as code\n'
+                                     f'     e.g. ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(10)); a disease written as code\n'
                                      f'     defines its states (define_states()) and what happens each step (step_state(), step()), or subclasses ss.Infection if it is transmitted between agents.')
         super().init_pre(sim)
         if self.engine is not None:
@@ -1149,7 +1152,7 @@ class SIR(Disease):
     dur_inf   = ss.par(ss.years(6))
     p_death   = ss.par(0.0)
     S, I, R   = ss.states('S I R')
-    infection = ss.transmission('S -> I', beta=beta)
+    infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
     standard_results = True
@@ -1184,8 +1187,8 @@ class SEIR(Disease):
     dur_inf   = ss.par(ss.years(6))
     p_death   = ss.par(0.0)
     S, E, I, R = ss.states('S E I R')
-    infection = ss.transmission('S -> E', beta=beta, source='I')
-    latency   = ss.progression('E -> I', dur=dur_exp)
+    infection = ss.Transition(S, E, rate=beta * I)
+    latency   = ss.Transition(E, I, dur=dur_exp)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
     standard_results = True
@@ -1218,8 +1221,8 @@ class SIS(Disease):
     beta      = ss.par(ss.peryear(0.05))
     dur_inf   = ss.par(ss.years(10))
     S, I      = ss.states('S I')
-    infection = ss.transmission('S -> I', beta=beta)
-    recovery  = ss.progression('I -> S', dur=dur_inf)
+    infection = ss.Transition(S, I, rate=beta * I)
+    recovery  = ss.Transition(I, S, dur=dur_inf)
     standard_results = True
 
     def __init__(self, pars=None, **kwargs):

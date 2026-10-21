@@ -39,11 +39,12 @@ def make_sim(total, days=30, declared=False):
     ages = np.arange(89)
     pyramid = np.exp(-0.017*ages) # The stable age pyramid for the birth rate
     deaths = dict(deaths=ss.death(lifetable=ss.lifetable(ages, pyramid*0.017))) if declared else {} # Without them, no deaths: LASER draws each age at death once, which costs nothing per step
+    S, E, I, R = ss.states('S E I R')
     measles = ss.Disease(
-        infection = ss.transmission('S -> E', beta=ss.perday(3.9), source='I'),
-        onset     = ss.progression('E -> I', dur=ss.erlang(k=40, mean=ss.days(10))),
-        recovery  = ss.progression('I -> R', dur=ss.normal(7, 2, unit='days')),
-        births    = ss.birth('-> S', rate=ss.peryear(0.017)),
+        infection = ss.Transition(S, E, rate=ss.perday(3.9) * I),
+        onset     = ss.Transition(E, I, dur=ss.erlang(k=40, mean=ss.days(10))),
+        recovery  = ss.Transition(I, R, dur=ss.normal(7, 2, unit='days')),
+        births    = ss.birth(S, rate=ss.peryear(0.017)),
         init      = dict(I=ss.by(patch=[3]*n_places), R=0.95),
         name      = 'measles',
         **deaths,

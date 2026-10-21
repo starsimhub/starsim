@@ -99,7 +99,7 @@ def make_metapop(staged=False):
     if staged: # As an EMULSION user writes it: the stage as a dimension, with births from adults
         S, I, R = ss.states(3)
         N = S + I + R
-        sir = ss.Disease(infection=S >> I @ ss.perday(0.5)*I.n/N.n, recovery=I >> R @ ss.perday(0.1), births=ss.birth('-> S', rate=ss.by(stage=[0, 2*b])),
+        sir = ss.Disease(infection=S >> I @ ss.perday(0.5)*I.n/N.n, recovery=I >> R @ ss.perday(0.1), births=ss.birth(S, rate=ss.by(stage=[0, 2*b])),
                          deaths=ss.death(rate=b*N.n/K), maturation=ss.transfer(stage='J -> A', rate=ss.perday(1/20)), init=dict(I=ss.by(pop=[10] + [0]*9)), name='sir')
         sir.stratify(stage=['J', 'A'], split=[1, 0])
     else: # The two machines crossed by hand into six states

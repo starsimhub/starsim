@@ -90,9 +90,10 @@ Caching results by hash, so that an identical re-run is served from disk, is def
 ## Convergence checks
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=4),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=4),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, solver='binomial', unit='day', stop=100)

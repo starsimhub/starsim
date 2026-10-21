@@ -1222,7 +1222,8 @@ class timeseries(TimeValue):
         ```python
         beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
         decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
         ```
     """
@@ -1331,7 +1332,8 @@ class seasonal(TimeValue):
     Examples:
         ```python
         beta = ss.seasonal(mean=0.3, amplitude=0.4, peak='January')
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=10), init_prev=0.01)
+        S, I = ss.states(2)
+        sis = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, S, dur=10), init_prev=0.01)
         sim = ss.Sim(sis, start='2020-01-01', stop='2023-01-01').run()
         ```
     """

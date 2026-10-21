@@ -41,7 +41,8 @@ def read_register(ref, copies=1, stop=None):
 
 def make_herds(u0, register, stop, **kwargs):
     """ SimInf's SIR in herds, linked by the register """
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.16)), recovery=ss.progression('I -> R', rate=ss.perday(0.01)),
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.16) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.01)),
                      init=dict(I=ss.by(herd=u0.I.values)), name='sir')
     size = u0[['S', 'I', 'R']].sum(axis=1)
     sir.stratify(herd=list(u0.node.astype(str)), kind='space', split=size/size.sum(), mobility=ss.Mobility(data=register))
@@ -62,7 +63,8 @@ def make_pmcmc():
     """ SimInf's pmcmc example: one herd of 1,000, Poisson observations of I every 5 days """
     beta  = ss.par(ss.perday(0.2), bounds=[0.01, 1])
     gamma = ss.par(ss.perday(0.1), bounds=[0.01, 1])
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=gamma), init=dict(I=5), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init=dict(I=5), name='sir')
     data = pd.DataFrame(dict(t=ref_obs_t, n_I=ref_obs_I))
     return ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 
@@ -99,7 +101,8 @@ def test_siminf_ldata():
     sc.heading('A rate for each herd, as mparse() with ldata')
     n_herds = 100
     b = np.random.default_rng(2).uniform(0.08, 0.24, n_herds)
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(ss.by(herd=b))), recovery=ss.progression('I -> R', rate=ss.perday(0.01)),
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(ss.by(herd=b)) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.01)),
                      init=dict(I=ss.by(herd=[1] + [0]*(n_herds - 1))), name='sir')
     sir.stratify(herd=np.arange(n_herds).astype(str), kind='space', mobility=ss.Mobility(data=make_register(n_herds, 365)))
     sim = ss.Sim(sir, solver='gillespie', unit='day', start=0, stop=365, total_pop=50*n_herds, verbose=0).run()

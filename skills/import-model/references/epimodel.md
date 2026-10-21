@@ -64,12 +64,12 @@ A = ss.State(rel_trans=5, label='Acute')
 C = ss.State(label='Chronic')
 D = ss.State(rel_trans=2, label='AIDS')
 hiv = ss.Disease(
-    infection  = ss.transmission('S -> A', beta={k: week(1 - (1 - 0.0025)**n) for k,n in acts.items()}, source=['A', 'C', 'D']),
+    infection  = ss.Transition(S, A, rate=({k: week(1 - (1 - 0.0025)**n) for k,n in acts.items()}) * (A + C + D)),
     chronic    = A >> C @ week(1/12),
     aids       = C >> D @ week(1/520),
     aids_death = D >> ss.null @ week(1/104),
     departure  = S + A + C >> ss.null @ week(0.0005),
-    arrival    = ss.birth('-> S', rate=0.00065),
+    arrival    = ss.birth(S, rate=0.00065),
     test       = care('undx -> dx', 0.015, states=['A', 'C']),
     link       = care('dx -> art', 0.1),
     init       = dict(A=2, C=98, D=20),

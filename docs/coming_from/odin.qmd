@@ -123,7 +123,7 @@ These are from Starsim's switching demo for odin users (`tests/switching/test_od
 | A fixed delay (`delay()`) | **Works**: `ss.constant(ss.days(14))` is a conveyor of whole steps under every solver, exact at each step, and the ODE's release within a step is exact to second order (above) |
 | Any difference equation (a running maximum, a state that is not a flow) | **Partly**: Python in a `step()` of a module written as code; a value it keeps can be read by a function in a rate, which runs as agents |
 | The same model as agents, `sim.new(solver='abm', n_agents=20_000)` | **Fails**: 10 initial infections among a million people are 0.2 of an agent at this scale, which rounds to none with no note, so there is no epidemic |
-| Build and run a model from R | **Works**: through reticulate, with arrow strings and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
+| Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
 
 ## Bringing your model in
 

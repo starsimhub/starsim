@@ -30,7 +30,7 @@ has_reticulate = rscript is not None and subprocess.run([rscript, '-e', 'quit(st
 def make_sis(beta=ss.prob(1 - 0.6**2)):
     """ EpiModel's intro SIS: the per-partnership probability for two acts at 0.6 """
     S, I = ss.states(2)
-    return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=I >> S @ ss.prob(0.05), prevalence=I.frac, init=dict(I=10), name='sis')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=I >> S @ ss.prob(0.05), prevalence=I.frac, init=dict(I=10), name='sis')
 
 
 def prev_by_group(sim, burnin=150):
@@ -73,7 +73,10 @@ def test_epimodel_from_r(tmp_path):
         library(reticulate)
         ss <- import("starsim")
         ssl <- import("starsim.library")
-        sis <- ss$Disease(infection = ss$transmission("S -> I", beta = ss$prob(0.64)), recovery = ss$progression("I -> S", rate = ss$prob(0.05)), init = dict(I = 10L), name = "sis")
+        st <- ss$states("S I")
+        S <- st[[1]]
+        I <- st[[2]]
+        sis <- ss$Disease(infection = ss$Transition(S, I, rate = ss$prob(0.64) * I), recovery = ss$Transition(I, S, rate = ss$prob(0.05)), init = list(I = 10L), name = "sis") # A list: dict() would take the variable I as its key
         net <- ssl$DegreeNet(n_contacts = ss$by(risk = c(0.4, 1.6)), match = dict(risk = 0.8), dur = 50L)
         sim <- ss$Sim(sis, networks = net, n_agents = 1000L, stop = 300L, verbose = 0L)
         sim$stratify(risk = c("low", "high"), split = c(0.8, 0.2))

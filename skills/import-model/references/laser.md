@@ -9,14 +9,14 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 | LASER | Starsim v4 | Fit |
 |---|---|---|
 | Places (`GeoDataFrame` with populations and coordinates) | `ss.geo(names=..., pop=..., lat=..., lon=...)` or `x=`/`y=` in km, or `distances=` | Exact |
-| `SEIR.Transmission` with `beta` | `ss.transmission('S -> E', beta=ss.perday(beta), source='I')` | Exact |
-| `SEIR.Exposed`/`Infectious` with `normal(loc, scale)` | `ss.progression('E -> I', dur=ss.normal(7, 1, unit='days'))` | Exact as agents; Erlang stages as an ODE |
+| `SEIR.Transmission` with `beta` | `S >> E @ ss.perday(beta) * I` | Exact |
+| `SEIR.Exposed`/`Infectious` with `normal(loc, scale)` | `E >> I @ ss.normal(7, 1, unit='days')` | Exact as agents; Erlang stages as an ODE |
 | `gamma(shape=40, scale=0.25)` | `ss.erlang(k=40, mean=ss.days(10))` | Exact |
 | Gravity coupling of the force of infection | `dis.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))` | Exact (`kind='force'` is LASER's form) |
 | Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.Mobility(matrix=gravity, kind='force')` | Exact |
 | Ghana's mixing (residents make a share of contacts elsewhere) | `ss.Mobility(ss.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
 | Initial infections in one place | `init=dict(I=ss.by(patch=[0, 100] + [0]*14))` | Exact |
-| Births at a crude rate | `ss.birth('-> S', rate=ss.peryear(cbr/1000))`; vaccinated births as a second `ss.birth('-> R', ...)` | Exact |
+| Births at a crude rate | `ss.birth(S, rate=ss.peryear(cbr/1000))`; vaccinated births as a second `ss.birth(R, ...)` | Exact |
 | Deaths at a constant rate | `ss.death(rate=ss.peryear(0.007))` | Exact |
 | Deaths from a life table (an age at death drawn once) | A function that writes `sim.people.ti_dead` (workaround) | Exact, but not declared |
 | Importation of a fixed number every N days | A function that moves people from `S` to `I` (workaround); or, as a rate per person, `S >> E @ ss.peryear(x) * (S + E + I + R).n / S.n` | Workaround |
@@ -49,10 +49,11 @@ dist   = [0] + [150]*5 + [50, 100]*5 # Distance from the city, in km
 angle  = [0] + list(angles) + list(np.repeat(angles, 2))
 places = ss.geo(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
 
+S, E, I, R = ss.states('S E I R')
 seir = ss.Disease(
-    infection = ss.transmission('S -> E', beta=ss.perday(2/14), source='I'),
-    onset     = ss.progression('E -> I', dur=ss.normal(7, 1, unit='days')),
-    recovery  = ss.progression('I -> R', dur=ss.normal(14, 2, unit='days')),
+    infection = ss.Transition(S, E, rate=ss.perday(2/14) * I),
+    onset     = ss.Transition(E, I, dur=ss.normal(7, 1, unit='days')),
+    recovery  = ss.Transition(I, R, dur=ss.normal(14, 2, unit='days')),
     init      = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
 )
 seir.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))

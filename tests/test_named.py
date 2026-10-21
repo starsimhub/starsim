@@ -11,7 +11,8 @@ kw = dict(verbose=0)
 
 
 def make_sir():
-    return ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(7)), init_prev=0.001, name='sir')
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.001, name='sir')
 
 
 @sc.timer()

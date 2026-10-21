@@ -11,9 +11,10 @@ In a declared disease, a value used once lives in the transition that uses it. T
 import starsim as ss
 ss.options(jupyter=True)
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
     init_prev = 0.01,
 )
 print(sir.pars)
@@ -77,9 +78,10 @@ Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a sou
 
 ```{python}
 def make_sir(beta):
+    S, I, R = ss.states('S I R')
     return ss.Disease(
-        infection = ss.transmission('S -> I', beta=beta),
-        recovery  = ss.progression('I -> R', dur=ss.days(10)),
+        infection = ss.Transition(S, I, rate=beta * I),
+        recovery  = ss.Transition(I, R, dur=ss.days(10)),
         init_prev = 0.01,
         name = 'sir',
     )
@@ -104,9 +106,10 @@ A function given to a slot can also take the agents it is asked about, `fn(sim, 
 import sciris as sc
 import matplotlib.pyplot as plt
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.peryear(0.5)),
-    recovery  = ss.progression('I -> R', dur=lambda sim, uids: ss.years(sim.people.age[uids] / 10)),
+    infection = ss.Transition(S, I, rate=ss.peryear(0.5) * I),
+    recovery  = ss.Transition(I, R, dur=lambda sim, uids: ss.years(sim.people.age[uids] / 10)),
     init_prev = 0.05,
 )
 sim = ss.Sim(n_agents=20e3, start='2000', stop='2010', diseases=sir, networks='random')

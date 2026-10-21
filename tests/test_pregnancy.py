@@ -63,7 +63,7 @@ def test_births(ode=False):
     def make():
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), embryos_per_pregnancy=ss.choice(a=[1, 2], p=[0.8, 0.2]))
         S, I = ss.states('S I')
-        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), recovery=I >> S @ ss.years(1), born=ss.birth('-> I', per=preg.delivery), name='d')
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), recovery=I >> S @ ss.years(1), born=ss.birth(I, per=preg.delivery), name='d')
         return dict(demographics=preg, diseases=d)
     abm = ss.Sim(**make(), n_agents=20_000, stratify=strat, **kw).run()
     ra = abm.results
@@ -89,7 +89,8 @@ def test_births(ode=False):
     assert len(newest) and abm.diseases.d.I[newest].mean() > 0.8
 
     with pytest.raises(ValueError):
-        ss.birth('-> S', rate=ss.peryear(0.01), per=abm.diseases.d.infection)
+        S = ss.State()
+        ss.birth(S, rate=ss.peryear(0.01), per=abm.diseases.d.infection)
     return abm
 
 
@@ -259,7 +260,7 @@ def test_mother_cond():
         ss.Sim(demographics=ss.Pregnancy(), diseases='sis', networks='random', interventions=ss.screen(ss.Diagnostic(), on=ss.state('pregnancy.P'), name='scr'), n_agents=100, **kw).init()
     def make(solver): # Nothing else here needs agents
         S, I = ss.states('S I')
-        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth('-> S', rate=ss.peryear(0.03)), name='d')
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth(S, rate=ss.peryear(0.03)), name='d')
         nb = ss.screen(ss.Diagnostic(sensitivity=1.0), who=d.births & ss.mother(I, born=True), disease='d')
         return ss.Sim(diseases=d, interventions=nb, solver=solver, total_pop=1000, **kw)
     with pytest.raises(ss.CapabilityError, match='mother'): # Agents only: compartments do not know anyone's mother
@@ -342,7 +343,8 @@ def test_fetus_ode():
     sc.heading('Testing fetuses (ss.mother() and a maternal network): agents only')
     agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal()), networks=ss.MaternalNet()), match='mother')
     agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal())), match='mother') # ss.mother() alone
-    agents_only(lambda: dict(demographics=ss.Pregnancy(), diseases=ss.Disease(infection=ss.transmission('S -> I', beta=dict(maternalnet=0.3))), networks=ss.MaternalNet()), match='MaternalNet')
+    S, I = ss.states('S I')
+    agents_only(lambda: dict(demographics=ss.Pregnancy(), diseases=ss.Disease(infection=ss.Transition(S, I, rate=dict(maternalnet=0.3) * I)), networks=ss.MaternalNet()), match='MaternalNet')
     agents_only(lambda: dict(demographics=ss.Pregnancy(fetus=True)), match='fetus=True')
 
 
@@ -358,7 +360,7 @@ def test_lactation():
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150))
         S, I = ss.states('S I')
         d = ss.Disease(S, I,
-            infection = ss.transmission('S -> I', beta=dict(maternalnet=0.3, breastfeedingnet=0.5)),
+            infection = ss.Transition(S, I, rate=dict(maternalnet=0.3, breastfeedingnet=0.5) * I),
             death     = ss.Transition(I, ss.null, rate=ss.peryear(2), where=ss.ppl.age < 1), # Infant deaths end breastfeeding
             init=dict(I=0.3), name='d')
         mods = []
@@ -432,7 +434,7 @@ def make_hiv_vertical(bf=True):
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
     S, I = ss.states('S I')
     beta = dict(maternalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
-    hiv = ss.Disease(S, I, infection=ss.transmission('S -> I', beta=beta), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
+    hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
     return dict(demographics=[preg, ss.Lactation(p_breastfeed=0.8)], diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
 
 

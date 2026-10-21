@@ -42,8 +42,8 @@ def make_tb(ages=True, data=None):
     S, E, L, I, T, R = ss.states('S E L I T R')
     tb = ss.Disease(infection=S >> E @ beta*I, reinfection_L=L >> E @ beta*0.21*I, reinfection_R=R >> E @ beta*0.21*I,
                     stabilisation=E >> L @ 2.0, early_activation=E >> I @ 0.2, late_activation=L >> I @ 0.002, self_recovery=I >> R @ 0.2,
-                    detection=I >> T @ detect_max*scaleup, treatment_end=T >> R @ 2.0, tb_death=ss.death('I ->', rate=0.2),
-                    death=ss.death(rate=1/70), birth=ss.birth('-> S', rate=0.02), init=dict(I=1000), name='tb')
+                    detection=I >> T @ detect_max*scaleup, treatment_end=T >> R @ 2.0, tb_death=ss.death(I, rate=0.2),
+                    death=ss.death(rate=1/70), birth=ss.birth(S, rate=0.02), init=dict(I=1000), name='tb')
     if ages:
         tb.stratify(age=[0, 5, 15, 35, 50, 70], split=[1/6]*6, adjust={'early_activation': [3, 1.5, 1, 1, 1, 1], 'rel_trans': [0.1, 0.2, 1, 1, 1, 1]})
     return ss.Sim(tb, networks=ss.contacts(age=mixing) if ages else None, total_pop=1e6, start=1950, stop=2025, unit='year', data=data, verbose=0)

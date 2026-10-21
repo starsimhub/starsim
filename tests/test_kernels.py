@@ -23,10 +23,11 @@ def make_sir():
 
 def make_seir():
     """ Seasonal transmission, a dwell time in stages, and a branch """
+    S, E, I, R, D = ss.states('S E I R D')
     seir = ss.Disease(
-        infection = ss.transmission('S -> E', beta=ss.seasonal(0.4, amplitude=0.3, peak=1), source='I'),
-        latency   = ss.progression('E -> I', dur=ss.erlang(mean=5, k=3)),
-        outcome   = ss.progression('I -> R | D', dur=8, p=[None, 0.1]),
+        infection = ss.Transition(S, E, rate=ss.seasonal(0.4, amplitude=0.3, peak=1) * I),
+        latency   = ss.Transition(E, I, dur=ss.erlang(mean=5, k=3)),
+        outcome   = ss.Transition(I, [R, D], dur=8, p=[None, 0.1]),
         init      = dict(I=0.01),
         name      = 'seir',
     )
@@ -34,7 +35,8 @@ def make_seir():
 
 
 def make_plain(beta, **kwargs):
-    return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=8), name='sir', **kwargs)
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=8), name='sir', **kwargs)
 
 
 def make_ages():
@@ -55,8 +57,9 @@ def make_commute():
 
 def make_delay():
     """ A fixed latent period, a conveyor, with a death rate acting on it as well """
-    return ss.Disease(infection=ss.transmission('S -> E', beta=0.4, source='I'), latency=ss.progression('E -> I', dur=ss.constant(ss.days(5))),
-                      recovery=ss.progression('I -> R', dur=ss.days(8)), death=ss.death('E | I ->', rate=ss.perday(0.02)), init_prev=0.01, name='delay')
+    S, E, I, R = ss.states('S E I R')
+    return ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), latency=ss.Transition(E, I, dur=ss.constant(ss.days(5))),
+                      recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
 
 
 models = sc.objdict(
@@ -172,10 +175,11 @@ def test_stochastic():
 def test_stages():
     sc.heading('Testing that a dwell time in many stages is as long as it should be under every solver')
     def make():
+        S, E, I, R = ss.states('S E I R')
         return ss.Disease(
-            infection = ss.transmission('S -> E', beta=0.4, source='I'),
-            latency   = ss.progression('E -> I', dur=ss.normal(7, 1.4)), # 25 stages
-            recovery  = ss.progression('I -> R', dur=10),
+            infection = ss.Transition(S, E, rate=0.4 * I),
+            latency   = ss.Transition(E, I, dur=ss.normal(7, 1.4)), # 25 stages
+            recovery  = ss.Transition(I, R, dur=10),
             init      = dict(I=0.001),
             name      = 'seir',
         )
@@ -189,7 +193,8 @@ def test_stages():
 
     # Through the stages in whole steps, with another way out: the same as the ODE
     def cohort(solver):
-        sim = ss.Sim(ss.Disease(onset=ss.progression('E -> I', dur=ss.normal(7, 1)), death=ss.progression('E -> D', dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
+        E, I, D = ss.states('E I D')
+        sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
     ode = cohort('ode')
     for res in [cohort('binomial')]:
@@ -201,7 +206,8 @@ def test_stages():
 def test_seasonal_steps():
     sc.heading('Testing that the stochastic solvers follow a value that varies within a step')
     def make(solver, dt, seed=0, pop=5000):
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25)), recovery=ss.progression('I -> S', dur=ss.days(10)), init_prev=0.05, name='sis')
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25) * I), recovery=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.05, name='sis')
         sim = ss.Sim(sis, solver=solver, dt=dt, stop=ss.years(2), total_pop=pop, rand_seed=seed, **kw).run()
         return sim.results.sis.infection.sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
@@ -212,13 +218,16 @@ def test_seasonal_steps():
         assert runs[0][1] == solver
         assert np.isclose(out[solver], ode, rtol=0.02), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
     with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within each quarter of a step
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.seasonal(mean=0.15, amplitude=0.5)), recovery=ss.progression('I -> S', dur=10), init_prev=0.05, name='sis')
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
         ss.Sim(sis, solver='gillespie', approx=False, unit='day', stop=100, **kw).init()
 
     # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run (stepped, it was taken at the middle and end of each step, 1.4% off)
     days = [f'2020-01-{d:02d}' for d in range(1, 32)]
     beta = ss.par(0.5, name='b')*ss.seasonal(mean=0.9, amplitude=0.1)*ss.timeseries(dict(zip(days, np.linspace(1.0, 0.3, len(days))))) # A time series is a step function by default
-    sir = lambda: ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    def sir():
+        S, I, R = ss.states('S I R')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
     whole = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run()
     stepped = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run(until='2020-02-15')
     assert np.allclose(stepped.results.sir.n_I, whole.results.sir.n_I, rtol=1e-9)
@@ -270,7 +279,8 @@ def test_restart():
 
     # The exact solver runs place by place when places do not affect each other within a step, with the same results as event by event over all places
     def herds(local):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(10)), init=dict(I=ss.by(herd=[5]*20)), name='herds')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init=dict(I=ss.by(herd=[5]*20)), name='herds')
         sir.stratify(herd=[str(i) for i in range(20)], kind='space')
         out = []
         for seed in range(10):
@@ -288,20 +298,23 @@ def test_restart():
 
     # A place where nothing can happen is skipped until something changes it: here, waning that starts on day 30, in a herd where nobody is infected
     wane = 0.05*ss.timeseries({0: 0.0, 29: 0.0, 30: 1.0})
-    sirs = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(10)), waning=ss.progression('R -> S', rate=wane),
+    S, I, R = ss.states('S I R')
+    sirs = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), waning=ss.Transition(R, S, rate=wane),
                       init=dict(I=ss.by(herd=[5, 0]), R=ss.by(herd=[0, 50])), name='sirs')
     sirs.stratify(herd=['a', 'b'], kind='space')
     S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.n_S.select(herd='b').values
     assert S_b[60] > S_b[29] # Herd b's recovered wane once waning starts
 
     # How often a small outbreak dies out, from the runs' results
-    small = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2), name='small')
+    S, I, R = ss.states('S I R')
+    small = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=2), name='small')
     msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
     died = (msim_small.results.small.n_I.values[:, -1] == 0).mean()
     assert 0.3 < died < 0.9
 
     # How often it is a major outbreak (more than 10% infected), which dying out does not say for an SIR, since every run dies out in the end
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=2/7), recovery=ss.progression('I -> R', dur=7), init=dict(I=1), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=2/7 * I), recovery=ss.Transition(I, R, dur=7), init=dict(I=1), name='sir')
     msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
     assert 0.25 < major < 0.75 and (msim.results.sir.n_I.values[:, -1] == 0).all()

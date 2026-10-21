@@ -550,7 +550,8 @@ class Sim(ss.Base):
 
         Examples:
             ```python
-            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4), init_prev=0.01)
+            S, I, R = ss.states(3)
+            sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=4), init_prev=0.01)
             ss.Sim(sir, solver='binomial', unit='day', stop=100).check_dt()
             ```
         """
@@ -661,15 +662,15 @@ class Sim(ss.Base):
         Births, deaths, and migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`): see `ss.demographics.Flows`
 
         People are born and die once, so these become the transitions of one disease, the first declared (or, for births into a
-        state that is named, the first with that state), whose people are everyone's: as agents, the diseases share the people, and
+        state that is given, the one it is a state of), whose people are everyone's: as agents, the diseases share the people, and
         in a compartmental run with several declared diseases, their states are tracked jointly (see `ss.solvers.init_crossings()`). For the
         same reason, births or deaths of everyone declared in more than one disease are an error.
         """
         for flows in [mod for mod in self.pars.demographics.values() if isinstance(mod, ss.demographics.Flows)]:
             for tr in flows.transitions:
-                tr = sc.dcp(tr) # The sim's own, so the module is unchanged if it is built again
-                named = tr.dst[0] if tr.inflow and tr.arrow_given else None
-                holder = next((mod for mod in self.declared if named is None or named in mod.graph.states), self.declared[0])
+                named = tr.dst[0] if tr.inflow and tr.state_given else None # A state of one of the diseases
+                holder = next((mod for mod in self.declared if named is None or any(st is named for st in mod.graph.states.values())), self.declared[0])
+                tr = sc.dcp(tr, memo={} if named is None else {id(named):named}) # The sim's own, so the module is unchanged if it is built again
                 holder.graph.add_flow(tr)
         holders = [mod.name for mod in self.declared if self.flows_of(mod)]
         if len(holders) > 1:
@@ -1790,7 +1791,8 @@ class Sim(ss.Base):
 
         Example:
             ```python
-            sir = ss.Disease(ss.transmission('S -> I', beta=0.3), ss.progression('I -> R', dur=8), init=dict(I=0.01))
+            S, I, R = ss.states(3)
+            sir = ss.Disease(S >> I @ 0.3*I, ss.Transition(I, R, dur=8), init=dict(I=0.01))
             sim = ss.Sim(sir, unit='day', stop=100).init()
             peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.n_I.max() for beta in [0.2, 0.3, 0.4]]
             ```

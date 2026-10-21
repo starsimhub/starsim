@@ -45,8 +45,8 @@ def as_expr(obj):
             errormsg = 'A condition on states alone cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
             raise TypeError(errormsg)
         return Prop(obj)
-    elif isinstance(obj, ss.transitions.Transition) and obj.src is None: # Part of a weighted destination, e.g. 0.5*I + 0.5*R @ 0.1, where @ binds before +
-        errormsg = f'"@" binds before "+", so in a weighted destination the destination needs parentheses: S >> (0.5*I + 0.5*R) @ rate, not S >> 0.5*I + 0.5*R @ rate'
+    elif isinstance(obj, ss.transitions.Transition) and obj.src is None: # e.g. S >> I + R @ 0.1, where @ binds before +
+        errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a list, with p= for the share of each, e.g. ss.Transition(I, [R, D], dur=10, p=[0.9, 0.1])'
         raise TypeError(errormsg)
     elif isinstance(obj, ss.transitions.Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
@@ -110,10 +110,6 @@ class Expr:
     def __le__(self, other):       return Func('less_equal', self, other)
     def __gt__(self, other):       return Func('greater', self, other)
     def __ge__(self, other):       return Func('greater_equal', self, other)
-
-    def __matmul__(self, driver):
-        """ A weighted destination: (p*A + (1-p)*B) @ rate """
-        return ss.transitions.Transition(dst=self) @ driver
 
     def __bool__(self):
         errormsg = f'Cannot use the expression "{self}" where Python needs a single True or False; it has no value until the model runs'
@@ -409,33 +405,11 @@ class Share(Expr):
         return out if self.row.scalar is None else evaluate(self.row.scalar, ctx)*out
 
 
-class Column(Expr):
-    """ One destination's column of a function given as the single `p=` of a transition with several (`p=fn`, returning a row of probabilities or weights for each person or group, one column per destination), normalized over the row """
-    def __init__(self, p, i, n):
-        self.p = p
-        self.i = i
-        self.n_dst = n
-        return
-
-    @property
-    def leaves(self):
-        return self.p.leaves
-
-    def evaluate(self, ctx):
-        row = np.asarray(evaluate(self.p, ctx), dtype=float)
-        if row.shape[-1:] != (self.n_dst,):
-            raise ss.BadBranchSplit(f'the function {format_expr(self.p)} given as p= returns a row of {row.shape[-1] if row.ndim else 1} values, but the transition has {self.n_dst} destinations; return one column per destination')
-        total = row.sum(axis=-1)
-        if np.any(total <= 0):
-            raise ss.BadBranchSplit(f'the function {format_expr(self.p)} given as p= returns a row that sums to 0, so it has no shares')
-        return row[..., self.i]/total
-
-
 def to_pars(expr):
     """ The parameters in an expression whose value is an `ss.by` with a `to` axis (over the destinations of a transition) """
     if not isinstance(expr, Expr):
         return []
-    leaves = expr.leaves if not isinstance(expr, (Share, Column)) else []
+    leaves = expr.leaves if not isinstance(expr, Share) else []
     return [leaf for leaf in leaves if isinstance(leaf, par) and isinstance(leaf.raw, ss.by) and 'to' in leaf.raw.dims]
 
 
@@ -506,30 +480,7 @@ class Clock(Expr):
         return f'{inner}.{self.kind}'
 
 
-class Mother(Expr):
-    """
-    `ss.mother(x)`: a condition or expression evaluated on each unborn agent's mother (or, with `born=True`, each agent's), and 0 for everyone else
-
-    Args:
-        x (Cond/State/Expr): what to evaluate on the mother, e.g. `syph.Pv | syph.S2`, or `preg.P.time`
-        born (bool): also for agents already born, not only the unborn
-    """
-    def __init__(self, x, born=False):
-        if isinstance(x, Mother):
-            errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
-            raise ValueError(errormsg)
-        self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
-        self.born = born
-        return
-
-    def to_str(self, parent=False):
-        return f'mother({self.x}{", born=True" if self.born else ""})'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
-
-
-def mother(x, born=False):
+class mother(Expr):
     """
     A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born, unless born=True
 
@@ -550,7 +501,19 @@ def mother(x, born=False):
         newborn = ss.screen(test, who=preg.birth & ss.mother(anc.positive.since <= ss.years(1), born=True))
         ```
     """
-    return Mother(x, born=born)
+    def __init__(self, x, born=False):
+        if isinstance(x, mother):
+            errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
+            raise ValueError(errormsg)
+        self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
+        self.born = born
+        return
+
+    def to_str(self, parent=False):
+        return f'mother({self.x}{", born=True" if self.born else ""})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
 
 
 class Since(Expr):
@@ -585,7 +548,7 @@ def mothers_in(obj, seen=None):
     if id(obj) in seen:
         return False
     seen.add(id(obj))
-    if isinstance(obj, Mother):
+    if isinstance(obj, mother):
         return not obj.born # Only the unborn need fetuses as agents
     elif isinstance(obj, par):
         return mothers_in(obj.value, seen) if isinstance(obj.value, (Expr, ss.conditions.Cond)) else False
@@ -889,13 +852,13 @@ def evaluate(expr, ctx):
         return ctx.exposure(expr)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
-    elif isinstance(expr, (Share, Column)):
+    elif isinstance(expr, Share):
         return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
     elif isinstance(expr, attr):
         return ctx.attr(expr)
-    elif isinstance(expr, Mother):
+    elif isinstance(expr, mother):
         return ctx.mother(expr)
     elif isinstance(expr, Since):
         return ctx.since(expr)
@@ -996,9 +959,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         elif isinstance(e, Share):
             share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
-        elif isinstance(e, Column):
-            return f'{fmt(e.p)}[{e.i}]'
-        elif isinstance(e, (Clock, Mother, Since)):
+        elif isinstance(e, (Clock, mother, Since)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

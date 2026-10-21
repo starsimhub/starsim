@@ -228,7 +228,7 @@ def coded_disease(sim, name):
 
 def trigger_moves(owner, outcome, sel, eng=None, before=None):
     """
-    The transitions triggered by an event of a delivery or product (e.g. `ss.Transition('I -> R_res', on=drug.failed, p=0.05)`):
+    The transitions triggered by an event of a delivery or product (e.g. `ss.Transition(I, R_res, on=drug.failed, p=0.05)`):
     the people it happened to who are in the transition's source, and meet the rest of its condition, move now, with its
     probability (`p=`), or split between its destinations; under every solver
 
@@ -336,7 +336,7 @@ def check_undriven(sim):
     """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.UndrivenUnused`) """
     for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
-            if tr.undriven and not getattr(tr, 'intended', False) and not movers(sim, mod.name, name):
+            if tr.undriven and not movers(sim, mod.name, name):
                 ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.UndrivenUnused)
     return
 
@@ -1551,7 +1551,8 @@ class vaccinate(Delivery):
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         vaccine = ss.Vaccine(efficacy=0.85)
         campaign = ss.vaccinate(vaccine, coverage=0.7, at=[20, 40])
         sim = ss.Sim(sir, interventions=campaign, stop=100).run()
@@ -1566,7 +1567,8 @@ class treat(Delivery):
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         drug = ss.Treatment(cure=0.95)
         treatment = ss.treat(drug, coverage=0.5, interval=7)
         sim = ss.Sim(sir, interventions=treatment, stop=100).run()
@@ -1586,7 +1588,8 @@ class screen(Delivery):
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         test = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
         screening = ss.screen(test, coverage=0.4, interval=7)
         treatment = ss.treat(ss.Treatment(cure=0.95), who=screening.positive, coverage=0.8)

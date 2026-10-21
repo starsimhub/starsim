@@ -66,9 +66,10 @@ Example: `ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)`. If syp
 ```python
 import starsim as ss
 
+S, I, R = ss.states('S I R')
 sir    = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 test   = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
@@ -214,7 +215,7 @@ Requirement 2 rules out one random number stream shared across workers, and is o
 
 `sim.init()` builds the sim in this order (`sim.run()` calls it if it has not been called):
 
-1. Resolve the declarations: states (declared or inferred, and which of them are people), the kind of each transition, the sim's unit (from `unit=`, else the model's typed values, else dates; none of these means time is in steps; [02-types.md](02-types.md)), and defaults. Every guessed default is recorded for `describe()`.
+1. Resolve the declarations: states (and which of them are people), the kind of each transition, the sim's unit (from `unit=`, else the model's typed values, else dates; none of these means time is in steps; [02-types.md](02-types.md)), and defaults. Every guessed default is recorded for `describe()`.
 2. Expand stratifications into strata and generate the transitions between them.
 3. Load named data: parameters from data sources, and observed data attached to results by name.
 4. Check the dimension of every rate, the shape of every array-valued parameter, and every parameter's value against its bounds (`ss.UnvaluedParameter`, `ss.OutOfBounds`).

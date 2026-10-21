@@ -14,14 +14,14 @@ kw = dict(verbose=0, start=2000, stop=2010, dt=ss.months(3))
 def make_geno(name, beta=1.2):
     """ A genotype as a disease of its own, S -> I -> S """
     S, I = ss.states('S I')
-    return ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(beta)), clearance=I >> S @ ss.years(1), init_prev=0.1, name=name)
+    return ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(beta) * I), clearance=I >> S @ ss.years(1), init_prev=0.1, name=name)
 
 
 def make_hpv(name, beta=1.5):
     """ A genotype with a lesion and cancer: S -> I -> CIN -> CA, cleared to S, and excised (undriven) back to I """
     S, I, CIN, CA = ss.states('S I CIN CA')
     return ss.Disease(
-        infection = ss.transmission('S -> I', beta=ss.peryear(beta), source=I + CIN),
+        infection = S >> I @ ss.peryear(beta) * (I + CIN),
         clearance = I >> S @ ss.years(1),
         dysplasia = I >> CIN @ ss.years(2),
         regress   = CIN >> S @ ss.years(3),
@@ -203,11 +203,11 @@ def test_outcomes():
 
 
 def test_any():
-    sc.heading('Testing ss.any() across diseases in detects= and eligible=, with the disease taken from the conditions')
+    sc.heading('Testing a condition across diseases in detects= and eligible=, with the disease taken from the conditions')
     seen = sc.objdict()
     def make(**kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
-        any_cin, any_ca = ss.any(g.CIN for g in genos), ss.any(g.CA for g in genos)
+        any_cin, any_ca = genos[0].CIN | genos[1].CIN, genos[0].CA | genos[1].CA
         def look(sim):
             if sim.solver == 'abm':
                 d, u = sim.diseases, sim.people.auids
@@ -258,7 +258,7 @@ def test_strain_efficacy():
     sc.heading('Testing an efficacy by a strain that susceptibles do not carry: an error, pointing to efficacy by disease')
     def make(eff, **kwargs):
         S, I = ss.states('S I')
-        hpv = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(1.2)), clearance=I >> S @ ss.years(1), init_prev=0.1, name='hpv')
+        hpv = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.2) * I), clearance=I >> S @ ss.years(1), init_prev=0.1, name='hpv')
         hpv.stratify(genotype=['hpv16', 'hpv18'], kind='strain') # In v4 a name only suggests a kind
         return ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=eff), at=[2005]), **kwargs)
     for solver in ['abm', 'ode']:
@@ -344,7 +344,7 @@ def test_hpv_screen_treat():
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.3)]
         tx = lambda name, eff: ss.Treatment(moves={g.excised: eff for g in genos}, name=name) # port.py treat_all_genotypes(), with no fan-out
         hpv_dna = ss.Diagnostic(sensitivity={g[x]:p for g in genos for x,p in dict(I=0.9, CIN=0.95).items()}, specificity=0.97)
-        any_ca = ss.any(g.CA for g in genos)
+        any_ca = genos[0].CA | genos[1].CA
         primary = ss.screen(hpv_dna, who=hpv_dna.since >= ss.years(5), coverage=ss.probperyear(0.3), start=2005, name='primary')
         tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~any_ca), who=primary.positive, coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6), name='tx_visit')
         ablate = ss.treat(tx('ablation', 0.936), who=tx_visit.positive, name='ablate')

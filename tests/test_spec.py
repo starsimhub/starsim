@@ -122,7 +122,7 @@ def test_error_catalog():
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
     'Sim and modules': ('Sim People people ppl Module Disease Strains Infection Demographics Intervention Connector Analyzer', 'people ppl Strains'),
-    'States, transitions, parameters, results': ('State states null Transition transmission progression birth death immigration emigration lifetable transfer par outcome data', 'all'),
+    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par outcome data', 'all'),
     'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
@@ -140,7 +140,7 @@ DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModifiableArr Pars Per
 Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results SEIR SIR SIS SexualNetwork SimPars beta_dist beta_mean
 check_requires choose_n demo dtypes dynamics_by_age histogram infection_log
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink standardize_data standardize_netkey state any child mother attr on stay style to_code uids warn
+show shrink standardize_data standardize_netkey state child mother attr on stay style to_code uids warn
 """.split()
 
 

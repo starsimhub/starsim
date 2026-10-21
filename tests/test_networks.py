@@ -565,7 +565,7 @@ def test_partners():
     # Acts in each partnership (acts=, per unit time): beta is then per act, so two acts a day at 0.4 transmit as one partnership at 1 - 0.6**2 a day
     def prev(acts, beta):
         S, I = ss.states(2)
-        sis2 = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=I >> S @ ss.prob(0.05), init=dict(I=10), name='sis')
+        sis2 = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=I >> S @ ss.prob(0.05), init=dict(I=10), name='sis')
         return ss.Sim(sis2, networks=ss.PartnerNet(n_contacts=0.7, dur=50, acts=acts), n_agents=medium, stop=200, rand_seed=1, verbose=0).run().results.sis.n_I.values
     assert np.allclose(prev(ss.freqperday(2), ss.peract(0.4)), prev(None, ss.prob(1 - 0.6**2)))
     with pytest.raises(ValueError, match='per unit time'): # A bare number would be acts in a step, which depends on the step
@@ -588,14 +588,16 @@ def test_partners():
 
     # With births and deaths, partnerships also end when a partner dies, which is allowed for so the mean holds
     net = ssl.DegreeNet(n_contacts=0.5, dur=50, name='main')
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.0), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
     demog = [ss.Births(birth_rate=ss.peryear(50)), ss.Deaths(death_rate=ss.peryear(50))]
     vital = ss.Sim(sir, networks=net, demographics=demog, n_agents=2000, dt=ss.weeks(1), start=2000, stop=2030, verbose=0).run()
     assert abs(vital.networks.main.results.mean_degree[-500:].mean() - 0.5) < 0.03
 
     # Several networks of the same kind take their names from their variables, or from the keys of a dict
     main, casual = ss.PartnerNet(n_contacts=0.5, dur=50), ss.PartnerNet(n_contacts=0.3, dur=5)
-    two = ss.Disease(infection=ss.transmission('S -> I', beta=dict(main=0.1, casual=0.05)), recovery=ss.progression('I -> R', dur=10), init_prev=0.05, name='two')
+    S, I, R = ss.states('S I R')
+    two = ss.Disease(infection=ss.Transition(S, I, rate=dict(main=0.1, casual=0.05) * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.05, name='two')
     assert list(ss.Sim(two, networks=[main, casual], n_agents=500, stop=5, verbose=0).init().networks.keys()) == ['main', 'casual']
     keyed = ss.Sim(two, networks=dict(main=ss.PartnerNet(dur=50), casual=ss.PartnerNet(dur=5)), n_agents=500, stop=5, verbose=0).init()
     assert list(keyed.networks.keys()) == ['main', 'casual']
@@ -606,7 +608,8 @@ def test_partner_targets():
     sc.heading('Testing other targets: partnerships within a level, and targets between men and women')
 
     # Most partnerships between people at the same level of risk
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.0), name='sir')
+    S, I = ss.states('S I')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), name='sir')
     sir.stratify(risk=['low', 'high'], split=[0.8, 0.2])
     for share in [None, 0.9]:
         net = ssl.DegreeNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
@@ -658,7 +661,8 @@ def test_bare_units():
 
 def chance(beta, acts=ss.constant(ss.freqperyear(1)), dt=ss.years(1), steps=1, connectors=None, net=None, n=40_000, f2m=False, seed=1):
     """ The chance that a partnership with an infectious partner transmits over some steps, measured over many lasting partnerships (from men to women, or with f2m=True, women to men) """
-    si = ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0.5, name='si')
+    S, I = ss.states('S I')
+    si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.5, name='si')
     net = net or ss.MFNet
     net = net(dur=ss.constant(ss.years(100)), participation=ss.bernoulli(p=1.0), debut=ss.constant(0), acts=acts)
     sim = ss.Sim(si, networks=net, connectors=connectors, n_agents=n, start=2000, stop=2000 + steps*dt.years, dt=dt, rand_seed=seed, verbose=0).init()
@@ -683,7 +687,8 @@ def test_per_act():
 
     # And an epidemic over 10 years is the same at monthly and weekly steps (it was 38% against 12% with ss.probpermonth(0.01), and 37% against 29% with -log(1 - p) as a rate per month)
     def prev(dt, beta=ss.peract(0.01)):
-        si = ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0.05, name='si')
+        S, I = ss.states('S I')
+        si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.05, name='si')
         sims = [ss.Sim(si, networks=ss.MFNet(dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))), n_agents=5000, start=2000, stop=2010, dt=dt, rand_seed=seed, verbose=0) for seed in [1, 2]]
         return np.mean([sim.run().results.si.n_I[-1]/5000 for sim in sims])
     monthly, weekly = prev(ss.years(1/12)), prev(ss.weeks(1))
@@ -726,7 +731,9 @@ def test_per_act():
 def test_beta_readings():
     sc.heading('Testing how a beta is read on networks with and without acts, and their directions')
     kw = dict(n_agents=500, start=2000, stop=2002, verbose=0)
-    sis = lambda beta: ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='sis')
+    def sis(beta):
+        S, I = ss.states('S I')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
     mf = ss.MFNet()
     assert ss.MFNet().directions == ['m2f', 'f2m'] and ss.PrenatalNet().directions == ['mother2child']
     assert ss.PartnerNet(sides='sex').directions == ['m2f', 'f2m', 'm2m', 'f2f'] and ss.RandomNet().directions == []
@@ -764,7 +771,8 @@ def test_beta_readings():
         ss.Sim(sis(0.01), networks=ss.MFNet(acts=ss.poisson(lam=ss.freqperyear(80))), **kw).init()
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
-    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5))), init_prev=0.1, name='hiv')
+    S, I = ss.states('S I')
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(mfnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5)) * I), init_prev=0.1, name='hiv')
     sim = ss.Sim(hiv, networks=[ss.MFNet(), ss.MaternalNet()], demographics=ss.Pregnancy(), **kw).run()
     assert sim.results.hiv.n_I[-1] > 0
     return
@@ -785,7 +793,8 @@ def test_route_modifiers():
 
     # ... and leaves the other routes alone
     def run(mods=None, beta=ss.peryear(0.5)):
-        si = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=ss.peract(0.05), randomnet=beta)), init_prev=0.05, name='si')
+        S, I = ss.states('S I')
+        si = ss.Disease(infection=ss.Transition(S, I, rate=dict(mfnet=ss.peract(0.05), randomnet=beta) * I), init_prev=0.05, name='si')
         return ss.Sim(si, networks=[ss.MFNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.n_I[-1]
     assert run(condoms(multiply=0, share=1)) > run(condoms(multiply=0, share=1), beta=0) > 0 # Infections only over the random network
     with pytest.raises(ss.RouteMismatch, match='not a route'):
@@ -795,7 +804,8 @@ def test_route_modifiers():
 
     # Under an ODE, over a mixing pool, it is a multiplier on that route's hazard, by group with a share by group, as agents
     def pool(solver, mods, seed=1):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=dict(pool=ss.perday(0.03), home=ss.perday(0.02))), recovery=ss.progression('I -> R', dur=ss.days(10)), init_prev=0.01, name='sir')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=dict(pool=ss.perday(0.03), home=ss.perday(0.02)) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
         nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
         sim = ss.Sim(sir, networks=nets, interventions=mods, stratify=dict(risk=['low', 'high'], split=[0.7, 0.3]), total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=seed, verbose=0)
         return sim.run().results.sir.n_R.values
@@ -813,7 +823,8 @@ def test_needles():
     sc.heading('Testing a needle-sharing network beside a sexual one (injecting drug use)')
     def run(mf_beta, needles_beta=ss.peract(0.006), nsp=False):
         needles = ss.PartnerNet(name='needles', where=ss.ppl.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
-        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=dict(mfnet=mf_beta, needles=needles_beta)), init_prev=0.05, name='hiv')
+        S, I = ss.states('S I')
+        hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(mfnet=mf_beta, needles=needles_beta) * I), init_prev=0.05, name='hiv')
         intv = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2005) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
         sim = ss.Sim(hiv, networks=[ss.MFNet(), needles], interventions=intv, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
         sim.stratify(pwid=[False, True], split=[0.9, 0.1]).init()
@@ -835,7 +846,8 @@ def test_two_groups():
     sc.heading('Testing partnerships between two groups (between=), lasting and one-off')
     def run(dt=ss.months(1), solver='abm', seed=1, n=10_000):
         sw = ss.PartnerNet(name='sw', between=('fsw', 'client'), n_contacts=dict(client=ss.permonth(1)), acts=3) # One-off contacts, 3 acts each
-        hiv = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peract(fsw2client=0.01, client2fsw=0.02)), init_prev=0.05, name='hiv')
+        S, I = ss.states('S I')
+        hiv = ss.Disease(infection=ss.Transition(S, I, rate=ss.peract(fsw2client=0.01, client2fsw=0.02) * I), init_prev=0.05, name='hiv')
         sim = ss.Sim(hiv, networks=sw, n_agents=n, total_pop=n, start=2000, stop=2010, dt=dt, solver=solver, rand_seed=seed, verbose=0)
         return sim.stratify(role=['none', 'fsw', 'client'], split=[0.8, 0.05, 0.15]).run()
 
@@ -853,7 +865,8 @@ def test_two_groups():
 
     # Lasting partnerships between the groups: each between one of each, with a number of partners for each
     net = ss.PartnerNet(name='regular', between=('fsw', 'client'), n_contacts=dict(fsw=3, client=0.5), dur=ss.months(3))
-    sim = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.1), init_prev=0.05, name='d'), networks=net, n_agents=5000, start=2000, stop=2003, dt=ss.months(1), verbose=0)
+    S, I = ss.states('S I')
+    sim = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), init_prev=0.05, name='d'), networks=net, n_agents=5000, start=2000, stop=2003, dt=ss.months(1), verbose=0)
     sim.stratify(role=['none', 'fsw', 'client'], split=[0.8, 0.05, 0.15]).run()
     e, role = sim.networks.regular.edges, sim.people.role.raw
     assert np.all(role[e.p1] == 1) and np.all(role[e.p2] == 2) and len(e.p1) > 300
@@ -863,7 +876,9 @@ def test_two_groups():
 @sc.timer()
 def test_partnership_approx():
     sc.heading('Testing the partnership approximation: lasting partnerships under the ODE, binomial, and Gillespie solvers')
-    sis = lambda beta, dur=None: ss.Disease(infection=ss.transmission('S -> I', beta=beta), **(dict(recovery=ss.progression('I -> S', dur=dur)) if dur else {}), init_prev=0.05, name='d') # SI with no dur
+    def sis(beta, dur=None):
+        S, I = ss.states('S I')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), **(dict(recovery=ss.Transition(I, S, dur=dur)) if dur else {}), init_prev=0.05, name='d') # SI with no dur
     def run(solver, disease, net, dt=ss.months(1), stratify=None, seed=1, n=5000, **kw):
         sim = ss.Sim(disease, networks=net, n_agents=n, total_pop=n, start=2000, stop=2020, dt=dt, solver=solver, rand_seed=seed, verbose=0, **kw)
         return sim.stratify(**(stratify or dict(sex=['female', 'male'])))
@@ -908,8 +923,8 @@ def test_peract_spec():
     sc.heading('Testing how a probability per act is described, written in the model spec, and written as code')
     def make(beta):
         S, P, EL = ss.states('S P EL')
-        syph = ss.Disease(S, P, EL, infection=ss.transmission('S -> P', source=dict(P=1, EL=0.55), beta=beta),
-                          latent=ss.progression('P -> EL', dur=ss.years(1)), clear=ss.progression('EL -> S', dur=ss.years(2)), init=dict(P=0.05), name='syph')
+        syph = ss.Disease(S, P, EL, infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)),
+                          latent=ss.Transition(P, EL, dur=ss.years(1)), clear=ss.Transition(EL, S, dur=ss.years(2)), init=dict(P=0.05), name='syph')
         condoms = ss.modify(syph.infection, efficacy=0.5, share=ss.timeseries({2000: 0.05, 2020: 0.3}), route='mfnet', name='condoms')
         return ss.Sim(syph, networks=ss.MFNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
     sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
@@ -936,7 +951,8 @@ def test_beta_default():
     kw = dict(n_agents=1000, stop=2, verbose=0)
     m2f = ss.par(0.06, name='m2f')
     def make(**betas):
-        return ss.Disease(infection=ss.transmission('S -> I', beta=betas), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.1, name='d')
+        S, I = ss.states('S I')
+        return ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='d')
 
     # A library disease names routes the sim may not have: those are dropped with a note, and the routes it does not name take the default
     sim = ss.Sim(make(mfnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.MFNet(), ss.MaternalNet()], **kw).run()
@@ -953,7 +969,8 @@ def test_beta_default():
     # The default is the same as giving each route its value, as agents and as an ODE, which agree; it can be a typed rate or a parameter
     def pools(solver, **betas):
         nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=betas), recovery=ss.progression('I -> R', dur=ss.days(10)), init_prev=0.01, name='sir')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
         sim = ss.Sim(sir, networks=nets, total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=1, verbose=0)
         return sim.run().results.sir.n_R.values
     res = {}
@@ -982,7 +999,8 @@ def test_per_act_beta():
     """ A bare beta on a network with acts is a probability per act, so it does not depend on dt or the unit """
     sc.heading('Testing per-act beta on a sexual network')
     def run(dt, unit='year', beta=0.003):
-        si = ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0.05, name='si')
+        S, I = ss.states('S I')
+        si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.05, name='si')
         mf = ss.MFNet(acts=ss.constant(ss.freqperyear(96)))
         sim = ss.Sim(si, networks=mf, n_agents=3000, start='2000-01-01', stop='2005-01-01', unit=unit, dt=dt, verbose=0, rand_seed=1).run()
         return sim.results.si.infection.sum()
@@ -1001,7 +1019,8 @@ def test_condoms():
             self.edges.condoms[:] = self.pars.share
             return
     def make(share=0.0, eff=0.8):
-        si = ss.Disease(infection=ss.transmission('S -> I', beta=0.02), init_prev=0.05, name='si')
+        S, I = ss.states('S I')
+        si = ss.Disease(infection=ss.Transition(S, I, rate=0.02 * I), init_prev=0.05, name='si')
         net = CondomNet(name='mf', acts=ss.constant(ss.freqperyear(50)))
         net.define_pars(share=share)
         condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, route='mf', name='condoms')
@@ -1031,7 +1050,8 @@ def test_coded_declared_transmission():
             return
 
     def pairs(coded, beta, net, mods=None):
-        si = SI(beta=beta, name='si') if coded else ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0, name='si')
+        S, I = ss.states('S I')
+        si = SI(beta=beta, name='si') if coded else ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0, name='si')
         sim = ss.Sim(diseases=si, networks=net, connectors=mods, analyzers=ss.infection_log(), n_agents=2000, start=2000, stop=2003, verbose=0, rand_seed=3).init()
         seeds = ss.uids(np.arange(0, 2000, 10)) # The same people infected at the start
         si = sim.diseases.si

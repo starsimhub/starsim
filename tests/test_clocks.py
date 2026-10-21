@@ -172,15 +172,15 @@ def test_bv_recurrence():
         recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
         onset  = CST1 >> CST4 @ ss.permonth(0.05)
         tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average
-        recur  = ss.progression('P -> CST4', rate=recur0*np.exp(-P.time/recur_tau))
-        settle = ss.progression('P -> CST1', dur=ss.months(6))
+        recur  = ss.Transition(P, CST4, rate=recur0*np.exp(-P.time/recur_tau))
+        settle = ss.Transition(P, CST1, dur=ss.months(6))
 
     def recur_rate(sim, uids): # The workaround (bv_gud_connectors/port.py)
         bv = sim.diseases.bv
         months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months
         return ss.permonth(0.06 * np.exp(-months / 3))
     class Old(BV):
-        recur = ss.progression('P -> CST4', rate=recur_rate)
+        recur = ss.Transition(BV.P, BV.CST4, rate=recur_rate)
 
     kw2 = dict(n_agents=10_000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw)
     new = ss.Sim(BV(name='bv'), **kw2).run().results.bv
@@ -197,8 +197,8 @@ def test_entry_hazard():
         CST1, CST4, P = ss.states('CST1 CST4 P')
         onset  = CST1 >> CST4 @ ss.permonth(0.05)
         tx     = CST4 >> P @ ss.months(2) # A dwell time, which ends in the state-change row
-        recur  = ss.progression('P -> CST4', rate=ss.permonth(0.06)*np.exp(-P.time/ss.months(3))) # Largest on entry
-        settle = ss.progression('P -> CST1', dur=ss.months(6))
+        recur  = ss.Transition(P, CST4, rate=ss.permonth(0.06)*np.exp(-P.time/ss.months(3))) # Largest on entry
+        settle = ss.Transition(P, CST1, dur=ss.months(6))
     kw2 = dict(n_agents=50_000, start=2000, stop=2005, unit='year', **kw)
     weekly, monthly = [ss.Sim(BV(name='bv'), dt=dt, **kw2).run().results.bv.recur.sum() for dt in [ss.weeks(1), ss.months(1)]]
     assert np.isclose(weekly, monthly, rtol=0.03), f'weekly {weekly:n}, monthly {monthly:n}' # Without the hazard on entry, monthly steps were about 20% lower

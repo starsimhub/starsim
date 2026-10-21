@@ -23,9 +23,10 @@ A model in this language is a set of objects (states, transitions, parameters), 
 Nobody is expected to write a model spec by hand, and nothing reads one back: models are written in Python, the spec is produced from them, and a model is saved and shared as code. There is no non-Python consumer of the spec.
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, stop=100)

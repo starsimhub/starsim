@@ -13,7 +13,7 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | A probability per unit of time | `ss.prob(p, 'day')`, `ss.prob(p, 'year')` |
 | A mean duration | `I >> R @ ss.days(10)` (exponential) |
 | A fixed duration | `Q >> R @ ss.constant(ss.days(30))` |
-| An Erlang or gamma duration, or stages | `ss.progression('E -> I', dur=ss.erlang(k=3, mean=ss.days(10)))`, or `stages=3` on the transition |
+| An Erlang or gamma duration, or stages | `E >> I @ ss.erlang(k=3, mean=ss.days(10))`, or `stages=3` on the transition |
 | A lognormal or other distribution | `dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3))` (agents sample it; compartments use Erlang stages, with a note) |
 | "As soon as", probability 1 at the next step | If it happens on entry, a branch with `p=` and no rate on the transition into the state (nobody waits in it, under every solver). If it waits on a condition (`where=`), a rate of a few per step, such as `rate=ss.perday(5)` for a daily step (99% leave within the step); not a very high rate such as `ss.perday(1e9)`, since a compartmental solver takes as many substeps as the fastest rate needs, and hangs |
 | A delay that is exact (odin's `delay()`, a lag) | `ss.outcome(source, delay=ss.days(14))` for a reported quantity; for people, a fixed dwell (`ss.constant`), which every solver takes exactly, as a conveyor of whole steps |
@@ -35,12 +35,12 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 
 | In the source | In Starsim |
 |---|---|
-| Births into a state | `ss.birth('-> S', rate=mu)` (per person, by the population), or `ss.null >> S @ mu * (S + I + R).n` |
+| Births into a state | `ss.birth(S, rate=mu)` (per person, by the population), or `ss.null >> S @ mu * (S + I + R).n` |
 | Deaths from some states, or from all | `(S \| R) >> ss.null @ mu`, `ss.death(rate=mu)` (from every state) |
 | An absorbing dead state that is removed (`autoremove`) | An outflow to `ss.null` |
-| Immigration and emigration | `ss.immigration('-> S', rate=)`, `ss.emigration(rate=)` |
+| Immigration and emigration | `ss.immigration(S, rate=)`, `ss.emigration(rate=)` |
 | Aging between age groups | `use_aging=True` on the sim with an age stratification; or `ss.transfer` between levels |
-| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth('-> NB', per=farrowing, n=10)` (agents); by prototype across several machines: custom code on the transition's events, see below |
+| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)` (agents); by prototype across several machines: custom code on the transition's events, see below |
 | Scheduled moves, entries, and exits (SimInf's events) | `ss.Mobility(data=df)` with columns for the time, `from`, `to`, the number, and the states chosen from |
 
 Actions on crossing a transition, such as offspring or a counter, as agents:

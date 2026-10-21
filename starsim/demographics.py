@@ -86,7 +86,7 @@ class Flows(Demographics):
     used directly.
 
     Args:
-        transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no arrow), and migration (`ss.immigration()`, `ss.emigration()` with no arrow)
+        transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no state), and migration (`ss.immigration()`, `ss.emigration()` with no state)
     """
     compartmental = True
 
@@ -94,7 +94,7 @@ class Flows(Demographics):
         super().__init__(**kwargs)
         for tr in transitions:
             if not (tr.inflow or getattr(tr, 'every_state', False)):
-                errormsg = f'demographics= takes births, deaths, and migration of everyone; "{tr.arrow}" is a transition of some people, so it goes in the disease, e.g. ss.SIR(deaths=ss.death("{tr.arrow}", ...))'
+                errormsg = f'demographics= takes births, deaths, and migration of everyone; "{tr.arrow}" is a transition of some people, so it goes in the disease, e.g. ss.Disease(..., deaths=ss.death(I, rate=...))'
                 raise ValueError(errormsg)
         self.transitions = list(transitions)
         return

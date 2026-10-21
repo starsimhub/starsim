@@ -44,9 +44,10 @@ msim.plot()                                 # the median and an interval
 The short form of the same disease, for when nothing needs a name, is two lines:
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 ss.Sim(sir, stop=100).run().plot()          # nothing has a unit, so time is in timesteps: 100 steps
@@ -71,7 +72,7 @@ Interventions ([08](08-interventions.md)) are a product or a change to a quantit
 ss.Sim                          modules, a population, mixing, a timeline, a solver
  ├── modules                    one or more ss.Module
  │     ├── ss.Disease           states people are in, and transitions between them (ss.Infection for a disease written as code)
- │     │     ├── ss.State           declared, or inferred from arrow strings; people, or a plain count
+ │     │     ├── ss.State           declared; people, or a plain count
  │     │     ├── ss.Transition      contact-mediated or spontaneous (derived from its rate)
  │     │     ├── ss.par             named parameters, in sir.pars
  │     │     └── results            n_<state>, one flow per transition, ss.outcome, ratios
@@ -91,12 +92,9 @@ ss.MultiSim                     many runs of a sim (ss.parallel); its results ha
 
 ## One vocabulary, several lengths
 
-The same transition can be written three ways, and a module can be built with a constructor or as a class. All of them produce the same model. [01-objects.md §The equivalence rule](01-objects.md#the-equivalence-rule)
+The same transition can be written two ways, and a module can be built with a constructor or as a class. All of them produce the same model. [01-objects.md §The equivalence rule](01-objects.md#the-equivalence-rule)
 
 ```python
-# Arrow strings: states inferred
-infection = ss.transmission('S -> I', beta=0.3)
-
 # Operators: states declared
 S, I, R   = ss.states(3)
 infection = S >> I @ 0.3 * I
@@ -122,13 +120,13 @@ Subclassing adds behavior. It does not add vocabulary.
 1. **The model is data.** States and transitions are objects, so the diagram, the equations, the stratified model, the hash, and the saved file are all derived from them. The serialized form is the model spec ([14-model-spec.md](14-model-spec.md)).
 2. **The solver is chosen for you, and can be changed.** `solver='auto'` picks the simplest, fastest representation that runs the model faithfully: an ODE if every part has a compartmental form, agents otherwise. `solver='ode' | 'binomial' | 'gillespie' | 'abm'` asks for one. For simple models this is a free run-time choice; for complex models the solver is effectively part of the specification. [12-backends.md](12-backends.md)
 3. **Approximations are stated.** `'auto'` never approximates the mixing and never drops individual-level structure; the one thing it does unasked is represent a non-exponential dwell time by Erlang sub-stages, and it says so. When a solver is asked for that the model does not natively fit, the library uses the standard approximation where one exists and says so in one line; it stops only when there is no sensible approximation. `approx=False` makes any approximation an error, and `approx=True` keeps the note in `sim.notes` without printing it. `sir.solvers()` shows which solvers can run a model before anything runs.
-4. **Defaults are guessed and printed.** `describe()` shows every inferred state, source of infection, dwell-time distribution, unit, and mixing assumption, and which states are people and which are counts. [01-objects.md §`describe()`](01-objects.md#describe)
+4. **Defaults are guessed and printed.** `describe()` shows every guessed dwell-time distribution, unit, and mixing assumption, and which states are people and which are counts. [01-objects.md §`describe()`](01-objects.md#describe)
 
 ## What happens at build time
 
 Nothing is computed when a model is written. `sim.init()`, which `sim.run()` (and `sim.describe()`) calls if it has not been called already, does three things in order:
 
-1. **Resolve defaults and check.** Names are assigned (states and transitions take theirs from the variables they are bound to); states are inferred from arrow strings if none were declared; sources of infection, which states are people, initial conditions, dwell-time distributions, and the mixing are filled in where they were not given. Unknown state and parameter names, values outside their bounds, and shapes that do not match their stratification are reported here, before the first timestep, as named errors ([15-errors.md](15-errors.md)). Every guess is recorded so that `describe()` can mark it.
+1. **Resolve defaults and check.** Names are assigned (states and transitions take theirs from the variables they are bound to); sources of infection (from the rates), which states are people, initial conditions, dwell-time distributions, and the mixing are filled in where they were not given. Unknown state and parameter names, values outside their bounds, and shapes that do not match their stratification are reported here, before the first timestep, as named errors ([15-errors.md](15-errors.md)). Every guess is recorded so that `describe()` can mark it.
 2. **Pick the unit and the solver.** The sim's unit comes from the model ([02-types.md](02-types.md#the-sims-unit)). Under `solver='auto'`, the library checks whether every part has a compartmental form (trying any user functions on groups, and turning a non-exponential dwell time into sub-stages) and chooses an ODE or agents accordingly; under an explicit solver it works out what, if anything, has to be approximated. The choice and its reason are printed (`solver: ode (every part of the model has a compartmental form)`), with a note for the unit if it was inferred and one for each approximation.
 3. **Build the population and the results.** The people (agents, or one row per group in a compartmental run), the initial values of every state, the results, and the loop. For a compartmental run with transmission, it prints R0 and the number infectious at the start (`sir: R0 = 3, with 100 infectious at the start`), as a check that the model and its seed are what was meant.
 

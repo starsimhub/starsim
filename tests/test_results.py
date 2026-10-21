@@ -253,7 +253,8 @@ def test_time_points():
     def kill(sim):
         sim.people.request_death(sim.people.auids[:2])
     S, I = ss.states(2)
-    dis = ss.Disease(infection=ss.transmission('S -> I', beta=0.0, source='I'), init=dict(I=1), kill=kill, name='dis')
+    S, I = ss.states('S I')
+    dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init=dict(I=1), kill=kill, name='dis')
     res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
     assert np.array_equal(res.n_alive, [1000, 998, 996, 994, 992])
     assert np.array_equal(res.new_deaths, [0, 2, 2, 2, 2])
@@ -276,7 +277,7 @@ def test_time_points():
 def cohort(solver, p=0.3, data=None):
     """ 10,000 people who leave P after 5 days on average: a share p to C, and the rest to R """
     P, C, R = ss.states('P C R')
-    course = ss.progression('P -> C | R', dur=ss.days(5), p=[p, None])
+    course = ss.Transition(P, [C, R], dur=ss.days(5), p=[p, None])
     dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), init=dict(P=10_000), name='dis')
     dis.stratify(age=ss.years([0, 40]))
     return ss.Sim(dis, n_agents=10_000, solver=solver, unit='day', stop=60, data=data, verbose=0)

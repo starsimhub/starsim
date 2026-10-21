@@ -12,7 +12,8 @@ kw = dict(verbose=0, unit='day')
 
 
 def make_sir():
-    return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
 
 
 def run_both(make, stop=100, pop=50_000, n_agents=10_000, **kwargs):
@@ -298,7 +299,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     return ss.Disease(
         infection = S >> E @ beta*(A + P + Y + C),
-        latency   = ss.progression('E -> P | A', p=0.4, dur=ss.days(5)),
+        latency   = ss.Transition(E, [P, A], p=0.4, dur=ss.days(5)),
         onset     = P >> Y @ ss.days(10),
         seek      = Y >> C @ ss.days(20),
         clear_a   = A >> S @ ss.days(150),
@@ -355,7 +356,8 @@ def test_rescreen():
 def test_two_doses():
     sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py), as agents')
     def make(**kwargs):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(1.5)), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])
+        S, I = ss.states('S I')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.5) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])
         vx = ss.Vaccine(efficacy=0.9, doses=[0.6, 1.0])
         girls = (ss.ppl.age >= 9) & (ss.ppl.age < 15)
         first = ss.vaccinate(vx, who=girls & ~vx.ever, coverage=ss.probperyear(0.5), start=2020)

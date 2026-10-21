@@ -15,9 +15,10 @@ There are a few basic ways to add vital dynamics to your model. The simplest is 
 import starsim as ss
 ss.options(jupyter=True)
 
+S, I = ss.states('S I')
 sis = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.peryear(2)),
-    recovery = ss.progression('I -> S', dur=ss.years(1)),
+    infection = ss.Transition(S, I, rate=ss.peryear(2) * I),
+    recovery = ss.Transition(I, S, dur=ss.years(1)),
     init_prev = 0.01,
 )
 demographics = [

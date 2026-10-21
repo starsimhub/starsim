@@ -86,9 +86,10 @@ The number remembers the rate and the duration it was made from, which is how th
 
 <!-- fragment -->
 ```python
-ss.transmission('S -> I', beta=0.05)      # beta= is a rate slot      -> 0.05 per unit time
-ss.progression('I -> R', dur=10)          # dur= is a duration slot   -> 10 units of time
-ss.progression('I -> R', rate=0.1)        # rate= is a rate slot      -> 0.1 per unit time
+S, I, R = ss.states('S I R')
+ss.Transition(S, I, rate=0.05 * I)        # beta, the factor of I, takes the rate's -> 0.05 per unit time
+ss.Transition(I, R, dur=10)               # dur= is a duration slot   -> 10 units of time
+ss.Transition(I, R, rate=0.1)             # rate= is a rate slot      -> 0.1 per unit time
 I >> R @ 0.1                              # after @, a bare number is always a rate
 ```
 
@@ -132,9 +133,10 @@ The default timestep is one unit: one day, one year, or one step. With no `stop`
 If nothing has a unit (no `unit=`, no unit on any `dt`, no dates, no typed values), time is unitless and counted in timesteps. `beta=0.3` is per step, `dur=10` is ten steps, `stop=100` is 100 steps, results are indexed by step, and nothing is said or assumed about days or years:
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 ss.Sim(sir, stop=100).run()    # 100 steps

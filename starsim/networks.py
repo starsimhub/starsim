@@ -2154,7 +2154,8 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
 
     Examples:
         ```python
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.05*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         mixing = ss.contacts([[10, 3], [3, 5]], bands=[0, 18])
         sim = ss.Sim(sir, networks=mixing, unit='day', stop=100).run()
 
@@ -2267,7 +2268,8 @@ class geo:
         ```python
         kenya = ss.geo('Kenya', level=1) # Its 47 counties
         towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         sir.stratify(patch=towns, mobility=ss.gravity(k=0.01))
         ```
     """

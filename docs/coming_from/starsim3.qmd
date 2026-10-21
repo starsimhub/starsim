@@ -24,9 +24,10 @@ In Starsim 4, the same disease is declared as states and transitions. Two things
 import starsim as ss
 ss.options(jupyter=True)
 
+S, I = ss.states('S I')
 sis = ss.Disease(
-    infection = ss.transmission('S -> I', beta=dict(randomnet=ss.prob(0.05, 'month'))),
-    recovery  = ss.progression('I -> S', dur=ss.years(1)),
+    infection = ss.Transition(S, I, rate=dict(randomnet=ss.prob(0.05, 'month')) * I),
+    recovery  = ss.Transition(I, S, dur=ss.years(1)),
     init_prev = 0.01,
 )
 sim = ss.Sim(sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, start=2000, stop=2010, dt=ss.years(1/12), verbose=0)

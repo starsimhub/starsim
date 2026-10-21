@@ -33,8 +33,9 @@ untriggered = {}
 # %% Models
 
 def sir(name='sir', beta=0.3, **kwargs):
-    """ The two-line SIR """
-    return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), name=name, **sc.mergedicts(dict(init_prev=0.01), kwargs))
+    """ A simple SIR """
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=10), name=name, **sc.mergedicts(dict(init_prev=0.01), kwargs))
 
 
 def ode(*args, **kwargs):
@@ -59,15 +60,19 @@ def _(): 1 - ss.peryear(0.1)
 def _(): ss.peryear(0.1) * ss.peryear(0.1)
 
 @trigger(ss.ReservedName)
-def _(): ss.Disease(step=ss.progression('I -> R', dur=3))
+def _():
+    I, R = ss.states('I R')
+    ss.Disease(step=ss.Transition(I, R, dur=3))
 
 @trigger(ss.UnknownState)
 def _():
     S, I = ss.states('S I')
-    ss.Disease(S >> I @ 0.1*I, ss.progression('I -> Q', dur=3))
+    ss.Disease(S >> I @ 0.1*I, init=dict(Q=0.1))
 
 @trigger(ss.BadBranchSplit)
-def _(): ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
+def _():
+    I, H, R = ss.states('I H R')
+    ss.Disease(a=ss.Transition(I, H, p=0.2, dur=3), b=ss.Transition(I, R, p=0.7, dur=3))
 
 @trigger(ss.DuplicateDeclaration)
 def _(): ode(ss.SIR(name='a', births=ss.birth(rate=0.02)), ss.SIS(name='b', births=ss.birth(rate=0.02))).init()
@@ -78,7 +83,9 @@ def _():
     ss.Disease(S >> I @ 0.1*I*I)
 
 @trigger(ss.UndrivenTransition)
-def _(): ss.transmission('S -> I')
+def _():
+    S, I = ss.states('S I')
+    ss.Disease(births=ss.Transition(ss.null, S), infection=S >> I @ 0.1*I)
 
 @trigger(ss.UnnamedState)
 def _():
@@ -90,9 +97,6 @@ def _():
     S, I = ss.states('S I')
     W = ss.State('W', people=False)
     ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.null >> W @ 10*I.n)
-
-@trigger(ss.SourceNeeded)
-def _(): ode(ss.Disease(infection=ss.transmission('S -> E', beta=0.3), latency=ss.progression('E -> I', dur=5), recovery=ss.progression('I -> R', dur=10))).init()
 
 @trigger(ss.UnknownTransition)
 def _(): sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
@@ -160,7 +164,8 @@ def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], n_Q=[10])), stop=100).init
 
 @trigger(ss.OverlappingSources)
 def _():
-    d = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), death=ss.progression('I -> D', dur=50), init_prev=0.01, name='sird')
+    S, I, R, D = ss.states('S I R D')
+    d = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), death=ss.Transition(I, D, dur=50), init_prev=0.01, name='sird')
     ode(d, interventions=ss.treat(ss.Treatment(moves=[d.recovery, d.death]))).init()
 
 @trigger(ss.TriggerLoop)
@@ -182,7 +187,7 @@ def _():
 def _():
     S, X = ss.states('S X')
     X.people = False
-    ss.Disease(S, X, births=ss.null >> (0.9*S + 0.1*X) @ ss.peryear(100))
+    ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
 
 @trigger(ss.InitWhereNobodyIs)
 def _():
@@ -229,7 +234,9 @@ def _(): fittable().calibrate(method=[dict(method='nelder-mead', maxiter=2, scan
 def _(): fittable(solver='binomial', total_pop=10_000).calibrate(method='pmcmc', likelihood=dict(n_I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
 
 @trigger(ss.UndrivenUnused)
-def _(): ode(ss.Disease(infection=ss.transmission('S -> I', beta=0.3), cure=ss.progression('I -> S'), init_prev=0.01, name='sis')).init()
+def _():
+    S, I = ss.states('S I')
+    ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), cure=ss.Transition(I, S), init_prev=0.01, name='sis')).init()
 
 @trigger(ss.LossyExport)
 def _(): ss.Sim(sir(), networks='random', n_agents=100, **kw).to_code()
@@ -249,7 +256,9 @@ def _():
 def _(): return ode(sir(), start='2020-01-01', stop='2020-03-01').init()
 
 @trigger(ss.LargeStep, note='shorter than the step')
-def _(): return ode(ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=0.5), init_prev=0.01, name='sir')).init()
+def _():
+    S, I, R = ss.states('S I R')
+    return ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=0.5), init_prev=0.01, name='sir')).init()
 
 @trigger(ss.MatrixAggregated, note='aggregated from 3 age groups')
 def _(): return ode(sir(), stratify=dict(age=[0, 15]), networks=ss.contacts(np.ones((3, 3)), bands=[0, 15, 50])).init()
@@ -268,7 +277,9 @@ def _():
 def _(): return ode(sir(init_prev=0.002), total_pop=1000, stop=10).run()
 
 @trigger(ss.ExtinctionPossible, note='would usually die out')
-def _(): return ode(ss.Disease(infection=ss.transmission('S -> I', beta=0.5), recovery=ss.progression('I -> R', dur=5), waning=ss.progression('R -> S', dur=300), init_prev=0.01, name='sirs'), unit='day', stop=1000, total_pop=10_000).run()
+def _():
+    S, I, R = ss.states('S I R')
+    return ode(ss.Disease(infection=ss.Transition(S, I, rate=0.5 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=300), init_prev=0.01, name='sirs'), unit='day', stop=1000, total_pop=10_000).run()
 
 @trigger(ss.StagesUnderAuto, note='approximated by')
 def _(): return ode(ss.SIR(dur_inf=ss.lognorm_ex(mean=ss.years(6))), stop=2001).init()

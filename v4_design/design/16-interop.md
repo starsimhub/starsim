@@ -81,7 +81,8 @@ Writing the importers found gaps in the language. Each import lists the part it 
 
 ```python
 import starsim.interop
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
 sim = ss.Sim(sir, unit='day')
 
 ss.save('model.py', sim)                     # Python that builds the sim again (sim.to_code())
@@ -112,8 +113,9 @@ The diagram is the text of a Mermaid flowchart, from `sir.diagram()`; `format='m
 Since both are data, comparing them is mechanical:
 
 ```python
-sim_a = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir'), unit='day')
-sim_b = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.08), recovery=ss.progression('I -> R', dur=ss.gamma(a=3, scale=10/3)), init_prev=0.01, name='sir'), unit='day')
+S, I, R = ss.states('S I R')
+sim_a = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir'), unit='day')
+sim_b = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.08 * I), recovery=ss.Transition(I, R, dur=ss.gamma(a=3, scale=10/3)), init_prev=0.01, name='sir'), unit='day')
 ss.diff(sim_a, sim_b)
 ```
 

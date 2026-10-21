@@ -37,16 +37,14 @@ The names below are checked against the code: each one is exported by `starsim`,
 
 Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.UnknownState`, `ss.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
-### States, transitions, parameters, results: 15
+### States, transitions, parameters, results: 13
 
 | Name | What it is |
 |---|---|
-| **`ss.State`** | A state, with `people`, `init`, `infectious`, `rel_sus`, `rel_trans`, `label` |
+| **`ss.State`** | A state, with `people`, `init`, `rel_sus`, `rel_trans`, `label` |
 | **`ss.states`** | Several states at once, named from the variables they are assigned to: `S, I, R = ss.states(3)`. `ss.states('S I R')` when the names are wanted up front |
 | **`ss.null`** | Outside the model: the source of an inflow and the destination of an outflow (`ss.null >> W @ rate`, `I >> ss.null @ 0.1`) |
 | **`ss.Transition`** | The one transition class; also built by `a >> b @ x` |
-| **`ss.transmission`** | Shorthand: an arrow string with `beta=` and optionally `source=` |
-| **`ss.progression`** | Shorthand: an arrow string with `dur=` or `rate=`, optionally `p=` |
 | **`ss.birth`** | Shorthand: an inflow of newborns, at a rate per person |
 | **`ss.death`** | Shorthand: an outflow; `lifetable=` draws each person's age at death from a life table |
 | **`ss.immigration`** | Shorthand: an inflow of a number of people per unit time, at ages like the population's |
@@ -139,7 +137,7 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Group | Names | Of which new |
 |---|---|---|
 | Sim and modules | 12 | 3 |
-| States, transitions, parameters, results | 15 | 15 |
+| States, transitions, parameters, results | 13 | 13 |
 | Time | 27 | 1 |
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
@@ -147,13 +145,13 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Interactions and interventions | 9 | 9 |
 | Running, comparing, saving | 6 | 1 |
 | Types you get back or subclass | 5 | 0 |
-| **`ss.` names** | **103** | **40** |
+| **`ss.` names** | **101** | **38** |
 | Methods and attributes | 43 | 28 |
-| **Total** | **146** | **68** |
+| **Total** | **144** | **66** |
 
 <!-- counts end -->
 
-The two-line SIR uses five of them: `ss.Disease`, `ss.transmission`, `ss.progression`, `ss.Sim`, and `run` (six with `plot`). The operator form swaps the two constructors for `ss.states` and adds `ss.days` if the duration is typed. A stratified, calibrated national model with interventions uses perhaps forty.
+A simple SIR uses four of them: `ss.states`, `ss.Disease`, `ss.Sim`, and `run` (five with `plot`, and `ss.days` if the duration is typed). A stratified, calibrated national model with interventions uses perhaps forty.
 
 The total is about the first draft's (134). What changed is what the names are: most of the `ss.` names are ones a Starsim user already knows, and the ones removed (below) were mostly new concepts, while the ones added are mostly methods for looking at a model.
 
@@ -166,10 +164,8 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.Sim` | the model (a module or a list of modules) as the first argument; `networks` `people` `total_pop` `n_agents` `start` `stop` `dt` `unit` `solver` `integrator` `substeps` `approx` `stratify` `rand_seed` `verbose` `interventions` `connectors` `analyzers` `data` `pars` `results` `use_aging` `label`; plus `diseases`, `demographics`, `modules` as in Starsim. `solver` may also be given to `sim.run` before the sim is initialized, and `n_runs` to `sim.run` |
 | `ss.MultiSim`, `ss.parallel` | `n_runs` `pars` `priors`, and one keyword per scenario |
 | `ss.Disease` | `name` `dt` `init_prev` `init` `transitions` `results` `outcomes`, and one keyword per member |
-| `ss.State` | `name` `people` `init` `infectious` `rel_sus` `rel_trans` `label` |
+| `ss.State` | `name` `people` `init` `rel_sus` `rel_trans` `label` |
 | `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` `name` `label` |
-| `ss.transmission` | `beta` `source` (a state, a list, or a dict of weights) `p` `where` |
-| `ss.progression` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` |
 | `ss.birth`, `ss.immigration` | `rate` |
 | `ss.death`, `ss.emigration` | `rate` `dur`; `lifetable` (`ss.death`) |
 | `ss.transfer` | the stratification's name (or `increment`, for a counter), `rate` `dur` `p` `states`, and the delivery keywords |
@@ -199,11 +195,11 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 
 | Slot | A bare number is | Appears on |
 |---|---|---|
-| `beta=` | a rate per unit time with no network; a probability per contact on a network without acts; a probability per act on a network with acts (`ss.MFNet`, `ss.PartnerNet(acts=...)`), as `ss.peract`. A dict gives one value per network; directions are named with `ss.peract(m2f=..., f2m=...)` (a pair is an error) | `ss.transmission` |
+| `beta=` | a rate per unit time with no network; a probability per contact on a network without acts; a probability per act on a network with acts (`ss.MFNet`, `ss.PartnerNet(acts=...)`), as `ss.peract`. A dict gives one value per network; directions are named with `ss.peract(m2f=..., f2m=...)` (a pair is an error) | `ss.SIR`, `ss.SIS`, `ss.SEIR` and the library's diseases |
 | `rate=`, and a bare number after `@` | a rate (hazard) per unit time | `ss.Transition` and every shorthand constructor |
-| `dur=` | a duration; a scalar means an exponential dwell time with that mean | `ss.Transition`, `ss.progression`, `ss.transfer`, networks |
-| `p=` | a branch probability | `ss.Transition`, `ss.progression`, `ss.transmission`, `ss.transfer` |
-| `stages=` | a whole number of sub-stages | `ss.Transition`, `ss.progression` |
+| `dur=` | a duration; a scalar means an exponential dwell time with that mean | `ss.Transition`, `ss.transfer`, networks |
+| `p=` | a branch probability | `ss.Transition`, `ss.transfer` |
+| `stages=` | a whole number of sub-stages | `ss.Transition` |
 | `init=` | below 1 a fraction, 1 or more a number of people (whether written `1` or `1.0`); on the disease, a dict of these by state name | `ss.State`, `ss.Disease` |
 | `init_prev=` | a fraction | `ss.Disease` |
 | `n_contacts=` | contacts per unit time; on a sexual network, the mean number of partners at a time | `ss.MixingPool`, `ss.RandomNet`, `ss.PartnerNet` |
@@ -243,7 +239,11 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `capabilities()`, `closure=`, `to_ode()`, `scale=` | The closure ladder and per-transition hybrid solvers are out of v1 | `describe()`, `solver=`, printed approximations |
 | `jacobian()`, `fixed_points()`, `sim.equations()` | Symbolic analysis is not a v1 feature | `sir.equations()` |
 | `summary()` on a model, `to_dict()` | `summarize` is about results in Starsim; the model as data is its model spec, and `to_json` is a sim's results | `describe()`, `to_spec()` |
-| The dict tuple shorthand `dict(infection=('S -> I', 0.05))` | Ambiguous: it guesses the kind of transition from a bare value | The two-line constructor form |
+| The dict tuple shorthand `dict(infection=('S -> I', 0.05))` | Ambiguous: it guesses the kind of transition from a bare value | The operator form |
+| `ss.transmission`, `ss.progression` (arrow strings) | A second spelling of a transition, with states made from their names and the source of infection guessed | `S >> I @ beta * I`, `ss.Transition(I, R, dur=10)` |
+| `rate=ss.on(...)`, `after=` an event, `undriven=` | Duplicates of `on=` (`on=event, dur=delay`), and a flag that only silenced a warning | `on=`; a transition with no driver |
+| Weighted destinations (`S >> (p*A + (1-p)*B)`), `p=` a function giving a row | Duplicates of the list form of branches | `ss.Transition(S, [A, B], p=[p, 1 - p])`, a function for each destination |
+| `ss.any` | A reduce of `\|` | `a \| b`, or a list in `who=` |
 | `ss.Route` | Starsim's name; the base class is `ss.networks.Route`, not exported | `ss.Network`, passed with `networks=` |
 | `ss.stratify(sir, ...)`, `ss.RandomExactNet`, `birth_rate=`/`death_rate=` on `ss.Sim`, a delivery's `years=`/`dates=`/`eligible=`, `track_writes=` | Duplicates of other spellings (D34, D36, D38, D39) | `sir.stratify(...)`, `ss.RandomNet(method='exact')`, `demographics=[ss.birth(...), ss.death(...)]`, `at=`/`where=`, `sim.what_modifies()` |
 | `ss.explain`, `ss.conformance`, `mixing=`, `n=`, `route=`, `ontology=`, `kind=` on parameters, `take=`/`doses=`, `min=`/`max=` clamps, `crn_strict`, `run(force=)`, `run(reset=)` | Small things that did not earn a name | Documentation pages; `networks=`; `total_pop=`; inline provenance in `ss.par(source=)` |
@@ -276,7 +276,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `ss.clock()` | `(A \| B).time` is the same clock | `(A \| B).time` |
 | `X.dwell` | The same clock as `X.time`, half a step later | `X.time` |
 | `ss.spread` | Back-dating a module's start is a longer run; only pregnancy's burn-in keeps it, inside the module | Start the sim earlier |
-| `offspring=` | A birth in the same disease does it | `ss.birth('-> NB', per=farrowing, n=3)` |
+| `offspring=` | A birth in the same disease does it | `ss.birth(NB, per=farrowing, n=3)` |
 | `ss.func` | Never built; a plain function given as a keyword already does what it was for | A plain function, or `step()` |
 | `sim.crn_report()` | Never built | `ss.options.crn`, and paired runs ([11-random.md](11-random.md)) |
 | `dependence=` and `n_ref=` on `ss.MixingPool` | Never built; density dependence is a count in the rate | `beta * I.n` |

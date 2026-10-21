@@ -134,9 +134,11 @@ def test_posterior():
 def make_coinfection(beta=0.15, data=None, dt=0.25, **kwargs):
     """ Two diseases that modify each other, so whose states are tracked jointly (see ss.solvers.Crossing), one with a transfer at a constant rate """
     beta = ss.par(beta, bounds=[0.05, 0.5], name='beta')
-    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=beta), death=ss.death('I ->', rate=0.05), init_prev=0.05, name='hiv')
+    S, I = ss.states('S I')
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), death=ss.death(I, rate=0.05), init_prev=0.05, name='hiv')
     hiv.stratify(art=[False, True], states=['I'], adjust=dict(death=[1.0, 0.2]), move=ss.transfer(art=True, rate=ss.peryear(0.1)))
-    syph = ss.Disease(infection=ss.transmission('S -> I', beta=1.0), cure=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='syph')
+    S, I = ss.states('S I')
+    syph = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), cure=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='syph')
     coinfection = [
         ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
         ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
@@ -159,7 +161,8 @@ def test_crossing():
     assert sim.results.hiv.move[1:].sum() > 0 # The transfer's flow is recorded
 
     # Each flow of three diseases tracked jointly takes the exposure summed over the others' compartments as one number, worked out once (adding it up in each flow took 513 operations here, and three HPV genotypes 383 s instead of 9 s)
-    ds = [ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=5), waning=ss.progression('R -> S', dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
+    S, I, R = ss.states('S I R')
+    ds = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
     mods = [ss.modify(ds[i].rel_sus, multiply=0.5, where=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
     three = ss.Sim(diseases=ds, connectors=mods, unit='day', stop=100, total_pop=10_000, solver='ode', **kw).run()
     assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.n_I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
