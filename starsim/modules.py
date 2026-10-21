@@ -277,6 +277,10 @@ class Module(Base):
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
+        if unknown:
+            errormsg = f'{type(self).__name__}() got {"an unexpected keyword" if len(unknown) == 1 else "unexpected keywords"} {sc.strjoin(f"{key}=" for key in unknown)} (see the migrate-starsim3 skill for keywords that have changed)'
+            raise TypeError(errormsg)
         self.t = ss.Timeline(**kwargs, name=self.name, init=False) # Initialized in init_pre(), so the sim's dt is used if not supplied
 
         # Properties to be added by init_pre()
@@ -704,6 +708,10 @@ class Module(Base):
         initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
         """
+        other = getattr(self, 'sim', None)
+        if other is not None and other is not sim:
+            errormsg = f'"{self.name}" is already part of another sim; a sim runs the modules it is given, so give each sim its own, e.g. {self.name}.copy(), or make the module in a function'
+            raise ValueError(errormsg)
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
             ss.distributions.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances

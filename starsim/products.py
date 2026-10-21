@@ -567,9 +567,6 @@ class Treatment(Held):
     spec_keys = ['cure', 'efficacy', 'transition', 'to', 'moves', 'waning', 'cost']
 
     def __init__(self, cure=None, efficacy=None, transition=None, to=None, moves=None, **kwargs):
-        if 'on_fail' in kwargs:
-            errormsg = 'on_fail= is removed: what happens at failure is a transition of the disease triggered by the outcome, e.g. ss.Transition("I -> R_res", on=drug.failed, p=0.05), or a step of its own, e.g. ss.treat(second_line, who=first_line.failed)'
-            raise TypeError(errormsg)
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
             raise ValueError(errormsg)

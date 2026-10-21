@@ -118,7 +118,7 @@ A modifier never overwrites the quantity it changes. A modified array keeps its 
 ```{python}
 sis = ss.SIS(init_prev=0.2)
 protect = ss.modify(sis.rel_sus, multiply=0.5, where=lambda sim: sim.people.age < 15)
-sim = ss.Sim(diseases=sis, networks='random', n_agents=1000, connectors=protect, copy_inputs=False, verbose=0)
+sim = ss.Sim(diseases=sis, networks='random', n_agents=1000, connectors=protect, verbose=0)
 sim.run()
 
 children = (sim.people.age < 15).uids[:3]

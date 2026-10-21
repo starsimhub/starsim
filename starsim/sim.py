@@ -2,8 +2,6 @@
 Define core Sim classes
 """
 import os
-import types
-from dis import get_instructions
 import inspect
 import itertools
 import numpy as np
@@ -45,9 +43,6 @@ class Sim(ss.Base):
         unit (str): the unit of bare numbers in declared transitions, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
         approx (bool): by default, each approximation a solver makes is noted in one line (kept in `sim.notes`, and printed unless `verbose=0`); True does not print them, and False makes them errors
         stratify (dict): stratify every module by a property of people, e.g. `dict(age=[0, 15, 65])`
-        copy_inputs (bool): if True (default), copy modules as they're inserted into the sim, allowing
-            the same module objects to be reused across multiple sims. Set to False if you want external
-            references to the module objects to reflect state changes after sim.run().
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
@@ -75,12 +70,14 @@ class Sim(ss.Base):
 
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
-                 modules=None, copy_inputs=True, data=None, pars=None, **kwargs):
+                 modules=None, data=None, pars=None, **kwargs):
         self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
         models = [arg for arg in models if arg is not None]
+        given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
+                     interventions=interventions, analyzers=analyzers, custom=custom, modules=modules, data=data)
         for arg in models: # The model: modules, or lists of them; or the sim parameters, as a dict
             if isinstance(arg, dict):
-                kwargs = sc.mergedicts(arg, kwargs)
+                kwargs = sc.mergedicts({k:v for k,v in arg.items() if given.get(k) is None}, kwargs) # A keyword given outright wins over the same key in the dict
             elif not (isinstance(arg, ss.Module) or (isinstance(arg, (list, tuple)) and all(isinstance(mod, ss.Module) for mod in arg))):
                 errormsg = f'ss.Sim() takes the model (modules, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
                 raise TypeError(errormsg)
@@ -105,9 +102,7 @@ class Sim(ss.Base):
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
-        if copy_inputs:
-            remap_closures(args, input_pars)
+        input_pars = sc.mergedicts(pars, args, kwargs) # The sim runs the modules it is given, so code that refers to them sees it run; a module belongs to one sim
         self.pars.update(input_pars)  # Update the parameters
         self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
@@ -2301,93 +2296,6 @@ class Sim(ss.Base):
             kwargs['num'] = plotlabel
         title = self.label if show_label in ['title', 'suptitle'] else None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, title=title, show_skipped=show_skipped, show_module=show_module, n_ticks=n_ticks, annualize=annualize, **kwargs)
-
-
-def remap_closures(given, copies):
-    """
-    Point the functions that the copied modules hold at the sim's copies of the modules they close over (TL35)
-
-    A sim copies the modules it is given, and a bound method is copied with its module, but a
-    function is not copied: a closure from a factory method (`hs.serve()`), or a lambda naming
-    a module in the function it was written in, would read the module that was passed in, which
-    never runs. Their closures are remade with the copies. A function that names a module as a
-    global cannot be remade, so it is warned about.
-
-    Args:
-        given (dict): the modules as they were given, by argument (e.g. `interventions=[...]`)
-        copies (dict): the same, as copied
-    """
-    mapping = dict()
-    where = dict() # Where the sim keeps each, for the warning
-    for key,val in given.items():
-        for orig,copy in zip(sc.tolist(val), sc.tolist(copies.get(key))):
-            if isinstance(orig, (ss.Module, ss.People)) and orig is not copy:
-                mapping[id(orig)] = copy
-                where[id(orig)] = 'sim.people' if key == 'people' else f'sim.{key}.{getattr(copy, "name", None) or "<name>"}'
-    if not mapping:
-        return
-    seen = set()
-
-    def remap(fn):
-        """ The function with its closure pointed at the copies, or None if it needs no change """
-        if fn.__closure__ is None:
-            names = {ins.argval for ins in get_instructions(fn) if ins.opname in ['LOAD_GLOBAL', 'LOAD_NAME']} # Not attributes, which co_names also has
-            names = [name for name in names if id(fn.__globals__.get(name)) in mapping]
-            if names:
-                ss.warn(f'the function "{fn.__qualname__}" reads {sc.strjoin(names)} as a global, which is the module passed to the sim, not the copy the sim runs; look it up from the sim instead (e.g. {where[id(fn.__globals__[names[0]])]})')
-            return None
-        cells = []
-        changed = False
-        for cell in fn.__closure__:
-            try:
-                val = cell.cell_contents
-            except ValueError: # An empty cell
-                cells.append(cell)
-                continue
-            new = mapping.get(id(val))
-            if new is None and isinstance(val, types.FunctionType) and id(val) not in seen:
-                seen.add(id(val))
-                new = remap(val)
-            if new is not None:
-                changed = True
-                cells.append(types.CellType(new))
-            else:
-                cells.append(cell)
-        if not changed:
-            return None
-        out = types.FunctionType(fn.__code__, fn.__globals__, fn.__name__, fn.__defaults__, tuple(cells))
-        out.__kwdefaults__ = fn.__kwdefaults__
-        out.__dict__.update(fn.__dict__)
-        return out
-
-    def walk(obj, depth=0):
-        """ Replace the functions held in an object, its parameters, and the containers in them """
-        if depth > 4 or id(obj) in seen:
-            return
-        seen.add(id(obj))
-        if isinstance(obj, dict):
-            items = list(obj.items())
-            setter = lambda k, v: dict.__setitem__(obj, k, v)
-        elif isinstance(obj, list):
-            items = list(enumerate(obj))
-            setter = obj.__setitem__
-        elif type(obj).__module__.startswith('starsim') and hasattr(obj, '__dict__'):
-            items = list(vars(obj).items())
-            setter = lambda k, v: obj.__dict__.__setitem__(k, v)
-        else:
-            return
-        for k,v in items:
-            if isinstance(v, types.FunctionType):
-                new = remap(v)
-                if new is not None:
-                    setter(k, new)
-            else:
-                walk(v, depth+1)
-        return
-
-    for copy in mapping.values():
-        walk(copy)
-    return
 
 
 class AlreadyRunError(RuntimeError):

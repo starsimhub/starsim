@@ -147,6 +147,10 @@ def test_api():
     with pytest.raises(TypeError):
         ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).init()
 
+    # A keyword given outright wins over the same key in a dict of parameters
+    sim = ss.Sim(dict(diseases='sir', networks='random', n_agents=100), diseases=ss.SIS(), verbose=0).init()
+    assert list(sim.diseases.keys()) == ['sis']
+
     return s1
 
 
@@ -316,7 +320,6 @@ def test_creation_syntax():
         connectors = mod2,
         diseases = net,
         analyzers = dis,
-        copy_inputs = True,
     )
     sim.init()
     sim.run()

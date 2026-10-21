@@ -332,6 +332,12 @@ def check_betas(sim, nets):
                         if not acts:
                             raise ss.RouteMismatch(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
                         val.resolve(net)
+                    elif acts and ss.expressions.value_dimension(val) == -1 and getattr(p, 'library_default', False): # The default of ss.SIR, ss.SIS, or ss.SEIR: a probability per act, as in Starsim 3
+                        value = getattr(val, 'value', val)
+                        routes = raw if isinstance(raw, dict) else {'default':raw}
+                        p.value = routes | {net.name:ss.peract(value)}
+                        p.value[net.name].resolve(net)
+                        ss.note(f'the default beta of "{mod.name}" ({val!r}) is read as ss.peract({value}) on "{net.name}", which has acts, as in Starsim 3; give beta= to set it', sim=sim)
                     elif acts and ss.expressions.value_dimension(val) == -1:
                         raise ss.WrongDimension(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
     return

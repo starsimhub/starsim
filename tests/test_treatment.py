@@ -190,8 +190,6 @@ def test_crossed_outcomes():
     for solver,sim in run_both(make_one).items():
         r = sim.results
         assert np.isclose(r.fail_step.delivered.sum(), r.clinic.failed.sum(), rtol=0.01), f'{solver}: {r.fail_step.delivered.sum()} of {r.clinic.failed.sum()} failures'
-    with pytest.raises(TypeError, match='failed'): # on_fail= is written as a transition triggered by the outcome
-        ss.Treatment(moves='ng.cure', on_fail='ng.fail')
     return sims
 
 
@@ -273,8 +271,6 @@ def test_syndromic():
     check_close(sims, lambda sim: sim.results.syndromic.unneeded.select(disease='ct').sum(), rtol=0.15)
     check_close(sims, lambda sim: sim.results.syndromic.cured.select(disease='ng').sum(), rtol=0.15)
     assert sims.ode.crossings # The diseases are tracked jointly, since the treatment acts on both
-    with pytest.raises(TypeError, match='on=drug.failed'): # Removed: failure is a transition or a step of its own
-        ss.Treatment(moves='ng.cure', on_fail='ng.fail')
     return sims
 
 

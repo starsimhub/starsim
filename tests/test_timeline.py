@@ -286,7 +286,7 @@ def test_mixed_timesteps():
     SIS = ssl.AgentSIS # Written as code, since a declared disease cannot yet have a timestep of its own
 
     siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
-    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', verbose=0)
 
     print('Year-year')
     sis1 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))

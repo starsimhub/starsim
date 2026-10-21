@@ -117,7 +117,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 ### Types you get back or subclass: 6
 
-`ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's, and **`ss.Fit`**, what `sim.calibrate()` returns (called `fit` below). Users rarely construct these. (Starsim 3's `ss.Calibration` remains, for packages that subclass it, and is not counted.)
+`ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's, and **`ss.Fit`**, what `sim.calibrate()` returns (called `fit` below). Users rarely construct these. (Starsim 3's `ss.Calibration` is removed.)
 
 ### Methods and attributes: 45 distinct names
 
@@ -286,7 +286,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.rel_sus.effective` for the value with modifiers applied |
 | `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
 | `solver='tau'`, `'sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'`, which takes tau leaps when a run would take too many events; `'binomial'` |
-| `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.Fit` | `ss.Fit` (`ss.Calibration` remains for Starsim 3 code) |
+| `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.Fit` | `ss.Fit` (Starsim 3's `ss.Calibration` is removed) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
 | `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.n_I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
 | `ss.outcome(every=)`, `annualize()` | Resampling belongs to a result | `result.resample('year')` |

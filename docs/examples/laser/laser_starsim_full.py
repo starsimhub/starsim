@@ -121,7 +121,7 @@ def run_sim(run=True, plot=False):
     sir_model = SIRModel()
 
     # Initialize the model
-    sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model], copy_inputs=False)
+    sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model])
 
     # Run the simulation
     if run:

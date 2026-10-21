@@ -172,14 +172,7 @@ t('run')
 from .run import MultiSim, parallel
 
 t('calibration') # Lazy import to save 500 ms
-from .calibration import (
-    Calibration, CalibComponent,
-    BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
-    mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize,
-)
-
-t('samples')
-from .samples import Dataset, Samples
+from .calibration import mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize
 
 # The library of example/reference modules; not exported at the top level, access via e.g. ss.library.mnch.FetalHealth
 t('library')

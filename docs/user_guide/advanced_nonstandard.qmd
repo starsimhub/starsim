@@ -188,7 +188,7 @@ pars = dict(
 )
 
 # Run the model
-sim = ss.Sim(pars, copy_inputs=False) # copy_inputs=False lets us reuse the "wealth" object from above
+sim = ss.Sim(pars) # The sim runs the "wealth" object from above
 sim.run()
 
 # Plot the results

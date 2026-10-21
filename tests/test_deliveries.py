@@ -456,11 +456,6 @@ def test_screen():
         daily = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0, delay=ss.days(3)), interval=1, name='daily')
         res = ss.Sim(sir, interventions=daily, solver=solver, total_pop=100, **(dict(n_agents=100) if solver == 'abm' else {}), unit='day', stop=20, verbose=0).run().results.daily
         assert np.isclose(res.delivered.sum(), 700) and np.isclose(res.positive.sum(), 600, rtol=1e-3) # Each person every 3 days, the last result after the end; not 2,000 tests and 0 positive
-
-    # Nested follow-ups are removed, with a message that says how to write them as steps; and ss.Test is now ss.Diagnostic
-    for key in ['on_positive', 'on_negative']:
-        with pytest.raises(TypeError, match='step of its own'):
-            ss.screen(ss.Diagnostic(), interval=7, **{key:ss.treat(ss.Treatment())})
     return sims
 
 

@@ -51,7 +51,7 @@ def test_random():
 
     # Manual creation
     nw1 = ss.RandomNet()
-    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
+    ss.Sim(n_agents=small, networks=nw1).init() # This initializes the network
 
     # Automatic creation as part of sim
     s2 = ss.Sim(n_agents=small, networks='random').init()
@@ -258,7 +258,7 @@ def test_erdosrenyi():
     # Manual creation
     p = 0.1
     nw1 = ssl.networks.ErdosRenyiNet(p=p)
-    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
+    ss.Sim(n_agents=small, networks=nw1).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
@@ -287,7 +287,7 @@ def test_disk():
 
     # Visualize the path of agents
     nw1 = ssl.networks.DiskNet()
-    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1, copy_inputs=False).init() # This initializes the network
+    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1).init() # This initializes the network
 
     if sc.options.interactive:
         fig, ax = plt.subplots()
@@ -394,7 +394,7 @@ def test_dynamic_household():
 
     household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
     preg = ss.Pregnancy()
-    sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
+    sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg)
     sim.run()
 
     # All delivered agents should have household IDs; undelivered embryos should not.
@@ -428,7 +428,7 @@ def test_household_coarse_pregnancy_dt():
         household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True, prob_move_out=0.5)
         preg = ss.Pregnancy(dt=preg_dt)
         sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
-                     start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1, copy_inputs=False)
+                     start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1)
         sim.run()
         return household.n_households
 
@@ -446,7 +446,7 @@ def test_other():
 
     print('Testing MSM network')
     msm = ssl.MSMNet(participation=0.3)
-    sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=msm, copy_inputs=False)
+    sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=msm)
     sim.run()
 
     print('Testing MF network relative participation')
@@ -507,7 +507,7 @@ def test_dynamic():
 def test_cluster():
     sc.heading('Testing cluster networks')
     net = ssl.ClusterNet(cluster_size=ss.poisson(5), age_range=[18, 65])
-    sim = ss.Sim(n_agents=medium, networks=net, copy_inputs=False).init()
+    sim = ss.Sim(n_agents=medium, networks=net).init()
     ages = sim.people.age
     clusters = net.cluster[net.p1]
     assert np.array_equal(clusters, net.cluster[net.p2]) # Edges are only within clusters
@@ -738,6 +738,8 @@ def test_beta_readings():
     assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
     with pytest.raises(ss.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard (D2)
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.MFNet(), **kw).init()
+    sim = ss.Sim(diseases='sis', networks=['mf', 'random'], n_agents=500, verbose=0).init() # But the default of ss.SIS is a probability per act there, as in Starsim 3
+    assert sim.diseases.sis.pars.beta.raw['mfnet'] == ss.peract(0.05) and any('as in Starsim 3' in note for note in sim.notes)
     with pytest.raises(ss.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names (D3, N7)
         ss.Sim(sis(dict(mfnet=[0.3, 0.15])), networks=ss.MFNet(), **kw).init()
     with pytest.raises(ss.RouteMismatch, match='no acts'): # No act to be per

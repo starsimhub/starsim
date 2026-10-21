@@ -269,7 +269,7 @@ def test_ncd():
 
     ppl = ss.People(n_agents)
     ncd = ss.NCD()
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1), analyzers='infection_log') # Since using ncd directly below
+    sim = ss.Sim(people=ppl, diseases=ncd, dt=ss.years(1), analyzers='infection_log') # Since using ncd directly below
     sim.run()
     log = sim.analyzers[0].logs[0]
 

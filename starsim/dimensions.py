@@ -481,7 +481,7 @@ def transfer(rate=None, dur=None, p=None, states=None, name=None, label=None, in
         ss.transfer(method='none -> pill | iud', p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
         ```
     """
-    opts = [key for key in kwargs if key in ss.interventions.delivery_keys + list(ss.interventions.renamed_keys) + ['disease']]
+    opts = [key for key in kwargs if key in ss.interventions.delivery_keys + ['disease']]
     if opts:
         dim = next((key for key in kwargs if key not in opts), 'vaccinated')
         errormsg = (f'ss.transfer() is movement that happens all the time, at a rate (rate= or dur=); {sc.strjoin(f"{key}=" for key in opts)} {"is" if len(opts) == 1 else "are"} for a delivery. '

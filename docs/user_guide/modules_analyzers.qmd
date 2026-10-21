@@ -202,7 +202,7 @@ class dynamics_by_age(ss.Analyzer):
 
 # Demonstrate
 by_age = dynamics_by_age('sis.I', age_bins=(0, 10, 30, 100)) # People's states are named by module and state
-sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
+sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
 sim.run()
 by_age.plot()
 ```

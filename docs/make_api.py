@@ -82,7 +82,6 @@ module_titles = sc.objdict(
     results       = 'Results',
     run           = 'Running multiple simulations',
     calibration   = 'Calibration',
-    samples       = 'Samples',
     arrays        = 'Arrays and agent indexing',
     loop          = 'Integration loop',
     utils         = 'Utilities',

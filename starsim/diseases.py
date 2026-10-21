@@ -1405,7 +1405,9 @@ class SIR(Disease):
     standard_results = True
 
     def __init__(self, pars=None, **kwargs):
+        default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
         super().__init__(pars, **library_kwargs(type(self), kwargs))
+        self.graph.pars['beta'].library_default = default_beta # Read as a probability per act on a network with acts, as in Starsim 3 (see ss.solvers.check_betas())
         return
 
 
@@ -1439,7 +1441,9 @@ class SEIR(Disease):
     standard_results = True
 
     def __init__(self, pars=None, **kwargs):
+        default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
         super().__init__(pars, **library_kwargs(type(self), kwargs))
+        self.graph.pars['beta'].library_default = default_beta # Read as a probability per act on a network with acts, as in Starsim 3 (see ss.solvers.check_betas())
         return
 
 
@@ -1469,7 +1473,9 @@ class SIS(Disease):
     standard_results = True
 
     def __init__(self, pars=None, **kwargs):
+        default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
         super().__init__(pars, **library_kwargs(type(self), kwargs))
+        self.graph.pars['beta'].library_default = default_beta # Read as a probability per act on a network with acts, as in Starsim 3 (see ss.solvers.check_betas())
         return
 
 

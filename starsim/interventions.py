@@ -475,16 +475,6 @@ def order_steps(mods):
 #%% Deliveries for declared models: who gets a product, when, and how many
 
 delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'priority', 'queue', 'target', 'above']
-renamed_keys = dict(years='at', dates='at', eligible='where') # Starsim 4 prereleases and Starsim 3, which are an error that names the new keyword
-removed_keys = dict(on_positive='positive', on_negative='negative') # Nested follow-ups, now steps of their own
-replaced_keys = dict( # Keywords of the v4-rs branch, written another way here
-    then     = 'a step at the same visit is a step of its own, triggered by this one: ss.treat(drug, who=<this delivery>)',
-    on_result= 'a follow-up of one result is a step of its own, triggered by it: ss.treat(drug, who=<this delivery>.<result>)',
-    repeat   = 'whether someone may receive it again is a condition on its memory: who=... & ~<delivery>.ever (once ever), or who=... & (<delivery>.since >= ss.years(5))',
-    dose     = 'a product given in doses (doses=[...]) gives each holder the next dose; the second dose is a step triggered by the first, e.g. ss.vaccinate(vx, who=<first dose>, delay=...)',
-    remove   = 'what happens above a target is above=: "stop", a rate, or a transition',
-    of       = 'a target counts the holders of the product (or those at the end of the move); for a share of some people, give target=ss.share(0.8, among=...)',
-)
 
 
 class share:
@@ -639,20 +629,6 @@ class Delivery(ss.products.EventSource, Intervention):
     def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
                  capacity=None, uses=None, on=None, operator='any', when=None, deliver=None, trace=None, priority=None, queue=None, target=None, above=None,
                  delay=None, disease=None, at_age=None, count_events=None, name=None, label=None, **kwargs):
-        for key in [key for key in kwargs if key in renamed_keys]:
-            errormsg = f'{key}= of a delivery is now {renamed_keys[key]}= (the same keyword as ss.change() and ss.modify() use), e.g. ss.vaccinate(..., {renamed_keys[key]}=...)'
-            raise TypeError(errormsg)
-        for key in [key for key in kwargs if key in replaced_keys]:
-            errormsg = f'{key}= is not a keyword of a delivery: {replaced_keys[key]}'
-            raise TypeError(errormsg)
-        for key in [key for key in kwargs if key in removed_keys]:
-            errormsg = (f'{key}= is removed: a follow-up is a step of its own, triggered by the result, e.g.\n'
-                        f'     screening = ss.screen(test, ...)\n     treatment = ss.treat(drug, who=screening.{removed_keys[key]}, ...)\n'
-                        f'     and both are passed to the sim (or to ss.cascade(screening, treatment))')
-            raise TypeError(errormsg)
-        if 'product' in kwargs:
-            errormsg = 'the product of a delivery is what=, or the first argument, e.g. ss.vaccinate(bcg, ...) or ss.vaccinate(what=bcg, ...)'
-            raise TypeError(errormsg)
         product = what
         trigger, eligible = ss.conditions.split_who(who, operator=operator, where=where, on=on)
         own = {key:kwargs.pop(key) for key in self.product_keys if key in kwargs} # The product's own keywords, for a delivery that makes its own, e.g. ss.vaccinate(efficacy=0.9, ...)

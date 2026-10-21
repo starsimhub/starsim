@@ -246,7 +246,7 @@ class on:
 
     Examples:
         ```python
-        debut = U >> CST1 @ ss.on(ss.People.female & (ss.People.age >= 15))
+        debut = U >> CST1 @ ss.on(ss.ppl.female & (ss.ppl.age >= 15))
         cancelled = (S + P + C) >> Z @ ss.on(ss.any(ss.state(f'{g}.X') for g in others))
         ```
     """

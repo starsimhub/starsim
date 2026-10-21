@@ -6,6 +6,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 This version adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (`ss.SIR`, custom `step()` methods, etc.) still run, but their results are one step later than in Starsim 3 (see *Regression* below), so they agree with Starsim 3 statistically, not number for number. The migration guide (`docs/migration/v3_v4.md`) maps Starsim 3 code to Starsim 4.
 
+### Simplification
+- Starsim 3's calibration (`ss.Calibration`, `ss.CalibComponent` and its likelihoods), interventions and products (`ss.RoutineDelivery`, `ss.CampaignDelivery`, `ss.BaseTest` and the other base classes, `ss.treat_num`, `ss.Dx`/`Tx`/`Vx`), `ss.Samples`/`ss.Dataset`, `ss.Debugger`, `ss.check_version`, `msim.extinction()`/`outbreaks()`, `sim.R0()`, `sim.solvers()` (now part of `describe()`), and the aliases and error messages kept for Starsim 3 and prerelease names are removed; the migrate-starsim3 skill and `python -m starsim.interop.migrate` (moved from `starsim.migrate`) cover each. `msim.to_hub()` is `ss.interop.to_hub(msim)`.
+- *Regression*: code is no longer run on a throwaway sim to choose the solver. An analyzer, a plain `ss.Module`, a function given as a module, and a declared disease's own `step()` and functions run beside the compartments without changing it from an ODE; a function that needs agents says so when it runs, and `compartmental = False` on a module says it needs agents.
+- `ss.Loop(steps=[...], times=...)` runs ordinary functions with no sim (`step(t, dt)`, and `record(t)` at each time point), at shared or separate times.
+- A sim written only as code honors `unit=` (it ran in years); an unknown keyword to any module names the module.
+
 ### Fixes
 - *Regression*: a duration drawn from `ss.choice` of typed values (`ss.choice(a=ss.weeks([...]))`, as `dur_pregnancy` is) was read as bare numbers in the sim's unit, so it was right only when that unit was the values' own; it is now converted.
 - *Regression*: a drawn attribute (`ss.attr(dist, on=)`) with typed values was drawn in steps rather than in the sim's unit, so a comparison with a clock (`preg.P.time >= anc_ga`) was off by the step size.

@@ -130,25 +130,23 @@ m1, m2 = merged.split() # Back to two MultiSims with 3 runs each (or use inds or
 
 ## Copies
 
-Both `ss.Sim` and `ss.MultiSim` objects let you control whether or not the objects passed into them are copied. By default, sims _do_ copy inputs and multisims _don't_. Let's look at a few examples.
+A sim runs the modules it is given, so a module you made is the one that runs, and you can use it directly afterwards:
 
-Sims copy inputs by default because it's common to want to reuse a module between sims, which wouldn't be allowed if it wasn't copied (since it's modified in place during run). For example:
+```{python}
+sir = ss.SIR(beta=0.035)
+sim = ss.Sim(n_agents=2000, diseases=sir, networks='random')
+sim.run()
+sir.plot()
+```
+
+A module belongs to one sim, so to use the same module in two sims, give each its own copy:
 
 ```{python}
 sis = ss.SIS(beta=0.1)
 
-s1 = ss.Sim(label='Low contacts', n_agents=2000, diseases=sis, networks=ss.RandomNet(n_contacts=5))
-s2 = ss.Sim(label='High contacts', n_agents=2000, diseases=sis, networks=ss.RandomNet(n_contacts=10))
+s1 = ss.Sim(label='Low contacts', n_agents=2000, diseases=sis.copy(), networks=ss.RandomNet(n_contacts=5))
+s2 = ss.Sim(label='High contacts', n_agents=2000, diseases=sis.copy(), networks=ss.RandomNet(n_contacts=10))
 ss.parallel(s1, s2).plot()
-```
-
-But this can be confusing, because it means the `sis` in the simulation is a different object than the `sis` you created. If you want to keep it the same, set `copy_inputs=False`, for example, to use it directly afterwards:
-
-```{python}
-sir = ss.SIR(beta=0.035)
-sim = ss.Sim(n_agents=2000, diseases=sir, networks='random', copy_inputs=False)
-sim.run()
-sir.plot() # This wouldn't work without copy_inputs=False
 ```
 
 Conversely, `ss.MultiSim()` by default does _not_ copy the input sims, so they are modified in place:

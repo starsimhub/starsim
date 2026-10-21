@@ -295,8 +295,6 @@ def test_memory():
         assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # Agents are about 10% below the ODE at a step of a day (as in test_transfer), and one run varies too
     assert [s.labels for s in sims.ode.groups.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
-    with pytest.raises(TypeError, match='doses'):
-        ss.vaccinate(ss.Vaccine(efficacy=0.8), dose=2)
     return sims
 
 
@@ -317,8 +315,6 @@ def test_same_visit():
         assert np.isclose(res.visit_then2.delivered.sum(), 0.5*res.visit.delivered.sum(), rtol=0.05)
         assert np.isclose(res.visit_then2.positive.sum(), 0.1*res.visit_then2.delivered.sum(), rtol=0.15) # Tested at the same visit, after the drug (which cures 90%)
     check_close(sims, lambda sim: sim.results.visit_then1.delivered.sum(), rtol=0.1)
-    with pytest.raises(TypeError, match='step of its own'):
-        ss.treat(ss.Treatment(), then=ss.vaccinate(ss.Vaccine(efficacy=0.5)))
     return sims
 
 

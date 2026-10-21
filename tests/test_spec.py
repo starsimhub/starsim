@@ -134,10 +134,10 @@ vocabulary = {
 
 # The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr, ss.distributions.link_dists)
 code_names = """
-AgeGroup AlreadyRunError Arr Base BaseArr BetaBinomial Binomial Births BoolArr
-BoolState BreastfeedingNet CalibComponent Calibration Dataset DateArray Deaths Delivery Diagnostics DirichletMultinomial
-DynamicNetwork Event FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
-Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results SEIR SIR SIS Samples SexualNetwork SimPars beta_dist beta_mean
+AgeGroup AlreadyRunError Arr Base BaseArr Births BoolArr
+BoolState BreastfeedingNet DateArray Deaths Delivery Diagnostics
+DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Optimization Pars ParticleFilter Person PostnatalNet
+Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results SEIR SIR SIS SexualNetwork SimPars beta_dist beta_mean
 check_requires check_sims_match choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
 show shrink standardize_data standardize_netkey state any child mother attr func spread on Resource share stay clock style to_code uids warn

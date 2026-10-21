@@ -233,4 +233,4 @@ proj.results.sir.cases.plot()
 
 ## Existing code using `ss.Calibration`
 
-Starsim 3's `ss.Calibration` class, with its `build_fn`, `CalibComponent`s (`ss.Normal`, `ss.BetaBinomial`, and so on), and `eval_fn`, still exists so that existing code runs. For new work, `sim.calibrate()` replaces it: the bounds of `calib_pars` go on the parameters, the `expected` data of each component goes in `data=`, a component's likelihood becomes `likelihood=`, and an `eval_fn` becomes `gof=`. The [migration guide](../migration/v3_v4.md) maps one to the other.
+Starsim 3's `ss.Calibration` class, with its `build_fn`, `CalibComponent`s (`ss.Normal`, `ss.BetaBinomial`, and so on), and `eval_fn`, has been removed. `sim.calibrate()` replaces it: the bounds of `calib_pars` go on the parameters, the `expected` data of each component goes in `data=`, a component's likelihood becomes `likelihood=`, and an `eval_fn` becomes `gof=`. The [migration guide](../migration/v3_v4.md) maps one to the other.

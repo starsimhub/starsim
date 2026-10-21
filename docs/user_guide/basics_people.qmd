@@ -78,7 +78,7 @@ The main reason to create custom people is if you want to specify a particular a
 ```{python}
 age_data = pd.read_csv('test_data/nigeria_age.csv')
 ppl = ss.People(n_agents=10e3, age_data=age_data)
-sim = ss.Sim(people=ppl, copy_inputs=False).init()
+sim = ss.Sim(people=ppl).init()
 ppl.plot_ages();
 ```
 

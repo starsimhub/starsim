@@ -124,7 +124,7 @@ transmission = Transmission(infection_rate)
 sir_model = SIRModel()
 
 # Initialize the model
-sim = ss.Sim(params, modules=[intrahost, transmission, sir_model], copy_inputs=False)
+sim = ss.Sim(params, modules=[intrahost, transmission, sir_model])
 
 # Run the simulation
 with sc.timer():

@@ -140,7 +140,6 @@ website:
             - user_guide/workflows_sir_calibration.qmd
             - user_guide/workflows_calibration.qmd
             - user_guide/workflows_deploy.qmd
-            - user_guide/workflows_samples.qmd
           - section: "Advanced topics"
             contents:
             - user_guide/advanced_time.qmd
@@ -184,7 +183,6 @@ website:
           contents:
             - api/run.qmd
             - api/calibration.qmd
-            - api/samples.qmd
         - section: "**Library**"
           contents:
             - api/library.diseases.qmd
@@ -228,7 +226,6 @@ quartodoc:
         - products
         - results
         - run
-        - samples
         - settings
         - sim
         - time
