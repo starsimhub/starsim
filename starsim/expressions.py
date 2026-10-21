@@ -474,7 +474,7 @@ class Clock(Expr):
     of the scheduled dwell time in a state that has elapsed (`X.progress`, from 0 to 1)
 
     A duration in the sim's unit, so `X.time / ss.years(1)` is a number of years. It is NaN for anyone
-    outside the states. As agents only, for now.
+    outside the states. As agents only.
 
     Args:
         states (list): the states, as `ss.State`s or (module, name) pairs (from a condition, `A | B`)
@@ -482,10 +482,9 @@ class Clock(Expr):
     """
     sets = [] # The names of the sets of states that clocks have been made for: their engines keep the time each person entered the set (see `ss.solvers.Agents.define()`)
 
-    def __init__(self, states, kind='time', bins=None):
+    def __init__(self, states, kind='time'):
         self.states = list(states)
         self.kind = kind
-        self.bins = bins # In a compartmental run, the width of each level of elapsed time
         names = tuple(self.names)
         if len(set(names)) > 1 and names not in Clock.sets:
             Clock.sets.append(names)
@@ -494,10 +493,6 @@ class Clock(Expr):
     @property
     def names(self):
         return [s[1] if isinstance(s, tuple) else s.name for s in self.states]
-
-    def own(self, state):
-        """ Whether this is the time in one state (`X.time`), which for the people leaving it is `X.dwell` (see `ss.graph.Graph.check_dwell()`) """
-        return state is not None and self.kind == 'time' and len(self.states) == 1 and self.states[0] is state
 
     @property
     def module(self):
@@ -537,7 +532,7 @@ def mother(x, born=False):
     """
     A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born, unless born=True
 
-    Usable in rates, `p=`, `where=`, `who=`, `ss.on()`, and modifier conditions. Agents only for now.
+    Usable in rates, `p=`, `where=`, `who=`, `ss.on()`, and modifier conditions. Agents only: `solver='auto'` chooses them, and a compartmental solver stops with a `CapabilityError`.
 
     With `born=True` it is evaluated on the mother of anyone who has one, born or not, e.g. to reach the newborns
     of mothers who tested positive. An agent with no mother in the sim gets 0. A mother who has died or left is in
@@ -579,9 +574,6 @@ class Since(Expr):
     names = [] # As a clock (see clocks_in()), of no state
     kind = 'since'
 
-    def own(self, state):
-        return False
-
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
 
@@ -620,27 +612,26 @@ class attr(Expr):
     someone; an expression (or the name of another attribute) with `on=` is recorded then, as it was just
     before the move; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
     (states not listed give NaN), with no `on=` is derived, worked out when it is read. Attributes set on
-    the same event are set in the order they are declared, and each sees the ones before it. As agents only, for now.
+    the same event are set in the order they are declared, and each sees the ones before it. As agents only.
 
     Args:
         value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, or a dict of expressions by state (or by a sum of states)
         on (Event/Transition): the event(s) that set it, joined with `|`; none for a trait or a derived attribute
         combine (str/func): how a new value is combined with the one already held: 'last' (the default), 'first', 'max', 'min', 'sum', or `fn(old, new)`
         init (float): the value before any event (default NaN, or 0 for `combine='sum'`)
-        bins (int/list): in a compartmental run, the number of equal-probability bins of a distribution, or the bin edges of a recorded value
         name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
         label (str): a human-readable name
 
     Examples:
         ```python
-        cd4_latent = ss.attr(ss.normal(500, 50), on=infection, bins=3)          # Drawn
+        cd4_latent = ss.attr(ss.normal(500, 50), on=infection)                  # Drawn
         cd4_preart = ss.attr('cd4', on=start_art)                               # Recorded, just before starting
         rel_sev    = ss.attr(ss.normal(1, 0.2))                                 # A trait
         cd4        = ss.attr({latent: cd4_latent, falling: cd4_latent*(1 - falling.progress)}) # Derived
         nab        = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
         ```
     """
-    def __init__(self, value, on=None, combine='last', init=None, bins=None, name=None, label=None):
+    def __init__(self, value, on=None, combine='last', init=None, name=None, label=None):
         if not (callable(combine) or combine in combines):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
@@ -648,7 +639,6 @@ class attr(Expr):
         self.on = on
         self.combine = combine
         self.init = init
-        self.bins = bins
         self.name = name
         self.label = label
         self.module = None # Set by the graph

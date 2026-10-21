@@ -19,7 +19,7 @@ There are three products, one for each kind of delivery:
 | `ss.Diagnostic` | Diagnostics | `ss.screen()` | `sensitivity`, `specificity`, `delay`, `detects`, `cost` |
 | `ss.Treatment` | Treatments | `ss.treat()` | `cure`, `efficacy`, `transition`, `cost` |
 
-They work with every solver: in an agent-based run the sim records who holds a product and since when, and in a compartmental run holding it becomes a stratification of the model.
+They work with every solver: in an agent-based run the sim records who holds a product and since when, and in a compartmental run holding it becomes a stratification of the model. What follows each person's own history is agents only: waning given as a function of the time since delivery, a test's `delay=`, `queue=` and `delay=` on a delivery, and the memory `.since` and `.count` (`.ever` works with every solver); with `solver='auto'` such a model runs as agents.
 
 ## Vaccines
 
@@ -97,7 +97,7 @@ print(f'Doses: {res.delivered.sum():n}; total cost: ${res.cost.sum():,.2f}')
 
 ## Tests with several results, and treatment queues
 
-A test can have more than two results: `results=` gives them most severe first, each with its probability for people in each state (`None` for people in none of the states), and the last result is `None`, everyone the others do not take. Each result is a result of the delivery and an event that can trigger what follows; `positive` is any result but the last. A treatment can have a capacity, and with `queue=True` those not served wait, longest first, until they are served or are no longer eligible (a duration, e.g. `queue=ss.months(6)`, limits the wait):
+A test can have more than two results: `results=` gives them most severe first, each with its probability for people in each state (`None` for people in none of the states), and the last result is `None`, everyone the others do not take. Each result is a result of the delivery and an event that can trigger what follows; `positive` is any result but the last. A treatment can have a capacity, and with `queue=True` those not served wait, longest first, until they are served or are no longer eligible (a duration, e.g. `queue=ss.months(6)`, limits the wait; agents only):
 
 ```{python}
 cytology = ss.Diagnostic(results=dict(high=dict(I=0.9), low={'I': 0.05, None: 0.02}, normal=None)) # Low grade for 2% of those not infected

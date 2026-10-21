@@ -115,8 +115,7 @@ class Presentation:
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
-                slots = getattr(engine, 'n_slots', {}).get(tr.src[0].name) if name in self.dwell_trs else None # Under compartments, followed by the time in the state
-                at_exit = f'decided as people leave, from their time in {tr.src[0].name}' + (f'; {slots + 2} compartments by time in state' if slots else '') if name in self.dwell_trs else None
+                at_exit = f'decided as people leave, from their time in {tr.src[0].name}' if name in self.dwell_trs else None
                 ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis, or a function giving a row, is one entry
                 rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
                 how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]

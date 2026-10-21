@@ -108,15 +108,15 @@ class EventSource:
                 out[e[1]] = True
             return out
         out = None
-        for _,sel,before,eng in entries:
+        for _,sel,before,eng in entries: # Parts of the people one delivery reached (e.g. those cured, and the rest), which are disjoint; a product delivered by several steps is agents only (see ss.solvers.init_capabilities())
             after = eng.state_counts()
             now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, now that others may have moved
             if eng.mod is not selector.mod:
                 if not np.allclose(now, now[0]):
                     raise ss.CapabilityError(f'the event "{self.name}{"." + outcome if outcome else ""}" selects people by their state in "{eng.mod.name}", which cannot be carried over to "{selector.mod.name}" with solver="{sim.solver}". Run with solver="abm".')
                 now = np.broadcast_to(now[0], selector.shape).astype(float)
-            out = now if out is None else out + now - out*now
-        return selector.nobody() if out is None else out
+            out = now if out is None else out + now
+        return selector.nobody() if out is None else np.clip(out, 0, 1)
 
     def flush(self, ti):
         """ Put the people events happened to, up to and including time index ti, into the memory """
@@ -130,7 +130,7 @@ class EventSource:
                 last[sel] = t
                 count[sel] = count[sel] + 1
             else:
-                ss.interventions.remember_levels(self, outcome, t, sel, before, eng, ti)
+                ss.interventions.remember_levels(self, outcome, sel, before, eng)
         self._pending = keep
         return
 
@@ -220,11 +220,9 @@ class Effect:
         efficacy = selector.per_person(self.efficacy)
         if getattr(product, 'doses', None): # Relative efficacy after each dose
             efficacy = efficacy*np.concatenate([[0.0], product.doses])[np.clip(np.nan_to_num(level).astype(int), 0, len(product.doses))]
-        if callable(product.waning) and selector.abm: # Scaled by how much protection is left, given the time since it was delivered
+        if callable(product.waning): # Scaled by how much protection is left, given the time since it was delivered (agents only: see agent_reasons())
             elapsed = (product.sim.ti - product.ti_delivered.raw)*engine.dt
             efficacy = efficacy*np.where(holds, product.waning(np.where(holds, elapsed, 0.0)), 0.0)
-        elif callable(product.waning): # In a compartmental run, the level is the time since delivery: see init_stages()
-            efficacy = efficacy*product.stage_factors[level]
         return value*np.where(holds, 1 - efficacy, 1.0)
 
     def describe(self):
@@ -241,8 +239,6 @@ class Held(Product):
     """
     compartmental = True
     default_key = 'acquisition'
-    n_stages = 10 # In a compartmental run, the levels of time since delivery for a product whose protection fades by a function of it: at least this many, and more (up to max_stages) until the protection changes by less than 2% across each (see init_stages())
-    max_stages = 40
 
     def __init__(self, efficacy=None, waning=None, doses=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
@@ -323,60 +319,9 @@ class Held(Product):
         return self.waning is not None and not callable(self.waning)
 
     def agent_reasons(self):
+        if callable(self.waning):
+            return [f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep']
         return []
-
-    @property
-    def staged(self):
-        """ Whether holding the product has levels of time since delivery in a compartmental run, for protection that fades by a function of it """
-        return self.holds and callable(self.waning)
-
-    def stage_levels(self, sim=None):
-        """ The levels of holding the product in a compartmental run: not holding it, then the levels of time since delivery """
-        n = self.choose_stages(sim)[0] if sim is not None else self.n_stages
-        return [False] + [f'stage {j+1}' for j in range(n)]
-
-    def choose_stages(self, sim):
-        """ The number of levels of time since delivery, and the steps in each: they cover the time until the protection settles, with as few levels (from n_stages to max_stages) as keep it within 2% across each """
-        dt = float(sim.pars.dt.to(sim.unit_base).value) if isinstance(sim.pars.dt, ss.dur) else float(sim.pars.dt)
-        if getattr(self, '_stages', None) is not None and self._stages[0] == dt:
-            return self._stages[1]
-        span = ss.years(100).to(sim.unit_base).value # Long enough for any protection to settle; the levels then stop where it does
-        t = np.linspace(0, span, 20_001)
-        w = np.broadcast_to(np.asarray(self.waning(t), dtype=float), t.shape)
-        top = max(np.abs(w).max(), 1e-12)
-        moving = np.flatnonzero(np.abs(w - w[-1]) > 0.01*top)
-        settled = t[min(moving[-1] + 1, len(t) - 1)] if len(moving) else 0.0
-        for n in range(type(self).n_stages, self.max_stages + 1):
-            steps = max(1, int(np.ceil(settled/dt/(n - 1) - 1e-9))) # Steps in each level
-            edges = np.arange(n + 1)*steps*dt
-            if steps == 1 or np.max(np.abs(np.diff(np.asarray(self.waning(edges), dtype=float)))[:-1], initial=0) <= 0.02*top:
-                break
-        self._stages = (dt, (n, steps))
-        return n, steps
-
-    def init_stages(self, sim):
-        """
-        For a compartmental run: how long people stay in each level of time since delivery, and the protection in each
-
-        The levels cover the time until the protection settles (to within 1% of its
-        largest value), or the whole sim; the last level is kept for good. Everyone moves
-        up a level every `stage_steps` steps: see `ss.Delivery.step_stages()`. With one
-        step to a level this is exact; with more, the time since delivery is that of the
-        middle of the level, and a note says so.
-        """
-        dt = sim.t.dt.to(sim.unit_base).value
-        n, steps = self.choose_stages(sim)
-        start = np.arange(n)*steps # The steps since delivery at the start of each level
-        mids = np.append(start[:-1] + (steps - 1)/2, start[-1]) # The middle of each level, and the start of the last
-        if steps > 1:
-            mids[0] = (steps - 1)/4 # People delivered between the moves stay in the first level for less than a level, on average
-            if sim.pars.approx is False:
-                raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: the protection of "{self.name}" fades by a function of time, which is kept as {n} levels of {steps} steps each. Run with solver="abm".')
-            else:
-                ss.note(f'the protection of "{self.name}" fades by a function of the time since delivery, approximated by {n} levels of {steps} steps each', sim=sim, verbose=0 if sim.pars.approx else None)
-        self.stage_steps = steps
-        self.stage_factors = np.concatenate([[0.0], np.broadcast_to(np.asarray(self.waning(mids*dt), dtype=float), (n,))]) # The share of protection left, at each level
-        return
 
     def init_pre(self, sim):
         if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
@@ -386,8 +331,6 @@ class Held(Product):
         super().init_pre(sim)
         if not self.holds:
             return
-        if self.staged and sim.solver != 'abm':
-            self.init_stages(sim)
         for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
             coded = ss.interventions.coded_disease(sim, disname)
             if coded is not None: # Written as code (PL2): its rel_sus and rel_trans, as for ss.modify()
@@ -466,7 +409,7 @@ class Vaccine(Held):
         efficacy (float/dict): protection against acquisition (required); or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
         waning (dur/func): a duration, for protection that is lost after an exponentially distributed time with that mean;
-            or a function of the time since delivery returning the fraction of protection that remains (in a compartmental run, kept as levels of time since delivery)
+            or a function of the time since delivery returning the fraction of protection that remains (agents only)
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
             level per dose, and each delivery to someone who holds it gives them the next dose
         leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")
@@ -772,7 +715,7 @@ class Diagnostic(Product):
         combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the most severe of them is theirs;
             for a positive and a negative result, each disease is detected independently), or 'max' (the highest probability of each result
             or a more severe one, so for a positive and a negative result, the highest sensitivity)
-        delay (dur/dict): the time from the test to the result (in a compartmental run, people wait in levels of one step each); a dict gives one for each result
+        delay (dur/dict): the time from the test to the result (agents only); a dict gives one for each result
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to
@@ -866,6 +809,8 @@ class Diagnostic(Product):
         detects = self.detects
         if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.n_args(detects) >= 2:
             out.append(f'what the test "{self.name}" detects is a function of uids')
+        if self.delay is not None:
+            out.append(f'the results of the test "{self.name}" come after a delay, which only agents wait for')
         return out
 
     def init_pre(self, sim):

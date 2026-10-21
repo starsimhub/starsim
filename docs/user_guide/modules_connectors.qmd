@@ -120,6 +120,7 @@ sis = ss.SIS(init_prev=0.2)
 protect = ss.modify(sis.rel_sus, multiply=0.5, where=lambda sim: sim.people.age < 15)
 sim = ss.Sim(diseases=sis, networks='random', n_agents=1000, connectors=protect, verbose=0)
 sim.run()
+sis = sim.diseases.sis # The sim's copy, which ran
 
 children = (sim.people.age < 15).uids[:3]
 sis.rel_sus[children] = 0.8 # Assigning sets the base

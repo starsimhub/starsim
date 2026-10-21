@@ -131,4 +131,4 @@ with sc.timer():
     sim.run()
 
 # Plot results
-sir_model.plot_results()
+sim.modules[-1].plot_results() # The sim's copy of sir_model, which ran

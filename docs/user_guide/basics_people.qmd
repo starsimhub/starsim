@@ -79,7 +79,7 @@ The main reason to create custom people is if you want to specify a particular a
 age_data = pd.read_csv('test_data/nigeria_age.csv')
 ppl = ss.People(n_agents=10e3, age_data=age_data)
 sim = ss.Sim(people=ppl).init()
-ppl.plot_ages();
+sim.people.plot_ages(); # The sim's copy of the people
 ```
 
 Another reason to create custom people is if there are additional attributes that you want to track. Let's say we want to add a state to track urban/rural status. The example below also illustrates how you can add a stochastic state whose values are sampled from a distribution.

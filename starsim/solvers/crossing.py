@@ -416,9 +416,6 @@ class Crossing:
                 chain.append((0, -1, -1))
             for i in range(len(p.starts) - len(p.src) - 1): # Each conveyor, for each combination of the others' compartments (see ss.kernels.convey())
                 a, b = p.starts[len(p.src)+i], p.starts[len(p.src)+i+1]
-                if p.ops[a] != kn.CONVEY:
-                    raise ss.CapabilityError(f'"{self.names[k]}" sets a count each step (ss.update), which cannot run with solver="{self.sim.solver}" in diseases tracked jointly yet.\n'
-                                             f'     Run with solver="abm".')
                 for o in range(O):
                     conveyors.append([n_flows + p.args[a]*O + o] + list(L.rowmap[p.args[a+1:b], o]))
             self.pieces.flows.append(pairs(F, FC))

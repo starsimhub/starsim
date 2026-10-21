@@ -472,28 +472,23 @@ def test_rescale():
 
 @sc.timer()
 def test_copied_modules():
-    """ Test that functions given to a sim read the sim's copies of the modules they name (TL35) """
-    sc.heading('Testing closures over copied modules')
+    """ Test that a sim runs copies of the modules it is given, so they can be given to other sims, and functions read them from the sim """
+    sc.heading('Testing copied modules')
     class HS(ss.Intervention):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.served_now = ss.uids()
         def step(self):
             self.served_now = self.sim.diseases.toy.I.uids[:5]
-        def serve(self): # A factory method, returning a closure over the module
-            return lambda sim: self.served_now
 
-    def treated(how):
-        S, I = ss.states('S I')
-        toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
-        hs = HS(name='hs')
-        deliver = dict(closure=hs.serve(), lambda_=lambda sim: hs.served_now, by_name=lambda sim: sim.interventions.hs.served_now)[how]
-        sim = ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), deliver=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run()
-        return sim.results.tx.delivered.values.sum()
-    expected = treated('by_name')
-    assert expected > 400
-    for how in ['closure', 'lambda_']:
-        assert treated(how) == expected, how # Were 0: they read the module passed in, which never ran
+    S, I = ss.states('S I')
+    toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
+    hs = HS(name='hs')
+    deliver = lambda sim: sim.interventions.hs.served_now # The sim's copy, which runs
+    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), deliver=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
+    assert sims[0].results.tx.delivered.values.sum() > 400
+    assert sims[0].results.tx.delivered.values.sum() == sims[1].results.tx.delivered.values.sum() # The same modules, given to two sims
+    assert not toy.initialized and sims[0].diseases.toy is not toy # Neither ran the module itself
     return
 
 

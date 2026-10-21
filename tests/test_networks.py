@@ -50,8 +50,7 @@ def test_random():
     sc.heading('Testing random networks')
 
     # Manual creation
-    nw1 = ss.RandomNet()
-    ss.Sim(n_agents=small, networks=nw1).init() # This initializes the network
+    nw1 = ss.Sim(n_agents=small, networks=ss.RandomNet()).init().networks[0] # The sim's copy, initialized
 
     # Automatic creation as part of sim
     s2 = ss.Sim(n_agents=small, networks='random').init()
@@ -257,8 +256,7 @@ def test_erdosrenyi():
 
     # Manual creation
     p = 0.1
-    nw1 = ssl.networks.ErdosRenyiNet(p=p)
-    ss.Sim(n_agents=small, networks=nw1).init() # This initializes the network
+    nw1 = ss.Sim(n_agents=small, networks=ssl.networks.ErdosRenyiNet(p=p)).init().networks[0] # The sim's copy, initialized
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
@@ -286,8 +284,8 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    nw1 = ssl.networks.DiskNet()
-    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1).init() # This initializes the network
+    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=ssl.networks.DiskNet()).init()
+    nw1 = s1.networks[0]
 
     if sc.options.interactive:
         fig, ax = plt.subplots()
@@ -396,6 +394,7 @@ def test_dynamic_household():
     preg = ss.Pregnancy()
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg)
     sim.run()
+    household, preg = sim.networks[0], sim.demographics[0] # The sim's copies, which ran
 
     # All delivered agents should have household IDs; undelivered embryos should not.
     # Agents born in the sim with age >= dt have been through at least one full step
@@ -430,7 +429,7 @@ def test_household_coarse_pregnancy_dt():
         sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
                      start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1)
         sim.run()
-        return household.n_households
+        return sim.networks[0].n_households
 
     n_month   = run(ss.months(1))
     n_quarter = run(ss.months(3))
@@ -448,6 +447,7 @@ def test_other():
     msm = ssl.MSMNet(participation=0.3)
     sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=msm)
     sim.run()
+    msm = sim.networks[0] # The sim's copy, which ran
 
     print('Testing MF network relative participation')
     mf = ss.Sim(n_agents=1000, networks=ss.MFNet(rel_part_rates=0.5), verbose=0).init().networks.mfnet
@@ -508,6 +508,7 @@ def test_cluster():
     sc.heading('Testing cluster networks')
     net = ssl.ClusterNet(cluster_size=ss.poisson(5), age_range=[18, 65])
     sim = ss.Sim(n_agents=medium, networks=net).init()
+    net = sim.networks[0] # The sim's copy, initialized
     ages = sim.people.age
     clusters = net.cluster[net.p1]
     assert np.array_equal(clusters, net.cluster[net.p2]) # Edges are only within clusters

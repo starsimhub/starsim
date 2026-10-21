@@ -148,10 +148,7 @@ class Run:
         self.gather_crd = np.zeros((ncr, nf))
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
-        extra = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # The conveyors and updates, after the flows' operations (see ss.kernels.convey() and update_values())
-        conveyors = [(a, b) for a,b in extra if p.ops[a] == ss.kernels.CONVEY]
-        self.updates = [(a, b) for a,b in extra if p.ops[a] != ss.kernels.CONVEY] # The operations of each (the last sets its compartment)
-        self.up_comp = np.array([p.args[b-1] for a,b in self.updates], dtype=int)
+        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.kernels.convey())
         self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
         slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
         self.cv_first = np.array([s[0] for s in slots], dtype=int)
@@ -260,15 +257,6 @@ class Run:
                 else:              stack.append(jnp.where(x >= y, 1.0, 0.0))
         return stack[0]
 
-    def update_values(self, ys, consts):
-        """ The values that counts are set to at the end of a step (`ss.update()`), from the compartments at its start (as `ss.kernels.update_values()`) """
-        jnp = jax().numpy
-        p = self.p
-        n = ys[p.people].sum(axis=0)
-        local_n = n if self.simple else self.place.T @ (self.place @ n)
-        local_n = jnp.where(local_n > 0, local_n, jnp.inf) # A share of nobody is 0, as in the kernels
-        return jnp.stack([jnp.broadcast_to(self.evaluate(ys, a, b-1, consts, [], local_n), (self.ng,)) for a,b in self.updates])
-
     def share(self, v, block, X, by_columns):
         """ The time share between places times values by place and level (as `ss.kernels.share()`) """
         jnp = jax().numpy
@@ -345,8 +333,6 @@ class Run:
 
         def step(y, ti):
             due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
-            if len(self.updates): # Counts set to a value at the end of the step, worked out from the start
-                values = self.update_values(y, at(X['consts'], ti, 0.0))
 
             if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
                 x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti, 0.0)), 0.0)*dt
@@ -405,8 +391,6 @@ class Run:
                 _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
                 y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
-            if len(self.updates):
-                y_end = y_end.at[self.up_comp].set(values)
             return jnp.maximum(y_end, 0.0), flows, n # The compartments after the step, as the kernels record them
 
         return step
@@ -1007,8 +991,6 @@ class Density:
                 leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
                 if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
                     raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
-                if dw is not None and flow.at is not None and any(id(leaf) in self.index for leaf in dw.par.leaves): # Followed by the time in its state (see ss.solvers.Compartmental.slot_rate())
-                    raise Unsupported(f'a fitted dwell time out of a state followed by the time in it ("{flow.tr.name}")')
                 if any(id(leaf) in self.index for leaf in leaves):
                     mult = np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)
                     fixed.append((f, flow, dw, mult))

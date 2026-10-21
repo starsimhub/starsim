@@ -7,7 +7,6 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
-import itertools
 from .expressions import as_expr, evaluate, Expr, par
 
 
@@ -961,8 +960,8 @@ class by:
             return 'keys', [str(k) for k in vals]
         return None
 
-    def check(self, sim, note=False):
-        """ Check the values against the sim's dimensions (`ss.ShapeError`), and that a property of people that is not one is given by value (with `note=True`, when the sim is built, also note a table averaged over groups); returns the positions of the sim's dimensions it is by, and those dimensions """
+    def check(self, sim):
+        """ Check the values against the sim's dimensions (`ss.ShapeError`), and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
         names = [strat.name for strat in sim.groups.strats]
         if 'to' in self.dims: # Over the destinations of a transition, which is taken a destination at a time (see at())
             return [], []
@@ -984,7 +983,7 @@ class by:
         elif self.table is None:
             for strat in strats:
                 vals = self.given[strat.name]
-                labels = strat.coarse_labels if strat.coarse is not None else strat.labels # A clock's levels as given, when they are steps
+                labels = strat.labels
                 if isinstance(vals, dict):
                     missing = [str(label) for label in labels if str(label) not in [str(k) for k in vals]]
                     if missing:
@@ -993,12 +992,17 @@ class by:
                 n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else len(labels) # One value is for every level, e.g. ss.by(subpop=2.2)
                 if n != len(labels):
                     raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
-        if note and sim.solver != 'abm':
-            for strat in strats:
-                kind = self.keys(strat.name)
-                if kind is not None and kind[0] == 'edges' and not (strat.edges is not None and np.array_equal(strat.edges, kind[1])):
-                    ss.note(f'{self} gives values by bins of {strat.name} other than the model\'s ({sc.strjoin(strat.labels)}), so a compartmental run averages it over each group, weighting each bin by how much of the group it covers; agents read each person\'s own {strat.name}', sim=sim)
         return ds, strats
+
+    def split_groups(self, sim):
+        """ The first dimension whose groups a table's bins split (an edge inside a group, e.g. single years of age on 5-year age groups), so that a group has no one value and only agents can read it; None if there is none """
+        names = [strat.name for strat in sim.groups.strats]
+        for dim in self.dims:
+            kind = self.keys(dim) if dim in names else None
+            edges = sim.groups.strats[names.index(dim)].edges if kind is not None else None
+            if kind is not None and kind[0] == 'edges' and edges is not None and any(k > edges[0] and not np.isclose(edges, k).any() for k in kind[1]):
+                return dim
+        return None
 
     def converter(self, sim, convert=None, year=None):
         """ A function that gives a value as a number: a value that varies in time is taken at the sim's current time, or at `year` if given """
@@ -1031,9 +1035,7 @@ class by:
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
                 if isinstance(vals, dict): # By label, in the order of the levels
                     vals = {str(k):v for k,v in vals.items()}
-                    vals = [vals[str(label)] for label in (strat.coarse_labels if strat.coarse is not None else strat.labels)]
-                if strat.coarse is not None and isinstance(vals, (list, tuple)) and len(vals) == len(strat.coarse_labels): # A clock whose levels are steps: each step takes the value of the level as given that it is in
-                    vals = [vals[c] for c in strat.coarse]
+                    vals = [vals[str(label)] for label in strat.labels]
                 if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
                     single, items = False, vals
                 else:
@@ -1045,8 +1047,8 @@ class by:
                 shape[i] = strat.n
                 out = out*vals.reshape(shape)
             return ds, out
-        if any(self.keys(strat.name)[0] == 'edges' for strat in strats): # Bins of their own: averaged over each group
-            return ds, self.binned_grid(strats, convert)
+        if any(self.keys(strat.name)[0] == 'edges' for strat in strats): # Bins of their own: each group in one of them
+            return ds, self.binned_grid(sim, strats, convert)
         out = np.zeros([strat.n for strat in strats])
         for _,row in self.table.iterrows():
             index = []
@@ -1059,12 +1061,15 @@ class by:
             out[tuple(index)] += convert(row['value'])
         return ds, out
 
-    def binned_grid(self, strats, convert):
-        """ For a table with a column of bin edges (e.g. single years of age): the value for each group, the mean over the table's bins weighted by how much of the group each covers """
-        num = np.zeros([strat.n for strat in strats])
-        den = np.zeros_like(num)
+    def binned_grid(self, sim, strats, convert):
+        """ For a table with a column of bin edges (e.g. age=[0, 15, 50]), the model's or coarser: the value for each group, that of the bin it is in. Bins that split a group raise, since a group has no one value (see `split_groups()`) """
+        dim = self.split_groups(sim)
+        if dim is not None:
+            raise ss.CapabilityError(f'{self} is by bins of {dim} that split the model\'s groups ({sc.strjoin(strats[[s.name for s in strats].index(dim)].labels)}), so a group has no one value.\n'
+                                     f'     Give it by the model\'s groups, or run with solver="abm" (which reads each person\'s own {dim}).')
+        out = np.zeros([strat.n for strat in strats])
         for _,row in self.table.iterrows():
-            parts = [] # For each dimension: the groups the row is in, and its weight in each
+            index = [] # For each dimension: the groups the row is for
             for strat in strats:
                 kind, keys = self.keys(strat.name)
                 val = row[strat.name]
@@ -1072,30 +1077,14 @@ class by:
                     labels = [str(label) for label in strat.labels]
                     if str(val) not in labels:
                         raise ss.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
-                    parts.append([(labels.index(str(val)), 1.0)])
-                elif isnull(val) and strat.kind == 'clock': # People who have not had the event: a clock's level none
-                    parts.append([(strat.n - 1, 1.0)])
+                    index.append([labels.index(str(val))])
                 elif isnull(val) or strat.edges is None: # People with no value, who are in no group
-                    parts.append([])
-                else:
-                    edges = strat.edges[:-1] if strat.kind == 'clock' else strat.edges # A clock's last level is none, with no time
-                    cap = max(keys[-1], edges[-1]) + 1 # The last bin of each is open-ended
+                    index.append([])
+                else: # The groups whose lower edge is in the row's bin (the last is open-ended)
                     lo = float(val)
-                    hi = keys[keys > lo][0] if np.any(keys > lo) else cap
-                    ends = np.append(edges[1:], cap)
-                    overlap = np.maximum(np.minimum(hi, ends) - np.maximum(lo, edges), 0)
-                    parts.append([(i, w) for i,w in enumerate(overlap) if w > 0])
-            value = float(convert(row['value']))
-            for combo in itertools.product(*parts):
-                index = tuple(i for i,w in combo)
-                weight = np.prod([w for i,w in combo])
-                num[index] += weight*value
-                den[index] += weight
-        out = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
-        for i,strat in enumerate(strats): # A clock with no row for none: the mean over its other levels, as agents take it (weighted by the people at each)
-            if strat.kind == 'clock' and not np.take(den, [strat.n - 1], axis=i).any():
-                inner = np.take(out, range(strat.n - 1), axis=i)
-                np.put_along_axis(out, np.full([1 if j == i else s.n for j,s in enumerate(strats)], strat.n - 1), inner.mean(axis=i, keepdims=True), axis=i)
+                    hi = keys[keys > lo][0] if np.any(keys > lo) else np.inf
+                    index.append(np.flatnonzero((strat.edges >= lo) & (strat.edges < hi)))
+            out[np.ix_(*index)] = float(convert(row['value']))
         return out
 
     def on_people(self, sim):

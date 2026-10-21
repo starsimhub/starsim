@@ -269,8 +269,9 @@ def test_ncd():
 
     ppl = ss.People(n_agents)
     ncd = ss.NCD()
-    sim = ss.Sim(people=ppl, diseases=ncd, dt=ss.years(1), analyzers='infection_log') # Since using ncd directly below
+    sim = ss.Sim(people=ppl, diseases=ncd, dt=ss.years(1), analyzers='infection_log')
     sim.run()
+    ncd = sim.diseases[0] # The sim's copy, which ran
     log = sim.analyzers[0].logs[0]
 
     assert len(log) == log.to_graph().number_of_edges()
@@ -711,7 +712,7 @@ def test_strains_seeding():
 
 @sc.timer()
 def test_strains_compartmental():
-    sc.heading('Testing a family under the compartmental solvers: members side by side, couplings from shares, against agents')
+    sc.heading('Testing a family under the compartmental solvers: independent members side by side; members that affect each other need agents')
     def make(name, beta, **kwargs):
         S, I, R, Ca = ss.states('S I R Ca')
         return ss.Disease(infection=S >> I @ ss.peryear(beta)*I, clearance=I >> R @ ss.years(1), reinfection=R >> I @ ss.peryear(beta)*I, waning=R >> S @ ss.years(2),
@@ -725,37 +726,16 @@ def test_strains_compartmental():
     assert sim.solver == 'ode' and np.array_equal(res.a.n_I, alone.results.a.n_I) and np.array_equal(res.b.n_I, alone.results.b.n_I) # Bit for bit
     assert np.allclose(res.hpv.n_I, 10_000*(1 - (1 - res.a.n_I/10_000)*(1 - res.b.n_I/10_000)))
 
-    # HP22's rule as shares: rel_sus of a for people in its own R (exact) when everyone is in b's R, with a vaccine on top: (1 − (0.2 + 0.1))·0.5 = 0.35
-    hpv = ss.Strains('hpv', [make('a', 1, init=dict(S=0.5, R=0.5)), make('b', 1, init=dict(R=10_000))], immunity=ss.immunity(protected='R', rel_sus=[[0.2, 0.5], [0.1, 0.4]], combine='sum'))
-    sim = ss.Sim(diseases=hpv, connectors=ss.modify('a.rel_sus', multiply=0.5), solver='ode', total_pop=10_000, approx=True, **pars).init()
-    sim.diseases.hpv.start_step()
-    a = sim.diseases.a
-    assert np.isclose(a.engine.mult_raw('rel_sus', state=a.graph.states.R), 0.35) and np.isclose(a.engine.mult_raw('rel_sus', state=a.graph.states.S), (1 - 0.1)*0.5)
-
-    # A contract, for 2 and 4 members with HPV-like cross-immunity: side by side (ODE, binomial) against the exact form (the crossing, which a
-    # modifier between the members gives, here one that changes nothing) and agents. Side by side is within 10% of exact on these
-    for n in [2, 4]:
-        matrix = np.full((n, n), 0.3) + np.eye(n)*0.6 # Rows from, columns against
-        family = lambda: ss.Strains('hpv', [make(f'g{i}', 3 - 0.3*i) for i in range(n)], immunity=ss.immunity(protected='R', rel_sus=matrix, combine='sum'), init_prev=0.1)
-        links = [ss.modify('g0.rel_sus', multiply=1.0, where=ss.conditions.Cond('state', f'g{i}', 'R'), name=f'link{i}') for i in range(1, n)]
-        out = sc.objdict()
-        for key,solver,connectors,seeds in [('ode', 'ode', [], 1), ('exact', 'ode', links, 1), ('binomial', 'binomial', [], 2), ('abm', 'abm', [], 2)]:
-            sims = [ss.Sim(diseases=family(), connectors=sc.dcp(connectors), solver=solver, n_agents=10_000, total_pop=10_000, rand_seed=seed, approx=True, **pars).run() for seed in range(seeds)]
-            out[key] = np.mean([[sim.results.hpv.infected[-1], sim.results.hpv.cancer.sum(), sim.results.g0.infected[-1]] for sim in sims], axis=0)
-        assert np.allclose(out.ode, out.exact, rtol=0.1) and np.allclose(out.binomial, out.ode, rtol=0.05) and np.allclose(out.abm, out.exact, rtol=0.15), f'{n} members: {out}'
-
-    # One course at a time, from shares: those who get cancer from one member are moved to X in the other, except those with cancer in it already
-    hpv = ss.Strains('hpv', [make('a', 3), make('b', 2.5)], immunity=ss.immunity(protected='R', rel_sus=0.3), init_prev=0.1, exclusive='Ca')
-    res = ss.Sim(diseases=hpv, solver='ode', total_pop=10_000, approx=True, **pars).run().results
-    assert np.isclose(res.a.n_X[-1], res.b.n_Ca[-1]*(1 - res.a.n_Ca[-1]/10_000), rtol=0.05) and np.isclose(res.b.n_X[-1], res.a.n_Ca[-1]*(1 - res.b.n_Ca[-1]/10_000), rtol=0.05)
-
-    # What the solvers say: approx, with auto running a coupled family as agents unless approx=True
-    sim = ss.Sim(diseases=family(), **pars).init()
-    assert sim.solver == 'abm' and 'approx as compartments (members side by side' in sim.describe(output=True)
-    assert ss.Sim(diseases=family(), approx=True, **pars).init().solver == 'ode'
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(diseases=family(), solver='ode', approx=False, **pars).init()
-    return out
+    # Members that affect each other (immunity=, exclusive=) need agents: auto runs them as agents, and a compartmental solver refuses, whatever approx=
+    families = [lambda: ss.Strains('hpv', [make('a', 3), make('b', 2.5)], immunity=ss.immunity(protected='R', rel_sus=0.3), init_prev=0.1),
+                lambda: ss.Strains('hpv', [make('a', 3), make('b', 2.5)], init_prev=0.1, exclusive='Ca')]
+    for family in families:
+        sim = ss.Sim(diseases=family(), total_pop=10_000, approx=True, **pars).init()
+        assert sim.solver == 'abm' and 'compartmental solvers: none' in sim.describe(output=True)
+        for solver in ['ode', 'binomial']:
+            with pytest.raises(ss.CapabilityError, match='only agents follow'):
+                ss.Sim(diseases=family(), solver=solver, total_pop=10_000, approx=True, **pars).init()
+    return res
 
 
 @sc.timer()

@@ -56,9 +56,6 @@ class Intervention(ss.Module):
 
 #%% Events: the people something happened to on a step, and what each person remembers of them
 
-max_since_levels = 40 # In a compartmental run, the most levels of time since an event; beyond, each level is several steps (with a note)
-
-
 class Event(ss.FloatArr):
     """
     An event that a module written as code fires: the people something happened to on a step
@@ -149,28 +146,19 @@ def memory_needs(sim):
     The events whose memory something in the sim reads, or that `count_events=` asks to keep, by (module name, outcome)
 
     Found by walking the conditions of the interventions and connectors, and the `where=` of the transitions. Each has the
-    kinds read (`ever`, `count`, `since`), the largest count and time since compared with (for the levels of a compartmental
-    run), and whether a log is kept (`log`, as agents).
+    kinds read (`ever`, `count`, `since`), and whether a log is kept (`log`, as agents).
     """
     out = sim.__dict__.get('_memory_needs')
     if out is not None:
         return out
     out = {}
     def need(key):
-        return out.setdefault(key, sc.objdict(kinds=set(), count=1, since=[], log=False))
-    def add(event, kind, values=()):
-        n = need((ss.conditions.modname(event.args[0]), event.args[1]))
-        n.kinds.add(kind)
-        for v in values:
-            if kind == 'count' and sc.isnumber(v):
-                n.count = max(n.count, int(np.ceil(v)) + 1)
-            elif kind == 'since' and (sc.isnumber(v) or isinstance(v, ss.TimePar)):
-                n.since.append(v) # Converted to the sim's unit when it is known: see memory_layout()
-        return
+        return out.setdefault(key, sc.objdict(kinds=set(), log=False))
     def walk(val):
         if isinstance(val, ss.conditions.Cond):
-            for mem,values in ss.conditions.memory_leaves(val):
-                add(mem.args[0], mem.args[1], values)
+            for mem in ss.conditions.memory_leaves(val):
+                event, kind = mem.args
+                need((ss.conditions.modname(event.args[0]), event.args[1])).kinds.add(kind)
         return
     mods = modules_of(sim, 'interventions') + modules_of(sim, 'connectors')
     for mod in mods:
@@ -199,87 +187,36 @@ def memory_needs(sim):
 
 
 def memory_layout(sim, key):
-    """ In a compartmental run: the stratifications that keep an event's memory (time since, count, or ever), with what each level means """
+    """ In a compartmental run: the stratification that keeps whether an event happened (`.ever`, the only memory with a compartmental form: see `ss.solvers.init_capabilities()`), or None if nothing reads it """
     cache = sim.__dict__.setdefault('_memory_layout', {})
-    if key in cache:
-        return cache[key]
-    need = memory_needs(sim).get(key)
-    if need is None or not need.kinds:
-        cache[key] = None
-        return None
-    Strat = ss.transitions.Strat
-    name, outcome = key
-    base = name if outcome is None else f'{name}_{outcome}'
-    dt = float(sim.pars.dt.to(sim.unit_base).value) if isinstance(sim.pars.dt, ss.dur) else float(sim.pars.dt)
-    out = sc.objdict(since=None, count=None, ever=None, every=1, times=None)
-    if 'since' in need.kinds: # Never, then the steps since (the last level is that many or more)
-        since = max([ss.solvers.convert(v, sim.unit_base) if isinstance(v, ss.TimePar) else float(v) for v in need.since], default=dt)
-        m = int(np.ceil(since/dt - 1e-9)) + 1
-        every = max(1, int(np.ceil((m + 1)/max_since_levels)))
-        n = int(np.ceil(m/every)) + 1
-        out.since = Strat(f'since_{base}', ['never'] + [f'{j*every} steps' for j in range(n)], split=[1.0] + [0.0]*n)
-        out.every = every
-        out.times = np.array([np.inf] + [j*every*dt for j in range(n)])
-        if every > 1:
-            ss.note(f'the time since "{base.replace("_", ".", 1) if outcome else base}" is kept as {n + 1} levels of {every} steps each', sim=sim)
-    if 'count' in need.kinds:
-        out.count = Strat(f'count_{base}', [str(j) for j in range(need.count)] + [f'{need.count}+'], split=[1.0] + [0.0]*need.count)
-    if out.since is None and out.count is None:
-        out.ever = Strat(f'ever_{base}', [False, True], split=[1.0, 0.0])
-    cache[key] = out
-    return out
+    if key not in cache:
+        need = memory_needs(sim).get(key)
+        name, outcome = key
+        cache[key] = None if need is None or not need.kinds else ss.transitions.Strat(f'ever_{name if outcome is None else f"{name}_{outcome}"}', [False, True], split=[1.0, 0.0])
+    return cache[key]
 
 
-def remember_levels(owner, outcome, t, sel, before, eng, ti):
-    """ In a compartmental run: move the people an event happened to at time index t to the levels of its memory """
+def remember_levels(owner, outcome, sel, before, eng):
+    """ In a compartmental run: move the people an event happened to (a share of the people in each state and group of `eng` as they were in `before`) to the level of its memory that says it happened """
     sim = owner.sim
-    lay = memory_layout(sim, (owner.name, outcome))
-    if lay is None:
+    strat = memory_layout(sim, (owner.name, outcome))
+    if strat is None:
         return
     shifter = owner if isinstance(owner, Delivery) else next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is owner)
     after = eng.state_counts()
     now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
-    selector = eng.selector
-    mover = ss.conditions.Cond('event', owner, outcome)
-    for strat,level in [(lay.since, None), (lay.count, None), (lay.ever, 1)]:
-        if strat is None:
-            continue
-        d = sim.groups.dim_index(strat.name)
-        if strat is lay.since:
-            changes = {d:min(1 + (ti - t)//lay.every, strat.n - 1)}
-            now = shifter.follow(now, now, changes, mover)
-        elif strat is lay.count: # Each person up one, from the highest level down, so nobody moves twice
-            moved = np.zeros_like(now)
-            pos = selector.dim(strat.name)
-            for j in range(strat.n - 1, -1, -1):
-                part = now*(pos == j)
-                moved = moved + shifter.follow(part, part, {d:min(j + 1, strat.n - 1)}, mover)
-            now = np.clip(moved, 0, 1)
-        else:
-            now = shifter.follow(now, now, {d:level}, mover)
+    shifter.follow(now, now, {sim.groups.dim_index(strat.name):1}, ss.conditions.Cond('event', owner, outcome))
     return
 
 
 def flush_memory(sim):
-    """ At the start of a step: (in a compartmental run) move everyone up a level of time since an event, and put any events not yet there into the memory """
+    """ At the start of a step: put any events not yet there into the memory """
     ti = sim.ti
     done = sim.__dict__.get('_memory_ti')
     if done is not None and done >= ti:
         return
     sim.__dict__['_memory_ti'] = ti
-    owners = [m for m in list(sim.interventions()) + list(sim.products()) if isinstance(m, ss.products.EventSource) and m.__dict__.get('_needs')]
-    if sim.solver != 'abm':
-        start = (done if done is not None else 0) + 1
-        for owner in owners:
-            for outcome in owner._needs:
-                lay = memory_layout(sim, (owner.name, outcome))
-                if lay is None or lay.since is None:
-                    continue
-                shifter = owner if isinstance(owner, Delivery) else next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is owner)
-                for t in range(start, ti + 1):
-                    if t % lay.every == 0:
-                        shifter.move_up(lay.since.name, range(1, lay.since.n - 1)) # The last level is kept
-    for owner in owners:
+    for owner in [m for m in list(sim.interventions()) + list(sim.products()) if isinstance(m, ss.products.EventSource) and m.__dict__.get('_needs')]:
         owner.flush(ti)
     return
 
@@ -315,13 +252,8 @@ def remembered(selector, cond):
         last, count = arr.raw, arr.counts.raw
     elif selector.abm:
         last, count = [a.raw for a in owner._mem[outcome]]
-    else:
-        lay = memory_layout(sim, (owner.name, outcome))
-        if kind == 'since':
-            return lay.times[selector.dim(lay.since.name)]
-        strat = lay.count if kind == 'count' else (lay.since or lay.count or lay.ever)
-        pos = selector.dim(strat.name)
-        return pos if kind == 'count' else pos > 0
+    else: # Only .ever, as a level (see memory_layout())
+        return selector.dim(memory_layout(sim, (owner.name, outcome)).name) > 0
     if kind == 'ever':
         return count > 0
     elif kind == 'count':
@@ -581,7 +513,7 @@ class Delivery(ss.products.EventSource, Intervention):
             or a list of them served in order (all of the first, then the second); a score, highest first: an expression (e.g. `-hiv.cd4`, the
             lowest CD4 first) or a function of the sim (or of `(sim, uids)`, agents only); ties are broken at random. A number is the class of
             everyone the step reaches among the steps that share a resource (0 first)
-        queue (bool/dur): what happens to people not served for lack of capacity: None (the default), they are lost; True, they wait until
+        queue (bool/dur): what happens to people not served for lack of capacity (agents only): None (the default), they are lost; True, they wait until
             served; a duration, they wait at most that long, and those still waiting then are the outcome `never_ran`. Those waiting are served
             before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible (`left`)
         target (float/func/ss.share/ss.by): a stock to keep: the number holding the product (or at the end of the move), as people, a time
@@ -592,7 +524,7 @@ class Delivery(ss.products.EventSource, Intervention):
             are moved along (lowest priority first)
         on (event/func): the event part of who=, joined to it with `&`: a transition (e.g. `on=sir.infection`), a delivery or an outcome
             of one, or a function of the sim returning the people; for the people in a state, use `where=` (e.g. `where=sir.I, interval=1`)
-        delay (dur/Dist): for a triggered step, the time from the trigger to delivery: a duration, or (agents only) a distribution of
+        delay (dur/Dist): for a triggered step, the time from the trigger to delivery (agents only): a duration, or a distribution of
             durations, drawn per person (e.g. `ss.uniform(ss.months(1), ss.months(8))`). The people triggered receive it then if they are
             eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that the event in
@@ -820,7 +752,6 @@ class Delivery(ss.products.EventSource, Intervention):
         return self.product is not None and self.product.holds
 
     spells = True # Routine delivery is once per spell of being eligible (pending a decision: False is once per life)
-    max_levels = 50 # In a compartmental run, the most levels of time waiting in a queue before the last is kept for those who have waited longer
 
     def typed_function(self):
         """ Whether the coverage is a function of the sim that gives a typed rate (e.g. `lambda sim: ss.peryear(4)`): worked out the first time it can be called """
@@ -865,68 +796,19 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Whether the results of the test it delivers come after a delay """
         return isinstance(self.product, ss.Diagnostic) and self.product.delay is not None
 
-    @property
-    def pending(self):
-        """ In a compartmental run: the property of people that says how long they have waited for a test result, and which result """
-        return f'pending_{self.name}'
-
-    @property
-    def delayed(self):
-        """ In a compartmental run: the property of people that says how long they have waited since the trigger, with delay= """
-        return f'delayed_{self.name}'
-
     def delay_steps(self, sim):
         """ The number of steps from the trigger to delivery, with a fixed delay= """
-        return self.result_steps(sim, self.delay)
-
-    @property
-    def waiting(self):
-        """ In a compartmental run: the property of people that says how long they have waited in the queue """
-        return f'waiting_{self.name}'
-
-    def staged(self, sim):
-        """ Whether, in this sim, the delivery needs levels that people move up step by step: the time since a product whose protection fades was delivered, or since a test whose result is delayed, or in a queue """
-        if sim.solver in [None, 'abm']:
-            return False
-        return (self.holds and self.product.staged) or self.waits or self.queue is not None or self.delay is not None
-
-    def result_steps(self, sim, delay=None):
-        """ The number of steps from a test to its result, as agents wait (see `test()`) """
         dt = sim.pars.dt.to(sim.unit_base).value
-        return max(1, int(np.ceil(ss.solvers.convert(self.product.delay if delay is None else delay, sim.unit_base)/dt - 1e-9)))
-
-    def pending_blocks(self, sim):
-        """ In a compartmental run: for each result that people wait for, its levels of pending_<delivery>, as (result, first level, number of levels), results from the least severe """
-        if not self.waits:
-            return []
-        out = []
-        first = 1
-        for k,delay in enumerate(self.product.delays()):
-            if delay is not None:
-                m = self.result_steps(sim, delay)
-                out.append((k, first, m))
-                first += m
-        return out
+        return max(1, int(np.ceil(ss.solvers.convert(self.delay, sim.unit_base)/dt - 1e-9)))
 
     def dims(self, sim=None):
         """ The properties of people that this delivery needs, as stratifications where everyone starts at the first level """
         Strat = ss.transitions.Strat
-        staged = sim is not None and self.staged(sim)
         out = []
         if self.holds:
             doses = self.product.doses
-            levels = self.product.stage_levels(sim) if staged and self.product.staged else [False] + [f'dose {k+1}' for k in range(len(doses))] if doses else [False, True]
+            levels = [False] + [f'dose {k+1}' for k in range(len(doses))] if doses else [False, True]
             out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
-        if staged and self.waits: # Waiting for a result: one level for each step, for each result with a delay (a negative one too, since anyone waiting is not tested again)
-            names = self.product.result_names
-            levels = ['none'] + [f'{names[k]} {j+1}' for k,first,m in self.pending_blocks(sim) for j in range(m)]
-            out.append(Strat(self.pending, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
-        if staged and self.delay is not None and not isinstance(self.delay, ss.Dist): # Waiting for a delayed delivery: one level for each step (a delay drawn per person is agents only)
-            n = self.delay_steps(sim)
-            out.append(Strat(self.delayed, ['none'] + [f'wait {j}' for j in range(1, n + 1)], split=[1.0] + [0.0]*n))
-        if staged and self.queue is not None: # Waiting in the queue: one level for each step waited
-            n = self.wait_levels(sim)[0]
-            out.append(Strat(self.waiting, ['none'] + [f'waited {j}' for j in range(1, n + 1)], split=[1.0] + [0.0]*n))
         for dim,level in (self.move or {}).items():
             if isinstance(level, bool):
                 out.append(Strat(dim, [False, True], split=[1.0, 0.0]))
@@ -936,16 +818,11 @@ class Delivery(ss.products.EventSource, Intervention):
         return out
 
     def memory_strats(self, sim=None):
-        """ In a compartmental run: the properties of people that keep the memory of its events, and of its product's (by its first delivery), that something reads """
+        """ In a compartmental run: the properties of people that keep whether its events, and its product's (by its first delivery), happened, if something reads it """
         if sim is None or sim.solver in [None, 'abm']:
             return []
         owners = [self.name] + ([self.product.name] if self.product is not None and next((d for d in modules_of(sim, 'interventions') if isinstance(d, Delivery) and d.product is self.product), None) is self else [])
-        out = []
-        for name,outcome in memory_needs(sim):
-            if name in owners:
-                lay = memory_layout(sim, (name, outcome))
-                out += [strat for strat in ([lay.since, lay.count, lay.ever] if lay is not None else []) if strat is not None]
-        return out
+        return [strat for key in memory_needs(sim) if key[0] in owners and (strat := memory_layout(sim, key)) is not None]
 
     def dim_moves(self):
         """ Movement along those properties that happens by itself: losing the protection of a product """
@@ -965,10 +842,12 @@ class Delivery(ss.products.EventSource, Intervention):
                 out.append(f'"{self.name}" is triggered by {leaf}, an event of a module written as code')
         if self.trace is not None:
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
-        if isinstance(self.delay, ss.Dist):
-            out.append(f'"{self.name}" has a delay drawn for each person ({self.delay})')
-        if self.disease_list and not self.holds and isinstance(self.product, (ss.Diagnostic, ss.Treatment)):
-            out.append(f'"{self.name}" tests or cures several diseases given by disease=, the worst result over them per person')
+        if self.delay is not None:
+            out.append(f'"{self.name}" has delay=, whose people wait from the trigger to delivery, which only agents follow')
+        if self.queue is not None:
+            out.append(f'"{self.name}" has queue=, whose people wait to be served, which only agents follow')
+        if self.disease_list:
+            out.append(f'"{self.name}" is delivered for several diseases (disease=[...]), which only agents follow; a product keyed by the diseases (e.g. efficacy=dict(hpv16=0.9, hpv18=0.9)) has a compartmental form')
         for key,attr in [('where', 'eligible'), ('coverage', 'coverage'), ('on', 'on'), ('deliver', 'deliver'), ('priority', 'priority')]:
             func = getattr(self, attr)
             if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.n_args(func) >= 2:
@@ -1057,9 +936,6 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.routine and (sc.isnumber(cap) or (isinstance(cap, ss.transitions.timeseries) and all(sc.isnumber(v) for v in cap.values))): # A count per round or per step is clear; for routine delivery, which has neither, a number needs a unit of time
             errormsg = f'The capacity= of "{self.name}" is a bare number, but routine delivery has no rounds for it to be a number per round: give it as a rate, e.g. capacity=ss.perday({cap if sc.isnumber(cap) else "..."}) or ss.peryear(...)'
             raise ValueError(errormsg)
-        reasons = [r for r in self.agent_reasons() if not (r.startswith('priority=') and sim.pars.approx is not False)] # A priority per agent is ignored, with a note: see key()
-        if sim.solver != 'abm' and reasons:
-            raise ss.CapabilityError(f'"{self.name}" cannot run with solver="{sim.solver}": {reasons[0]}.\n     Run with solver="abm", or leave the solver as "auto".')
         if self.trace is not None:
             if self.on is None:
                 errormsg = f'"{self.name}" traces the contacts of people, so needs to know whose: give an event in who= (e.g. who=tb.diagnosis, or who=screening.positive)'
@@ -1356,20 +1232,6 @@ class Delivery(ss.products.EventSource, Intervention):
         np.add.at(moved, (slice(None), target), chosen*before) # The people chosen are now in another group, along with whoever was offered it before
         return np.clip(np.divide(moved, after, out=np.zeros_like(moved), where=after>0), 0, 1)
 
-    def follow_each(self, sels, changes):
-        """ In a compartmental run: move several selections of people (in different groups) to other levels of some dimensions; returns each, as they now are """
-        eng = self.eng
-        before = eng.state_counts()
-        target = eng.targets(changes)
-        self.shift(sum(sels), changes)
-        after = eng.state_counts()
-        out = []
-        for sel in sels:
-            moved = np.zeros_like(sel)
-            np.add.at(moved, (slice(None), target), sel*before)
-            out.append(np.clip(np.divide(moved, after, out=np.zeros_like(moved), where=after>0), 0, 1))
-        return out
-
     #%% Stepping
 
     def due(self):
@@ -1391,13 +1253,12 @@ class Delivery(ss.products.EventSource, Intervention):
         return
 
     def prepare(self):
-        """ What happens at the start of each step before anyone is offered anything: protection lost, levels moved up, test results that have come; once a step """
+        """ What happens at the start of each step before anyone is offered anything: protection lost, test results that have come; once a step """
         if getattr(self, '_ti_prepared', None) == self.sim.ti:
             return
         self._ti_prepared = self.sim.ti
         if self.product is not None:
             self.product.step_waning()
-            self.step_stages()
         self.step_results()
         return
 
@@ -1427,27 +1288,19 @@ class Delivery(ss.products.EventSource, Intervention):
         return sel if self.delay is None else self.delayed_arrivals(sel)
 
     def delayed_arrivals(self, sel):
-        """ With delay=: those triggered now start waiting (unless waiting already), and those whose wait is over arrive """
+        """ With delay= (agents only): those triggered now start waiting (unless waiting already), and those whose wait is over arrive """
         selector = self.selector
         ti = self.sim.ti
-        if selector.abm:
-            due = (self.ti_due <= ti).uids
-            self.ti_due[due] = np.nan
-            uids = self.uids(sel)
-            uids = uids[np.isnan(self.ti_due[uids])] # Not triggered again while waiting
-            if len(uids):
-                steps = np.ceil(self.delay.rvs(uids)/self.dt_sim - 1e-9) if isinstance(self.delay, ss.Dist) else self.delay_steps(self.sim)
-                self.ti_due[uids] = ti + np.maximum(steps, 0)
-            now = uids[self.ti_due[uids] <= ti] # A delay drawn as less than a step: now
-            self.ti_due[now] = np.nan
-            return selector.to_selection(due.concat(now) if len(now) else due)
-        n = self.delay_steps(self.sim) # As levels of the time waited: those at the last arrive, and wait no more; the others move up
-        d = self.sim.groups.dim_index(self.delayed)
-        due = self.follow_each([(selector.dim(self.delayed) == n)*selector.everyone()], {d:0})[0]
-        self.move_up(self.delayed, range(1, n))
-        before = self.eng.state_counts()
-        self.shift(sel*(selector.dim(self.delayed) == 0), {d:1}, mover=self.on)
-        return self.same_people(due, before)
+        due = (self.ti_due <= ti).uids
+        self.ti_due[due] = np.nan
+        uids = self.uids(sel)
+        uids = uids[np.isnan(self.ti_due[uids])] # Not triggered again while waiting
+        if len(uids):
+            steps = np.ceil(self.delay.rvs(uids)/self.dt_sim - 1e-9) if isinstance(self.delay, ss.Dist) else self.delay_steps(self.sim)
+            self.ti_due[uids] = ti + np.maximum(steps, 0)
+        now = uids[self.ti_due[uids] <= ti] # A delay drawn as less than a step: now
+        self.ti_due[now] = np.nan
+        return selector.to_selection(due.concat(now) if len(now) else due)
 
     def skip_past(self):
         """
@@ -1481,26 +1334,6 @@ class Delivery(ss.products.EventSource, Intervention):
         finally:
             age.raw[:] = saved
             sim.groups.group_levels = levels
-
-    def move_up(self, dim, levels):
-        """ In a compartmental run: move everyone up one level of a dimension, for each of these levels (highest first, so nobody moves twice) """
-        selector = self.selector
-        d = self.sim.groups.dim_index(dim)
-        everyone = selector.everyone()
-        for level in sorted(levels, reverse=True):
-            self.shift((selector.dim(dim) == level)*everyone, {d:level + 1})
-        return
-
-    def step_stages(self):
-        """ In a compartmental run: move the holders of a product whose protection fades up a level of time since delivery, every `stage_steps` steps; once per step, for all its deliveries """
-        product = self.product
-        sim = self.sim
-        if sim.solver == 'abm' or not (self.holds and product.staged) or getattr(product, '_ti_staged', None) == sim.ti:
-            return
-        product._ti_staged = sim.ti
-        if sim.ti > 0 and sim.ti % product.stage_steps == 0:
-            self.move_up(product.dim, range(1, len(product.stage_factors) - 1)) # The last level is kept
-        return
 
     def delivered_by_function(self):
         """ Who the deliver= function says receives the product: UIDs, or a number of people per group """
@@ -1581,11 +1414,8 @@ class Delivery(ss.products.EventSource, Intervention):
         """ The people who would be served now if there were no limit: those chosen, and those waiting """
         abm = self.selector.abm
         n = self.people(chosen)
-        if self.queue is not None:
-            if abm:
-                n += np.count_nonzero(~np.isnan(self.ti_queued.raw[self.sim.people.auids]))*self.sim._current_scale
-            else:
-                n += (self.eng.state_counts()*(self.selector.dim(self.waiting) > 0)).sum()
+        if self.queue is not None: # Agents only
+            n += np.count_nonzero(~np.isnan(self.ti_queued.raw[self.sim.people.auids]))*self.sim._current_scale
         return n
 
     def new_spells(self):
@@ -1612,10 +1442,10 @@ class Delivery(ss.products.EventSource, Intervention):
         sel = sel*self.eligible_now()
         if self.remembers:
             sel = sel*(selector.dim(self.offered) == 0)
-        if self.waits: # Not to people still waiting for the result of an earlier test
-            sel = sel & np.isnan(self.ti_result.raw) if abm else sel*(selector.dim(self.pending) == 0)
-        if self.queue is not None: # Not those already waiting
-            sel = sel*(np.isnan(self.ti_queued.raw[:len(sel)]) if abm else (selector.dim(self.waiting) == 0))
+        if self.waits: # Not to people still waiting for the result of an earlier test (agents only)
+            sel = sel & np.isnan(self.ti_result.raw)
+        if self.queue is not None: # Not those already waiting (agents only)
+            sel = sel & np.isnan(self.ti_queued.raw[:len(sel)])
         return sel
 
     def eligible_now(self, held=True):
@@ -1650,7 +1480,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if sim.solver == 'abm' or len(sim.declared) != 1 or self.eng.cross is not None:
             return False
         product = self.product
-        moves = (product is None and self.move_states is None) or (product is not None and product.holds and not self.staged(sim) and getattr(product, 'take', None) is None) # Not a move between states, or an all-or-nothing vaccine, whose doses are not all held
+        moves = (product is None and self.move_states is None) or (product is not None and product.holds and getattr(product, 'take', None) is None) # Not a move between states, or an all-or-nothing vaccine, whose doses are not all held
         scheduled = self.routine or (self.in_rounds and self.on is None)
         watched = self.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, Delivery) for leaf in ss.conditions.event_leaves(mod.on)] or self._needs # Its events are read, which the kernels do not keep
         static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
@@ -1886,7 +1716,7 @@ class Delivery(ss.products.EventSource, Intervention):
             res.use(n*amount)
         return
 
-    #%% Queues: people not served wait, up to queue= (agents: ti_queued; compartments: levels of waiting_<delivery>)
+    #%% Queues: people not served wait, up to queue= (agents only, in ti_queued)
 
     def max_wait(self, sim):
         """ The most steps anyone waits (inf for queue=True) """
@@ -1895,19 +1725,8 @@ class Delivery(ss.products.EventSource, Intervention):
             return np.inf
         return max(1, int(round(ss.solvers.convert(self.queue, sim.unit_base)/dt)))
 
-    def wait_levels(self, sim):
-        """ In a compartmental run: the levels of waiting_<delivery>, one per step waited, and whether the last is kept (queue=True) """
-        K = self.max_wait(sim)
-        absorbing = not np.isfinite(K)
-        if absorbing:
-            K = self.max_levels
-            ss.note(f'the queue of "{self.name}" has no limit, so in a compartmental run it is kept as {K} levels of one step each, the last for those who have waited longer (first come, first served only within {K} steps)', sim=sim)
-        return K, absorbing
-
     def serve_queue(self, sel, chosen):
         """ Serve those waiting and those just chosen, by priority and then by how long they have waited; the rest wait, until queue= """
-        if not self.selector.abm:
-            return self.serve_queue_groups(sel, chosen)
         selector = self.selector
         sim = self.sim
         ti = sim.ti
@@ -1938,59 +1757,6 @@ class Delivery(ss.products.EventSource, Intervention):
         self.results.waited[ti] = wait[was].sum()/n*self.dt_sim if n else 0.0
         self.results.waiting[ti] = np.count_nonzero(~np.isnan(q[sim.people.auids]))*ss.results.people_scale(sim)
         return sel, served
-
-    def serve_queue_groups(self, sel, chosen):
-        """
-        In a compartmental run: those waiting are at levels of waiting_<delivery> (the steps they have waited), crossed with
-        everything else, so they keep progressing. Those no longer eligible go back to level 0 (left); the rest are served
-        with the people just chosen, by priority and then from the highest level down; the unserved move up a level, and
-        those past the last leave unserved (never_ran)
-        """
-        selector = self.selector
-        sim = self.sim
-        ti = sim.ti
-        d = sim.groups.dim_index(self.waiting)
-        K, absorbing = self.wait_levels(sim)
-        lev = np.broadcast_to(selector.dim(self.waiting), selector.shape)
-        N = self.eng.state_counts()
-        A = chosen*N*(lev == 0) # Just chosen
-        offer = sel*N*(lev == 0)
-        W = N*(lev > 0)
-        left = W*(1 - self.eligible_now())
-        if left.sum():
-            self.relocate(left, {d:0})
-            self.add('left', groups=left.sum(axis=0))
-        W = W - left
-        cands = A + W
-        served = self.take_limited(np.divide(cands, N, out=np.zeros_like(N), where=N>0), wait=lev)*N
-        self.use_amount(served.sum())
-        A_srv, W_srv = served*(lev == 0), served*(lev > 0)
-        S = A_srv
-        dropped = 0.0
-        for w in range(K, 0, -1): # From the top down, so nobody moves twice
-            at = lev == w
-            srv, uns = W_srv*at, (W - W_srv)*at
-            if srv.sum():
-                S = S + self.relocate(srv, {d:0})
-            if uns.sum():
-                if w < K:
-                    self.relocate(uns, {d:w + 1})
-                elif not absorbing:
-                    dropped = dropped + self.relocate(uns, {d:0})
-        A_uns = A - A_srv
-        if A_uns.sum():
-            offer = offer - A_uns + self.relocate(A_uns, {d:1}) # Joining the queue: offered, and waiting
-        after = self.eng.state_counts()
-        frac = lambda x: np.clip(np.divide(x, after, out=np.zeros_like(after), where=after>0), 0, 1)
-        if np.sum(dropped) and 'never_ran' in self.results:
-            self.add('never_ran', groups=np.sum(dropped, axis=0))
-            self.add('lost_capacity', groups=np.sum(dropped, axis=0))
-            self.fire('never_ran', frac(dropped))
-        n = served.sum()
-        self.results.waited[ti] = (W_srv*lev).sum()/n*self.dt_sim if n else 0.0
-        lev = np.broadcast_to(selector.dim(self.waiting), selector.shape)
-        self.results.waiting[ti] = (after*(lev > 0)).sum()
-        return frac(offer), frac(S)
 
     def relocate(self, amount, changes):
         """ In a compartmental run: move some people (by state and group) to other levels; returns where they are now """
@@ -2405,37 +2171,15 @@ class Delivery(ss.products.EventSource, Intervention):
                 self.report([selector.to_selection(uids[(result == k) & ~wait]) for k in range(n)])
             return
         probs = [1 - tails[0]] + [tails[k] - tails[k+1] for k in range(len(tails) - 1)] + [tails[-1]]
-        sels = [chosen*np.clip(p, 0, 1) for p in probs]
-        blocks = {k:first for k,first,m in self.pending_blocks(self.sim)}
-        if blocks: # They wait for the result: see step_results()
-            d = self.sim.groups.dim_index(self.pending)
-            before = self.eng.state_counts()
-            for k,first in reversed(blocks.items()): # The most severe result first
-                self.shift(self.same_people(sels[k], before), {d:first})
-            sels = [selector.nobody() if k in blocks else self.same_people(sel, before) for k,sel in enumerate(sels)]
-        if len(blocks) < len(sels): # Some results now
-            self.report(sels)
+        self.report([chosen*np.clip(p, 0, 1) for p in probs]) # In a compartmental run, every result now (a delay is agents only)
         return
 
     def step_results(self):
-        """ Act on the test results that have become available """
+        """ Act on the test results that have become available (agents only) """
         if not self.waits:
             return
         selector = self.selector
         n = len(self.product.result_names)
-        if not selector.abm: # The people who have waited long enough are at the top level for their result
-            blocks = self.pending_blocks(self.sim)
-            level = selector.dim(self.pending)
-            everyone = selector.everyone()
-            sels = [selector.nobody() for k in range(n)]
-            for k,first,m in blocks:
-                sels[k] = (level == first + m - 1)*everyone
-            moved = self.follow_each([sels[k] for k,first,m in blocks], {self.sim.groups.dim_index(self.pending):0}) # They wait no more
-            for (k,first,m),sel in zip(blocks, moved):
-                sels[k] = sel
-            self.report(sels)
-            self.move_up(self.pending, [j for k,first,m in blocks for j in range(first, first + m - 1)]) # And the others move up
-            return
         due = (self.ti_result <= self.sim.ti).uids
         if len(due):
             result = self.result[due].astype(int)

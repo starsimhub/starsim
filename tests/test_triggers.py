@@ -280,7 +280,7 @@ def test_ct_by_sex():
 
 @sc.timer()
 def test_with_conveyor(solvers=('abm',)):
-    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), and a clock in a crossing made by a trigger')
+    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), in a crossing made by a trigger; a clock there needs agents')
     size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
     for solver in solvers: # Those who stay at the end of a fixed dwell are not in the flow
         LL, T, Sp = ss.states('LL T Sp')
@@ -296,10 +296,11 @@ def test_with_conveyor(solvers=('abm',)):
         E, I, Z = ss.states('E I Z')
         latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
         return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), init=dict(E=10_000), name='b')] # The trigger tracks a and b jointly
-    for clock in [False, True]:
-        out = [ss.Sim(make(clock), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
-        for key in ['n_I', 'n_Z']:
-            assert np.allclose(out[0][key], out[1][key], atol=300), f'clock={clock}, {key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
+    out = [ss.Sim(make(False), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
+    for key in ['n_I', 'n_Z']:
+        assert np.allclose(out[0][key], out[1][key], atol=300), f'{key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
+    with pytest.raises(ss.CapabilityError, match='E.time is a clock'):
+        ss.Sim(make(True), solver='ode', start=2000, stop=2004, dt=ss.months(1), unit='year', **size('ode'), **kw).init()
     return
 
 

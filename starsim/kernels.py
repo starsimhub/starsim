@@ -26,7 +26,7 @@ __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS, TOTAL = range(22) # TOTAL is a count in the whole population, every place (I.total)
-CONVEY, ASSIGN = 22, 23 # Not in a rate: a conveyor (its flow, then its slots), and the compartment an update sets (see convey() and update_values()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
+CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -42,7 +42,7 @@ fields = [
     'mult',       # The multiplier on each flow whose rate does, by group
     # The rates that change within a step
     'depth',      # The largest stack any of them needs
-    'starts',     # Where each flow's operations start and end (the same, if it has none); and after the flows', those of each conveyor and each update (see convey() and update_values())
+    'starts',     # Where each flow's operations start and end (the same, if it has none); and after the flows', those of each conveyor (see convey())
     'ops',        # The operations
     'args',       # What each one acts on
     'consts',     # The parameter values, by group
@@ -154,7 +154,7 @@ def workspace(y, p):
     rates     = np.empty(p.fixed.shape)         # The rate of each flow, by group
     exposures = np.empty((len(p.exp_set), ng))  # Exposure to each infectious state
     stack     = np.empty((p.depth, ng))         # For working out a rate
-    groups    = np.empty((7 + len(p.starts) - len(p.src) - 1, ng)) # Scratch, by group; and after it, the value of each update (see update_values())
+    groups    = np.empty((7, ng))               # Scratch, by group
     cells     = np.zeros((6, size))             # Scratch, by cell of a mixing term or by place; the last row is, for the exact solver by place, whether each place can have no event until something changes it (see gillespie_places()), kept here since another array to pass would slow every step
     dy        = np.empty((4, nc, ng))           # The stages of the integrator
     df        = np.empty((4, nflows, ng))
@@ -1209,7 +1209,7 @@ min_coupled = 8 # The fewest groups for which the exact solver follows only what
 
 @jit
 def coupled(p, ng):
-    """ Whether the exact solver can step a program by `gillespie_groups()`: enough groups, events that stay in their group, and rates worked out from counts by place and exposures by cell (no reservoir, conveyor, update, count in every place, contacts by group, or sum of exposures) """
+    """ Whether the exact solver can step a program by `gillespie_groups()`: enough groups, events that stay in their group, and rates worked out from counts by place and exposures by cell (no reservoir, conveyor, count in every place, contacts by group, or sum of exposures) """
     if ng < min_coupled or p.has_det or len(p.starts) - len(p.src) - 1 > 0:
         return False
     if p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1:
@@ -1882,94 +1882,9 @@ def convey(rng, y, p, w, flows, release):
 
 
 @jit
-def update_values(y, p, stack, groups, cells):
+def step_start(y, p, dt, solver):
     """
-    The values that counts are set to at the end of a step (`ss.update()`), from the compartments at its start, into the rows of `groups` after the scratch
-
-    Worked out as the rates in `step()` are, for the operations an update can have (any but
-    exposure, which is contact): called once a step, and only if the program has conveyors or
-    updates. Each update is a set of operations after the flows' (see `Program.starts`), the
-    last of which is ASSIGN, whose argument is the compartment it sets.
-    """
-    ng = y.shape[1]
-    nf = len(p.src)
-    n, local_n, vals = groups[0], groups[1], groups[2]
-    num = cells[0]
-    for g in range(ng): # The people in each group, and in the same place as each group
-        n[g] = 0
-        for c in p.people:
-            n[g] += y[c, g]
-    for i in range(p.n_places):
-        num[i] = 0
-    for g in range(ng):
-        num[p.places[g]] += n[g]
-    for g in range(ng):
-        local_n[g] = num[p.places[g]]
-    for u in range(len(p.starts) - nf - 1):
-        a, b = p.starts[nf+u], p.starts[nf+u+1]
-        if p.ops[b-1] != ASSIGN:
-            continue
-        top = -1
-        for k in range(a, b-1):
-            op = p.ops[k]
-            arg = p.args[k]
-            if op == CONST:
-                top += 1
-                for g in range(ng):
-                    stack[top, g] = p.consts[arg, g]
-            elif op == TOTAL or op == COUNT or op == FRAC:
-                top += 1
-                for i in range(p.n_places):
-                    num[i] = 0
-                for g in range(ng):
-                    vals[g] = 0
-                    for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                        vals[g] += y[p.set_comps[i], g]
-                    num[p.places[g]] += vals[g]
-                total = 0.0
-                for i in range(p.n_places):
-                    total += num[i]
-                for g in range(ng):
-                    if op == TOTAL:
-                        stack[top, g] = total
-                    elif op == FRAC:
-                        stack[top, g] = num[p.places[g]]/local_n[g] if local_n[g] > 0 else 0.0
-                    else:
-                        stack[top, g] = num[p.places[g]]
-            elif op >= EXP:
-                for g in range(ng):
-                    x = stack[top, g]
-                    if   op == EXP:  stack[top, g] = np.exp(x)
-                    elif op == LOG:  stack[top, g] = np.log(x)
-                    elif op == SQRT: stack[top, g] = np.sqrt(x)
-                    elif op == ABS:  stack[top, g] = abs(x)
-                    elif op == SIN:  stack[top, g] = np.sin(x)
-                    else:            stack[top, g] = np.cos(x)
-            else:
-                top -= 1
-                for g in range(ng):
-                    x = stack[top, g]
-                    z = stack[top+1, g]
-                    if   op == ADD: stack[top, g] = x + z
-                    elif op == SUB: stack[top, g] = x - z
-                    elif op == MUL: stack[top, g] = x * z
-                    elif op == DIV: stack[top, g] = x / z if x != 0 else 0.0
-                    elif op == POW: stack[top, g] = x ** z
-                    elif op == MIN: stack[top, g] = min(x, z)
-                    elif op == MAX: stack[top, g] = max(x, z)
-                    elif op == LT:  stack[top, g] = 1.0 if x < z else 0.0
-                    elif op == LE:  stack[top, g] = 1.0 if x <= z else 0.0
-                    elif op == GT:  stack[top, g] = 1.0 if x > z else 0.0
-                    else:           stack[top, g] = 1.0 if x >= z else 0.0
-        for g in range(ng):
-            groups[7+u, g] = stack[0, g]
-    return
-
-
-@jit
-def step_start(y, p, w, dt, solver):
-    """
-    For `step()`, in a program with conveyors or updates: the values of the updates, from the compartments at the start of the step, and for the ODE, the people due to leave each conveyor over it
+    For `step()`, in a program with conveyors: for the ODE, the people due to leave each conveyor over it
 
     Returns whether a stochastic solver has people to release from a conveyor in the step. Kept
     out of `step()` (as is `step_end()`), since code there, even if a model never runs it, slows
@@ -1977,7 +1892,6 @@ def step_start(y, p, w, dt, solver):
     """
     nf = len(p.src)
     ng = y.shape[1]
-    update_values(y, p, w[2], w[3], w[4])
     pending = False
     for i in range(len(p.starts) - nf - 1):
         a, b = p.starts[nf+i], p.starts[nf+i+1]
@@ -2021,16 +1935,8 @@ def release_rates(y, p, rates, dt):
 
 @jit
 def step_end(rng, y, p, w, flows):
-    """ For `step()`, in a program with conveyors or updates: everyone in a conveyor moves along one slot, and the counts that are updated are set (see `step_start()`) """
-    nf = len(p.src)
-    ng = y.shape[1]
-    groups = w[3]
+    """ For `step()`, in a program with conveyors: everyone in a conveyor moves along one slot (see `step_start()`) """
     convey(rng, y, p, w, flows, False)
-    for i in range(len(p.starts) - nf - 1):
-        b = p.starts[nf+i+1]
-        if p.ops[b-1] == ASSIGN:
-            for g in range(ng):
-                y[p.args[b-1], g] = groups[7+i, g]
     return
 
 
@@ -2071,8 +1977,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     elapsed = 0.0 # For these: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
-    extra = len(p.starts) - nf - 1 # Conveyors and updates, whose operations follow the flows'
-    pending = step_start(y, p, w, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
+    extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
+    pending = step_start(y, p, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out

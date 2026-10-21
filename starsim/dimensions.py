@@ -42,8 +42,7 @@ class Strat:
     A dimension of kind 'clock' holds the time since an event, which advances with time as age does: its levels are
     the lower edges of bins of time (e.g. `ss.months([0, 1, 2, 3, 6, 12, 24])`), and a last level `none` holds the
     people who have not had the event (whose value is NaN). An event sets it with `move=` (e.g. `move=dict(since_birth=0)`).
-    As agents, each person's value is the time since it was set; in a compartmental run, the levels are whole steps
-    up to the last edge (people move along them a step at a time, which is exact), with the last open-ended.
+    Each person's value is the time since it was set, so a clock is kept by agents only.
     """
     def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None, immunity=None):
         self.name = name
@@ -94,7 +93,6 @@ class Strat:
         else:
             self.labels = levels
         self.n = len(self.labels)
-        self.coarse = None # For a clock in whole steps: the level as given that each step is in
         self.female = None # For a dimension called sex, which is people.female: the position of the level for women
         if name == 'sex' and kind is None: # kind= says it is something else, e.g. a place
             women = [i for i,label in enumerate(self.labels) if str(label).lower() in ['female', 'females', 'f', 'women', 'woman']]
@@ -163,14 +161,13 @@ class Strat:
         self.split = split
         return
 
-    def set_clock(self, vals, coarse=None):
+    def set_clock(self, vals):
         """ A clock's levels: bins with these lower edges (in its own unit), then none """
         vals = np.asarray(vals, dtype=float)
         ends = list(vals[1:]) + [None]
         self.edges = np.append(vals, np.inf) # Nobody's value reaches the last edge, so a value of NaN (none) is in the last level
         self.labels = [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(vals, ends)] + ['none']
         self.n = len(self.labels)
-        self.coarse = coarse
         return
 
     def clock_dt(self, sim):
@@ -180,26 +177,9 @@ class Strat:
             return float(dt)
         return float(ss.time.get_dur_class(sim.unit_base)(dt).to(self.clock_unit).value)
 
-    def clock_steps(self, sim):
-        """ For a clock in a compartmental run: its levels made whole steps (from 0 to its last edge, rounded to a step), each in the level as given that it is in """
-        self.set_clock(self.declared) # As given, if it was made steps before
-        dt = self.clock_dt(sim)
-        top = int(round(self.declared[-1]/dt))
-        steps = np.arange(top + 1)*dt
-        if not np.allclose(self.declared/dt, np.round(self.declared/dt), atol=1e-6):
-            ss.note(f'the clock "{self.name}" has levels ({sc.strjoin(self.labels[:-1])}) that are not whole steps, so a compartmental run rounds them to the nearest step', ss.LargeStep, sim=sim)
-        coarse = np.clip(np.searchsorted(self.declared, steps + dt/2, side='right') - 1, 0, len(self.declared) - 1)
-        labels = list(self.labels)
-        self.set_clock(steps, coarse=np.append(coarse, len(self.declared))) # The last of the given levels is none
-        self.coarse_labels = labels
-        self.split = self.at_none()
-        return
-
     def worth(self):
-        """ The value of the property for each level, as a compartmental run takes it in an expression: the lower edge for a clock (none is NaN) or for whole numbers (a counter), and otherwise the middle of the bin """
-        if self.kind == 'clock':
-            return np.where(np.isinf(self.edges), np.nan, self.edges)
-        elif self.edges is not None and np.allclose(self.edges, np.round(self.edges)):
+        """ The value of the property for each level, as a compartmental run takes it in an expression: the lower edge for whole numbers (a counter), and otherwise the middle of the bin """
+        if self.edges is not None and np.allclose(self.edges, np.round(self.edges)):
             return self.edges.copy()
         return self.mids
 
@@ -606,13 +586,8 @@ class Groups:
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         return
 
-    def init(self, steps=False):
-        """
-        Collect the stratifications of the sim and its modules, and work out the groups they give
-
-        Args:
-            steps (bool): for a compartmental run, once its unit is known: a clock's levels are whole steps (see `ss.dimensions.Strat.clock_steps()`)
-        """
+    def init(self):
+        """ Collect the stratifications of the sim and its modules, and work out the groups they give """
         sim = self.sim
         strats = sc.objdict()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
@@ -684,15 +659,9 @@ class Groups:
                 raise ss.DuplicateStructuralDimension(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
-        for strat in self.strats: # A clock's levels: as given, or whole steps
-            if strat.kind == 'clock':
-                if 'split' not in strat.guessed:
-                    raise ss.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
-                if steps:
-                    strat.clock_steps(sim)
-                elif strat.coarse is not None:
-                    strat.set_clock(strat.declared)
-                    strat.split = strat.at_none()
+        for strat in self.strats: # A clock starts with everyone at none
+            if strat.kind == 'clock' and 'split' not in strat.guessed:
+                raise ss.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
         for strat in self.strats: # The kind comes from the value, not the name; a name that suggests another kind is noted
             if strat.hint:
                 ss.note(f'the dimension "{strat.name}" is {strat.guessed["kind"]}', sim=sim)

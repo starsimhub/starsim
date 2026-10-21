@@ -603,14 +603,13 @@ def test_counts():
         peak, last = ss.State(people=False), ss.State(people=False)
         return ss.Disease(infection=S >> I @ ss.perday(0.3)*I*np.exp(-5*peak.n), recovery=I >> R @ ss.days(10), track=ss.update(peak, np.maximum(peak.n, I.frac)),
                           lag=ss.update(last, I.n), init=dict(I=10), name='behaviour')
-    peaks = []
-    for solver in ['ode', 'binomial', 'gillespie', 'abm']:
-        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-        res = ss.Sim(behaviour(), unit='day', stop=200, solver=solver, **size, **kw).run().results.behaviour
-        frac = res.n_I.values/10_000
-        assert np.allclose(res.n_peak[1:], np.maximum.accumulate(frac)[:-1]) and np.allclose(res.n_last[1:], res.n_I[:-1]), f'{solver}: the counts should be set from the step before'
-        peaks.append(frac.max())
-    assert np.allclose(peaks, peaks[0], rtol=0.15) and peaks[0] < 0.15 # Without the slowing, 30% are infectious at the peak
+    res = ss.Sim(behaviour(), unit='day', stop=200, n_agents=10_000, **kw).run().results.behaviour # As agents only
+    frac = res.n_I.values/10_000
+    assert np.allclose(res.n_peak[1:], np.maximum.accumulate(frac)[:-1]) and np.allclose(res.n_last[1:], res.n_I[:-1]) # The counts are set from the step before
+    assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
+    with pytest.raises(ss.CapabilityError, match='ss.update'):
+        ss.Sim(behaviour(), unit='day', stop=200, solver='ode', **kw).init()
+    assert ss.Sim(behaviour(), unit='day', stop=200, **kw).init().solver == 'abm'
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
     S, I, Q, R = ss.states(4)
@@ -2083,7 +2082,7 @@ def test_messages_and_crashes():
 
 @sc.timer()
 def test_given_dwell():
-    sc.heading('Testing a branch probability and a rate that depend on the time in the state (P.dwell)')
+    sc.heading('Testing a branch probability and a rate that depend on the time in the state (P.dwell), as agents only')
     n = 20_000
     def make(solver, p=None, rate=None, dur=ss.expon(ss.years(1))):
         P, C, R = ss.states('P C R')
@@ -2091,9 +2090,12 @@ def test_given_dwell():
         return ss.Sim(ss.Disease(P, C, R, **exits, init=dict(P=n), name='d'), n_agents=n, total_pop=n, stop=ss.years(15), dt=ss.years(0.1), solver=solver, verbose=0)
 
     # A known answer: with an exponential dwell of mean 1, P(C) = 1 - exp(-dwell) sends half to C (HP18)
-    for solver in ['ode', 'binomial', 'abm']:
-        share = make(solver, p=lambda P: 1 - np.exp(-P.dwell)).run().results.d.n_C[-1]/n
-        assert np.isclose(share, 0.5, atol=0.01 if solver == 'ode' else 3*np.sqrt(0.25/n)), f'{solver}: {share}'
+    share = make('abm', p=lambda P: 1 - np.exp(-P.dwell)).run().results.d.n_C[-1]/n
+    assert np.isclose(share, 0.5, atol=3*np.sqrt(0.25/n)), share
+    for solver in ['ode', 'binomial']: # A compartmental solver refuses, and auto runs agents
+        with pytest.raises(ss.CapabilityError, match='P.dwell'):
+            make(solver, p=lambda P: 1 - np.exp(-P.dwell)).init()
+    assert make('auto', p=lambda P: 1 - np.exp(-P.dwell)).init().solver == 'abm'
 
     # As agents, the same as a function of the sim reading the time in the state
     func = lambda sim, uids: 1 - np.exp(-sim.diseases.d.P.dwell[uids])
@@ -2102,13 +2104,12 @@ def test_given_dwell():
     assert np.array_equal(a, b)
 
     # A hazard that grows with the time in the state, against a death rate: the share cleared is 0.841
-    for solver in ['ode', 'abm']:
-        cleared = make(solver, rate=lambda P: ss.peryear(0.5)*P.dwell).run().results.d.n_R[-1]/n
-        assert np.isclose(cleared, 0.841, atol=0.01), f'{solver}: {cleared}'
+    cleared = make('abm', rate=lambda P: ss.peryear(0.5)*P.dwell).run().results.d.n_R[-1]/n
+    assert np.isclose(cleared, 0.841, atol=0.01), cleared
 
     # The model spec writes it, and a branch with p= (decided on entry) cannot read it
-    sim = make('ode', p=lambda P: 1 - np.exp(-P.dwell), dur=ss.lognorm_ex(ss.years(3), ss.years(9))).init()
-    assert 'P.dwell' in str(sim.to_spec()) and 'by time in state' in sim.describe(output=True)
+    sim = make('abm', p=lambda P: 1 - np.exp(-P.dwell), dur=ss.lognorm_ex(ss.years(3), ss.years(9))).init()
+    assert 'P.dwell' in str(sim.to_spec()) and 'decided as people leave' in sim.describe(output=True)
     ns = {}
     exec(ss.to_code(sim.to_spec()).replace("if __name__ == '__main__'", 'if False'), ns)
     assert ns['sim'].hash() == sim.hash()

@@ -235,16 +235,11 @@ class Engine:
             self.foreign = {d for d,strat in enumerate(sim.groups.strats) if strat.kind != 'disease' and not any(self.applies[name][d] for name in people)}
         return
 
-    def moves(self, tr, dst=None):
-        """
-        The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is
-        ('+', amount); and in a compartmental run, of an attribute the transition (to `dst`) sets, ('attr', name); or None
-        """
-        attrs = tuple((d, ('attr', strat.name)) for d,strat in enumerate(self.sim.groups.strats) if getattr(strat, 'of_attr', None) is not None and strat in self.graph.strats
-                      and any(e.args[0] in ['tr', 'to'] and e.args[1].name == tr.name and (e.args[0] == 'tr' or dst is None or getattr(e.args[2], 'name', e.args[2]) == dst) for e in strat.of_attr.events))
+    def moves(self, tr):
+        """ The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is ('+', amount); or None """
         if tr.move is None and getattr(tr, 'increment', None) is None:
-            return attrs or None
-        return (self.own_moves(tr) + attrs) or None
+            return None
+        return self.own_moves(tr) or None
 
     def own_moves(self, tr):
         """ The moves of `move=` and `increment=`: see `moves()` """
@@ -297,9 +292,7 @@ class Engine:
                 for d,strat in enumerate(self.sim.groups.strats):
                     n = strat.n
                     factor = np.zeros((n, n))
-                    if d in moved and isinstance(moved[d], tuple) and moved[d][0] == 'attr': # An attribute drawn at the event: each level to where a draw takes it (see ss.solvers.choose.add_attr_strats())
-                        factor = strat.matrix
-                    elif d in moved and isinstance(moved[d], tuple): # A counter (each level to the one k up), or a clock set to a time
+                    if d in moved and isinstance(moved[d], tuple): # A counter (each level to the one k up), or a clock set to a time
                         factor[np.arange(n), strat.target(moved[d])] = 1
                     elif d in moved:
                         factor[:, moved[d]] = 1
@@ -822,10 +815,8 @@ class Engine:
         if expr.born:
             raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": it reads each agent\'s mother, and compartments do not know who anyone\'s mother is.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
-        if getattr(self.sim, 'fetal_trs', None) and self.sim.solver != 'abm': # The unborn are fetal levels of the pregnant compartments (see ss.Pregnancy.add_fetal_dims()), so everyone here is born, whose mother is 0
-            return 0.0
-        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the mother of an unborn person is kept per agent, and the fetal levels of the mother\'s compartments are not built yet.\n'
-                                 f'     Run with solver="abm".')
+        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": the mother of an unborn person is kept per agent, and compartments have no fetuses.\n'
+                                 f'     Run with solver="abm", or leave the solver as "auto".')
 
     def since(self, expr):
         raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the time since an event is kept per agent. Run with solver="abm".')
@@ -900,7 +891,7 @@ class Engine:
                     dw.family = 'exponential'
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
                     dw.fixed = True
-                elif tr.stages is None and name not in self.graph.dwell_trs: # Not one that reads the time in its state, whose distribution is followed exactly (see Compartmental.build_layout())
+                elif tr.stages is None:
                     shape = raw.pars.get('a')
                     if dw.family == 'gamma' and sc.isnumber(shape) and shape == int(shape):
                         dw.k = int(shape)

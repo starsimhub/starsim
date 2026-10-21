@@ -532,17 +532,21 @@ def test_lifetable_deaths():
     with pytest.raises(ValueError, match='female and male'):
         ss.Deaths(lifetable=dict(women=table(0.01), men=table(0.03)))
 
-    # A death rate by single year of age on 5-year age groups (a compartmental run averages it), and a function of the sim per year
+    # A death rate by single year of age on 5-year age groups (which only agents read), and a function of the sim per year
     mx = ss.by(dict(age=np.arange(100), value=[ss.peryear(0.001*np.exp(0.07*a)) for a in range(100)]))
     def flat(sim): return 0.02
-    for rate,stratify in [(mx, True), (ss.peryear(flat), False)]:
-        n = []
-        for solver,pop in [('abm', dict(n_agents=50_000)), ('ode', dict(total_pop=50_000))]:
-            S, I = ss.states(2)
-            sim = ss.Sim(ss.Disease(S, I, inf=S >> I @ 0*I, death=ss.death(rate=rate), name='d'), solver=solver, start=2000, stop=2005, verbose=0, **pop)
-            if stratify:
-                sim.stratify(age=list(range(0, 100, 5)))
-            n.append(sim.run().results.d.death.sum())
+    def make(rate, solver, stratify, **pop):
+        S, I = ss.states(2)
+        sim = ss.Sim(ss.Disease(S, I, inf=S >> I @ 0*I, death=ss.death(rate=rate), name='d'), solver=solver, start=2000, stop=2005, verbose=0, **pop)
+        if stratify:
+            sim.stratify(age=list(range(0, 100, 5)))
+        return sim
+    with pytest.raises(ss.CapabilityError, match='split'):
+        make(mx, 'ode', True, total_pop=50_000).init()
+    assert make(mx, 'auto', True, total_pop=50_000).init().solver == 'abm'
+    coarse = ss.by(dict(age=np.arange(0, 100, 5), value=[ss.peryear(np.mean([0.001*np.exp(0.07*a) for a in range(lo, lo + 5)])) for lo in range(0, 100, 5)])) # The same, given by the groups
+    for rate,fine,stratify in [(coarse, mx, True), (ss.peryear(flat), ss.peryear(flat), False)]:
+        n = [make(r, solver, stratify, **pop).run().results.d.death.sum() for r,solver,pop in [(fine, 'abm', dict(n_agents=50_000)), (rate, 'ode', dict(total_pop=50_000))]]
         assert np.isclose(n[0], n[1], rtol=0.06), f'{n[0]:n} deaths as agents, {n[1]:n} as compartments'
     assert np.isclose(n[1], 50_000*(1 - np.exp(-0.02*5)), rtol=1e-3)
     return sim

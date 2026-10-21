@@ -205,12 +205,12 @@ class Strains(ss.Module):
     (dengue serotypes, influenza strains, drug resistance), use a strain dimension instead:
     `stratify(strain=[...], immunity=...)`, which takes the same `ss.immunity`.
 
-    As agents, all of this is exact. Under the compartmental solvers the members run side by side (with
-    the sum of their compartments, not the product), and protection, one course at a time, the union
-    results, and the seeding are worked out from each member's share of each group, as if the members
-    were independent given their shares (marked `approx`; `auto` runs a family whose members affect
-    each other as agents, unless `approx=True`). The exact form is the crossing, which an
-    `ss.modify(..., where=)` between two members gives (with the product of their compartments).
+    As agents, all of this is exact. Under the compartmental solvers, members that do not affect each other
+    run side by side (with the sum of their compartments, not the product), and the union results and the
+    seeding are worked out from each member's share of each group. Members that affect each other
+    (`immunity=`, `exclusive=`) need agents: `auto` runs them as agents, and a compartmental solver raises
+    a `CapabilityError`. As compartments, write the couplings as `ss.modify(..., where=)` between the
+    members instead, which tracks their states jointly (exactly, with the product of their compartments).
 
     Args:
         name (str): the name of the family, e.g. 'hpv'
@@ -449,18 +449,15 @@ class Strains(ss.Module):
                     raise ss.UnknownState(f'"{mod.name}" has no state with no exits for people with {self.exclusive} in another member of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
                 self.blocked.append(ends[-1])
 
-        # Under the compartmental solvers: the members side by side, and what ties them together from their shares
-        if sim.solver != 'abm' and (self.coupled or self.init_prev is not None):
-            what = sc.strjoin([w for w,given in [('protection', self.immunity), ('one course at a time', self.exclusive is not None), ('the union results', True), ('the joint seeding', self.init_prev is not None)] if given])
-            msg = f'the members of "{self.name}" run side by side with solver="{sim.solver}": {what} are worked out from each member\'s share of each group, as if the members were independent of each other given their shares'
-            if sim.pars.approx is False and self.coupled:
-                raise ss.CapabilityError(f'{msg}, which approx=False does not allow.\n     Run with solver="abm", or write the couplings as ss.modify(..., where=) between members, which tracks their states jointly (exactly, but with the product of their compartments).')
+        # Under the compartmental solvers: the members side by side, seeded from their shares (members that affect each other need agents: see ss.solvers.init_capabilities())
+        if sim.solver != 'abm' and self.init_prev is not None:
+            msg = f'the members of "{self.name}" run side by side with solver="{sim.solver}": the union results and the joint seeding are worked out from each member\'s share of each group, as if the members were independent of each other given their shares'
             ss.note(msg, sim=sim, verbose=0 if sim.pars.approx else None)
         return
 
     @property
     def coupled(self):
-        """ Whether the members affect each other (protection, or one course at a time), which a compartmental run works out from their shares """
+        """ Whether the members affect each other (protection, or one course at a time), which only agents follow """
         return bool(self.immunity) or self.exclusive is not None
 
     def shares(self, states, k, g):
@@ -547,14 +544,6 @@ class Strains(ss.Module):
         members = self.members
         n = len(members)
         self.prot = dict()
-        if self.sim.solver != 'abm': # By state and group, for each member's engine, from the shares of the others
-            for i,imm in enumerate(self.immunity):
-                for g in range(n):
-                    keys = [key for key in imm.values if np.any(imm.matrix(key, n)[:, g] > 0)]
-                    held = self.held(self.sources[i], g) if keys else None
-                    for key in keys:
-                        self.prot[(i, key, g)] = combine_protection(imm.matrix(key, n)[:, g][:, None, None]*held, imm.combine)
-            return
         for i,imm in enumerate(self.immunity):
             if self.by_attr(i): # Read when the quantity is, as a modifier reads it: see protection()
                 continue
@@ -582,14 +571,14 @@ class Strains(ss.Module):
 
     def protection(self, index, key, g):
         """ The protection of each agent (by UID) against one member, from one `ss.immunity` on one quantity; none from an immunity that gives that member none, or before the first step (people moved before a run); from an attribute, its values now """
-        if self.sim.solver == 'abm' and self.by_attr(index): # m[k, g] times each member's attribute, as it is now
+        if self.by_attr(index): # m[k, g] times each member's attribute, as it is now
             n_agents = len(self.members[0].rel_sus.raw)
             held = np.array([self.attr_level(mod, a, n_agents) if a is not None else np.zeros(n_agents) for mod,a in zip(self.members, self.sources[index])])
             imm = self.immunity[index]
             return combine_protection(imm.matrix(key, len(held))[:, g][:, None]*held, imm.combine)
         out = getattr(self, 'prot', {}).get((index, key, g))
         if out is None:
-            return 0.0 if self.sim.solver != 'abm' else np.zeros(len(self.members[0].rel_sus.raw))
+            return np.zeros(len(self.members[0].rel_sus.raw))
         return out
 
     def step(self):
@@ -613,50 +602,23 @@ class Strains(ss.Module):
 
     def step_shares(self):
         """
-        After the members' steps, under the compartmental solvers: people who died in one member die in the others, and
-        those who entered the exclusive state of one member leave the others' states, as shares of each group
-
-        The people who die from a member's exclusive state are those the others moved to their state with no way out,
-        so they leave that; the others leave every state in proportion (as if independent of the member they died of).
+        After the members' steps, under the compartmental solvers: people who died in one member die in the others, as
+        shares of each group, leaving every state in proportion (as if independent of the member they died of)
         """
         members = self.members
-        if all(mod.engine.cross is not None for mod in members): # Tracked jointly, so the crossing has them die once, and one course at a time cannot be told apart by group
-            if self.exclusive is not None:
-                raise ss.CapabilityError(f'exclusive= of "{self.name}" cannot run with solver="{self.sim.solver}" when its members are tracked jointly (e.g. with births or deaths of everyone, or an ss.modify(where=) between them); run with solver="abm"')
+        if all(mod.engine.cross is not None for mod in members): # Tracked jointly, so the crossing has them die once
             return
-        n = len(members)
-        died = [] # For each member, those who died in the step, by group: from its exclusive state, and from the rest
-        entered = [] # The share of each group that entered its exclusive state
-        for mod in members:
-            engine, graph = mod.engine, mod.graph
-            flows = engine.last_flows
-            died.append([sum(flows.get(tr.deaths, 0) for tr in graph.transitions.values() if tr.deaths and tr.people and ((self.exclusive is not None and self.exclusive in [s.name for s in tr.src]) == excl)) for excl in [True, False]])
-            arrived = sum(flows.get(tr.name, 0)*p for tr in graph.transitions.values() if self.exclusive is not None and tr.dst is not None for dst,p in zip(tr.dst, engine.branch_probs(tr)) if dst.name == self.exclusive)
-            size = engine.n_people(total=False)
-            entered.append(np.divide(arrived, size, out=np.zeros(len(size)), where=size>0))
+        died = [sum(mod.engine.last_flows.get(tr.deaths, 0) for tr in mod.graph.transitions.values() if tr.deaths and tr.people) for mod in members] # For each member, those who died in the step, by group
         for j,mod in enumerate(members):
-            engine, graph = mod.engine, mod.graph
-            rows = engine.selector.states
-            for k in range(n):
-                if k == j:
-                    continue
-                excl, rest = died[k]
-                if not np.any(excl) and not np.any(rest):
+            engine = mod.engine
+            for k in range(len(members)):
+                if k == j or not np.any(died[k]):
                     continue
                 size = engine.n_people(total=False)
-                frac = np.zeros(engine.selector.shape)
-                frac[:] = np.divide(rest, size, out=np.zeros(len(size)), where=size>0)
-                if self.exclusive is not None:
-                    b = rows.index(self.blocked[j])
-                    there = engine.count([graph.states[self.blocked[j]]], total=False)
-                    frac[b] = np.divide(excl, there, out=np.zeros(len(there)), where=there>0)
-                for s,name in enumerate(rows): # Leaving the population, as an outflow does
+                frac = np.divide(died[k], size, out=np.zeros(len(size)), where=size>0)
+                for name in engine.selector.states: # Leaving the population, as an outflow does
                     for comp in engine.state_comps[name]:
-                        engine.y[comp] -= engine.take(engine.y[comp], frac[s])
-            if self.exclusive is not None:
-                frac = 1 - np.prod([1 - entered[k] for k in range(n) if k != j], axis=0)
-                srcs = [s for s in graph.people_states if s.name not in [self.blocked[j], self.exclusive]]
-                engine.move_states(np.broadcast_to(frac, engine.selector.shape), srcs, graph.states[self.blocked[j]])
+                        engine.y[comp] -= engine.take(engine.y[comp], frac)
             engine.record_stocks()
         return
 
@@ -749,8 +711,8 @@ class Strains(ss.Module):
         stocks = [f'{key} (union of the members\' {key})' for key in self.stocks if not key.startswith('n_')]
         lines.append(f'  results: {", ".join(stocks + [f"n_{key[2:]}" for key in self.stocks if key.startswith("n_")])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.name}") for each member')
         if any(self.attr_of(self.members[0], imm.protected) is not None for imm in self.immunity):
-            lines.append('  compartmental solvers: none (protection from an attribute is kept per agent for now)')
+            lines.append('  compartmental solvers: none (protection from an attribute is kept per agent)')
         else:
-            lines.append('  compartmental solvers: members side by side; ' + ('protection, one course at a time, ' if self.coupled else '') + 'unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)')
+            lines.append('  compartmental solvers: ' + ('none (members that affect each other need agents)' if self.coupled else 'members side by side; unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)'))
         text = '\n'.join(lines)
         return text if output else print(text)

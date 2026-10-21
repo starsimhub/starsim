@@ -340,30 +340,27 @@ def test_acquisition():
     return
 
 
-# %% Behavior: a regression, a counter, a table over the destinations, and a clock
+# %% Behavior: a regression, a counter, and a table over the destinations
 
 def behavior(solver, seed=1, n=5000):
-    """ A choice of method: a regression over two boolean dimensions and a counter, a switching row by age and destination, and a clock since the last birth """
+    """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age and destination (a clock since the last birth is agents only: see test_dimensions.py::test_clocks) """
     from scipy.special import expit
     none, pill, iud, P = ss.states('none pill iud P')
     p_use = expit(-1.0 + 0.5*ss.ppl.urban + 0.3*ss.ppl.edu + 0.4*ss.ppl.parity) # Parity is a counter, so is exact as compartments
     mix = ss.par(ss.by(dict(age=[0, 0, 30, 30], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6]))) # A row of the switching matrix by age, over the destinations
-    pp = ss.par(ss.by(dict(since_birth=[None, 0, 6], value=[1.0, 2.0, 1.0]))) # More start in the six months after a birth
-    act = ss.par(ss.by(dict(since_birth=[None, 0, 3, 12], value=[1.0, 0.0, 0.5, 1.0]))) # And conceive less
     contra = ss.Disease(none, pill, iud, P,
-        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use*pp, p=[mix]),
+        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use, p=[mix]),
         stop     = ss.Transition(pill, none, rate=ss.peryear(0.2)),
         remove   = ss.Transition(iud, none, rate=ss.peryear(0.1)),
-        conceive = ss.Transition(none, P, rate=ss.peryear(0.2)*act),
-        deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity', move=dict(since_birth=0)),
-        mix=mix, pp=pp, act=act, name='contra')
+        conceive = ss.Transition(none, P, rate=ss.peryear(0.2)),
+        deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity'),
+        mix=mix, name='contra')
     size = dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
     sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), use_aging=False, verbose=0, **size)
     sim.stratify(age=[0, 30])
     sim.stratify(urban=[False, True], split=[0.4, 0.6])
     sim.stratify(edu=[False, True], split=[0.5, 0.5])
     sim.stratify(parity=[0, 1, 2, 3])
-    sim.stratify(since_birth=ss.months([0, 3, 6, 12]), kind='clock')
     return sim
 
 
@@ -376,7 +373,7 @@ def behavior_shares(sim):
 
 @sc.timer()
 def test_behavior_solvers():
-    sc.heading('Testing that a module of behavior (a regression, a counter, a table over the destinations, and a clock) has the same shares by method and age under every solver')
+    sc.heading('Testing that a module of behavior (a regression, a counter, and a table over the destinations) has the same shares by method and age under every solver')
     ode = behavior_shares(behavior('ode').run())
     sim = behavior('binomial', n=1_000_000)
     sim.pars.substeps = 10 # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)

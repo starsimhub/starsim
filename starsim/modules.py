@@ -2,7 +2,6 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
-import copy
 import inspect
 import functools as ft
 import sciris as sc
@@ -701,19 +700,6 @@ class Module(Base):
         return
 
     @required()
-    def as_given(self):
-        """
-        A copy of the module as it was given to its sim, before it ran there (or of the module itself, if it has not run), for another sim
-
-        A sim runs the modules it is given; one given to a second sim is copied with this, so the two sims do not share it.
-        """
-        sim = self.__dict__.get('sim')
-        fresh = getattr(sim, '_as_given', {}).get(self.__dict__.get('_given_key')) if sim is not None else self
-        if fresh is None:
-            errormsg = f'"{self.name}" has run in a sim that did not keep it as it was given; give each sim a module of its own, e.g. by making it in a function'
-            raise ValueError(errormsg)
-        return copy.deepcopy(fresh)
-
     def init_pre(self, sim, force=False):
         """
         Perform initialization steps
@@ -722,10 +708,6 @@ class Module(Base):
         initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
         """
-        other = getattr(self, 'sim', None)
-        if other is not None and other is not sim:
-            errormsg = f'"{self.name}" is already part of another sim; a sim runs the modules it is given, so give each sim its own, e.g. {self.name}.copy(), or make the module in a function'
-            raise ValueError(errormsg)
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
             ss.distributions.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances

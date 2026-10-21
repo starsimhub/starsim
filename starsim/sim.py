@@ -2,7 +2,6 @@
 Define core Sim classes
 """
 import os
-import copy
 import inspect
 import itertools
 import numpy as np
@@ -60,56 +59,6 @@ class Sim(ss.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
-    @staticmethod
-    def _modules_in(obj, out=None, depth=0):
-        """ The modules in the sim's inputs, including those inside other modules (e.g. the members of an `ss.Strains`) """
-        out = {} if out is None else out
-        if depth > 4:
-            return out
-        if isinstance(obj, ss.Module):
-            if id(obj) in out:
-                return out
-            out[id(obj)] = obj
-            obj = vars(obj)
-        if isinstance(obj, dict):
-            for val in obj.values():
-                if isinstance(val, (ss.Module, dict, list, tuple)):
-                    Sim._modules_in(val, out, depth+1)
-        elif isinstance(obj, (list, tuple)):
-            for val in obj:
-                if isinstance(val, (ss.Module, dict, list, tuple)):
-                    Sim._modules_in(val, out, depth+1)
-        return out
-
-    def _take_inputs(self, pars):
-        """
-        The sim's inputs, as it runs them. It runs the modules it is given, so code that refers to them sees them run; the
-        containers they come in are copied, so a dict of parameters can be given to another sim too. If a module was given
-        to another sim too, the sim runs a copy of all its inputs, made together so they refer to each other as given; what
-        was given to a sim that has run starts from its copy as given there (`sim._as_given`, see `ss.Module.as_given()`).
-        """
-        mods = list(self._modules_in(pars).values())
-        keep = [obj for obj in pars.values() if isinstance(obj, ss.People)] + mods
-        if not any(mod.__dict__.get('_given_key') is not None for mod in mods): # The usual case: nothing here was given to another sim
-            memo = {id(obj):obj for obj in keep} # Kept as they are
-        else:
-            memo = {}
-            for other in {id(mod.sim):mod.sim for mod in mods if mod.__dict__.get('sim') is not None}.values(): # What was given to a sim that has run, as it was given there
-                given = {key:val for key,val in other._as_given.items() if key != id(other._as_given)}
-                fresh = {}
-                copy.deepcopy(list(given.values()), fresh)
-                memo.update({key:fresh[id(val)] for key,val in given.items() if id(val) in fresh})
-            for mod in [mod for mod in mods if mod.__dict__.get('sim') is not None]: # A module that ran, or a copy of one (e.g. mod.copy()), and what has referred into it since
-                new = memo.setdefault(id(mod), mod.as_given())
-                for key,val in vars(mod).items():
-                    if id(val) not in memo and key in vars(new) and not isinstance(val, (str, int, float, bool, type(None))):
-                        memo[id(val)] = vars(new)[key]
-        out = copy.deepcopy(pars, memo)
-        for mod in self._modules_in(out).values():
-            if mod.__dict__.get('_given_key') is None:
-                mod.setattribute('_given_key', id(mod))
-        return out
-
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)
         if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
@@ -153,10 +102,9 @@ class Sim(ss.Base):
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        input_pars = self._take_inputs(sc.mergedicts(pars, args, kwargs))
+        input_pars = sc.mergedicts(pars, args, kwargs, _copy=True) # Copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given
         self.pars.update(input_pars)  # Update the parameters
-        self._as_given = {} # Each object given, by its id, to its copy as given, before the sim runs it; it keeps the objects given, so their ids stay theirs (see _take_inputs())
-        self.inputs = copy.deepcopy(input_pars, self._as_given) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
+        self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
         self.notes = [] # Notes on what was assumed or approximated when the sim was built
         self.solver = None # Set in init()
@@ -909,7 +857,7 @@ class Sim(ss.Base):
             else:
                 add('unit', self.unit, f'from {self.unit_source}' if self.unit_source else None)
             for strat in self.groups.strats: # Each dimension: its levels, the states it applies to, and what it generates
-                text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}' if strat.coarse is None else f'{strat.name} ({strat.kind}): {sc.strjoin(strat.coarse_labels)}, kept as {strat.n} levels of a step each'
+                text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
                 text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':

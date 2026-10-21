@@ -48,6 +48,14 @@ def check_close(sims, func, rtol=0.1):
     return vals
 
 
+def check_agents(make, **kwargs):
+    """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
+    with pytest.raises(ss.CapabilityError):
+        make(solver='ode', **kwargs).init()
+    assert make(**kwargs).init().solver == 'abm'
+    return
+
+
 # %% Define the tests
 
 def test_change():
@@ -343,7 +351,7 @@ def test_treat():
         assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.15 if solver == 'abm' else 0.07) # By default, the people who are infected at the time (as agents, those infected after the step's exits, and one run)
     check_close(sims, lambda sim: sim.results.rounds.delivered.sum(), rtol=0.12) # As agents, about 9% fewer are infected (a difference of order dt)
 
-    # A treatment that changes rates, with protection that fades by a function of time (in a compartmental run, levels of time since delivery)
+    # A treatment that changes rates, with protection that fades by a function of time (agents only)
     def make_sird():
         return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), death=ss.death('I ->', rate=0.02), init_prev=0.01, name='sird')
     def rates(waning=None, **kwargs):
@@ -356,11 +364,9 @@ def test_treat():
     for sim in sims.values():
         assert sim.results.sird.death.sum() < 0.6*untreated.results.sird.death.sum()
     check_close(sims, lambda sim: sim.results.program.delivered.sum()/sim.results.sird.infection.cum[-1]) # Most of the people infected, whenever that was
-    fades = run_each(rates, waning=lambda t: np.exp(-t/5))
-    for solver,sim in fades.items():
-        assert sim.results.sird.death.sum() > 1.2*sims[solver].results.sird.death.sum()
-    check_close(fades, lambda sim: sim.results.sird.death.sum())
-    assert rates(waning=lambda t: np.exp(-t/5), approx=False, **kw).init().solver == 'abm' # The levels are an approximation
+    fades = rates(waning=lambda t: np.exp(-t/5), solver='abm', stop=150, **kw).run()
+    assert fades.results.sird.death.sum() > 1.2*sims.abm.results.sird.death.sum()
+    check_agents(rates, waning=lambda t: np.exp(-t/5), **kw)
 
     with pytest.raises(ss.UnknownEffect):
         ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(cure=0.5, transition='cure')), **kw).init()
@@ -433,7 +439,7 @@ def test_screen():
         assert np.isclose(res.symptomatic.positive.sum(), 0.8*res.symptomatic.delivered.sum(), rtol=0.08) # As agents, a few have already recovered by the time they are tested
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1])
 
-    # A test with a delay: the follow-ups happen when the result arrives (in a compartmental run, people wait in levels of one step each)
+    # A test with a delay: the follow-ups happen when the result arrives (agents only)
     def delay(**kwargs):
         sis = make_sis()
         test = ss.Diagnostic(sensitivity=0.9, specificity=0.9, delay=ss.days(3))
@@ -442,38 +448,37 @@ def test_screen():
         cure = ss.treat(drug, who=slow.positive)
         protect = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=slow.negative)
         return ss.Sim(sis, interventions=[slow, cure, protect], **kwargs)
-    sims = run_each(delay, stop=60)
-    for sim in sims.values():
-        res = sim.results
-        assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.positive)) == [43]
-        assert np.isclose(res.cure.delivered[43], res.slow.positive[43])
-        assert np.isclose(res.slow.positive[43] + res.protect.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other
-    check_close(sims, lambda sim: sim.results.slow.positive.sum()) # As agents, the prevalence of an SIS model is about 6% lower at a step of a day
+    res = delay(solver='abm', stop=60, **kw).run().results
+    assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.positive)) == [43]
+    assert np.isclose(res.cure.delivered[43], res.slow.positive[43])
+    assert np.isclose(res.slow.positive[43] + res.protect.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other
+    check_agents(delay, **kw)
 
     # Someone waiting for a result is not tested again, so a test repeated more often than its delay still returns results
-    for solver in ['ode', 'abm']:
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0), recovery=ss.progression('I -> R', dur=ss.days(1e6)), init_prev=1.0, name='sir')
-        daily = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0, delay=ss.days(3)), interval=1, name='daily')
-        res = ss.Sim(sir, interventions=daily, solver=solver, total_pop=100, **(dict(n_agents=100) if solver == 'abm' else {}), unit='day', stop=20, verbose=0).run().results.daily
-        assert np.isclose(res.delivered.sum(), 700) and np.isclose(res.positive.sum(), 600, rtol=1e-3) # Each person every 3 days, the last result after the end; not 2,000 tests and 0 positive
+    sir = ss.Disease(infection=ss.transmission('S -> I', beta=0), recovery=ss.progression('I -> R', dur=ss.days(1e6)), init_prev=1.0, name='sir')
+    daily = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0, delay=ss.days(3)), interval=1, name='daily')
+    res = ss.Sim(sir, interventions=daily, total_pop=100, n_agents=100, unit='day', stop=20, verbose=0).run().results.daily
+    assert np.isclose(res.delivered.sum(), 700) and np.isclose(res.positive.sum(), 600, rtol=1e-3) # Each person every 3 days, the last result after the end; not 2,000 tests and 0 positive
     return sims
 
 
 def test_cascade():
     sc.heading('Testing a cascade: steps triggered by each other\'s events, and its table')
 
-    # A union of events fires once per person, written as | or as a list; an intersection is those in both
-    for solver in ['ode', 'abm']:
-        out = {}
-        for key,who in dict(union=lambda a,b: a.positive | b.positive, list=lambda a,b: [a.positive, b.positive], both=lambda a,b: [a.positive, b.positive]).items():
-            a = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_a'), coverage=0.5, at=[20], name='a')
-            b = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_b'), coverage=0.5, at=[20], name='b')
-            tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), operator='all' if key == 'both' else 'any', name='tx')
-            res = ss.Sim(make_sir(), interventions=[tx, a, b], solver=solver, stop=30, **kw).run().results # In any order: each step after its triggers
-            out[key] = res.tx.delivered[20]/res.sir.n_I[20]
-        print(f'{solver}: {out}')
-        assert np.isclose(out['union'], 0.75, atol=0.03) and out['list'] == out['union'] # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
-        assert np.isclose(out['both'], 0.25, atol=0.03)
+    # A union of events fires once per person, written as | or as a list; an intersection is those in both (agents only)
+    def union(key, who, **kwargs):
+        a = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_a'), coverage=0.5, at=[20], name='a')
+        b = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_b'), coverage=0.5, at=[20], name='b')
+        tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), operator='all' if key == 'both' else 'any', name='tx')
+        return ss.Sim(make_sir(), interventions=[tx, a, b], stop=30, **kwargs) # In any order: each step after its triggers
+    out = {}
+    for key,who in dict(union=lambda a,b: a.positive | b.positive, list=lambda a,b: [a.positive, b.positive], both=lambda a,b: [a.positive, b.positive]).items():
+        res = union(key, who, **kw).run().results
+        out[key] = res.tx.delivered[20]/res.sir.n_I[20]
+        check_agents(lambda **kwargs: union(key, who, **kwargs), **kw)
+    print(out)
+    assert np.isclose(out['union'], 0.75, atol=0.03) and out['list'] == out['union'] # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
+    assert np.isclose(out['both'], 0.25, atol=0.03)
 
     # Several steps on the same event, in the step of the test, under agents and the ODE (each finds the people where the others moved them)
     for solver in ['ode', 'abm']:
@@ -486,7 +491,7 @@ def test_cascade():
         assert n > 0 and np.allclose([res.cure.delivered[20], res.v1.delivered[20], res.v2.delivered[20]], n) # Not fewer for the later steps
         assert np.isclose(res.cure.cured[20] + res.cure.failed[20] + res.cure.unneeded[20], n)
 
-    # A cascade runs as its steps would as a list, and adds a table of who each step reached and lost
+    # A cascade runs as its steps would as a list, and adds a table of who each step reached and lost (as agents, since it reads rapid.since and pcr has a delay)
     def make(as_cascade=True, **kwargs):
         sis = make_sis()
         rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
@@ -496,16 +501,16 @@ def test_cascade():
         treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50)) # Its treatment is called treatment_treatment
         care = ss.cascade(screening, confirm, treatment)
         return ss.Sim(make_sis(), interventions=care if as_cascade else [treatment, confirm, screening], **kwargs)
-    for solver in ['ode', 'abm']:
-        sim = make(solver=solver, stop=120, **kw).run()
-        plain = make(as_cascade=False, solver=solver, stop=120, **kw).run()
-        assert np.array_equal(sim.results.sis.n_I, plain.results.sis.n_I) # Identical
-        df = sim.results.care.to_df()
-        res = sim.results
-        assert list(df.step) == ['screening', 'confirm', 'treatment'] # Named from their variables
-        assert np.allclose(df.reached + df.lost_coverage + df.lost_capacity, df.eligible)
-        assert df.lost_capacity.iloc[2] > 0 and np.isclose(df.eligible.iloc[1], res.screening.positive.sum()) # Each step's eligible are its trigger's outcome
-        assert np.isclose(df.eligible.iloc[2], res.confirm.positive.sum(), rtol=1e-6)
+    check_agents(make, stop=120, **kw)
+    sim = make(solver='abm', stop=120, **kw).run()
+    plain = make(as_cascade=False, solver='abm', stop=120, **kw).run()
+    assert np.array_equal(sim.results.sis.n_I, plain.results.sis.n_I) # Identical
+    df = sim.results.care.to_df()
+    res = sim.results
+    assert list(df.step) == ['screening', 'confirm', 'treatment'] # Named from their variables
+    assert np.allclose(df.reached + df.lost_coverage + df.lost_capacity, df.eligible)
+    assert df.lost_capacity.iloc[2] > 0 and np.isclose(df.eligible.iloc[1], res.screening.positive.sum()) # Each step's eligible are its trigger's outcome
+    assert np.isclose(df.eligible.iloc[2], res.confirm.positive.sum(), rtol=1e-6)
     text = sim.describe(output=True)
     assert 'care (cascade of 3 steps)' in text and 'on screening.positive' in text
 
@@ -559,23 +564,21 @@ def test_cascade():
 def test_memory():
     sc.heading('Testing the memory of events: .ever, .count, .since, and count_events=')
 
-    # Nobody screened twice within five years; the time since as levels against agents; first-time positives by count
+    # Nobody screened twice within five years; first-time positives by count; .since and .count are agents only
     def make(**kwargs):
         sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(2)), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='sis')
         cytology = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
         screening = ss.screen(cytology, who=cytology.since >= ss.years(5), coverage=0.3, interval=ss.years(1), count_events=True)
         retest = ss.screen(ss.Diagnostic(sensitivity=0.9, name='pcr'), who=screening.positive & (screening.positive.count == 1), coverage=0.5)
         return ss.Sim(sis, interventions=ss.cascade(screening, retest, name='care'), start=2000, stop=2030, dt=0.5, total_pop=20_000, verbose=0, **kwargs) # A step of half the dwell, so agents and the ODE differ little by whole steps
-    sims = sc.objdict(abm=make(n_agents=20_000).run(), ode=make(solver='ode').run())
+    check_agents(make)
+    sims = sc.objdict(abm=make(n_agents=20_000).run())
     df = sims.abm.interventions.screening.events_df()
     tested = df[df.event == 'screening'].sort_values(['uid', 'time'])
     assert len(tested) == sims.abm.results.screening.delivered.sum() # The log has one row per event per person
     assert tested.groupby('uid').time.diff().dropna().min() >= np.timedelta64(5*365, 'D')
     scr = sims.abm.interventions.screening
     assert (scr.count_positive.raw > 0).sum() == df[df.event == 'screening.positive'].uid.nunique() # Positives over the run are those ever positive
-    assert 'since_cytology' in sims.ode.describe(output=True)
-    for key in ['screening', 'retest']:
-        assert np.isclose(sims.ode.results[key].delivered.sum(), sims.abm.results[key].delivered.sum(), rtol=0.05)
 
     # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(0.5)), recovery=ss.progression('I -> S', dur=ss.years(2)), init_prev=0.1, name='sis')
@@ -1108,27 +1111,25 @@ def test_whole_run():
 
 
 def test_delay():
-    sc.heading('Testing delay= on a triggered step: a treatment three months after the test, under every solver')
-    def make(solver, delay=ss.months(3)):
+    sc.heading('Testing delay= on a triggered step: a treatment three months after the test, as agents')
+    def make(delay=ss.months(3), **kwargs):
         S, I = ss.states(2)
         sis = ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(1), cure=I >> S, init_prev=0.1, name='sis')
         screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.3, interval=ss.months(3))
         treatment = ss.treat(ss.Treatment(cure=0.9, transition='cure'), who=screening.positive, delay=delay)
-        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
-        return ss.Sim(sis, interventions=[screening, treatment], solver=solver, start=2000, stop=2005, dt=ss.months(1), verbose=0, **size)
-    for solver in solvers:
-        res = make(solver).run().results
-        pos, tx = res.screening.positive[:-4], res.treatment.delivered[3:-1] # Nothing is delivered at the last time point, which has no step
-        assert tx[0] > 0 and tx[1:3].sum() == 0
-        assert np.allclose(tx, pos, rtol=1e-6 if solver != 'binomial' else 0.05, atol=0 if solver != 'binomial' else 30), f'{solver}: {tx[::3]} treated against {pos[::3]} positive'
-    sim = make('abm', delay=ss.uniform(ss.months(1), ss.months(5))).run() # Drawn per person: 2 to 5 steps after the test
+        return ss.Sim(sis, interventions=[screening, treatment], start=2000, stop=2005, dt=ss.months(1), total_pop=20_000, verbose=0, **kwargs)
+    check_agents(make) # Who is waiting is each person's own, so agents only, fixed or drawn
+    check_agents(make, delay=ss.uniform(ss.months(1), ss.months(5)))
+    res = make(solver='abm', n_agents=20_000).run().results
+    pos, tx = res.screening.positive[:-4], res.treatment.delivered[3:-1] # Nothing is delivered at the last time point, which has no step
+    assert tx[0] > 0 and tx[1:3].sum() == 0
+    assert np.allclose(tx, pos, rtol=1e-6), f'{tx[::3]} treated against {pos[::3]} positive'
+    sim = make(delay=ss.uniform(ss.months(1), ss.months(5)), solver='abm', n_agents=20_000).run() # Drawn per person: 2 to 5 steps after the test
     tx = sim.results.treatment.delivered
     assert tx[:2].sum() == 0 and np.isclose(tx[2:5].sum(), 0.75*sim.results.screening.positive[0], rtol=0.1) # Those due after 2, 3, or 4 steps
-    assert 'after 3 months' in make('ode').init().interventions.treatment.describe()
+    assert 'after 3 months' in make(solver='abm', n_agents=1000).init().interventions.treatment.describe()
     with pytest.raises(ValueError, match='needs an event'):
         ss.treat(ss.Treatment(cure=0.9), delay=ss.months(3))
-    with pytest.raises(ss.CapabilityError, match='drawn for each person'):
-        make('ode', delay=ss.uniform(ss.months(1), ss.months(5))).init()
     return sim
 
 
@@ -1198,6 +1199,46 @@ def test_copied_steps():
     return copied
 
 
+def test_agents_only():
+    sc.heading('Testing the deliveries that are agents only: an explicit ODE refuses each before the run, naming it, and solver="auto" runs it as agents')
+    def make(form, **kwargs):
+        sis, other = make_sis(), ss.Disease(infection=ss.transmission('S -> I', beta=0.2), init_prev=0.01, name='other')
+        test = ss.Diagnostic(sensitivity=0.9, delay=ss.days(3) if form == 'result_delay' else None)
+        scr = ss.screen(test, coverage=0.5, interval=7, disease='sis', name='scr')
+        rescr = ss.screen(test, who=scr.negative, disease='sis', name='rescr') # The same test again, for some
+        drug = ss.Treatment(cure=0.9)
+        steps = dict(
+            queue        = ss.treat(drug, who=scr.positive, capacity=10, queue=True),
+            delay        = ss.treat(drug, who=scr.positive, delay=ss.days(14)),
+            result_delay = ss.treat(drug, who=scr.positive),
+            since        = ss.treat(drug, who=scr.positive & (scr.since > ss.days(30))),
+            count        = ss.treat(drug, who=scr.positive & (scr.positive.count < 2)),
+            ever         = ss.treat(drug, who=scr.positive & ~scr.negative.ever), # Kept: a level of people
+            union        = ss.treat(drug, who=scr.positive | rescr.positive),
+            product      = ss.treat(drug, who=test.positive), # Delivered by two steps
+            waning       = ss.vaccinate(ss.Vaccine(efficacy=0.9, waning=lambda t: np.exp(-t/50)), at=[10]),
+            diseases     = ss.vaccinate(ss.Vaccine(efficacy=0.9), at=[10], disease=['sis', 'other']),
+        )
+        return ss.Sim([sis] + [other]*(form == 'diseases'), interventions=[scr, rescr, ss.cascade(steps[form], name='step')], stop=20, **kw, **kwargs)
+    for form in ['queue', 'delay', 'result_delay', 'since', 'count', 'union', 'product', 'waning', 'diseases']:
+        with pytest.raises(ss.CapabilityError, match='Run with solver="abm"'):
+            make(form, solver='ode').init()
+        assert make(form).init().solver == 'abm', form
+    assert make('ever').run().solver == 'ode'
+
+    # A follow-up of a cure finds everyone it reached, the cured and the rest (each a part of its event), under every solver
+    def follow(**kwargs):
+        sis = make_sis()
+        scr = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.5), at=[5], name='scr') # False positives are not infected: unneeded, in S with the cured
+        tx = ss.treat(ss.Treatment(cure=0.5), who=scr.positive, name='tx')
+        after = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=tx, name='after')
+        return ss.Sim(sis, interventions=[scr, tx, after], **kwargs)
+    for solver,sim in run_each(follow, stop=10).items():
+        r = sim.results
+        assert r.tx.unneeded[5] > 0 and np.isclose(r.after.delivered[5], r.tx.delivered[5], rtol=0.01 if solver == 'binomial' else 1e-6), solver # Was 11% short as an ODE, the parts taken as independent; the binomial solver draws
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -1227,3 +1268,4 @@ if __name__ == '__main__':
     whole  = test_whole_run()
     delay  = test_delay()
     coded  = test_coded_disease()
+    agents = test_agents_only()

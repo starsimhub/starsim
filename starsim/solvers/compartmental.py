@@ -11,18 +11,6 @@ from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_l
 __all__ = ['Compartmental', 'synced_event']
 
 
-def at_dwell(expr, value, state=None):
-    """ An expression with the time in a state (`P.dwell`, or `P.time` of the state the people are in) replaced by a value: that of the people in one slot of a conveyor by time in state """
-    E = ss.transitions
-    if isinstance(expr, E.Dwell) or (isinstance(expr, ss.expressions.Clock) and expr.own(state)):
-        return value
-    elif isinstance(expr, E.BinOp):
-        return E.BinOp(expr.op, at_dwell(expr.a, value, state), at_dwell(expr.b, value, state))
-    elif isinstance(expr, E.Func):
-        return E.Func(expr.name, *[at_dwell(arg, value, state) for arg in expr.args])
-    return expr
-
-
 def synced_event(tr, sim, home):
     """
     For a transition triggered by an event (`ss.on(other.tr)`, `ss.on(other.tr.to(B))`): the transition of another
@@ -31,7 +19,7 @@ def synced_event(tr, sim, home):
     an event a module records in code)
     """
     trig = tr.trigger
-    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event) or id(tr) in getattr(sim, 'fetal_trs', ()): # Unborn people's, which the pregnancy takes (see ss.Pregnancy.add_fetal_dims())
+    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event):
         return None
     kind, obj, dst = trig.x.args
     if kind not in ['tr', 'to']:
@@ -40,22 +28,9 @@ def synced_event(tr, sim, home):
     declared = [m.name for m in getattr(sim, 'declared', [])]
     if name in [None, home] or name not in declared:
         return None
-    other = sim.get_declared(name)
-    if getattr(obj, 'name', None) not in other.graph.transitions:
-        alias = getattr(other, 'compartmental_events', {}).get(getattr(obj, 'name', None)) # An event a module records in code, which is one of its transitions under compartments (e.g. a live birth is a delivery)
-        return Bunch(mod=name, tr=alias, to=getattr(dst, 'name', dst)) if isinstance(alias, str) else None
+    if getattr(obj, 'name', None) not in sim.get_declared(name).graph.transitions: # An event a module records in code
+        return None
     return Bunch(mod=name, tr=obj.name, to=getattr(dst, 'name', dst))
-
-
-def unrecorded_event(tr, sim):
-    """ Whether a transition is triggered by an event another module records in code that never happens under compartments (e.g. the death of a pregnancy's child): see `compartmental_events` of `ss.Pregnancy` """
-    trig = tr.trigger
-    if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event) or trig.x.args[0] not in ['tr', 'to']:
-        return False
-    other = next((m for m in getattr(sim, 'declared', []) if m.name == ss.conditions.modname(trig.x.args[1].module)), None)
-    events = getattr(other, 'compartmental_events', {})
-    name = getattr(trig.x.args[1], 'name', None)
-    return name in events and events[name] is None
 
 
 class Compartmental(Engine):
@@ -190,24 +165,6 @@ class Compartmental(Engine):
             self.movers.append(sc.objdict(name=None, comps=comps, matrix=matrix, transfer=None))
         for mover in self.movers: # The people due to leave a conveyor leave it over the step (in the ODE), so are not moved between groups within it
             mover.comps = [c for c in mover.comps if c not in self.leaving]
-        self.clocks = [] # Clocks, whose people move up a level (a step) at the start of each step: where each group's people go, and the compartments that have it
-        for d,strat in enumerate(sim.groups.strats):
-            if strat.kind == 'clock':
-                if self.cross is not None:
-                    raise ss.CapabilityError(f'the clock "{strat.name}" cannot be used where the states of several diseases are tracked jointly (solver="{sim.solver}"); run with solver="abm"')
-                level = coords[:, d]
-                to = sim.groups.folded(np.where(level < strat.n - 2, np.arange(self.n_groups) + int(mults[d]), np.arange(self.n_groups))) # The open-ended level and none stay
-                comps = [ind for state in graph.people_states if self.applies[state.name][d] for ind in self.state_comps[state.name]]
-                self.clocks.append((to, comps))
-        return
-
-    def step_clocks(self):
-        """ Move everyone on a clock up a step, for the step that follows (see `init_movers()`) """
-        for to,comps in self.clocks:
-            for c in comps:
-                self.y[c] = np.bincount(to, weights=self.y[c], minlength=self.n_groups)
-        if self.clocks:
-            self.changed()
         return
 
     def mover_matrix(self, src, dst, rates):
@@ -315,9 +272,9 @@ class Compartmental(Engine):
             self.state_comps[state.name].append(len(self.comps) - 1)
             return len(self.comps) - 1
 
-        def add_flow(tr, src, kind, named=True, to=None, stages=None, at=None):
+        def add_flow(tr, src, kind, named=True, to=None, stages=None):
             for strain in (self.strain_levels() if kind == 'contact' else [None]): # A transmission is one flow for each strain it can come from
-                self.flows.append(Bunch(tr=tr, src=src, kind=kind, named=named and not tr.stays, to=to, stages=stages, at=at, index=self.tr_index[tr.name], strain=strain, record=None, routes=False,
+                self.flows.append(Bunch(tr=tr, src=src, kind=kind, named=named and not tr.stays, to=to, stages=stages, index=self.tr_index[tr.name], strain=strain, record=None, routes=False,
                                         state=None if src is None else self.comps[src].state, rel_sus=1.0 if src is None else self.comps[src].state.rel_sus))
             return
 
@@ -336,24 +293,6 @@ class Compartmental(Engine):
                     add_flow(other, ind, 'contact')
             return
 
-        def add_slots(state, slotted, exits, competing):
-            """ A state whose exits read the time in it (P.dwell): a conveyor of whole steps (see ss.kernels.convey()), each slot with the rates and destinations of its people's time in the state, then one compartment for the rest """
-            n = self.n_slots[state.name] = self.dwell_slots(state, slotted)
-            slots = [add_comp(state, 0, None) for i in range(n + 1)]
-            rest = add_comp(state, 0, 0)
-            acting = slots if self.sim.solver == 'ode' else slots[:-1] # As for a fixed delay
-            for i,ind in list(enumerate(acting)) + [(n + 1, rest)]:
-                for tr in slotted:
-                    if i or tr.dur is None: # Nobody leaves by a dwell time in the step they arrive in, as for agents (see slot_rate())
-                        add_flow(tr, ind, 'hazard', at=i)
-                add_exits(ind, state, exits, competing, {})
-            add_flow(slotted[0], slots[-1], 'conveyor', named=False, to=rest)
-            self.conveyors.append(Bunch(slots=slots, flow=self.flows[-1]))
-            return slots[0]
-
-        self.slotted = graph.dwell_trs # The transitions that read the time in their source state: see add_slots()
-        self.n_slots = dict()
-        self._quantiles = dict()
         self.conveyors = [] # The slots of each fixed delay and minimum stay, and the flow out of its last: see ss.kernels.convey()
         for name,state in graph.states.items():
             exits = graph.exits[name]
@@ -362,23 +301,7 @@ class Compartmental(Engine):
             staged = [tr for tr in exits.timed if self.dwells[tr.name].staged]
             competing += [tr for tr in exits.timed if not self.dwells[tr.name].staged]
             branches = exits.branches + sc.tolist(exits.remainder)
-            slotted = [tr for tr in exits.timed + exits.hazards if tr.name in self.slotted]
-            competing = [tr for tr in competing if tr.name not in self.slotted]
-            staged = [tr for tr in staged if tr.name not in self.slotted]
             stays = self.stays(name, exits, competing, staged, branches) # The slots of a conveyor that each transition with after= or before= acts on
-            immediate = lambda tr: tr.rate is None and (tr.dur is None or tr.immediate)
-            rest = exits.remainder if slotted and exits.remainder is not None and exits.remainder.rate is None and exits.remainder.dur is not None and len(exits.remainder.dst) == 1 else None
-            if rest is not None and all(immediate(tr) for tr in exits.branches) and not stays: # Branches on entry (e.g. an abortion), and the rest leave by a dwell time: one more exit of the conveyor by time in the state
-                slotted = slotted + [rest]
-                branches = [tr for tr in branches if tr is not rest]
-                staged = [tr for tr in staged if tr is not rest]
-            if slotted:
-                if [tr for tr in branches if not immediate(tr)] or staged or stays:
-                    other = 'branches with p=' if branches else 'a non-exponential dwell time' if staged else 'a minimum stay (after=) or a limit (before=)'
-                    self.unsupported(slotted[0], f'an exit that reads {name}.dwell, with {other} out of "{name}",')
-                passed = [Bunch(tr=tr, p=tr.p[0] if tr.p is not None and not tr.split else None, immediate=True) for tr in branches] # Passed straight through on entry
-                self.tracks[name] = passed + [Bunch(tr=None, p=None, immediate=False, first=add_slots(state, slotted, exits, competing))]
-                continue
             if branches: # Split on entry: one track per branch
                 if staged:
                     self.unsupported(staged[0], f'a non-exponential dwell time out of "{name}" alongside branches with p=')
@@ -437,22 +360,9 @@ class Compartmental(Engine):
         for flow in self.flows: # The expression each flow's rate is worked out from, if it is not a dwell time, and whether that can change within a step
             tr = flow.tr
             flow.expr = None if (flow.kind in ['stage', 'conveyor'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
-            flow.row = None
-            if flow.at is not None and flow.expr is not None: # A rate that reads the time in the state, at the time of the people in this slot
-                flow.expr = at_dwell(flow.expr, ss.par(self.slot_times(flow)[1], literal=True), flow.state)
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
             flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.transitions.Count)) for leaf in flow.expr.leaves)
-
-        self.slot_ps = dict() # For each transition with several destinations that reads the time in its state: its flows out of each slot, and its p= with the time of each slot's people
-        for name in self.slotted:
-            tr = graph.transitions[name]
-            flows = [flow for flow in self.flows if flow.tr is tr and flow.at is not None]
-            if len(tr.dst) > 1:
-                for row,flow in enumerate(flows):
-                    flow.row = row
-                times = ss.par(np.array([self.slot_times(flow)[0] for flow in flows]).reshape(-1, 1), literal=True)
-                self.slot_ps[name] = (len(flows), [None if p is None else at_dwell(p, times, tr.src[0]) for p in tr.p])
 
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
@@ -519,96 +429,10 @@ class Compartmental(Engine):
                 self.unsupported(tr, f'a dwell time that starts after a minimum stay, out of "{name}" with a longer stay or limit,')
         return stays
 
-    def dwell_slots(self, state, slotted):
-        """ How many whole steps the conveyor by time in a state follows people for (see `build_layout()`): until all but 0.1% have left by its longest dwell time, and no longer than the run """
-        t = getattr(self.mod, 't', None)
-        if isinstance(getattr(t, 'dt', None), ss.dur):
-            dt = self.dt
-        elif getattr(getattr(self.sim, 'pars', None), 'dt', None) is not None and getattr(self.mod.pars, 'dt', None) is None: # Laid out before the sim's time is set, to track it jointly with other diseases (see ss.solvers.init_crossings()): by the sim's timeline
-            if not isinstance(getattr(getattr(self.sim, 't', None), 'dt', None), ss.dur):
-                self.sim._init_time() # Its unit is known by now; init() sets it again
-            t = self.sim.t
-            dt = t.dt.to(self.sim.unit_base).value
-        else: # Laid out before the module is in a sim, for its equations: one slot
-            return 1
-        n = t.npts
-        timed = [tr for tr in slotted if tr.dur is not None]
-        if timed: # Everyone has left by its longest dwell time, whatever the rates
-            ends = [np.max(self.dwell_mean(tr.name))*np.log(1000) if self.dwells[tr.name].dist is None else self.quantiles(tr)[int(0.999*len(self.quantiles(tr)))] for tr in timed]
-            n = min(n, int(np.ceil(max(ends)/dt)))
-        n = max(n, 1)
-        total = (n + 2)*self.n_groups
-        if total > 10_000:
-            ss.note(f'{state.name} is followed by its time in the state, as {n + 2} compartments a group ({total:,} in all; every {dt:n} {self.sim.unit_name}s to {n*dt:n}), since {sc.strjoin(tr.name for tr in slotted)} read{"s" if len(slotted) == 1 else ""} {state.name}.dwell', ss.LargeStep, sim=self.sim)
-        return n
-
-    def quantiles(self, tr):
-        """ The quantiles of a transition's dwell time, in the sim's unit, from which its distribution is worked out under a conveyor by time in state (see `slot_rate()`) """
-        if tr.name not in self._quantiles:
-            dist = sc.dcp(self.dwells[tr.name].dist)
-            dist.init(force=True)
-            self._quantiles[tr.name] = np.sort(np.asarray(dist.ppf((np.arange(20_000) + 0.5)/20_000), dtype=float))
-        return self._quantiles[tr.name]
-
-    def slot_times(self, flow):
-        """ The time in the state of the people in one slot of a conveyor by time in state, as agents count it: for its branch probabilities, whole steps when they leave; for a rate, to the middle of the step """
-        n = self.n_slots[flow.state.name]
-        dt = self.dt if isinstance(getattr(getattr(self.mod, 't', None), 'dt', None), ss.dur) else 1.0 # Or laid out for its equations
-        i = flow.at
-        if i > n: # The rest: the mean time in the state of those still in it
-            timed = [tr for tr in self.graph.exits[flow.state.name].timed if tr.name in self.slotted]
-            leave = (n + 0.5)*dt + (self.time_left(timed[0], (n + 0.5)*dt, 1.0) if timed else 0)
-            return leave, leave
-        if self.sim.solver == 'binomial': # Arrivals come at the end of a step, as agents', and move up a slot with it, so slot i is i - 1 steps on, to the middle of the step (slot 0 holds only those placed at the start)
-            return i*dt, (i - 0.5 if i else 0.5)*dt
-        return i*dt, (i if i else 0.25)*dt # Arrivals come through the step, then move up a slot at its end: in slot i, on average, i steps in the state (a quarter of one in the first)
-
-    def time_left(self, tr, T, m):
-        """ The mean time left in a transition's dwell time, sped up by m, for people who have been there a time T (an array, by group, if m is) """
-        dw = self.dwells[tr.name]
-        if dw.dist is None:
-            return np.asarray(self.dwell_mean(tr.name))/m
-        q = self.quantiles(tr)
-        x = np.asarray(T*m, dtype=float)
-        i = np.searchsorted(q, x, side='right')
-        sums = np.concatenate([np.cumsum(q[::-1])[::-1], [0]])
-        count = len(q) - i
-        return np.where(count > 0, (sums[i]/np.maximum(count, 1) - x)/m, self.dt) # Past every quantile: a step
-
-    def slot_rate(self, flow):
-        """
-        The rate out of one slot of a conveyor by time in state by a dwell time: from the share of people who leave in the slot's step, given that they have not left before; worked out for every slot at once, once a step
-
-        A person who will leave after a dwell d leaves from the slot whose step d is nearest to, and
-        at least one step after arriving, as agents leave at the start of the step nearest the end of
-        their dwell, and no sooner than the next step. The flow's
-        multipliers (a modifier, adjust=) speed the distribution up, which is exact while they are
-        constant; the rate is returned over them, since `rates()` applies them.
-        """
-        tr = flow.tr
-        key = ('slots', tr.name, flow.state.name)
-        if key not in self.cache:
-            dt = self.dt
-            mult = np.asarray(self.flow_mult(flow), dtype=float)
-            m = np.maximum(mult, 1e-12)
-            n = self.n_slots[flow.state.name]
-            if self.dwells[tr.name].dist is None:
-                F = lambda t: -np.expm1(-t/self.dwell_mean(tr.name))
-            else:
-                q = self.quantiles(tr)
-                F = lambda t: np.interp(t, q, (np.arange(len(q)) + 0.5)/len(q), left=0, right=1)
-            ends = np.where(np.arange(n + 1) > 0, np.arange(n + 1) + 0.5, 0)*dt # Each slot takes the dwells from the end of the one before to its own: none in the first, which people arrive in (see above)
-            cdf = F(m*np.concatenate([[0], ends])[:, None])
-            share = np.clip(np.divide(cdf[1:] - cdf[:-1], 1 - cdf[:-1], out=np.ones(cdf[1:].shape), where=cdf[:-1] < 1), 0, 1 - 1e-12)
-            rest = 1/np.maximum(self.time_left(tr, (n + 0.5)*dt, m), 1e-12) # The rest: at the rate that gives the mean time left
-            rates = np.concatenate([-np.log1p(-share)/dt, np.broadcast_to(rest, (1, np.size(cdf[0])))])
-            self.cache[key] = np.where(mult > 0, rates/m, 0.0)
-        return self.cache[key][flow.at]
-
     def init_post(self):
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
-        if self.cross is not None and any(sp.get('share') is None for sp in self.spreads): # A module's own burn-in (ss.Pregnancy's burnin=) is worked out in its own compartments, which the crossing starts from (see ss.solvers.Crossing.init())
+        if self.cross is not None and self.spreads:
             raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}", which is tracked jointly with {sc.strjoin(n for n in self.cross.names if n != self.mod.name)}, cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
         self.update_targets()
         amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
@@ -669,16 +493,6 @@ class Compartmental(Engine):
         taken = np.zeros(self.n_groups) # Those back-dated, from the groups of the first state they started in
         try:
             for sp in self.spreads:
-                if sp.get('share') is not None: # A module's own burn-in (ss.Pregnancy's burnin=): each person of the first state with a chance of having entered over the steps before the start, evenly, run forward by the module's own transitions; as agents, all of them are kept (e.g. a delivery before the start counts in the parity)
-                    want = np.asarray(sp.share(), dtype=float)*saved[self.state_comps[first]].sum(axis=0)
-                    self.y = np.zeros_like(saved)
-                    for k in range(sp.steps):
-                        self.arrive(sp.tr.dst[0].name, want/sp.steps, self.y)
-                        self.y, _ = ss.kernels.one_step(rng, self.y, p, self.dt, solver, self.substeps(), no_tables, -1)
-                    out[self.people_comps] += self.y[self.people_comps]
-                    taken += want
-                    ss.note(sp.note, sim=sim)
-                    continue
                 window = sp.spread.window(self.convert)
                 lo, hi = (0, 2000) if window is None else [int(round(v/self.dt)) for v in window]
                 hi = max(hi, lo)
@@ -1132,7 +946,7 @@ class Compartmental(Engine):
         """ Triggers (`ss.on()`): on states and strata, the compartments where they hold vanish; on time or counts, they are applied at each step """
         sim = self.sim
         self.triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and not tr.trigger.event and not tr.trigger.outcome]
-        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None and not unrecorded_event(tr, sim) and id(tr) not in getattr(sim, 'fetal_trs', ())] # An event of this module: moved at the end of the step, see step_triggers()
+        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None] # An event of this module: moved at the end of the step, see step_triggers()
         for tr in self.triggers:
             tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
             if not tr.static:
@@ -1190,9 +1004,7 @@ class Compartmental(Engine):
                     masks.append(mask)
                     left = left - mask
                 probs[name] = [p*left for p in probs[name]] + masks
-        key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and tr.split and tr.name not in self.slotted for p in self.branch_probs(tr)]
-        slot_probs = {name:[np.broadcast_to(p, (n, self.n_groups)) for p in self.branch_probs(self.graph.transitions[name], ps)] for name,(n,ps) in self.slot_ps.items()} # For every slot at once
-        key += [p for probs in slot_probs.values() for p in probs]
+        key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dst is not None and tr.split for p in self.branch_probs(tr)]
         last = getattr(self, '_target_key', None)
         if last is not None and len(last) == len(key) and all(np.array_equal(a, b) for a,b in zip(last, key)):
             return
@@ -1240,12 +1052,12 @@ class Compartmental(Engine):
             else:
                 flow.targets, flow.credits, flow.recs = [], [], []
                 src = None if flow.src is None else flow.state.name
-                ps = self.branch_probs(flow.tr) if flow.row is None else [p[flow.row] for p in slot_probs[flow.tr.name]]
+                ps = self.branch_probs(flow.tr)
                 for dst,p in zip(flow.tr.dst, ps):
                     comps, credits = self.entry[dst.name]
                     syn = self.syncs_of(flow.tr, dst.name)
                     for ind,w in comps:
-                        dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr, dst.name)), syn) # Moving other modules' coordinates too (a synchronized flow)
+                        dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr)), syn) # Moving other modules' coordinates too (a synchronized flow)
                         if dim_map is not None and np.ndim(w): # A branch share decided on entry, by the groups people land in, which can have a dimension the source lacks (TL16: it was read at the first level)
                             landed = dim_map*w
                             total = landed.sum(axis=1)
@@ -1287,15 +1099,6 @@ class Compartmental(Engine):
         active[0] += active.sum(axis=0) == 0 # Those with none of them stay in the first, where nothing moves them
         return list(active)
 
-    def attr(self, a):
-        """ An attribute's value in each group: that of its level (see ss.solvers.choose.add_attr_strats()) """
-        groups = self.sim.groups
-        for d,strat in enumerate(groups.strats):
-            if getattr(strat, 'of_attr', None) is a:
-                return strat.values[groups.group_coords[:, d]]
-        errormsg = f'The attribute "{a.name}" has no levels in this compartmental run'
-        raise ss.CapabilityError(errormsg)
-
     def add_per_births(self):
         """ After a step: the children of those who went through a transition with births driven by its flow (`ss.birth(per=)`), `n` for each, in the youngest groups of their parents' place """
         for tr in self.graph.inflows:
@@ -1307,73 +1110,18 @@ class Compartmental(Engine):
             n = tr.n_born.raw if isinstance(tr.n_born, ss.par) else tr.n_born
             if isinstance(n, ss.Dist):
                 n = ss.transitions.dwell_stats(n, self.convert)[0] # The mean number of children
-            fetal = getattr(self.mod, 'fetal_levels', None)
-            if fetal: # By the fetus's state at the delivery (see ss.Pregnancy.add_fetal_dims())
-                born, births = self.fetal_births(tr, flow, float(n), fetal)
-            else:
-                born = float(n)*flow @ self.birth_map(tr)
-                if self.integer: # Whole children
-                    born = self.rng.poisson(born).astype(float)
-                births = born
+            born = float(n)*flow @ self.birth_map(tr)
+            if self.integer: # Whole children
+                born = self.rng.poisson(born).astype(float)
             self.arrive(tr.dst[0].name, born, self.y)
             if self.cross is not None: # Into the joint states, where the other diseases' children start by their dimensions' splits
                 self.cross.put(self)
             for engine,other in self.births_of(tr): # Counted as this module's births, and as the children other modules place (ss.birth(per=) of this transition)
-                engine.flowcounts[other.name] += np.sum(births)
-                engine.last_flows[other.name] = engine.last_flows.get(other.name, 0.0) + births
+                engine.flowcounts[other.name] += np.sum(born)
+                engine.last_flows[other.name] = engine.last_flows.get(other.name, 0.0) + born
                 if engine.n_groups > 1:
                     engine.flow_groups[other.name] = engine.last_flows[other.name]
         return
-
-    def fetal_births(self, tr, flow, n, fetal):
-        """
-        The children of the deliveries in each group of a pregnancy with fetal levels (see `ss.Pregnancy.add_fetal_dims()`), by
-        where each fetus goes (`ss.Pregnancy.route()`): none for a stillbirth (the pregnancy's, and the module's transition), born
-        and dead at once for a neonatal death, or born into the state its transitions at the delivery and birth lead to, in the
-        module's level of the crossing; the module's transitions at the delivery and the birth are counted as its own
-        """
-        if len(fetal) > 1:
-            raise ss.CapabilityError(f'"{self.mod.name}" has fetal levels for {sc.strjoin(fetal.keys())}; more than one module\'s has no compartmental form yet. Run with solver="abm".')
-        spec = fetal[0]
-        groups = self.sim.groups
-        if groups.group_fold is not None:
-            raise ss.CapabilityError(f'fetal levels of "{self.mod.name}" with dimensions that only some groups have cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
-        coords = groups.group_coords
-        f, c = groups.dim_index(spec.dim), groups.dim_index(spec.mod.name)
-        other = spec.mod.engine
-        base = self.birth_map(tr)
-        first = int(np.argmax(groups.strats[c].split)) # Where children start in the module, in the crossing
-        born = np.zeros(self.n_groups)
-        counts = sc.ddict(float) # The module's transitions
-        live = 0.0
-        for k,level in enumerate(spec.levels):
-            amount = flow*(coords[:, f] == k)
-            total = amount.sum()
-            if not total:
-                continue
-            kind, state, trs = self.mod.route(spec.mod, level)
-            for name in trs:
-                counts[name] += n*total
-            if kind == 'still':
-                self.flowcounts['stillbirth'] += total
-                self.last_flows['stillbirth'] = self.last_flows.get('stillbirth', 0.0) + amount
-                continue
-            live += total
-            if kind == 'nnd':
-                self.mod._nnd += n*total
-                continue
-            target = [(other.people_comps.index(ind), w) for ind,w in other.entry[state][0] if ind in other.people_comps]
-            for lt,w in target: # Moved from where children would start to the level of this state
-                shifted = np.zeros_like(base)
-                cols = np.flatnonzero(coords[:, c] == first)
-                shifted[:, cols + (lt - first)*int(groups.group_mults[c])] = base[:, cols]
-                born += n*float(np.mean(w))*(amount @ shifted)
-        for name,val in counts.items():
-            other.flowcounts[name] = other.flowcounts.get(name, 0.0) + val
-        if self.integer:
-            born = self.rng.poisson(born).astype(float)
-        births = born*(n*live/born.sum()) if born.sum() else born # Those who died at birth are born too, though not added
-        return born, births
 
     def births_of(self, tr):
         """ The engine and inflow of each declared module with an `ss.birth(per=)` of the same transition as `tr` (this module's own first) """
@@ -1413,8 +1161,6 @@ class Compartmental(Engine):
             return 0.0
         elif flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.kernels.convey())
             return 1.0
-        elif flow.expr is None and flow.at is not None:
-            return self.slot_rate(flow)
         elif flow.expr is None:
             kg = self.dwells[flow.tr.name].kg if flow.kind == 'stage' else None # Ragged stages: each group's own number
             return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/self.dwell_mean(flow.tr.name)
@@ -1643,15 +1389,9 @@ class Compartmental(Engine):
                 for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
                     check(leaf)
             starts.append(len(ops))
-        for cv in self.conveyors: # After the flows' operations, each conveyor's (its flow, then its slots) and each update's (its value in the groups the count is in, then the compartment it sets): see ss.kernels.convey() and update_values()
+        for cv in self.conveyors: # After the flows' operations, each conveyor's (its flow, then its slots): see ss.kernels.convey()
             ops += [kn.CONVEY]*(len(cv.slots) + 1)
             args += [next(i for i,flow in enumerate(self.flows) if flow is cv.flow)] + cv.slots
-            starts.append(len(ops))
-        for upd in self.graph.updates.values():
-            name = upd.state.name
-            depth = max(depth, flatten(upd.value*ss.par((self.collapse[name] == np.arange(ng)).astype(float), literal=True), None))
-            ops.append(kn.ASSIGN)
-            args.append(self.state_comps[name][0])
             starts.append(len(ops))
 
         place_of = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int)
@@ -1831,7 +1571,7 @@ class Compartmental(Engine):
             crd_parent = np.array([item[2] for item in credits], dtype=int),
             maps       = np.array(list(maps.values()), dtype=float).reshape(len(maps), ng, ng),
         )
-        local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) and not self.graph.updates # Places do not affect each other within a step (an update can read every place): see ss.kernels.gillespie_places()
+        local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) # Places do not affect each other within a step: see ss.kernels.gillespie_places()
         self.program = self.program._replace(local=local)
         return
 
@@ -1932,13 +1672,12 @@ class Compartmental(Engine):
         """
         graph = self.graph
         states = {id(s) for s in graph.infected}
-        updated = {id(upd.state) for upd in graph.updates.values()} # A count set by an update has no flows, so is held at its value
         found = None
         while found != states: # Until nothing more is found, since each count found can lead to another
             found = set(states)
             for flow in self.flows: # A count that infection depends on, such as a water reservoir, and the states that infection leads to
                 if flow.src is not None and id(flow.state) not in states and flow.expr is not None:
-                    single = [leaf.states[0] for leaf in flow.expr.leaves if isinstance(leaf, ss.transitions.Count) and len(leaf.states) == 1 and id(leaf.states[0]) not in updated]
+                    single = [leaf.states[0] for leaf in flow.expr.leaves if isinstance(leaf, ss.transitions.Count) and len(leaf.states) == 1]
                     counts = {id(s) for s in single if not s.people}
                     by_infected = not flow.state.people and any(id(s) in states for s in single) # A count moved by the number infected, e.g. mosquitoes biting them
                     if counts or by_infected:
@@ -1956,7 +1695,7 @@ class Compartmental(Engine):
         y0 = self.y.copy()
         y0[first] += y0[people].sum(axis=0)
         y0[infected] = 0
-        counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected and id(comp.state) not in updated]
+        counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected]
         if counts: # Their equilibrium, from the rates at the disease-free state
             self.y = y0
             self.cache.clear()
@@ -2024,7 +1763,7 @@ class Compartmental(Engine):
             exprs = [p for tr in graph.transitions.values() for p in sc.tolist(tr.p) if p is not None] # The values that are read once for the whole run
             exprs += [w for info in self.outcomes.values() for key,w in info.sources if isinstance(w, ss.transitions.Expr)]
             funcs = [p for p in graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.transitions.TimeValue))] # Called each step
-            funcs += [leaf for expr in exprs for leaf in expr.leaves if not (isinstance(leaf, ss.transitions.Dwell) or (isinstance(leaf, ss.par) and (isinstance(leaf.raw, ss.Dist) or not callable(leaf.raw))))] # The time in a state is each slot's own (see slot_times())
+            funcs += [leaf for expr in exprs for leaf in expr.leaves if not (isinstance(leaf, ss.par) and (isinstance(leaf.raw, ss.Dist) or not callable(leaf.raw)))]
             transfers = [name for name,tf in graph.transfers.items() if not self.constant_transfer(tf)]
             if self.program is None:
                 self.init_program()
@@ -2164,16 +1903,11 @@ class Compartmental(Engine):
         sim = self.sim
         nc, ng, npts = len(self.comps), self.n_groups, self.mod.t.npts
         self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Delivery) and mod.dis is self.mod and mod.tabulated]
-        C = len(self.clocks) # Clocks first, so that a delivery that sets one does so after it has moved up
-        K = C + len(self.deliveries)
+        K = len(self.deliveries)
         due = np.zeros((K, npts), dtype=np.bool_)
         sel, cov = np.zeros((K, nc, ng)), np.zeros((K, nc, ng))
         to, rest = np.zeros((K, ng), dtype=np.int64), np.zeros((K, ng), dtype=np.int64)
-        for k,(clock_to,comps) in enumerate(self.clocks):
-            due[k, 1:] = True
-            sel[k, comps], cov[k, comps] = 1.0, 1.0
-            to[k], rest[k] = clock_to, np.arange(ng)
-        for k,mod in enumerate(self.deliveries, start=C):
+        for k,mod in enumerate(self.deliveries):
             due[k], sel_k, cov_k, to[k], rest[k] = mod.shifts()
             for s,name in enumerate(self.selector.states):
                 for comp in self.state_comps[name]:
@@ -2200,7 +1934,7 @@ class Compartmental(Engine):
             args, tables = self.run_args()
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
             out = ss.kernels.run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step())
-            for k,mod in enumerate(self.deliveries, start=len(self.clocks)):
+            for k,mod in enumerate(self.deliveries):
                 mod.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
         flows = self.count_deaths(flows)
@@ -2287,7 +2021,7 @@ class Compartmental(Engine):
             y, stocks, flows, more = ss.kernels.run(rng, y, program, dt, end + 1, solver, n_sub, *tables, self.register, self.shifts, tally, self.per_step(), start)
             short += more
             last = end == npts - 1
-            for k,mod in enumerate(self.deliveries, start=len(self.clocks)):
+            for k,mod in enumerate(self.deliveries):
                 mod.store_shifts(tally[:, k] if last else tally[:-1, k], start=start, done=last) # The last row is the start of the next part's first step
             yield (start, stocks, flows) if start == 0 else (start + 1, stocks[1:], flows[1:])
             start = end
@@ -2368,7 +2102,7 @@ class Compartmental(Engine):
         for ti in np.flatnonzero(sh.due.any(axis=0)):
             if ti < len(stocks) - 1: # No step follows the last time point
                 ss.kernels.apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti]) # Expected numbers, so nothing is drawn
-        for k,mod in enumerate(self.deliveries, start=len(self.clocks)):
+        for k,mod in enumerate(self.deliveries):
             mod.store_shifts(tally[:, k])
         return
 
@@ -2421,7 +2155,7 @@ class Compartmental(Engine):
                 break
             start = end
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
-        out.deliveries = sc.objdict({mod.name:mod.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries, start=len(self.clocks))})
+        out.deliveries = sc.objdict({mod.name:mod.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
 
     def collect(self, stocks, flows, expected=False, grouped=None, seeds=None):
@@ -2618,7 +2352,6 @@ class Compartmental(Engine):
         if solver == 'gillespie' and self.program.local and self.program.has_det: # By place, the counts are settled after the events, as in SimInf
             ss.kernels.settle_places(self.y, self.program, dt, flows)
         self.record_flows(flows)
-        self.step_clocks() # At the start of the next step, before its deliveries
         return
 
     def count_deaths(self, flows):
@@ -2648,21 +2381,7 @@ class Compartmental(Engine):
                 if self.n_groups > 1:
                     self.flow_groups[name] = self.last_flows[name]
         self.add_per_births()
-        for spec in (getattr(self.mod, 'fetal_levels', None) or {}).values(): # Fetal deaths, counted as the module's: their share of the losses in each group
-            if spec.deaths:
-                base = np.broadcast_to(np.asarray(self.eval(self.graph.transitions.miscarriage.orig_rate.a), dtype=float), (self.n_groups,))
-                rates = [np.broadcast_to(np.asarray(self.eval(d.extra), dtype=float), (self.n_groups,)) for d in spec.deaths]
-                total = base + sum(rates)
-                lost = sum(np.broadcast_to(self.last_flows.get(key, 0.0), (self.n_groups,)) for key in ['miscarriage', 'stillbirth'])
-                for d,rate in zip(spec.deaths, rates):
-                    share = np.divide(rate, total, out=np.zeros(self.n_groups), where=total > 0)
-                    engine = spec.mod.engine
-                    engine.flowcounts[d.tr.name] = engine.flowcounts.get(d.tr.name, 0.0) + float((lost*share).sum())
-        fetal = {tf_name:(spec.mod.engine, tf.of_fetal.name) for spec in (getattr(self.mod, 'fetal_levels', None) or {}).values() for tf_name,tf in spec.transfers.items()} # The fetal transitions, counted as the module's (see ss.Pregnancy.add_fetal_dims())
         for i,mover in enumerate(self.movers):
-            if mover.name in fetal:
-                engine, name = fetal[mover.name]
-                engine.flowcounts[name] = engine.flowcounts.get(name, 0.0) + flows[self.n_trans + i].sum()
             if mover.name is not None:
                 self.flowcounts[mover.name] += flows[self.n_trans + i].sum()
                 self.flow_groups[mover.name] = flows[self.n_trans + i]

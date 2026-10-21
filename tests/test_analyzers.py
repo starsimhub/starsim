@@ -31,6 +31,7 @@ def test_dynamics_by_age(do_plot=False):
     by_age = ss.dynamics_by_age('sis.I', age_bins=(0, 10, 30, 100))
     sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
     sim.run()
+    by_age = sim.analyzers[0] # The sim's copy, which ran
 
     # Tests
     h = by_age.hist

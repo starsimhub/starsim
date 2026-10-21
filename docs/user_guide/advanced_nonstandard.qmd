@@ -188,10 +188,11 @@ pars = dict(
 )
 
 # Run the model
-sim = ss.Sim(pars) # The sim runs the "wealth" object from above
+sim = ss.Sim(pars)
 sim.run()
 
-# Plot the results
+# Plot the results of the sim's copy of the wealth model
+wealth = sim.demographics[0]
 wealth.plot()
 wealth.plot3d()
 ```

@@ -27,6 +27,18 @@ def check_close(sims, func, rtol=0.1):
     return vals
 
 
+def check_agents(make, stop=100, pop=50_000, **kwargs):
+    """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
+    with pytest.raises(ss.CapabilityError):
+        make(solver='ode', total_pop=pop, stop=stop, **kw, **kwargs).init()
+    assert make(total_pop=pop, stop=stop, **kw, **kwargs).init().solver == 'abm'
+    return
+
+
+def run_abm(make, stop=100, pop=50_000, n_agents=10_000, **kwargs):
+    return sc.objdict(abm=make(solver='abm', total_pop=pop, n_agents=n_agents, stop=stop, **kw, **kwargs).run())
+
+
 # %% Define the tests
 
 def test_people():
@@ -89,14 +101,18 @@ def make_sis(name='sis', beta=0.25):
 
 
 def test_queue():
-    sc.heading('Testing queues: dropped, waiting up to a limit, and leaving when no longer eligible')
+    sc.heading('Testing queues: dropped, waiting up to a limit (agents only), and leaving when no longer eligible')
     def make(queue=None, **kwargs):
         sis = make_sis()
         clinic = ss.treat(ss.Treatment(moves=sis.cure), on=sis.infection, where=sis.I, capacity=ss.perday(20), queue=queue)
         return ss.Sim(sis, interventions=clinic, **kwargs)
     out = sc.objdict()
     for label,queue in dict(none=None, days=ss.days(5), true=True).items():
-        sims = run_both(make, stop=150, queue=queue)
+        if queue is None:
+            sims = run_both(make, stop=150, queue=queue)
+        else: # Who waits, and since when, is each person's own
+            check_agents(make, stop=150, queue=queue)
+            sims = run_abm(make, stop=150, queue=queue)
         for solver,sim in sims.items():
             r = sim.results.clinic
             n = sc.objdict({k:r[k].sum() for k in ['eligible', 'delivered', 'lost_capacity'] + (['left'] if queue is not None else [])})
@@ -111,9 +127,9 @@ def test_queue():
                 if label == 'days':
                     assert np.allclose(r.waited[20:100], 5) and np.isclose(r.never_ran.sum(), n.lost_capacity) # First come, first served: the oldest, who have waited the longest allowed
             out[f'{label}_{solver}'] = n
-        check_close(sims, lambda sim: sim.results.clinic.lost_capacity.sum() + 1, rtol=0.1)
-    for solver in ['ode', 'abm']:
-        assert out[f'true_{solver}'].lost_capacity == 0 and out[f'days_{solver}'].lost_capacity < 0.8*out[f'none_{solver}'].lost_capacity
+        if queue is None:
+            check_close(sims, lambda sim: sim.results.clinic.lost_capacity.sum() + 1, rtol=0.1)
+    assert out.true_abm.lost_capacity == 0 and out.days_abm.lost_capacity < 0.8*out.none_abm.lost_capacity
     return out
 
 
@@ -247,26 +263,23 @@ def test_memory():
         assert once[solver].results.clinic.delivered.sum() < 0.6*r.delivered.sum()
     check_close(each, lambda sim: sim.results.clinic.delivered.sum(), rtol=0.15) # As agents, a few % fewer are seen (above), and the epidemic is a few % smaller
 
-    # Not within 30 days of the last time, at a rate per year; and the time since another delivery in a condition
+    # Not within 30 days of the last time, at a rate per year; and the time since another delivery in a condition (.since is agents only)
     def rescreen(**kwargs):
         sis = make_sir()
         test = ss.Diagnostic(sensitivity=0.9)
         screening = ss.screen(test, who=test.since >= ss.days(30), coverage=ss.peryear(4))
         recent = ss.vaccinate(ss.Vaccine(efficacy=0.5), where=screening.since < ss.days(5), coverage=0.1)
         return ss.Sim(sis, interventions=[screening, recent], **kwargs)
-    sims = run_both(rescreen, stop=120)
+    check_agents(rescreen, stop=120)
+    sims = run_abm(rescreen, stop=120)
     for solver,sim in sims.items():
         r = sim.results.screening
         p = 1 - np.exp(-4/365) # Each day, of those not screened in the last 30 days
         assert np.isclose(r.coverage[1:31].mean(), p, rtol=0.07) and np.isclose(r.eligible[1], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
         assert np.isclose(r.eligible[60], 50_000 - r.delivered[31:60].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
         assert sim.results.recent.delivered[1] > 0 and sim.results.recent.eligible[50] < 6*r.delivered[45:50].sum()
-        if solver == 'abm':
-            screened = sim.interventions.screening.last_event.raw
-            assert np.nanmin(sim.ti - screened) >= 0
-    check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.05)
-    check_close(sims, lambda sim: sim.results.recent.delivered.sum(), rtol=0.05)
-    assert 'since_screening' in [s.name for s in sims.ode.groups.strats] and 'since_screening' not in [s.name for s in sims.abm.groups.strats]
+        screened = sim.interventions.screening.last_event.raw
+        assert np.nanmin(sim.ti - screened) >= 0
 
     # Coverage as a function that gives a typed rate is a rate at every step too, as the typed rate itself is
     def typed(func=False, **kwargs):
@@ -278,21 +291,23 @@ def test_memory():
         assert np.allclose(func, direct), f'{solver}: a function giving a typed rate should be the rate, not a routine delivery once per spell'
         assert func[30:].sum() > 0.5*func[:30].sum()
 
-    # Two doses: the second at least 30 days after the first (each delivery to a holder gives the next dose); and .held
-    def doses(**kwargs):
+    # Two doses: the second at least 30 days after the first (each delivery to a holder gives the next dose; agents only, by .since), or in a round of its own (every solver); and .held
+    def doses(since=True, **kwargs):
         sir = make_sir()
         vx = ss.Vaccine(efficacy=0.8, doses=[0.5, 1.0])
         first = ss.vaccinate(vx, coverage=0.6, at=[5])
-        second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.days(30)), coverage=0.5, interval=1)
+        second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.days(30)), coverage=0.5, interval=1) if since else ss.vaccinate(vx, who=vx.ever, coverage=0.5, at=[35], name='second')
         held = ss.vaccinate(ss.Vaccine(efficacy=0.1, name='other'), where=vx.held, at=[60])
         return ss.Sim(sir, interventions=[first, second, held], **kwargs)
-    sims = run_both(doses, stop=80)
-    for solver,sim in sims.items():
-        res = sim.results
-        assert np.isclose(res.first.delivered[5], 30_000, rtol=0.02)
-        d2 = res.second.delivered
-        assert d2[:35].sum() == 0 and np.isclose(d2[35], 15_000, rtol=0.03) and np.isclose(d2.sum(), res.first.delivered.sum(), rtol=0.01) # Everyone who had the first, in the end
-        assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
+    check_agents(doses, stop=80)
+    for since,sims in [(True, run_abm(doses, stop=80)), (False, run_both(doses, stop=80, since=False))]:
+        for solver,sim in sims.items():
+            res = sim.results
+            assert np.isclose(res.first.delivered[5], 30_000, rtol=0.02)
+            d2 = res.second.delivered
+            assert d2[:35].sum() == 0 and np.isclose(d2[35], 15_000, rtol=0.03) # Half of those who had the first
+            assert not since or np.isclose(d2.sum(), res.first.delivered.sum(), rtol=0.01) # Everyone who had the first, in the end
+            assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # Agents are about 10% below the ODE at a step of a day (as in test_transfer), and one run varies too
     assert [s.labels for s in sims.ode.groups.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
     return sims
@@ -354,7 +369,7 @@ def test_hiv_art():
 
 
 def test_hpv_algorithm():
-    sc.heading('Acceptance: HPV screen, then a treatment visit with a capacity of 10 a week and a queue (hpvsim_interventions/port.py algo_a, one genotype)')
+    sc.heading('Acceptance: HPV screen, then a treatment visit with a capacity of 10 a week and a queue (hpvsim_interventions/port.py algo_a, one genotype), as agents')
     def make(**kwargs):
         S, I, CIN, CA = ss.states('S I CIN CA')
         hpv = ss.Disease(
@@ -374,7 +389,9 @@ def test_hpv_algorithm():
         excise = ss.treat(ss.Treatment(moves={hpv.excised: 0.95}, name='excision'), who=tx_visit.negative)
         return ss.Sim(hpv, interventions=ss.cascade(primary, tx_visit, ablate, excise), start=2015, stop=2030, dt=ss.months(3), use_aging=False, **kwargs)
     kwa = dict(verbose=0)
-    sims = sc.objdict(ode=make(solver='ode', total_pop=100_000, **kwa).run(), abm=make(solver='abm', total_pop=100_000, n_agents=20_000, **kwa).run())
+    with pytest.raises(ss.CapabilityError): # The queue, and hpv_dna.since
+        make(solver='ode', total_pop=100_000, **kwa).init()
+    sims = sc.objdict(abm=make(total_pop=100_000, n_agents=20_000, **kwa).run())
     for solver,sim in sims.items():
         res = sim.results
         q = res.tx_visit
@@ -384,14 +401,11 @@ def test_hpv_algorithm():
         full = q.waiting[25:-1] > 1 # Steps with people queueing, when the capacity is all used
         assert np.all(q.delivered <= cap + 5.1) and full.sum() > 5 and np.isclose(q.delivered[25:-1][full].mean(), cap, rtol=0.02) # Within an agent, as agents
         assert q.waiting.max() > 0 and n.never_ran > 0 and q.waited.max() <= 6 + 1e-6, q.waited.max() # In the sim's unit, months
-        assert np.isclose(0.8*n.eligible, n.delivered + n.never_ran + n.left + q.waiting[-2], rtol=1e-6 if solver == 'ode' else 0.05) # Of those who come (coverage 0.8; as agents, a few % low, the known coverage bias)
+        assert np.isclose(0.8*n.eligible, n.delivered + n.never_ran + n.left + q.waiting[-2], rtol=0.05) # Of those who come (coverage 0.8; as agents, a few % low, the known coverage bias)
         assert np.isclose(res.ablate.delivered.sum() + res.excise.delivered.sum(), n.delivered, rtol=0.01)
         assert res.ablate.unneeded.sum() > 0 and res.ablate.cured.sum() > 0
         women = res.primary.eligible[20] # Women 30-49, none screened yet at the start of 2020
         assert res.primary.delivered[:-1].sum() < 2*women # Nobody is screened twice in 5 years, so at most twice in 2020-2030
-    check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.05)
-    check_close(sims, lambda sim: sim.results.tx_visit.never_ran.sum(), rtol=0.2)
-    assert any('since' in s.name for s in sims.ode.groups.strats) and any('waiting' in s.name for s in sims.ode.groups.strats)
     return sims
 
 
@@ -411,7 +425,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
 
 
 def test_clinic():
-    sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial)')
+    sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial), as agents')
     def make(**kwargs):
         ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
         clinic = ss.Resource(ss.perweek(250))
@@ -420,7 +434,8 @@ def test_clinic():
         screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), uses=clinic, priority=2)
         treatment = ss.treat(discharge, who=screening.positive)
         return ss.Sim([ng, ct], interventions=[syndromic, screening, treatment], dt=7, **kwargs)
-    sims = run_both(make, stop=364, pop=20_000, n_agents=20_000)
+    check_agents(make, stop=364, pop=20_000) # The queue
+    sims = run_abm(make, stop=364, pop=20_000, n_agents=20_000)
     for solver,sim in sims.items():
         res = sim.results
         used = res.syndromic.delivered + res.screening.delivered
@@ -432,20 +447,20 @@ def test_clinic():
         for dis in ['ng', 'ct']:
             assert np.isclose(sum(r[k].select(disease=dis).sum() for k in ['cured', 'failed', 'unneeded']), r.delivered.sum())
         assert r.unneeded.select(disease='ct').sum() > 0 and r.waiting.max() > 0
-    check_close(sims, lambda sim: sim.results.syndromic.delivered.sum(), rtol=0.15)
-    check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.25)
     return sims
 
 
 def test_rescreen():
-    sc.heading('Acceptance: rescreening every 5 years at most, at 30% a year')
+    sc.heading('Acceptance: rescreening every 5 years at most, at 30% a year, as agents')
     def make(**kwargs):
         sir = make_sir()
         test = ss.Diagnostic()
         primary = ss.screen(test, who=test.since >= ss.years(5), coverage=ss.probperyear(0.3), count_events=True)
         return ss.Sim(sir, interventions=primary, start=2020, stop=2040, dt=ss.months(3), **kwargs)
     kwa = dict(verbose=0)
-    sims = sc.objdict(ode=make(solver='ode', total_pop=10_000, **kwa).run(), abm=make(solver='abm', total_pop=10_000, n_agents=10_000, **kwa).run())
+    with pytest.raises(ss.CapabilityError): # test.since
+        make(solver='ode', total_pop=10_000, **kwa).init()
+    sims = sc.objdict(abm=make(total_pop=10_000, n_agents=10_000, **kwa).run())
     df = sims.abm.interventions.primary.events_df()
     tested = df[df.event == 'primary'].sort_values(['uid', 'time'])
     assert tested.groupby('uid').time.diff().dropna().min() >= np.timedelta64(5*365, 'D') # As agents: nobody screened twice within 5 years
@@ -453,13 +468,11 @@ def test_rescreen():
         d, e = sim.results.primary.delivered, sim.results.primary.eligible
         assert np.isclose(d[0], 10_000*(1 - 0.7**0.25), rtol=0.05)
         assert np.isclose(e[19], 10_000 - d[:19].sum()) and np.isclose(e[20], 10_000 - d[1:20].sum()) # Those screened first are due again after exactly 5 years
-    check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.03)
-    assert 'since_test' in [s.name for s in sims.ode.groups.strats]
     return sims
 
 
 def test_two_doses():
-    sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py)')
+    sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py), as agents')
     def make(**kwargs):
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.peryear(1.5)), recovery=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])
         vx = ss.Vaccine(efficacy=0.9, doses=[0.6, 1.0])
@@ -468,7 +481,9 @@ def test_two_doses():
         second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.months(6)), coverage=0.9) # The next dose, for those who had the first
         return ss.Sim(sir, interventions=[first, second], start=2019, stop=2026, dt=ss.months(1), use_aging=False, **kwargs)
     kwa = dict(verbose=0)
-    sims = sc.objdict(ode=make(solver='ode', total_pop=50_000, **kwa).run(), abm=make(solver='abm', total_pop=50_000, n_agents=25_000, **kwa).run())
+    with pytest.raises(ss.CapabilityError): # vx.since
+        make(solver='ode', total_pop=50_000, **kwa).init()
+    sims = sc.objdict(abm=make(total_pop=50_000, n_agents=25_000, **kwa).run())
     for solver,sim in sims.items():
         res = sim.results
         d1, d2 = res.first.delivered, res.second.delivered
@@ -476,8 +491,6 @@ def test_two_doses():
         assert d2[:start + 6].sum() == 0 and d2[start + 6] > 0 # No second dose within 6 months of the first
         assert np.isclose(d2[start + 6:].sum(), 0.9*d1[:-7].sum(), rtol=0.05)
         assert np.isclose(res.first.delivered.by('age').values[:, [0, 2]].sum(), 0)
-    check_close(sims, lambda sim: sim.results.second.delivered.sum(), rtol=0.05)
-    check_close(sims, lambda sim: sim.results.sis.n_I[-2], rtol=0.1)
     return sims
 
 

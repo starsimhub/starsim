@@ -199,8 +199,9 @@ class Cond:
             a, b = a_val, b_val
         a, b = evaluate(a, ctx), evaluate(b, ctx)
         if op in ['&', '|']:
-            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group
-                return ctx.combine(op, args[0], args[1], np.asarray(a, dtype=float), np.asarray(b, dtype=float))
+            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group, and the other side is a condition, which holds for all of a group or none (two events together are agents only: see group_reasons())
+                a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+                return np.clip(a*b if op == '&' else a + b - a*b, 0, 1)
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
 
@@ -359,17 +360,16 @@ def set_states(cond):
     return None
 
 
-def clock(within, bins=None):
+def clock(within):
     """
-    Time since entering some states from outside them: the longhand of `X.time` and `(A | B).time`, with options
+    Time since entering some states from outside them: the longhand of `X.time` and `(A | B).time`; as agents only
 
     Args:
         within (State/Cond): the state, or a set of states (`A | B`)
-        bins (dur): in a compartmental run, the width of each level of elapsed time
 
     Examples:
         ```python
-        latent = ss.clock(syph.EL | syph.LL, bins=ss.months(3))
+        latent = ss.clock(syph.EL | syph.LL)
         decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=syph.EL | syph.LL)
         ```
     """
@@ -377,7 +377,7 @@ def clock(within, bins=None):
     if states is None:
         errormsg = f'ss.clock() takes a state or a set of states (A | B), not {within!r}'
         raise TypeError(errormsg)
-    return ss.expressions.Clock(states, bins=bins)
+    return ss.expressions.Clock(states)
 
 
 class StatePath(Cond):
@@ -560,6 +560,8 @@ def as_cond(obj):
         return Cond('event', obj, None)
     elif isinstance(obj, ss.Event):
         return Cond('event', obj.mod, obj.name)
+    elif isinstance(obj, ss.solvers.CountState): # A declared state after a compartmental run (e.g. sir.S once sir has run): the state it counts
+        return as_cond(obj.state)
     elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Transfer)): # Looked up by name when the sim runs, since the sim works on copies
         out = Cond('state', getattr(obj, 'module', None), obj.name)
         if not isinstance(obj, ss.State):
@@ -598,7 +600,8 @@ def has_event(cond):
 def group_reasons(cond, sim):
     """
     What in a condition only agents can evaluate, found from its structure without evaluating it: a mother's
-    state, a function of uids, or a binned property (e.g. an age) compared with a number inside a bin
+    state, a function of uids, events combined (`a.positive | b.positive`), or a binned property (e.g. an age)
+    compared with a number inside a bin
     """
     if isinstance(cond, ss.expressions.Mother):
         return [f'{cond} reads each person\'s mother, which only agents know']
@@ -607,6 +610,8 @@ def group_reasons(cond, sim):
     if not isinstance(cond, Cond) or cond.op in leaves:
         return []
     out = []
+    if cond.op in ['&', '|'] and has_event(cond.args[0]) and has_event(cond.args[1]):
+        out.append(f'{cond} combines events, whose shared people only agents follow')
     if cond.op in comparisons:
         for x,v in [cond.args, cond.args[::-1]]:
             if isinstance(x, Cond) and x.op == 'people' and sc.isnumber(v) and not isinstance(v, (bool, np.bool_)):
@@ -632,17 +637,14 @@ def event_leaves(cond):
 
 
 def memory_leaves(cond, out=None):
-    """ The memory leaves of a condition (e.g. `cytology.since`), each with the values it is compared with """
+    """ The memory leaves of a condition (e.g. `cytology.since`) """
     out = [] if out is None else out
     if isinstance(cond, ss.expressions.Mother): # Read on the mother
         return memory_leaves(cond.x, out)
     if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
         return out
     if cond.op == 'memory':
-        out.append((cond, []))
-    elif cond.op in comparisons and any(isinstance(arg, Cond) and arg.op == 'memory' for arg in cond.args):
-        mem, other = cond.args if isinstance(cond.args[0], Cond) and cond.args[0].op == 'memory' else cond.args[::-1]
-        out.append((mem, [other]))
+        out.append(cond)
     else:
         for arg in cond.args:
             memory_leaves(arg, out)
@@ -909,20 +911,6 @@ class Selector:
                                      f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
         return engine.event_frac(name)
 
-    def combine(self, op, ca, cb, a, b):
-        """
-        In a compartmental run: `|` or `&` of two selections of which at least one is an event, a share of each state and group
-
-        Two outcomes of one step (or events that follow from them) are disjoint; an event that follows from another is
-        within it (`triage.positive` within `screening.ascus`); otherwise they are taken as independent within each state and group.
-        """
-        rel = self.relation(ca, cb)
-        if op == '|':
-            out = a + b if rel == 'disjoint' else b if rel == 'a_in_b' else a if rel == 'b_in_a' else a + b - a*b
-        else:
-            out = 0*(a + b) if rel == 'disjoint' else a*np.ones_like(b) if rel == 'a_in_b' else b*np.ones_like(a) if rel == 'b_in_a' else a*b
-        return np.clip(out, 0, 1)
-
     def lineage(self, cond, depth=0):
         """ The events that the people of an event are all within: itself, the delivery it is an outcome of, the product, and what triggered the delivery, as (module name, outcome) """
         if not isinstance(cond, Cond) or depth > 50:
@@ -938,11 +926,7 @@ class Selector:
             return out
         elif cond.op in leaves:
             return {(modname(cond.args[0]), cond.args[1])} if is_event(cond) else set()
-        elif cond.op == '&':
-            return self.lineage(cond.args[0], depth + 1) | self.lineage(cond.args[1], depth + 1)
-        elif cond.op == '|':
-            return self.lineage(cond.args[0], depth + 1) & self.lineage(cond.args[1], depth + 1)
-        return set()
+        return set() # Events combined are agents only (see group_reasons())
 
     def relation(self, ca, cb):
         """ How the people of two events are related: 'disjoint', 'a_in_b', 'b_in_a', or None if not known """

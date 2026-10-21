@@ -204,7 +204,7 @@ class dynamics_by_age(ss.Analyzer):
 by_age = dynamics_by_age('sis.I', age_bins=(0, 10, 30, 100)) # People's states are named by module and state
 sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
 sim.run()
-by_age.plot()
+sim.analyzers[0].plot() # The sim's copy of the analyzer, which ran
 ```
 
 Since we are using a random network, we wouldn't expect any differences in transmission by age, so what you're seeing here is the difference in age bin size.

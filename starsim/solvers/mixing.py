@@ -123,12 +123,8 @@ class Mixing:
         if not nets:
             return
         self.terms = []
-        fetal = any(getattr(mod, 'fetal_levels', None) for mod in sim.declared)
         for net in nets:
-            named = all(isinstance(getattr(coef, 'raw', coef), dict) for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values()) # Every transmission names its routes, so one over this network is a fetal transition
-            if fetal and isinstance(net, ss.PrenatalNet) and named: # Links mothers and the unborn, whom the pregnancy's fetal levels carry (see ss.Pregnancy.add_fetal_dims())
-                ss.note(f'"{net.name}" links mothers and their unborn children, who are fetal levels of the pregnant compartments in a compartmental run, so it adds no contacts', sim=sim)
-                continue
+            named = all(isinstance(getattr(coef, 'raw', coef), dict) for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values()) # Every transmission names its routes
             key = ss.standardize_netkey(net.name)
             betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.standardize_netkey(k) == key] if named else None
             if betas and not any(np.any(np.asarray(convert(val, sim.unit_base)) > 0) for val in betas): # Named by transmissions, but none over it

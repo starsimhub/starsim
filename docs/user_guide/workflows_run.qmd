@@ -130,23 +130,23 @@ m1, m2 = merged.split() # Back to two MultiSims with 3 runs each (or use inds or
 
 ## Copies
 
-A sim runs the modules it is given, so a module you made is the one that runs, and you can use it directly afterwards:
+A sim copies the modules it is given, together, so the same modules can be given to several sims, and the ones you made are never run themselves:
+
+```{python}
+sis = ss.SIS(beta=0.1)
+
+s1 = ss.Sim(label='Low contacts', n_agents=2000, diseases=sis, networks=ss.RandomNet(n_contacts=5))
+s2 = ss.Sim(label='High contacts', n_agents=2000, diseases=sis, networks=ss.RandomNet(n_contacts=10))
+ss.parallel(s1, s2).plot()
+```
+
+To use a module after the run, take the sim's copy of it, e.g. `sim.diseases.sir`, and write functions given to a sim to read modules from the sim they are given (`lambda sim: sim.diseases.sir.I.n`) rather than from a variable:
 
 ```{python}
 sir = ss.SIR(beta=0.035)
 sim = ss.Sim(n_agents=2000, diseases=sir, networks='random')
 sim.run()
-sir.plot()
-```
-
-A module belongs to one sim, so to use the same module in two sims, give each its own copy:
-
-```{python}
-sis = ss.SIS(beta=0.1)
-
-s1 = ss.Sim(label='Low contacts', n_agents=2000, diseases=sis.copy(), networks=ss.RandomNet(n_contacts=5))
-s2 = ss.Sim(label='High contacts', n_agents=2000, diseases=sis.copy(), networks=ss.RandomNet(n_contacts=10))
-ss.parallel(s1, s2).plot()
+sim.diseases.sir.plot()
 ```
 
 Conversely, `ss.MultiSim()` by default does _not_ copy the input sims, so they are modified in place:

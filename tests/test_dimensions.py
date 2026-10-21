@@ -815,12 +815,14 @@ def test_by_properties():
     with pytest.raises(ss.MissingDimension, match='lower edge'):
         make(ss.by(age=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
 
-    # A table with bin edges, by single years of age or coarser: each person's own age as agents; averaged over each age group as compartments, with a note
+    # A table with bin edges: each person's own age as agents; as compartments, only bins that each group is inside (bins that split a group need agents)
     table = ss.by(dict(age=[0, 20, 40, 60], value=[ss.peryear(v) for v in [0.01, 0.02, 0.03, 0.04]]))
     abm = make(table, n_agents=50_000, solver='abm').run()
-    ode = make(table, total_pop=50_000, solver='ode', dims=dict(age=[0, 30, 60])).run()
+    ode = make(table, total_pop=50_000, solver='ode', dims=dict(age=[0, 10, 20, 40, 60])).run() # Groups inside the bins: exact
     assert np.isclose(abm.results.d.n_D[-1], ode.results.d.n_D[-1], rtol=0.03)
-    assert any('averages it over each group' in str(note) for note in ode.notes)
+    with pytest.raises(ss.CapabilityError, match='split'):
+        make(table, total_pop=50_000, solver='ode', dims=dict(age=[0, 30, 60])).init()
+    assert make(table, total_pop=50_000, dims=dict(age=[0, 30, 60])).init().solver == 'abm'
 
     # A row for people with no value (None), and a product of values by different dimensions
     ppl = ss.People(10_000, extra_states=[ss.FloatArr('since_birth', default=ss.choice([np.nan, 1.0, 10.0], p=[0.5, 0.25, 0.25]))])
@@ -966,25 +968,23 @@ def test_counters():
 
 @sc.timer()
 def test_clocks():
-    sc.heading('Testing clocks: the time since an event')
-    def make(solver, **kw):
+    sc.heading('Testing clocks: the time since an event, as agents only')
+    def make(solver='abm', **kw):
         NP, P = ss.states('NP P')
         act = ss.par(ss.by(dict(since_birth=[None, 0, 1, 2, 3, 6, 12, 24], value=[1.0, 0.0, 0.1, 0.2, 0.5, 0.8, 0.9, 1.0]))) # Activity by months since the last birth; None: no birth yet
         preg = ss.Disease(NP, P, conceive=NP >> P @ ss.peryear(0.5)*act, deliver=ss.Transition(P, NP, dur=ss.months(9), move=dict(since_birth=0)), act=act, name='preg')
         sim = ss.Sim(preg, solver=solver, start=2000, stop=2010, dt=ss.months(1), use_aging=False, verbose=0, **kw)
         sim.stratify(since_birth=ss.months([0, 1, 2, 3, 6, 12, 24]), kind='clock')
         return sim.run()
-    def shares(sim): # The share in each level as given (a compartmental run has a level for each step)
-        strat = sim.groups.strats[sim.groups.dim_index('since_birth')]
+    def shares(sim): # The share in each level
         res = sim.results.preg
         n = res.n_NP.by('since_birth').values[-1] + res.n_P.by('since_birth').values[-1]
-        n = n if strat.coarse is None else np.bincount(strat.coarse, weights=n)
         return n/n.sum()
-    ode = shares(make('ode', total_pop=100_000))
-    assert make('ode', total_pop=1000).groups.strats[0].n == 26 # 0 to 24 months a month at a time, and none
-    for solver,kw in [('binomial', dict(total_pop=100_000)), ('abm', dict(n_agents=100_000))]:
-        assert np.allclose(shares(make(solver, **kw)), ode, atol=0.01), f'Expected {solver} to match the ODE'
-    sim = make('abm', n_agents=2000)
+    for solver in ['ode', 'binomial']: # A compartmental solver refuses, and 'auto' runs agents
+        with pytest.raises(ss.CapabilityError, match='clock'):
+            make(solver, total_pop=1000)
+    assert make('auto', total_pop=1000).solver == 'abm'
+    sim = make(n_agents=2000)
     since = sim.people.since_birth[sim.people.auids]
     born = sim.results.preg.deliver.values.sum() > 0
     assert born and np.isnan(since).any() and np.allclose(since[~np.isnan(since)] % 1, 0) # Whole months, and none for those with no birth

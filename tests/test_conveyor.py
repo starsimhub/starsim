@@ -1,5 +1,5 @@
 """
-Test the conveyor: clocks and dwell times kept as levels of whole steps under the compartmental solvers
+Test the conveyor: fixed delays kept as levels of whole steps under the compartmental solvers; and clocks, which are agents only
 """
 import numpy as np
 import sciris as sc
@@ -74,7 +74,7 @@ def test_fixed_delay():
 
 @sc.timer()
 def test_exit_split():
-    sc.heading('A split taken by the dwell just completed (HPV: CIN from P.time), read as people leave')
+    sc.heading('A split taken by the dwell just completed (HPV: CIN from P.time), read as people leave: as agents only')
     k = 0.5
     def make():
         P, C, R = ss.states('P C R')
@@ -84,91 +84,59 @@ def test_exit_split():
     sigma2 = np.log(1 + (2/3)**2) # The lognormal of mean 3 and sd 2, in whole steps as agents leave at the one nearest their dwell
     dwell = np.random.default_rng(0).lognormal(np.log(3) - sigma2/2, np.sqrt(sigma2), 1_000_000)
     q = logf2(np.maximum(np.round(dwell/0.25), 1)*0.25, k).mean()
-    ode = ss.Sim(make(), solver='ode', total_pop=1.0, **kw2).run().results.hpv
-    assert np.isclose(ode.n_C[-1], q, rtol=0.01), f'{ode.n_C[-1]} vs {q}'
     abm = ss.Sim(make(), n_agents=50_000, **kw2).run().results.hpv
     assert abs(abm.n_C[-1]/50_000 - q) < 0.01
-    bino = ss.Sim(make(), solver='binomial', total_pop=50_000, **kw2).run().results.hpv
-    assert abs(bino.n_C[-1]/50_000 - q) < 0.01
-    return ode
+    for solver in ['ode', 'binomial']:
+        with pytest.raises(ss.CapabilityError, match='P.time is a clock'):
+            ss.Sim(make(), solver=solver, total_pop=50_000, **kw2).init()
+    assert ss.Sim(make(), total_pop=50_000, **kw2).init().solver == 'abm'
+    return abm
 
 
-@pytest.mark.xfail(reason='Phase B, task B1: the time in a set of states ((EL | LL).time) as compartments', strict=True)
 @sc.timer()
 def test_syphilis_clock():
-    sc.heading('Clocks as compartments: syphilis latent infectiousness by (EL | LL).time')
-    hl = 1.0
-    def make(beta=0.8, bins=None, init_prev=0.02, init=dict(EL=0.01, LL=0.01), **kwargs):
+    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time')
+    def make(**kwargs):
         S, E, EL, LL = ss.states('S E EL LL')
         syph = ss.Disease(S, E, EL, LL,
-            infection = S >> E @ beta*(E + EL + LL),
+            infection = S >> E @ 0.8*(E + EL + LL),
             latency   = E >> EL @ ss.months(3),
             to_late   = EL >> LL @ ss.years(2),
-            init_prev = init_prev, init=init, name='syph')
-        latent = ss.clock(EL | LL, bins=bins)
-        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(hl)), where=EL | LL, name='latent_decay')
+            init_prev = 0.02, init=dict(EL=0.01, LL=0.01), name='syph')
+        latent = ss.clock(EL | LL)
+        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=EL | LL, name='latent_decay')
         return ss.Sim(syph, connectors=decay, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw, **kwargs)
-
-    # Exact: with almost no transmission, new infections come from the seeds, whose infectiousness halves each year, to the last level
-    sim = make(beta=1e-6, init_prev=0, init=dict(LL=0.02), solver='ode', total_pop=10_000).run()
-    conv = sim.diseases.syph.engine.conveyors[0]
-    assert sim.solver == 'ode' and conv.kind == 'clock' and conv.steps == 1 and conv.n == 80 # Until 0.5**t is within 1% of where it ends
-    inf = sim.results.syph.infection
-    ratio = inf[2:]/inf[1:-1]
-    assert np.allclose(ratio[:78], 0.5**(1/12), rtol=1e-5) and np.allclose(ratio[80:], 1, rtol=1e-5) # Held at the last level
-
-    # As agents, and with wider levels
-    ode = make(solver='ode', total_pop=20_000).run().results.syph
-    abm = np.mean([make(n_agents=20_000, rand_seed=seed).run().results.syph.infection.sum() for seed in range(3)])
-    assert np.isclose(ode.infection.sum(), abm, rtol=0.05), f'ODE {ode.infection.sum():n}, agents {abm:n}'
-    wide = make(bins=ss.months(3), solver='ode', total_pop=20_000).run()
-    assert wide.diseases.syph.engine.conveyors[0].steps == 3 and any('read at the mean time' in note for note in wide.notes)
-    assert np.isclose(wide.results.syph.infection.sum(), ode.infection.sum(), rtol=0.05)
+    with pytest.raises(ss.CapabilityError, match='is a clock'):
+        make(solver='ode', total_pop=20_000).init()
+    sim = make(total_pop=20_000).run()
+    assert sim.solver == 'abm'
+    s = sim.diseases.syph
+    eff = s.rel_trans.effective[s.LL.uids]
+    assert not np.isnan(eff).any() and eff.min() < 0.3 # Halving each year since latent onset (see test_clocks.py::test_syphilis_latent)
     return sim
 
 
 @sc.timer()
 def test_bv_clock():
-    sc.heading('Clocks as compartments: BV recurrence by P.time')
-    def make():
-        class BV(ss.Disease):
-            CST1, CST4, P = ss.states('CST1 CST4 P')
-            recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
-            onset  = CST1 >> CST4 @ ss.permonth(0.05)
-            tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average
-            recur  = ss.progression('P -> CST4', rate=recur0*np.exp(-P.time/recur_tau))
-            settle = ss.progression('P -> CST1', dur=ss.months(6))
-        return BV(name='bv')
-
-    # A cohort that starts in P leaves at the hazard of its time in P: as agents, the hazard at the start of each step. As an ODE, each slot of time in P is read for people who arrived through a step (the usual case, and the one that converges as the step shrinks), so a cohort placed at the start is near the agents' answer, not the continuous one (0.835 at the end)
-    def cohort():
+    sc.heading('The time in a state in a rate, as agents only: BV recurrence by P.time')
+    def cohort(): # A cohort that starts in P leaves at the hazard of its time in P: as agents, the hazard at the start of each step
         P, R = ss.states('P R')
         return ss.Disease(P, R, recur=P >> R @ ss.permonth(0.06)*np.exp(-P.time/ss.months(3)), name='bv')
     kw2 = dict(start=2000, stop=2003, dt=ss.months(1), unit='year', **kw)
-    r = ss.Sim(cohort(), solver='ode', total_pop=10_000, **kw2).run().results.bv
-    h = 0.06*np.exp(-np.arange(len(r.n_P))/3) # Per month, at the start of each month in P
-    expected = 10_000*np.exp(-np.concatenate([[0], np.cumsum(h)[:-1]]))
-    assert np.allclose(r.n_P, expected, rtol=0.01)
     abm = ss.Sim(cohort(), n_agents=10_000, **kw2).run().results.bv
+    h = 0.06*np.exp(-np.arange(len(abm.n_P))/3) # Per month, at the start of each month in P
+    expected = 10_000*np.exp(-np.concatenate([[0], np.cumsum(h)[:-1]]))
     assert np.allclose(abm.n_P, expected, rtol=0.03)
-
-    # The full model: as agents, at weekly and monthly steps (people who arrive in P at the start of a step face its hazard, the largest, for that step)
-    kw2 = dict(start=2000, stop=2005, unit='year', **kw)
-    ode = ss.Sim(make(), solver='ode', total_pop=50_000, dt=ss.weeks(1), **kw2).run().results.bv
-    monthly = ss.Sim(make(), solver='ode', total_pop=50_000, dt=ss.months(1), **kw2).run().results.bv
-    assert np.isclose(ode.recur.sum(), monthly.recur.sum(), rtol=0.03)
-    for dt,ref in [(ss.weeks(1), ode), (ss.months(1), monthly)]:
-        abm = ss.Sim(make(), n_agents=50_000, dt=dt, **kw2).run().results.bv
-        assert np.isclose(ref.recur.sum(), abm.recur.sum(), rtol=0.03), f'{dt}: ODE {ref.recur.sum():n}, agents {abm.recur.sum():n}'
-    for solver in ['binomial', 'gillespie']:
-        res = ss.Sim(make(), solver=solver, total_pop=20_000, dt=ss.months(1), **kw2).run().results.bv
-        assert np.isclose(res.recur.sum()*2.5, monthly.recur.sum(), rtol=0.1), solver
-    return ode
+    for solver in ['ode', 'gillespie']:
+        with pytest.raises(ss.CapabilityError, match='P.time is a clock'):
+            ss.Sim(cohort(), solver=solver, total_pop=10_000, **kw2).init()
+    assert ss.Sim(cohort(), total_pop=10_000, **kw2).init().solver == 'abm'
+    return abm
 
 
 @sc.timer()
 def test_conveyor_limits():
-    sc.heading('What a compartmental clock does not do yet: a clear error, and agents under solver="auto"')
+    sc.heading('A clock under a compartmental solver: a clear error, and agents under solver="auto"')
     def make():
         S, A, B = ss.states('S A B')
         return ss.Disease(S, A, B, sa=S >> A @ ss.perday(0.05), ab=ss.Transition(A, B, dur=ss.days(4)), ax=ss.Transition(A, S, rate=ss.perday(0.1)*A.progress), name='d')
@@ -177,7 +145,7 @@ def test_conveyor_limits():
     assert ss.Sim(make(), **kw).init().solver == 'abm'
     d = make_seir(init_prev=0.01)
     vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.E & (d.E.time >= ss.days(2)), name='vx')
-    with pytest.raises(ss.CapabilityError, match='E.time is a clock'): # A delivery reading a clock (only an exit of its own state reads one as compartments)
+    with pytest.raises(ss.CapabilityError, match='E.time is a clock'): # A delivery reading a clock
         ss.Sim(d, interventions=vx, solver='ode', **kw).init()
     d = make_seir(init_prev=0.01)
     with pytest.raises(ss.CapabilityError, match='fixed delay and a modifier'): # A modifier of a conveyor's rate

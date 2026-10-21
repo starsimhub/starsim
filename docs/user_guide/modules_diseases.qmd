@@ -218,6 +218,7 @@ Because they're ordinary per-agent arrays, you can also set them directly. Here 
 sir = ss.SIR(init_prev=0.01)
 sim = ss.Sim(n_agents=2000, diseases=sir, networks='random', verbose=0)
 sim.init()
+sir = sim.diseases[0] # The sim's copy, which will run
 
 # Fully protect under-20s: rel_sus = 0 means they cannot acquire infection
 young = (sim.people.age < 20).uids

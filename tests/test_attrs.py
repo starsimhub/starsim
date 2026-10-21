@@ -31,10 +31,10 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         dropout     = ss.Transition(on_art, post_art, dur=ss.lognorm_ex(ss.years(3), ss.years(1.5)))
 
         cd4_start     = ss.attr(ss.normal(800, 50), on=infection)
-        cd4_latent    = ss.attr(ss.normal(500, 50), on=infection, bins=3)
+        cd4_latent    = ss.attr(ss.normal(500, 50), on=infection)
         cd4_preart    = ss.attr('cd4', on=start_art) # CD4 just before starting
         cd4_potential = ss.attr(cd4_preart*(1 + (cd4_max - cd4_preart)/cd4_healthy*np.log(cd4_max/cd4_preart)), on=start_art, combine='first') # Set at the first start only
-        cd4_stop      = ss.attr('cd4', on=dropout, bins=[0, 50, 200, 350, 500, 650, 800]) # Finer than the stratification at the top, where most stop (bins are for a compartmental run)
+        cd4_stop      = ss.attr('cd4', on=dropout)
         gain = cd4_potential - cd4_preart
         cd4 = ss.attr({
             acute:    cd4_start - (cd4_start - cd4_latent)*acute.progress,
@@ -118,30 +118,15 @@ class TrackNab(ss.Analyzer):
         return
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B6: attributes as compartments (CD4 derived per compartment, recorded values as levels) are deferred')
 def test_hiv_cd4_ode():
-    sc.heading('HIV CD4 as an ODE: derived per compartment, CD4 at infection and at ART as levels; against agents')
+    sc.heading('HIV CD4 under a compartmental solver: attributes are kept per agent, so it refuses, and auto runs agents (see test_hiv_cd4)')
     kw2 = dict(start=1990, stop=2000, dt=ss.months(1), unit='year', **kw)
     hiv, mods = make_hiv()
-    assert ss.Sim(hiv, connectors=mods, **kw2).init().solver == 'abm' # cd4_start has no bins, so 'auto' runs agents
+    assert ss.Sim(hiv, connectors=mods, total_pop=20_000, **kw2).init().solver == 'abm'
     hiv, mods = make_hiv()
-    ode = ss.Sim(hiv, connectors=mods, solver='ode', total_pop=20_000, **kw2).run()
-    e = ode.diseases.hiv.engine
-    assert e.attr_forms.cd4_start == 'its mean' and e.attr_forms.cd4_latent.startswith('3 levels') and e.attr_forms.cd4_preart.startswith('5 levels in on_art, post_art')
-    assert any('replaces by its mean' in note for note in ode.notes)
-    r = ode.results.hiv
-    by = r.cd4_death.by('cd4')
-    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and np.allclose(r.n_on_art.by('cd4').values.sum(axis=1), r.n_on_art.values)
-    abm = []
-    for seed in range(2):
-        hiv, mods = make_hiv()
-        abm.append(ss.Sim(hiv, connectors=mods, n_agents=20_000, rand_seed=seed, **kw2).run().results.hiv)
-    deaths = lambda r: r.cd4_death.sum() + r.aids_death.sum() + r.post_art_death.sum()
-    on_art = np.mean([a.n_on_art[-1] for a in abm])
-    dead = np.mean([deaths(a) for a in abm])
-    assert np.isclose(r.n_on_art[-1], on_art, rtol=0.1), f'on ART: ODE {r.n_on_art[-1]:n}, agents {on_art:n}'
-    assert np.isclose(deaths(r), dead, rtol=0.15), f'HIV deaths: ODE {deaths(r):n}, agents {dead:n}'
-    return ode
+    with pytest.raises(ss.CapabilityError, match='attributes'):
+        ss.Sim(hiv, connectors=mods, solver='ode', total_pop=20_000, **kw2).init()
+    return
 
 
 @sc.timer()
@@ -167,13 +152,14 @@ def test_hpv_nab():
 
 
 def test_hpv_nab_ode():
-    def one(**opts): # One genotype, its own antibodies, combine='max' as transitions between 3 levels as compartments
+    sc.heading('HPV antibodies under a compartmental solver: refused, and auto runs agents (see test_hpv_nab)')
+    def make(**opts): # One genotype, its own antibodies, combine='max'
         h = make_hpv('hpv', beta=ss.peryear(0.6))
-        h.graph.attrs.nab.bins = 3
-        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(1), unit='year', **opts, **kw).run().results.hpv.infection.sum() # At quarterly steps agents are 13% below the ODE with no antibodies at all, and converge as the step shrinks
-    ode = one(solver='ode', total_pop=20_000)
-    abm = np.mean([one(n_agents=20_000, rand_seed=seed) for seed in range(2)])
-    assert np.isclose(ode, abm, rtol=0.05), f'ODE {ode:n}, agents {abm:n}'
+        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(1), unit='year', **opts, **kw)
+    with pytest.raises(ss.CapabilityError, match='attributes'):
+        make(solver='ode', total_pop=20_000).init()
+    sim = make(total_pop=20_000).run()
+    assert sim.solver == 'abm' and sim.results.hpv.infection.sum() > 0
 
 
 class FirstNab(ss.Analyzer):
