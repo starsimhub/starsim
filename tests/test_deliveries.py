@@ -205,13 +205,13 @@ def test_vaccinate():
         assert np.isclose(res.delivered.sum(), 30_000, rtol=0.02) and np.isclose(res.coverage[5], 0.6, atol=0.02)
         assert np.isclose(res.cost.sum(), 2*res.delivered.sum())
         assert sim.results.sir.infection.cum[-1] < 0.5*base.results.sir.infection.cum[-1]
-        assert [strat.name for strat in sim.strats] == ['has_vaccine'] # Holding the vaccine is a property of people
+        assert [strat.name for strat in sim.groups.strats] == ['has_vaccine'] # Holding the vaccine is a property of people
     assert sims.ode.hash().model == base.hash().model # The scenario is not part of the model
     assert 'has_vaccine' in sims.ode.describe(output=True)
     rounds = ss.vaccinate(efficacy=0.9, cost=2.0, coverage=0.6, at=[5]) # With a vaccine of its own
     own = ss.Sim(make_sir(), interventions=rounds, solver='ode', stop=150, **kw).run()
     assert np.isclose(own.results.sir.infection.cum[-1], sims.ode.results.sir.infection.cum[-1]) # The same as with the vaccine given
-    assert [strat.name for strat in own.strats] == ['has_rounds_vaccine']
+    assert [strat.name for strat in own.groups.strats] == ['has_rounds_vaccine']
 
     # Routine delivery: each person is offered it once, and half accept
     def routine(**kwargs):
@@ -461,8 +461,6 @@ def test_screen():
     for key in ['on_positive', 'on_negative']:
         with pytest.raises(TypeError, match='step of its own'):
             ss.screen(ss.Diagnostic(), interval=7, **{key:ss.treat(ss.Treatment())})
-    with pytest.raises(AttributeError, match='Diagnostic'):
-        ss.Test()
     return sims
 
 
@@ -615,7 +613,7 @@ def test_deliver():
     # A function that says who gets it: UIDs for agents, a number per group otherwise
     def give(sim):
         if sim.ti != 5:
-            return ss.uids() if sim.solver == 'abm' else np.zeros(sim.n_groups)
+            return ss.uids() if sim.solver == 'abm' else np.zeros(sim.groups.n_groups)
         elif sim.solver == 'abm':
             return sim.people.auids[:10_000]
         return sim.diseases.sir.S.values*0.5
@@ -955,7 +953,7 @@ def test_trace():
     infected = sim.results.sir.infection.sum()
     print(f'Infected: {base.results.sir.infection.sum():.0f} without and {infected:.0f} with ring vaccination ({sim.results.ring.delivered.sum():.0f} vaccinated)')
     assert infected < 0.5*base.results.sir.infection.sum()
-    assert sim.solvers(output=True).count('module: ring') == 1 # Its reason for agents, not that and a trial on groups as well
+    assert sim.describe(output=True).count('module: ring') == 1 # Its reason for agents, not that and a trial on groups as well
 
     # Everyone vaccinated is a contact of someone infected
     sir = sim.diseases.sir

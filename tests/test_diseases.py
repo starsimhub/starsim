@@ -141,7 +141,6 @@ def test_seir():
     seir = sim.diseases.seir
     res = sim.results.seir
     assert not (seir.E & seir.I).any(), 'Agents should not be in both E and I'
-    assert (seir.infected == (seir.exposed | seir.infectious)).all(), 'The Starsim 3 name infected should be E plus I'
     assert np.allclose(res.prevalence, (res.n_E + res.n_I)/sim.results.n_alive), 'prevalence should be computed from E plus I'
     assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
     assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
@@ -752,7 +751,7 @@ def test_strains_compartmental():
 
     # What the solvers say: approx, with auto running a coupled family as agents unless approx=True
     sim = ss.Sim(diseases=family(), **pars).init()
-    assert sim.solver == 'abm' and 'approx (members side by side' in sim.solvers(output=True)
+    assert sim.solver == 'abm' and 'approx as compartments (members side by side' in sim.describe(output=True)
     assert ss.Sim(diseases=family(), approx=True, **pars).init().solver == 'ode'
     with pytest.raises(ss.CapabilityError):
         ss.Sim(diseases=family(), solver='ode', approx=False, **pars).init()

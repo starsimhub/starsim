@@ -114,7 +114,7 @@ def test_factored_mixing():
     term = mixing.terms[0]
     pre, post = np.kron(mixing.time_share.toarray(), np.eye(3)), np.kron(mixing.time_share.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
     rng = np.random.default_rng(1)
-    infectious, n = rng.random(sim.n_groups), 1 + rng.random(sim.n_groups)
+    infectious, n = rng.random(sim.groups.n_groups), 1 + rng.random(sim.groups.n_groups)
     num, den = [np.bincount(term.cells, weights=v, minlength=9) @ pre for v in [infectious, n]]
     expected = (post @ (num/den))[term.cells]
     assert np.allclose(mixing.term_exposure(term, infectious, n), expected, rtol=1e-12, atol=0)
@@ -267,8 +267,10 @@ def test_restart():
     assert len(np.unique(res.values.max(axis=1))) > 10 # Each has its own seed
     one = base.new(rand_seed=base.pars.rand_seed + 7).run() # Each is the run that a sim with that seed gives
     for key,multi in msim.results.sir.items():
-        if key != 'cases': # Reported cases are drawn afterwards, for all the runs at once
-            assert np.allclose(multi.values[7], one.results.sir[key].values), key
+        assert np.allclose(multi.values[7], one.results.sir[key].values), key
+    grouped = ss.Sim(models.ages[0](), solver='binomial', **models.ages[1], **kw) # By group too
+    many, alone = grouped.run(n_runs=3).results.sir, grouped.new(rand_seed=grouped.pars.rand_seed + 2).run().results.sir
+    assert all(np.allclose(many[key].strata[2], alone[key].strata) for key in ['n_I', 'infection']) and np.allclose(many.n_I.values[2], alone.n_I.values)
     assert set(msim.results.sir.keys()) == {key for key,res in one.results.sir.items() if isinstance(res, ss.Result)}
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.infection.cum.values[:, -1].mean() - 0.6) < 0.05
     base.pars.rand_seed += 7 # A seed set after the sim was made is used, as is an option of running in parallel
@@ -308,20 +310,17 @@ def test_restart():
     S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.n_S.select(herd='b').values
     assert S_b[60] > S_b[29] # Herd b's recovered wane once waning starts
 
-    # How often a small outbreak dies out
+    # How often a small outbreak dies out, from the runs' results
     small = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2), name='small')
     msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
-    ext = msim_small.extinction(output=True)
-    assert 0.3 < ext.share[0] < 0.9 and ext.runs[0] == 50
-    assert msim_small.summarize().small_extinction.mean == ext.share[0] # Reported by summarize() too, since some runs died out
+    died = (msim_small.results.small.n_I.values[:, -1] == 0).mean()
+    assert 0.3 < died < 0.9
 
-    # How often it is a major outbreak, which extinction does not say for an SIR, since every run dies out in the end
+    # How often it is a major outbreak (more than 10% infected), which dying out does not say for an SIR, since every run dies out in the end
     sir = ss.Disease(infection=ss.transmission('S -> I', beta=2/7), recovery=ss.progression('I -> R', dur=7), init=dict(I=1), name='sir')
     msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
-    out = msim.outbreaks(output=True)
-    assert 0.25 < major < 0.75 and out.share[0] == major and out.threshold[0] == 100 # 10% of the people, by default
-    assert msim.extinction(output=True).share[0] == 1 and msim.outbreaks(threshold=1000, output=True).share[0] == 0
+    assert 0.25 < major < 0.75 and (msim.results.sir.n_I.values[:, -1] == 0).all()
 
     # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, when=lambda sim: sim.ti >= 20)

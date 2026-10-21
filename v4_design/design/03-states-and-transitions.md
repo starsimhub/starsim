@@ -649,11 +649,10 @@ sir.describe()      # the resolved model as text, with every guessed default mar
 sir.diagram()       # the state-transition diagram
 sir.equations()     # the ODE system, with symbolic parameter names
 sir.transitions     # the table of transitions; printing it shows the state-by-state matrix
-sir.solvers()       # which solvers can run this model
 sir.to_spec()       # the model spec (14-model-spec.md)
 ```
 
-`describe()` is specified in [01-objects.md](01-objects.md#describe). `sim.describe()` and `sim.solvers()` cover the whole sim.
+`describe()` is specified in [01-objects.md](01-objects.md#describe). `sim.describe()` covers the whole sim, including which solvers can run it.
 
 `equations()` is a method of the disease (or any module with transitions), not of the sim, and it prints parameter names, not numbers:
 
@@ -682,4 +681,4 @@ R     .    .            .
 
 The matrix is Atomica's transition matrix, and it is the natural grid for a spreadsheet or form view of the model. An empty column for a state that also starts empty means nothing can ever be in it. When the states were inferred from arrow strings that is usually a typo, so building the sim raises `UnknownState`, with the closest names; declared states, or an `init` for the state, say it is meant. (A reservoir is not this case: its column holds an inflow from `ss.null`.)
 
-`solvers()` prints a coarse table: one row per ingredient that matters (each network, non-exponential dwell times, custom functions), one column per solver, and entries `yes`, `approx (how)`, or `no (why)`. It is specified in [12-backends.md](12-backends.md).
+`sim.describe()` lists, under the solver, one line per ingredient that matters (each network, non-exponential dwell times, custom functions), saying whether it runs as compartments: `yes`, `approx (how)`, or `no (why)`. It is specified in [12-backends.md](12-backends.md).

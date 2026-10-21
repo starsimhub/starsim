@@ -37,11 +37,11 @@ sims = ss.parallel(
 sims.plot()
 ```
 
-The disease object is the same in all three. `sim.solvers()` shows which solvers can run a model with a given route, and `describe()` shows the mixing and what each rate resolved to:
+The disease object is the same in all three. `sim.describe()` shows which solvers can run a model with a given route, the mixing, and what each rate resolved to:
 
 ```{python}
 sim = ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), **kw)
-sim.solvers()
+sim.describe()
 ```
 
 A compartmental solver can be asked for even with a network: `solver='ode'` approximates a `RandomNet` by homogeneous mixing with the same number of contacts, and says so in one line. Partnership networks (`ss.MFNet`, `ss.PartnerNet`) have no compartmental approximation yet, so they run as agents (and `solver='ode'` raises `CapabilityError`).

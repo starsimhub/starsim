@@ -48,16 +48,6 @@ def test_people():
     assert sims.abm.pars.pop_scale == 5
     check_close(sims, lambda sim: seen[sim.solver].n_I, rtol=0.15)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.1)
-
-    # The switch back: results are in agents during the run, and scaled at the end
-    ss.results.people_now = False
-    try:
-        sim = make(solver='abm', total_pop=50_000, n_agents=10_000, stop=60, **kw).run()
-    finally:
-        ss.results.people_now = True
-    res = sim.results
-    assert np.isclose(seen.abm.n_I*5, res.sir.n_I[29]) and np.isclose(seen.abm.delivered*5, res.stock.delivered[29])
-    assert np.allclose(res.stock.delivered[10:59], 500, rtol=0.02)
     return sims
 
 
@@ -276,7 +266,7 @@ def test_memory():
             assert np.nanmin(sim.ti - screened) >= 0
     check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.05)
     check_close(sims, lambda sim: sim.results.recent.delivered.sum(), rtol=0.05)
-    assert 'since_screening' in [s.name for s in sims.ode.strats] and 'since_screening' not in [s.name for s in sims.abm.strats]
+    assert 'since_screening' in [s.name for s in sims.ode.groups.strats] and 'since_screening' not in [s.name for s in sims.abm.groups.strats]
 
     # Coverage as a function that gives a typed rate is a rate at every step too, as the typed rate itself is
     def typed(func=False, **kwargs):
@@ -304,7 +294,7 @@ def test_memory():
         assert d2[:35].sum() == 0 and np.isclose(d2[35], 15_000, rtol=0.03) and np.isclose(d2.sum(), res.first.delivered.sum(), rtol=0.01) # Everyone who had the first, in the end
         assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # Agents are about 10% below the ODE at a step of a day (as in test_transfer), and one run varies too
-    assert [s.labels for s in sims.ode.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
+    assert [s.labels for s in sims.ode.groups.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
     with pytest.raises(TypeError, match='doses'):
         ss.vaccinate(ss.Vaccine(efficacy=0.8), dose=2)
     return sims
@@ -405,7 +395,7 @@ def test_hpv_algorithm():
         assert res.primary.delivered[:-1].sum() < 2*women # Nobody is screened twice in 5 years, so at most twice in 2020-2030
     check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.05)
     check_close(sims, lambda sim: sim.results.tx_visit.never_ran.sum(), rtol=0.2)
-    assert any('since' in s.name for s in sims.ode.strats) and any('waiting' in s.name for s in sims.ode.strats)
+    assert any('since' in s.name for s in sims.ode.groups.strats) and any('waiting' in s.name for s in sims.ode.groups.strats)
     return sims
 
 
@@ -468,7 +458,7 @@ def test_rescreen():
         assert np.isclose(d[0], 10_000*(1 - 0.7**0.25), rtol=0.05)
         assert np.isclose(e[19], 10_000 - d[:19].sum()) and np.isclose(e[20], 10_000 - d[1:20].sum()) # Those screened first are due again after exactly 5 years
     check_close(sims, lambda sim: sim.results.primary.delivered.sum(), rtol=0.03)
-    assert 'since_test' in [s.name for s in sims.ode.strats]
+    assert 'since_test' in [s.name for s in sims.ode.groups.strats]
     return sims
 
 

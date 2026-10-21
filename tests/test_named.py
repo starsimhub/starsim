@@ -33,7 +33,7 @@ def test_contacts():
     assert not np.allclose(sims[0].results.sir.n_I, sims[1].results.sir.n_I) # A country's matrix brings its people's ages, so has 44% under 18 rather than the world's 30%
     sims[1] = ss.Sim(make_sir(), networks=given, people=ss.people('Kenya'), stratify=dict(age=[0, 5, 18, 65]), total_pop=10_000, unit='day', stop=60, **kw).run()
     assert np.allclose(sims[0].results.sir.n_I, sims[1].results.sir.n_I) # The same as the matrix given by hand, with Kenya's people
-    assert sims[0].pars.total_pop == 10_000 and sims[0].strats[0].split[:2].sum() > 0.4 # The ages of Kenya, but not its size
+    assert sims[0].pars.total_pop == 10_000 and sims[0].groups.strats[0].split[:2].sum() > 0.4 # The ages of Kenya, but not its size
 
     # A place a source does not have says which do
     with pytest.raises(ss.UnknownLocation, match='mistry2021'):
@@ -123,7 +123,7 @@ def test_people():
     abm = ss.Sim(make_sir(), people=ss.people('Kenya', year=2024, n_agents=20_000), stratify=stratify, unit='day', stop=60, **kw).run()
     assert abm.solver == 'abm' and abm.pars.pop_scale == total/20_000
     share = np.histogram(abm.people.age.values, [0, 5, 18, 65, 200])[0]/20_000
-    assert np.allclose(share, abm.strats[0].split, atol=0.01)
+    assert np.allclose(share, abm.groups.strats[0].split, atol=0.01)
     assert abs(abm.people.female.mean() - female.sum()/(female + male).sum()) < 0.01
 
     # In a compartmental run, people age out of each age group as the population's own pyramid has them do, as agents do

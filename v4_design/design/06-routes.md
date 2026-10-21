@@ -196,7 +196,7 @@ How the columns are used follows the approximation policy in [12-backends.md](12
 
 - `solver='auto'` never approximates the mixing. A model with only "exact" compartmental entries runs as an ODE; a model containing an individual-level network runs as agents, and the choice is printed. (The one approximation `auto` may make is Erlang stages for a non-exponential dwell time, which it reports; [12-backends.md](12-backends.md).)
 - When the user asks for a compartmental solver on a model with a network (`solver='ode'`), the library uses the approximation in the table and says so in one line (for example `StaticNet approximated by homogeneous mixing with 2 contacts per day (the mean degree of its graph)`). A network with no approximation in the table raises `CapabilityError`.
-- `approx=False` turns any approximation into an error (`CapabilityError`), and `approx=True` silences the note. `sim.solvers()` shows this table for the sim at hand, with a row for each network (`approx (contact rates)` for `ss.RandomNet`, `no (no approximation)` for `ss.MFNet`).
+- `approx=False` turns any approximation into an error (`CapabilityError`), and `approx=True` silences the note. `sim.describe()` shows this for the sim at hand, with a row for each network (`approx (contact rates)` for `ss.RandomNet`, `no (no approximation)` for `ss.MFNet`).
 
 The table has one approximation per route. A network with strong variation in the number of contacts is approximated by homogeneous mixing with the same mean like any other, which is a poor approximation for it; there is no degree-grouped ODE form ([Rejected](#rejected)), and the agent-based run is the way to keep that variation.
 

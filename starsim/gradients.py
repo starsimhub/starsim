@@ -64,6 +64,8 @@ def reason(sim):
         return 'JAX is not installed'
     elif funcs:
         return f'"{funcs[0][0]}" combines protection with a function ({funcs[0][1]}), which has no gradient; the rules "max", "sum", and "multiply" do'
+    elif not getattr(sim, 'declared', None): # Code of its own, whose gradient is not known (a fit of it uses the runs alone)
+        return 'the model is written as code, with no declared states and transitions, so it has no gradient'
     elif families: # Its step works out the couplings and unions in Python
         return f'"{families[0].name}" is a family of diseases (ss.Strains), which is run a step at a time for now'
     elif sim.solver != 'ode':

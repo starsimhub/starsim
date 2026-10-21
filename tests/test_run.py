@@ -33,7 +33,7 @@ class BySex(ss.Analyzer):
         self.define_results(ss.Result('n_infected', columns=['female', 'male'], label='Infected'))
 
     def step(self):
-        infected = self.sim.diseases.sis.infected
+        infected = self.sim.diseases.sis.I
         female = self.sim.people.female
         self.results.n_infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
 
@@ -190,15 +190,7 @@ def test_other():
     assert not s1.initialized
     ss.parallel(s1, s2, inplace=True)
     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
-
-    # Check single run
-    s3 = ss.Sim(pars)
-    s4 = ss.Sim(pars)
-    s3 = ss.single_run(s3)
-    s4 = ss.single_run(s4, n_agents=2000)
-    assert not np.allclose(s3.summary[:], s4.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
-
-    return s3,s4
+    return s1,s2
 
 
 if __name__ == '__main__':

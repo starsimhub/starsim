@@ -49,10 +49,10 @@ sim.describe()
 
 ## Choosing a solver
 
-`solver='auto'` (the default) chooses an ODE when it can, and agents otherwise. `sim.solvers()` shows which solvers can run the model, and `sim.new()` makes a copy of the sim with something changed:
+`solver='auto'` (the default) chooses an ODE when it can, and agents otherwise. `sim.describe()` shows which solvers can run the model, and why, and `sim.new()` makes a copy of the sim with something changed:
 
 ```{python}
-sim.solvers()
+sim.describe()
 
 for solver in ['ode', 'binomial', 'gillespie', 'abm']:
     s = sim.new(solver=solver, verbose=0).run()

@@ -21,9 +21,9 @@ from .odin import load_odin
 from .sbml import load_sbml
 from .siminf import load_siminf
 from .summer2 import load_summer2
-from .export import exporters, export
+from .export import exporters, export, to_hub
 
-__all__ = ['Source', 'build', 'formats', 'sniff', 'load', 'exporters', 'export']
+__all__ = ['Source', 'build', 'formats', 'sniff', 'load', 'exporters', 'export', 'to_hub']
 
 formats = dict(
     atomica  = load_atomica,

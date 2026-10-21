@@ -24,21 +24,20 @@ class Levels(sc.objdict):
         return fig
 
 
-# Numbers are people (proposal 02 rule 1.2; pending a decision, so kept to this switch and the two functions below):
-# as agents, the results of declared modules and deliveries are scaled when written, so they are people when read
-# during a run, and capacities, targets, and counts given to deliveries are people. False scales results at the end, as before
-people_now = True
-
-
 def people_scale(sim):
-    """ What a declared result is multiplied by when written: the people each agent stands for, or 1 """
-    return sim._current_scale if people_now and sim.solver == 'abm' else 1.0
+    """
+    What a declared result is multiplied by when written: the people each agent stands for, or 1
+
+    As agents, the results of declared modules and deliveries are scaled when written, so they are
+    people when read during a run, and capacities and counts given to deliveries are people.
+    """
+    return sim._current_scale if sim.solver == 'abm' else 1.0
 
 
 def in_people(*results):
     """ Mark results as written in people, so they are not scaled again at the end """
     for res in results:
-        if res.scale and people_now:
+        if res.scale:
             res.in_people = True
             if res.values is not None and res.values.dtype.kind in 'iu': # A count times a scale that need not be whole
                 res.init_values(dtype=float, force=True)
@@ -94,17 +93,11 @@ class Result(ss.BaseArr):
         ```
     """
     runs = None # For a result across the runs of a MultiSim: one row per run (see above)
-    _removed = { # Starsim 3 methods, with what to write instead
-        'annualize': "res.resample('year'), which sums a flow over each year and takes a stock at the year's end (res.resample('year', kind='ratio') averages it, as annualize() did)",
-    }
-
     def __getattr__(self, attr):
-        """ The flow to one destination of a transition with several (`res.cin.X`); say what a removed method has become; otherwise, as `ss.BaseArr` """
+        """ The flow to one destination of a transition with several (`res.cin.X`); otherwise, as `ss.BaseArr` """
         dests = self.__dict__.get('dests')
         if dests and attr in dests:
             return dests[attr]
-        elif attr in Result._removed:
-            raise AttributeError(f'Result.{attr}() has been removed from Starsim. Instead, write: {Result._removed[attr]}. (The migrate-starsim3 skill lists every change.)')
         return super().__getattr__(attr)
 
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
@@ -1435,7 +1428,7 @@ class data:
                 raise KeyError(errormsg)
             df = df.rename(columns={col:name})
         if sim is not None and self.ignore_extra:
-            dims = [strat.name for strat in getattr(sim, 'strats', [])] # Columns that say which stratum a row is for
+            dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] # Columns that say which stratum a row is for
             keep = [col for col in df.columns if col in self.time_cols or col in dims or match_column(sim, col) is not None]
             df = df[keep]
         return df
@@ -1492,7 +1485,7 @@ def widen_data(sim, df):
 
     A level is given by its label (or its position).
     """
-    dims = [strat.name for strat in getattr(sim, 'strats', []) if strat.name in df.columns]
+    dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', []) if strat.name in df.columns]
     if not dims:
         return df
     parts = []

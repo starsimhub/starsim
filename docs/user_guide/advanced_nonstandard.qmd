@@ -33,7 +33,7 @@ csim.run()
 csim.plot()
 ```
 
-The sim prints the solver it chose, and why. `csim.solvers()` shows which solvers can run the model.
+The sim prints the solver it chose, and why. `csim.describe()` shows which solvers can run the model.
 
 Let's compare to the same model run as agents. Nothing in the model changes: only the solver, and the number of agents:
 

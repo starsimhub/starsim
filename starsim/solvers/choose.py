@@ -8,7 +8,7 @@ import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents
 
-__all__ = ['solver_names', 'removed', 'integrators', 'max_seconds', 'make_engine', 'choose_solver', 'init_crossings', 'init_capabilities', 'auto_reasons', 'try_capabilities', 'count_events', 'exact_seconds', 'tried_error']
+__all__ = ['solver_names', 'removed', 'integrators', 'max_seconds', 'make_engine', 'choose_solver', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons', 'count_events', 'exact_seconds']
 
 
 solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'abm'] # The solvers that can be asked for
@@ -162,18 +162,15 @@ def choose_solver(sim):
 
     # The solver
     init_capabilities(sim, modules)
-    if solver == 'auto' and not auto_reasons(sim):
-        try_capabilities(sim)
     if solver == 'auto':
         reasons = auto_reasons(sim)
-        tried = [cap.ingredient.split(': ', 1)[-1] for cap in sim.capabilities if cap.probe is not None and cap.groups == 'yes']
         if reasons:
             solver, reason = 'abm', reasons[0]
             for cap in sim.capabilities:
                 if cap.ingredient.startswith('property:'):
                     ss.note(f'running as agents: {cap.auto}', sim=sim)
         else:
-            solver, reason = 'ode', 'every part of the model has a compartmental form' + (f', as running {sc.strjoin(tried)} on groups showed' if tried else '')
+            solver, reason = 'ode', 'every part of the model has a compartmental form'
     elif solver == 'gillespie' and pars.approx is not False: # One event at a time, unless that would take too long
         n_events, seconds = exact_seconds(sim)
         if seconds > solvers.max_seconds:
@@ -500,18 +497,27 @@ def init_crossings(sim):
     return
 
 
+def observer(mod):
+    """ Whether a module written as code, which does not say whether it works on groups, runs beside the compartments: an analyzer, a plain `ss.Module`, or a function given as a module """
+    if callable(getattr(mod, 'func', None)) and not isinstance(mod, ss.Demographics): # e.g. interventions=func
+        return True
+    return isinstance(mod, ss.Analyzer) or not isinstance(mod, (ss.Disease, ss.Network, ss.Demographics, ss.Intervention, ss.Connector))
+
+
 def init_capabilities(sim, modules):
     """
-    One record for each ingredient that matters to which solvers can run the model, read by `solver='auto'`, `sim.solvers()`, `sim.describe()`, and the `CapabilityError` of a compartmental solver that was asked for
+    One record for each ingredient that matters to which solvers can run the model, read by `solver='auto'`, `sim.describe()`, and the `CapabilityError` of a compartmental solver that was asked for
 
-    Each record has the ingredient; what a compartmental solver does with it (`groups`: 'yes', 'approx', 'no', or '?' for code
-    that is tried on groups when it matters: see `try_capabilities()`), and how; the reason it makes `auto` run the model as
-    agents (`auto`), if it does; and whether it stops a compartmental solver that was asked for (`fatal`). Setting
-    `compartmental = True` or `False` on a module (or its class) says whether it works on groups, in place of trying it.
+    Each record has the ingredient; what a compartmental solver does with it (`groups`: 'yes', 'approx' or 'no'), and how;
+    the reason it makes `auto` run the model as agents (`auto`), if it does; and whether it stops a compartmental solver that
+    was asked for (`fatal`). Code is never run to find out: setting `compartmental = True` or `False` on a module (or its class)
+    says whether it works on groups. Without it, an analyzer, a plain `ss.Module`, a function given as a module, and the code
+    and functions of a declared module run beside the compartments (and raise a `CapabilityError` if they ask for agents);
+    other modules written as code (diseases, networks, demographics, interventions, connectors) need agents.
     """
     caps = []
-    def add(ingredient, groups, how, auto=None, fatal=False, probe=None):
-        caps.append(sc.objdict(ingredient=ingredient, groups=groups, how=how, auto=auto, fatal=fatal, probe=probe))
+    def add(ingredient, groups, how, auto=None, fatal=False):
+        caps.append(sc.objdict(ingredient=ingredient, groups=groups, how=how, auto=auto, fatal=fatal))
         return
 
     approx = sim.pars.approx
@@ -526,6 +532,9 @@ def init_capabilities(sim, modules):
         reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no trying
         for reason in reasons:
             add(f'module: {mod.name}', 'no', reason, auto=reason)
+        for cond in [getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and graph is not None)]: # The conditions of a delivery or a modifier
+            for reason in ss.conditions.group_reasons(cond, sim)[:1]:
+                add(f'condition: {mod.name}', 'no', reason, auto=reason, fatal=True)
         graph = getattr(mod, 'graph', None)
         own = [] if graph is None else [c for name in graph.dwell_trs for tr in [graph.transitions[name]] for c in ss.expressions.clocks_in([tr.rate] + sc.tolist(tr.p)) if c.own(tr.src[0])] # The time in a state read as people leave it, followed by a conveyor (see ss.graph.Graph.check_dwell())
         for clock in [c for c in clocks_of(mod) if not any(c is o for o in own)][:1]: # Others kept per agent for now
@@ -568,11 +577,10 @@ def init_capabilities(sim, modules):
                 add(f'network: {mod.name}', 'approx', 'the mean number of contacts', auto=f'the mixing pool "{mod.name}" has a number of contacts that differs between people ({type(mod.pars.n_contacts).__name__})')
             elif isinstance(mod, ss.networks.Route): # A mixing pool, which works on groups
                 continue
-            elif flag:
-                if hasattr(mod, 'try_groups') and not getattr(mod, 'timed', False) and not reasons: # Its conditions and functions, tried on groups
-                    add(f'module: {mod.name}', '?', 'tried on groups', probe=(mod.name, 'try_groups'))
-            elif flag is None and callable(getattr(mod, 'func', None)) and not isinstance(mod, ss.Demographics): # A function given as a module (e.g. interventions=func)
-                add(f'function: {mod.name}', '?', 'tried on groups', probe=(mod.name, 'step'))
+            elif flag: # It says it works on groups
+                continue
+            elif flag is None and observer(mod): # It runs in Python beside the compartments, whatever the solver; if it asks for agents, it says so then
+                add(f'module: {mod.name}', 'yes', 'runs in Python each step')
             else:
                 if isinstance(mod, (ss.Births, ss.Deaths)) and flag is None:
                     why = f'"{mod.name}" ({type(mod).__name__}) works on agents; ss.birth() and ss.death() in the disease are its compartmental form'
@@ -586,17 +594,17 @@ def init_capabilities(sim, modules):
         if flag is False:
             add(f'module: {mod.name}', 'no', 'compartmental = False', auto=f'"{mod.name}" has compartmental = False', fatal=True)
         elif own and flag is None:
-            add(f'code: {mod.name}.{own[0]}()', '?', 'tried on groups', probe=(mod.name, own))
-        for i,p in enumerate(graph.all_pars()):
+            add(f'code: {mod.name}.{own[0]}()', 'yes', 'runs in Python each step (compartmental = False if it needs agents)')
+        for p in graph.all_pars():
             raw = p.raw
             if callable(raw) and not isinstance(raw, ss.Dist):
                 name = getattr(raw, '__name__', 'function')
                 if ss.utils.n_args(raw) >= 2:
                     add(f'function: {name}', 'no', 'takes uids', auto=f'the function "{name}" takes uids')
                 elif not isinstance(raw, timed):
-                    add(f'function: {name}', '?', 'tried on groups', probe=(mod.name, i))
+                    add(f'function: {name}', 'yes', 'a function of the sim, evaluated on groups')
         for name,func in graph.funcs.items(): # Custom per-step behavior
-            add(f'function: {name}', '?', 'tried on groups', probe=(mod.name, func))
+            add(f'function: {name}', 'yes', 'runs in Python each step')
         init_prev = graph.init_prev.raw if isinstance(graph.init_prev, ss.par) else graph.init_prev
         if isinstance(init_prev, ss.bernoulli) and callable(init_prev.pars.p): # Starsim 3's form, a function of the agents
             init_prev = init_prev.pars.p
@@ -604,7 +612,7 @@ def init_capabilities(sim, modules):
             if len(inspect.signature(init_prev).parameters) >= 2:
                 add('function: init_prev', 'no', 'takes uids', auto=f'init_prev of "{mod.name}" is a function of the agents')
             else:
-                add('function: init_prev', '?', 'tried on groups', probe=(mod.name, 'init_prev'))
+                add('function: init_prev', 'yes', 'a function of the sim, evaluated on groups')
         inits = [init_prev] + [state.init.raw if isinstance(state.init, ss.par) else state.init for state in graph.states.values()]
         for by in [val for val in inits if isinstance(val, ss.by)]: # A share by a property of each person that is not a dimension (as for a value in a rate, below)
             for prop in [prop for prop in by.dims if prop not in [strat.name for strat in sim.groups.strats] + ['female']*any(strat.female is not None for strat in sim.groups.strats)]:
@@ -666,10 +674,14 @@ def init_capabilities(sim, modules):
                 add(f'transition: {name}', 'yes', f'n children for each person through "{tr.per.name}", added at the end of each step')
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
-        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state have a compartmental form if each is for other people (see ss.solvers.Compartmental.apart_shares()), which is tried
+        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state have a compartmental form if each is for other people (see ss.solvers.Compartmental.apart_shares()), which the engine checks
             dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
             if len(dwells) > 1 and not exits.branches:
-                add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', '?', 'a track for each, if each is for other people (where=)', probe=(mod.name, []))
+                wheres = [repr(getattr(tr, 'where', None)) for tr in dwells]
+                if any(getattr(tr, 'where', None) is None for tr in dwells) or len(set(wheres)) < len(wheres): # Each needs a where= of its own; that they are for other people is checked when the engine is built
+                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'no', 'for the same people', auto=f'"{dwells[0].name}" and "{dwells[1].name}" are non-exponential dwell times out of "{name}" for the same people', fatal=True)
+                else:
+                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'yes', 'a track for each, as each is for other people (where=)')
         for name,tf in graph.transfers.items(): # A time drawn for each person, as Erlang stages (see ss.dimensions.transfer_stages())
             raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
             if isinstance(raw, ss.Dist) and not isinstance(raw, ss.expon):
@@ -692,50 +704,6 @@ def init_capabilities(sim, modules):
 def auto_reasons(sim):
     """ The reasons, from the capability record, that `solver='auto'` runs the model as agents (none if it runs it as compartments) """
     return [cap.auto for cap in getattr(sim, 'capabilities', []) if cap.auto]
-
-
-def try_capabilities(sim):
-    """ Try each function and piece of code in the model that is not known to work on groups, on groups, once, on a throwaway sim, and fill in its record (see `init_capabilities()`) """
-    rows = [cap for cap in sim.capabilities if cap.groups == '?']
-    if not rows or not hasattr(sim, 'inputs'):
-        return
-    try:
-        probe = sim.new(solver='ode', verbose=0, approx=True).init()
-        for mod in probe.declared:
-            mod.engine.start_step()
-    except ss.CodedError as E:
-        for cap in rows:
-            cap.groups, cap.how = 'no', 'the model does not run as compartments'
-        rows[0].auto = f'the model does not run as compartments ({str(E).splitlines()[0]})'
-        return
-    except Exception as E:
-        raise tried_error('the model', E) from E
-    mods = {mod.name:mod for mod in probe.modules}
-    for cap in rows:
-        modname, what = cap.probe
-        mod = mods[modname]
-        name = cap.ingredient.split(': ', 1)[-1]
-        try:
-            if isinstance(what, int): # A function in a value
-                mod.engine.value(mod.graph.all_pars()[what])
-            elif callable(what): # Custom per-step behavior, called with the sim
-                what(probe)
-            elif what == 'try_groups':
-                mod.try_groups()
-            elif what == 'init_prev':
-                mod.engine.init_fractions()
-            else: # A step of its own, or a function given as a module
-                for method in sc.tolist(what):
-                    getattr(mod, method)()
-        except (ss.CodedError, AttributeError) as E: # It asked for something that only agents have
-            why = str(E).splitlines()[0].strip()
-            cap.groups, cap.how = 'no', why
-            cap.auto = f'"{name}" does not work on groups ({why})'
-        except Exception as E: # A mistake in the code, which agents would not fix
-            raise tried_error(f'"{name}"', E) from E
-        else:
-            cap.groups = 'yes'
-    return
 
 
 def count_events(sim, mod=None):
@@ -787,10 +755,3 @@ def exact_seconds(sim):
     n_events = sum(count_events(ode, mod) for mod in ode.declared)
     seconds = sum(count_events(ode, mod) for mod in timed)*(0.1 + 0.05*ode.groups.n_groups**1.5)*1e-6
     return n_events, seconds
-
-
-def tried_error(what, E):
-    """ The error for a function that failed when it was tried on groups for a reason other than needing agents """
-    errormsg = (f'{what} raised {type(E).__name__} ({E}) when it was tried on groups, to see whether the model can run as compartments.\n'
-                f'     If it is a mistake, fix it; if it needs values that only agents have, run with solver="abm".')
-    return ValueError(errormsg)

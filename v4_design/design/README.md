@@ -42,7 +42,7 @@ Each document starts with a pointer to the `best-practices` document that justif
 
 - [10-execution.md](10-execution.md): the ordered loop, what runs when, competing hazards, per-module timesteps, and building the sim.
 - [11-random.md](11-random.md): random number streams, common random numbers, the run hash, and convergence checks.
-- [12-backends.md](12-backends.md): solvers. `solver='auto'`, the solvers, the standard approximations and how they are reported, `solvers()`, and the try-it rule for functions.
+- [12-backends.md](12-backends.md): solvers. `solver='auto'`, the solvers, the standard approximations and how they are reported, and the try-it rule for functions.
 - [13-inference.md](13-inference.md): `sim.calibrate()`, goodness of fit, how the fitting method is chosen, sensitivity, and model comparison.
 
 ### Machinery

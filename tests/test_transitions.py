@@ -192,15 +192,8 @@ def test_names():
     with pytest.raises(ss.BadBranchSplit, match=r'\[R, ss.null\]'): # A weighted destination cannot leave the model: a split with ss.null can (it was a raw TypeError)
         S, I, R = ss.states('S I R')
         I >> (0.9*R + 0.1*ss.null) @ 0.1
-    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # Below 1, an error that suggests ss.stay (pending a decision: ss.transitions.rest_stay)
+    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # Below 1, an error that suggests ss.stay
         ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3))
-    ss.transitions.rest_stay = True
-    try: # When it is decided that the rest stay
-        assert 'states.I.stay' in ss.Disease(a=ss.progression('I -> H', p=0.2, dur=3), b=ss.progression('I -> R', p=0.7, dur=3)).graph.guessed
-        d = ss.Disease(sev=ss.progression('E -> P', p=0.3), mild=ss.progression('E -> A')) # With no p= at all, a transition is undriven, not the remainder: the rest stay
-        assert d.graph.transitions.mild.undriven and d.graph.exits.E.stay == pytest.approx(0.7)
-    finally:
-        ss.transitions.rest_stay = False
     with pytest.raises(ss.NonlinearExposure):
         S, I = ss.states(2)
         ss.Disease(infection = S >> I @ 0.1 * I * I)
@@ -732,7 +725,7 @@ def test_describe():
     table = repr(sir.transitions)
     print(table)
     assert 'contact-mediated, source I' in table
-    print(sim.solvers(output=True))
+    print(sim.describe(output=True))
     spec = sim.to_spec()
     assert spec['modules'][0]['transitions'][0]['rate'] == 'beta * I'
 
@@ -743,9 +736,9 @@ def test_describe():
     assert np.isclose(seir.R0(), 0.3/(0.1 + 0.05))
     C = np.array([[10, 3], [3, 5]])
     aged = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.03), recovery=ss.progression('I -> R', dur=10)), networks=ss.contacts(C, bands=[0, 20]), **kw)
-    assert np.isclose(aged.R0(), 0.3*np.linalg.eigvals(C).max())
+    assert np.isclose(aged.init().diseases[0].R0(), 0.3*np.linalg.eigvals(C).max()) # With the mixing of its sim
     cholera = ss.Sim(make_cholera(), total_pop=10_000, unit='day', **kw)
-    assert np.isclose(cholera.R0(), 0.5/1e5*10_000*10*5*30) # Infection × shedding × time infectious × time in the water
+    assert np.isclose(cholera.init().diseases[0].R0(), 0.5/1e5*10_000*10*5*30) # Infection × shedding × time infectious × time in the water
     return sim
 
 
@@ -887,7 +880,7 @@ def test_stratify():
     # Errors
     again = make_sir().stratify(age=[0, 15]).stratify(age=[0, 15]) # The same line run twice does nothing more
     assert len(again.graph.strats) == 1
-    assert ss.Sim(make_sir(), **kw).stratify(age=[0, 15]).stratify(age=[0, 15]).init().n_groups == 2 # Likewise for the sim
+    assert ss.Sim(make_sir(), **kw).stratify(age=[0, 15]).stratify(age=[0, 15]).init().groups.n_groups == 2 # Likewise for the sim
     with pytest.raises(ss.DuplicateStructuralDimension): # In another way, it is an error
         make_sir().stratify(age=[0, 15]).stratify(age=[0, 20])
     with pytest.raises(ss.UnknownTransition):
@@ -902,7 +895,7 @@ def test_stratify():
         ss.Sim([a, b], **kw).init()
 
     # One parser for the sim and the disease: an option is never a dimension, and the sim's adjust= is checked too
-    assert [strat.name for strat in ss.Sim(make_sir(), stratify=dict(age=[0, 15], states=['S', 'I']), **kw).init().strats] == ['age'] # Not a dimension called states
+    assert [strat.name for strat in ss.Sim(make_sir(), stratify=dict(age=[0, 15], states=['S', 'I']), **kw).init().groups.strats] == ['age'] # Not a dimension called states
     with pytest.raises(ss.UnknownTransition):
         ss.Sim(make_sir(), stratify=dict(age=[0, 15], adjust={'recovry': [1, 2]}), **kw).init()
     with pytest.raises(ValueError):
@@ -944,7 +937,7 @@ def test_transfer():
 
     # A dimension that people are moved along, with no split given, starts with everyone at its first level
     staged = make_sir().stratify(stage=['early', 'late'], progress=ss.transfer(stage='early -> late', rate=ss.perday(0.01)))
-    assert np.allclose(ss.Sim(staged, unit='day', stop=10, **kw).init().strats[0].split, [1, 0])
+    assert np.allclose(ss.Sim(staged, unit='day', stop=10, **kw).init().groups.strats[0].split, [1, 0])
 
     # A transfer along a dimension the model does not have is an error
     with pytest.raises(ss.MissingDimension):
@@ -1299,30 +1292,32 @@ def test_functions():
         )
         return d
 
-    # The function is tried on groups: with no age groups it cannot run as compartments, so the model runs as agents
-    sim = ss.Sim(make(seeding=seed_cluster), stop=100, unit='day', **kw).run()
-    assert sim.solver == 'abm' and 'severity' in sim.solver_reason
+    # Code is not run to choose the solver: with no age groups the function cannot run as compartments, which it says, so the model is run as agents by asking
+    with pytest.raises(ss.CapabilityError, match='people.age'):
+        ss.Sim(make(), stop=100, unit='day', **kw).run()
+    sim = ss.Sim(make(seeding=seed_cluster), stop=100, unit='day', solver='abm', **kw).run()
     assert sim.results.d.n_I[-1] == sim.diseases.d.I.count() # The counts kept through the run, which the function's changes to the states are counted in, are those of the agents
     by_age = ss.Sim(make(), stop=100, unit='day', stratify=dict(age=[0, 50]), **kw).run()
     assert by_age.solver == 'ode'
     res = by_age.results.d
     assert res.n_H.select(age='50+').max() > res.n_H.select(age='0-49').max() # Older people are more likely to be hospitalized
-    assert ss.Sim(make(), stop=100, unit='day', stratify=dict(age=[0, 15, 65]), **kw).init().solver == 'abm' # 50 is inside a group, so it runs as agents (it ran as an ODE, giving each group the age of its middle)
+    with pytest.raises(ss.CapabilityError, match='falls inside a group'): # 50 is inside a group, which it says before the run (it ran as an ODE, giving each group the age of its middle)
+        ss.Sim(make(), stop=100, unit='day', stratify=dict(age=[0, 15, 65]), **kw).init()
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make(), stop=100, unit='day', solver='ode', **kw).run()
     def typo(sim):
         return sim.results.d['n_X'][sim.ti] # A mistake, which agents would not fix
-    with pytest.raises(ValueError, match='tried on groups'):
+    with pytest.raises(KeyError, match='n_X'):
         bad = ss.Disease(infection=ss.transmission('S -> I', beta=0.3, source='I'), course=ss.progression('I -> H | R', p=typo, dur=7), discharge=ss.progression('H -> R', rate=0.1), name='d')
         ss.Sim(bad, stop=100, unit='day', **kw).run()
 
-    # Code of the user's own is tried on groups (a function given as an intervention, a step() of a declared disease), and compartmental= says it outright
+    # Code of the user's own (a function given as an intervention, a step() of a declared disease) runs beside the compartments, and compartmental=False says it needs agents
     def knock(sim):
         if sim.ti == 20:
             sim.diseases.sir.pars.beta = 0.1
     sir = lambda: ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
     knocked = ss.Sim(sir(), interventions=knock, stop=60, unit='day', **kw).run()
-    assert knocked.solver == 'ode' and 'knock' in knocked.solver_reason # Not 10,000 agents
+    assert knocked.solver == 'ode' # Not 10,000 agents
     assert knocked.results.sir.infection.cum[-1] < 0.7*ss.Sim(sir(), stop=60, unit='day', **kw).run().results.sir.infection.cum[-1] # It still acts
     def stop_in_place(sim):
         if sim.ti == 20:
@@ -1337,9 +1332,8 @@ def test_functions():
     seeded = lambda fn: ss.Disease(infection=ss.transmission('S -> I', beta=0), recovery=ss.progression('I -> R', dur=1000), init=dict(I=0), seeding=fn, name='sir')
     sim = ss.Sim(seeded(seed), stop=6, unit='day', **kw).run()
     assert sim.solver == 'ode' and sim.results.sir.n_I[-1] > 4.9 # Called each step, not skipped by a whole run (was 0)
-    assert 'seeding' in ss.Sim(seeded(seed_agents), stop=6, unit='day', **kw).init().solver_reason # Tried on groups, so run as agents
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(seeded(seed_agents), stop=6, unit='day', solver='ode', **kw).run()
+    with pytest.raises(ss.CapabilityError, match='uids'): # It asks for agents, which it says
+        ss.Sim(seeded(seed_agents), stop=6, unit='day', **kw).run()
     class Mine(ss.Disease):
         def step(self):
             return super().step()
@@ -1350,13 +1344,13 @@ def test_functions():
     assert ss.Sim(mine(Agentish), unit='day', **kw).init().solver == 'abm'
     births = ss.Sim(sir(), demographics=ss.Births(), unit='day', **kw).init()
     assert births.solver == 'abm' and 'ss.birth()' in births.solver_reason
-    assert births.solver_reason in births.solvers(output=True) # solvers() says what auto did
+    assert births.solver_reason in births.describe(output=True) # describe() says what auto did
 
     # A function that takes uids only works on agents
     d2 = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', rate=clearance), init_prev=0.01, name='d2')
     sim2 = ss.Sim(d2, stop=100, unit='day', **kw).run()
     assert sim2.solver == 'abm' and 'clearance' in sim2.solver_reason
-    assert 'no (takes uids)' in sim2.solvers(output=True)
+    assert 'no as compartments (takes uids)' in sim2.describe(output=True)
 
     # Arguments with defaults do not count: this is a function of the sim
     def recover(sim, factor=2):

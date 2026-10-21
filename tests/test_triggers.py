@@ -194,22 +194,15 @@ def test_syphilis_stay():
             tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
         return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
     out = sc.objdict()
-    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to (pending a decision: ss.transitions.rest_stay)
+    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
-    for form in ['implicit', 'explicit']:
-        for solver in ['abm', 'ode']:
-            size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-            ss.transitions.rest_stay = form == 'implicit'
-            try:
-                sim = ss.Sim(make(form), solver=solver, start=2000, stop=2006, unit='year', **size, **kw).run()
-            finally:
-                ss.transitions.rest_stay = False
-            res = sim.results.syph
-            assert np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{form} ({solver}): {res.n_T[-1]/1e4:.3f} in T'
-            assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6) # Staying is not a flow
-            out[f'{form}_{solver}'] = sim
-    desc = out.implicit_abm.diseases.syph.describe(output=True)
-    assert 'the other 65% stay' in desc and '[guessed]' in desc
+    for solver in ['abm', 'ode']:
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        sim = ss.Sim(make('explicit'), solver=solver, start=2000, stop=2006, unit='year', **size, **kw).run()
+        res = sim.results.syph
+        assert np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T[-1]/1e4:.3f} in T'
+        assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6) # Staying is not a flow
+        out[f'explicit_{solver}'] = sim
     assert 'states.LL.stay' not in out.explicit_abm.diseases.syph.graph.guessed
     s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time keeps running
     u = s.LL.uids

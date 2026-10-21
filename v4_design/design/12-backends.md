@@ -62,7 +62,7 @@ A model runs as agents under `'auto'` if it contains any of these:
 - `n_agents=` given to the sim or to `ss.People`;
 - a per-agent function (`fn(sim, uids)`) or a per-agent attribute that is not a stratification (viral load, an individual's partner count);
 - a distribution on a per-person quantity other than a dwell time (`beta`, `rel_sus = ss.lognorm_ex(mean=1, std=0.3)`) that has not been binned into a dimension;
-- custom code (a function intervention or analyzer, or a `step()` override) that does not work on groups when it is tried on them (see [Functions](#functions-try-it)); a module written as code says outright that it works on groups, or does not, with the class attribute `compartmental = True` or `False`;
+- a module written as code that needs agents: a disease, network, demographic module, intervention or connector written as code, unless it says it works on groups with the class attribute `compartmental = True`, and any module with `compartmental = False`. An analyzer, a plain `ss.Module` (e.g. an ODE of its own in NumPy), a function given as a module, and the functions and `step()` of a declared module run beside the compartments without changing the solver; code is never run to find out (decided 2026-10-20), so if one of them asks for something only agents have, the run stops and says so (see [Functions](#functions-try-it));
 - something that needs individual histories: contact tracing, transmission trees, the infection log (`analyzers='infection_log'`), or the strains each person has had (a strain dimension with partial immunity);
 - a family of diseases (`ss.Strains`) whose members affect each other (`immunity=`, `exclusive=`), unless `approx=True`: under the compartmental solvers these are worked out from each member's shares (below);
 - an initial value (`init_prev=` or `init=`) by a property of people that is not a dimension, or a function of the agents.
@@ -71,7 +71,7 @@ Or the user asks: `solver='abm'` runs any model as agents, for example to study 
 
 Everything else has a compartmental form: homogeneous mixing, an `ss.MixingPool` of everyone and contact matrices, stratifications, exponential and Erlang dwell times (exactly), fixed delays and minimum stays (`ss.constant`, `after=`, `before=`: by a conveyor of whole steps), and other dwell times (by stages, with the note above), `ss.modify` with conditions on strata, interventions whose eligibility uses only strata, states that are not people (reservoirs, vectors), and functions that use only counts, parameters, time, and strata. A state that is not people never makes a model agent-based.
 
-The reasons are kept in one record, which `sim.solvers()`, `describe()`, and the `CapabilityError` all read.
+The reasons are kept in one record, which `describe()` and the `CapabilityError` read.
 
 For simple models the solver is a free choice made when the sim is built. For complex models it is in effect part of the specification: a model built around a sexual network is an agent-based model, and running it another way gives a different, coarser model.
 
@@ -137,7 +137,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 
 - Under `solver='auto'`, `approx=False` rules out the Erlang stages too: a model with a dwell time that has no exact compartmental form then runs as agents, where the dwell time is sampled directly, and the printed reason names the transition.
 - `verbose=0` hides everything printed at run time, the notes included.
-- Whatever is printed, the notes are kept in `sim.notes` (and in the model spec's metadata), so they survive into saved output; `sim.solvers()` shows what each solver would approximate.
+- Whatever is printed, the notes are kept in `sim.notes` (and in the model spec's metadata), so they survive into saved output; `sim.describe()` shows what would be approximated as compartments.
 
 ### The standard approximations
 
@@ -207,28 +207,23 @@ CapabilityError: cannot run 'hiv' with solver='ode'.
      Options: use solver='abm', or replace it with a screening rate among partners' groups.
 ```
 
-## `solvers()`: what can run this model
+## What can run this model
 
 ```python
-sir.solvers()     # for one disease
 sim = ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), unit='day', stop=100)
-sim.solvers()     # for the whole sim: networks, interventions, and custom code included
+sim.describe()    # networks, interventions, and custom code included
 ```
 
-For an HIV model with a sexual network, a lognormal dwell time, a function in a rate, and partner notification (`trace=`):
+Under the solver, `describe()` lists one line per ingredient that matters (each network, each non-exponential dwell time, each function, each module that needs agents, `n_agents=`), saying whether it runs as compartments: `yes`, `approx` (with how), or `no` (with why). For an HIV model with a sexual network, a lognormal dwell time, and partner notification (`trace=`):
 
 ```text
->>> sim.solvers()
-                                 ode                                       binomial, gillespie                       abm
-network: mfnet                   approx (the partnership approximation)    approx (the partnership approximation)    yes
-function: care_seeking           no (the model does not run as ...)        no (the model does not run as ...)        yes
-dwell time: acute (lognorm_ex)   approx (Erlang stages)                    approx (Erlang stages)                    yes
-module: partner_notification     no ("partner_notification" traces ...)    no ("partner_notification" traces ...)    yes
-
-auto would choose: abm (MFNet is an individual-level network)
+solver       abm                                    [guessed: MFNet is an individual-level network]
+             network: mfnet: approx as compartments (the partnership approximation)
+             dwell time: acute (lognorm_ex): approx as compartments (Erlang stages)
+             module: partner_notification: no as compartments ("partner_notification" traces contacts, which only a network of agents keeps)
 ```
 
-The table is deliberately coarse: one row per ingredient that matters (each network, each non-exponential dwell time, each custom function, each module that needs agents, `n_agents=`), one column per solver, and each entry is `yes`, `approx` (with how), or `no` (with why). Ordinary transitions and parameters that run everywhere are not listed. The stochastic compartmental solvers (`binomial`, `gillespie`) share one column. `sim.solvers()` initializes the sim if it has not been, since functions are filled in by trying them on groups; when something else already makes the model agent-based, they are not tried. `sir.solvers()` on a disease alone tries its functions on the disease's own groups. The last line is what `'auto'` will do, and why; `sim.kernel_reason()` says, separately, why a compartmental run is taken a step at a time rather than in one call to the kernels.
+Ordinary transitions and parameters that run everywhere are not listed. Nothing is run to fill it in (decided 2026-10-20): a module says whether it works on groups with `compartmental = True` or `False`, and functions are listed as running on groups, to be checked when they run (see below). When a solver was asked for, the last line says what `'auto'` would choose, and why; `sim.kernel_reason()` says, separately, why a compartmental run is taken a step at a time rather than in one call to the kernels.
 
 ## Functions: try it
 
@@ -251,7 +246,7 @@ CapabilityError: people.n_partners was asked for, but it is a per-agent attribut
      Stratify by it (e.g. sim.stratify(n_partners=[...])), or run with solver="abm".
 ```
 
-So a lambda in an ODE model is fine, as long as what it does makes sense for groups. Under `'auto'`, functions are tried on groups once at `sim.init()`; if one fails, the model runs as agents and the printed reason says which function.
+So a lambda in an ODE model is fine, as long as what it does makes sense for groups. Under `'auto'`, functions are not tried in advance: a function that does not work on groups stops the run with the error above (at `sim.init()` for values, which are first evaluated there), and the fix is `solver='abm'`, a stratification, or `compartmental = False` on the module.
 
 ## How a model is built
 
@@ -281,7 +276,7 @@ Rates that use the count are written with `.n` (`beta * W.n / (W.n + K)`, `shed 
 
 ```python
 sir.equations()     # the ODE system, with symbolic parameter names
-sir.R0()            # optional numeric helper, for simple models
+sir.R0()            # optional numeric helper, with the mixing of its sim if it is in one
 ```
 
 ```text
@@ -305,7 +300,7 @@ The continuous-time solver has no `dt` and so no rate-to-probability conversion.
 
 Non-exponential dwell times need sub-states here exactly as under an ODE: the Erlang expansion is the same one, `stages=k` sets it by hand, and a dwell time that is not Erlang is approximated by fitted stages with the same one-line note.
 
-A sim is one trajectory. The distribution comes from many runs, `msim = ss.parallel(sim, n_runs=500)` (or `sim.run(n_runs=500)`), and `msim.extinction()` says how often each disease died out ([09-results.md](09-results.md#one-run-many-runs)), since it is often the reason for choosing such a solver. Each module's stochastic compartmental run draws from a generator of its own, so pairing between scenarios is weak ([11-random.md](11-random.md)).
+A sim is one trajectory. The distribution comes from many runs, `msim = ss.parallel(sim, n_runs=500)` (or `sim.run(n_runs=500)`), and how often each disease died out is read from their results ([09-results.md](09-results.md#one-run-many-runs)), since it is often the reason for choosing such a solver. Each module's stochastic compartmental run draws from a generator of its own, so pairing between scenarios is weak ([11-random.md](11-random.md)).
 
 ## Agent-based specifics
 

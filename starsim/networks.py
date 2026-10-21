@@ -267,12 +267,6 @@ class Network(Route):
         out += '\n' + self.to_df().__repr__()
         return out
 
-    def __getitem__(self, key):
-        """ Allow edge columns to be accessed like a dict, e.g. `network['p1']`, as for Covasim v3 layers """
-        if isinstance(key, str) and key in self.edges:
-            return self.edges[key]
-        return super().__getitem__(key)
-
     def __contains__(self, item):
         """
         Check if a person is present in a network
@@ -656,14 +650,6 @@ def check_acts(net, acts):
     raise TypeError(f'acts= of "{name}" is {acts} ({type(acts).__name__}); give a rate, {example}')
 
 
-def check_duration(net, pars, kwargs):
-    """ The duration of a partnership is dur=, as for every other network; Starsim 3's duration= is an error that says so """
-    if 'duration' in kwargs or 'duration' in (pars or {}):
-        errormsg = f'duration= of ss.{type(net).__name__}() is now dur=, as for every other network, e.g. ss.{type(net).__name__}(dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)))'
-        raise TypeError(errormsg)
-    return
-
-
 class SexualNetwork(DynamicNetwork):
     """
     Base class for all sexual networks
@@ -849,9 +835,6 @@ class RandomNet(DynamicNetwork):
     def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, method=_, **kwargs):
         """ Initialize """
         super().__init__()
-        if 'uniform_targets' in kwargs: # Starsim 4 prereleases
-            errormsg = "uniform_targets=True of ss.RandomNet() is now method='uniform'"
-            raise TypeError(errormsg)
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
@@ -1581,7 +1564,6 @@ class MFNet(DegreeTargets, SexualNetwork):
     """
     def __init__(self, pars=None, dur=_, debut=_, acts=_, participation=_, rel_part_rates=_, n_contacts=_, concurrency=_, max_contacts=_, **kwargs):
         super().__init__()
-        check_duration(self, pars, kwargs)
         self.define_pars(
             dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values

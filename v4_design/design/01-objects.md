@@ -41,7 +41,7 @@ ss.Result                   a named time series, with a dimension per stratifica
 | CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.Calibration`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
 | lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.compare_models` |
 
-Methods that describe the model are `describe()`, `diagram()`, `equations()`, and `solvers()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.
+Methods that describe the model are `describe()`, `diagram()`, and `equations()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.
 
 ## Constructing a model
 
@@ -255,7 +255,6 @@ There is no replicate count on `ss.Sim`: `sim.run(n_runs=100)` is a shortcut for
 | `sim.run(solver=None, n_runs=None)` | runs it, calling `init()` first if needed; returns the sim, or with `n_runs=` a MultiSim of that many runs |
 | `sim.new(**kwargs)` | a fresh, uninitialized copy, with any keywords changed (`sim.new(solver='abm')`) |
 | `sim.describe()` | prints the resolved model, with every guess marked ([below](#describe)) |
-| `sim.solvers()` | prints which solvers can run the model ([12-backends.md](12-backends.md)) |
 | `sim.stratify(age=..., ...)` | stratifies every module by a property of people; the same as `stratify=` ([05-dimensions.md](05-dimensions.md)) |
 | `sim.what_modifies(x)` | lists what changes a quantity ([below](#the-module-contract)) |
 | `sim.requires()` | prints the data the modules say they require ([04-parameters.md](04-parameters.md#requirements)) |

@@ -88,7 +88,7 @@ def test_2d_results():
             self.define_results(ss.Result('n_infected', columns=['female', 'male'], label='Infected'))
 
         def step(self):
-            infected = self.sim.diseases.sis.infected
+            infected = self.sim.diseases.sis.I
             female = self.sim.people.female
             self.results.n_infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
 
@@ -122,7 +122,7 @@ def test_nested_results():
             self.results.nested += ss.Result('n_infected', shape=self.t.npts, timevec=self.t.timevec)
 
         def step(self):
-            self.results.nested.n_infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.infected)
+            self.results.nested.n_infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
 
     sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=Nested())
     sim.run()

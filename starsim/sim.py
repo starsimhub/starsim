@@ -64,18 +64,6 @@ class Sim(ss.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
-    _private_phases = ['init_solver', 'init_unit', 'init_named_people', 'init_flows', 'init_lifetables', 'init_time', 'init_modules_pre',
-                       'init_rescale', 'init_dists', 'init_people_vals', 'init_modules_post'] # Private since Starsim 4 (as _init_time() etc.); no package overrides them
-
-    def __init_subclass__(cls, **kwargs):
-        """ An override of a phase of init() by its old, public name would be silently ignored """
-        super().__init_subclass__(**kwargs)
-        old = [name for name in cls._private_phases if name in vars(cls)]
-        if old:
-            errormsg = f'{cls.__name__} defines {sc.strjoin(old)}, which Sim.init() no longer calls: these phases are private (_{old[0]}() etc.). A module (e.g. an analyzer with init_pre()) is usually the better place.'
-            raise TypeError(errormsg)
-        return
-
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)
         if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
@@ -637,34 +625,6 @@ class Sim(ss.Base):
         return self
 
     @property
-    def strats(self):
-        """ The stratifications of the sim and its modules, once it is initialized: see `ss.dimensions.Groups` """
-        return self.groups.strats
-
-    @property
-    def n_groups(self):
-        """ The number of groups that the stratifications give (1 if there are none): see `ss.dimensions.Groups` """
-        return self.groups.n_groups
-
-    @property
-    def group_coords(self):
-        """ The level of each group in each dimension: see `ss.dimensions.Groups` """
-        return self.groups.group_coords
-
-    @property
-    def group_levels(self):
-        """ The level of each group in each dimension, or -1 for none: see `ss.dimensions.Groups` """
-        return self.groups.group_levels
-
-    def dim_index(self, name):
-        """ The position of a stratification dimension: see `ss.dimensions.Groups.dim_index()` """
-        return self.groups.dim_index(name)
-
-    def level_raw(self, d):
-        """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID; see `ss.dimensions.Groups.level_raw()` """
-        return self.groups.level_raw(d)
-
-    @property
     def unit_name(self):
         """ The unit of time, for what the sim says: its unit, or, with none, "step" (or "unit", if a step is not one unit) """
         if self.unit:
@@ -882,8 +842,11 @@ class Sim(ss.Base):
         if self.declared:
             guessed = pars.solver == 'auto' or self.solver != pars.solver # Chosen by auto, or tau-leaping for gillespie
             add('solver', self.solver, f'guessed: {self.solver_reason}' if guessed else 'requested')
-            for cap in self.capabilities: # What matters to which solvers can run it: see sim.solvers()
-                add('', f'{cap.ingredient}: {"not tried" if cap.groups == "?" else cap.groups} on groups{"" if cap.groups == "?" else f" ({cap.how})"}')
+            for cap in self.capabilities: # What matters to which solvers can run it: see ss.solvers.init_capabilities()
+                add('', f'{cap.ingredient}: {cap.groups} as compartments ({cap.how})')
+            if not guessed: # What auto would have done
+                reasons = ss.solvers.auto_reasons(self)
+                add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
             if self.solver == 'abm':
                 scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
                 add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in self.given else 'guessed')
@@ -999,36 +962,6 @@ class Sim(ss.Base):
                     lines.append(f'  {name:12s} rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
         return lines
 
-    def solvers(self, output=False):
-        """
-        Print which solvers can run the model: one row per ingredient that matters, one column per solver
-
-        Args:
-            output (bool): if True, return the text rather than printing it
-        """
-        if not self.initialized:
-            self.init()
-        if self.declared:
-            ss.solvers.try_capabilities(self) # Anything not tried yet, when a solver was asked for
-        rows = []
-        for cap in self.capabilities: # See ss.solvers.init_capabilities()
-            how = cap.groups if cap.groups == '?' else f'{cap.groups} ({cap.how})'
-            rows.append([cap.ingredient, how, how, 'yes'])
-        header = ['', 'ode', 'binomial, gillespie', 'abm']
-        table = [header] + rows
-        widths = [max(len(row[i]) for row in table) + 3 for i in range(4)]
-        lines = [''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in table]
-        if not rows:
-            lines.append('(every part of the model runs under every solver)')
-        reasons = ss.solvers.auto_reasons(self) if self.declared else ['the model is written as code']
-        if self.pars.solver == 'auto' and self.declared: # What it did
-            choice = f'{self.solver} ({self.solver_reason})'
-        else:
-            choice = f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'
-        lines += ['', f'auto would choose: {choice}']
-        text = '\n'.join(lines)
-        return text if output else print(text)
-
     def requires(self, output=False):
         """
         Print the data the modules in the sim require, and which items are still missing
@@ -1077,20 +1010,6 @@ class Sim(ss.Base):
         print(df.to_string(index=False))
         print(f'\n{n_missing} of {len(df)} item{"s" if len(df) != 1 else ""} missing' if n_missing else f'\nNothing is missing ({len(df)} item{"s" if len(df) != 1 else ""})')
         return
-
-    def R0(self):
-        """
-        The basic reproduction number of each declared disease, with the sim's mixing and stratification: see `ss.Disease.R0()`
-
-        Returns a number if the sim has one declared disease with a transmission, and otherwise a dict by disease.
-        """
-        sim = self.new(solver='ode', verbose=0).init()
-        out = sc.objdict()
-        for dis in sim.diseases():
-            ngm = dis.engine.next_generation() if dis.graph is not None else None
-            if ngm is not None:
-                out[dis.name] = float(np.max(np.abs(np.linalg.eigvals(ngm))))
-        return out[0] if len(out) == 1 else out
 
     def hash(self):
         """
@@ -1585,11 +1504,6 @@ class Sim(ss.Base):
         return rows, ends
 
     @property
-    def current_scale(self):
-        """ Kept for Starsim 3 modules: declared models and deliveries count in people (see `ss.results.people_scale()`), so need no scale """
-        return self._current_scale
-
-    @property
     def _current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
         if not self.pars.rescale:
@@ -1967,7 +1881,6 @@ class Sim(ss.Base):
         for mod in self.modules:
             mod.finalize()
         self.check_finite()
-        self.check_time_index()
 
         # Resets verbose if needed
         if hasattr(self, '_orig_verbose'):
@@ -1988,40 +1901,6 @@ class Sim(ss.Base):
                     errormsg = (f'The number of people in "{name}" of "{mod.name}" is not a number from time point {ti} on. A rate too fast for the step can do this, '
                                 f'e.g. a count of people where a share was meant (I.n rather than I.frac); see sim.notes, or use a smaller dt')
                     raise ValueError(errormsg)
-        return
-
-    def check_time_index(self):
-        """ Warn about results of modules written as code that look written to Starsim 3's time index: a flow at the first time point (before any step), or a last point left empty """
-        def is_multiple(vals, other):
-            """ Whether one series is a constant multiple of another """
-            if other.shape != vals.shape or other.dtype.kind not in 'biuf' or len(np.unique(other)) < 3: # A multiple of a series that is all one value (and zeros) says nothing
-                return False
-            other = other.astype(float)
-            k = vals[np.flatnonzero(other)[0]] / other[np.flatnonzero(other)[0]]
-            return k != 0 and np.allclose(vals, k*other)
-
-        found = []
-        for mod in self.modules:
-            if getattr(mod, 'graph', None) is not None or type(mod).__module__.startswith('starsim.'): # Only code written outside Starsim
-                continue
-            own = [np.asarray(r.values) for r in mod.results.values() if isinstance(r, ss.Result) and r.name in getattr(mod, '_starsim_results', ())]
-            for res in mod.results.values():
-                if getattr(res, 'name', None) in getattr(mod, '_starsim_results', ()): # Defined and written by Starsim's own classes, e.g. the results of a subclass of ss.screen
-                    continue
-                vals = np.asarray(res.values) if isinstance(res, ss.Result) else None
-                if vals is not None and any(is_multiple(vals, o) for o in own): # A copy of one of those, e.g. under an older name, or a multiple of one
-                    continue
-                if vals is None or vals.ndim != 1 or vals.dtype.kind not in 'biuf' or len(vals) < 5: # Only series of numbers
-                    continue
-                vals = np.nan_to_num(vals.astype(float))
-                first = res.kind == 'flow' and vals[0] != 0
-                last = vals[-1] == 0 and np.all(vals[-4:-1] != 0)
-                if first or last:
-                    found.append(f'{mod.name}.{res.name}')
-        if found:
-            ss.warn(f'{len(found)} result(s) of modules written as code look written to Starsim 3\'s time index ({sc.strjoin(found[:5])}{", ..." if len(found) > 5 else ""}): '
-                    f'a flow at the first time point, before any step, or a last point left at 0. In step(), self.ti is the start of the step, so a result goes at self.ti + 1; '
-                    f'in update_results(), self.ti is already the end. python -m starsim.migrate makes these changes (see the migrate-starsim3 skill).')
         return
 
     def finalize_results(self):

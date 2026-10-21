@@ -470,7 +470,7 @@ def test_edge_ops():
     df = sc.dataframe(p1=[0, 1, 2, 3], p2=[1, 2, 3, 4])
     net = ss.Network(name='mynet').from_df(df) # Create from a dataframe
     assert net.name == 'mynet' and len(net) == 4
-    assert np.array_equal(net['p1'], df.p1) # Access edge columns like a dict
+    assert np.array_equal(net.edges.p1, df.p1)
 
     # Find contacts (both directions, including the agents themselves if they're each other's contacts), as an array or a set
     net2 = ss.Network(p1=[1,2,3,4], p2=[2,3,1,4])
@@ -604,7 +604,7 @@ def test_partner_targets():
         net = ss.PartnerNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
         sim = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run()
         net = sim.networks.net
-        level = sim.level_raw(sim.dim_index('risk'))
+        level = sim.groups.level_raw(sim.groups.dim_index('risk'))
         within = np.mean(level[net.edges.p1] == level[net.edges.p2])
         assert np.isclose(net.results.mean_degree[150:].mean(), 0.7, rtol=0.05)
         assert np.isclose(within, 0.68, atol=0.03) if share is None else np.isclose(within, share, atol=0.02) # By chance, 0.8² + 0.2²
@@ -645,8 +645,6 @@ def test_bare_units():
         warnings.simplefilter('error')
         sim(ss.MFNet(dur=ss.days(5))).init() # A unit says which is meant
         ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.01)), networks=ss.MFNet(dur=5), verbose=0).init() # The same unit as the sim
-    with pytest.raises(TypeError): # duration= is dur=, as for every other network
-        ss.MFNet(duration=5)
     return
 
 

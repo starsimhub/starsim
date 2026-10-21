@@ -599,7 +599,7 @@ def test_choose_n():
     # In a sim: exact seeding, including with a callable
     sir = ss.SIR(init_prev=ss.choose_n(lambda sim: sim.pars.n_agents//100))
     sim = ss.Sim(n_agents=500, diseases=sir, networks='random', dur=1, verbose=0).init()
-    assert sim.diseases.sir.infected.sum() == 5 # Exactly 1% are seeded
+    assert sim.diseases.sir.I.sum() == 5 # Exactly 1% are seeded
     sim = ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init()
     assert sim.diseases.sir.I.sum() == 20 # A number of people rather than a probability
     return chosen

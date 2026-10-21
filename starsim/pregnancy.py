@@ -171,7 +171,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         p_loss = p_loss if isinstance(p_loss, ss.TimePar) else ss.probperweek(p_loss)
         if np.any(np.asarray(p_loss.value) > 0): # Before the engine lays out the clocks, which depend on it
             self.pars.update(loss_rate=p_loss)
-        if 'parity' in [strat.name for strat in sim.strats] and self.graph.transitions.delivery.increment is None: # Parity as a counter: up one at each delivery
+        if 'parity' in [strat.name for strat in sim.groups.strats] and self.graph.transitions.delivery.increment is None: # Parity as a counter: up one at each delivery
             self.graph.transitions.delivery.increment = dict(parity=1)
         dist = self.graph.pars.dur_pregnancy.raw
         self.mean_dur_pregnancy = ss.transitions.dwell_stats(dist, lambda v: ss.solvers.convert(v, 'year'))[0]
@@ -651,12 +651,12 @@ class Pregnancy(ss.Demographics, ss.Disease):
             births = np.histogram(ages, bins=bins)[0]
             auids = ppl.auids
             women = np.histogram(ppl.age.raw[auids][ppl.female.raw[auids]], bins=bins)[0]
-        elif any(strat.kind == 'age' and strat.edges is not None for strat in sim.strats): # The rate of each age group, for each bin within it
-            ng = sim.n_groups
+        elif any(strat.kind == 'age' and strat.edges is not None for strat in sim.groups.strats): # The rate of each age group, for each bin within it
+            ng = sim.groups.n_groups
             engine = self.engine
-            d = next(i for i,strat in enumerate(sim.strats) if strat.kind == 'age' and strat.edges is not None)
-            strat = sim.strats[d]
-            level = sim.group_coords[:, d]
+            d = next(i for i,strat in enumerate(sim.groups.strats) if strat.kind == 'age' and strat.edges is not None)
+            strat = sim.groups.strats[d]
+            level = sim.groups.group_coords[:, d]
             female = np.broadcast_to(engine.selector.select(ss.ppl.female)[0], (ng,))
             delivered = np.broadcast_to(engine.flow_groups.get('delivery', 0.0), (ng,))
             pop = np.broadcast_to(sum(engine.stock_groups.get(s.name, 0.0) for s in self.graph.people_states), (ng,))

@@ -10,7 +10,6 @@ import starsim as ss
 
 
 
-hub_quantiles = [0.01, 0.025] + [round(q, 2) for q in np.arange(0.05, 0.951, 0.05)] + [0.975, 0.99] # The 23 quantiles of the US forecast hubs
 run_options = ['parallel', 'n_cpus', 'par_args', 'shrink', 'verbose', 'run_args'] # How to run the sims, as opposed to which runs to take
 
 
@@ -120,19 +119,6 @@ class MultiSim:
             self.init_sims()
 
         return
-
-    _removed = { # Starsim 3 methods, with what to write instead
-        'reduce': "msim.results.<module>.<result>, which has a run axis first: .median(), .mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]) pool every run, as reduce() did, and .select(scenario=...) keeps one scenario; msim.plot() draws the median and an interval of each scenario",
-        'mean':   "msim.results.<module>.<result>.mean() (each result has a run axis first); msim.plot() draws the scenarios",
-        'median': "msim.results.<module>.<result>.median() (each result has a run axis first); msim.plot() draws the scenarios",
-        'reset':  "nothing (the results across runs are kept beside the sims, so there is nothing to undo)",
-    }
-
-    def __getattr__(self, attr):
-        """ Say what a removed method has become """
-        if attr in MultiSim._removed:
-            raise AttributeError(f'MultiSim.{attr}() has been removed from Starsim. Instead, write: {MultiSim._removed[attr]}. (The migrate-starsim3 skill lists every change.)')
-        raise AttributeError(f"'MultiSim' object has no attribute '{attr}'")
 
     def __len__(self):
         """ The length of a MultiSim is its number of runs """
@@ -316,13 +302,14 @@ class MultiSim:
 
     def combine(self):
         """
-        Combine the sims into a single sim, e.g. to treat several smaller sims as one larger population
+        Combine the sims into a single sim, whose results are those of one population made of all of them, e.g. to treat several smaller sims as one larger population
 
-        Results that scale with population size (`res.scale=True`, e.g. counts) are
-        summed; other results (e.g. prevalence) are averaged, weighted by each sim's
-        `total_pop`. The population sizes (`n_agents` and `total_pop`) are summed, and
-        `pop_scale` is updated to match. The people are not combined: the combined
-        sim keeps the people (if any) of the first sim.
+        Only the output is combined. Results that scale with population size (`res.scale=True`,
+        e.g. counts) are summed; other results (e.g. prevalence) are averaged, weighted by
+        each sim's `total_pop`. The population sizes (`n_agents` and `total_pop`) are summed,
+        and `pop_scale` is updated to match. The people are not joined: the combined sim keeps
+        the people (if any) of the first sim, so it is not a larger population of agents that
+        interact, and cannot be run again as one. To keep the runs as runs, see `ss.MultiSim.merge()`.
 
         Returns:
             The combined sim
@@ -368,8 +355,6 @@ class MultiSim:
             method (str): one of 'mean' (default: the mean, standard deviation, and standard error over the runs), 'median' (quantiles over the runs), or 'all' (the value of each run)
             quantiles (dict/list): if method='median', the quantiles (default: median, min, max, q25, and q75)
             how (str/dict): how to summarize each result over each run: as for `sim.summarize()`
-
-        If any run of a declared disease died out (see `msim.extinction()`), the summary also has `<disease>_extinction`: 1 for each run that died out and 0 otherwise, so its mean is the share of runs that died out.
         """
         self.check_run('summarize')
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda vals: vals[-1])
@@ -398,17 +383,6 @@ class MultiSim:
             else:
                 errormsg = f'Unknown method "{method}"; use "mean", "median", or "all"'
                 raise ValueError(errormsg)
-
-        for name,(first,n) in self._infected().items(): # Whether each run died out (see extinction()), only if one did
-            over = ((n[:, -1] <= 0) & (n[:, 0] > 0)).astype(float)
-            if over.any():
-                key = f'{name}_extinction'
-                if method == 'all':
-                    summary[key] = over
-                elif method == 'mean':
-                    summary[key] = sc.objdict({'mean':over.mean(), 'std':over.std(), 'sem':sc.sem(over)})
-                else:
-                    summary[key] = {q: np.quantile(over, v) for q, v in quantiles.items()}
 
         self.summary = summary
         return summary
@@ -489,133 +463,6 @@ class MultiSim:
         self.check_run('to_df')
         return self.results.to_df(quantiles=quantiles)
 
-    def to_hub(self, targets, by=None, every='week', quantiles=hub_quantiles, location=None):
-        """
-        The runs as a submission to a forecast hub: quantiles of each target, by location and period
-
-        Args:
-            targets (dict): the hub's name for each result, e.g. `dict(incidHosp='inc hosp')`
-            by (str): the dimension whose levels are the locations (default: one location, the total)
-            every (str): the period: a flow is totaled over it, and a count is taken at its end: 'day' or 'week' (of the sim's steps, which must then be days)
-            quantiles (list): the quantiles (default: the 23 that the US forecast hubs ask for)
-            location (str): the name of the single location, if `by` is not given
-
-        Returns a long dataframe with columns `target`, `location`, `target_end_date`, `output_type`, `quantile`, and `value`.
-        """
-        self.check_run('to_hub')
-        steps = dict(day=1, week=7)[every]
-        found = {key:res for modname,key,res in self.results.walk() if modname is not None}
-        rows = []
-        for key,target in targets.items():
-            if key not in found:
-                errormsg = f'No result called "{key}"; the results are {sc.strjoin(found)}'
-                raise KeyError(errormsg)
-            res = found[key]
-            places = res.by(by) if by is not None else {location or 'total':res}
-            for place,sub in places.items():
-                vals = sub.values[:, 1:] # The steps, after the start
-                n = vals.shape[1]//steps
-                if sub.kind == 'flow':
-                    periods = vals[:, :n*steps].reshape(len(vals), n, steps).sum(axis=2)
-                else:
-                    periods = vals[:, steps-1:n*steps:steps]
-                ends = np.array(sub.timevec)[1:][steps-1:n*steps:steps]
-                for q,qvals in zip(quantiles, np.quantile(periods, quantiles, axis=0)):
-                    rows.append(pd.DataFrame(dict(target=target, location=str(place), target_end_date=ends, output_type='quantile', quantile=q, value=qvals)))
-        return pd.concat(rows, ignore_index=True)
-
-    def _infected(self):
-        """ For each declared disease with infected states: its first infected state's result, and the number infected, runs by steps (see `extinction()`) """
-        out = {}
-        for dis in getattr(self.sims[0], 'declared', []):
-            infected = [s for s in dis.graph.infected if s.people]
-            if not infected or dis.name not in self.results:
-                continue
-            res = self.results[dis.name]
-            out[dis.name] = (res[f'n_{infected[0].name}'], sum(res[f'n_{s.name}'].values for s in infected))
-        return out
-
-    def extinction(self, output=False):
-        """
-        How often each declared disease died out: the share of runs in which nobody was infected by the end, and the median time it happened
-
-        Reported for each scenario, if there are several. Runs that start with nobody infected are not counted as dying out.
-
-        This is not the chance of a major outbreak. A disease that nobody can catch again
-        (an SIR, with no births or imports) dies out in every run that runs long enough,
-        after a major outbreak as after a minor one, so this gives 100%. For the share
-        of runs with a major outbreak, see `msim.outbreaks()`.
-
-        Args:
-            output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
-
-        Examples:
-            ```python
-            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2))
-            msim = ss.Sim(sir, total_pop=200, solver='gillespie', unit='day', stop=100).run(n_runs=100)
-            msim.extinction() # e.g. "sir: died out in 41% of 100 runs (median time 6 days)"
-            ```
-        """
-        self.check_run('extinction')
-        base = self.sims[0]
-        rows = []
-        for name,(first,n) in self._infected().items():
-            for label,inds in first.scenarios().items():
-                runs = n[inds]
-                over = (runs[:, -1] <= 0) & (runs[:, 0] > 0)
-                times = [first.timevec[len(row) - np.argmax(row[::-1] > 0)] for row in runs[over]] if over.any() else [] # The step after the last with anyone infected
-                scenario = label if len(first.scenarios()) > 1 else None
-                rows.append(dict(disease=name, scenario=scenario, runs=len(runs), share=over.mean(), median_time=float(np.median(times)) if times else None))
-        df = sc.dataframe(rows)
-        if output:
-            return df
-        for row in rows:
-            scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
-            unit = f' {base.unit}s' if getattr(base, 'unit', None) else ''
-            when = f' (median time {row["median_time"]:n}{unit})' if row['median_time'] is not None else ''
-            every = '; every run ended with nobody infected, as an epidemic that nobody can catch again always does, so this does not say how often there was a major outbreak (see msim.outbreaks())' if row['share'] == 1 else ''
-            print(f'{row["disease"]}{scenario}: died out in {row["share"]:.0%} of {row["runs"]} runs{when}{every}')
-        return
-
-    def outbreaks(self, threshold=0.1, output=False):
-        """
-        How often each declared disease caused a major outbreak: the share of runs in which more than a threshold were infected
-
-        The number infected in a run is its total of the transitions that infect people (the
-        acquisitions, e.g. `S -> I`), so the people infected at the start are not counted. Reported
-        for each scenario, if there are several. With no reinfection, a run that is not a major
-        outbreak is a minor one, which died out early.
-
-        Args:
-            threshold (float): the share of the people at the start (or, if 1 or more, the number of people) who are infected in a major outbreak
-            output (bool): if True, return a dataframe (one row per disease and scenario) instead of printing it
-
-        Examples:
-            ```python
-            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.2), recovery=ss.progression('I -> R', dur=10), init=dict(I=1))
-            msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365).run(n_runs=100)
-            msim.outbreaks() # e.g. "sir: a major outbreak (more than 100 infected) in 48% of 100 runs"
-            ```
-        """
-        self.check_run('outbreaks')
-        rows = []
-        for name,(first,n) in self._infected().items():
-            res = self.results[name]
-            graph = self.sims[0].diseases[name].graph
-            infected = sum(res[tr.name].values.sum(axis=1) for tr in graph.acquisitions)
-            people = sum(res[f'n_{state.name}'].values[:, 0] for state in graph.people_states)
-            least = np.broadcast_to(threshold if threshold >= 1 else threshold*people, infected.shape) # The number infected in a major outbreak, in each run
-            for label,inds in first.scenarios().items():
-                scenario = label if len(first.scenarios()) > 1 else None
-                rows.append(dict(disease=name, scenario=scenario, runs=len(inds), share=(infected[inds] > least[inds]).mean(), threshold=float(np.median(least[inds]))))
-        df = sc.dataframe(rows)
-        if output:
-            return df
-        for row in rows:
-            scenario = f' ({row["scenario"]})' if row['scenario'] is not None else ''
-            print(f'{row["disease"]}{scenario}: a major outbreak (more than {row["threshold"]:n} infected) in {row["share"]:.0%} of {row["runs"]} runs')
-        return
-
     def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):
         """
         Plot a bar chart comparing the runs, with one panel per result; see `msim.compare()`.
@@ -660,7 +507,9 @@ class MultiSim:
     @classmethod
     def merge(cls, *args):
         """
-        Merge several MultiSims into one, with the runs of each; see also `msim.split()`.
+        Merge several MultiSims into one, with the runs of each, one after the other; `msim.split()` separates them again.
+
+        Unlike `msim.combine()`, which adds up the sims as one population, the runs stay separate runs.
 
         Args:
             args (MultiSim): the MultiSims to merge (either a list, or separate arguments)
@@ -687,7 +536,7 @@ class MultiSim:
 
     def split(self, inds=None, chunks=None):
         """
-        Split one MultiSim into several, by run; the reverse of `ss.MultiSim.merge()`.
+        Split one MultiSim into several, each with some of its runs; the reverse of `ss.MultiSim.merge()`.
 
         Specify either the positions of the runs for each new MultiSim (`inds`), or
         consecutive chunks (`chunks`). For a merged MultiSim, neither is needed.
@@ -748,72 +597,26 @@ def make_run(sim, values, seed):
     return new
 
 
-def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,
-               verbose=None, do_run=True, copy_sim=False, **kwargs):
+def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False):
     """
-    Convenience function to perform a single simulation run. Mostly used for
-    parallelization, but can also be used directly.
+    Run one sim, as `run_each()` does: labelled by its position if it has no label, and shrunk afterwards if `shrink`
 
     Args:
-        sim         (Sim)   : the sim instance to be run
-        ind         (int)   : the index of this sim
-        reseed      (bool)  : whether to generate a fresh seed for each run
-        shrink      (bool)  : whether to shrink the sim after the sim run
-        run_args    (dict)  : arguments passed to sim.run()
-        sim_args    (dict)  : extra parameters to pass to the sim, e.g. 'n_infected'
-        verbose     (int)   : detail to print
-        do_run      (bool)  : whether to actually run the sim (if not, just initialize it)
-        copy_sim    (bool)  : whether to explicitly copy the sim before running (default: False)
-        kwargs      (dict)  : also passed to the sim
-
-    Returns:
-        sim (Sim): a single sim object with results
-
-    Examples:
-        ```python
-        import starsim as ss
-        sim = ss.Sim() # Create a default simulation
-        sim = ss.single_run(sim) # Run it, equivalent(ish) to sim.run()
-        ```
+        sim (Sim): the sim to run
+        ind (int): its position among the sims
+        shrink (bool): whether to shrink the sim after it has run
+        run_args (dict): arguments passed to `sim.run()`
+        verbose (int): detail to print
+        copy_sim (bool): whether to run a copy of the sim (as pickling gives when running in parallel)
     """
-
-    # Set sim and run arguments
-    sim_args = sc.mergedicts(sim_args, kwargs)
-    run_args = sc.mergedicts({'verbose': verbose}, run_args)
-    if verbose is None:
-        verbose = sim.pars['verbose']
-
     if copy_sim:
-        sim = sim.copy() # Make a copy to avoid modifying the original sim (typically done by default via pickling with ss.parallel())
-
+        sim = sim.copy()
     if not sim.label:
         sim.label = f'Sim {ind}'
-
-    if reseed:
-        sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
-        if ind and sim.initialized:
-            ss.warn(f'Sim "{sim.label}" is already initialized, so changing its seed has no effect; pass an uninitialized sim instead')
-
-    # Handle additional arguments
-    for key, val in sim_args.items():
-        if key in sim.pars.keys():
-            if verbose >= 2:
-                print(f'Setting key {key} from {sim[key]} to {val}')
-            sim.pars[key] = val
-        else:
-            raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
-
-    # Run
-    if do_run:
-        sim.run(**run_args)
-
-    # Shrink the sim to save memory
+    sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
     if shrink:
         sim.shrink(die=False)
-
     return sim
-
-
 
 
 def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbose=None, run_args=None):
@@ -826,7 +629,7 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
 
     Returns the list of run sims (copies, since they are pickled to run in parallel).
     """
-    kwargs = dict(reseed=False, verbose=verbose, shrink=shrink, run_args=run_args)
+    kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args)
     if parallel:
         par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method()}, par_args)
         with ss.kernels.one_blas_thread():

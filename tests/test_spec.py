@@ -134,26 +134,26 @@ vocabulary = {
 
 # The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr, ss.distributions.link_dists)
 code_names = """
-AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr
-BoolState BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dx
+AgeGroup AlreadyRunError Arr Base BaseArr BetaBinomial Binomial Births BoolArr
+BoolState BreastfeedingNet CalibComponent Calibration Dataset DateArray Deaths Delivery Diagnostics DirichletMultinomial
 DynamicNetwork Event FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
-Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
-check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
+Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results SEIR SIR SIS Samples SexualNetwork SimPars beta_dist beta_mean
+check_requires check_sims_match choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink single_run standardize_data standardize_netkey state any child mother attr func spread on Resource share stay clock style to_code treat_num uids warn
+show shrink standardize_data standardize_netkey state any child mother attr func spread on Resource share stay clock style to_code uids warn
 """.split()
 
 
 # The counted methods and attributes, by the class they are on, and which of them the specification adds
 methods = {
-    'Disease': ('describe diagram equations solvers transitions stratify to_spec to_json copy pars R0', 'describe diagram equations solvers transitions stratify to_spec R0'),
+    'Disease': ('describe diagram equations transitions stratify to_spec to_json copy pars R0', 'describe diagram equations transitions stratify to_spec R0'),
     'State': ('n frac total', 'all'),
     'ModifiableArr': ('effective', 'all'),
-    'Sim': ('init run plot summarize to_df loop results describe solvers stratify requires to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new R0 gradient', 'describe solvers stratify requires to_spec to_code hash calibrate sensitivity check_dt what_modifies new R0 gradient'),
+    'Sim': ('init run plot summarize to_df loop results describe stratify requires to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify requires to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
     'PartnerNet': ('check', 'all'),
-    'MultiSim': ('run plot summarize to_df results diff extinction outbreaks to_hub', 'diff extinction outbreaks to_hub'),
+    'MultiSim': ('run plot summarize to_df results diff', 'diff'),
     'Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
     'ModelComparison': ('fits plot summarize to_df', 'fits'),
 }
@@ -260,10 +260,6 @@ def test_namespace():
     assert not set(code_names) & counted, f'In both tiers: {sorted(set(code_names) & counted)}'
     gone = set(code_names) - exported
     assert not gone, f'In code_names but not exported: {sorted(gone)}'
-    for name in ss._removed: # Removed names say what to write instead
-        assert name not in exported
-        with pytest.raises(AttributeError, match='Instead'):
-            getattr(ss, name)
     return
 
 if __name__ == '__main__':

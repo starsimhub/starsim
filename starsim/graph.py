@@ -678,7 +678,7 @@ class Graph(Presentation):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
         self.exits = sc.objdict()
         for state in self.states.values():
-            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[], stay=0)
+            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[])
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
@@ -734,9 +734,6 @@ class Graph(Presentation):
                     if below and len(exits.timed) == 1:
                         exits.remainder = exits.timed.pop()
                         exits.remainder.guessed['p'] = f'{1 - bad[0][1]:n}'
-                    elif below and ss.transitions.rest_stay and not exits.timed and exits.remainder is None and len(bad) == 1 and len(bad[0][0]) == len(exits.branches): # The rest stay (pending a decision: see ss.transitions.rest_stay)
-                        exits.stay = 1 - bad[0][1]
-                        self.guessed[f'states.{name}.stay'] = f'the other {exits.stay:.0%} stay'
                     else:
                         group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
@@ -749,7 +746,7 @@ class Graph(Presentation):
             exits.timed += apart
         for name,exits in self.exits.items():
             outs = exits.branches + exits.timed + exits.hazards + exits.triggered + sc.tolist(exits.remainder)
-            exits.held = bool(exits.stay) or any(tr.stays for tr in outs) # Whether some people stay with no exit of their own: see ss.solvers.Compartmental.build_layout()
+            exits.held = any(tr.stays for tr in outs) # Whether some people stay with no exit of their own (ss.stay): see ss.solvers.Compartmental.build_layout()
         return
 
     @staticmethod

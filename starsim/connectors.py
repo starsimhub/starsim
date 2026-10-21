@@ -462,14 +462,6 @@ class modify(Connector):
             out.append('the value it is given is NaN for them; check what it reads, or give it a where= for the people it has a value for')
         return '; '.join(out) + '.'
 
-    def try_groups(self):
-        """ Check that the modifier's condition and amount can be evaluated on groups """
-        sim = self.sim
-        mods = {mod.name:mod for mod in sim.declared}
-        engine = mods.get(self.target_module, sim.declared[0]).engine # A network's contacts are worked out by each disease
-        self.apply(1.0, engine)
-        return
-
     def describe(self):
         """ One line saying what the modifier does """
         amount = self.amount.__name__ if callable(self.amount) and hasattr(self.amount, '__name__') else self.amount

@@ -291,7 +291,7 @@ def test_arr_2d():
 
         def step(self):
             out = super().step()
-            self.sus_imm[self.infected.uids, 1] += 0.1
+            self.sus_imm[self.I.uids, 1] += 0.1
             return out
 
     sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, dur=10).run()

@@ -132,9 +132,6 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
-        for name,exits in self.exits.items():
-            if exits.stay:
-                add(name, f'the other {exits.stay:.0%} stay', 'guessed')
         for name,upd in self.updates.items():
             add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", unit=unit, mul="×")}, set at the end of each step')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle

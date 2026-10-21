@@ -595,6 +595,29 @@ def has_event(cond):
     return any(has_event(arg) for arg in cond.args)
 
 
+def group_reasons(cond, sim):
+    """
+    What in a condition only agents can evaluate, found from its structure without evaluating it: a mother's
+    state, a function of uids, or a binned property (e.g. an age) compared with a number inside a bin
+    """
+    if isinstance(cond, ss.expressions.Mother):
+        return [f'{cond} reads each person\'s mother, which only agents know']
+    if callable(cond) and not isinstance(cond, (Cond, ss.expressions.Expr)):
+        return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
+    if not isinstance(cond, Cond) or cond.op in leaves:
+        return []
+    out = []
+    if cond.op in comparisons:
+        for x,v in [cond.args, cond.args[::-1]]:
+            if isinstance(x, Cond) and x.op == 'people' and sc.isnumber(v) and not isinstance(v, (bool, np.bool_)):
+                strat = next((strat for strat in sim.groups.strats if strat.name == x.args[0]), None)
+                if strat is not None and strat.edges is not None and v not in strat.edges and strat.edges[0] < v:
+                    out.append(f'a condition uses people.{x.args[0]} and {v:n}, which falls inside a bin of {x.args[0]}')
+    for arg in cond.args:
+        out += group_reasons(arg, sim)
+    return out
+
+
 def event_leaves(cond):
     """ The event leaves of a condition, including those that its memory is read from """
     if isinstance(cond, ss.expressions.Mother): # Read on the mother

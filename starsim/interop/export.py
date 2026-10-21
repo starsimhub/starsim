@@ -10,6 +10,8 @@ as `ss.LossyExport`. An export does not fail because something cannot be carried
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
 - `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
 
+The runs of a MultiSim are written as a submission to a forecast hub by `ss.interop.to_hub()`.
+
 SBML and odin are written from the compartmental form of the model (what
 `sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
 that is not exponential is its Erlang stages, and each stratification is summed into
@@ -19,10 +21,11 @@ import re
 import ast
 import xml.etree.ElementTree as ET
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['exporters', 'export', 'flatten', 'to_mermaid', 'to_sbml', 'to_odin']
+__all__ = ['exporters', 'export', 'flatten', 'to_mermaid', 'to_sbml', 'to_odin', 'to_hub']
 
 math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', minimum='min', maximum='max', min='min', max='max', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
 
@@ -47,7 +50,7 @@ def compartmental(sim):
 def strata(sim, mod):
     """ The stratifications of a disease, as text (e.g. 'age: 0-4, 5-17, 18+') """
     seen = {}
-    for strat in list(getattr(sim, 'strats', [])) + list(getattr(mod.graph, 'strats', [])):
+    for strat in list(getattr(getattr(sim, 'groups', None), 'strats', [])) + list(getattr(mod.graph, 'strats', [])):
         seen[strat.name] = f'{strat.name}: {", ".join(str(l) for l in strat.labels)}'
     return list(seen.values())
 
@@ -409,3 +412,49 @@ def export(sim, format, filename=None, verbose=None):
         out = f'```mermaid\n{text}```\n' if key == 'mermaid' and str(filename).endswith('.md') else text
         sc.savetext(filename, out)
     return text
+
+
+#%% Exporting runs
+
+hub_quantiles = [0.01, 0.025] + [round(q, 2) for q in np.arange(0.05, 0.951, 0.05)] + [0.975, 0.99] # The 23 quantiles of the US forecast hubs
+
+def to_hub(msim, targets, by=None, every='week', quantiles=hub_quantiles, location=None):
+    """
+    The runs of a MultiSim as a submission to a forecast hub: quantiles of each target, by location and period
+
+    Args:
+        msim (`ss.MultiSim`): the runs
+        targets (dict): the hub's name for each result, e.g. `dict(incidHosp='inc hosp')`
+        by (str): the dimension whose levels are the locations (default: one location, the total)
+        every (str): the period: a flow is totaled over it, and a count is taken at its end: 'day' or 'week' (of the sim's steps, which must then be days)
+        quantiles (list): the quantiles (default: the 23 that the US forecast hubs ask for)
+        location (str): the name of the single location, if `by` is not given
+
+    Returns a long dataframe with columns `target`, `location`, `target_end_date`, `output_type`, `quantile`, and `value`.
+
+    **Example**:
+
+        msim = ss.parallel(sim, n_runs=20)
+        hub = ss.interop.to_hub(msim, targets=dict(infection='inc inf'), by='patch', every='week')
+    """
+    msim.check_run('to_hub')
+    steps = dict(day=1, week=7)[every]
+    found = {key:res for modname,key,res in msim.results.walk() if modname is not None}
+    rows = []
+    for key,target in targets.items():
+        if key not in found:
+            errormsg = f'No result called "{key}"; the results are {sc.strjoin(found)}'
+            raise KeyError(errormsg)
+        res = found[key]
+        places = res.by(by) if by is not None else {location or 'total':res}
+        for place,sub in places.items():
+            vals = sub.values[:, 1:] # The steps, after the start
+            n = vals.shape[1]//steps
+            if sub.kind == 'flow':
+                periods = vals[:, :n*steps].reshape(len(vals), n, steps).sum(axis=2)
+            else:
+                periods = vals[:, steps-1:n*steps:steps]
+            ends = np.array(sub.timevec)[1:][steps-1:n*steps:steps]
+            for q,qvals in zip(quantiles, np.quantile(periods, quantiles, axis=0)):
+                rows.append(pd.DataFrame(dict(target=target, location=str(place), target_end_date=ends, output_type='quantile', quantile=q, value=qvals)))
+    return pd.concat(rows, ignore_index=True)

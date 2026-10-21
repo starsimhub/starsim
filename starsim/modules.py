@@ -504,7 +504,10 @@ class Module(Base):
         calling function (which is almost always a module's `__init__()` method)
         """
         if inherit: # Merge with existing
-            self.pars.update(**kwargs, create=True)
+            given = {k:v for k,v in kwargs.items() if isinstance(v, ss.par)} if getattr(self, 'graph', None) is None else {} # In a module written as code, a parameter given as ss.par (e.g. with bounds, to be fitted) is kept as one, and its code uses the value, as for update_pars()
+            self.pars.update(**{k:(v.value if k in given else v) for k,v in kwargs.items()}, create=True)
+            if given:
+                self.pars.update(**given)
             self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
         else: # Or overwrite
             self.pars = ss.Pars(**kwargs)
@@ -674,7 +677,6 @@ class Module(Base):
     def define_results(self, *args):
         """ Add results to the module """
         auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate an n_<name> result
-        own = ss.utils.getframe(1).f_globals.get('__name__', '').startswith('starsim.') # Defined by Starsim's own classes (e.g. ss.Delivery), so not checked by sim.check_time_index()
         for arg in args:
             if isinstance(arg, (list, tuple)):
                 result = ss.Result(*arg)
@@ -691,8 +693,6 @@ class Module(Base):
                 msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the state "{result.name[2:]}".'
                 raise ValueError(msg)
             self.results += result
-            if own:
-                self.setattribute('_starsim_results', getattr(self, '_starsim_results', set()) | {result.name})
         return
 
     @required()

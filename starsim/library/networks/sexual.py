@@ -20,7 +20,6 @@ class MSMNet(ss.SexualNetwork):
     """
     def __init__(self, pars=None, dur=_, debut=_, acts=_, participation=_, **kwargs):
         super().__init__()
-        ss.networks.check_duration(self, pars, kwargs)
         self.define_pars(
             dur = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)),
             debut = ss.normal(loc=16, scale=2),

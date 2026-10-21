@@ -253,9 +253,14 @@ class AgentSIS(ss.Infection):
     def step_state(self):
         """ Progress infectious -> recovered """
         recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
-        self.infected[recovered] = False
-        self.susceptible[recovered] = True
+        self.clear_infection(recovered)
         self.update_immunity()
+        return
+
+    def clear_infection(self, uids):
+        """ Clear the infection, on recovery or cure (e.g. by `ss.treat()`): the agents are susceptible again """
+        self.infected[uids] = False
+        self.susceptible[uids] = True
         return
 
     def make_naive(self, uids, skip_states=None):

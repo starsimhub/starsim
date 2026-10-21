@@ -389,6 +389,66 @@ def test_behavior_solvers():
     return ode
 
 
+
+# %% Code beside a declared model
+
+class Watch(ss.Analyzer):
+    """ An analyzer that only reads a count, saying nothing about solvers """
+    def init_post(self):
+        super().init_post()
+        self.seen = []
+        return
+
+    def step(self):
+        self.seen.append(self.sim.diseases.sir.I.n)
+        return
+
+
+class NumpySIS(ss.Module):
+    """ An ODE of its own, in plain NumPy, with Euler steps of a day """
+    def init_post(self):
+        super().init_post()
+        self.y = np.array([0.99, 0.01])
+        return
+
+    def step(self):
+        S, I = self.y
+        flow = (0.3*S*I - 0.1*I)*self.t.dt.days
+        self.y = np.array([S - flow, I + flow])
+        return
+
+
+class Tagger(ss.Intervention):
+    """ An intervention written as code, which works on agents """
+    def step(self):
+        return self.sim.diseases.sir.S.uids
+
+
+def test_coded_beside():
+    sc.heading('Testing that code beside a declared model does not change its solver unless it needs agents')
+    alone = corpus.sir(unit='day').run()
+    assert alone.solver == 'ode'
+
+    # An analyzer that reads counts, or a NumPy ODE of its own, runs beside the compartments, and the declared model's results are unchanged
+    watched = corpus.sir(unit='day', analyzers=Watch()).run()
+    assert watched.solver == 'ode', f'An analyzer changed the solver to {watched.solver}'
+    assert np.array_equal(watched.results.sir.n_I.values, alone.results.sir.n_I.values)
+    assert np.allclose(watched.analyzers.watch.seen, alone.results.sir.n_I.values[:len(watched.analyzers.watch.seen)])
+    numpy = corpus.sir(unit='day', connectors=NumpySIS()).run()
+    assert numpy.solver == 'ode' and np.array_equal(numpy.results.sir.n_I.values, alone.results.sir.n_I.values)
+    assert numpy.connectors.numpysis.y[1] > 0.5 # Its own model ran (to near 1 - 0.1/0.3)
+
+    # Code that says it needs agents, and an intervention written as code, make the model run as agents
+    class Agentish(Watch):
+        compartmental = False
+    for mod in [Agentish(), Tagger()]:
+        sim = corpus.sir(unit='day', n_agents=2000, **{'analyzers' if isinstance(mod, ss.Analyzer) else 'interventions':mod}).init()
+        assert sim.solver == 'abm', f'{type(mod).__name__} should need agents'
+    with pytest.raises(ss.CapabilityError):
+        corpus.sir(unit='day', interventions=Tagger(), solver='ode').init()
+    return numpy
+
+
 if __name__ == '__main__':
     T = sc.timer()
     for row in guesses:

@@ -19,48 +19,6 @@ func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'expit', 'minimum'
 comparisons = {ast.Lt:'<', ast.LtE:'<=', ast.Gt:'>', ast.GtE:'>='}
 
 
-def quantity(val, kind=None):
-    """ A value from the model spec: a typed quantity, a distribution, a value by stratum, or a plain number """
-    if isinstance(val, dict):
-        if val.get('type') == 'peract': # A probability per act: one value, or one for each direction
-            items = {k:quantity(v) for k,v in val.items() if k != 'type'}
-            return ss.peract(items['value']) if 'value' in items else ss.peract(**items)
-        elif 'type' in val:
-            unit = val['unit']
-            if unit is None:
-                return val['value']
-            if val['type'] == 'dur':
-                return getattr(ss, f'{unit}s')(val['value'])
-            prefix = '' if val['type'] == 'per' else val['type']
-            return getattr(ss, f'{prefix}per{unit}')(val['value'])
-        elif 'dist' in val:
-            pars = {k:quantity(v) for k,v in val.items() if k != 'dist'}
-            return getattr(ss, val['dist'])(**pars)
-        elif 'timeseries' in val:
-            times = list(val['timeseries'].keys())
-            values = [quantity(v) for v in val['timeseries'].values()]
-            kw = dict(period=quantity(val['period'])) if 'period' in val else {}
-            return ss.timeseries(dict(zip(times, values)), mode=val['mode'], **kw)
-        elif 'by' in val:
-            dims = val['by']
-            if 'array' in val:
-                return ss.by(val['array'], dims=dims)
-            elif 'table' in val:
-                return ss.by({col:quantity(v) for col,v in val['table'].items()})
-            elif 'values' in val:
-                return ss.by(**{dims[0]:quantity(val['values'])})
-            return ss.by(**{dim:quantity(v) for dim,v in val['product'].items()})
-        elif 'keyed' in val: # Values by label, e.g. ss.by(sex=dict(female=..., male=...))
-            return {k:quantity(v) for k,v in val['keyed'].items()}
-        elif 'seasonal' in val:
-            fields = val['seasonal']
-            return ss.seasonal(mean=quantity(fields['mean']), amplitude=fields['amplitude'], peak=fields['peak'])
-        unknown(f'the value {val}')
-    elif isinstance(val, list):
-        return [quantity(v) for v in val]
-    return val
-
-
 def unknown(what):
     errormsg = f'ss.load() cannot yet read {what} from a model spec'
     raise NotImplementedError(errormsg)
@@ -162,7 +120,7 @@ class Code(str):
 
 
 def code_value(val):
-    """ The Python for a value in the model spec: the inverse of quantity() """
+    """ The Python for a value in the model spec """
     if isinstance(val, Code):
         return str(val)
     elif isinstance(val, ss.by) and val.array is not None:

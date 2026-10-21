@@ -199,8 +199,6 @@ class Stay:
 
 stay = Stay()
 
-rest_stay = False # Pending a decision (03 Q1): whether branch probabilities out of a state that sum below 1 leave the rest in the state, guessed and printed (True), or are an error that suggests ss.stay (False)
-
 
 #%% Transitions
 

@@ -390,8 +390,8 @@ class Compartmental(Engine):
                 if apart and (stays or any(tr.where is None or self.dwells[tr.name].fixed for tr in staged)):
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" (unless each is for other people, by where=)')
                 tracks += [Bunch(tr=tr, p=None, immediate=False, apart=apart) for tr in (staged or [None])]
-            if exits.held: # People who stay, with no exit of their own: the rest of the branches (p=None), or those who took ss.stay (p=0, entered only from the split)
-                tracks.append(Bunch(tr=None, p=None if exits.stay else ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
+            if exits.held: # People who took ss.stay, with no exit of their own (p=0, entered only from the split)
+                tracks.append(Bunch(tr=None, p=ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
             for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
                 if tr.trigger.outcome: # Moved when the outcome happens: see ss.interventions.trigger_moves()
                     continue

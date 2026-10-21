@@ -327,18 +327,13 @@ class Disease(ss.Module):
         self.check_declared('diagram()')
         return self.graph.diagram(format=format, **kwargs)
 
-    def solvers(self, output=False, **kwargs):
-        """ Which solvers can run this disease, before anything runs: see `ss.Sim.solvers()`; keyword arguments go to the sim """
-        return ss.Sim(self, verbose=0, **kwargs).solvers(output=output)
-
     def R0(self, matrix=False):
         """
         The basic reproduction number, from the next-generation matrix at the disease-free state
 
         The model is laid out as an ODE: if the disease is in a sim, a copy of that sim
-        is made with `solver='ode'`; otherwise a sim with the disease alone, under
-        homogeneous mixing (so use `sim.R0()` for a disease with a contact matrix or
-        places). Values that vary in time are taken at the start.
+        is made with `solver='ode'`, with its mixing and stratification; otherwise a sim with
+        the disease alone, under homogeneous mixing. Values that vary in time are taken at the start.
 
         This is the largest eigenvalue of the next-generation matrix. Where infection
         passes through a vector (people infect mosquitoes, which infect people), each
@@ -1392,8 +1387,7 @@ class SIR(Disease):
         p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
 
-    The Starsim 3 names `susceptible`, `infected`, and `recovered` are aliases of
-    `S`, `I`, and `R` for this release. Starsim 3's `ss.SIR`, with its lognormal
+    Starsim 3's `ss.SIR`, with its lognormal
     `dur_inf` and `p_death=0.01`, is `ssl.AgentSIR`, written as code.
 
     **Example**:
@@ -1414,10 +1408,6 @@ class SIR(Disease):
         super().__init__(pars, **library_kwargs(type(self), kwargs))
         return
 
-    susceptible = property(lambda self: self.S)
-    infected    = property(lambda self: self.I)
-    recovered   = property(lambda self: self.R)
-
 
 class SEIR(Disease):
     """
@@ -1434,8 +1424,6 @@ class SEIR(Disease):
     As in `ss.SIR`, each duration is exponential unless a distribution is given, and
     nobody dies of the infection unless `p_death` is given.
 
-    The Starsim 3 names `susceptible`, `exposed`, `infectious`, and `recovered` are
-    aliases of `S`, `E`, `I`, and `R` for this release, and `infected` is `E | I`.
     Starsim 3's `ss.SEIR`, with its lognormal durations and `p_death=0.01`, is
     `ssl.AgentSEIR`, written as code.
     """
@@ -1454,11 +1442,6 @@ class SEIR(Disease):
         super().__init__(pars, **library_kwargs(type(self), kwargs))
         return
 
-    susceptible = property(lambda self: self.S)
-    exposed     = property(lambda self: self.E)
-    infectious  = property(lambda self: self.I)
-    recovered   = property(lambda self: self.R)
-    infected    = property(lambda self: self.E | self.I)
 
 
 class SIS(Disease):
@@ -1473,8 +1456,7 @@ class SIS(Disease):
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 10 years; a number is in years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
 
-    The Starsim 3 names `susceptible` and `infected` are aliases of `S` and `I` for
-    this release. Starsim 3's `ss.SIS` had a lognormal `dur_inf` and a per-agent
+    Starsim 3's `ss.SIS` had a lognormal `dur_inf` and a per-agent
     immunity level, boosted by each infection and waning over time (`waning=`,
     `imm_boost=`), which has no declared form; that model, written as code, is
     `ssl.AgentSIS`.
@@ -1487,15 +1469,8 @@ class SIS(Disease):
     standard_results = True
 
     def __init__(self, pars=None, **kwargs):
-        immunity = [key for key in ['waning', 'imm_boost'] if key in kwargs or key in (pars or {})]
-        if immunity:
-            raise ss.UnknownParameter(f'ss.SIS has no {sc.strjoin(immunity)}: Starsim 3\'s SIS had a per-agent immunity level that waned, which has no declared form.\n'
-                             f'     For that model, written as code, use ssl.AgentSIS({immunity[0]}=...); for immunity as a state, declare an SIRS, e.g. ss.Disease(infection=ss.transmission("S -> I", beta=0.05), recovery=ss.progression("I -> R", dur=10), waning=ss.progression("R -> S", dur=20)).')
         super().__init__(pars, **library_kwargs(type(self), kwargs))
         return
-
-    susceptible = property(lambda self: self.S)
-    infected    = property(lambda self: self.I)
 
 
 def library_kwargs(cls, kwargs):

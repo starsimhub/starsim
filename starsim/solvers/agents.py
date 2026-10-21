@@ -1729,10 +1729,6 @@ class Agents(Engine):
                 else: # Nobody waits in this branch, beyond a minimum stay
                     best[chosen] = self.after_of(tr) or -np.inf
                 which[chosen] = i
-        if branches and exits.stay: # The rest stay: no exit scheduled
-            rest = which < 0
-            best[rest] = np.inf
-            which[rest] = -2
         for i,tr in enumerate(exits.timed, start=len(branches)): # Competing dwell times: the earliest wins
             dur = self.sample_dwell(tr, new) + self.after_of(tr)
             earlier = (dur < best) | (which < 0) # A dwell that does not end until its rate changes (e.g. outside a where=) is still this exit's, so it can be rescaled

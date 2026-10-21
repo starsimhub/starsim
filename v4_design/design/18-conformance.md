@@ -22,7 +22,7 @@ An implementation can be complete in stages. Each level includes the ones before
 |---|---|
 | **Core** | Objects ([01](01-objects.md)), types ([02](02-types.md)), states and transitions ([03](03-states-and-transitions.md)), parameters ([04](04-parameters.md)), the ordered loop ([10](10-execution.md)), the model spec ([14](14-model-spec.md)), errors as classes ([15](15-errors.md)), and `solver='abm'` |
 | **Compartmental** | `solver='ode'` and `'auto'`; mixing pools and contact matrices; Erlang stages; `equations()`; states that are not people |
-| **Stochastic** | `'gillespie'` (with tau-leaping as its noted fallback for a run of too many events) and `'binomial'`; `ss.MultiSim` for many runs; extinction reporting |
+| **Stochastic** | `'gillespie'` (with tau-leaping as its noted fallback for a run of too many events) and `'binomial'`; `ss.MultiSim` for many runs |
 | **Structured** | Stratification ([05](05-dimensions.md)), `ss.modify` and conditions ([07](07-effects.md)), interventions ([08](08-interventions.md)), results and data ([09](09-results.md)) |
 | **Spatial** | Patches, mobility models, commuting, geography |
 | **Inference** | Calibration, sensitivity, and model comparison ([13](13-inference.md)) |
@@ -80,7 +80,7 @@ For every approximation in [12-backends.md](12-backends.md#the-standard-approxim
 - with an explicit solver and `approx=False`, the same request raises `ss.CapabilityError` naming the piece and the approximation that would have been used;
 - with `solver='auto'` and `approx=False`, the dwell-time model runs as agents, where the dwell time is sampled directly;
 - with `verbose=0` nothing is printed, and the note is still kept in `sim.notes`;
-- `sim.solvers()` shows `approx` for that ingredient under that solver, before anything is run;
+- `sim.describe()` shows `approx` for that ingredient, before anything is run;
 - a distribution on `beta` or `rel_sus` runs as agents under `'auto'`, and under an explicit `solver='ode'` uses the mean and says so.
 
 For the things with no approximation (contact tracing, transmission trees, agent-only custom code), a compartmental solver raises `ss.CapabilityError` with a message in the shape [15-errors.md](15-errors.md) asks for.

@@ -552,7 +552,7 @@ def test_mixing():
     mixing = ss.contacts(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]])
     sims = sc.objdict({solver:run(make(), solver, networks=mixing, total_pop=10_000, dt=0.1, stop=20) for solver in solvers})
     res = sims.ode.results.sir
-    assert sims.ode.strats[0].kind == 'plain'
+    assert sims.ode.groups.strats[0].kind == 'plain'
     attack = {(a,l):res.n_R.select(age=a, location=l)[-1]/res.n_S.select(age=a, location=l)[0] for a in ['young', 'old'] for l in ['urban', 'rural']}
     assert attack['old', 'urban'] > attack['young', 'urban'] # Old people have more contacts
     assert np.isclose(attack['young', 'urban'], attack['young', 'rural']) # The two kinds of place mix alike and are seeded as their people are split, so they end alike (before, a strict > held by a rounding error)
@@ -673,10 +673,10 @@ def test_ragged():
         return sir
     sims = sc.objdict({solver:run(make(), solver, unit='day', stop=150, total_pop=100_000) for solver in solvers})
     ode = sims.ode
-    assert np.all(ode.group_levels[ode.group_coords[:, 0] == 1, 1] == -1) # Men have no age group
+    assert np.all(ode.groups.group_levels[ode.groups.group_coords[:, 0] == 1, 1] == -1) # Men have no age group
     res = ode.results.sir
     start = at_start(ss.Sim(make(), unit='day', stop=150, total_pop=100_000, **kw)).sir
-    split = next(strat for strat in ode.strats if strat.name == 'age').split
+    split = next(strat for strat in ode.groups.strats if strat.name == 'age').split
     assert np.isclose(start.n_I.select(sex='male')[0], 50_000*(split @ [0.004, 0.002, 0.001, 0.0]), rtol=0.01) # A value for each age group is, for men, the mean over them, weighted by the split
     assert np.allclose(res.n_R.by('age').values.sum(axis=1), res.n_R.select(sex='female').values) # Selecting an age group selects women only
     for solver in ['binomial', 'abm']:
@@ -694,8 +694,8 @@ def test_ragged():
     # A dimension within a ragged one, set on the sim; contacts by a ragged dimension have no level for the others to mix as
     sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.2), recovery=ss.progression('I -> R', dur=10), init=dict(I=0.001), name='sir')
     sim = ss.Sim(sir, stratify=[dict(sex=['female', 'male']), dict(age=[15, 25, 35, 50], where=dict(sex='female')), dict(parity=['0', '1+'], split=[0.4, 0.6], where=dict(age=['25-34', '35-49']))], total_pop=10_000, unit='day', stop=50, **kw).run()
-    split = next(strat for strat in sim.strats if strat.name == 'age').split
-    assert (sim.group_levels[:, 2] >= 0).sum() == 4 and np.isclose(sim.results.sir.n_S.by('parity').values[0].sum(), 5_000*split[1:3].sum(), rtol=0.01) # Women aged 25 to 49
+    split = next(strat for strat in sim.groups.strats if strat.name == 'age').split
+    assert (sim.groups.group_levels[:, 2] >= 0).sum() == 4 and np.isclose(sim.results.sir.n_S.by('parity').values[0].sum(), 5_000*split[1:3].sum(), rtol=0.01) # Women aged 25 to 49
     with pytest.raises(ss.PartialStratificationMixing):
         ss.Sim(make(), networks=ss.contacts([[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]], bands=[15, 25, 35, 50]), **kw).init()
     with pytest.raises(ss.PartialStratificationMixing): # So do contacts by a dimension that the infectious state does not have
@@ -1077,7 +1077,7 @@ def test_sex():
             assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
         sim.run()
         ppl = sim.people
-        strat = sim.strats[0]
+        strat = sim.groups.strats[0]
         women = ppl[strat.attr].raw[ppl.auids] == strat.female
         assert np.array_equal(women, ppl.female.raw[ppl.auids]), f'{kw}: the levels of sex disagree with people.female'
         assert sim.results.si.n_S.select(**{strat.name: strat.labels[strat.female]})[-1] == (ppl.female & sim.diseases.si.S).sum()

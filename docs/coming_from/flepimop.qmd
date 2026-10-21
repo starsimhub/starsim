@@ -121,7 +121,7 @@ These are from Starsim's switching demo for flepiMoP users (`tests/switching/tes
 | Fit one value per place: `Ro` by county, fitted to weekly hospitalizations by county with a Poisson likelihood | **Works**: `sim.new(pars=dict(Ro=ss.par(ss.by(subpop=[2.2, 2.2, 2.2]), bounds=[1, 4])))` and `calibrate()`; the fitted values are within 5% of the true ones. Data by place are a long table with a `subpop` column |
 | A Poisson likelihood on data that are not whole numbers (an ODE's output) | **Works**: the likelihood is finite |
 | Runs that each draw their parameters from their priors | **Works**: `ss.parallel(sim, n_runs=, priors=True)` |
-| A hub submission: 23 quantiles by location, target, and week | **Works**: `msim.to_hub(targets=..., by='subpop', every='week')`, below |
+| A hub submission: 23 quantiles by location, target, and week | **Works**: `ss.interop.to_hub(msim, targets=..., by='subpop', every='week')`, below |
 | Scenarios from the configuration | **Works**: `sim.imported.scenarios` gives each scenario's modifiers, as `ss.modify` interventions |
 | Fits by NUTS with gradients through the run | **Works**: on flepiMoP's California and New York benchmark (four parameters, a value for each state in two periods, fitted to six weekly series), NUTS took 70 s on 4 cores against 283 s for flepiMoP's emcee run on 10 cores, with estimates within 1.5% of the truth (measured on 17 October 2026, with each state's values written into the rate) |
 | Batch jobs on a cluster, R post-processing | **Not planned**: Starsim runs in one process on many cores |
@@ -140,7 +140,7 @@ seir.stratify(patch=list(pop.keys()), split=list(pop.values()), mobility=ss.Mobi
 sim = ss.Sim(seir, total_pop=sum(pop.values()), start='2020-02-01', stop='2020-08-31', verbose=0)
 
 msim = ss.parallel(sim, n_runs=20, priors=True) # Each run draws its own Ro
-hub = msim.to_hub(targets=dict(infection='inc inf'), by='patch', every='week')
+hub = ss.interop.to_hub(msim, targets=dict(infection='inc inf'), by='patch', every='week')
 hub.head()
 ```
 

@@ -88,13 +88,13 @@ sim.plot()
 
 ## Choosing a solver
 
-The same model can be run in several ways. With a network of individual contacts, as above, it runs as agents. Without a network, everyone mixes with everyone else, and Starsim solves it as an ODE by default. You can also ask for a particular solver with `solver=`: `'ode'`, `'binomial'` (a stochastic compartmental model), `'gillespie'` (exact continuous-time events), or `'abm'` (agents). `sim.solvers()` shows which solvers can run a model, and `sim.new()` makes a copy of a sim with something changed:
+The same model can be run in several ways. With a network of individual contacts, as above, it runs as agents. Without a network, everyone mixes with everyone else, and Starsim solves it as an ODE by default. You can also ask for a particular solver with `solver=`: `'ode'`, `'binomial'` (a stochastic compartmental model), `'gillespie'` (exact continuous-time events), or `'abm'` (agents). `sim.describe()` shows which solvers can run a model, and `sim.new()` makes a copy of a sim with something changed:
 
 ```{python}
 infection = S >> I @ ss.perday(0.3) * I # A higher beta this time
 sir = ss.Disease(infection, recovery, init_prev=0.01)
 sim = ss.Sim(sir, total_pop=5_000, start='2020-01-01', stop='2020-07-01', verbose=0)
-sim.solvers()
+sim.describe()
 
 for solver in ['ode', 'binomial', 'gillespie', 'abm']:
     s = sim.new(solver=solver).run()

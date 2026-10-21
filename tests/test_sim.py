@@ -147,11 +147,6 @@ def test_api():
     with pytest.raises(TypeError):
         ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).init()
 
-    # An override of a private phase of init() by its old name would be silently ignored
-    with pytest.raises(TypeError):
-        class MySim(ss.Sim):
-            def init_time(self): pass
-
     return s1
 
 
@@ -461,7 +456,7 @@ def test_rescale():
     rescaled = make_sim(init_inf=20, rescale=True).run()
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
-    assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized
+    assert make_sim(init_inf=20, rescale=True)._current_scale == 1 # Available before the sim is initialized
     cum_fixed = fixed.results.sir.cum_infections[-1]
     cum_rescaled = rescaled.results.sir.cum_infections[-1]
     assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
