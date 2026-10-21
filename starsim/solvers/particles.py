@@ -77,10 +77,11 @@ class Particles:
         tables = self.tables if tables is None else tables
         shares = self.shares if shares is None else shares
         rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, self.per_step, row0)
+        kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver))
         if self.n_threads > 1:
-            ss.kernels.advance_threads(self.rngs, self.progs, self.ys, self.dt, self.done, end, *rest)
+            kn.advance_threads(self.rngs, self.progs, self.ys, self.dt, self.done, end, *rest)
         else:
-            ss.kernels.advance(self.rngs, self.program, self.ys, 0, len(self.ys), self.dt, self.done, end, *rest)
+            kn.advance(self.rngs, self.program, self.ys, 0, len(self.ys), self.dt, self.done, end, *rest)
         self.done = end
         return
 

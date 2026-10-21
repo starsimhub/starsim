@@ -142,7 +142,7 @@ class Engine:
         self.immune_states = []
         self.cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
         self.kernel_rng = None # The random numbers of a run stepped by the kernels: see init_program()
-        ss.kernels.announce(verbose=sim.pars.get('verbose', 0)) # A mock sim, e.g. for equations(), runs nothing
+        self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
         return
 
     def shrink(self):

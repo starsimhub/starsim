@@ -13,12 +13,14 @@ value per group. Everything else is a number per group that Python sets once a s
 
 import os
 import sys
+import importlib
 import ctypes
 import contextlib
 import collections
 import multiprocessing as mp
 import numpy as np
 import numba as nb
+import sciris as sc
 import starsim as ss
 from .distributions import _GOLDEN, _MIX1, _MIX2, _U30, _U27, _U31, _U11, _U40, _INV53, _INV24
 
@@ -127,20 +129,141 @@ shift_fields = [
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
 
-jit = nb.jit(nopython=True, cache=True, error_model='numpy')
+plain = __name__ == 'starsim.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
+
+def kernel(error_model='numpy', **kwargs):
+    """ Compile a kernel with Numba (cached on disk), or leave it as plain Python in the copy that `uncompiled()` gives """
+    return (lambda func: func) if plain else nb.jit(nopython=True, cache=True, error_model=error_model, **kwargs)
+
+jit = kernel()
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
-announced = False # Whether a cold cache has been checked for, so it is said only once
 golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a random stream: see uniform()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 
 
-def announce(verbose=True):
-    """ Say when the kernels are about to be built, since the first use after installing (or changing this file) takes one or two minutes """
-    global announced
-    if verbose and not announced:
-        announced = True
-        if not run._cache._cache_file._load_index(): # Empty if there is no cache, or it is out of date
-            print('Building the solver kernels for first use (one or two minutes; once per install)')
+compile_after = 20 # The seconds that runs would take as plain Python, in a session, above which the kernels are compiled (by default: see choose())
+plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
+plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
+on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
+entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
+
+
+def uncompiled():
+    """
+    The kernels as plain Python: this module's code, run without compiling it, which gives the same results with the
+    same random numbers (Numba follows NumPy's algorithms for its draws). Much slower for a large model, but there is
+    nothing to wait for. Its entry points ignore the overflow of the random streams' integer arithmetic, as compiled
+    code does.
+    """
+    global plain_copy
+    if plain_copy is None:
+        spec = importlib.util.spec_from_file_location('starsim.plain_kernels', __file__)
+        copy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(copy)
+        for name in entries:
+            setattr(copy, name, quiet(getattr(copy, name)))
+        plain_copy = copy
+    return plain_copy
+
+
+def quiet(func):
+    """ A kernel run as plain Python, with NumPy's warnings about integer overflow off (see `uncompiled()`) """
+    def wrapper(*args, **kwargs):
+        with np.errstate(over='ignore'):
+            return func(*args, **kwargs)
+    return wrapper
+
+
+def is_compiled():
+    """ Whether the kernels are compiled already: in this session, or in Numba's cache from an earlier one (an index that is out of date reads as empty) """
+    global on_disk
+    if on_disk is None:
+        on_disk = bool(step._cache._cache_file._load_index())
+    return on_disk or bool(step.signatures)
+
+
+def plain_seconds(p, y, npts, solver):
+    """
+    About how long a run would take as plain Python, in seconds: about 20 µs a step (or, for the exact solver, an
+    event), and 0.4 µs for each group times each flow, operation, and compartment, and each pair of levels or places
+    that mix; RK4 and tau-leaping take about four times as many steps, and the exact solver about one event for
+    each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within about 2×, which is enough to
+    choose whether to compile.
+    """
+    nc, ng = y.shape
+    size = ng*(len(p.src) + len(p.ops) + nc) + len(p.exp_set)*(3*len(p.sh_val) + (p.sizes**2).sum())
+    if solver == solvers['gillespie']:
+        return y.sum()*len(p.src)*(1e-5 + 3e-7*size)
+    stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
+    return npts*stages*(2e-5 + 4e-7*size)
+
+
+def choose(seconds=0.0, verbose=True):
+    """
+    The kernels to take a run with: these, compiled by Numba, or the same code as plain Python (see `uncompiled()`)
+
+    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`), so by default
+    (`ss.options.compile = 'auto'`) a run is taken as plain Python, unless the kernels are compiled already, or the
+    runs taken that way in this session, with this one, would take longer than `compile_after` seconds (as a
+    calibration's many small runs would).
+
+    Args:
+        seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
+        verbose (bool): whether to say when the kernels are compiled for a run
+    """
+    mode = ss.options.compile
+    if mode not in ['auto', 'always', 'never']:
+        raise ValueError(f'ss.options.compile must be "auto", "always", or "never", not {mode!r}')
+    if mode == 'never':
+        return uncompiled()
+    if mode == 'always' or is_compiled():
+        return sys.modules[__name__]
+    global plain_total
+    if plain_total + seconds < compile_after:
+        plain_total += seconds
+        return uncompiled()
+    if verbose:
+        which = f'this run would take about {seconds:.0f} s' if seconds >= compile_after else f'the runs so far would take more than {compile_after} s'
+        print(f'Compiling the solver kernels, since {which} uncompiled (about a minute, once per install; ss.compile() does it ahead of time)')
+    return sys.modules[__name__]
+
+
+def compile(verbose=True):
+    """
+    Compile the kernels now (those of the compartmental solvers, and the passes over the agents), so that no run waits for them: e.g. in a Docker image, in CI, or before a calibration
+
+    Compiling takes about a minute, once per install (and after an upgrade); the result is kept in Numba's cache,
+    beside the package (or, if that cannot be written to, in the user's cache folder, or in `NUMBA_CACHE_DIR` if it
+    is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.compile`.
+
+    **Example**:
+
+        ss.compile()
+    """
+    T = sc.timer()
+    if verbose:
+        print('Compiling the solver kernels (about a minute)...')
+    def make(solver='binomial'):
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
+        return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
+    with ss.options.context(compile='always'):
+        make().run() # A whole run, in one call: run(), which has every solver's code
+        make().run(until=1) # A run taken a step at a time: one_step()
+        sim = make().init()
+        engine = sim.diseases[0].engine
+        engine.init_program()
+        engine.run_many([0, 1]) # An ensemble: run_many()
+        for n in [1, 2]: # The particles of a particle filter: advance(), and advance_threads()
+            engine.restart()
+            ss.solvers.Particles(engine, n, np.random.default_rng()).advance(2)
+        y, p = engine.y.copy(), engine.program # And those called on their own
+        apply_events(engine.make_rng(), y, engine.register, 0, True)
+        apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
+        settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
+    make('abm').run() # The passes over the agents, which are kept in the same cache (so they are compiled again whenever this file changes)
+    if verbose:
+        print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
 
 
@@ -473,7 +596,7 @@ def draw(rng, y, p, w, dt, flows, tau):
     return
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def sum_exposures(expo, e, s):
     """ The sum of the -s exposures before exposure e, added in order (an exposure whose set is negative, see `Program`) """
     v = expo[e+s]
@@ -568,7 +691,7 @@ def place_rates(ys, p, a, b, rates, stack, expo):
     return
 
 
-@nb.jit(nopython=True, cache=True, inline='always') # Inlined, as it is called for every event of the exact solver by place
+@kernel(error_model='python', inline='always') # Inlined, as it is called for every event of the exact solver by place
 def splitmix(z):
     """ The mixing function of SplitMix64, which turns a counter into random bits (as `ss.distributions.hash_uniforms()` does for agents) """
     z = (z ^ (z >> np.uint64(30)))*np.uint64(0xbf58476d1ce4e5b9)
@@ -576,7 +699,7 @@ def splitmix(z):
     return z ^ (z >> np.uint64(31))
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def uniform(z):
     """ A number uniform on (0, 1) from the counter of a random stream (SplitMix64), which the caller moves on by `golden` before each number """
     return (float(splitmix(z) >> np.uint64(11)) + 0.5)/9007199254740992.0
@@ -728,7 +851,7 @@ def sparse_maps(p, nc):
     return cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def add_key(keys, n, key):
     """ Put a key into the first n of a sorted array, in order; returns the new number of keys """
     m = n
@@ -739,7 +862,7 @@ def add_key(keys, n, key):
     return n + 1
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def drop_key(keys, n, key):
     """ Take a key out of the first n of a sorted array; returns the new number of keys """
     m = np.searchsorted(keys[:n], key)
@@ -1119,7 +1242,7 @@ def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows, 
     return
 
 
-@nb.jit(nopython=True, cache=True, error_model='numpy', inline='always') # Inlined, and given the program's src, det, and inflow rather than the program, since it is called for every flow and group at each event, and passing the program costs (even inlined) far more than the arithmetic
+@kernel(inline='always') # Inlined, and given the program's src, det, and inflow rather than the program, since it is called for every flow and group at each event, and passing the program costs (even inlined) far more than the arithmetic
 def propensity(y, src, det, inflow, rates, f, g):
     """ The rate at which events of a flow happen in a group: per member of its source compartment, or in total for an inflow """
     s = src[f]
@@ -1820,7 +1943,7 @@ def set_step(parts, ti, tables):
 
 
 @jit
-def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step=1, start=0):
+def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step, start):
     """
     Take every step of a run, or the steps from time point `start` on
 
@@ -1943,7 +2066,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
     return
 
 
-inline_step = nb.jit(nopython=True, cache=True, error_model='numpy', inline='always')(step.py_func) # step(), compiled into advance() rather than called from it, since a call that is passed the program costs as much as a small step
+inline_step = step if plain else kernel(inline='always')(step.py_func) # step(), compiled into advance() rather than called from it, since a call that is passed the program costs as much as a small step
 
 
 @jit
@@ -2012,7 +2135,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
     return
 
 
-@nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
+@kernel(parallel=True)
 def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
     """ `advance()` for every run, with the runs shared between threads: one program for each thread (progs, a typed list of copies), since a step changes the parts of it that vary in time """
     k = len(progs)
@@ -2086,7 +2209,7 @@ def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust
 # (in ss.parallel() or a calibration's workers, which run with one thread) never starts Numba's threads. Counts are
 # whole numbers and lists of agents are kept in order, so the results do not depend on the number of threads.
 
-pjit = nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
+pjit = kernel(parallel=True)
 min_threaded = 200_000 # The smallest population whose passes are threaded: below it, starting the threads costs more than they save
 chunk_size = 65_536 # The fewest agents a thread takes at a time
 

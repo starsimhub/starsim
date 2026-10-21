@@ -128,6 +128,7 @@ t('conditions')
 from . import conditions
 from .conditions import state, child # Conditions on a state by path, and on a mother when her child goes through an event
 from . import kernels
+from .kernels import compile # Compile the solver kernels ahead of time
 
 t('transitions')
 from .expressions import par, mother, attr

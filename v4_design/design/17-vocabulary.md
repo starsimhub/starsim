@@ -103,9 +103,9 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | **`ss.Vaccine`** **`ss.Diagnostic`** **`ss.Treatment`** | Products: nouns for things (Starsim 3's `ss.Vx`, `ss.Dx`, `ss.Tx` remain only as base classes for products written as code, not as aliases; `ss.Diagnostic` was `ss.Test`, renamed so that no product and delivery differ only by case) |
 | **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** | Deliveries: verbs (`ss.Delivery` with no product is a step people attend, a visit) |
 
-### Running, comparing, saving: 6
+### Running, comparing, saving: 7
 
-`ss.MultiSim` (several runs of a sim, or several sims, whose results have a run dimension), `ss.parallel` (run them in parallel: `ss.parallel(sim, n_runs=100)` for replicates, with `sim.run(n_runs=100)` as its shortcut, and `ss.parallel(baseline=..., vaccine=...)` for scenarios), `ss.options` (Starsim's global options; `ss.options.crn = False` turns common random numbers off), **`ss.diff`** (what differs between two models), `ss.load` (a sim saved by `ss.save`, or a model in another framework's format), `ss.save` (a sim with its results, or a model as code with `ss.save('model.py', sim)`, or in another format).
+`ss.MultiSim` (several runs of a sim, or several sims, whose results have a run dimension), `ss.parallel` (run them in parallel: `ss.parallel(sim, n_runs=100)` for replicates, with `sim.run(n_runs=100)` as its shortcut, and `ss.parallel(baseline=..., vaccine=...)` for scenarios), `ss.options` (Starsim's global options; `ss.options.crn = False` turns common random numbers off), **`ss.diff`** (what differs between two models), `ss.load` (a sim saved by `ss.save`, or a model in another framework's format), `ss.save` (a sim with its results, or a model as code with `ss.save('model.py', sim)`, or in another format), **`ss.compile`** (compile the compartmental solvers' kernels ahead of time, e.g. in a Docker image or before a calibration; until then, small runs are taken uncompiled, with the same results).
 
 ### Types you get back or subclass: 5
 
@@ -143,11 +143,11 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Parameter forms | 3 | 3 |
 | Mixing and space | 10 | 5 |
 | Interactions and interventions | 9 | 9 |
-| Running, comparing, saving | 6 | 1 |
+| Running, comparing, saving | 7 | 2 |
 | Types you get back or subclass | 5 | 0 |
-| **`ss.` names** | **101** | **38** |
+| **`ss.` names** | **102** | **39** |
 | Methods and attributes | 43 | 28 |
-| **Total** | **144** | **66** |
+| **Total** | **145** | **67** |
 
 <!-- counts end -->
 

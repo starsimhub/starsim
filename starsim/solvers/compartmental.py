@@ -437,7 +437,7 @@ class Compartmental(Engine):
                 self.flowcounts[name] = 0.0
             self.forced = dict()
         if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
-            self.check_short(ss.kernels.apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
+            self.check_short(self.kernels().apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
         self.record_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
@@ -447,6 +447,7 @@ class Compartmental(Engine):
         """ Go back to the start of the run, with the current values of the parameters and the seed: see `ss.Sim.restart()` """
         self.rng = self.make_rng()
         self.kernel_rng = self.make_rng(stream=1)
+        self.compiled = None
         self.cache.clear()
         self.y = np.zeros((self.n_comps, self.n_groups))
         self.init_post()
@@ -1809,6 +1810,19 @@ class Compartmental(Engine):
         self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables() if tables else None
 
+    def kernels(self, runs=1):
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
+        if runs == 1 and self.compiled is not None:
+            return ss.kernels if self.compiled else ss.kernels.uncompiled()
+        sim = self.sim
+        if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
+            return ss.kernels.choose(verbose=False)
+        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, self.mod.t.npts, solver), verbose=sim.pars.get('verbose', 0))
+        if runs == 1:
+            self.compiled = kn is ss.kernels
+        return kn
+
     def init_shifts(self):
         """ The deliveries that the kernels take in a whole run (see `ss.Delivery.tabulated`), as arrays: see `ss.kernels.Shifts` """
         sim = self.sim
@@ -1844,7 +1858,7 @@ class Compartmental(Engine):
         else:
             args, tables = self.run_args()
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
-            out = ss.kernels.run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step())
+            out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
@@ -1925,11 +1939,12 @@ class Compartmental(Engine):
         length = max(int(part_bytes//per_point)//every, 1)*every # Steps per part: whole rows, so each part ends at the end of one
         short = 0.0
         start = 0
+        kn = self.kernels()
         while start < npts - 1:
             end = min(start + length, npts - 1)
             tally = np.zeros((end + 1 - start, len(self.shifts.to), 2, self.n_groups))
             tables = self.tables(start, end) # Only for these steps, since by group at every step they can be large
-            y, stocks, flows, more = ss.kernels.run(rng, y, program, dt, end + 1, solver, n_sub, *tables, self.register, self.shifts, tally, self.per_step(), start)
+            y, stocks, flows, more = kn.run(rng, y, program, dt, end + 1, solver, n_sub, *tables, self.register, self.shifts, tally, self.per_step(), start)
             short += more
             last = end == npts - 1
             for k,mod in enumerate(self.deliveries):
@@ -2012,7 +2027,7 @@ class Compartmental(Engine):
         tally = np.zeros((self.mod.t.npts, len(sh.to), 2, self.n_groups))
         for ti in np.flatnonzero(sh.due.any(axis=0)):
             if ti < len(stocks) - 1: # No step follows the last time point
-                ss.kernels.apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti]) # Expected numbers, so nothing is drawn
+                self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti]) # Expected numbers, so nothing is drawn
         for k,mod in enumerate(self.deliveries):
             mod.compartments.store_shifts(tally[:, k])
         return
@@ -2058,9 +2073,10 @@ class Compartmental(Engine):
         per_step = self.per_step()
         length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*per_step*ng*8)), 1) # Steps per part, so the tables of values that vary in time (by group, at every step) are not all held at once
         start = 0
+        kn = self.kernels(runs=n_runs)
         while True:
             end = min(start + length, npts - 1)
-            ss.kernels.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
+            kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
                                 tally, tally_g, state_of, np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
             if end >= npts - 1:
                 break
@@ -2257,11 +2273,12 @@ class Compartmental(Engine):
         dt = self.dt
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
         tables, row = self.step_tables(dt, smooth=solver != 'euler') # Euler holds values that vary in time for the step
-        self.y, flows = ss.kernels.one_step(self.kernel_rng, self.y, self.program, dt, ss.kernels.solvers[solver], self.substeps(), tables, row)
+        kn = self.kernels()
+        self.y, flows = kn.one_step(self.kernel_rng, self.y, self.program, dt, ss.kernels.solvers[solver], self.substeps(), tables, row)
         if self.sim.mixing.register is not None: # The events dated at the end of the step
-            self.check_short(ss.kernels.apply_events(self.kernel_rng, self.y, self.register, self.mod.ti + 1, self.integer))
+            self.check_short(kn.apply_events(self.kernel_rng, self.y, self.register, self.mod.ti + 1, self.integer))
         if solver == 'gillespie' and self.program.local and self.program.has_det: # By place, the counts are settled after the events, as in SimInf
-            ss.kernels.settle_places(self.y, self.program, dt, flows)
+            kn.settle_places(self.y, self.program, dt, flows)
         self.record_flows(flows)
         return
 

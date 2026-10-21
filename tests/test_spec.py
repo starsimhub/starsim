@@ -128,7 +128,7 @@ vocabulary = {
     'Parameter forms': ('by timeseries seasonal', 'all'),
     'Mixing and space': ('Network RandomNet MFNet MixingPool MixingPools PartnerNet contacts geo Mobility gravity', 'PartnerNet contacts geo Mobility gravity'),
     'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
-    'Running, comparing, saving': ('MultiSim parallel options diff load save', 'diff'),
+    'Running, comparing, saving': ('MultiSim parallel options diff load save compile', 'diff compile'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
 }
 

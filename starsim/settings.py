@@ -138,6 +138,9 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
+        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if a run would take more than about 20 s uncompiled; "always" to always compile them first (about a minute, once per install); "never" for plain Python'
+        options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
+
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
