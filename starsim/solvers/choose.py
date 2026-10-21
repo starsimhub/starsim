@@ -8,18 +8,11 @@ import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents
 
-__all__ = ['solver_names', 'removed', 'integrators', 'max_seconds', 'make_engine', 'choose_solver', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons', 'count_events', 'exact_seconds']
+__all__ = ['solver_names', 'integrators', 'make_engine', 'choose_solver', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons']
 
 
-solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'abm'] # The solvers that can be asked for
-removed = dict( # Solvers of earlier versions, and what to use instead
-    sde        = 'solver="sde" (the diffusion approximation) has been removed; use solver="gillespie" for a stochastic run (it switches to tau-leaping when a run would take too many events), or solver="ode"',
-    tau        = 'solver="tau" is no longer a choice of its own; use solver="gillespie", which switches to tau-leaping when a run would take too many events (and says so)',
-    stochastic = 'solver="stochastic" has been removed; use solver="gillespie", which switches to tau-leaping when a run would take too many events (and says so)',
-    ctmc       = 'solver="ctmc" has been removed; use solver="gillespie"',
-)
+solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for
 integrators = ['rk4', 'euler'] # The schemes of the ODE
-max_seconds = 1.0 # The longest that solver="gillespie" takes events one at a time, as estimated by exact_seconds(); above it, it takes tau leaps (except by place, which is always exact)
 
 
 def make_engine(module, sim):
@@ -66,49 +59,12 @@ def choose_solver(sim):
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
     sim._resolve_path_triggers() # A trigger on another module's transition by path is its event
     sim._init_flows()
-    for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
-        for name,tr in mod.graph.transitions.items():
-            where = getattr(tr, 'where', None)
-            key = f'where_{mod.name}_{name}'
-            if where is not None and key not in pars.connectors and tr.trigger is None: # A trigger takes where= into its condition
-                if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
-                    pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
-                    pars.connectors[key].on_rate = True
-                    continue
-                if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
-                    others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
-                else: # A condition, a state, or an array
-                    others = ~ss.conditions.as_cond(where)
-                pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=others, name=key)
-                pars.connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in where=
-                level_key = f'level_{mod.name}_{name}'
-                if tr.move_from and tr.p is not None and level_key not in pars.connectors: # A branch for the people at some levels only (a move= arrow): never drawn by people at the others, who would never leave by it
-                    at = None
-                    for dim,levels in tr.move_from.items():
-                        here = None
-                        for level in levels: # At any of the levels it moves people from
-                            eq = ss.conditions.Cond('dim', dim) == level
-                            here = eq if here is None else here | eq
-                        at = here if at is None else at & here
-                    pars.connectors[level_key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=~at, name=level_key)
-    for m in list(pars.interventions.values()) + list(pars.connectors.values()): # A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted
-        if isinstance(m, ss.modify) and isinstance(m.amount, ss.par):
-            p = m.amount
-            target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
-            p.name = p.name or m.name
-            if target is not None and p.name not in target.graph.pars:
-                target.graph.pars[p.name] = p
-                target.define_pars(**{p.name:p})
+    init_where(sim)
     solver = pars.solver
-    if solver in solvers.removed:
-        raise ValueError(solvers.removed[solver])
-    elif solver not in ss.solvers.solver_names:
+    if solver not in ss.solvers.solver_names:
         errormsg = f'Unknown solver "{pars.solver}"; the choices are {sc.strjoin(ss.solvers.solver_names)}'
         raise ValueError(errormsg)
-    if pars.integrator == 'jax':
-        errormsg = 'integrator="jax" has been removed: integrator= is the scheme of the ODE ("rk4" or "euler"). JAX is used without being asked by sim.gradient(), sim.log_density(), gradient fits, and ss.parallel() with many sets of values.'
-        raise ValueError(errormsg)
-    elif pars.integrator is not None and pars.integrator not in solvers.integrators:
+    if pars.integrator is not None and pars.integrator not in solvers.integrators:
         errormsg = f'Unknown integrator "{pars.integrator}"; integrator= is the scheme of the ODE, {sc.strjoin(solvers.integrators)}'
         raise ValueError(errormsg)
     sim.unit = None # e.g. 'day'; None means time is counted in timesteps
@@ -138,9 +94,6 @@ def choose_solver(sim):
         sim.capabilities = []
         return
 
-    for mod in sim.declared: # The initial values, by now all given
-        mod.graph.guess_init()
-
     # States that nothing enters: a typo in an arrow string makes a new state
     if sim.mixing.register is None: # A register can add people to any state
         for mod in sim.declared:
@@ -167,15 +120,6 @@ def choose_solver(sim):
                     ss.note(f'running as agents: {cap.auto}', sim=sim)
         else:
             solver, reason = 'ode', 'every part of the model has a compartmental form'
-    elif solver == 'gillespie' and pars.approx is not False: # One event at a time, unless that would take too long
-        n_events, seconds = exact_seconds(sim)
-        if seconds > solvers.max_seconds:
-            solver, reason = 'tau', f'tau-leaping for solver="gillespie": an ODE run gives about {n_events:.1e} events, about {seconds:.2g} s one at a time'
-            ss.note(f'solver="gillespie" takes tau leaps: an ODE run gives about {n_events:.1e} events, which would take about {seconds:.2g} s one at a time, more than {solvers.max_seconds:n} s; tau leaps are close but biased (in 1e7 people, the peak about 0.7% high, several times the run-to-run spread), and approx=False keeps it exact', sim=sim, verbose=0 if pars.approx else None)
-        elif n_events is None:
-            reason = 'exact, by place'
-        else:
-            reason = f'exact; an ODE run gives about {sc.sigfig(n_events, 2, sep=",")} events'
     else:
         reason = 'requested'
     sim.solver = solver
@@ -223,8 +167,59 @@ def choose_solver(sim):
         pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
         pars.n_agents = sim.groups.n_groups
 
-    # A beta for each route names every route and nothing else, unless it gives a default for the routes it does not name; a route has no beta of its own
-    nets = list(sim.mixed if solver != 'abm' else pars.networks.values())
+    check_routes(sim)
+
+    for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
+        for p in mod.graph.all_pars():
+            if isinstance(p.raw, ss.by) and not set(p.raw.dims) & {strat.name for m in sim.declared for strat in m.graph.derived}: # Not by a derived attribute's levels, which add no groups
+                p.raw.check(sim)
+    # The notes on what was chosen, kept in sim.notes whatever the verbosity
+    if sim.unit_source:
+        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.UnitInferred, sim=sim)
+    return
+
+
+def init_where(sim):
+    """ The modifiers that `where=` on a transition stands for, and the parameters of modifiers, given to the modules they modify """
+    for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
+        for name,tr in mod.graph.transitions.items():
+            where = getattr(tr, 'where', None)
+            key = f'where_{mod.name}_{name}'
+            if where is not None and key not in sim.pars.connectors and tr.trigger is None: # A trigger takes where= into its condition
+                if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
+                    sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
+                    sim.pars.connectors[key].on_rate = True
+                    continue
+                if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
+                    others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
+                else: # A condition, a state, or an array
+                    others = ~ss.conditions.as_cond(where)
+                sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=others, name=key)
+                sim.pars.connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in where=
+                level_key = f'level_{mod.name}_{name}'
+                if tr.move_from and tr.p is not None and level_key not in sim.pars.connectors: # A branch for the people at some levels only (a move= arrow): never drawn by people at the others, who would never leave by it
+                    at = None
+                    for dim,levels in tr.move_from.items():
+                        here = None
+                        for level in levels: # At any of the levels it moves people from
+                            eq = ss.conditions.Cond('dim', dim) == level
+                            here = eq if here is None else here | eq
+                        at = here if at is None else at & here
+                    sim.pars.connectors[level_key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=~at, name=level_key)
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted
+        if isinstance(m, ss.modify) and isinstance(m.amount, ss.par):
+            p = m.amount
+            target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
+            p.name = p.name or m.name
+            if target is not None and p.name not in target.graph.pars:
+                target.graph.pars[p.name] = p
+                target.define_pars(**{p.name:p})
+    return
+
+
+def check_routes(sim):
+    """ A beta for each route names every route and nothing else, unless it gives a default for the routes it does not name; a route has no beta of its own; checked when the sim is built """
+    nets = list(sim.mixed if sim.solver != 'abm' else sim.pars.networks.values())
     routes = [net.name for net in nets]
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
@@ -248,7 +243,7 @@ def choose_solver(sim):
                     typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.Rate)]
                     if typed:
                         raise ss.WrongDimension(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
-    if all(getattr(dis, 'graph', None) is not None for dis in pars.diseases.values()):
+    if all(getattr(dis, 'graph', None) is not None for dis in sim.pars.diseases.values()):
         for net in nets:
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
             if not (sc.isnumber(beta) and beta == 1):
@@ -262,23 +257,6 @@ def choose_solver(sim):
             counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.transitions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
             if counts:
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
-
-    for mod in sim.declared: # A value for each level, checked when the sim is built rather than when it first runs
-        for p in mod.graph.all_pars():
-            if isinstance(p.raw, ss.by) and not set(p.raw.dims) & {strat.name for m in sim.declared for strat in m.graph.derived}: # Not by a derived attribute's levels, which add no groups
-                p.raw.check(sim)
-    # The notes on what was chosen, kept in sim.notes whatever the verbosity
-    if sim.unit_source:
-        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.UnitInferred, sim=sim)
-    for mod in sim.declared:
-        for state in mod.graph.count_states:
-            if 'people' in state.guessed:
-                ss.note(f"state '{state.name}' treated as a count, not people ({state.guessed.people})", ss.StateNotPeople, sim=sim)
-        exclusive = any(isinstance(fam, ss.Strains) and fam.exclusive is not None and mod.name in fam.member_names for fam in pars.diseases.values()) # Its states with no exits are where a family moves people (see ss.Strains.step())
-        separate = [s for s in mod.graph.separate if not (exclusive and not any(mod.graph.exits[s.name].values()))]
-        if separate:
-            names = sc.strjoin(s.name for s in separate)
-            ss.note(f"{names} of '{mod.name}' {'is' if len(separate) == 1 else 'are'} people (people=True) with no transition to or from {mod.graph.first.name}, so the people in them are a population of their own, counted in n_alive, with ages; a count is ss.State(people=False)", sim=sim)
     return
 
 
@@ -475,16 +453,6 @@ def init_capabilities(sim, modules):
                 add(f'condition: {mod.name}', 'no', reason, auto=reason, fatal=True)
         for clock in clocks_of(mod)[:1]: # The time in a state or since an event, kept per agent (see ss.expressions.Clock)
             add(f'module: {mod.name}', 'no', f'{clock} is a clock', auto=f'{clock} is a clock, which only agents keep', fatal=True)
-        for name in sorted(graph.dwell_states if graph is not None else [])[:1]: # The time in a state read as people leave it (see ss.graph.Graph.check_dwell())
-            add(f'module: {mod.name}', 'no', f'{name}.dwell is a clock', auto=f'{name}.dwell is the time each person has spent in {name}, which only agents keep', fatal=True)
-        for name in (graph.hooks if graph is not None else []): # Agents only (see ss.func)
-            add(f'hook: {mod.name}.{name}', 'no', 'a function of the agents an event happens to', auto=f'"{name}" is a function of the agents an event happens to (ss.func)', fatal=True)
-        for name in (graph.updates if graph is not None else []): # Agents only (see ss.update)
-            add(f'update: {mod.name}.{name}', 'no', 'a count set each step', auto=f'"{name}" of "{mod.name}" sets a count each step (ss.update), which only agents do', fatal=True)
-        if graph is not None: # Seeds back-dated and run forward: agents only, for now (see ss.spread)
-            spread = [f'init_prev' if isinstance(getattr(graph.init_prev, 'raw', graph.init_prev), ss.spread) else None] + [f'init of {state.name}' for state in graph.states.values() if isinstance(getattr(state.init, 'raw', state.init), ss.spread)]
-            for what in [w for w in spread if w]:
-                add(f'module: {mod.name}', 'yes', f'the {what} is ss.spread(): seeds back-dated (as compartments, the natural history fed a constant inflow over the window)')
         if graph is not None and graph.attrs: # Agents only (see ss.attr)
             add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(graph.attrs.keys())}) are kept per agent', fatal=True)
         if isinstance(mod, ss.Strains): # Its members side by side; what ties them together from their shares (see ss.Strains.shares())
@@ -607,8 +575,6 @@ def init_capabilities(sim, modules):
                 add(f'transition: {name}', 'yes', 'moved at the end of each step, the share its module\'s event happened to')
             elif tr.trigger is not None:
                 add(f'transition: {name}', 'yes', 'a trigger (ss.on): where it holds, arrivals pass straight through')
-            if getattr(tr, 'offspring', None) is not None:
-                add(f'transition: {name}', 'no', 'adds offspring for each person', auto=f'"{name}" has offspring (offspring=), which are added for each person who goes through it')
             if getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) not in [None, mod.name]:
                 add(f'transition: {name}', 'yes', f'places the children of "{ss.conditions.modname(tr.per.module)}.{tr.per.name}", as its states are tracked jointly with it')
             elif getattr(tr, 'per', None) is not None:
@@ -645,54 +611,3 @@ def init_capabilities(sim, modules):
 def auto_reasons(sim):
     """ The reasons, from the capability record, that `solver='auto'` runs the model as agents (none if it runs it as compartments) """
     return [cap.auto for cap in getattr(sim, 'capabilities', []) if cap.auto]
-
-
-def count_events(sim, mod=None):
-    """ The number of events that solver="gillespie" would take, from an ODE run (or of one module of a sim that has been run as an ODE): people moved along each transition, once for each stage of its dwell time """
-    if mod is None:
-        if not hasattr(sim, 'inputs'):
-            return 0
-        ode = sim.new(solver='ode', verbose=0, approx=True).run()
-        return sum(count_events(ode, mod) for mod in ode.declared)
-    n = 0
-    dwells = mod.engine.dwells
-    for name,tr in mod.graph.transitions.items():
-        if tr.people:
-            k = dwells[name].k if name in dwells else 1
-            n += k*np.sum(mod.results[name].values)
-    return n
-
-
-def exact_seconds(sim):
-    """
-    The number of events that solver="gillespie" would take (from an ODE run), and about how long it would take them one at a time
-
-    An event costs about 0.1 µs for one group, and more for groups that affect each other (strata
-    that mix, or places that people commute between), since each event changes the rates of the
-    groups the mixing takes it to: about 0.05·n^1.5 µs for n groups, from timings of the exact
-    solver on an SIR (October 2026: 1 µs for 8 places linked by commuting, 4 µs for 16, 40 µs for
-    80, 170 µs for 150; up to twice that for commuting, half for a force of infection shared between
-    places). Places that do not affect each other are run by place, which is always exact (it is
-    faster than tau leaps), so they count for no time; if every module is run by place, the ODE is
-    not run, and the number of events is None.
-    """
-    if not hasattr(sim, 'inputs'):
-        return 0, 0.0
-    try:
-        ode = sim.new(solver='ode', verbose=0, approx=True).init()
-    except ss.CapabilityError: # Then the model cannot run on groups at all, which the sim itself says, naming the solver it was asked for
-        return 0, 0.0
-    def by_place(mod):
-        engine = mod.engine
-        if getattr(engine, 'cross', None) is not None:
-            return False
-        if engine.program is None:
-            engine.init_program()
-        return engine.program.local and engine.program.n_places > 1
-    timed = [mod for mod in ode.declared if not by_place(mod)]
-    if not timed:
-        return None, 0.0
-    ode.run()
-    n_events = sum(count_events(ode, mod) for mod in ode.declared)
-    seconds = sum(count_events(ode, mod) for mod in timed)*(0.1 + 0.05*ode.groups.n_groups**1.5)*1e-6
-    return n_events, seconds

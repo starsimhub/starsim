@@ -103,7 +103,7 @@ def test_syphilis_clock():
             latency   = E >> EL @ ss.months(3),
             to_late   = EL >> LL @ ss.years(2),
             init_prev = 0.02, init=dict(EL=0.01, LL=0.01), name='syph')
-        latent = ss.clock(EL | LL)
+        latent = (EL | LL).time
         decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=EL | LL, name='latent_decay')
         return ss.Sim(syph, connectors=decay, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw, **kwargs)
     with pytest.raises(ss.CapabilityError, match='is a clock'):

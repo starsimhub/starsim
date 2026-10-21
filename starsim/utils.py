@@ -245,6 +245,26 @@ def getframe(depth=1):
         return None
 
 
+def caller_names(depth=1):
+    """
+    The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
+    each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
+    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`) look up the names of
+    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate)
+    """
+    frame = getframe(depth + 1)
+    if frame is None:
+        return {}
+    out = {}
+    for space in [frame.f_globals, frame.f_locals]: # The local ones win
+        found = {}
+        for key,val in space.items():
+            if not key.startswith('_'):
+                found.setdefault(id(val), set()).add(key)
+        out.update({i:(keys.pop() if len(keys) == 1 else None) for i,keys in found.items()})
+    return out
+
+
 def n_args(func):
     """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
     import inspect

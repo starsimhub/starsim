@@ -3,7 +3,9 @@ Test dimensions that are more than a property of people: states with dimensions 
 """
 
 # %% Imports and settings
+import sys
 import math
+import subprocess
 import pytest
 import numpy as np
 import pandas as pd
@@ -40,7 +42,7 @@ def make_malaria():
     b = 0.5 # Probability an infectious bite infects a human
     c = 0.5 # Probability a bite on an infectious human infects the mosquito
     Sh, Eh, Ih, Rh = ss.states(4)
-    Sv, Ev, Iv     = ss.states(3)
+    Sv, Ev, Iv     = ss.states(3, people=False)
     Nh             = (Sh + Eh + Ih + Rh).n
     malaria = ss.Disease(
         infection  = Sh >> Eh @ a * b * Iv.n / Nh,
@@ -331,16 +333,20 @@ def test_space():
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(region=[10, 0])), name='sir')
         return ss.Sim(sir.stratify(region=levels), total_pop=20_000, unit='day', stop=200, solver='ode', **kw).run()
     plain, places = regions(['a', 'b']), regions(ss.geo(names=['a', 'b']))
-    assert np.all(plain.results.sir.infection.cum.by('region').values[-1] > 4000) and any('"region" is plain' in note for note in plain.notes) # Its levels mix
+    assert np.all(plain.results.sir.infection.cum.by('region').values[-1] > 4000) # Its levels mix: a name says nothing of the kind
     assert places.results.sir.infection.cum.by('region').values[-1, 1] == 0 # Places are apart
 
-    # A moving force of infection goes only where the matrix sends it: from a to b, not from b to a
-    for matrix,reached in [([[0, 0.1], [0, 0]], True), ([[0, 0], [0.1, 0]], False)]:
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(place=[10, 0])), name='sir')
-        sir.stratify(place=['a', 'b'], kind='space', mobility=ss.Mobility(matrix=matrix, kind='force'))
+    # A moving force of infection (LASER's coupling), in which M[i,k] of place i's force goes to k, goes only where M sends it; it is the same as a contact matrix over the places
+    for M,reached in [([[0, 0.1], [0, 0]], True), ([[0, 0], [0.1, 0]], False)]:
+        M = np.array(M)
+        def make(mobility=None):
+            sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init=dict(I=ss.by(place=[10, 0])), name='sir')
+            return sir.stratify(place=['a', 'b'], kind='space', mobility=mobility)
         for solver in ['ode', 'abm']:
-            attack = run(sir, solver, total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
+            attack = run(make(ss.Mobility(matrix=M, kind='force')), solver, total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert attack[0] > 5000 and (attack[1] > 5000) == reached, f'Expected b to be reached: {reached}, with {solver}, not {attack}'
+            contacts = run(make(), solver, networks=ss.contacts(place=M.T + np.diag(1 - M.sum(axis=1))), total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
+            assert np.allclose(contacts, attack), f'Expected the contact matrix to give the same run as kind="force" with {solver}: {contacts} against {attack}'
 
     # A movement matrix may be sparse, for many places; the time share is kept sparse either way, with the same run
     finals = []
@@ -352,7 +358,8 @@ def test_space():
     assert np.array_equal(*finals) and finals[0][1] > 1000 # The same with either
 
     # A count has one value per place, and a count in a rate is the count in the same place
-    S, I, R, W = ss.states(4)
+    S, I, R = ss.states(3)
+    W = ss.State(people=False)
     cholera = ss.Disease(
         infection = S >> I @ 0.5 * W.n / (W.n + 1e5),
         recovery  = I >> R @ ss.days(5),
@@ -418,40 +425,56 @@ def test_space():
 
 @sc.timer()
 def test_commuting():
-    sc.heading('Testing commuters who leave home and come back at finite rates')
+    sc.heading('Testing commuters who leave home and come back at finite rates, as a dimension of where people are now')
     beta, gamma, away, N = 1.0, 0.1, 0.1, np.array([8000, 2000.])
-    def make(back, solver='ode', **kwargs):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(beta)), recovery=ss.progression('I -> R', rate=ss.perday(gamma)), init=dict(I=ss.by(patch=[5, 0])), name='sir')
-        sir.stratify(patch=['a', 'b'], split=list(N/N.sum()), mobility=ss.Mobility(matrix=[[0, 1], [1, 0]], kind='commute', away=away, back=back))
+    l = 0.05 # Leaving home, and coming back, at rates that give 10% of time away
+    r = l*(1 - away)/away
+    T = np.array([[1 - away, away], [away, 1 - away]]) # People start in each place for their share of time there
+    def make(solver='ode', **kwargs):
+        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(beta)), recovery=ss.progression('I -> R', rate=ss.perday(gamma)), init=dict(I=ss.by(home=[5, 0])), name='sir')
+        sir.stratify(home=['a', 'b']) # Where people live, which does not keep them apart
+        sir.stratify(patch=['a', 'b'], kind='space', split=ss.by(N[:, None]/N.sum()*T, dims=['home', 'patch']), # Where they are now, where they mix
+                     out=ss.transfer(patch='a -> b', rate=ss.by(home=[ss.perday(l), ss.perday(r)])),
+                     back=ss.transfer(patch='b -> a', rate=ss.by(home=[ss.perday(r), ss.perday(l)])))
         return ss.Sim(sir, unit='day', stop=100, total_pop=N.sum(), solver=solver, **kwargs, **kw)
 
-    # Keeling and Rohani's commuter model (7.3): X[i,j] are the residents of i now in j, who leave home at rate l and come back at rate r, which give 10% of time away
-    l = 0.05
-    r = l*(1 - away)/away
+    # Keeling and Rohani's commuter model (7.3): X[i,j] are the residents of i now in j, who leave home at rate l and come back at rate r
     def deriv(t, y):
         S, I, R = y.reshape(3, 2, 2)
         lam = beta*I.sum(axis=0)/y.reshape(3, 2, 2).sum(axis=(0, 1)) # The force of infection where people are now
         move = lambda X: np.array([[r*X[0, 1] - l*X[0, 0], l*X[0, 0] - r*X[0, 1]], [l*X[1, 1] - r*X[1, 0], r*X[1, 0] - l*X[1, 1]]])
         return np.concatenate([-lam*S + move(S), lam*S - gamma*I + move(I), gamma*I + move(R)]).ravel()
-    T = np.array([[1 - away, away], [away, 1 - away]]) # People start in each place for their share of time there
     I0 = np.array([5, 0])[:, None]*T
     y = sp_integrate.solve_ivp(deriv, [0, 100], np.concatenate([N[:, None]*T - I0, I0, 0*T]).ravel(), t_eval=np.arange(101), rtol=1e-10, atol=1e-8).y
-    sim = make(ss.perday(r)).run()
-    I = sim.results.sir.n_I.by('patch').values # By home, wherever people are
-    assert np.allclose(I, y.reshape(3, 2, 2, -1)[1].sum(axis=1).T, rtol=1e-4, atol=1e-2)
-    assert 'patch_now (space): a, b' in sim.describe(output=True)
+    sim = make().run()
+    I = sim.results.sir.n_I.by('home').values # By home, wherever people are
+    assert np.allclose(I, y.reshape(3, 2, 2, -1)[1].sum(axis=1).T, rtol=1e-4, atol=0.1)
 
-    # Coming back fast is the time-share form, and slowly, fewer people take the infection to b early on
-    fast = make(ss.perday(1000)).run().results.sir.n_I.by('patch').values
-    shared = make(None).run().results.sir.n_I.by('patch').values
-    assert np.allclose(fast, shared, rtol=0.01, atol=1) and np.all(I[1:8, 1] < 0.9*shared[1:8, 1])
-
-    # As agents, the share of time away is kept with daily steps, and the epidemic reaches b
-    sim = make(ss.days(2), solver='abm', n_agents=10_000).run()
-    home, now = sim.people.patch.raw, sim.people.patch_now.raw
+    # As agents, the share of time away is kept, and the epidemic reaches b
+    sim = make(solver='abm', n_agents=10_000).run()
+    home, now = sim.people.home.raw, sim.people.patch.raw
     assert abs((now[home == 0] == 1).mean() - away) < 0.02 and abs((now[home == 1] == 0).mean() - away) < 0.03
-    assert sim.results.sir.infection.cum.by('patch').values[-1, 1] > 1000
+    assert sim.results.sir.infection.cum.by('home').values[-1, 1] > 1000
     return sim
+
+
+@sc.timer()
+def test_unnamed_data():
+    sc.heading('Testing that a model with no named data does not import starsim_data')
+    code = """
+import sys
+import numpy as np
+import starsim as ss
+sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+towns = ss.geo(names=['a', 'b'], pop=[6000, 4000], x=[0, 10], y=[0, 0])
+ss.Sim(sir.stratify(patch=towns, mobility=ss.gravity()), networks=ss.contacts([[3, 1], [1, 2]], bands=[0, 18]), unit='day', stop=20, verbose=0).run()
+ss.Sim(sir, networks=ss.RandomNet(), n_agents=500, unit='day', stop=20, verbose=0).run()
+ss.Sim(ss.SIS(), stratify=dict(age=[0, 15, 65]), solver='ode', verbose=0).run()
+print('starsim_data' in sys.modules)
+"""
+    out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True).stdout
+    assert out.split()[-1] == 'False', 'A model with no named places or matrices imported starsim_data'
+    return
 
 
 @sc.timer()

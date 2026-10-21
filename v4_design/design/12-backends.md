@@ -58,14 +58,14 @@ A lognormal recovery time does not by itself turn a two-line model into an agent
 
 A model runs as agents under `'auto'` if it contains any of these:
 
-- an individual-level network (`ss.RandomNet`, `ss.MFNet`, `ss.PartnerNet` and other sexual networks, `ss.StaticNet`, a maternal network), or a mixing pool between some people only (`src=`, `dst=`) or with a number of contacts that differs between people;
+- an individual-level network (`ss.RandomNet`, `ss.MFNet`, `ss.PartnerNet` and other networks of partnerships, `ssl.StaticNet`, a maternal network), or a mixing pool between some people only (`src=`, `dst=`) or with a number of contacts that differs between people;
 - `n_agents=` given to the sim or to `ss.People`;
 - a per-agent function (`fn(sim, uids)`) or a per-agent attribute that is not a stratification (viral load, an individual's partner count);
 - a distribution on a per-person quantity other than a dwell time (`beta`, `rel_sus = ss.lognorm_ex(mean=1, std=0.3)`) that has not been binned into a dimension;
 - a module written as code that needs agents: a disease, network, demographic module, intervention or connector written as code, unless it says it works on groups with the class attribute `compartmental = True`, and any module with `compartmental = False`. An analyzer, a plain `ss.Module` (e.g. an ODE of its own in NumPy), a function given as a module, and the functions and `step()` of a declared module run beside the compartments without changing the solver; code is never run to find out (decided 2026-10-20), so if one of them asks for something only agents have, the run stops and says so (see [Functions](#functions-try-it));
 - something that needs individual histories: contact tracing, transmission trees, the infection log (`analyzers='infection_log'`), or the strains each person has had (a strain dimension with partial immunity);
 - a family of diseases (`ss.Strains`) whose members affect each other (`immunity=`, `exclusive=`), whatever `approx=` (decided 2026-10-20: the approximation from each member's shares is gone; below);
-- a clock: the time in a state or a set of states (`X.time`, `(A | B).time`, `ss.clock()`, `X.progress`, `X.dwell`), the time since an event, or a dimension of kind `'clock'`; and the values of each person declared in a module, `ss.attr` and `ss.update` (decided 2026-10-20; fixed delays, minimum stays, and Erlang stages are the compartmental forms of timing);
+- a clock: the time in a state or a set of states (`X.time`, `(A | B).time`, `X.progress`), the time since an event, or a dimension of kind `'clock'`; and the values of each person declared in a module, `ss.attr` (decided 2026-10-20; fixed delays, minimum stays, and Erlang stages are the compartmental forms of timing);
 - a table by bins that split the model's groups (`ss.by(dict(age=np.arange(100), value=...))` on 5-year age groups), which agents read for each person; a compartmental run does not average it over each group, but stops and says to give the values by the model's groups;
 - an initial value (`init_prev=` or `init=`) by a property of people that is not a dimension, or a function of the agents;
 - a delivery that follows each person's own history (decided 2026-10-20): a queue (`queue=`), a wait from the trigger (`delay=`) or for a test's result, how often or how long ago an event happened (`.count`, `.since`; whether it did, `.ever`, is a level of people), protection that fades by a function of the time since delivery, events combined (`a.positive | b.positive`), or one delivery for several diseases (`disease=[...]`).
@@ -91,37 +91,33 @@ For simple models the solver is a free choice made when the sim is built. For co
 ss.Sim(sir, solver='auto')        # the default
 ss.Sim(sir, solver='ode')         # deterministic compartmental
 ss.Sim(sir, solver='binomial')    # chain-binomial, discrete time
-ss.Sim(sir, solver='gillespie')   # exact stochastic, continuous time; tau-leaping, with a note, for a run that would take too long one event at a time
+ss.Sim(sir, solver='gillespie')   # exact stochastic, continuous time
+ss.Sim(sir, solver='tau')         # tau-leaping: stochastic, close to exact, for a run of many events
 ss.Sim(sir, solver='abm')         # agent-based
 ```
 
-The solvers of earlier drafts raise an error that names what to use: `'tau'` and `'stochastic'` (use `'gillespie'`, which takes tau leaps by itself when that pays), `'sde'` (removed: it resolved competing exits in declaration order at coarse steps, agreed worst with the ODE, and had no user; use `'gillespie'` or `'ode'`), and `'ctmc'` (use `'gillespie'`).
+The diffusion approximation of earlier drafts (`'sde'`) is gone: it resolved competing exits in declaration order at coarse steps, agreed worst with the ODE, and had no user. An unknown solver raises an error that lists the solvers.
 
 The model object is the same in every case, and whatever the solver, a sim is one trajectory; many runs are `ss.parallel(sim, n_runs=100)` ([09-results.md](09-results.md#one-run-many-runs)). The exact solver is called `'gillespie'` because that is the name the field uses for it. An integro-differential solver (`'ide'`, for arbitrary dwell times without stages) is deferred.
 
 | Solver | Time | State | Good for | Loses accuracy when |
 |---|---|---|---|---|
 | `ode` | continuous | real-valued | large populations, fast fitting | counts are small or extinction matters |
-| `gillespie` | continuous | integer | exact stochastic dynamics (for rates that are constant within each quarter of a step) | values vary quickly within a step; for a run that would take more than about a second one event at a time, it takes tau leaps, which lose accuracy when rates change quickly within a leap |
+| `gillespie` | continuous | integer | exact stochastic dynamics (for rates that are constant within each quarter of a step) | values vary quickly within a step |
+| `tau` | continuous | integer | large stochastic runs, close to exact | rates change quickly within a leap |
 | `binomial` | discrete | integer | simple stochastic models on a fixed step | `rate * dt` is large |
 | `abm` | discrete | individuals | networks, heterogeneity, histories | `rate * dt` is large; cost grows with `n_agents` |
 
 Some of these conditions are checked and reported as one-line notes, each naming the quantity involved and what would not have the problem: after an ODE run, `ss.SmallCounts` (it starts with only a few infected) and `ss.ExtinctionPossible` (the number infected falls below one and rises again); at `init()`, for a solver that takes whole steps (`binomial`, `abm`), `ss.LargeStep` (a transition's `rate * dt` is large), which also says how far whole steps can be from the ODE and to run `sim.check_dt()`. They are notes, not errors: the run goes ahead and the user is told.
 
-`'gillespie'` counts the events a run would take from an ODE run at `sim.init()` (milliseconds) and estimates how long taking them one at a time would take: about 0.1 µs an event for one group, and about 0.05·n^1.5 µs for n groups that affect each other (strata that mix, or places that people commute between), since each event changes the rates of the groups the mixing takes it to. Below about a second it takes them one at a time; above, it takes tau leaps and says so. Places that do not affect each other within a step are run by place, which is always exact, since it is faster than tau leaps (SimInf's 16,000 herds and 4.7 million events take 2 to 3 s):
+`'gillespie'` is always exact: it takes the events one at a time, however many there are, and `sim.solver` is the solver that was asked for. Places that do not affect each other within a step (mixing only within each place, with no commuting, and one place if the model has none) are run place by place: after each event, only the rates of its place are worked out again, so an event costs about 0.1 µs however many places there are, and a place where nothing can happen is skipped until something changes it (SimInf's 16,000 herds and 5 million events take about 4 s). Diseases tracked jointly, whose large program has mostly empty compartments, are stepped by the compartments that hold anyone. Groups that affect each other (strata that mix by a contact matrix, or places that people commute between) have every rate worked out again after each event: about 4 µs an event for 20 groups, and 10 to 60 µs for 100. For millions of events in groups like these, `'tau'` (tau leaps, each short enough that the rates change little over it) or `'binomial'` takes a fraction of a second, at a small bias that is noted in [the approximations](#the-standard-approximations):
 
 ```text
 >>> ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=100).run()
-solver: gillespie (exact; an ODE run gives about 1,900 events)
+solver: gillespie (requested)
 ```
 
-```text
->>> ss.Sim(sir, total_pop=10_000_000, solver='gillespie', unit='day', stop=100).run()
-  note: solver="gillespie" takes tau leaps: an ODE run gives about 1.9e+07 events, which would take about 2.8 s one at a time, more than 1 s; approx=False keeps it exact
-solver: tau (tau-leaping for solver="gillespie": an ODE run gives about 1.9e+07 events, about 2.8 s one at a time)
-```
-
-Small counts, where extinction questions arise, are runs of few events, so they get the exact solver. `approx=False` keeps the exact solver however long it takes. `sim.solver` records which solver produced the result (`'tau'` when it took tau leaps). The tau leaps choose their own size from the rates, so a step that is large for them needs no note of its own.
+Small counts, where extinction questions arise, are runs of few events, for which the exact solver is fast. The tau leaps choose their own size from the rates, so a step that is large for them needs no note of its own.
 
 ## Approximations
 
@@ -152,7 +148,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 
 | The model has | Solver | Approximated by | Reported |
 |---|---|---|---|
-| A random or static network (`ss.RandomNet`, `ss.StaticNet`) | compartmental, explicit | homogeneous mixing with the network's mean number of contacts (for a static network, the mean degree of its graph) | the contact rate and where it came from |
+| A random or static network (`ss.RandomNet`, `ssl.StaticNet`) | compartmental, explicit | homogeneous mixing with the network's mean number of contacts (for a static network, the mean degree of its graph) | the contact rate and where it came from |
 | A network of lasting partnerships (`ss.MFNet`, `ss.PartnerNet` with `dur=`) | compartmental, explicit | the partnership approximation ([`06-routes.md`](06-routes.md)): partnerships formed at `n/D̄` per person, each transmitting with its chance over its whole length, from partners drawn from the population; its sides, and the property it matches or counts partners by, must be dimensions. Against agents (20 runs of 10,000, prevalence at 10 and 20 years, ODE over agents): risk groups with 6-month partnerships 1.00 and 0.99; HIV-like, 5-year monogamous partnerships 1.11 and 1.25 (infection kept within pairs, which it spreads); gonorrhea-like with Poisson partners at a time, 0.19 and 0.13 (concurrency, which it leaves out; 1.0 and 1.5 near the threshold with one partner at a time) | the rate partnerships form, and under the route in `describe()`, the chance over a partnership in each direction |
 | A modifier of a transmission on a route with a share for each edge (`share=lambda net: ...`) | compartmental, explicit | none: `CapabilityError` (a share that is a number, a time series, or by a dimension is exact) | |
 | A dwell time that is not exponential, Erlang, or fixed (`ss.constant`) | compartmental, explicit or `'auto'` | Erlang stages matching the mean and, as closely as possible, the standard deviation; `stages=k` sets the number directly | the number of stages, and the mean and standard deviation that result |
@@ -161,7 +157,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 | A function in a `rate=`, `p=`, `where=`, or `when=` slot | compartmental | nothing: it is evaluated on groups instead of agents, if it can be ([Functions](#functions-try-it)) | only if it fails |
 | `n_agents < total_pop` | `abm` | scaling: each agent stands for `total_pop / n_agents` people and count results are multiplied up | the scale factor |
 | A compartmental model with nothing agent-based | `abm` | nothing needed: agents are sampled into the states, with homogeneous mixing | `n_agents` if defaulted |
-| A very large population | `gillespie` | tau-leaping, when the events estimated by an ODE run would take more than about a second one at a time (never by place); `approx=False` keeps the exact solver | the estimated number of events and time |
+| Many events | `tau` | tau leaps, each short enough that the rates change little over it: close to the exact solver, but biased (in 1e7 people, the peak of an SIR about 0.7% high, several times the run-to-run spread) | nothing: it is asked for by name |
 | A value that varies smoothly in time (`ss.seasonal`, `ss.timeseries`) | `gillespie` | held for a quarter of a step at a time, at its middle; `approx=False` makes it an error | that it is held |
 
 "Explicit" means the user named the solver. Under `'auto'` only the dwell-time row applies; the other rows make the model agent-based instead.
@@ -178,7 +174,7 @@ A fixed delay (`ss.constant`, as odin's `delay()`) has no good Erlang form: its 
 |---|---|
 | `ode` | at a constant rate over the step, so the release of the people who arrived over a step `K` steps before is that of the delay differential equation, to second order (odin's SEIR within 0.25% at a step of a day, 0.06% at half a day, in 8 ms); the state's other exits act on them until they leave, with the release lowered to what they leave, so a competing exit acts over the whole delay |
 | `binomial` | at the start of the step, once the step's rates are worked out from the people as they were, as agents' scheduled exits come first; so it agrees with agents step for step |
-| `gillespie` (and its tau leaps) | at the middle of the step, the mean of the ODE's release |
+| `gillespie`, `tau` | at the middle of the step, the mean of the ODE's release |
 | `abm` | each at the start of the step their delay, rounded to the nearest step, ends in |
 
 The stock at each time point is the same in each: exact for a delay of whole steps. A delay that is not a whole number of steps is rounded to one, with a note. A minimum stay (`after=`) and a limit (`before=`) use the same conveyor, with each transition acting only on the people who have stayed long enough (or not too long); a stay on a transmission, or out of a state that splits on entry, has no compartmental form yet. The kernels, the particle filter, and the run in JAX all take conveyors; a model without one pays nothing for them.
@@ -199,7 +195,7 @@ These stop a compartmental run with `CapabilityError`:
 - transmission trees and individual histories (the infection log, `analyzers='infection_log'`);
 - custom code that only works on agents: a function taking `uids`, a `deliver=fn(sim) -> uids` delivery, a `step()` override that reaches for a per-agent attribute that is not a stratification;
 - a strain dimension with partial immunity and people who can be infected again: a person's level is their last strain, so the protection of the strains before it would be lost (the exact form, a history of strains had with `2^k` levels, is deferred);
-- a family whose members affect each other (`immunity=`, `exclusive=`), a clock, an attribute (`ss.attr`), an update each step (`ss.update`), and a table by bins that split the model's groups;
+- a family whose members affect each other (`immunity=`, `exclusive=`), a clock, an attribute (`ss.attr`), and a table by bins that split the model's groups;
 - a value read from each person's own properties that is not a dimension, including an initial value (`init_prev=ss.by(dict(age=[0, 15], value=[0, 0.1]))`).
 
 ```text
@@ -270,7 +266,7 @@ A state that is not people (bacteria in water, mosquitoes; [03-states-and-transi
 | Solver | What such a state is |
 |---|---|
 | `ode` | One more real-valued compartment (or one per patch). Nothing distinguishes it from the others except that it is not counted in `N` |
-| `gillespie` (and its tau leaps), `binomial` | A real-valued count, whose flows are their expected values over each step (or each event's interval, under `gillespie`), while people are drawn. This is SimInf's split between continuous-time events for animals and a deterministic environmental pressure, and it keeps the cost of a reservoir independent of its size |
+| `gillespie`, `tau`, `binomial` | A real-valued count, whose flows are their expected values over each step (or each event's interval, under `gillespie`), while people are drawn. This is SimInf's split between continuous-time events for animals and a deterministic environmental pressure, and it keeps the cost of a reservoir independent of its size |
 | `abm` | A count, never agents. People are agents and the reservoir stays a number, advanced over each step as an ODE (by RK4) with the people as they were at its start ([10-execution.md](10-execution.md#states-that-are-not-people)) |
 
 Rates that use the count are written with `.n` (`beta * W.n / (W.n + K)`, `shed * I.n`) and are used exactly as written under every solver: there is no contact rate and no network in them. A count set each step by `ss.update` is worked out from the model at the start of the step and set after the transmissions, as agents only (decided 2026-10-20): `auto` runs a model with one as agents, and a compartmental solver raises. Under `'auto'` a model with states that are not people runs as an ODE unless something else makes it agent-based; adding `n_agents=` makes the people agents and leaves the count a count.
@@ -297,7 +293,7 @@ Stages multiply compartments, and with stratification they multiply quickly ([05
 
 ## Stochastic compartmental specifics
 
-Time-varying rates MUST work under every solver. Under `gillespie` (and its tau leaps) a value that varies smoothly in time is held for a quarter of a step at a time, at its middle, so the solver is exact for rates that are constant within each quarter; this is said in a note, and `approx=False` makes it an error. The chain-binomial solver takes such a value at the middle of each substep.
+Time-varying rates MUST work under every solver. Under `gillespie` and `tau` a value that varies smoothly in time is held for a quarter of a step at a time, at its middle, so the solver is exact for rates that are constant within each quarter; this is said in a note, and `approx=False` makes it an error. The chain-binomial solver takes such a value at the middle of each substep.
 
 The continuous-time solver has no `dt` and so no rate-to-probability conversion. Its results are recorded on the sim's time points, so that results from every solver have the same time axis.
 

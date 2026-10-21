@@ -38,7 +38,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         p_loss (bernoulli): chance of a spontaneous loss in each step of the module
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
-        burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_spread()`); agents only
+        burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_plan()`); agents only
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
 
     Examples:
@@ -140,7 +140,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
 
     @property
     def since_birth(self):
-        """ Time since the last live birth (inf if never); survives later losses. TODO: ss.clock(start=live_birth): see ss.expressions.Since """
+        """ Time since the last live birth (inf if never); survives later losses. see ss.expressions.Since """
         return ss.expressions.Since(self, 'live_birth')
 
     def attr(self, name, dist, on='conception'):
@@ -180,7 +180,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.init_fetus()
         return
 
-    def burnin_spread(self, engine):
+    def burnin_plan(self, engine):
         """
         `burnin=True` (the default): women pregnant at the start. Each woman who could conceive has the chance of
         having conceived in the mean duration of a pregnancy before the start, at her conception hazard then
@@ -206,7 +206,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
                         mod.engine.live = None
                         mod.engine.record_stocks()
         note = f'{self.name}: women pregnant at the start, conceived over the {steps} steps before it (burnin=True)'
-        return sc.objdict(spread=None, share=share, steps=steps, entry=None, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
+        return sc.objdict(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
     def compartmental_form(self, sim):
         """
@@ -225,7 +225,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
         early = float(np.clip(convert(g.pars.loss_threshold.raw)/dur, 0, 1))
         trs.miscarriage.rate = g.pars.loss_rate*early
         trs.stillbirth.rate = g.pars.loss_rate*(1 - early)
-        g.check_dwell() # Nothing reads P.time now
         note = (f'"{self.name}" runs in its small compartmental form: losses at a constant rate, {early:.0%} of them miscarriages (the share of the mean gestation below loss_threshold); '
                 f'no fetuses, links between mothers and children, lactation, burn-in (nobody is pregnant at the start), preterm risk, or deaths at delivery. Run with solver="abm" for these')
         return note

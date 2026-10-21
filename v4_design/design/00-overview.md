@@ -37,7 +37,7 @@ sims  = ss.parallel(
 sims.plot()                                 # ss.parallel runs the sims
 
 # --- chance: a sim is one run; many runs are a MultiSim --------------------
-msim = ss.parallel(ss.Sim(sir, solver='gillespie', **kw), n_runs=100)
+msim = ss.parallel(ss.Sim(sir, solver='tau', **kw), n_runs=100)   # stochastic: tau-leaping, since 50 million people are too many events to take one at a time
 msim.plot()                                 # the median and an interval
 ```
 

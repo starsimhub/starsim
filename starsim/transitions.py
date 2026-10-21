@@ -21,12 +21,12 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, Dwell, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
+from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 from .networks import geo, gravity, Mobility
 
 __all__ = ['Expr', 'par', 'State', 'states', 'null',
-           'Transition', 'transmission', 'progression', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'update', 'Graph',
+           'Transition', 'transmission', 'progression', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
            'by', 'timeseries', 'seasonal', 'geo', 'gravity', 'Mobility', 'Strat', 'Transfer', 'transfer']
 
 
@@ -42,7 +42,7 @@ class State(Nameable, Expr):
     Args:
         name (str): the name; if not given, taken from the keyword or the variable the state is assigned to
         init (float/int): the initial fraction (below 1) or count (above 1) in the state
-        people (bool): whether this state holds people; if None, worked out from the transitions
+        people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes)
         infectious (bool): whether this state is a source of infection by default
         rel_sus (float): susceptibility multiplier while in this state
         rel_trans (float): infectiousness multiplier while in this state
@@ -57,7 +57,7 @@ class State(Nameable, Expr):
     """
     _counter = itertools.count() # States are ordered by when they were created
 
-    def __init__(self, name=None, init=None, people=None, infectious=False, rel_sus=1.0, rel_trans=1.0, label=None):
+    def __init__(self, name=None, init=None, people=True, infectious=False, rel_sus=1.0, rel_trans=1.0, label=None):
         self.name = name
         self.init = init
         self.people = people
@@ -133,11 +133,6 @@ class State(Nameable, Expr):
     def total(self):
         """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
         return Count([self], kind='total')
-
-    @property
-    def dwell(self):
-        """ The time each person has spent in this state: usable in p= of a transition with several destinations out of it (decided when they leave), and in the rate of a transition out of it """
-        return Dwell(self)
 
 
 def states(arg, **kwargs):
@@ -306,7 +301,6 @@ class Transition(Nameable):
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         after (dur/event): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then); agents only. Or an event (`after=preg.delivery`): people in the source move when it happens to them, or `dur=` after it (a time drawn for each person), as agents
         before (dur): the opposite, for a rate: it applies only until people have been in its source state this long, as EMULSION's escape during a minimum stay; agents only
-        offspring (State/str/tuple): each person who goes through it has a newborn, in this state and in their place (or several: a state and a number, e.g. `(NB, 2)`); agents only
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         undriven (bool): declare that it has no rate, duration, p=, or trigger on purpose, so only products, deliveries, or code move people along it; a sim with none of them does not warn (`ss.UndrivenUnused`)
@@ -324,11 +318,10 @@ class Transition(Nameable):
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2), move=dict(since_birth=0)) # Parity goes up by 2, and a clock is set to 0
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
         postpartum = ss.Transition(PP, NP, dur=ss.months(6), after=preg.delivery) # Six months after each woman's own delivery
-        farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10)) # Ten piglets for each sow that farrows
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, beta=None, source=None, where=None, move=None, increment=None, after=None, before=None, acquisition=None, on=None, undriven=False):
         if isinstance(rate, Trigger): # ss.Transition(A, B, rate=ss.on(...))
             rate, on = None, rate
         delay = None # With after= an event: the time after it that people move, if dur= is given
@@ -370,10 +363,6 @@ class Transition(Nameable):
             raise ValueError(errormsg)
         self.after = after # A minimum stay in the source state before this transition can happen
         self.before = before # Or the time in it after which it cannot
-        self.offspring = None # The state newborns go into, and how many each person has, when they go through it
-        if offspring is not None:
-            state, n = offspring if isinstance(offspring, (tuple, list)) else (offspring, 1)
-            self.offspring = (state, int(n))
         self.move = None # A change of level in some dimensions: {dim: level}
         self.move_given = dict(move) if move else None # As given, for the model spec
         self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
@@ -700,7 +689,7 @@ def transmission(arrow, beta=None, source=None, p=None, where=None, acquisition=
     return Transition(src, dst, beta=beta, source=source, p=p, where=where, acquisition=acquisition, name=name, label=label)
 
 
-def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, offspring=None, acquisition=None, on=None, undriven=False, name=None, label=None):
+def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, move=None, increment=None, after=None, before=None, acquisition=None, on=None, undriven=False, name=None, label=None):
     """
     A spontaneous transition, driven by a dwell time or a rate
 
@@ -715,7 +704,6 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         increment (str/dict): a counter that goes up as well, e.g. `increment='episodes'` (see `ss.Transition`)
         after (dur): a minimum stay in the source state first (see `ss.Transition`)
         before (dur): for a rate, the time in the source state after which it no longer applies (see `ss.Transition`)
-        offspring (State/str/tuple): newborns for each person who goes through it (see `ss.Transition`)
         on (Cond/Event/func): a trigger, the same as `rate=ss.on(...)` (see `ss.on`)
         acquisition (bool): whether it is an acquisition of the disease (see `ss.Transition`), e.g. `ss.progression('S -> V', rate=..., acquisition=False)` for a vaccination
         undriven (bool): no driver on purpose: only products, deliveries, or code move people along it (see `ss.Transition`)
@@ -723,7 +711,7 @@ def progression(arrow, dur=None, rate=None, p=None, stages=None, where=None, mov
         label (str): a human-readable name
     """
     src, dst = parse_arrow(arrow)
-    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, offspring=offspring, acquisition=acquisition, on=on, undriven=undriven, name=name, label=label)
+    return Transition(src, dst, dur=dur, rate=rate, p=p, stages=stages, where=where, move=move, increment=increment, after=after, before=before, acquisition=acquisition, on=on, undriven=undriven, name=name, label=label)
 
 
 class Per:
@@ -1017,44 +1005,6 @@ class outcome(Nameable):
         return dict(type=type(lik).__name__, pars=pars)
 
 
-class update(Nameable):
-    """
-    A count that is set each step to a value worked out from the model at the start of the step
-
-    For what is not a flow, as odin's `update()` of a variable: a lag, a running maximum, a
-    switch that stays on. The count is a state that is not people, with no transitions of its
-    own; its result is `n_<state>`, it can be used in any rate, and it starts at its `init`
-    (or 0). Every rate in a step sees its value from the start of the step. A quantity that
-    accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), and a total
-    by week is a flow's result resampled (`res.infection.resample('week')`).
-
-    Args:
-        state (State/str): the count to set
-        value (any): an expression of parameters, counts (`I.n`, `I.frac`, `I.total`), the count itself, and numbers, with functions of them (`np.maximum`, comparisons); not a bare state, which means contact
-        name (str): the name; if not given, taken from the keyword or the variable it is assigned to
-        label (str): a human-readable name
-
-    Examples:
-        ```python
-        peak = ss.State(people=False) # The largest prevalence so far
-        sir = ss.Disease(infection=S >> I @ ss.perday(0.3)*I*np.exp(-5*peak.n), recovery=I >> R @ ss.days(10),
-                         track=ss.update(peak, np.maximum(peak.n, I.frac)), init=dict(I=10))
-        lag = ss.update(I_last, I.n) # The number infectious a step ago
-        ```
-    """
-    def __init__(self, state, value, name=None, label=None):
-        self.state = state
-        self.value = as_expr(value)
-        self.name = name
-        self.label = label
-        self.guessed = sc.objdict()
-        return
-
-    def __repr__(self):
-        state = self.state if isinstance(self.state, str) else self.state.label_name
-        return f'update({state}, {format_expr(self.value)})'
-
-
 class Destination:
     """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is """
     def __init__(self, tr, state):
@@ -1269,30 +1219,12 @@ def erlang_stages(mean, std, max_stages=50):
     return int(np.clip(round((mean/std)**2), 1, max_stages))
 
 
-def bound_names(obj, frame):
-    """ The names of the variables an object is bound to in the calling frame: the local ones, else the global ones """
-    if frame is None:
-        return []
-    names = []
-    for space in [frame.f_locals, frame.f_globals]:
-        names += [key for key,val in space.items() if val is obj and not key.startswith('_')]
-        if names:
-            break
-    return sorted(set(names))
-
-
-def find_name(obj, frame):
-    """ Find the name of the variable an object is bound to in the calling frame; returns None unless there is exactly one """
-    names = bound_names(obj, frame)
-    return names[0] if len(names) == 1 else None
-
-
 def class_members(cls):
     """ Collect the states, transitions, parameters, outcomes, and results declared in a class body, in definition order """
     members = dict()
     for base in reversed(cls.__mro__):
         for key,val in base.__dict__.items():
-            if isinstance(val, (Expr, Transition, outcome, FlowSum, ss.expressions.func)): # Including results that are sums or ratios of states, attributes, and hooks
+            if isinstance(val, (Expr, Transition, outcome, FlowSum)): # Including results that are sums or ratios of states, and attributes
                 members[key] = val
             elif key in members: # Rebound to something else in a subclass
                 del members[key]

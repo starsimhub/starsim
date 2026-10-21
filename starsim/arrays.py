@@ -1299,11 +1299,11 @@ class BoolState(BoolArr):
         return float(len(uids))
 
     @property
-    def dwell(self):
-        """ For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, in the sim's unit, by UID, as `P.dwell` is in `p=`; e.g. `hpv.P.dwell[uids]` in a function """
+    def time(self):
+        """ For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, in the sim's unit, by UID, as `P.time` is in `p=`; e.g. `hpv.P.time[uids]` in a function """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
-            raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.dwell)')
+            raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.time)')
         mod = engine.mod
         return (mod.ti - mod[f'ti_{self.name}'].raw)*engine.dt
 

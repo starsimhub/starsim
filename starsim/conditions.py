@@ -13,7 +13,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event', 'clock', 'state', 'any_', 'child']
+__all__ = ['Cond', 'Event', 'state', 'any_', 'child']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -61,8 +61,15 @@ class Cond:
 
     def __init__(self, op, *args):
         self.op = op
-        self.args = args if op in leaves else tuple(as_cond(arg) for arg in args) # So e.g. a declared state can be an operand
+        self._args = args if op in leaves else tuple(as_cond(arg) for arg in args) # So e.g. a declared state can be an operand
         return
+
+    @property
+    def args(self):
+        """ The operands; a dimension given as a product (`vx.held`) is named when it is read, since a product can be named after the condition is written """
+        if self.op == 'dim' and not isinstance(self._args[0], str):
+            return (self._args[0].dim,)
+        return self._args
 
     def __repr__(self):
         op, args = self.op, self.args
@@ -358,26 +365,6 @@ def set_states(cond):
         parts = [set_states(as_cond(arg)) for arg in cond.args]
         return None if any(p is None for p in parts) else [s for p in parts for s in p]
     return None
-
-
-def clock(within):
-    """
-    Time since entering some states from outside them: the longhand of `X.time` and `(A | B).time`; as agents only
-
-    Args:
-        within (State/Cond): the state, or a set of states (`A | B`)
-
-    Examples:
-        ```python
-        latent = ss.clock(syph.EL | syph.LL)
-        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=syph.EL | syph.LL)
-        ```
-    """
-    states = [within] if isinstance(within, ss.State) else set_states(as_cond(within))
-    if states is None:
-        errormsg = f'ss.clock() takes a state or a set of states (A | B), not {within!r}'
-        raise TypeError(errormsg)
-    return ss.expressions.Clock(states)
 
 
 class StatePath(Cond):

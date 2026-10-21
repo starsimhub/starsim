@@ -302,7 +302,7 @@ class Held(Product):
     @property
     def held(self):
         """ Whether each person holds it now, as a condition: `ss.modify(..., where=vx.held)` """
-        return ss.conditions.Cond('dim', self.dim) > 0
+        return ss.conditions.Cond('dim', self) > 0
 
     @property
     def effects(self):

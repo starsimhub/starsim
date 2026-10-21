@@ -576,8 +576,8 @@ def test_births_parents():
 def test_unborn():
     """ The unborn of ss.Pregnancy are not counted among the people, are not seeded, and a single beta on a maternal network goes from mother to child """
     sc.heading('Testing the unborn...')
+    S = ss.State() # The first state declared, where people start unless put elsewhere
     I = ss.State(init=0.5)
-    S = ss.State()
     hiv = ss.Disease(infection=S >> I @ ss.par(dict(prenatalnet=0.33, breastfeedingnet=0.12)) * I, name='hiv')
     sim = ss.Sim(hiv, demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.15), rate_units=1), networks=[ss.PrenatalNet(), ss.BreastfeedingNet()],
                  n_agents=5000, start=2010, stop=2011, dt=ss.months(1), verbose=0).init()

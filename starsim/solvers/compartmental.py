@@ -65,9 +65,6 @@ class Compartmental(Engine):
 
     def init_pre(self):
         for name,tr in self.graph.transitions.items():
-            if getattr(tr, 'offspring', None) is not None:
-                raise ss.CapabilityError(f'"{name}" of "{self.mod.name}" has offspring (offspring=), which are added for each person who goes through it, so it cannot run with solver="{self.sim.solver}".\n'
-                                         f'     Run with solver="abm", or leave the solver as "auto".')
             if tr.dies and tr.stays and self.integer:
                 ss.note(f'"{name}" of "{self.mod.name}" splits between ss.null and ss.stay: with solver="{self.sim.solver}", the count of its deaths is drawn apart from the move, so agrees with the number who died on average, not in each run; run with solver="abm" or "ode" for counts that agree in each run', sim=self.sim)
         self.init_dwells()
@@ -146,17 +143,6 @@ class Compartmental(Engine):
             src, dst = np.nonzero(rates[coords[:, d]]) # Each group, and each place its people move to
             matrix = self.mover_matrix(src, src + (dst - coords[src, d])*int(mults[d]), rates[coords[src, d], dst])
             self.movers.append(sc.objdict(name=None, comps=self.people_comps, matrix=matrix, transfer=None, places=(src, dst, int(mults[d])))) # Where each entry goes, for a restart with new rates: see restart_movement()
-        home = sim.mixing.commuting
-        if home is not None and graph.people_states and shared: # Commuters leaving home for each place, and coming back
-            d = sim.mixing.space
-            leave, back = home.mobility.commute_rates(home, sim.unit_base)
-            h, now = coords[:, home.dim], coords[:, d]
-            out, to = np.nonzero(leave[h]*(now == h)[:, None]) # Each group at home, and each place its people go to
-            away = np.flatnonzero(now != h) # Each group away, whose people go home
-            src, dst = np.concatenate([out, away]), np.concatenate([to, h[away]])
-            rates = np.concatenate([leave[h[out], to], np.full(len(away), back)])
-            matrix = self.mover_matrix(src, src + (dst - now[src])*int(mults[d]), rates)
-            self.movers.append(sc.objdict(name=None, comps=self.people_comps, matrix=matrix, transfer=None))
         for move in (sim.groups.dim_moves if shared else []): # Movement that belongs to the sim, not to this module: e.g. the protection of a product waning
             d = sim.groups.dim_index(move.dim)
             src = np.flatnonzero(coords[:, d] == move.src)
@@ -432,8 +418,6 @@ class Compartmental(Engine):
     def init_post(self):
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
-        if self.cross is not None and self.spreads:
-            raise ss.CapabilityError(f'ss.spread() in "{self.mod.name}", which is tracked jointly with {sc.strjoin(n for n in self.cross.names if n != self.mod.name)}, cannot run with solver="{self.sim.solver}" yet. Run with solver="abm".')
         self.update_targets()
         amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
         first = self.graph.first.name if self.graph.people_states else None
@@ -445,8 +429,6 @@ class Compartmental(Engine):
             self.arrive(name, amount, self.y, before=name in infected)
         for name,count in counts.items():
             self.arrive(name, count*self.state_split[name], self.y, before=name in infected)
-        if self.spreads: # People who start part way through their natural history
-            self.backfill_spreads()
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
         if any(not tr.static for tr in self.triggers) and self.cross is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
@@ -459,77 +441,6 @@ class Compartmental(Engine):
         self.record_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
-        return
-
-    def backfill_spreads(self):
-        """
-        People who start part way through their natural history (`ss.spread`): the model with nobody to infect and no
-        inflows, fed a constant inflow over the window (or until the people still there settle, with no `over=`), and
-        stepped to the start in the kernels, so they spread over the stages and slots of its dwell times; scaled to the
-        share given in the target, and taken from the first state. The values are those at the start (as are the ages)
-        """
-        mod = self.mod
-        sim = self.sim
-        saved = self.y.copy()
-        first = self.graph.first.name
-        out = np.zeros_like(self.y)
-        def zero(r): # A rate matrix (sparse, or not) with nothing in it
-            if hasattr(r, 'indptr'):
-                r = r.copy()
-                r.data[:] = 0
-                return r
-            return np.zeros_like(np.asarray(r, dtype=float))
-        self._mover_rates = [zero(r) for r in self.mover_rates()] # Nobody moves between places (or ages) before the start
-        if self.program is None:
-            self.init_program()
-        p = self.program
-        inflows = [i for i,flow in enumerate(self.flows) if flow.src is None]
-        kept = (p.fixed.copy(), p.mult.copy())
-        self.refresh_program()
-        p.fixed[inflows] = 0 # No births or immigration before the start
-        p.mult[inflows] = 0
-        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else 'rk4'] # The expected numbers, whatever the solver
-        rng = self.make_rng(stream=3)
-        taken = np.zeros(self.n_groups) # Those back-dated, from the groups of the first state they started in
-        try:
-            for sp in self.spreads:
-                window = sp.spread.window(self.convert)
-                lo, hi = (0, 2000) if window is None else [int(round(v/self.dt)) for v in window]
-                hi = max(hi, lo)
-                if sp.tr is not None: # Where a new infection goes
-                    entry = list(zip(sp.tr.dst, [np.asarray(x, dtype=float) for x in self.branch_probs(sp.tr)]))
-                else:
-                    entry = [(sp.entry, 1.0)]
-                self.y = np.zeros_like(saved)
-                targets = [c for name in sp.target for c in self.state_comps[name]]
-                last = None
-                for k in range(-hi - 1, 0):
-                    if -k - 1 >= lo: # Entered in this step
-                        for dst,share in entry:
-                            self.arrive(dst.name, share*self.state_split[first], self.y)
-                    self.y, _ = ss.kernels.one_step(rng, self.y, p, self.dt, solver, self.substeps(), no_tables, -1)
-                    if window is None: # Until those still there settle
-                        now = self.y[targets].sum(axis=0)
-                        if last is not None and np.allclose(now, last, rtol=1e-7, atol=0):
-                            break
-                        last = now
-                x = sp.spread.value
-                want = (x if x <= 1 else x/self.total_pop)*self.total_pop*self.state_split[first]
-                have = self.y[targets].sum(axis=0)
-                scale = np.divide(want, have, out=np.zeros_like(have), where=have > 0)
-                out[targets] += self.y[targets]*scale
-                taken += (self.y[targets]*scale).sum(axis=0)
-                what = 'infected' if sp.tr is not None else f'in {sp.entry.name}'
-                when = '[' + ', '.join(f'{v*self.dt:n}' for v in [lo, hi]) + ']' + (f' {sim.pars.unit}s' if sim.pars.get('unit') else ' steps') if window is not None else 'long enough to be stationary'
-                ss.note(f'{mod.name}: {x:n} {what}, back-dated over {when} (natural history only; values and ages as at the start)', sim=sim)
-        finally:
-            p.fixed[:], p.mult[:] = kept
-            self.cache.clear()
-        firsts = self.state_comps[first] # Those back-dated are taken from the first state
-        total = saved[firsts].sum(axis=0)
-        keep = np.divide(np.maximum(total - taken, 0), total, out=np.zeros_like(total), where=total > 0)
-        saved[firsts] *= keep
-        self.y = saved + out
         return
 
     def restart(self):
@@ -554,9 +465,6 @@ class Compartmental(Engine):
         entry of 0), so a compiled run and the gradients' check that the layout is the same both hold.
         """
         mixing = self.sim.mixing
-        if mixing.commuting is not None:
-            errormsg = 'This sim cannot be restarted with new values of the movement between places, since with back= they set where people are at the start, which is laid out when the sim is built; use sim.new(pars=...) instead'
-            raise ValueError(errormsg)
         def onto(new, rows, cols, what):
             """ The entries of a new sparse matrix at the old one's, if it has no others """
             vals = np.asarray(new[rows, cols], dtype=float).ravel() if len(rows) else np.zeros(0)

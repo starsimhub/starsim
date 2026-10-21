@@ -117,8 +117,7 @@ This is how environmental and vector-borne transmission are written. There is no
 
 **States that are not people.** The one thing the library needs to know about such a state is that it is not people, because in an agent-based run the people become agents and the other states stay numbers, and because `total_pop`, age, and sex apply only to people.
 
-- **It is worked out from the transitions.** A state is people if transitions connect it to the disease's first state, in either direction; the states an inflow is split between (`ss.null >> (0.9*S + 0.1*X)`) are connected to each other; a state that no transition touches at all is people, like the first state. No transition joins `W` to `S`, or `Sv` to `Sh`, so `W` and `Sv` are not people. `describe()` prints this as a guess (`W a count, not people [guessed: no transition connects W to S]`), and the build notes it once (`StateNotPeople`).
-- **`ss.State(people=False)` says it outright.**
+- **It is declared.** Every state is people unless it is declared a count with `ss.State(people=False)` (or `ss.states(3, people=False)`); it is not worked out from the transitions ([03-states-and-transitions.md](03-states-and-transitions.md)).
 - **A state that is not people holds a plain count.** It is never represented as agents, it is left out of `total_pop` and of `N`, and it is skipped by people dimensions (age, sex, risk) when the model is stratified. It is stratified by `patch`, or by its own dimensions with `states=` ([05-dimensions.md](05-dimensions.md#states-that-are-not-people)).
 - **Inflows and outflows use `ss.null`**, which stands for outside the model: `ss.null >> W @ rate` is an inflow and `W >> ss.null @ rate` an outflow ([03-states-and-transitions.md](03-states-and-transitions.md)). An inflow rate is a total per unit time, not a per-capita hazard.
 
@@ -187,7 +186,7 @@ Routes are passed with Starsim's keyword `networks=`, which accepts networks and
 | `ss.MFNet(...)`, `ss.PartnerNet(...)`, and other networks of partnerships | partnerships with durations and acts; `beta` is per act | exact | the partnership approximation (below), marked `approx` |
 | `ss.PartnerNet(between=(a, b), n_contacts=dict(b=rate))` with no `dur=` | one-off contacts between two groups, with acts per contact | exact | exact: a contact matrix between the two groups (levels of one stratification), with `1 − E[exp(−K·h)]` per contact for `K` acts |
 | `ss.contacts(matrix, dims=['sex', 'risk'])` | a contact matrix over several stratifications together | exact | exact |
-| `ss.StaticNet(graph=...)` | a fixed set of contacts | exact | approximated by homogeneous mixing with the mean degree of its graph (or, for a random graph made when the sim starts, its mean number of contacts); `CapabilityError` for a graph made by another function |
+| `ssl.StaticNet(graph=...)` (the library's) | a fixed set of contacts | exact | approximated by homogeneous mixing with the mean degree of its graph (or, for a random graph made when the sim starts, its mean number of contacts); `CapabilityError` for a graph made by another function |
 | counts used literally (`W.n`, `Iv.n`) | nothing; the rate is the hazard | exact | exact |
 
 There is no `ss.Homogeneous` class. Homogeneous mixing is what happens when no network is given; to set a contact rate use `ss.MixingPool(n_contacts=10)`, which is Starsim's class and is homogeneous when given no groups.
@@ -195,7 +194,7 @@ There is no `ss.Homogeneous` class. Homogeneous mixing is what happens when no n
 How the columns are used follows the approximation policy in [12-backends.md](12-backends.md):
 
 - `solver='auto'` never approximates the mixing. A model with only "exact" compartmental entries runs as an ODE; a model containing an individual-level network runs as agents, and the choice is printed. (The one approximation `auto` may make is Erlang stages for a non-exponential dwell time, which it reports; [12-backends.md](12-backends.md).)
-- When the user asks for a compartmental solver on a model with a network (`solver='ode'`), the library uses the approximation in the table and says so in one line (for example `StaticNet approximated by homogeneous mixing with 2 contacts per day (the mean degree of its graph)`). A network with no approximation in the table raises `CapabilityError`.
+- When the user asks for a compartmental solver on a model with a network (`solver='ode'`), the library uses the approximation in the table and says so in one line (for example `ssl.StaticNet` is `StaticNet approximated by homogeneous mixing with 2 contacts per day (the mean degree of its graph)`). A network with no approximation in the table raises `CapabilityError`.
 - `approx=False` turns any approximation into an error (`CapabilityError`), and `approx=True` silences the note. `sim.describe()` shows this for the sim at hand, with a row for each network (`approx (contact rates)` for `ss.RandomNet`, `no (no approximation)` for `ss.MFNet`).
 
 The table has one approximation per route. A network with strong variation in the number of contacts is approximated by homogeneous mixing with the same mean like any other, which is a poor approximation for it; there is no degree-grouped ODE form ([Rejected](#rejected)), and the agent-based run is the way to keep that variation.
@@ -221,30 +220,28 @@ The disease object is the same in all four. The second and fourth MUST agree in 
 
 ### Describing a network
 
-A network is usually described by how it is generated, since that is what modelers know: "0.7 partners on average, partnerships last 50 days". A fixed set of contacts is accepted as a NetworkX graph, or a function that makes one (`ss.StaticNet(graph=...)`), but never required.
+A network is usually described by how it is generated, since that is what modelers know: "0.7 partners on average, partnerships last 50 days". A fixed set of contacts is accepted as a NetworkX graph, or a function that makes one (`ssl.StaticNet(graph=...)`, from the library, `import starsim.library as ssl`), but never required.
 
 ```python
-ss.MFNet(
-    n_contacts  = ss.poisson(0.7),     # how many partners at a time
-    dur         = ss.days(50),         # how long partnerships last
-    acts        = ss.freqperweek(2),   # how often, within a partnership (acts per unit time)
-    concurrency = 0.22,                # the share of people with more than one partner at once
+ss.PartnerNet(
+    n_contacts = 0.7,                  # the mean number of partners at a time
+    dur        = ss.days(50),          # how long partnerships last
+    acts       = ss.freqperweek(2),    # how often, within a partnership (acts per unit time)
 )
 ```
 
-- **Partnerships and acts are separate numbers** with separate data sources (number of partners, partnership duration, acts per unit time), and sexual networks keep them separate. That is what gives a per-act transmission probability its meaning.
-- **`n_contacts` takes a distribution.** "0.7 partners" on its own is ambiguous: one partner 70% of the time (`ss.bernoulli(0.7)`) and a Poisson number of partners with mean 0.7 (`ss.poisson(0.7)`) are different networks. A bare number is read as the mean of a Poisson, and `describe()` says so. `n_contacts` is the name Starsim's other networks already use, and it takes a distribution there too.
-- **`n_contacts`, `concurrency`, and `max_contacts` are targets**, as for `ss.PartnerNet` (below): partnerships form between men and women so that the number each person has at a time settles at the target distribution, and anyone left without a partner of the other sex waits for one. Without them, `ss.MFNet` forms partnerships from `participation` and `debut`, as in Starsim v3. `net.check()` reports whether a generated network recovers the targets.
+- **Partnerships and acts are separate numbers** with separate data sources (number of partners, partnership duration, acts per unit time), and networks of partnerships keep them separate. That is what gives a per-act transmission probability its meaning.
+- **Partnerships are not only sexual.** `ss.PartnerNet` is lasting partnerships between anyone, among some people (`where=`, a condition over people, e.g. needle sharing among people who inject), or between two groups (`between=(a, b)`: each partnership joins one person of each group, levels of a stratification or boolean properties of people, which are its sides; `n_contacts` can be a number for each, `dict(fsw=3, client=0.5)`, which balance only in the mean, the surplus of one group waiting). People look for a new partner with the same chance on every step, however many they have, and those looking are paired at random; partnerships end at a constant rate (or after a drawn duration). So `n_contacts` is the mean number of partners at a time, which in a closed population is Poisson, and the network starts there; these are the partnerships the partnership approximation assumes (below). With `between=` and no `dur=`, contacts are one-off: they last a step, `n_contacts` is a rate for one group (`dict(client=ss.permonth(1))`), whose contacts are each with someone of the other group at random, and `acts=` is acts per contact (default 1).
+- **`ss.MFNet`** is partnerships between men and women formed from `participation` and `debut`, as in Starsim v3: people with no partner are paired, so nobody has more than one at a time. `ss.SexualNetwork` is the base class that STI models subclass.
 
-`net.check()` runs the sim again (three times by default) and reports, for each target it was given (the mean number of partners, the share with two or more, the maximum, the share matched, and how long partnerships last), the target, the mean over the second half of each run, and the spread across runs (`TargetStatsNotRecovered` if a target is missed by more than the spread). Running it is recommended before trusting results from a fitted network.
-
-A one-mode network of partnerships is described the same way, by `ss.PartnerNet`, with the targets EpiModel's introductory network is fitted to:
+Targets for the number of partners at a time, as EpiModel's networks fitted to target statistics have, are the library's (`import starsim.library as ssl`): `ssl.DegreeNet` takes the arguments of `ss.PartnerNet` (except one-off contacts), and `ssl.DegreeMFNet` those of `ss.MFNet`, with `n_contacts` as a target distribution (a bare number is the mean of a Poisson; "0.7 partners" on its own is ambiguous, since one partner 70% of the time, `ss.bernoulli(0.7)`, and `ss.poisson(0.7)` are different networks), `concurrency` (the share with two or more) and `max_contacts`. The EpiModel importer makes an `ssl.DegreeNet`. EpiModel's introductory network:
 
 ```python
-ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)   # 175 partnerships among 500, 110 people with two or more, nobody with four or more
+import starsim.library as ssl
+ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)   # 175 partnerships among 500, 110 people with two or more, nobody with four or more
 ```
 
-The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state. This matches the number of partners people have, which is what most published models target. Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`), and `net.check()` reports the share realized. Several properties each have a target of their own (`match=dict(risk=0.9, region=0.7)`): each person looks within their level of each with its own chance, and is paired with someone looking within the same levels; this gives each target when the properties are independent, and `net.check()` says how close it is otherwise. A target below the share that pairing at random gives cannot be reached, and gives that share. `n_contacts` can be given for each level of a property of people (`n_contacts=ss.by(risk=[0.4, 1.6])`, EpiModel's nodefactor), and `acts=` (acts per unit time: a rate such as `ss.freqperweek(2)`, or a distribution of rates drawn once for each partnership) makes `beta` per act, so a partnership transmits with probability `1 − (1 − beta)^(a·dt)` in a step (EpiModel's act rate). `where=` (a condition over people) limits who takes part, e.g. a needle-sharing network among people who inject. `between=(a, b)` makes a two-mode network: each partnership joins one person of each group (levels of a stratification or boolean properties of people), which are its sides; `n_contacts` can be a number for each (`dict(fsw=3, client=0.5)`), whose targets balance only in the mean, the surplus of one group waiting as in `ss.MFNet`. With `between=` and no `dur=`, contacts are one-off: they last a step, `n_contacts` is a rate for one group (`dict(client=ss.permonth(1))`), whose contacts are each with someone of the other group at random, and `acts=` is acts per contact (default 1). Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
+The targets are cross-sectional: nobody has a fixed number of partners. Partnerships end at a constant rate, and people look for partners at a rate that depends on how many they already have, chosen so that the target distribution is the network's stable state; partnerships ended by a partner leaving are allowed for (EpiModel's d.rate correction). Mixing by a property of people is a target too: `match=dict(risk=0.9)` makes 90% of partnerships between people at the same level of `risk` (EpiModel's `nodematch`). Several properties each have a target of their own (`match=dict(risk=0.9, region=0.7)`): each person looks within their level of each with its own chance, and is paired with someone looking within the same levels; this gives each target when the properties are independent. A target below the share that pairing at random gives cannot be reached, and gives that share. `n_contacts` can be given for each level of a property of people (`n_contacts=ss.by(risk=[0.4, 1.6])`, EpiModel's nodefactor). `net.check()` runs the sim again (three times by default) and reports, for each target, the target, the mean over the second half of each run, and the spread across runs (`TargetStatsNotRecovered` if a target is missed by more than the spread). Triangles (two of a person's partners who are partners of each other), which an ERGM can also target, are not covered: they need the network fitted as a whole, not partner by partner.
 
 ## Frequency and density dependence
 
@@ -334,22 +331,24 @@ Under `commute`, a person's home patch does not change. They spend a share `away
 
 This is the standard time-share form of a commuting model. It needs no change to the timestep and works under every solver. It does not represent the time of day; a model that needs daytime and nighttime mixing uses a sub-daily `dt` with separate layers.
 
-The time-share form is the limit in which commuters come back at once. With `back=`, they come back at a finite rate (or after a mean time away, given as a duration), and leave home for each place at the rates that keep their share of time there: `l[i,k] = back · T[i,k] / T[i,i]`. This is Keeling and Rohani's commuter model (7.3), whose `X[i,j]` are the residents of `i` now in `j`:
+The time-share form is the limit in which commuters come back at once. Commuters who come back at a finite rate (Keeling and Rohani's commuter model 7.3, whose `X[i,j]` are the residents of `i` now in `j`) are written with the general pieces: home is a dimension of its own, where people are now is the spatial one, and they move between its levels at rates by home. Results by home count people by home, wherever they are (`res.n_I.by('home')`), as the book's `Y_i = Σ_j Y_ij` does:
 
 <!-- fragment -->
 ```python
-ss.Mobility(matrix=[[0, 1], [1, 0]], kind='commute', away=0.1, back=ss.days(2))    # 10% of time away, in stays of 2 days on average
+l, r = 0.05, 0.45 # Leaving home, and coming back, per day: 10% of time away
+sir.stratify(home=['a', 'b'])
+sir.stratify(patch=['a', 'b'], kind='space', split=ss.by([[0.72, 0.08], [0.02, 0.18]], dims=['home', 'patch']), # Each home's people in each place for their share of time there
+             out=ss.transfer(patch='a -> b', rate=ss.by(home=[ss.perday(l), ss.perday(r)])),
+             back=ss.transfer(patch='b -> a', rate=ss.by(home=[ss.perday(r), ss.perday(l)])))
 ```
-
-A person is then in one place at a time, which is a dimension of its own beside their home, named after it with `_now` (`patch_now`), and they mix where they are now. It starts with each home's people in each place for their share of time there, and results by the home dimension count people by home, wherever they are (`res.n_I.by('patch')`), as the book's `Y_i = Σ_j Y_ij` does. As agents, each step moves people between home and away by the exact chances of the two over the step, so long steps keep the share of time away.
 
 Under `visit`, people also keep their home patch and spend a share `away` of their time elsewhere, but visitors are only exposed: they are exposed to the residents of the patches they go to, and do not expose anyone there (as for short trips, where the visitor's own infectiousness away from home is small).
 
-A third form moves neither people nor time: `kind='force'` moves the force of infection itself, as LASER does. With `M[i,k]` the movement from `i` to `k` (scaled by `away=`), each patch keeps `1 − Σ_k M[i,k]` of its own force of infection and receives `M[k,i]` of each other patch's, unweighted by the patches' sizes. It is less mechanistic than commuting, and is kept as the form LASER models are written in, for importing and comparing them (a model written for Starsim uses `commute`), and the same gravity matrix gives different epidemics under the two forms (in LASER's hub-and-spoke example, 88% infected against 80%).
+`kind='visit'` is commuting in which people are exposed to the residents of the places they go to but expose no one there. It is kept because flepiMoP's force of infection has this form, and its importer matches flepiMoP's runs to 1e-6.
 
-`kind='visit'` is commuting in which people are exposed to the residents of the places they go to but expose no one there.
+A third form moves neither people nor time: `kind='force'` moves the force of infection itself, as LASER does. With `M[i,k]` the movement from `i` to `k` (scaled by `away=`), each patch keeps `1 − Σ_k M[i,k]` of its own force of infection and receives `M[k,i]` of each other patch's, unweighted by the patches' sizes. It is the same as a contact matrix over the patches, `ss.contacts(patch=M.T + np.diag(1 - M.sum(axis=1)))`, but kept as its own form because as agents a contact matrix makes a mixing pool for each pair of patches, which is far slower for many patches (LASER's England and Wales, 954 patches: 34 s to build and 2.9 s a step, against 1.3 s and 0.35 s). It is less mechanistic than commuting, and is kept as the form LASER models are written in (a model written for Starsim uses `commute`), and the same gravity matrix gives different epidemics under the two forms (in LASER's hub-and-spoke example, 88% infected against 80%).
 
-`away=` gives every patch the same share by default. `scale='mean'` keeps the differences between patches that the movement model gives and makes `away=` their mean, and `cap=` is the most any patch's share can be, which is how LASER scales its gravity coupling: `ss.Mobility(ss.gravity(a=1, b=0.25, c=1.56), kind='force', away=0.0446, scale='mean', cap=0.2)`.
+`away=` gives every patch the same share. To keep the differences between patches that the movement model gives, or to cap any patch's share (as LASER scales its gravity coupling), scale the matrix in NumPy and give it as `matrix=` with no `away=`.
 
 Commuting couples patches without mixing their populations; migration does both. If `kind=` is not given, a gravity model or matrix is treated as `commute` and a movement register as `migrate`, and `describe()` marks the choice as a guess.
 

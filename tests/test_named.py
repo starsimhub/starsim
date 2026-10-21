@@ -85,10 +85,12 @@ def test_geo():
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.pop.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):
         assert np.allclose(home(ss.gravity(k=0.5)), 0) # Everyone away all the time, as the spec's example had it
-    mean = lambda **kw: 1 - home(ss.Mobility(ss.gravity(b=0.25, c=1.56), away=0.05, scale='mean', **kw)) # As LASER scales it: the share away is 5% on average, by gravity
-    free, capped = mean(), mean(cap=0.07)
-    assert np.isclose(free.mean(), 0.05) and free.std() > 0
-    assert np.allclose(capped, np.minimum(free, 0.07)) and free.max() > 0.07 # And at most 7%
+    with np.errstate(divide='ignore'): # As LASER scales its gravity: the share away is 5% on average, and at most 7%, given as the matrix
+        G = kenya.pop[None, :]**0.25/kenya.distances**1.56
+    np.fill_diagonal(G, 0)
+    G *= 0.05/G.sum(axis=1).mean()
+    capped = G*np.minimum(1, 0.07/G.sum(axis=1))[:, None]
+    assert np.allclose(1 - home(ss.Mobility(matrix=capped)), capped.sum(axis=1)) and G.sum(axis=1).max() > 0.07 >= capped.sum(axis=1).max() - 1e-12
 
     # The spec says where the places came from
     spec = sim.to_spec()

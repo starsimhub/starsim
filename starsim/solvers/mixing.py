@@ -34,15 +34,14 @@ class Mixing:
     def init_space(self):
         """ Find the spatial dimension, if there is one, and the movement between its levels """
         sim = self.sim
-        spaces = [d for d,strat in enumerate(sim.groups.strats) if strat.kind == 'space' and (strat.mobility is None or strat.mobility.back is None)] # Commuters who come home at a finite rate mix where they are now, not at home (see ss.Mobility.now())
+        spaces = [d for d,strat in enumerate(sim.groups.strats) if strat.kind == 'space']
         if len(spaces) > 1:
             errormsg = f'The model has more than one spatial dimension ({sc.strjoin(sim.groups.strats[d].name for d in spaces)}); a person is in one place at a time, so combine them into one'
             raise ValueError(errormsg)
         self.space = spaces[0] if spaces else None # The position of the spatial dimension
-        self.time_share = None # For commuting and visiting: the share of their time that people from each place spend in each place; for a moving force of infection, the share of each place's force that each place receives (a sparse array)
+        self.time_share = None # For commuting and visiting: the share of their time that people from each place spend in each place (a sparse array)
         self.present = False # Whether the time share also changes who is present in each place (for commuting)
         self.migration = None # For migration: the rate of moving from each place to each place
-        self.commuting = None # For commuters who come home at a finite rate: the dimension of their home (see ss.Mobility.commute_rates())
         self.register = None # For a movement register: the mobility that holds it; its events are worked out once the sim has a timeline
         self._events = None
         if spaces:
@@ -58,7 +57,6 @@ class Mixing:
         if self.space is not None:
             strat = self.sim.groups.strats[self.space]
             mobility = strat.mobility
-            self.commuting = strat.home
             if mobility is not None and mobility.kind in ['commute', 'visit']:
                 self.time_share = mobility.time_share(strat)
                 self.present = mobility.kind == 'commute' # Visitors are exposed to the residents of a place, and do not expose anyone there
@@ -135,9 +133,7 @@ class Mixing:
                 self.terms.append(self.dim_matrices(net, beta))
             elif isinstance(net, ss.MixingPools):
                 self.terms.append(self.age_matrix(net, beta))
-            elif isinstance(net, ss.MixingPool):
-                if net.pars.src is not None or net.pars.dst is not None:
-                    raise ss.CapabilityError(f'cannot run the mixing pool "{net.name}" with solver="{sim.solver}": only a pool of everyone, or ss.MixingPools between age groups, has a compartmental form so far. Run with solver="abm".')
+            elif isinstance(net, ss.MixingPool): # A pool of some people (src= or dst=) is refused by its capability record: see ss.solvers.init_capabilities()
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name))
             elif isinstance(net, ss.PartnerNet) and net.one_off: # Exact: a contact matrix between its two groups
                 self.terms.append(self.two_groups(net))
@@ -172,14 +168,14 @@ class Mixing:
         """
         The mean number of contacts of a network that has a compartmental approximation (homogeneous mixing with that many contacts), and where it comes from
 
-        A random network has its mean number of contacts, and a static network the mean degree of its graph. A network of
+        A random network has its mean number of contacts, and a network made from a NetworkX graph (`ssl.StaticNet`) the mean degree of its graph. A network of
         partnerships has none: its contacts last, so their number per unit time is not its number of partners (it uses
         the partnership approximation instead: see `partnerships()`).
         """
         n_contacts = net.pars.get('n_contacts')
         if isinstance(net, ss.RandomNet) and n_contacts is not None:
             return self.mean(n_contacts, self.sim.unit_base), 'its mean number of contacts'
-        elif isinstance(net, ss.StaticNet):
+        elif hasattr(net, 'nx_graph'): # A network made from a NetworkX graph (ssl.StaticNet)
             graph = net.nx_graph
             if graph is not None and not callable(graph):
                 return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
@@ -287,7 +283,7 @@ class Mixing:
                 older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
             else: # Agents' ages with no age data: uniform from 0 to 60
                 older = np.clip(1 - debut/60, 0, 1)
-            k = np.full(size, float(part)*p.rel_part_rates*older*(1.0 if p.n_contacts is None else mean(p.n_contacts)))
+            k = np.full(size, float(part)*p.rel_part_rates*older*(1.0 if p.get('n_contacts') is None else mean(p.n_contacts)))
         elif p.get('between') is not None:
             given = p.n_contacts if isinstance(p.n_contacts, dict) else {key:p.n_contacts for key in net.sides}
             k = np.array([mean(given[key]) for key in net.sides])[cell_side]
@@ -307,7 +303,7 @@ class Mixing:
         else:
             mix = np.broadcast_to(stubs[None, :], (size, size)).copy()
         mix = np.divide(mix, mix.sum(axis=1, keepdims=True), out=np.zeros((size, size)), where=mix.sum(axis=1, keepdims=True)>0)
-        if p.get('match'): # A share at the same level, as ss.PartnerNet pairs them (see its match_pairs())
+        if p.get('match'): # A share at the same level, as ssl.DegreeNet pairs them (see its match_pairs())
             share = list(p.match.values())[0]
             same = cell_lev[:, None] == cell_lev[None, :]
             by_chance = np.sum(np.bincount(cell_lev, weights=stubs, minlength=n_lev)**2)/max(stubs.sum()**2, 1e-300)

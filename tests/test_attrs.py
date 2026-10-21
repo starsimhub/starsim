@@ -207,11 +207,12 @@ def test_attr_crn():
 
 @sc.timer()
 def test_attr_rules():
-    sc.heading('Attributes: counts, first and min, traits, events at placement, modifiers, hooks')
+    sc.heading('Attributes: counts, first and min, traits, events at placement, modifiers, and a function each step')
     calls = []
-    def hook(sim, uids):
+    def hook(sim): # Called each step: a function given to the disease replaces a hook on an event (ss.func)
         d = sim.diseases.sis
-        assert d.I[uids].all() # In the new state
+        uids = d.infection.uids # Who was infected this step
+        assert np.all(d.I[uids] | np.isin(uids, d.recovery.uids)) # In the new state, unless they have left it already (a hook at the event saw them as they moved)
         assert np.all(d.n_inf[uids] >= 1) # After the attributes the event sets
         calls.append(len(uids))
     def make(births=False):
@@ -225,7 +226,7 @@ def test_attr_rules():
             low     = ss.attr(ss.normal(5, 1), on=infection, combine='min', init=10),
             avg     = ss.attr(I.time, on=recovery, combine=lambda old, new: np.where(np.isnan(old), new, (old + new)/2)), # Recorded: the time just completed
             rel     = ss.attr(ss.uniform(0.5, 1.5)),                     # A trait
-            dx      = ss.func(hook, on=infection),
+            dx      = hook,
             init_prev=0.01, name='sis', **extra)
     kw2 = dict(start=0, stop=100, unit='day', **kw)
     sim = ss.Sim(make(), n_agents=5000, **kw2).run()
@@ -234,7 +235,7 @@ def test_attr_rules():
     n = d.n_inf.values
     seeds = 50
     assert n.sum() == r.infection.sum() + seeds # Each infection counted once, and the seeds count as infected at the start
-    assert sum(calls) == r.infection.sum() # The hook is called for each infection in the run
+    assert sum(calls) == r.infection.sum() # The function sees each infection in the run
     had = n > 0
     assert np.all(np.isnan(d.first.values[~had])) and not np.isnan(d.first.values[had]).any()
     assert np.all(d.low.values[~had] == 10) and np.all(d.low.values[had] < 10)
@@ -258,34 +259,19 @@ def test_attr_rules():
 
 
 @sc.timer()
-def test_spread():
-    sc.heading('ss.spread: seeds back-dated and run forward, so they start part way through (proposal 01 §7.6)')
-    kw2 = dict(start=1990, stop=1996, dt=ss.months(1), unit='year', **kw)
+def test_burnin():
+    sc.heading('Seeds part way through their natural history: a sim that starts earlier (burn-in), which replaces ss.spread')
+    kw2 = dict(stop=1996, dt=ss.months(1), unit='year', n_agents=20_000, **kw)
     out = sc.objdict()
-    for label,init_prev in [('plain', 0.05), ('abm', ss.spread(0.05, over=(ss.months(5), ss.years(10))))]:
-        hiv, mods = make_hiv(init_prev=init_prev, art=ss.peryear(0))
-        sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=20_000, **kw2).run()
-        r = sim.results.hiv
-        out[label] = sc.objdict(n=r.n_acute[0] + r.n_latent[0] + r.n_falling[0], falling=r.n_falling[0], prog=r.progression[:37].sum(), aids=r.aids_death[:37].sum())
-    p, a = out.plain, out.abm
+    for label,start in [('plain', 1990), ('burnin', 1980)]:
+        hiv, mods = make_hiv(art=ss.peryear(0))
+        r = ss.Sim(hiv, connectors=mods, start=start, **kw2).run().results.hiv
+        i = (1990 - start)*12 # The step of 1990
+        out[label] = sc.objdict(falling=r.n_falling[i], prog=r.progression[i:i+37].sum(), aids=r.aids_death[i:i+37].sum())
+    p, b = out.plain, out.burnin
     assert p.prog == 0 and p.falling == 0 # Without it, nobody progresses for years
-    assert np.isclose(a.n, 1000, atol=2) and a.falling > 50 and a.prog > 100 and a.aids > 50, out
-
-    # No over=: stationary within the state; with a fixed dwell of 10 days, those there leave evenly over the first 10
-    r = ss.Sim(make_spread_ab(), n_agents=10_000, start=0, stop=20, unit='day', **kw).run().results.d
-    assert np.isclose(r.n_B[0], 1000, atol=2) and np.isclose(r.bc[1:11].sum(), 1000, atol=5) and r.bc[11:].sum() == 0
-    assert np.allclose(r.bc[1:11], 100, atol=40), r.bc[:12]
+    assert b.falling > 50 and b.prog > 100 and b.aids > 50, out
     return out
-
-
-def make_spread_ab():
-    A, B, C = ss.states('A B C')
-    return ss.Disease(A, B, C, ab=A >> B @ 0, bc=ss.Transition(B, C, dur=ss.constant(ss.days(10))), init=dict(B=ss.spread(0.1)), name='d')
-
-
-def test_spread_ode():
-    r = ss.Sim(make_spread_ab(), solver='ode', total_pop=10_000, start=0, stop=20, unit='day', **kw).run().results.d
-    assert np.isclose(r.n_B[0], 1000) and np.allclose(r.bc[1:11], 100, atol=1e-6), r.bc[:12]
 
 
 @sc.timer()
@@ -355,7 +341,7 @@ if __name__ == '__main__':
     test_hpv_nab()
     test_attr_crn()
     test_attr_rules()
-    test_spread()
+    test_burnin()
     test_attr_errors()
     test_attr_dist_par()
     test_attr_births()

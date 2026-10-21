@@ -184,7 +184,7 @@ Events inside a step use the same mechanism: a network given a sub-daily `dt` ap
 | `'abm'` | Drawn per agent at row 9, in the two parts above | In the loop, in order |
 | `'binomial'` | Drawn at row 9 from the counts at the start of the step, all flows together | Called at loop times, in loop order, on groups |
 | `'ode'` | All flows are evaluated together from the current state and integrated over the step, so there is no order among them | Called at loop times, in loop order, on groups |
-| `'gillespie'` (and its tau leaps) | Events are drawn in continuous time over the step; no order among flows | Called at loop times, in loop order, on groups |
+| `'gillespie'`, `'tau'` | Events are drawn in continuous time over the step; no order among flows | Called at loop times, in loop order, on groups |
 
 In a compartmental run the question "does recovery happen before or after infection?" has no meaning, which is one reason the simplest models behave identically however they are written. Things that happen at points in time (a campaign on a date, a custom function called each step) still happen in loop order under every solver. A compartmental sim with nothing that needs a step of its own is run in one call to the kernels, with no loop at all: deliveries on a schedule to people chosen by states and stratifications are taken by the kernels at their place in the order (before the step's flows), and `sim.kernel_reason()` says why a run is stepped instead. The continuous-time solver has no `dt` of its own; the sim's `dt` is then only the spacing of the loop times and of the results. See [12-backends.md](12-backends.md).
 

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 import starsim.interop
 
 kw = dict(verbose=0)
@@ -86,7 +87,8 @@ def _():
 
 @trigger(ss.ExposureToCount)
 def _():
-    S, I, W = ss.states('S I W')
+    S, I = ss.states('S I')
+    W = ss.State('W', people=False)
     ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.null >> W @ 10*I.n)
 
 @trigger(ss.SourceNeeded)
@@ -215,7 +217,7 @@ def _(): fittable().calibrate(method='nuts')
 # %% Warnings
 
 @trigger(ss.TargetStatsNotRecovered)
-def _(): ss.Sim(sir(), networks=ss.PartnerNet(n_contacts=0.7, dur=1000), n_agents=200, stop=10, **kw).run().networks[0].check(n_runs=2)
+def _(): ss.Sim(sir(), networks=ssl.DegreeNet(n_contacts=0.7, dur=1000), n_agents=200, stop=10, **kw).run().networks[0].check(n_runs=2)
 
 @trigger(ss.AtBound)
 def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).calibrate()
@@ -248,11 +250,6 @@ def _(): return ode(sir(), start='2020-01-01', stop='2020-03-01').init()
 
 @trigger(ss.LargeStep, note='shorter than the step')
 def _(): return ode(ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=0.5), init_prev=0.01, name='sir')).init()
-
-@trigger(ss.StateNotPeople, note='treated as a count')
-def _():
-    S, I, R, W = ss.states('S I R W')
-    return ode(ss.Disease(S >> I @ ss.perday(0.5)*W.n/(W.n + 1e5), I >> R @ ss.days(5), ss.null >> W @ 10*I.n, W >> ss.null @ ss.days(30), init=dict(I=0.001), name='water')).init()
 
 @trigger(ss.MatrixAggregated, note='aggregated from 3 age groups')
 def _(): return ode(sir(), stratify=dict(age=[0, 15]), networks=ss.contacts(np.ones((3, 3)), bands=[0, 15, 50])).init()

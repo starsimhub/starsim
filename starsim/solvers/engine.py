@@ -794,10 +794,6 @@ class Engine:
             self.cache[key] = func(self.sim)
         return self.cache[key]
 
-    def dwell(self, state):
-        """ The time in a state (`P.dwell`), which only the solvers that follow people in it have: see `Agents.dwell()`, and the conveyor of a compartmental run (`Compartmental.build_layout()`) """
-        raise ss.CapabilityError(f'{state.name}.dwell, the time in {state.name}, cannot be worked out here; it is used in p= or the rate of a transition out of {state.name}')
-
     def call_uids(self, func, p=None):
         name = getattr(func, '__name__', 'function')
         raise ss.CapabilityError(f'the function "{name}" cannot run with solver="{self.sim.solver}".\n'
@@ -1089,13 +1085,9 @@ class Engine:
         graph = self.graph
         fracs = sc.objdict({s.name:0.0 for s in graph.people_states})
         counts = sc.objdict({s.name:0.0 for s in graph.count_states})
-        self.spreads = [] # People back-dated and run forward to the start: see ss.spread and Agents.backfill_spreads()
         for state in graph.states.values():
             init = state.init
             if init is None:
-                continue
-            if isinstance(getattr(init, 'raw', init), ss.spread):
-                self.spreads.append(sc.objdict(spread=getattr(init, 'raw', init), entry=state, tr=None, target=[state.name]))
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
@@ -1142,13 +1134,6 @@ class Engine:
         if family is not None and self.sim.solver != 'abm': # A member of a family that seeds it (ss.Strains): the family's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
             family = self.sim.diseases[family]
             init_prev, share = family.init_prev, family.split[family.member_names.index(self.mod.name)]
-        if isinstance(getattr(init_prev, 'raw', init_prev), ss.spread): # Seeded through the first transmission, back-dated
-            tr = graph.transmissions[0] if graph.transmissions else None
-            if tr is None:
-                errormsg = f'"{self.mod.name}" has no contact-mediated transition to seed init_prev through; use init= on a state instead'
-                raise ValueError(errormsg)
-            self.spreads.append(sc.objdict(spread=getattr(init_prev, 'raw', init_prev), entry=None, tr=tr, target=[s.name for s in graph.infected if s.people]))
-            init_prev = None
         if isinstance(init_prev, ss.transitions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution
             init_prev = init_prev.raw if isinstance(init_prev.raw, ss.Dist) else self.value(init_prev)
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
@@ -1200,10 +1185,6 @@ class Engine:
                 first = graph.first.name
                 unset = [s.name for s in graph.people_states if s.init is None]
                 where = f'Say where the rest start, e.g. {unset[-1]}={np.max(rest):.4g}' if unset else 'Give initial values that sum to 1'
-                apart = [s.name for s in graph.count_states if isinstance(s.init, (int, float)) and 0 < s.init < 1] # Given a share of the population, but not connected to the people
-                if apart:
-                    where = (f'{sc.strjoin(apart)} {"is" if len(apart) == 1 else "are"} given a share of the population but no transition connects {"it" if len(apart) == 1 else "them"} to {first}, so {"it is a count" if len(apart) == 1 else "they are counts"}, not people. '
-                             f'If they are people (e.g. a second risk group), declare them with ss.State(people=True)')
                 errormsg = (f'The initial values of "{self.mod.name}" sum to {np.min(total):n}, not 1, and it is not clear where the rest start: {first} is given a value, which is kept, '
                             f'and {"no other state is left without one" if not unset else f"{sc.strjoin(unset)} are not given one"}.\n'
                             f'     {where}.')
@@ -1212,11 +1193,6 @@ class Engine:
                 fracs[graph.rest.name] += rest
             if left and graph.rest is not graph.first:
                 ss.note(f'the initial value of {graph.first.name} in "{self.mod.name}" is kept, and the rest ({np.max(rest):.3g}) start in {graph.rest.name}, the only state not given one', sim=self.sim)
-        burnin = getattr(self.mod, 'burnin_spread', None) # People who start part way through, from a module's own rule (e.g. ss.Pregnancy's burnin=)
-        if burnin is not None:
-            sp = burnin(self)
-            if sp is not None:
-                self.spreads.append(sp)
         return fracs, counts
 
     def seed_dist(self):

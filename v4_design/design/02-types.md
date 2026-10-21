@@ -23,7 +23,7 @@ The difference is only in that conversion, which a module written as code asks f
 
 `ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days.
 
-Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)). `P.dwell`, the time each person has spent in a state, is a number in the sim's unit, as a bare number returned by a function is.
+Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)). `P.time`, the time each person has spent in a state, is a number in the sim's unit, as a bare number returned by a function is.
 
 ## Conversion
 

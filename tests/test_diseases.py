@@ -268,7 +268,7 @@ def test_ncd():
     sc.heading('Testing NCDs')
 
     ppl = ss.People(n_agents)
-    ncd = ss.NCD()
+    ncd = ssl.NCD()
     sim = ss.Sim(people=ppl, diseases=ncd, dt=ss.years(1), analyzers='infection_log')
     sim.run()
     ncd = sim.diseases[0] # The sim's copy, which ran
@@ -531,7 +531,7 @@ def test_congenital():
     # stillbirths and congenital infections should occur in roughly a 0.3:0.4 ratio.
     # If stillbirths were scheduled at (rather than before) delivery, Pregnancy would
     # already have delivered the fetus and they would be logged as neonatal deaths,
-    # driving this ratio towards zero -- see Infection.set_congenital.
+    # driving this ratio towards zero -- see ssl.CongenitalDisease.set_congenital().
     ratio = sb/n_congenital
     assert 0.3 < ratio < 1.8, f'Stillbirth:congenital ratio {ratio:0.2f} is far from the expected 0.75'
 

@@ -319,12 +319,10 @@ def test_static():
     p = 0.2
     n = 100
     nc = p*n
-    nd1 = dict(type='static', p=p)
-    nw1 = ss.Sim(n_agents=n, networks=nd1).init().networks[0]
+    nw1 = ss.Sim(n_agents=n, networks=ssl.StaticNet(p=p)).init().networks[0]
 
     # Create with n_contacts
-    nd2 = dict(type='static', n_contacts=nc)
-    nw2 = ss.Sim(n_agents=n, networks=nd2).init().networks[0]
+    nw2 = ss.Sim(n_agents=n, networks=ssl.StaticNet(n_contacts=nc)).init().networks[0]
 
     # Check
     assert len(nw1) == len(nw2), 'Networks should be the same length'
@@ -538,10 +536,19 @@ def test_hybrid():
 
 @sc.timer()
 def test_partners():
-    sc.heading('Testing partnerships with a target number of partners at a time')
-    net = ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50) # EpiModel's introductory network
+    sc.heading('Testing lasting partnerships, and a target number of partners at a time')
+
+    # Partnerships that form at a constant rate: a Poisson number of partners at a time, with the mean given
     S, I = ss.states(2)
     sis = ss.Disease(S >> I @ ss.prob(0.64), I >> S @ ss.prob(0.05), init=dict(I=10), name='sis')
+    sim = ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), n_agents=2000, stop=300, verbose=0).run()
+    e = sim.networks[0].edges
+    degree = np.bincount(np.concatenate([e.p1, e.p2]), minlength=2000)
+    assert np.isclose(degree.mean(), 0.7, rtol=0.1) and np.isclose(degree.var(), degree.mean(), rtol=0.15)
+    assert sim.results.sis.n_I[-1] > 100 # Infection spreads through the partnerships
+
+    # The targets of EpiModel's introductory network, from the library
+    net = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)
     sim = ss.Sim(sis, networks=net, n_agents=medium, stop=400, verbose=0).run()
     net = sim.networks[0]
     res = net.results
@@ -565,7 +572,7 @@ def test_partners():
         prev(2, ss.peract(0.4))
 
     # A number of partners for each level of a property, as EpiModel's nodefactor
-    byrisk = ss.PartnerNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50)
+    byrisk = ssl.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50)
     sim2 = ss.Sim(sis, networks=byrisk, n_agents=medium, stop=200, verbose=0).stratify(risk=['low', 'high'], split=[0.8, 0.2]).run()
     level = np.asarray(sim2.networks[0].levels('risk'))[sim2.people.alive.uids]
     degree = sim2.networks[0].degrees(sim2.people.alive.uids)
@@ -573,14 +580,14 @@ def test_partners():
 
     # Targets that cannot be met together are an error; partnerships are approximate under an ODE (see test_partnership_approx()), and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
-        ss.PartnerNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
+        ssl.DegreeNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
     with pytest.raises(ss.CapabilityError, match='partnership approximation'):
         ss.Sim(sis, networks=ss.PartnerNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approx=False, verbose=0).run()
-    ring = ss.Sim(sis, networks=ss.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
+    ring = ss.Sim(sis, networks=ssl.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
     assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
     # With births and deaths, partnerships also end when a partner dies, which is allowed for so the mean holds
-    net = ss.PartnerNet(n_contacts=0.5, dur=50, name='main')
+    net = ssl.DegreeNet(n_contacts=0.5, dur=50, name='main')
     sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.0), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
     demog = [ss.Births(birth_rate=ss.peryear(50)), ss.Deaths(death_rate=ss.peryear(50))]
     vital = ss.Sim(sir, networks=net, demographics=demog, n_agents=2000, dt=ss.weeks(1), start=2000, stop=2030, verbose=0).run()
@@ -596,13 +603,13 @@ def test_partners():
 
 
 def test_partner_targets():
-    sc.heading('Testing other targets: partnerships within a level, and targets on ss.MFNet')
+    sc.heading('Testing other targets: partnerships within a level, and targets between men and women')
 
     # Most partnerships between people at the same level of risk
     sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.0), name='sir')
     sir.stratify(risk=['low', 'high'], split=[0.8, 0.2])
     for share in [None, 0.9]:
-        net = ss.PartnerNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
+        net = ssl.DegreeNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
         sim = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run()
         net = sim.networks.net
         level = sim.groups.level_raw(sim.groups.dim_index('risk'))
@@ -613,21 +620,21 @@ def test_partner_targets():
 
     # Within the levels of several properties at once, each with its own target (EpiModel's nodematch on each)
     sir.stratify(region=['a', 'b', 'c'], split=[0.5, 0.3, 0.2])
-    net = ss.PartnerNet(n_contacts=0.7, dur=50, match=dict(risk=0.9, region=0.7), name='net')
+    net = ssl.DegreeNet(n_contacts=0.7, dur=50, match=dict(risk=0.9, region=0.7), name='net')
     res = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run().networks.net.results
     assert np.isclose(res.match_risk[150:].mean(), 0.9, atol=0.02) and np.isclose(res.match_region[150:].mean(), 0.7, atol=0.02) # By chance, 0.68 and 0.38
 
     # A target number of partners at a time between men and women, with concurrency
     duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))
-    mf = ss.MFNet(n_contacts=ss.poisson(0.7), concurrency=0.1, dur=duration, name='mf')
+    mf = ssl.DegreeMFNet(n_contacts=ss.poisson(0.7), concurrency=0.1, dur=duration, name='mf')
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, n_agents=5000, start=2000, stop=2030, dt=ss.months(1), verbose=0).run()
     res = sim.networks.mf.results
     assert np.isclose(res.mean_degree[60:].mean(), 0.7, rtol=0.03) and np.isclose(res.concurrency[60:].mean(), 0.1, rtol=0.1)
     with pytest.raises(ValueError, match='n_contacts'):
-        ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=ss.MFNet(concurrency=0.1), n_agents=500, verbose=0).init()
+        ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=ssl.DegreeMFNet(concurrency=0.1), n_agents=500, verbose=0).init()
 
     # In an open population with long partnerships, newcomers join and the target holds (HP9 to HP11: before, 0.65 against 0.87, and nobody born in the run took part)
-    mf = ss.MFNet(n_contacts=0.87, dur=ss.lognorm_ex(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
+    mf = ssl.DegreeMFNet(n_contacts=0.87, dur=ss.lognorm_ex(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=35), ss.Deaths(death_rate=15)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
     ppl, mf = sim.people, sim.networks.mf
     born = (ppl.alive & (ppl.age >= 18) & (ppl.age < 40)).uids # All born during the run, when the probability at birth was 0
@@ -815,7 +822,7 @@ def test_needles():
     sim = run(0)
     pwid = sim.people.pwid.raw.astype(bool)
     net = sim.networks.needles
-    assert pwid[net.edges.p1].all() and pwid[net.edges.p2].all() and np.isclose(net.results.mean_degree[-1], 2, rtol=0.1) # Only people who inject, with 2 partners each
+    assert pwid[net.edges.p1].all() and pwid[net.edges.p2].all() and np.isclose(2*len(net)/pwid[sim.people.alive.uids].sum(), 2, rtol=0.1) # Only people who inject, with 2 partners each on average
     new = sim.diseases.hiv.I.raw & ~sim.before
     assert not np.any(new & ~pwid) and np.any(new & pwid) # Nobody outside them is infected with beta 0 on mfnet
     low = ss.peract(0.0005)
@@ -872,9 +879,9 @@ def test_partnership_approx():
     mf = lambda **kw: ss.MFNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), **kw)
     cases = dict(
         risk = ([0.9, 1.1], [0.9, 1.1], dict(disease=sis(ss.peract(0.002)), stratify=dict(risk=['low', 'medium', 'high'], split=[0.8, 0.15, 0.05]), # 0.999, 0.995
-                 net=ss.PartnerNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6), acts=ss.freqperyear(80)))),
+                 net=ssl.DegreeNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6), acts=ss.freqperyear(80)))),
         gono = ([0.08, 0.4], [0.06, 0.4], dict(disease=sis(ss.peract(m2f=0.05, f2m=0.03), ss.months(4)), dt=ss.weeks(1), # 0.19, 0.13: concurrency (Poisson partners), which the approximation leaves out
-                 net=mf(n_contacts=1, dur=ss.lognorm_ex(mean=ss.weeks(4), std=ss.weeks(2)), acts=ss.freqperweek(2)))),
+                 net=ssl.DegreeMFNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), n_contacts=1, dur=ss.lognorm_ex(mean=ss.weeks(4), std=ss.weeks(2)), acts=ss.freqperweek(2)))),
         hiv  = ([1.0, 1.25], [1.1, 1.4], dict(disease=sis(ss.peract(m2f=0.004, f2m=0.002)), # 1.105, 1.247: infection kept within pairs, which the approximation spreads
                  net=mf(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(3)), acts=ss.freqperyear(80)))),
     )

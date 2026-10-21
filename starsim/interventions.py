@@ -436,14 +436,6 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.kind is not None and not isinstance(product, self.kind) and self.move_states is None:
             errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__}, not {type(product).__name__}'
             raise TypeError(errormsg)
-        frame = ss.utils.getframe(1)
-        for depth in range(2): # A product is named from the variable it is assigned to, where it can be found
-            if product is not None and product._default_name and frame is not None:
-                pname = ss.transitions.find_name(product, frame)
-                if pname is not None:
-                    product.name = product.label = pname
-                    product._default_name = False
-                frame = frame.f_back
         self.product = product
         self.move = move # For a transfer: the level people move to, by dimension
         self.increment = ss.transitions.parse_increment(increment, f'"{name or type(self).__name__}"') # Or the amount they move up a counter

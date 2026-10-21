@@ -30,7 +30,7 @@ sir = ss.Disease(infection, recovery, init_prev=0.01)   # names taken from the v
 # 3. Fully explicit
 sir = ss.Disease(
     ss.Transition(S, I, rate=beta * I, name='infection'),
-    ss.Transition('I', 'R', dur=ss.days(10), name='recovery'),
+    ss.Transition(I, R, dur=ss.days(10), name='recovery'),
     init_prev = 0.01,
 )
 ```
@@ -44,7 +44,7 @@ The first is the short form for SIR-shaped models. The second is the recommended
 ss.State(
     name       = None,      # taken from the keyword or the variable name if omitted
     init       = None,      # initial fraction or count; see below
-    people     = None,      # is this state people? None: worked out from the transitions (see States that are not people)
+    people     = True,      # is this state people? False for a count (see States that are not people)
     infectious = False,     # is this state a source of infection by default?
     rel_sus    = 1.0,       # susceptibility multiplier while in this state
     rel_trans  = 1.0,       # infectiousness multiplier while in this state
@@ -78,13 +78,13 @@ class SIR(ss.Disease):
     R = ss.State()
 ```
 
-At module level there is no such hook, which is why the lookup happens when the module is built: `ss.Disease(infection, recovery)` looks among the caller's variables for each state its transitions use. An arrow string or a `source='I'` that names a declared state is resolved at the same moment, after the names are known. Picking names up from variables is convenient and slightly magical; it stays under review in [19-open-questions.md](19-open-questions.md).
+At module level there is no such hook, which is why the lookup happens when the module is built: `ss.Disease(infection, recovery)` looks once among the caller's variables, and names the states, transitions, and parameters it was given from them. Nothing else looks: a string names a state only if that state is in the module (given as an object, or inferred from the arrows), not a variable of the caller. Picking names up from variables is convenient and slightly magical, so it is kept to this one lookup, in the constructor (and the one in `ss.Sim` that names modules, [01-objects.md](01-objects.md#names)); it stays under review in [19-open-questions.md](19-open-questions.md).
 
 `rel_sus` and `rel_trans` on a state are properties of being in that state, so a partially protective vaccine state is two numbers on a declaration rather than multipliers threaded through transmission code. They multiply with the per-agent `rel_sus` and `rel_trans` that [07-effects.md](07-effects.md) describes.
 
 A state belongs to the module whose transitions lead into or out of it. A state that appears only inside another module's rate (for example one disease's `I` in another disease's progression rate) is a reference, not a member. One set of states and transitions can build several diseases: when a disease is given states or transitions that another disease already has, they are copied (together, so they still refer to each other), and parameters stay shared. Two members of one module with the same explicit name raise `DuplicateDeclaration`.
 
-**The first state** (the anchor) is where people are unless they are put elsewhere. It is found among the states connected to those seeded (given initial values, or entered through the transmission that `init_prev` seeds). With contact-mediated transitions it is a source of one that people do not reach from another (`S`, not `V` after `S >> V`); of several, the one that no transition moves people into, then the earliest declared, and `describe()` notes the choice. With none, it is the earliest state that no transition moves people into. It can be given with `ss.Disease(..., first='S')`, and `to_spec()` and `to_code()` always write it. It depends neither on the order in which the states were made nor on the order of the transitions.
+**The first state** is where people are unless they are put elsewhere: the first state of people declared (made first: `S` in `S, I, R = ss.states(3)`, or the first in a class body or in the arrows), or the one given with `ss.Disease(..., first='S')`. It is not worked out from the transitions, so a model whose states are made in another order says `first=`. `to_spec()` and `to_code()` always write it.
 
 ### Declare states or infer them
 
@@ -105,8 +105,8 @@ sir = ss.Disease(infection, recovery, init=dict(S=0.90, I=0.01, R=0.09))   # the
 
 1. A value below 1 is a fraction of the population; a value of 1 or more is a number of people, whether written `1` or `1.0`. The interpretation is printed by `describe()`.
 2. `init` accepts the parameter ladder ([04-parameters.md](04-parameters.md)), for example `ss.by(age=[0.0, 0.02, 0.01])`.
-3. Whatever is left over goes to the first state ([above](#ssstate)). A value given for the first state is kept, never overwritten: then the rest go to the one state of people with no value (`init=dict(S=0.1, I=1e-4)` in an SIR starts 10% susceptible and the rest in `R`, with a note), and if there is none or several, the values must sum to 1, or it is an error that says to give the rest a state (`R=0.8999`). This applies to people only. A state that is not people ([below](#states-that-are-not-people)) starts at zero unless it has an `init`, and its `init` is always a count, never a fraction.
-4. `init_prev=x` on the disease seeds a fraction `x` through its contact-mediated transition, so the seeded individuals start wherever a new infection starts (`I` in an SIR, `E` in an SEIR). A disease with no contact-mediated transition (environmental or vector-borne, below) uses `init` on a state instead. With no initial values at all and a contact-mediated transition, `init_prev=0.01` is guessed, since nobody infected would mean no epidemic, and `init()` prints R0 and the number infectious at the start (unless a family of diseases, `ss.Strains`, seeds it). `init_prev` also takes an `ss.by` (by a dimension: a share for each group; by a property of people that is not one, such as `ss.by(dict(age=[0, 15, 50], value=[0, 0.1, 0.02]))`: each person's own share, as agents), a function of the sim (a share, or one for each group), or a function of the sim and the agents (`fn(sim, uids)`, a share for each, as agents); with a share for each agent, each is drawn on its own. Where a new infection has several destinations, the seeded are shared between them as a new infection is. `init=dict(I=ss.by(...))` by a property of people that is not a dimension is drawn for each agent likewise. Under a compartmental solver, a property that is not a dimension, or a function of the agents, raises `CapabilityError`.
+3. Whatever is left over goes to the first state ([above](#ssstate)), so giving one of `S` or `I` is enough. A value given for the first state is kept, never overwritten: then the rest go to the one state of people with no value (`init=dict(S=0.1, I=1e-4)` in an SIR starts 10% susceptible and the rest in `R`, with a note), and if there is none or several, the values must sum to 1 (counts, to the population), or it is an error that says to give the rest a state (`R=0.8999`). `init_prev=` together with `init=` for a state that `init_prev` seeds is ambiguous and an error. This applies to people only. A state that is not people ([below](#states-that-are-not-people)) starts at zero unless it has an `init`, and its `init` is always a count, never a fraction.
+4. `init_prev=x` on the disease seeds a fraction `x` through its contact-mediated transition, so the seeded individuals start wherever a new infection starts (`I` in an SIR, `E` in an SEIR). A disease with no contact-mediated transition (environmental or vector-borne, below) uses `init` on a state instead. With no initial values at all, nobody starts infected: the 1% is the default only of the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` (`init_prev=0.01`, as in Starsim 3) and so of `ss.demo()`, and `init()` prints R0 and the number infectious at the start. `init_prev` also takes an `ss.by` (by a dimension: a share for each group; by a property of people that is not one, such as `ss.by(dict(age=[0, 15, 50], value=[0, 0.1, 0.02]))`: each person's own share, as agents), a function of the sim (a share, or one for each group), or a function of the sim and the agents (`fn(sim, uids)`, a share for each, as agents); with a share for each agent, each is drawn on its own. Where a new infection has several destinations, the seeded are shared between them as a new infection is. `init=dict(I=ss.by(...))` by a property of people that is not a dimension is drawn for each agent likewise. Under a compartmental solver, a property that is not a dimension, or a function of the agents, raises `CapabilityError`.
 5. In an agent-based run the number who start in each state is exact (rounded to whole agents), not a chance for each agent; in a compartmental run it is used exactly. People who start in a state that an infection puts people into (`I` in an SIR) have been in it for the first step, as if infected in the step before (an infection is dated by the step it happens in, `ti_I = -1` for them as agents, and one slot along a conveyor): so a seeded case with a fixed stay of one step infects for one generation and is gone at the next time point, as in the Reed-Frost model.
 6. `init=dict(...)` on the disease gives the starting value of several states at once. Its keys are state names and each value means what the same value would mean as `ss.State(init=...)`. It is for when the whole distribution is wanted; if the values do not account for everyone, the remainder goes where item 3 says.
 
@@ -126,7 +126,6 @@ ss.Transition(
     increment = None,   # a counter that goes up as well: its name (adds 1), or a dict of amounts, e.g. dict(parity=2) (05-dimensions.md)
     after  = None,      # a minimum stay in the source state before anyone leaves by it
     before = None,      # for a rate: it applies only until people have been in the source state this long
-    offspring = None,   # each person who goes through it has newborns in this state: a state, or (state, number) (agents only)
     acquisition = None, # whether it is an acquisition of the disease (see What counts as acquisition); worked out if not given
     name   = None,
     label  = None,
@@ -135,7 +134,7 @@ ss.Transition(
 
 At most one of `rate` and `dur` is given, and `stages=` goes with `dur=`. `dur=ss.days(10)` and `rate=ss.perday(0.1)` say the same thing and produce the same model spec.
 
-`after=`, `before=`, and `offspring=` are for models that count time in a state or have litters, as EMULSION's minimum durations, escapes, and births do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`, `farrowing = ss.Transition(G, L, dur=ss.days(115), offspring=(NB, 10))`). `offspring=` needs agents. A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay. `after=` may instead be an event, of this module or another (`after=preg.delivery`, or any event `ss.on()` takes): people in the source move when it happens to them, or with `dur=` that long after it (drawn for each person when the event happens, a scalar being the mean of an exponential as for any `dur=`), unless they leave the source first; so "until delivery" is `ss.Transition(X, Y, after=preg.delivery)` and "a month after delivery" adds `dur=ss.constant(ss.months(1))`. As agents only, as for `ss.on()`. A function as `dur=` (`dur=fn`) is the mean of an exponential, which warns, since each person's own time from a function is `dur=ss.constant(fn)`.
+`after=` and `before=` are for models that count time in a state, as EMULSION's minimum durations and escapes do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`); a litter is a birth driven by the transition, `ss.birth('-> NB', per=farrowing, n=10)` ([below](#births-deaths-and-migration)). A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay. `after=` may instead be an event, of this module or another (`after=preg.delivery`, or any event `ss.on()` takes): people in the source move when it happens to them, or with `dur=` that long after it (drawn for each person when the event happens, a scalar being the mean of an exponential as for any `dur=`), unless they leave the source first; so "until delivery" is `ss.Transition(X, Y, after=preg.delivery)` and "a month after delivery" adds `dur=ss.constant(ss.months(1))`. As agents only, as for `ss.on()`. A function as `dur=` (`dur=fn`) is the mean of an exponential, which warns, since each person's own time from a function is `dur=ss.constant(fn)`.
 
 **The kind of a transition is derived, not chosen.** If the rate mentions a bare state, the transition is *contact-mediated* and that state is the source of infection; otherwise it is *spontaneous*. `describe()` prints the kind of every transition.
 
@@ -187,7 +186,7 @@ The lowercase constructors return an `ss.Transition`. Each is a shorter way of w
 | `ss.emigration('I ->', rate=r)` | as `ss.death()`, whose agents are recorded as emigrants |
 | `ss.transfer(risk='low -> high', rate=r)` | a transition between coordinates of a stratification (below) |
 
-`ss.progression` takes `dur=` or `rate=`, and optionally `p=`, `stages=`, `where=`, `move=`, `increment=`, `after=`, `before=`, and `offspring=`. `ss.transmission` takes `beta=` (required) and optionally `source=`, `p=`, and `where=`. The word `transmission` is what stands for "times the source": `ss.transmission('S -> I', beta=b)` is `S >> I @ b * I`, not `S >> I @ b`. There is no `ss.infection` alias; the keyword names the event (`infection=`) and the constructor names the mechanism.
+`ss.progression` takes `dur=` or `rate=`, and optionally `p=`, `stages=`, `where=`, `move=`, `increment=`, `after=`, and `before=`. `ss.transmission` takes `beta=` (required) and optionally `source=`, `p=`, and `where=`. The word `transmission` is what stands for "times the source": `ss.transmission('S -> I', beta=b)` is `S >> I @ b * I`, not `S >> I @ b`. There is no `ss.infection` alias; the keyword names the event (`infection=`) and the constructor names the mechanism.
 
 **`beta` may differ by route and direction.** Infectiousness belongs to the disease and contact to the network, and where the pathogen transmits differently through different kinds of contact the disease gives one value per network, as in Starsim:
 
@@ -358,7 +357,7 @@ A branching transition is one named transition with several destinations. Its re
 
 **`p` is always a branch probability**: the chance of taking this branch. Separate transitions with `p=` are decided when the person enters the source state (or, for a contact-mediated transition, when they are infected), and each then has its own dwell time. One transition with several destinations is decided when the person leaves, from the one dwell time drawn: its `p` is evaluated then, so a time series or a function of the sim sees the person as they are when they leave (an age-dependent share uses their age at exit). A per-period probability that governs timing is not `p=`; it is a typed rate, `rate=ss.prob(0.1, 'day')`.
 
-**A branch probability given the time in the state.** `P.dwell` is the time each person has spent in `P`, as `P.n` is the number in it: an expression, so it prints, fits, and is written to the spec as text. It may appear in `p=` of a transition with several destinations out of `P`, where it is the time the person spent there when they leave (`ss.Transition(P, [C, R], dur=..., p=[f(P.dwell), None])`: in HPV, the chance of CIN rises with the time infected), and in the rate of a transition out of `P` (a hazard that depends on the time in the state, `P >> R @ k*P.dwell`). Anywhere else it raises `CapabilityError`: separate transitions with `p=` are decided on entry, when no time has passed, so `p=` there names the one-transition form; and it is not a number of people, so it cannot be in a transmission, a result, an update, or another state's transition. It is the whole steps spent in the state when they leave (for `p=`), and to the middle of the step (for a rate), as agents only: `solver='auto'` runs a model that reads it as agents, and a compartmental solver raises `CapabilityError` (decided 2026-10-20; its conveyor by time in state is gone, and Erlang stages or fixed delays are the compartmental forms). In a function of `(sim, uids)`, `hpv.P.dwell[uids]` reads the same time.
+**A branch probability given the time in the state.** `P.time` is the time each person has spent in `P` ([clocks](#events-and-clocks)), as `P.n` is the number in it: an expression, so it prints, fits, and is written to the spec as text. In `p=` of a transition with several destinations out of `P` it is the time the person spent there when they leave (`ss.Transition(P, [C, R], dur=..., p=[f(P.time), None])`: in HPV, the chance of CIN rises with the time infected), and in the rate of a transition out of `P` it is a hazard that depends on the time in the state (`P >> R @ k*P.time`). Separate transitions with `p=` are decided on entry, when no time has passed, so `p=` there with a clock of the state raises `CapabilityError`, which names the one-transition form. It is whole steps, as agents only: `solver='auto'` runs a model that reads it as agents, and a compartmental solver raises `CapabilityError` (decided 2026-10-20; Erlang stages or fixed delays are the compartmental forms). In a function of `(sim, uids)`, `hpv.P.time[uids]` reads the same time. (`P.dwell`, which said the same, is gone.)
 
 - `p` accepts everything a parameter accepts ([04-parameters.md](04-parameters.md)): a constant, `ss.by(age=[...])`, a time series, or a function of the sim returning one value per agent or per group. In real models the split is rarely two constants.
 - The probabilities out of one state MUST sum to 1. One entry MAY be left out (`None` in a list, or one transition with no `p=`) and gets the remainder, which `describe()` marks as guessed; with two destinations a single value is the first one's probability. A constant split that does not sum to 1, or `ss.null` as one of several destinations (a branch out of the model is a transition of its own), raises `BadBranchSplit`.
@@ -511,16 +510,8 @@ The other way is the class form: subclass `ss.Disease`, declare the states and t
 
 Some of what a disease model tracks is not people: bacteria in water, a mosquito population, a wastewater signal. These are ordinary `ss.State` objects, declared and used like any other, with the same transition syntax, in the same `ss.Disease` as the states people are in. There is no separate class for them. It is how environmental and vector-borne transmission are written.
 
-**How they are recognized.** A person starts in the disease's first state or is seeded into another, and moves only along transitions. So a state is people if transitions connect it to the disease's first state, in either direction (a maternal-immunity state `M` with `M >> S` is people, although nobody moves from `S` into it), and it is not people if nothing connects them. In the cholera model below no transition joins `W` to `S`, `I`, or `R`, and in the malaria model none joins the mosquito states to the human ones. A transition to or from `ss.null` is not a connection, so a state that is only filled by an inflow and emptied by an outflow is not people. This is a guess, so `describe()` prints it:
+**Saying which they are.** Every state is people unless it is declared a count with `ss.State(people=False)` (or `ss.states(3, people=False)`). It is not worked out from the transitions: a person starts in the disease's first state or is seeded into another and moves only along transitions, but a model can keep two sets of people states with no transition between them (two risk groups), and a reservoir filled by an inflow looks like a group of people born into it, so a guess from the transitions can be wrong either way. A transition between a state of people and a count raises `PeopleAndCounts`, and a count used bare in a rate raises `ExposureToCount`, so a forgotten `people=False` is caught when the module is built.
 
-```text
-states       S, I, R
-             W a count, not people                           [guessed: no transition connects W to S]
-```
-
-The build also says it once as a note (`ss.StateNotPeople`).
-
-**Saying it outright.** `ss.State(people=False)` declares a count and `ss.State(people=True)` declares people; either one overrides the guess and removes the `[guessed]` mark. `people=True` is needed by a disease that deliberately keeps two sets of people states with no transition between them.
 
 **What follows.** A state that is not people:
 
@@ -536,7 +527,7 @@ The build also says it once as a note (`ss.StateNotPeople`).
 ExposureToCount: the rate for 'infection' uses the bare state W, and W is not people.
        rate = beta * W
      A bare state means contact with people in that state, and there is no contact with a count.
-     Write W.n for the number itself. If W is people, declare it with ss.State(people=True).
+     Write W.n for the number itself, or leave out people=False if W is people.
 ```
 
 ### Cholera: an environmental reservoir
@@ -548,7 +539,8 @@ beta = 0.5        # per day: infection hazard at saturating exposure
 K    = 1e5        # cells/mL giving half the maximum hazard
 xi   = 10         # cells/mL shed per infectious person per day
 
-S, I, R, W = ss.states(4)                     # W is bacteria in the water
+S, I, R = ss.states(3)
+W = ss.State(people=False)                    # bacteria in the water: a count
 
 cholera = ss.Disease(
     infection = S >> I @ beta * W.n / (W.n + K),
@@ -560,7 +552,7 @@ cholera = ss.Disease(
 sim = ss.Sim(cholera, total_pop=100_000, unit='day', stop=365)
 ```
 
-No transition leads from `S` to `W`, so `W` is a count: `total_pop=100_000` is the people in `S`, `I`, and `R`. Nothing here is agent-specific, so `solver='auto'` runs it as an ODE. Add `n_agents=10_000` or a network and the people become agents while `W` stays a count; the model text does not change. The corresponding SimInf model keeps `W` in its per-node continuous state `v` and updates it in a C post-timestep function; here it is two more transitions.
+`W` is declared a count, so `total_pop=100_000` is the people in `S`, `I`, and `R`. Nothing here is agent-specific, so `solver='auto'` runs it as an ODE. Add `n_agents=10_000` or a network and the people become agents while `W` stays a count; the model text does not change. The corresponding SimInf model keeps `W` in its per-node continuous state `v` and updates it in a C post-timestep function; here it is two more transitions.
 
 ### Malaria: a mosquito population
 
@@ -572,7 +564,7 @@ b = 0.5           # probability an infectious bite infects a human
 c = 0.5           # probability a bite on an infectious human infects the mosquito
 
 Sh, Eh, Ih, Rh = ss.states(4)
-Sv, Ev, Iv     = ss.states(3)
+Sv, Ev, Iv     = ss.states(3, people=False)   # mosquitoes: counts
 Nh             = (Sh + Eh + Ih + Rh).n
 
 malaria = ss.Disease(
@@ -589,25 +581,28 @@ malaria = ss.Disease(
 sim = ss.Sim(malaria, n_agents=5_000, unit='day', stop=3 * 365)
 ```
 
-Nobody can move from `Sh` into `Sv`, `Ev`, or `Iv`, so the mosquito states are counts (`ss.states(3, people=False)` says so outright). Here `n_agents=` makes the humans agents; the mosquitoes are three numbers. `infection` is an acquisition, so `ss.modify(malaria.rel_sus, multiply=0.5, where=...)` (a bednet) and a vaccine reduce it, `ss.treat` cures from `Eh` and `Ih`, and `malaria.R0()` is the next-generation value, with the mosquitoes at their disease-free equilibrium (the square root of the classical Ross-Macdonald number, since each passage through the vector is a generation: [12-backends.md](12-backends.md)). `Ih=0.01` is a fraction of the people and `Sv=50_000` is a count of mosquitoes. A seasonal mosquito population is `emergence = ss.null >> Sv @ ss.seasonal(mean=5_000, amplitude=0.8, peak='April')`. Several mosquito species are a stratification of the three vector states.
+The mosquito states are declared counts. Here `n_agents=` makes the humans agents; the mosquitoes are three numbers. `infection` is an acquisition, so `ss.modify(malaria.rel_sus, multiply=0.5, where=...)` (a bednet) and a vaccine reduce it, `ss.treat` cures from `Eh` and `Ih`, and `malaria.R0()` is the next-generation value, with the mosquitoes at their disease-free equilibrium (the square root of the classical Ross-Macdonald number, since each passage through the vector is a generation: [12-backends.md](12-backends.md)). `Ih=0.01` is a fraction of the people and `Sv=50_000` is a count of mosquitoes. A seasonal mosquito population is `emergence = ss.null >> Sv @ ss.seasonal(mean=5_000, amplitude=0.8, peak='April')`. Several mosquito species are a stratification of the three vector states.
 
-### A count set each step
+### A value set each step
 
-What is not a flow (a lag, a running maximum, a switch that stays on) is `ss.update`, as odin's `update()` of a variable: each step, a count is set to a value worked out from the model at the start of the step, so every rate in the step sees its old value.
+What is not a flow (a lag, a running maximum, a switch that stays on) is a few lines of a module written as code, whose `step()` sets it, and a function in a rate reads it, as odin's `update()` of a variable does:
 
 ```python
+class Peak(ss.Connector):                      # the largest prevalence so far
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.peak = 0.0
+    def step(self):
+        sir = self.sim.diseases.sir
+        self.peak = max(self.peak, sir.I.n/self.sim.people.alive.sum())
+
 S, I, R = ss.states(3)
-peak = ss.State(people=False)                  # the largest prevalence so far
-sir = ss.Disease(
-    infection = S >> I @ ss.perday(0.3) * I * np.exp(-5 * peak.n),   # people take care once they have seen a large epidemic
-    recovery  = I >> R @ ss.days(10),
-    track     = ss.update(peak, np.maximum(peak.n, I.frac)),
-    init      = dict(I=10),
-)
-sim = ss.Sim(sir, n_agents=10_000, unit='day', stop=200)
+slowing = lambda sim: np.exp(-5 * sim.connectors.peak.peak)      # people take care once they have seen a large epidemic
+sir = ss.Disease(infection=S >> I @ ss.perday(0.3) * I * slowing, recovery=I >> R @ ss.days(10), init=dict(I=10))
+sim = ss.Sim(sir, connectors=Peak(name='peak'), n_agents=10_000, unit='day', stop=200)
 ```
 
-The value is an expression of parameters, counts (`I.n`, `I.frac`, `I.total`), the count itself, and numbers, with functions of them, as a rate is, but not a bare state, which means contact (`ExposureToCount`). The count is an ordinary count with no transitions of its own (one that also had transitions, or a second update, is a `DuplicateDeclaration`): its result is `n_peak`, and it starts at its `init`, or 0. Agents set it at the end of the step; it is agents only (decided 2026-10-20), so `solver='auto'` runs a model with one as agents and a compartmental solver raises `CapabilityError`. What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), and a total by week is a flow's result resampled (`res.infection.resample('week')`).
+The connector runs before the diseases in each step, so every rate in the step sees the value from its start. A function in a rate runs as agents (`solver='auto'` chooses them). What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), which every solver runs, and a total by week is a flow's result resampled (`res.infection.resample('week')`). (`ss.update`, a declared form of this for agents only, is gone.)
 
 ### How counts are advanced
 
@@ -629,8 +624,7 @@ Every one of these is a default that `describe()` prints and marks, and each row
 | A transmission's source, in the string form | The states declared `infectious=True`, else the destination; required if the destination leads on as in an SEIR (`SourceNeeded`) |
 | Which states are infectious | The sources of contact-mediated transitions |
 | Which transitions are acquisitions | Contact-mediated ones, and the other transitions of people out of the first state when none of those is contact-mediated ([above](#what-counts-as-acquisition)); `acquisition=` overrides it |
-| Initial conditions | Whatever is not given goes to the first state (the source of the first transmission, [above](#ssstate)); with nothing given and a transmission, `init_prev=0.01` |
-| Which states are people | Every state connected to the first state by transitions; a state connected to none of them holds a count. The first state is never in a group that only an inflow fills (`ss.null >> Sv @ emergence`) when there is another, so initial mosquitoes do not make the mosquitoes the people; `ss.states(3, people=False)` says it outright, and states given `people=True` with no transition to the first state's are said in a note |
+| Initial conditions | Whatever is not given goes to the first state (the first declared, [above](#ssstate)); with nothing given, nobody is infected (the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` have `init_prev=0.01`) |
 | Dwell-time distribution | Exponential, from a scalar duration or a rate |
 | Number of sub-stages | From the distribution, unless `stages=` is given |
 | Units of bare numbers | [02-types.md §Bare numbers](02-types.md#bare-numbers) |

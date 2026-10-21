@@ -20,10 +20,6 @@ def level_dtype(n):
 
 #%% Stratifications
 
-hints = dict(patch='space', node='space', region='space', district='space', county='space', place='space', location='space', province='space',
-             strain='strain', variant='strain', genotype='strain', serotype='strain', resistance='strain') # Names that suggest a kind, for a note only: the kind comes from the value (see ss.transitions.Strat)
-
-
 class Strat:
     """
     One stratification: a property of people, and the levels it is split into
@@ -48,12 +44,7 @@ class Strat:
         self.name = name
         self.geo = levels if isinstance(levels, geo) else None
         self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'strain' if immunity is not None else 'age' if name == 'age' else 'plain')
-        self.hint = hints.get(name) if kind is None and self.kind == 'plain' else None # A name that suggests another kind, which is noted
         self.guessed = sc.objdict()
-        if self.hint == 'space':
-            self.guessed['kind'] = 'plain, so its levels mix; for places, give them as ss.geo(names=[...]) or pass kind="space"'
-        elif self.hint == 'strain':
-            self.guessed['kind'] = 'plain, so it does not change who infects whom; for strains, give immunity= or pass kind="strain"'
         self.states = states
         if where is not None and not isinstance(where, dict):
             errormsg = f'where= takes a dict of a dimension and its level (or levels), e.g. dict(sex="female"), not {type(where).__name__}'
@@ -75,7 +66,6 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
-        self.home = None # For where commuters are now (see ss.Mobility.now()): the dimension of their home
         self.clock_unit = None # For a clock: the unit of time its values are in (None for the sim's), and its levels as given
         self.declared = None
         if self.kind == 'clock':
@@ -302,8 +292,7 @@ class Strat:
         if self.mobility is not None:
             mob = self.mobility
             away = mob.away if mob.away is None else mob.away.name if isinstance(mob.away, ss.par) and mob.away.name else float(mob.away) # A fitted share by its parameter's name
-            back = None if mob.back is None else f'ss.{mob.back!r}' if isinstance(mob.back, ss.TimePar) else float(mob.back)
-            mobility = dict(kind=mob.kind, away=away, scale=None if mob.scale == 'each' else 'mean', cap=None if mob.cap is None else float(mob.cap), back=back)
+            mobility = dict(kind=mob.kind, away=away)
             if mob.data is None:
                 mobility['matrix'] = mob.matrix(self).tolist()
             else: # A register of movements, by its size and a hash of its contents
@@ -632,12 +621,6 @@ class Groups:
                         mod.graph.strats.append(strats[tf.dim])
                     else:
                         raise ss.MissingDimension(f'the transfer "{tf.name}" moves people along "{tf.dim}", but the model is not stratified by it. Add e.g. {mod.name}.stratify({tf.dim}=[...]).')
-        for strat in list(strats.values()): # Commuters who come home at a finite rate are in one place at a time: where they are now, beside their home (see ss.Mobility(back=))
-            if strat.mobility is not None and strat.mobility.back is not None:
-                now = strat.mobility.now(strat)
-                if strats.get(now.name, now) is not now:
-                    raise ss.DuplicateStructuralDimension(f'the model has a dimension called "{now.name}", which is also where the commuters of "{strat.name}" are now; rename it.')
-                strats[now.name] = now
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         for mod in sim.pars.interventions.values(): # Properties of people that the interventions need, e.g. holding a product
             if hasattr(mod, 'dims'):
@@ -670,9 +653,6 @@ class Groups:
         for strat in self.strats: # A clock starts with everyone at none
             if strat.kind == 'clock' and 'split' not in strat.guessed:
                 raise ss.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
-        for strat in self.strats: # The kind comes from the value, not the name; a name that suggests another kind is noted
-            if strat.hint:
-                ss.note(f'the dimension "{strat.name}" is {strat.guessed["kind"]}', sim=sim)
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
@@ -694,12 +674,6 @@ class Groups:
         births = np.ones(self.n_groups)
         for d,strat in enumerate(self.strats):
             strat.dim = d
-        for strat in self.strats: # Where commuters are now: at the start, in each place for their share of time there
-            if strat.home is not None:
-                share = strat.home.mobility.time_share(strat.home).toarray()
-                strat.cond = ((strat.home.dim, strat.dim), share)
-                strat.split = strat.home.split @ share
-                strat.guessed.pop('split', None)
         joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
             errormsg = 'Only one split= can cover several dimensions at once'
@@ -734,7 +708,7 @@ class Groups:
             born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
             births *= (born/born.sum())[tuple(self.group_coords[:, d] for i,d in enumerate(ds) if i not in ages)]
         for d,strat in enumerate(self.strats):
-            share = strat.shares(self.group_coords) if strat.home is not None else strat.split[self.group_coords[:, d]] # Where commuters are now, given their home
+            share = strat.split[self.group_coords[:, d]]
             if self.joint is None or d not in self.joint[0]:
                 split *= share
             if strat.kind == 'age':

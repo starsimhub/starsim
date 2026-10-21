@@ -6,7 +6,8 @@ they are read from the JSON written by `dump_epimodel.R`, which runs the script 
 EpiModel's own environment with the fitting and simulating functions replaced by ones
 that record their arguments. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`)
 becomes a disease with its transitions; a network fitted by `netest()` becomes an
-`ss.PartnerNet` with the same targets (an approximation, since it is not an ERGM); and
+`ssl.DegreeNet` (`import starsim.library as ssl`) with the same targets (an approximation,
+since it is not an ERGM); and
 modules written in R (`infection.FUN = infect`, ...) are listed, with their source in
 `sim.imported.modules`, to be written by hand.
 """
@@ -76,7 +77,8 @@ def value(par):
 
 
 def network(net, src, name):
-    """ An ss.PartnerNet with the targets of a network fitted by netest(), and its code """
+    """ An ssl.DegreeNet with the targets of a network fitted by netest(), and its code """
+    import starsim.library as ssl # Lazily, since the library builds on the rest of Starsim
     n = net['n']
     targets = sc.tolist(net['target_stats'])
     terms = [t for t in net['terms'] if t['term'] != 'offset']
@@ -108,15 +110,15 @@ def network(net, src, name):
             kw.match = {attr: round(val/edges, 10)}
             src.notes.append(f'{name}: nodematch("{attr}") is the share of partnerships within a level of a stratification "{attr}", split as on the network [guessed: matches the share, not an ERGM fit]')
         else:
-            src.skip(f'{name}: {t["text"]}', 'an ERGM term with no counterpart in ss.PartnerNet (it matches the number of partners, concurrency, a maximum, and mixing within a group)')
+            src.skip(f'{name}: {t["text"]}', 'an ERGM term with no counterpart in ssl.DegreeNet (it matches the number of partners, concurrency, a maximum, and mixing within a group)')
     if net['dissolution'].replace(' ', '') != '~offset(edges)':
-        src.skip(f'{name}: dissolution {net["dissolution"]}', 'partnerships that last longer within a group; ss.PartnerNet has one duration (the first is used)')
+        src.skip(f'{name}: dissolution {net["dissolution"]}', 'partnerships that last longer within a group; ssl.DegreeNet has one duration (the first is used)')
     kw.dur = float(sc.tolist(net['duration'])[0])
     if kw.dur.is_integer():
         kw.dur = int(kw.dur)
-    code = 'ss.PartnerNet(' + ', '.join(f'{k}={v!r}' for k,v in kw.items()) + ')'
+    code = 'ssl.DegreeNet(' + ', '.join(f'{k}={v!r}' for k,v in kw.items()) + ')'
     src.notes.append(f'{name}: {net["formation"]} with targets {targets} and partnerships lasting {kw.dur} steps => {code} [guessed: the same targets, not an ERGM fit]')
-    return ss.PartnerNet(**kw, name=name), code
+    return ssl.DegreeNet(**kw, name=name), code
 
 
 def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwargs):
@@ -227,7 +229,7 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
             nets[name], code = network(net, src, name)
             codes.append(f'{name}={code}')
             if net['d_rate']:
-                src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ss.PartnerNet allows for partnerships ended by departures')
+                src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ssl.DegreeNet allows for partnerships ended by departures')
         if len(nets) == 1:
             cfg.networks = nets[0]
             src.code['networks'] = codes[0].split('=', 1)[1]

@@ -67,7 +67,7 @@ Rules 2 and 3 are guesses about what the source meant, and the difference matter
 | **summer2** | `'summer2'` (a JSON dump, or the model) | Each flow kind as one transition, `stratify_with` as `stratify`, adjustments as `adjust=`, and the mixing matrix; the derived outputs are worked out from the results by `ss.interop.summer2.outputs()` |
 | **Atomica** | `'atomica'` (the framework, databook, and program book workbooks) | Compartments, transitions, characteristics, and the databook's values; the program book's spending as parameters whose coverage moves the parameters they affect |
 | **camdl** | `'camdl'` (a `.camdl` file, camdlc's JSON, or a pycamdl model) | The model, with the parameter values of one of its scenarios (`scenario=`), as an ODE or a chain binomial as camdl's backends run it |
-| **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ss.PartnerNet` for the network model's targets); custom modules are listed with their R source |
+| **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ssl.DegreeNet` for the network model's targets); custom modules are listed with their R source |
 | **epydemix** | `'epydemix'` (a JSON dump from `dump_epydemix.py`, or the model) | The transitions, the population, and its contact matrices |
 | **MEmilio** | `'memilio'` (a JSON dump from `dump_memilio.py`) | The ODE models (`osir`, `oseir`, `oseirdb`, `osecir`), alone, on a mobility graph (as places with commuting), or in a parameter study (its distributions as priors) |
 
@@ -80,6 +80,7 @@ Writing the importers found gaps in the language. Each import lists the part it 
 ## Export
 
 ```python
+import starsim.interop
 sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
 sim = ss.Sim(sir, unit='day')
 

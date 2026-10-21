@@ -361,8 +361,6 @@ class ParticleFilter:
         if swarm is not None:
             swarm.perturb(rng)
         n_threads = min(ss.options.threads or nb.get_num_threads(), n)
-        if prog.local and prog.n_places >= 512: # The exact solver steps many places on threads of its own (see ss.kernels.gillespie_places()), which it cannot start from within the particles' threads
-            n_threads = 1
         if n_threads > 1: # A copy of the program for each thread, since a step changes the parts of it that vary in time, and the threads would contend for the counts of references to shared arrays
             progs = nb.typed.List([ss.kernels.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in prog]) for i in range(n_threads)])
         logw = np.full(n, -np.log(n)) # The normalized log-weight of each particle
@@ -505,7 +503,7 @@ class Swarm:
                 x = to_x(z0 - 0.5*np.eye(len(z0))[i])[0]
                 set_pars(x)
                 if not np.allclose(self.shares(x[None])[0], ss.gradients.capture(engine)[2]['sh_val'], rtol=1e-9, atol=1e-12):
-                    errormsg = f'IF2 cannot fit "{name}" yet, since the movement between places does not change in proportion to it (as away= does, with no cap=); fit it with method="pmcmc", or fix it'
+                    errormsg = f'IF2 cannot fit "{name}" yet, since the movement between places does not change in proportion to it (as away= does); fit it with method="pmcmc", or fix it'
                     raise ValueError(errormsg)
         set_pars(x0)
         return

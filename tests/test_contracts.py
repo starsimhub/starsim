@@ -35,12 +35,6 @@ def declared_sir(**kwargs):
     return ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.erlang(mean=10, k=3, unit='days'), init_prev=0.01, name='sir', **kwargs)
 
 
-def water(declared):
-    S, I, R = ss.states('S I R')
-    W = ss.State(name='W', people=False) if declared else ss.State(name='W')
-    return ss.Disease(S >> I @ ss.perday(0.5)*W.n/(W.n + 1e5), I >> R @ ss.days(5), ss.null >> W @ 10*I.n, W >> ss.null @ ss.days(30), init=dict(I=0.001), name='cholera')
-
-
 def lognormal(stages):
     dur = ss.lognorm_ex(mean=10, std=4, unit='days')
     return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=dur, stages=stages), init_prev=0.01, name='sir')
@@ -59,8 +53,6 @@ guesses = dict(
     states     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'inferred from the arrows'),
     source     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'source is the destination'),
     infectious = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'I infectious'),
-    init       = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(init_prev=0.01)),           'init:'),
-    people     = (lambda: ss.Sim(water(False)),                      lambda: ss.Sim(water(True)),                          'a count, not people'),
     dwell      = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
     unit       = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(), unit='day'),             'unit'),
@@ -214,8 +206,7 @@ def test_exit_order(solver):
         exits = {key:I >> dests[key] @ ss.perday(1.0) for key in order} # Three equal exits, fast compared with the step
         dis = ss.Disease(I, *dests.values(), **exits, name='exits')
         agents = dict(n_agents=20_000) if solver == 'abm' else {}
-        pars = dict(solver='gillespie', total_pop=1e8) if solver == 'tau' else dict(solver=solver, total_pop=100_000) # Tau-leaping is gillespie's way with a run of too many events
-        sim = ss.Sim(dis, unit='day', stop=5, verbose=0, **pars, **agents).run()
+        sim = ss.Sim(dis, unit='day', stop=5, solver=solver, total_pop=100_000, verbose=0, **agents).run()
         assert sim.solver == solver
         res = sim.results.exits
         left = np.array([res[f'n_{k.upper()}'][-1] for k in 'abc'])

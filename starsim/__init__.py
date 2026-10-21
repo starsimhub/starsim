@@ -97,7 +97,7 @@ from .modules import (
 t('networks')
 from .networks import (
     Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomNet, PartnerNet, MFNet,
+    RandomNet, PartnerNet, MFNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts, geo, gravity, Mobility,
 )
@@ -126,14 +126,14 @@ from .connectors import Connector, modify, change
 
 t('conditions')
 from . import conditions
-from .conditions import clock, state, any_ as any, child # Conditions on a state by path, on any of several, and on a mother when her child goes through an event
+from .conditions import state, any_ as any, child # Conditions on a state by path, on any of several, and on a mother when her child goes through an event
 from . import kernels
 
 t('transitions')
-from .expressions import par, mother, attr, func, spread
+from .expressions import par, mother, attr
 from .transitions import (
     State, states, null, stay, on,
-    Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome, update,
+    Transition, transmission, progression, birth, death, lifetable, immigration, emigration, outcome,
 )
 
 t('dimensions')
@@ -143,7 +143,7 @@ t('solvers')
 from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.solvers.Agents
 
 t('diseases')
-from .diseases import Disease, Infection, NCD, SIR, SEIR, SIS
+from .diseases import Disease, Infection, SIR, SEIR, SIS
 from .strains import immunity, Strains
 
 t('pregnancy')

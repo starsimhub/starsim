@@ -81,9 +81,9 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 |---|---|---|---|---|---|
 | `events_SIR()`, 1,600 herds | 12 | 21 | 1.8 to 2.3 s as a command (starting R, loading the events, building, and running); the run itself 0.08 s | 0.9 s to build and run (1.2 s the first time in a new process) | **Fail** (lines) |
 | SISe3, 1,600 herds | 27 | 40 | 1.6 to 1.9 s as a command; the run itself 0.10 s | 5.2 s (5.5 s the first time) | **Fail** (lines, first run, repeated run) |
-| `events_SIR()` copied ten times: 16,000 herds and 4.7 million events | | | 1.9 s to run (2.0 s on 8 threads), 2.1 s to build | 3.1 s to run (1.8 s on 8 threads, 1.7 s on 20), 2.0 s to build | **Pass** |
+| `events_SIR()` copied ten times: 16,000 herds and 4.7 million events | | | 1.9 s to run (2.0 s on 8 threads), 2.1 s to build | 3.1 s to run, 2.0 s to build | **Pass** |
 
-The times were measured on 18 October 2026 on a machine shared with other jobs. The last row is the switching demo's `test_siminf_scale()`, with the results kept for every herd on every day, as SimInf keeps them. Starsim's Gillespie solver steps only the herds that can have an event (a herd with nobody infected is skipped until the register moves animals into or out of it), and when many herds have events it steps them on several threads (`nb.set_num_threads()`), with the same results on any number. Herds that do not affect each other within a step are always run exactly, however many events there are, since by herd that is faster than tau leaps.
+The times were measured on 18 October 2026 on a machine shared with other jobs. The last row is the switching demo's `test_siminf_scale()`, with the results kept for every herd on every day, as SimInf keeps them. Starsim's Gillespie solver steps only the herds that can have an event (a herd with nobody infected is skipped until the register moves animals into or out of it), and is always exact, however many events there are.
 
 ## What works and what does not yet
 

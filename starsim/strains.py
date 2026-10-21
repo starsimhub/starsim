@@ -253,15 +253,10 @@ class Strains(ss.Module):
             errormsg = f'ss.Strains("{name}", members) takes its members as one list of declared diseases (or an ss.ndict of them), e.g. ss.Strains("{name}", [hpv16, hpv18])'
             raise TypeError(errormsg)
         members = list(members.values()) if isinstance(members, dict) else list(members)
-        frame = ss.utils.getframe(1)
         for mod in members:
             if not isinstance(mod, ss.Disease) or mod.graph is None:
                 raise ss.CapabilityError(f'the member {getattr(mod, "name", mod)!r} of "{name}" is not a declared disease ({type(mod).__name__}), so its states are not visible to the family; declare it with ss.Disease(...)')
-            if mod._default_name: # Named from its variable, as the sim does, and then kept, since the family refers to it by name
-                found = ss.transitions.find_name(mod, frame)
-                if found is not None:
-                    mod.name = mod.label = found
-                mod._default_name = False
+            mod._default_name = False # The family refers to it by name, which the sim does not change
         names = [mod.name for mod in members]
         if len(set(names)) < len(names) or name in names:
             errormsg = f'the members of "{name}" need names of their own, different from each other and from the family; they are {sc.strjoin(names)}'
@@ -295,7 +290,7 @@ class Strains(ss.Module):
                 if own:
                     errormsg = f'"{name}" seeds its members (init_prev=), but its member "{mod.name}" has {sc.strjoin(own)} of its own as well; give one or the other'
                     raise ValueError(errormsg)
-                mod.graph.seeded_by = name # So it is not given the default seeding: see Graph.guess_init()
+                mod.graph.seeded_by = name # Seeded by the family (see ss.solvers.Engine.init_fractions())
         self.stocks = sc.objdict() # The results that are unions: for each name, the states of each member that make it up
         for key in self.common(members, 'states'):
             if all(mod.graph.states[key].people for mod in members):

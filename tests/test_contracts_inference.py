@@ -146,7 +146,7 @@ def test_particle_filter(key):
     kw = sc.mergedicts(dict(total_pop=pop), init)
     lik = {model.col:ss.nbinom(n=20)} # Wider than a Poisson, so that the noise in the data, not the chance in a run, dominates at a large population, and the likelihood has an ODE limit
     data = simulate(model, **kw)
-    sim = model.build(model.truth, data=data, solver='gillespie', **kw).init() # Tau-leaping, at this size
+    sim = model.build(model.truth, data=data, solver='tau', **kw).init()
     filt = ss.ParticleFilter(sim, likelihood=lik)
     with ss.options.context(threads=1):
         one = filt(n_particles=20, seed=0)
@@ -159,7 +159,7 @@ def test_particle_filter(key):
     for x in values:
         sim.restart(pars={name:x})
         pf[x] = np.array([filt(n_particles=50, seed=seed) for seed in range(n_seeds)])
-        direct[x] = np.array([ss.loglik(model.build(x, data=data, solver='gillespie', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
+        direct[x] = np.array([ss.loglik(model.build(x, data=data, solver='tau', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
         print(f'{key} at {x:.3g}: filter {pf[x].mean():.2f} +- {pf[x].std(ddof=1)/np.sqrt(n_seeds):.2f}; direct runs {direct[x].mean():.2f} +- {direct[x].std(ddof=1)/np.sqrt(n_seeds):.2f}')
 
     # At the truth: the filter, direct runs, and the ODE agree

@@ -359,7 +359,8 @@ ss.Sim(sir, networks=ss.contacts('Kenya'))
 
 - **In a compartmental run** the matrix is aggregated to the model's groups, weighted by population. Where a model group cuts through a matrix band, the band is split in proportion to population. A one-line note says the matrix was aggregated (`MatrixAggregated`).
 - **In an agent-based run** the matrix is used with its own groups: each agent has an exact age and is counted in whichever band the matrix uses.
-- **With places**, a contact matrix acts within each place, under every solver ([06-routes.md](06-routes.md#mobility)).
+- **With places**, a contact matrix acts within each place, under every solver ([06-routes.md](06-routes.md#mobility)); a matrix over the places themselves (`ss.contacts(patch=...)`) says who meets whom across them, and is how a force of infection shared between places (LASER's coupling) is written.
+- **The data is optional.** A matrix given as numbers needs nothing else: only a country's matrix by name (and `ss.geo` and `ss.people` by name) reads `starsim_data`, the optional `data` extra, and a model with no named data never imports it.
 
 With no mixing given, people mix homogeneously across the levels of every dimension except space, where the default is to mix within the patch ([06-routes.md](06-routes.md)).
 

@@ -113,7 +113,8 @@ def network(**kwargs):
 
 def cholera(**kwargs):
     """ 11. Cholera, whose states include a water reservoir, which is a count and not people """
-    S, I, R, W = ss.states(4)
+    S, I, R = ss.states(3)
+    W = ss.State(people=False) # Bacteria in the water
     cholera = ss.Disease(
         infection = S >> I @ ss.perday(0.5) * W.n / (W.n + 1e5),
         recovery  = I >> R @ ss.days(5),
@@ -129,7 +130,7 @@ def malaria(**kwargs):
     """ 12. Ross-Macdonald malaria: humans and mosquitoes as states of one disease """
     a, b, c = 0.3, 0.5, 0.5 # Bites per mosquito per day; probabilities that a bite infects a human, and a mosquito
     Sh, Eh, Ih, Rh = ss.states(4)
-    Sv, Ev, Iv     = ss.states(3)
+    Sv, Ev, Iv     = ss.states(3, people=False) # Mosquitoes: counts, not people
     Nh             = (Sh + Eh + Ih + Rh).n
     malaria = ss.Disease(
         infection  = Sh >> Eh @ a * b * Iv.n / Nh,

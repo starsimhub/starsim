@@ -86,7 +86,7 @@ class Disease(ss.Module):
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
     _coded = False # Whether the class is written as code (ss.Infection and its subclasses), so that the check in __init_subclass__() does not apply
-    _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital', 'step_congenital'] # Called only on a disease written as code
+    _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital'] # Called only on a disease written as code
 
     def __init_subclass__(cls, **kwargs):
         """ A declared class never calls the methods of a disease written as code, so overriding one (e.g. set_prognoses() on a subclass of ss.SIS) would be silently ignored """
@@ -107,9 +107,9 @@ class Disease(ss.Module):
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.expressions.func)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
         if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
-            self.init_graph(args, members, pars, kwargs, frame=ss.utils.getframe(1))
+            self.init_graph(args, members, pars, kwargs, names=ss.utils.caller_names(1))
         else: # Nothing declared, so written as code: the subclass defines its parameters and states after calling this
             self.update_pars(pars, **kwargs)
         return
@@ -128,7 +128,7 @@ class Disease(ss.Module):
         return out
 
     @staticmethod
-    def reuse(args, members, frame=None):
+    def reuse(args, members, names=None):
         """ States and transitions that already belong to another disease are copied (together, so they refer to each other), so one set can build several diseases; parameters stay shared """
         owners = {}
         pars = {}
@@ -171,7 +171,7 @@ class Disease(ss.Module):
         grouped = [obj for key in ss.transitions.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
         positional = []
         for obj in list(args) + grouped: # Named first, as keywords, since a copy is not bound to the variable
-            name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else ss.transitions.find_name(obj, frame))
+            name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else (names or {}).get(id(obj)))
             if name is None or isinstance(obj, ss.State):
                 positional.append(obj)
             else:
@@ -180,10 +180,10 @@ class Disease(ss.Module):
         memo = {key:None for key in owners} | {key:p for key,p in pars.items()} | others # The copies belong to no module yet, and parameters stay shared, e.g. one R0 for several models
         return sc.dcp((args, members), memo=memo)
 
-    def init_graph(self, args, members, pars, kwargs, frame=None):
+    def init_graph(self, args, members, pars, kwargs, names=None):
         """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer, ss.expressions.func)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
@@ -196,8 +196,8 @@ class Disease(ss.Module):
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
         members = sc.mergedicts(members, kwargs)
-        args, members = self.reuse(args, members, frame)
-        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, first=first, frame=frame)
+        args, members = self.reuse(args, members, names)
+        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, first=first, names=names)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()) + list(self.graph.attrs.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection, hiv.cd4
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
@@ -261,7 +261,7 @@ class Disease(ss.Module):
         """
         self.check_declared('stratify()')
         mod = self if inplace else self.copy()
-        mod.graph.stratify(frame=ss.utils.getframe(1), **kwargs)
+        mod.graph.stratify(**kwargs)
         for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
             if not hasattr(mod, strat.name):
                 mod.setattribute(strat.name, ss.conditions.Cond('dim', strat.name))
@@ -596,7 +596,7 @@ class Infection(Disease):
     that wanes, a time since infection. It runs as agents. This class implements
     network-based transmission with directional beta values, and defines the attributes
     (`rel_sus`, `rel_trans`) that other modules act on; a disease that is not transmitted
-    (such as `ss.NCD`) defines no `beta` and its own `step()`.
+    (such as `ssl.NCD`) defines no `beta` and its own `step()`.
 
     A disease that can be written as states and transitions is declared instead, with
     `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
@@ -628,7 +628,7 @@ class Infection(Disease):
     def init_pre(self, sim):
         """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()` """
         super().init_pre(sim)
-        if 'beta' in self.pars: # A disease that is not transmitted, such as ss.NCD, has no beta
+        if 'beta' in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             self.validate_beta()
         self.validate_init_prev()
         return
@@ -803,7 +803,7 @@ class Infection(Disease):
         `finalize_infections()`. A multi-strain disease can override this method to loop
         over strains, calling `infect_route()` with per-strain values.
         """
-        if 'beta' not in self.pars: # A disease that is not transmitted, such as ss.NCD, has no beta
+        if 'beta' not in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             return self.finalize_infections([], [], [])
         betamap = self.validate_beta()
 
@@ -935,117 +935,13 @@ class Infection(Disease):
         self.set_prognoses(uids[~congenital], src_p)
         return
 
-    # Birth outcomes that trigger request_death rather than setting a bool state.
-    # Prenatal outcomes are fetal losses and must fire while the agent is still unborn;
-    # postnatal outcomes happen to a live newborn. See set_congenital() for why this matters.
-    prenatal_death_keys = {'miscarriage', 'stillborn'}
-    postnatal_death_keys = {'neonatal_deaths'}
-    congenital_death_keys = prenatal_death_keys | postnatal_death_keys
-
-    def set_congenital(self, target_uids, source_uids=None):
+    def set_congenital(self, uids, sources=None):
         """
-        Default implementation for assigning congenital outcomes during in-utero
-        infection (called when transmission occurs via PrenatalNet).
+        Set the prognoses of people infected before birth (over `ss.PrenatalNet`; see `set_outcomes()`); by default nothing happens to them
 
-        Does nothing unless the disease defines `birth_outcome_keys` and
-        `birth_outcomes` in its pars. Diseases that need fully custom logic
-        (e.g. syphilis, which has stage-dependent outcomes) can override this
-        method entirely.
-
-        To use the default implementation, define in the disease's `__init__`:
-
-            self.define_pars(
-                birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
-                birth_outcomes     = sc.objdict(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
-            )
-
-        Each outcome name needs a matching `ti_<name>` FloatArr state; non-lethal
-        outcomes also need a BoolArr of the same name. Death outcomes ('miscarriage',
-        'neonatal_deaths', 'stillborn') fire via `request_death`; others set a bool state.
-
-        Outcomes are scheduled for the mother's delivery timestep, except for fetal
-        losses ('miscarriage', 'stillborn'), which are scheduled one timestep earlier so
-        that they occur before the fetus is delivered and are classified as fetal losses
-        rather than neonatal deaths. A fetus infected within one timestep of delivery is
-        therefore born alive, and a lethal outcome for it counts as a neonatal death.
-
-        For state- or GA-dependent probabilities, provide multiple keyed
-        distributions in `birth_outcomes` and override
-        `_assign_congenital_outcomes`.
-
-        Call `step_congenital` from the disease's `step_state()` to
-        execute the scheduled events each timestep.
+        A disease with outcomes at birth overrides this, e.g. `ssl.CongenitalDisease` (`import starsim.library as ssl`),
+        which schedules a birth outcome (a stillbirth, a congenital infection) for each.
         """
-        if 'birth_outcomes' not in self.pars or self.pars.birth_outcomes is None:
-            return
-
-        # Prevent repeated MTC transmission each timestep of pregnancy
-        self.susceptible[target_uids] = False
-
-        # Assign outcomes
-        outcomes = self.pars.birth_outcomes
-        if len(outcomes) == 1 and 'default' in outcomes:
-            assigned = outcomes['default'].rvs(target_uids)
-        else:
-            assigned = self._assign_congenital_outcomes(target_uids, source_uids)
-
-        # Store outcome index if the disease tracks it
-        if hasattr(self, 'cs_outcome'):
-            self.cs_outcome[target_uids] = assigned
-
-        # Schedule events at delivery time
-        preg = self.sim.demographics.pregnancy
-        dt_delivery = np.ceil(preg.ti_exit_P.raw) - self.ti  # The step each pregnancy is due to end in delivery; full array, indexed by UID below
-        for oi, key in enumerate(self.pars.birth_outcome_keys):
-            o_uids = target_uids[assigned == oi]
-            s_uids = source_uids[assigned == oi]
-            if len(o_uids):
-                ti_key = f'ti_{key}'
-                if hasattr(self, ti_key):
-                    ti_event = self.ti + dt_delivery[s_uids]
-                    if key in self.prenatal_death_keys:
-                        # Fetal losses must fire while the agent is still unborn. Pregnancy.step()
-                        # runs before diseases' step_state() in the integration loop, so an event
-                        # scheduled at the delivery would kill an already-delivered newborn: it would
-                        # be counted as a live birth and then as a neonatal death, rather than as a
-                        # fetal loss. Firing a timestep early also matches the biology, since a
-                        # stillborn fetus dies in utero before labor.
-                        ti_event = np.maximum(ti_event - 1, self.ti)
-                    getattr(self, ti_key)[o_uids] = ti_event
-        return
-
-    def _assign_congenital_outcomes(self, target_uids, source_uids):
-        """
-        Override point for diseases with state- or GA-dependent outcome probabilities.
-        Must return an integer array of outcome indices (one per target_uid),
-        corresponding to `self.pars.birth_outcome_keys`.
-        """
-        errormsg = 'Subclass must implement _assign_congenital_outcomes or use a single "default" distribution in birth_outcomes'
-        raise NotImplementedError(errormsg)
-
-    def step_congenital(self):
-        """
-        Execute scheduled congenital events whose `ti_<key>` has arrived.
-
-        Does nothing unless the disease defines `birth_outcome_keys` in its
-        pars. Call from the disease's `step_state()`; see `set_congenital`
-        for setup details.
-        """
-        if 'birth_outcome_keys' not in self.pars:
-            return
-        death_keys = self.congenital_death_keys
-        for key in self.pars.birth_outcome_keys:
-            ti_key = f'ti_{key}'
-            if not hasattr(self, ti_key):
-                continue
-            vals = getattr(self, ti_key)
-            due = (vals.notnan & (vals <= self.ti)).uids
-            if len(due):
-                if key in death_keys:
-                    self.sim.people.request_death(due, cause=self)
-                elif hasattr(self, key):
-                    getattr(self, key)[due] = True
-                vals[due] = np.nan  # Clear after firing
         return
 
     def update_results(self):
@@ -1223,99 +1119,6 @@ class InfectionLog:
             source, target, t = row.pop('source'), row.pop('target'), row.pop('t')
             graph.add_edge(np.nan if pd.isna(source) else source, target, key=t, **row)
         return graph
-
-
-class NCD(Infection):
-    """
-    Example non-communicable disease
-
-    This class implements a basic NCD model with risk of developing a condition
-    (e.g., hypertension, diabetes), a state for having the condition, and associated
-    mortality. It is written as code (see `ss.Infection`), and is not transmitted.
-
-    Args:
-        initial_risk (float/`ss.bernoulli`): initial prevalence of risk factors
-        dur_risk (float/`ss.dur`/`ss.Dist`): how long a person is at risk for
-        prognosis (float/`ss.dur`/`ss.Dist`): time in years between first becoming affected and death
-    """
-    def __init__(self, pars=None, initial_risk=_, dur_risk=_, prognosis=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
-            dur_risk = ss.expon(scale=ss.years(10)),
-            prognosis = ss.weibull(c=2, scale=ss.years(5)), # Time between first becoming affected and death; c is the (dimensionless) shape parameter
-        )
-        self.update_pars(pars, **kwargs)
-
-        self.define_states(
-            ss.BoolState('at_risk', label='At risk'),
-            ss.BoolState('affected', label='Affected'),
-            ss.FloatArr('ti_affected', label='Time of becoming affected'),
-            ss.FloatArr('ti_dead', label='Time of death'),
-            reset = True, # Not an infection, so without the states of ss.Infection
-        )
-        return
-
-    @property
-    def not_at_risk(self):
-        """ Boolean array of agents not currently at risk. """
-        return ~self.at_risk
-
-    def init_post(self):
-        """
-        Set initial values for states. This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the State objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called.
-        """
-        super().init_post()
-        initial_risk = self.pars['initial_risk'].filter()
-        self.at_risk[initial_risk] = True
-        self.ti_affected[initial_risk] = self.ti + self.pars['dur_risk'].rvs(initial_risk, round=True)
-        return initial_risk
-
-    def step_state(self):
-        ti = self.ti
-        deaths = (self.ti_dead <= ti).uids # <= since a prognosis that rounds to 0 is only caught on the next step
-        self.sim.people.request_death(deaths, cause=self) # Counted once resolved: see update_results()
-        if self.infection_log:
-            self.infection_log.add_data(deaths, died=True)
-        return
-
-    def step(self):
-        ti = self.ti
-        new_cases = (self.ti_affected == ti).uids
-        self.affected[new_cases] = True
-        dur_prog = self.pars.prognosis.rvs(new_cases, round=True)
-        self.ti_dead[new_cases] = ti + dur_prog
-        if self.infection_log:
-            self.infection_log.add_entries(new_cases, None, self.now)
-        return new_cases
-
-    def init_results(self):
-        """
-        Initialize results (not those of an infection)
-        """
-        ss.Module.init_results(self)
-        self.define_results(
-            ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
-            ss.Result('prevalence',    dtype=float, label='Prevalence'),
-            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
-        )
-        return
-
-    def update_results(self):
-        ss.Module.update_results(self)
-        ti = self.ti
-        if ti + 1 < len(self.results.new_deaths):
-            self.results.new_deaths[ti + 1] = len(self.sim.people.died_of(self)) # Deaths attributable to this module, at the end of the step (ti is its start), once each has one cause
-        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
-        return
-
-    def finalize_results(self):
-        ss.Module.finalize_results(self)
-        return
 
 
 class SIR(Disease):

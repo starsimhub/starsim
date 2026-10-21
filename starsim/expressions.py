@@ -5,7 +5,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Expr', 'par', 'mother', 'attr', 'func', 'spread']
+__all__ = ['Expr', 'par', 'mother', 'attr']
 
 
 #%% Helpers
@@ -319,13 +319,6 @@ class Prop(Expr):
             return
         walk(self.cond)
         return out
-
-
-class Dwell(Expr):
-    """ The time each person has spent in a state (`P.dwell`), in the sim's unit: in `p=` of a transition with several destinations out of it, when they leave; or in the rate of a transition out of it """
-    def __init__(self, state):
-        self.state = state
-        return
 
 
 class Flow(Expr):
@@ -697,46 +690,6 @@ class attr(Expr):
         return new
 
 
-class spread:
-    """
-    Initial people who are part way through their natural history: back-dated, and run forward to the start
-
-    As `init_prev=`, the share (or number) infected at the start, infected at times uniform over `over` before it;
-    as a value of `init=`, the share in that state, having entered it then. Their declared natural history (only
-    this disease's spontaneous transitions: no transmission, demography, or interventions, and ages as at the
-    start) runs from then to the start, so they arrive spread over the stages, clocks, and attributes, and some
-    progress soon after the start. Those no longer in the target at the start are not counted: as many more are
-    back-dated. With no `over=`, they entered long enough ago that the people still there are as many as would
-    be at a constant inflow (the stationary distribution within the state).
-
-    Args:
-        value (float): the share of people (below 1) or the number (above 1)
-        over (dur/tuple): how long before the start they entered: up to a duration, or between two
-
-    Examples:
-        ```python
-        hiv = HIV(init_prev=ss.spread(0.05, over=(ss.months(5), ss.years(10))))
-        syph = Syphilis(init=dict(EL=ss.spread(0.01), LL=ss.spread(0.01)))
-        ```
-    """
-    def __init__(self, value, over=None):
-        self.value = value
-        if over is not None and not isinstance(over, (tuple, list)):
-            over = (0.0, over)
-        self.over = over
-        return
-
-    def window(self, convert):
-        """ The earliest and latest times before the start, in the sim's unit, or None """
-        if self.over is None:
-            return None
-        lo, hi = [convert(v) if isinstance(v, ss.TimePar) else float(v) for v in self.over]
-        return lo, hi
-
-    def __repr__(self):
-        return f'ss.spread({self.value}{f", over={self.over}" if self.over is not None else ""})'
-
-
 def dists_in(expr):
     """ The distributions in an expression, as the parameters that hold them, e.g. `ss.uniform(0.5, 0.95)*ss.bernoulli(0.6)` """
     if isinstance(expr, ss.Dist):
@@ -760,50 +713,6 @@ def events_in(on, graph=None):
         return [e for item in on for e in events_in(item, graph)]
     errormsg = f'on= takes an event: a transition, a branch of one (tr.to(B)), X.enter, or X.exit, or several joined with |; not {on!r}'
     raise TypeError(errormsg)
-
-
-class func:
-    """
-    A function called with the agents an event happens to, at the moment they move: `fn(sim, uids)`
-
-    As agents only (a compartmental run has no agents to call it with). It runs inside the move, after the
-    people are in their new state and the attributes the event sets are set, and before anything reads them.
-
-    Args:
-        fn (func): the function, of `(sim, uids)`
-        on (Event/Transition): the event(s), as for `ss.attr`
-        name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
-
-    Examples:
-        ```python
-        def diagnose(sim, uids):
-            sim.diseases.hiv.diagnosed[uids] = True
-        hook = ss.func(diagnose, on=hiv.start_art)
-        ```
-    """
-    def __init__(self, fn, on=None, name=None):
-        if not callable(fn):
-            errormsg = f'ss.func() takes a function of (sim, uids), not {fn!r}'
-            raise TypeError(errormsg)
-        if on is None:
-            errormsg = 'ss.func() needs on=, the event that calls it'
-            raise ValueError(errormsg)
-        self.fn = fn
-        self.on = on
-        self.name = name or getattr(fn, '__name__', None)
-        self.events = []
-        return
-
-    def __set_name__(self, owner, name):
-        if self.name is None or self.name == '<lambda>':
-            self.name = name
-        return
-
-    def __call__(self, sim, uids):
-        return self.fn(sim, uids)
-
-    def __repr__(self):
-        return f'ss.func({getattr(self.fn, "__name__", "function")}, on={sc.strjoin(e.label for e in self.events) or self.on})'
 
 
 def rebind(expr, memo):
@@ -978,8 +887,6 @@ def evaluate(expr, ctx):
         return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.total_count(expr.states) if expr.kind == 'total' else ctx.local_frac(expr.states)
     elif isinstance(expr, ss.transitions.State):
         return ctx.exposure(expr)
-    elif isinstance(expr, Dwell):
-        return ctx.dwell(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
     elif isinstance(expr, (Share, Column)):
@@ -1086,8 +993,6 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             names = [s.label_name for s in e.states]
             inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}'
-        elif isinstance(e, Dwell):
-            return f'{e.state.label_name}.dwell'
         elif isinstance(e, Share):
             share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'

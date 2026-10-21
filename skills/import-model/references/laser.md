@@ -13,7 +13,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 | `SEIR.Exposed`/`Infectious` with `normal(loc, scale)` | `ss.progression('E -> I', dur=ss.normal(7, 1, unit='days'))` | Exact as agents; Erlang stages as an ODE |
 | `gamma(shape=40, scale=0.25)` | `ss.erlang(k=40, mean=ss.days(10))` | Exact |
 | Gravity coupling of the force of infection | `dis.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))` | Exact (`kind='force'` is LASER's form) |
-| Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.Mobility(matrix=gravity, kind='force')` | Exact, as a workaround |
+| Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.Mobility(matrix=gravity, kind='force')` | Exact |
 | Ghana's mixing (residents make a share of contacts elsewhere) | `ss.Mobility(ss.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
 | Initial infections in one place | `init=dict(I=ss.by(patch=[0, 100] + [0]*14))` | Exact |
 | Births at a crude rate | `ss.birth('-> S', rate=ss.peryear(cbr/1000))`; vaccinated births as a second `ss.birth('-> R', ...)` | Exact |

@@ -11,7 +11,7 @@ For a learning-oriented introduction, see [Tutorial 4 - Diseases](../tutorials/t
 
 | | Declared | Written as code |
 |---|---|---|
-| Base class | `ss.Disease` | `ss.Infection` (or `ss.NCD`) |
+| Base class | `ss.Disease` | `ss.Infection` (e.g. `ssl.NCD`) |
 | What you write | states and the transitions between them | per-agent arrays (`define_states()`) and the methods that update them (`set_prognoses()`, `step_state()`) |
 | Solvers | any: `'ode'`, `'binomial'`, `'gillespie'`, `'abm'` (`'auto'` picks one) | agents |
 | Inspection | `describe()`, `equations()`, `diagram()`, `R0()` | `describe()` in brief |

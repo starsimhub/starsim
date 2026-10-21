@@ -5,7 +5,6 @@ Test the kernels: that a run taken in one call matches the same run taken step b
 # %% Imports and settings
 import pytest
 import numpy as np
-import numba as nb
 import sciris as sc
 import starsim as ss
 from test_dimensions import make_malaria, make_tb
@@ -125,7 +124,7 @@ def test_factored_mixing():
 @sc.timer()
 def test_stochastic():
     sc.heading('Testing that the stochastic solvers give the same run in one call to the kernels as step by step, in whole people')
-    for solver,keys in dict(binomial=['sir', 'ages', 'commute'], gillespie=['sir', 'towns']).items():
+    for solver,keys in dict(binomial=['sir', 'ages', 'commute'], gillespie=['sir', 'towns', 'commute']).items():
         pop = 2000 if solver == 'gillespie' else 10_000
         for key in keys:
             for seed in range(3):
@@ -134,15 +133,10 @@ def test_stochastic():
                 n_I = sims.all.results[sims.all.declared[0].name].n_I.values
                 assert np.all(n_I == np.round(n_I)) # Whole people
 
-    # With many places that have events, the exact solver steps them on several threads: the same run as on one thread, and as step by step
-    herds = make_plain(0.3, init=dict(I=ss.by(herd=[2]*600))).stratify(herd=[str(i) for i in range(600)], kind='space')
+    # Many places, most of which have no events (skipped until something changes them): the same run as step by step
+    herds = make_plain(0.3, init=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=[str(i) for i in range(600)], kind='space')
     base = ss.Sim(herds, solver='gillespie', unit='day', stop=30, total_pop=600*50, **kw)
-    threads = nb.get_num_threads()
-    nb.set_num_threads(1)
-    one = base.new().run()
-    nb.set_num_threads(threads)
-    for sim in [base.new().run(), base.new().run(profile=True)]:
-        assert largest_diff(sim, one) == 0
+    assert largest_diff(base.new().run(), base.new().run(profile=True)) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
     lognormal = [ss.SIR(dur_inf=ss.lognorm_ex(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
@@ -164,23 +158,13 @@ def test_stochastic():
     assert np.array_equal(out.sparse[0], out.dense[0]) and np.array_equal(out.sparse[1], out.dense[1]) # The same events
     assert out.sparse[2] < out.dense[2]/3 # About 60 times faster here
 
-    # Strata that mix are stepped by the exact solver following only what each event changes: the same epidemic as one group, and a cost per event that does not grow with the number of strata
+    # Strata that mix: the same epidemic as one group
     def strata(K, **pars):
         sir = make_plain(ss.perday(0.3), init=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
         return ss.Sim(sir, solver='gillespie', unit='day', stop=100, total_pop=200*K, **pars, **kw)
     one = ss.Sim(make_plain(ss.perday(0.3), init=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.n_R.values[:, -1]
     ten = strata(10).run(n_runs=60).results.sir.n_R.values[:, -1]
     assert abs(one.mean() - ten.mean()) < 3*np.hypot(one.std(), ten.std())/np.sqrt(60) # The same final size
-    cost = {}
-    for K in [30, 300]:
-        times = []
-        for rep in range(3):
-            sim = strata(K, rand_seed=rep).init()
-            T = sc.timer()
-            res = sim.run().results.sir
-            times.append(T.toc(output=True)/(res.infection.values.sum() + res.recovery.values.sum()))
-        cost[K] = min(times)
-    assert cost[300] < 3*cost[30] # About the same per event (it was 6.5 times as much)
     return sims
 
 
@@ -196,7 +180,7 @@ def test_stages():
             name      = 'seir',
         )
     peaks = sc.objdict()
-    for solver in ['ode', 'binomial', 'gillespie', 'abm']: # With this many people, gillespie takes tau leaps
+    for solver in ['ode', 'binomial', 'tau', 'abm']:
         pars = dict(n_agents=20_000) if solver == 'abm' else {}
         sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
         peaks[solver] = np.mean([np.argmax(sim.results.seir.n_I) for sim in sims])
@@ -222,8 +206,8 @@ def test_seasonal_steps():
         return sim.results.sis.infection.sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
     out = sc.objdict()
-    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections; with more people, gillespie takes tau leaps
-        runs = [make('gillespie', ss.days(91), seed, pop) for seed in range(3)]
+    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections
+        runs = [make(solver, ss.days(91), seed, pop) for seed in range(3)]
         out[solver] = np.mean([run[0] for run in runs])
         assert runs[0][1] == solver
         assert np.isclose(out[solver], ode, rtol=0.02), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'

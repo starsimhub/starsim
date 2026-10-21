@@ -38,7 +38,7 @@ class Sim(ss.Base):
         modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
         solver (str): how to run modules with declared states and transitions (see `ss.Disease`): 'auto' (the default: an ODE if
             every part of the model has a compartmental form, otherwise agents), 'ode', 'binomial' (chain-binomial), 'gillespie' (exact,
-            switching to tau-leaping, with a note, when an ODE run estimates that taking the events one at a time would take more than a second (about ten million events in one group, fewer in groups that mix); `approx=False` keeps it exact), or 'abm'
+            one event at a time), 'tau' (tau-leaping: close to exact, and much faster for a run of many events), or 'abm'
         integrator (str): the scheme of the ODE: 'rk4' (the default) or 'euler'
         unit (str): the unit of bare numbers in declared transitions, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
         approx (bool): by default, each approximation a solver makes is noted in one line (kept in `sim.notes`, and printed unless `verbose=0`); True does not print them, and False makes them errors
@@ -84,7 +84,7 @@ class Sim(ss.Base):
         positional = [arg for arg in models if not isinstance(arg, dict)]
         if positional:
             modules = sc.mergelists(*positional, modules)
-        self._name_modules(ss.utils.getframe(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
+        self._name_modules(ss.utils.caller_names(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
@@ -144,7 +144,7 @@ class Sim(ss.Base):
         return self.__dict__.get('_set_after', {})
 
     @staticmethod
-    def _name_modules(frame, *args):
+    def _name_modules(names, *args):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
         for arg in args:
             mods = list(sc.tolist(arg))
@@ -153,7 +153,7 @@ class Sim(ss.Base):
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
                     if obj is not None and obj._default_name:
-                        name = ss.transitions.find_name(obj, frame)
+                        name = names.get(id(obj))
                         if name is None and getattr(obj, 'graph', None) is not None: # Not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'
                             name = ''.join(s.name[0].lower() for s in obj.graph.people_states) or None
                         if name is not None:
@@ -282,9 +282,6 @@ class Sim(ss.Base):
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
-        for mod in self.pars.diseases.values(): # A state that only a delivery moves people into is not where they start
-            if getattr(mod, 'graph', None) is not None:
-                mod.graph.delivered_to([d.move_states[1] for d in self.pars.interventions.values() if isinstance(d, ss.Delivery) and d.move_states is not None and d.disease in [None, mod.name]])
         self._init_solver() # Choose the unit and the solver
         self._init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
@@ -609,8 +606,8 @@ class Sim(ss.Base):
         return 'step' if dt is None or dt == 1 else 'unit'
 
     def has_demography(self):
-        """ Whether people are born or die other than of a disease: demographics modules, a declared birth, arrival, or death from every state, or newborns from a transition (offspring=) """
-        return bool(self.pars.demographics) or any(self.flows_of(mod) or any(getattr(tr, 'offspring', None) is not None for tr in mod.graph.transitions.values()) for mod in self.declared)
+        """ Whether people are born or die other than of a disease: demographics modules, a declared birth, arrival, or death from every state """
+        return bool(self.pars.demographics) or any(self.flows_of(mod) for mod in self.declared)
 
     @staticmethod
     def flows_of(mod):
@@ -815,7 +812,7 @@ class Sim(ss.Base):
         lines.append(f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {unit}s {t.start} to {t.stop}{stopguess}' if self.unit is None or not t.is_absolute else
                      f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {t.start} to {t.stop}{stopguess}')
         if self.declared:
-            guessed = pars.solver == 'auto' or self.solver != pars.solver # Chosen by auto, or tau-leaping for gillespie
+            guessed = pars.solver == 'auto'
             add('solver', self.solver, f'guessed: {self.solver_reason}' if guessed else 'requested')
             for cap in self.capabilities: # What matters to which solvers can run it: see ss.solvers.init_capabilities()
                 add('', f'{cap.ingredient}: {cap.groups} as compartments ({cap.how})')
@@ -841,7 +838,7 @@ class Sim(ss.Base):
                 text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
                 text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
                 if strat.kind == 'space':
-                    text += f'; where the people of each {strat.home.name} are now, who mix there' if strat.home is not None else f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                    text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
                     if strat.geo is not None and strat.geo.ref is not None: # Where a named geography came from
                         ref = strat.geo.ref
                         text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"

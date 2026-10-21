@@ -28,7 +28,7 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | A condition on age, sex, or another property | `where=ppl.age >= 15` (with `ppl = ss.People(n)` in scope); for a compartmental run, a bin edge at 15 in the age stratification |
 | A capacity (fewer than K in a state) | A comparison of counts in the rate: `I >> Q @ 0.01 * (Q.n < K)` |
 | A minimum stay before the other ways out apply | `after=` on each way out (`ss.Transition(E, I, rate=0.3, after=ss.days(10))`); `before=` for a way out that applies only during the stay (EMULSION's escape) |
-| A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A count set each step: `peak = ss.State(people=False)` and `ss.update(peak, np.maximum(peak.n, I.frac))` |
+| A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A module written as code keeps it in its `step()` (a connector with `self.peak = max(self.peak, I.n/N)`), and a function in the rate reads it (`lambda sim: np.exp(-5*sim.connectors.track.peak)`); agents only |
 | Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], split=..., adjust={'infection': [...]})`; places with `ss.geo(...)` and `ss.Mobility(...)` |
 
 ## People coming and going
@@ -40,7 +40,7 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | An absorbing dead state that is removed (`autoremove`) | An outflow to `ss.null` |
 | Immigration and emigration | `ss.immigration('-> S', rate=)`, `ss.emigration(rate=)` |
 | Aging between age groups | `use_aging=True` on the sim with an age stratification; or `ss.transfer` between levels |
-| Offspring produced on a transition (EMULSION's `produce_offspring`) | Custom code on the transition's events (agents): see below |
+| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth('-> NB', per=farrowing, n=10)` (agents); by prototype across several machines: custom code on the transition's events, see below |
 | Scheduled moves, entries, and exits (SimInf's events) | `ss.Mobility(data=df)` with columns for the time, `from`, `to`, the number, and the states chosen from |
 
 Actions on crossing a transition, such as offspring or a counter, as agents:
@@ -69,7 +69,7 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | A contact matrix by age | `networks=ss.contacts(matrix, bands=[...])`, with the disease stratified by the same bins (or a coarser set; `MatrixAggregated` says how it was aggregated) |
 | A matrix for each of several dimensions | `ss.contacts(age=M1, location=M2)` |
 | Coupling between places | `ss.Mobility(matrix=M)` (commuting), `ss.Mobility(kind='force')` (the force of infection moves), `ss.gravity(k=, a=, b=, c=)` |
-| A dynamic partnership network (ERGM-style targets) | `ss.PartnerNet(n_contacts=, concurrency=, dur=, match=dict(risk=0.9))`, `ss.MFNet(...)` for men and women |
+| A dynamic partnership network (ERGM-style targets) | `ssl.DegreeNet(n_contacts=, concurrency=, dur=, match=dict(risk=0.9))`, `ssl.DegreeMFNet(...)` for men and women (`import starsim.library as ssl`); `ss.PartnerNet(n_contacts=, dur=)` for lasting partnerships without targets |
 | A random network | `ss.RandomNet(n_contacts=)`, with `method='exact'` for a fixed number of contacts each |
 
 ## Interventions

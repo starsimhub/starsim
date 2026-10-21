@@ -128,7 +128,7 @@ These are from Starsim's switching demo for LASER users (`tests/switching/test_l
 | Memory per agent | **Passes**: about 48 bytes per agent at the peak, against LASER's 30 (the demo's target is 50). A run of LASER's full England and Wales (30 million agents) would need about 1.5 GB, against LASER's 1.2 GB |
 | Life-table deaths | **Works**: `ss.death(lifetable=ss.lifetable(ages, deaths))`, below; as agents each person's age at death is drawn once, and in a compartmental run stratified by age it is a death rate for each age group |
 | Seeding a fixed number of people on a schedule | **Works**: `ss.Delivery(move='S -> I', capacity=3, interval=ss.days(30))`, below |
-| Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: `ss.Mobility(ss.gravity(...), kind='force', away=..., scale='mean', cap=0.2)`, below |
+| Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: the matrix scaled in NumPy, as `ss.Mobility(matrix=..., kind='force')`, below |
 | The demo's check of life tables and seeding, as agents and as compartments | **Fails**: it is written with spellings that do not exist (`ss.death(age=...)`, `ss.seed()`); the spellings above work as agents |
 | The national model as compartments | **Works**: LASER's full England and Wales (954 places, 30.2 million people, a 40-stage latent period, with a constant death rate and importation as a rate) runs as a chain binomial in 12 s per simulated year |
 | A campaign for children 9 months to 5 years in some regions | **Works**: one `ss.vaccinate(...)` with `where=(ppl.age >= 0.75) & (ppl.age < 5) & measles.district.isin(names)`, which reached exactly those children |
@@ -155,7 +155,12 @@ measles = ss.Disease(
     init      = dict(I=ss.by(patch=[3]*n), R=0.95),
     name      = 'measles',
 )
-measles.stratify(patch=places, mobility=ss.Mobility(ss.gravity(b=0.25, c=1.56), kind='force', away=0.045, scale='mean', cap=0.2))
+with np.errstate(divide='ignore'): # LASER's gravity, scaled so that the mean share exported is 4.5%, and at most 20%
+    M = pop[None, :]**0.25/places.distances**1.56
+np.fill_diagonal(M, 0)
+M *= 0.045/M.sum(axis=1).mean()
+M *= np.minimum(1, 0.2/M.sum(axis=1))[:, None]
+measles.stratify(patch=places, mobility=ss.Mobility(matrix=M, kind='force'))
 seeding = ss.Delivery(move='S -> I', capacity=3, interval=ss.days(30), name='seeding') # 3 people every 30 days
 people = ss.People(int(pop.sum()), age_data=np.array([ages, pyramid]).T)
 sim = ss.Sim(measles, people=people, interventions=seeding, unit='day', stop=365, verbose=0)

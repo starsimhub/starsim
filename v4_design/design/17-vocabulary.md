@@ -37,7 +37,7 @@ The names below are checked against the code: each one is exported by `starsim`,
 
 Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.UnknownState`, `ss.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
-### States, transitions, parameters, results: 16
+### States, transitions, parameters, results: 15
 
 | Name | What it is |
 |---|---|
@@ -55,7 +55,6 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
-| **`ss.update`** | A count set each step to a value worked out from the model at the start of the step, for what is not a flow (a lag, a running maximum), as odin's `update()` |
 | **`ss.data`** | A data file or data frame with its columns matched to result names: `ss.data(df, aliases=..., ignore_extra=True)` |
 
 The operators `>>`, `@`, `|`, and arithmetic on states are part of this group and add no names. A custom per-step function needs no name of its own: a plain function is given as a keyword, or written in `step()`.
@@ -83,14 +82,14 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 **`ss.by`** (one value per stratum), **`ss.timeseries`** (varies in time), **`ss.seasonal`** (a yearly cycle). The other forms a parameter can take (a number, a typed quantity, a distribution, a function) need no names of their own.
 
-### Mixing and space: 11
+### Mixing and space: 10
 
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
-| `ss.RandomNet` `ss.MFNet` `ss.StaticNet` | Individual-level networks (Starsim's; its other networks are available too). `ss.MFNet` gains three keywords, `n_contacts`, `concurrency`, and `max_contacts` |
+| `ss.RandomNet` `ss.MFNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph) |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
-| **`ss.PartnerNet`** | Partnerships that form and dissolve, described by targets for the number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`), the share of partnerships within a level of a property (`match=`), their duration, acts per unit time in each partnership (`acts=`), who takes part (`where=`), and partnerships between two groups only (`between=`, lasting or one-off) |
+| **`ss.PartnerNet`** | Lasting partnerships that form and dissolve (not only sexual: needle sharing, sex work), described by the mean number of partners at a time (`n_contacts`), their duration, acts per unit time in each partnership (`acts=`), who takes part (`where=`), and partnerships between two groups only (`between=`, lasting or one-off). Targets for the number of partners (concurrency, a maximum, `match=`, as EpiModel's) are the library's `ssl.DegreeNet` and `ssl.DegreeMFNet` |
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
 | **`ss.geo`** | A geography: names, populations, centroids, distances; named (`ss.geo('Kenya', level=1)`) or given directly |
 | **`ss.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
@@ -118,7 +117,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 `ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's, and **`ss.Fit`**, what `sim.calibrate()` returns (called `fit` below). Users rarely construct these. (Starsim 3's `ss.Calibration` is removed.)
 
-### Methods and attributes: 45 distinct names
+### Methods and attributes: 44 distinct names
 
 | On | Names |
 |---|---|
@@ -129,7 +128,6 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | `sim.loop` | `insert` `to_df` `plot` `plot_step_order` |
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
 | A result of an `ss.MultiSim`, which has a run dimension | **`quantiles`** `values` |
-| A network (`ss.PartnerNet`, `ss.MFNet`) | **`check`** |
 | An `ss.MultiSim`, which is what `ss.parallel` returns | `run` `plot` `summarize` `to_df` `results` **`diff`** |
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
@@ -143,18 +141,18 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Group | Names | Of which new |
 |---|---|---|
 | Sim and modules | 12 | 3 |
-| States, transitions, parameters, results | 16 | 16 |
+| States, transitions, parameters, results | 15 | 15 |
 | Time | 27 | 1 |
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
-| Mixing and space | 11 | 5 |
+| Mixing and space | 10 | 5 |
 | Interactions and interventions | 9 | 9 |
 | Running, comparing, saving | 8 | 3 |
 | Optional metadata | 1 | 1 |
 | Types you get back or subclass | 6 | 1 |
-| **`ss.` names** | **109** | **45** |
-| Methods and attributes | 45 | 30 |
-| **Total** | **154** | **75** |
+| **`ss.` names** | **107** | **44** |
+| Methods and attributes | 44 | 29 |
+| **Total** | **151** | **73** |
 
 <!-- counts end -->
 
@@ -172,9 +170,9 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.MultiSim`, `ss.parallel` | `n_runs` `pars` `priors`, and one keyword per scenario |
 | `ss.Disease` | `name` `dt` `init_prev` `init` `transitions` `results` `outcomes`, and one keyword per member |
 | `ss.State` | `name` `people` `init` `infectious` `rel_sus` `rel_trans` `label` |
-| `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` `name` `label`; as agents, `offspring` |
+| `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` `name` `label` |
 | `ss.transmission` | `beta` `source` (a state, a list, or a dict of weights) `p` `where` |
-| `ss.progression` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before`; as agents, `offspring` |
+| `ss.progression` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` |
 | `ss.birth`, `ss.immigration` | `rate` |
 | `ss.death`, `ss.emigration` | `rate` `dur`; `lifetable` (`ss.death`) |
 | `ss.transfer` | the stratification's name (or `increment`, for a counter), `rate` `dur` `p` `states`, and the delivery keywords |
@@ -190,9 +188,9 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.data` | `aliases` `ignore_extra` |
 | `ss.Requires` | `shape` `source` `doc` `default` |
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
-| `ss.MFNet` | `n_contacts` `concurrency` `max_contacts`, added to Starsim's `duration` `acts` `participation` `debut` |
-| `ss.Mobility` | `matrix` `data` `kind` `away` `scale` `cap` |
-| `ss.PartnerNet` | `n_contacts` `concurrency` `max_contacts` `match` `dur` `acts` `sides` `between` `where` |
+| `ss.MFNet` | Starsim's `dur` `acts` `participation` `debut` |
+| `ss.Mobility` | `matrix` `data` `kind` `away` |
+| `ss.PartnerNet` | `n_contacts` `dur` `acts` `sides` `between` `where` |
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
 | Networks | `sides` (and `net.directions`, which follow from them) |
 | `sim.calibrate` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
@@ -212,7 +210,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `stages=` | a whole number of sub-stages | `ss.Transition`, `ss.progression` |
 | `init=` | below 1 a fraction, 1 or more a number of people (whether written `1` or `1.0`); on the disease, a dict of these by state name | `ss.State`, `ss.Disease` |
 | `init_prev=` | a fraction | `ss.Disease` |
-| `n_contacts=` | contacts per unit time; on a sexual network, the mean number of partners at a time | `ss.MixingPool`, `ss.RandomNet`, `ss.MFNet`, `ss.PartnerNet` |
+| `n_contacts=` | contacts per unit time; on a sexual network, the mean number of partners at a time | `ss.MixingPool`, `ss.RandomNet`, `ss.PartnerNet` |
 | `acts=` | on lasting partnerships, an error (it would be acts per step): give acts per unit time, e.g. `ss.freqperweek(2)`; on one-off contacts, acts per contact | `ss.MFNet`, `ss.PartnerNet` |
 | `share=` | the share of acts (or contacts) a modifier acts on | `ss.modify` |
 | `coverage=` | a fraction of the eligible people | deliveries, `ss.transfer` |
@@ -236,7 +234,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.radiation`/`ss.stouffer`/`ss.competing_destinations`, `msim.check_runs()`, `sim.requires(to=)` | Deferred from v1: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | A mobility matrix; `check_dt`; `sim.requires()` |
 | `ss.process` | A penalty-box name for custom code | A plain function as a keyword, or `step()` |
 | `ss.Homogeneous` | Not needed | No network given, or `ss.MixingPool(n_contacts=10)` |
-| `ss.SexualNet`, `ss.Network(edges=)` | Starsim already has names | `ss.MFNet` and Starsim's other networks; `ss.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |
+| `ss.SexualNet`, `ss.Network(edges=)` | Starsim already has names | `ss.MFNet` and Starsim's other networks; `ssl.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |
 | `ss.Par`, `ss.Outcome` | Capitalization rule | `ss.par`, `ss.outcome` |
 | `ss.cascade`, `observe()`, `Model.results()` | A separate observation step (`ss.cascade` came back as a group of steps, and was removed again on 2026-10-20: it ran as its steps would as a list) | Results declared as keywords with the model; the steps as a list |
 | `ss.visit`, `ss.Resource`, `ss.share` | Delivery extras, removed 2026-10-20 with stock targets (`target=`, `above=`), shared resources (`uses=`), and `count_events=` | `ss.Delivery(who=...)` with no product; `capacity=` or `deliver=` as a function of the sim; an analyzer |
@@ -278,13 +276,18 @@ Since the review of October 2026, these names went, or were promised and never b
 
 | Removed | Why | Use instead |
 |---|---|---|
+| `ss.update` | A coded module does it: a connector's `step()` keeps the value, read by a function in a rate | A connector, or `step()` |
+| `ss.clock()` | `(A \| B).time` is the same clock | `(A \| B).time` |
+| `X.dwell` | The same clock as `X.time`, half a step later | `X.time` |
+| `ss.spread` | Back-dating a module's start is a longer run; only pregnancy's burn-in keeps it, inside the module | Start the sim earlier |
+| `offspring=` | A birth in the same disease does it | `ss.birth('-> NB', per=farrowing, n=3)` |
 | `ss.func` | Never built; a plain function given as a keyword already does what it was for | A plain function, or `step()` |
 | `sim.crn_report()` | Never built | `ss.options.crn`, and paired runs ([11-random.md](11-random.md)) |
 | `dependence=` and `n_ref=` on `ss.MixingPool` | Never built; density dependence is a count in the rate | `beta * I.n` |
 | `.prev` on a state | The code's name is `.frac` | `.frac`, and `.n` or `.total` for counts |
 | `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.rel_sus.effective` for the value with modifiers applied |
 | `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
-| `solver='tau'`, `'sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'`, which takes tau leaps when a run would take too many events; `'binomial'` |
+| `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
 | `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.Fit` | `ss.Fit` (Starsim 3's `ss.Calibration` is removed) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
 | `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.n_I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |

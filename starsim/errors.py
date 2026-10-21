@@ -211,7 +211,7 @@ class NoScheduledDwell(CodedError):
     """ `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it """
 
 class PeopleAndCounts(CodedError):
-    """ A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` """
+    """ A transition moves between states of people and states that are counts (not people); names them, and says to leave out `people=False` if they are people """
 
 class InitWhereNobodyIs(CodedError):
     """ `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) """
@@ -294,13 +294,6 @@ class UnitInferred(Note):
 
 class LargeStep(Note):
     """ `rate × dt > 0.1` for a converted rate, or a mean dwell time shorter than the step; says how far `rate × dt` is from `1 − exp(−rate × dt)` and points to `sim.check_dt()` """
-
-class StateNotPeople(Note):
-    """
-    A state was inferred to hold a count and not people, because no transition connects it to the module's first state
-    (`state 'W' treated as a count, not people (no transition connects it to 'S')`). `ss.State(people=False)` confirms it and
-    `ss.State(people=True)` overrides it; either silences the note
-    """
 
 class MatrixAggregated(Note):
     """

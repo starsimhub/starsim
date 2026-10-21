@@ -128,8 +128,6 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
-        for name,upd in self.updates.items():
-            add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", unit=unit, mul="×")}, set at the end of each step')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle
             midpoint = getattr(p, 'midpoint', None)
             if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
@@ -341,7 +339,6 @@ class Presentation:
         out.functions = sorted([dict(name=name, **func_json(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
         expr = lambda e: None if e is None else format_expr(e, exact=True)
         out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, increment=tf.increment, p=None if tf.p is None else [expr(v) for v in tf.p]) for name,tf in self.transfers.items()] or None
-        out.updates = [dict(name=name, state=self.updates[name].state.name, value=expr(self.updates[name].value)) for name in sorted(self.updates.keys())] or None
         guessed = list(self.guessed.keys())
         for name,state in self.states.items():
             guessed += [f'states.{name}.{key}' for key in state.guessed.keys()]

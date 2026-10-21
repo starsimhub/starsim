@@ -268,17 +268,8 @@ def disease_code(spec, lines, left):
         elif plain:
             add(f"{plain[0]} = ss.State('{plain[0]}')")
         plain.clear()
-    linked = {spec.get('first') or spec['states'][0]['name']} if spec['states'] else set() # The states Starsim takes to be people: those connected by transitions to the first
-    for i in range(len(spec['states'])):
-        for t in spec['transitions']:
-            ends = set(t['src'] or []) | set(t['dst'] or [])
-            if t['src'] and t['dst'] and ends & linked:
-                linked |= ends
     for s in spec['states']:
-        guessed = f'states.{s["name"]}.people' in spec['guessed']
-        extra = dict(people=False) if not s['people'] and not guessed else {}
-        if s['people'] and not guessed and s['name'] not in linked: # People that Starsim would not otherwise take to be
-            extra['people'] = True
+        extra = dict(people=False) if not s['people'] else {} # A state is people unless declared a count
         extra.update({k:s[k] for k in ['rel_sus', 'rel_trans'] if s[k] != 1.0})
         if s['label'] is not None:
             extra['label'] = s['label']
@@ -354,9 +345,6 @@ def disease_code(spec, lines, left):
                 left.append(f'the likelihood of {r["name"]} ({lik})')
             source = r['source']
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
-
-    for u in spec.get('updates') or []: # Counts set each step
-        members.append((u['name'], f"ss.update({u['state']}, {code_expr(u['value'])})"))
 
     # Initial values
     inits = {s['name']:s['init'] for s in spec['states'] if s['init'] is not None and not isinstance(s['init'], str)}
@@ -469,7 +457,7 @@ def movable(strat, left):
     if mob is None:
         return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
-        args = ', '.join(f'{k}={v if k in ["away", "back"] and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name, and a typed rate of coming back as written
+        args = ', '.join(f'{k}={v if k == "away" and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name
         out['mobility'] = Code(f'ss.Mobility({args})')
     else:
         left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.Mobility(...) in stratify()')
@@ -709,6 +697,8 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     code = '\n'.join(lines)
     if any('np.' in line for line in lines if not line.startswith('#')):
         code = code.replace('import starsim as ss\n', 'import numpy as np\nimport starsim as ss\n', 1)
+    if any('ssl.' in line for line in lines if not line.startswith('#')): # A module from the library, e.g. ssl.DegreeNet from an import
+        code = code.replace('import starsim as ss\n', 'import starsim as ss\nimport starsim.library as ssl\n', 1)
     if any('expit(' in line for line in lines if not line.startswith('#')):
         code = code.replace('import starsim as ss\n', 'import starsim as ss\nfrom scipy.special import expit\n', 1)
     if filename is not None:

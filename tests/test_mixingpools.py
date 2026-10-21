@@ -8,6 +8,7 @@ import numpy as np
 import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
+import starsim.library as ssl
 import pytest
 
 pars = sc.objdict(
@@ -69,7 +70,7 @@ def test_single_ncd():
     )
     mp = ss.MixingPool(**mp_pars)
 
-    ncd = ss.NCD()
+    ncd = ssl.NCD()
     sim = ss.Sim(pars, diseases=ncd, networks=mp, label=test_name)
     with pytest.raises(Exception):
         sim.run()

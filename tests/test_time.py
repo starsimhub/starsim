@@ -474,7 +474,7 @@ def test_arithmetic():
                  lambda: ss.Disease(S >> I @ ss.perday(0.3) * I * ss.days(3), I >> R @ ss.days(10), name='sir')]:
         with pytest.raises(ss.WrongDimension):
             slip()
-    sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), ss.progression('I -> R', rate=1/ss.days(10)), name='sir') # A duration that divides is fine
+    sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), I >> R @ (1/ss.days(10)), name='sir') # A duration that divides is fine
     assert ss.progression('I -> R', dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
     return sir
 

@@ -10,6 +10,7 @@ import numpy as np
 import networkx as nx
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 
 kw = dict(verbose=0, unit='day', total_pop=50_000)
 solvers = ['ode', 'binomial', 'abm']
@@ -918,7 +919,7 @@ def test_trace():
     pars = dict(stop=120, n_agents=5_000, solver='abm', rand_seed=1, **kw)
     def run(ring):
         sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.1), recovery=ss.progression('I -> R', dur=10), init_prev=0.002, name='sir')
-        net = ss.StaticNet(graph=nx.erdos_renyi_graph, p=8/5_000, seed=True, name='net')
+        net = ssl.StaticNet(graph=nx.erdos_renyi_graph, p=8/5_000, seed=True, name='net')
         vx = ss.Vaccine(efficacy=1.0)
         intvs = ss.vaccinate(vx, on=sir.infection, trace='net', name='ring') if ring else None
         return ss.Sim(sir, networks=net, interventions=intvs, **pars).run()
@@ -939,7 +940,7 @@ def test_trace():
     sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
     with pytest.raises(ss.CapabilityError):
         ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.infection, trace='net'), solver='ode', **kw).init()
-    with pytest.raises(ss.CapabilityError, match='solver="gillespie"'): # The solver asked for, not the ODE that estimates its cost
+    with pytest.raises(ss.CapabilityError, match='solver="gillespie"'): # The solver asked for
         ss.Sim(sir, interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), on=sir.infection, trace='net'), solver='gillespie', **kw).init()
     with pytest.raises(ValueError, match='an event in who='):
         ss.Sim(sir, networks=ss.RandomNet(name='net'), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), trace='net'), solver='abm', n_agents=1000, **kw).init()
