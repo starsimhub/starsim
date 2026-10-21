@@ -79,6 +79,9 @@ Set aside on 2026-10-21 when the simplification plan ([oct21/plan.md](../oct21/p
 - **Performance**: MA28, N29, N25/SW7, FP34, ST27, D-P5, MA26, SC6, W16, DF7, X27/PL12, PL11. Each is to be re-measured after the simplification (S8.1 measures the benchmark set) before any is fixed.
 - **Inference and the saved form**: X26, DF15, DF26, R16, KI21, N20, DF22/R29, DF30, R23, DF38, PL10, C12c, X19, MA30, KI14, DF14/R17, DF12, FP38, X10.
 - **Importers** (lowest priority, as before).
+- **Small items from the October 19 decisions** (Cliff, 2026-10-21: "if something is simple + useful or simplifies things, implement; otherwise, defer"; none was both): NR13 (no progress bar for very short runs; naming a clashing product after its delivery, which changes result keys); X1 (hiding the `<transfer>_stage` dimension from `describe()` and results); DF20 (contact matrices as release assets); SW8 (a seed below one agent: it rounds to 0 with a note; stochastic rounding keeps the expected number but still gives no epidemic most of the time in `test_odin_agents`, and raising would refuse models that run, so neither is clearly better than the note). L20/L23 are under Features.
+- **Two designs from October 17** (Cliff, 2026-10-21): [people_as_data.md](../oct17/designs/people_as_data.md) and [burden_of_disease.md](../oct17/designs/burden_of_disease.md).
+- **Names from S3.5** (Cliff, 2026-10-21: "don't love delivery.compartments or ss.solvers.CompartmentalDelivery, but we can revisit later"): `delivery.compartments`, `ss.solvers.CompartmentalDelivery`, `Product.administer()`, `delivery.reached()`.
 - **Reviews**: the canon gallery, the naive review's xfails, real models at full complexity, D-T1's rest, D-T2, D-T3, P7/D45/X30, and the downstream CI gate.
 
 ## Won't do

@@ -1,7 +1,7 @@
 """
 Fitting sims to data: likelihoods, particle filters, samplers, and what `sim.calibrate()` runs
 
-Imported when it is first used (by `sim.calibrate()`, `sim.sensitivity()`, or `import starsim.fit`), not by `import starsim`.
+Imported when it is first used (by `ss.fit.X`, `sim.calibrate()`, or `sim.sensitivity()`), not by `import starsim`.
 """
 import inspect
 import sys

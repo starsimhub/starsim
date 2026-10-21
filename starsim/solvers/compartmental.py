@@ -491,6 +491,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.arrive(name, amount, self.y, before=name in infected)
         for name,count in counts.items():
             self.arrive(name, count*self.state_split[name], self.y, before=name in infected)
+        burnin = self.mod.burnin_plan(self) if hasattr(self.mod, 'burnin_plan') else None # People part way through at the start (ss.Pregnancy's burnin=)
+        if burnin is not None:
+            self.backfill_burnin(burnin)
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
         if any(not tr.static for tr in self.triggers) and self.cross is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
@@ -503,6 +506,20 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.record_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
+        return
+
+    def backfill_burnin(self, sp):
+        """
+        A module's people who start part way through (`ss.Pregnancy(burnin=True)`: see its `burnin_plan()`): each group's
+        share of the first state (`sp.share()`) is moved to the target, spread evenly over its compartments (stages, or the
+        slots of a fixed time), as if they entered uniformly over the steps before the start (the module's share takes off those
+        who would have left on the way)
+        """
+        first, target = self.state_comps[self.graph.first.name], self.state_comps[sp.target[0]]
+        moved = self.y[first]*np.asarray(sp.share(), dtype=float)
+        self.y[first] -= moved
+        self.y[target] += moved.sum(axis=0)/len(target)
+        ss.note(sp.note, sim=self.sim)
         return
 
     def restart(self):

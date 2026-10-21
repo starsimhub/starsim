@@ -164,10 +164,10 @@ sir  = ss.Disease(
     infection = ss.Transition(S, I, rate=beta * I),
     recovery  = ss.Transition(I, R, dur=ss.days(10)),
 )
-sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
+sim = ss.Sim(sir, pars=sc.loadjson('params/kenya_2024.json'), unit='day')
 ```
 
-`pars=` takes a dict or a file of values by name (`beta`, or `sir.beta` when there is more than one module): a CSV with a column of names and a column of values (`name,value`) or one row with a column per parameter, or a TOML or JSON table. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise `UnknownParameter`.
+`pars=` takes a dict of values by name (`beta`, or `sir.beta` when there is more than one module); values kept in a file are read into one first (`sc.loadjson()`, `pd.read_csv()`), since reading files is not the sim's job. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise `UnknownParameter`.
 
 Either way, `sim.hash()` returns the parts of the run's identity as an `sc.objdict` ([11-random.md](11-random.md)):
 

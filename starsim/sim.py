@@ -87,8 +87,6 @@ class Sim(ss.Base):
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
-        if isinstance(pars, (str, os.PathLike)): # A file of values by name
-            pars = ss.parameters.load_pars(pars)
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in mod.pars.keys()}

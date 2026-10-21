@@ -660,43 +660,6 @@ def check_verbose(verbose):
     raise ValueError(errormsg)
 
 
-def load_pars(filename):
-    """
-    Read parameter values by name from a file, for `ss.Sim(pars=...)`
-
-    A CSV file has either a column of names and a column of values (`name,value`), or
-    one row of values with a column per parameter; a TOML or JSON file is a table of
-    values by name.
-
-    Args:
-        filename (str/path): the file
-
-    Examples:
-        ```python
-        sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
-        ```
-    """
-    path = sc.path(filename)
-    suffix = path.suffix.lower()
-    if suffix == '.json':
-        return dict(sc.loadjson(path))
-    elif suffix == '.toml':
-        import tomllib
-        with open(path, 'rb') as f:
-            return tomllib.load(f)
-    elif suffix == '.csv':
-        df = pd.read_csv(path)
-        cols = [str(col).lower() for col in df.columns]
-        if len(cols) == 2 and cols[1] == 'value':
-            return dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1]))
-        elif len(df) == 1:
-            return df.iloc[0].to_dict()
-        errormsg = f'The parameter file {path} should have a column of names and a column named "value", or one row of values with a column per parameter; it has columns {list(df.columns)} and {len(df)} rows'
-        raise ValueError(errormsg)
-    errormsg = f'The parameter file {path} should be a CSV, TOML, or JSON file, not "{suffix}"'
-    raise ValueError(errormsg)
-
-
 #%% Values that vary by level or in time
 
 def isnull(val):

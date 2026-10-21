@@ -48,6 +48,7 @@ def test_states(ode=False):
         assert np.isclose(ra[key].sum(), ro[key].sum(), rtol=0.1), f'{key}: agents {ra[key].sum():.0f}, ODE {ro[key].sum():.0f}'
     loss = lambda r: r.miscarriage.sum() + r.stillbirth.sum()
     assert np.isclose(loss(ra), loss(ro), rtol=0.1)
+    assert np.isclose(ro.n_P[0], ra.n_P[0], rtol=0.1) # Women pregnant at the start (burnin=), spread evenly over gestation
     assert np.isclose(ro.miscarriage.sum()/loss(ro), thr.weeks/40.09, rtol=0.01) # The share of the mean gestation below the threshold, as nothing reads P.time
     assert any('small compartmental form' in str(note) for note in ode.notes)
     return abm
@@ -149,11 +150,12 @@ def test_burnin():
 
 
 def test_burnin_ode():
-    sc.heading('Testing burnin= in the small compartmental form: agents only, so nobody is pregnant at the start, with a note')
+    sc.heading('Testing burnin= in the small compartmental form: women pregnant at the start, as many as agents have, with a note')
     pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, use_aging=False)
     make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
-    assert ode.results.pregnancy.n_P[0] == 0 and any('burn-in' in str(note) for note in ode.notes)
+    abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
+    assert np.isclose(ode.results.pregnancy.n_P[0], abm.results.pregnancy.n_P[0], rtol=0.1) and any('burnin=True' in str(note) for note in ode.notes)
     assert ss.Sim(demographics=make(), total_pop=20_000, **pars).init().solver == 'abm'
 
 

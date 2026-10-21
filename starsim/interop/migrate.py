@@ -54,7 +54,6 @@ moved = dict(
     distributions = 'link_dists make_dist dist_list scale_types rand_raw Dists',
     settings      = 'load_fonts',
     modules       = 'module_map module_types find_modules',
-    parameters    = 'load_pars',
     results       = 'validate_sim_data',
     debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
     utils         = 'apply_age_range find_contacts standardize_data standardize_netkey',

@@ -186,15 +186,21 @@ class Pregnancy(ss.Demographics, ss.Disease):
         having conceived in the mean duration of a pregnancy before the start, at her conception hazard then
         (`1 - exp(-h*dur)`), at a step uniform over it, and is run forward by the pregnancy's own transitions
         (abortion, losses, and delivery, with no births), so the start has the gestational ages and the first steps
-        their deliveries. Starsim 3 ran the module's steps before the start instead. Agents only (see compartmental_form()).
+        their deliveries. Starsim 3 ran the module's steps before the start instead. In the compartmental form, the same share
+        of each group, less the abortions and the losses on the way, is spread evenly over gestation (see `ss.solvers.Compartmental.backfill_burnin()`).
         """
-        if not self.pars.burnin or not self.abm:
+        if not self.pars.burnin:
             return None
         dt = engine.dt
         steps = max(1, int(round(ss.solvers.convert(ss.years(self.mean_dur_pregnancy), engine.sim.unit_base)/dt)))
+        kept = 1.0
+        if not self.abm: # Compartments place people directly, so those lost before the start are taken off: abortions at once, and losses at their constant rate over the time since conception
+            g = self.graph
+            loss = ss.solvers.convert(g.pars.loss_rate.raw, 'year')*self.mean_dur_pregnancy
+            kept = (1 - g.pars.p_abortion.raw)*(-np.expm1(-loss)/loss if loss > 0 else 1.0)
         def share():
             rate = np.asarray(engine.convert(self.conception_rate(engine.sim)), dtype=float)
-            return -np.expm1(-rate*dt*steps)
+            return -np.expm1(-rate*dt*steps)*kept
         def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman, and in her pregnancies with the one she has at the start (a loss before the start counts in neither, so deliveries plus losses are pregnancies); and the fetuses of those pregnant at the start are there at the start
             delivered = np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0) if 'parity' in before else 0
             self.parity[kept] += delivered
@@ -230,8 +236,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         `dur_pregnancy` (a fixed delay, or Erlang stages for a distribution), with `n` children per delivery
         (`ss.birth(per=preg.delivery)`). The losses do not read the gestational age (`P.time`): the loss rate is split
         between miscarriage and stillbirth by the share of the mean gestation below `loss_threshold`. It has no fetuses,
-        no links between mothers and children, no lactation, no burn-in (nobody is pregnant at the start), no preterm
-        risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
+        no links between mothers and children, no lactation, no preterm risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
         """
         g = self.graph
         trs = g.transitions
@@ -241,7 +246,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         trs.miscarriage.rate = g.pars.loss_rate*early
         trs.stillbirth.rate = g.pars.loss_rate*(1 - early)
         note = (f'"{self.name}" runs in its small compartmental form: losses at a constant rate, {early:.0%} of them miscarriages (the share of the mean gestation below loss_threshold); '
-                f'no fetuses, links between mothers and children, lactation, burn-in (nobody is pregnant at the start), preterm risk, or deaths at delivery. Run with solver="abm" for these')
+                f'no fetuses, links between mothers and children, lactation, preterm risk, or deaths at delivery. Run with solver="abm" for these')
         return note
 
     def step(self):

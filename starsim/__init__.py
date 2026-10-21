@@ -167,7 +167,12 @@ from .sim import Sim, AlreadyRunError, demo
 t('run')
 from .run import MultiSim, parallel
 
-# ss.fit (fitting to data) is imported when it is first used: by sim.calibrate(), or import starsim.fit
+# ss.fit (fitting to data) is imported when it is first used, so that import starsim stays fast
+def __getattr__(name):
+    if name == 'fit':
+        import importlib
+        return importlib.import_module('.fit', __name__)
+    raise AttributeError(f'module "starsim" has no attribute "{name}"')
 
 # Load fonts
 def _load_fonts(debug=debug):

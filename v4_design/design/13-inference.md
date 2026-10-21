@@ -29,7 +29,7 @@ fit.plot()
 
 `calibrate()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.fit.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
 
-The fitting itself is the submodule `ss.fit`, which an ordinary run never imports: `sim.calibrate()` imports it when it is called, and `import starsim.fit` makes its parts available directly (`ss.fit.loglik()`, `ss.fit.ParticleFilter`, `ss.fit.compare_models()`, and so on).
+The fitting itself is the submodule `ss.fit`, which an ordinary run never imports: it is imported the first time it is used, by `sim.calibrate()` or by any of its parts (`ss.fit.loglik()`, `ss.fit.ParticleFilter`, `ss.fit.compare_models()`, and so on).
 
 ### Compared with Starsim 3
 
