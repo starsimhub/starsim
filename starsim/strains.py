@@ -190,6 +190,16 @@ class Protection:
         return f'{self.name:<16s} multiply={"1/" if self.state is not None else ""}(1 − protection)   ({what}; {imm.rule()} from {self.family.name}.{sc.strjoin(sc.tolist(imm.protected)) if imm.protected is not None else "its members"})'
 
 
+def stock_sum(expr):
+    """ The states in a result that is a plain sum of states (e.g. `S + I + R`), or None """
+    if isinstance(expr, ss.expressions.Stock):
+        return [expr.state]
+    elif isinstance(expr, ss.transitions.BinOp) and expr.op == '+':
+        a, b = stock_sum(expr.a), stock_sum(expr.b)
+        return a + b if a is not None and b is not None else None
+    return None
+
+
 class Strains(ss.Module):
     """
     A family of diseases that a person can have several of at once, each with its own natural history (e.g. HPV genotypes)
@@ -254,7 +264,7 @@ class Strains(ss.Module):
             raise TypeError(errormsg)
         members = list(members.values()) if isinstance(members, dict) else list(members)
         for mod in members:
-            if not isinstance(mod, ss.Disease) or mod.graph is None:
+            if not isinstance(mod, ss.Disease):
                 raise ss.CapabilityError(f'the member {getattr(mod, "name", mod)!r} of "{name}" is not a declared disease ({type(mod).__name__}), so its states are not visible to the family; declare it with ss.Disease(...)')
             mod._default_name = False # The family refers to it by name, which the sim does not change
         names = [mod.name for mod in members]
@@ -324,11 +334,8 @@ class Strains(ss.Module):
             if name in graph.states and graph.states[name].people:
                 out.append(name)
             elif name in graph.exprs:
-                try:
-                    states = graph.exprs[name]._sum_states()
-                except TypeError: # Not a plain sum of states, e.g. a ratio
-                    return None
-                if not all(isinstance(s, ss.State) and s.people for s in states):
+                states = stock_sum(graph.exprs[name])
+                if states is None or not all(s.people for s in states): # Not a plain sum of states, e.g. a ratio
                     return None
                 out += [s.name for s in states]
             else:

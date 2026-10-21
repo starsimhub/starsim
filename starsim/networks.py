@@ -1947,7 +1947,7 @@ class MixingPools(Route):
 
 def transmits(disease):
     """ Whether a disease is communicable: declared with a contact-mediated transition, or written as code with a beta """
-    if disease.graph is not None:
+    if isinstance(disease, ss.Disease):
         return len(disease.graph.transmissions) > 0
     return 'beta' in disease.pars
 
@@ -2044,7 +2044,7 @@ class MixingPool(Route):
             self.diseases = []
             for d in self.pars.diseases:
                 if not isinstance(d, str):
-                    raise TypeError(f'Diseases can be specified as ss.Disease objects or strings, not {type(d)}')
+                    raise TypeError(f'Diseases can be specified as disease objects or strings, not {type(d)}')
                 if d not in self.sim.diseases:
                     raise KeyError(f'Could not find disease with name {d} in the list of diseases.')
 

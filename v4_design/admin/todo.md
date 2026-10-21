@@ -46,6 +46,7 @@
 - [ ] Show example of pure NumPy and then stages of implementation moving to pure Starsim
 - [ ] Consider GPU support
 - [ ] Consider differentiable ABM
+- [ ] Think about vectors
 
 ## AI 0/4
 

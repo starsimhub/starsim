@@ -419,7 +419,7 @@ class Held(Product):
         uids = (arr == 1).uids
         if len(uids):
             dis = ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)
-            eng = dis.engine if dis.graph is not None else ss.connectors.AgentModifiers.engine(dis, sim)
+            eng = dis.engine if isinstance(dis, ss.Disease) else ss.connectors.AgentModifiers.engine(dis, sim)
             p = -np.expm1(-eng.dt/eng.convert(self.waning))
             lost = uids[self.rng_wane.rvs(uids) < p]
             arr[lost] = 0

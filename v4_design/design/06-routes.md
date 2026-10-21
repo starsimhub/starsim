@@ -19,7 +19,7 @@ There are two ways to mention a state in a rate, and they answer different quest
 - **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `n_I`, and it is used exactly as written ([below](#counts-used-literally)).
 - **A bare `I` is the chance that a contact is with someone in `I`.** With no network that is `I.n / N`, so `beta * I` and `beta * I.n / N` are the same model. With a contact matrix or a network it is the same quantity worked out for each person from whom they actually meet, which cannot be written as one formula; that is why the bare form exists.
 
-So a bare state is written when people catch the infection from people, and `.n` when the formula needs the number itself (a reservoir, a vector, a threshold). Three consequences:
+So a bare state is written when people catch the infection from people, and `.n` when the formula needs the number itself (a reservoir, a vector, a threshold). Elsewhere a bare state has the meaning of where it is written, told apart when the model is made: in a result (`prevalence = I/N`), the number in it, kept by group (where `I.n` is the number over every group); in a condition (`where=I`), being in it; and as a trigger (`on=I.enter`), the event of entering it. Three consequences:
 
 - **Several infectious states are a sum of exposures**, each with its own coefficient: `S >> I @ beta * I + beta_vax * I_vax`, or `S >> E @ beta * (I + 0.5 * A)`.
 - **A rate with no state is not transmission.** `S >> I @ beta` is legal and is a constant hazard that does not depend on anyone being infectious (an importation rate, say), exactly as `I >> R @ gamma` is a constant hazard of recovery.

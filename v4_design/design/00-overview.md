@@ -71,11 +71,12 @@ Interventions ([08](08-interventions.md)) are a product or a change to a quantit
 ```
 ss.Sim                          modules, a population, mixing, a timeline, a solver
  ├── modules                    one or more ss.Module
- │     ├── ss.Disease           states people are in, and transitions between them (ss.Infection for a disease written as code)
+ │     ├── ss.Disease           states people are in, and transitions between them (declared)
  │     │     ├── ss.State           declared; people, or a plain count
  │     │     ├── ss.Transition      contact-mediated or spontaneous (derived from its rate)
  │     │     ├── ss.par             named parameters, in sir.pars
  │     │     └── results            n_<state>, one flow per transition, ss.outcome, ratios
+ │     ├── ss.Infection         a disease written as code, as in Starsim 3
  │     ├── ss.Demographics      births, deaths, pregnancy
  │     ├── ss.Intervention      deliveries: ss.vaccinate, ss.screen, ss.treat
  │     └── ss.Connector, ss.Analyzer

@@ -1026,7 +1026,7 @@ class Sim(ss.Base):
             if isinstance(mod.get('transitions'), list): # The order of the transitions is not part of the model
                 mod['transitions'] = sorted(mod['transitions'], key=lambda t: t['name'])
             dis = self.diseases.get(mod.get('name')) if mod.get('init_prev') else None
-            if dis is not None and dis.graph is not None and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
+            if isinstance(dis, ss.Disease) and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
                 state = next(s for s in mod['states'] if s['name'] == dis.graph.transmissions[0].dst[0].name)
                 if state.get('init') is None:
                     state['init'], mod['init_prev'] = mod['init_prev'], None
@@ -1495,7 +1495,7 @@ class Sim(ss.Base):
     def _init_rescale(self):
         """ Check that the diseases support dynamic rescaling, and create the distribution for it """
         for disease in self.diseases():
-            if disease.graph is None and not hasattr(disease, 'ti_infected') and not isinstance(disease, ss.Strains):
+            if isinstance(disease, ss.Infection) and not hasattr(disease, 'ti_infected'):
                 errormsg = f'Dynamic rescaling (rescale=True) requires each disease written as code to have a ti_infected state, but "{disease.name}" does not'
                 raise ValueError(errormsg)
         self.rng_rescale = ss.choose_n(name='rng_rescale') # Choose who to make naive when rescaling

@@ -132,7 +132,7 @@ class Graph(Presentation):
                 self.add(self.attrs, obj.name, obj)
                 continue
             if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
-                self.add(self.exprs, name, obj)
+                self.add(self.exprs, name, ss.expressions.as_stocks(obj))
                 continue
             if isinstance(obj, (Transition, outcome, par, State)):
                 if name is not None:
@@ -160,7 +160,7 @@ class Graph(Presentation):
                 if name is None:
                     errormsg = f'Could not find a name for the result "{obj}"; pass it as a keyword, e.g. ss.Disease(..., prevalence=I/N)'
                     raise ValueError(errormsg)
-                self.add(self.exprs, name, obj)
+                self.add(self.exprs, name, ss.expressions.as_stocks(obj))
             elif callable(obj) and not isinstance(obj, (ss.Dist, type, TimeValue)): # A value that varies in time is a value, e.g. beta=ss.seasonal(...)
                 self.add(self.funcs, name or obj.__name__, obj)
             elif name is not None: # A number, typed quantity, or distribution sets the value of a parameter, once they are known

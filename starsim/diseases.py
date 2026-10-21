@@ -12,9 +12,61 @@ _ = None # For function signatures
 
 
 
-class Disease(ss.Module):
+class DiseaseBase:
     """
-    A disease: declared from its states and the transitions between them, or written as code
+    What a declared disease (`ss.Disease`) and a disease written as code (`ss.Infection`) share
+
+    The sim treats both as diseases (`sim.diseases`, deaths, `sim.rescale()`), and both date
+    infections the same way and write them to the log of an `ss.infection_log` analyzer.
+    """
+    infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
+
+    def init_pre(self, sim):
+        """ Link the disease to the sim, and start its infection log if there is an `ss.infection_log` analyzer """
+        super().init_pre(sim)
+        if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
+            self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
+        return
+
+    def step_die(self, uids):
+        """
+        Carry out state changes upon death
+
+        This function is triggered after deaths are resolved, and before analyzers are run.
+        See `ssl.AgentSIR` for a typical use case - deaths are requested as an autonomous
+        update, to take effect after transmission on the same timestep. State changes that occur
+        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
+        allows an intervention to avert a death scheduled on the same timestep, without having
+        to undo any state changes that have already been applied (because they only run via this
+        function if the death actually occurs).
+
+        Unlike other methods during the integration loop, this method is not called directly
+        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
+        the agents who will die.
+        """
+        return
+
+    @property
+    def ti_entry(self):
+        """
+        The time point that an infection in this step is dated at: the end of the step (`self.ti + 1`), since it has happened by then, or the start of the run for seeds
+
+        A declared disease dates infections this way (`ti_I`); a disease written as code dates them the same way by
+        setting e.g. `self.ti_infected[uids] = self.ti_entry` in `set_prognoses()`, and schedules what follows from it.
+        So in `update_results()` and analyzers, where `self.ti` is the end of the step, this step's infections are `ti_infected == self.ti`.
+        """
+        return self.ti + 1 if self.sim.initialized else self.ti
+
+    @property
+    def now_entry(self):
+        """ The time (e.g. a date) of `ti_entry`, which an infection log records """
+        ti, tvec = self.ti_entry, self.t.tvec
+        return tvec[ti] if ti < len(tvec) else tvec[0] + self.t.dt*ti # E.g. an infection after the last step
+
+
+class Disease(DiseaseBase, ss.Module):
+    """
+    A disease declared from its states and the transitions between them
 
     No methods need to be defined, and the disease can be run with any solver
     (see `ss.Sim`):
@@ -30,12 +82,8 @@ class Disease(ss.Module):
     add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR` are written
     this way.
 
-    A subclass that declares nothing is a disease written as code, as in Starsim 3:
-    its `__init__()` calls `super().__init__()` and then `define_pars()` and
-    `define_states()`, and it defines what happens each step (`step_state()`, `step()`),
-    as for any other module. It runs as agents. A disease written as code that is
-    transmitted between agents subclasses `ss.Infection`, which adds the susceptible
-    and infected states, `rel_sus` and `rel_trans`, and transmission over networks.
+    A disease written as code, with per-agent arrays that its own `step()` changes (as
+    in Starsim 3), subclasses `ss.Infection` instead.
 
     Args:
         args (list): transitions and outcomes, named from the variables they are assigned to
@@ -67,32 +115,19 @@ class Disease(ss.Module):
             S, I, R   = ss.states(3)
             infection = S >> I @ 0.3 * I
             recovery  = I >> R @ ss.days(10)
-
-        # Written as code: Starsim 3's ss.Disease
-        class Anemia(ss.Disease):
-            def __init__(self, **kwargs):
-                super().__init__()
-                self.define_pars(p_onset=ss.bernoulli(0.01))
-                self.update_pars(**kwargs)
-                self.define_states(ss.BoolState('anemic', label='Anemic'))
-
-            def step_state(self):
-                self.anemic[self.pars.p_onset.filter()] = True
         ```
     """
-    graph = None # The declared states and transitions; None for a disease written as code
+    graph = None # The declared states and transitions, built when the disease is made
     standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
-    _coded = False # Whether the class is written as code (ss.Infection and its subclasses), so that the check in __init_subclass__() does not apply
-    _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital'] # Called only on a disease written as code
+    _coded_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital'] # Methods of ss.Infection, which a declared disease never calls
 
     def __init_subclass__(cls, **kwargs):
-        """ A declared class never calls the methods of a disease written as code, so overriding one (e.g. set_prognoses() on a subclass of ss.SIS) would be silently ignored """
+        """ A declared disease never calls the methods of a disease written as code, so overriding one (e.g. set_prognoses() on a subclass of ss.SIS) would be silently ignored """
         super().__init_subclass__(**kwargs)
         overridden = [name for name in cls._coded_methods if name in vars(cls)]
-        declared = any(isinstance(val, (ss.State, ss.Transition)) for b in cls.__mro__ for val in vars(b).values()) # Its class body, or a base's, declares states or transitions (e.g. ss.SIS)
-        if overridden and declared and not cls._coded:
+        if overridden:
             base = next((f'ssl.Agent{b.__name__}' for b in cls.__mro__ if b.__module__ == __name__ and b.__name__ in ['SIR', 'SIS', 'SEIR']), 'ss.Infection')
             errormsg = (f'{cls.__name__} defines {sc.strjoin(overridden)}, which a declared disease never calls, so it would be silently ignored.\n'
                         f'     A disease written as code subclasses {base} instead (import starsim.library as ssl); a declared one changes its transitions.')
@@ -101,16 +136,17 @@ class Disease(ss.Module):
 
     def __init__(self, *args, pars=None, **kwargs):
         super().__init__()
-        self.infection_log = None
         self.engine = None # Runs the graph; created when the sim is initialized
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         members = ss.transitions.class_members(type(self))
         declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
-        if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
-            self.init_graph(args, members, pars, kwargs, names=ss.utils.caller_names(1))
-        else: # Nothing declared, so written as code: the subclass defines its parameters and states after calling this
-            self.update_pars(pars, **kwargs)
+        if not (args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items())):
+            errormsg = (f'"{type(self).__name__}" declares no states or transitions. A declared disease gives its transitions, e.g.\n'
+                        f'     ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(10)); a disease written as code (as Starsim 3\'s\n'
+                        f'     ss.Disease was) subclasses ss.Infection, and defines its states (define_states()) and what happens each step (step_state(), step()).')
+            raise ss.CapabilityError(errormsg)
+        self.init_graph(args, members, pars, kwargs, names=ss.utils.caller_names(1))
         return
 
     def define_pars(self, inherit=True, **kwargs):
@@ -258,7 +294,6 @@ class Disease(ss.Module):
             sir.stratify(parity=['0', '1-2', '3+'], where=dict(sex='female')) # Only women have a parity
             ```
         """
-        self.check_declared('stratify()')
         mod = self if inplace else self.copy()
         mod.graph.stratify(**kwargs)
         for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
@@ -268,27 +303,17 @@ class Disease(ss.Module):
 
     @property
     def transitions(self):
-        """ The table of declared transitions (None for a disease written as code); printing it also shows the matrix of sources by destinations """
-        return self.graph.transitions if self.graph is not None else None
-
-    def check_declared(self, what):
-        """ Raise `ss.CapabilityError` for something that needs the structure of a declared disease, if this one is written as code """
-        if self.graph is None:
-            raise ss.CapabilityError(f'{what} needs a disease declared from states and transitions, but "{self.name}" ({type(self).__name__}) is written as code.\n'
-                                     f'     Declare it with ss.Disease (e.g. ss.SIR, or ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(10))).')
-        return
+        """ The table of declared transitions; printing it also shows the matrix of sources by destinations """
+        return self.graph.transitions
 
     def describe(self, output=False):
         """
-        Print the resolved model as text, with every guessed default marked (for a disease written as code, a one-line summary)
+        Print the resolved model as text, with every guessed default marked
 
         Args:
             output (bool): if True, return the text rather than printing it
         """
-        if self.graph is None:
-            text = f"{type(self).__name__} '{self.name}': written as code (states: {sc.strjoin(self.state_dict.keys())})"
-        else:
-            text = '\n'.join(self.graph.describe(self.sim))
+        text = '\n'.join(self.graph.describe(self.sim))
         return text if output else print(text)
 
     def equations(self, output=False):
@@ -298,7 +323,6 @@ class Disease(ss.Module):
         Args:
             output (bool): if True, return the text rather than printing it
         """
-        self.check_declared('equations()')
         text = '\n'.join(self.graph.equations(self.engine))
         return text if output else print(text)
 
@@ -316,7 +340,6 @@ class Disease(ss.Module):
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
             print(sir.diagram())
         """
-        self.check_declared('diagram()')
         return '\n'.join(['flowchart LR'] + self.graph.diagram())
 
     def R0(self, matrix=False):
@@ -342,7 +365,6 @@ class Disease(ss.Module):
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
             sir.R0() # 3.0
         """
-        self.check_declared('R0()')
         if self.sim is not None and self.sim.initialized:
             sim = self.sim.new(solver='ode', verbose=0).init()
             dis = sim.diseases[self.name]
@@ -357,13 +379,13 @@ class Disease(ss.Module):
 
     def to_spec(self, filename=None, **kwargs):
         """
-        The disease's part of the model spec (`sim.to_spec()`): its states, parameters, and transitions as plain data, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`; for a disease written as code, see `ss.Module.to_spec()`
+        The disease's part of the model spec (`sim.to_spec()`): its states, parameters, and transitions as plain data, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`
 
         Args:
             filename (str): if provided, save to this file
             kwargs (dict): passed to `sc.savejson()`
         """
-        out = self.graph.to_spec(self.sim) if self.graph is not None else super().to_spec()
+        out = self.graph.to_spec(self.sim)
         if filename is not None:
             return sc.savejson(filename, out, **kwargs)
         return out
@@ -371,42 +393,31 @@ class Disease(ss.Module):
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
-        if self.graph is not None:
-            unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
-            if unknown:
-                hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=100)), and cannot be set through pars.' if 'init' in unknown else ''
-                raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
-            self.engine = ss.solvers.make_engine(self, sim)
-            self.engine.define()
-        elif not self.state_list and type(self).step is Disease.step and type(self).step_state is Disease.step_state:
-            raise ss.CapabilityError(f'"{type(self).__name__}" declares no states or transitions, and defines no states or step(). A declared disease gives its transitions,\n'
-                                     f'     e.g. ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(10)); a disease written as code\n'
-                                     f'     defines its states (define_states()) and what happens each step (step_state(), step()), or subclasses ss.Infection if it is transmitted between agents.')
+        unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
+        if unknown:
+            hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=100)), and cannot be set through pars.' if 'init' in unknown else ''
+            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
+        self.engine = ss.solvers.make_engine(self, sim)
+        self.engine.define()
         super().init_pre(sim)
-        if self.engine is not None:
-            self.engine.init_pre()
-        if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
-            self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
+        self.engine.init_pre()
         return
 
     def init_post(self):
         """ Initialize the values of the states, and set the initial conditions of the declared states """
         super().init_post()
-        if self.engine is not None:
-            self.engine.init_post()
+        self.engine.init_post()
         return
 
     def start_step(self):
         super().start_step()
-        if self.engine is not None:
-            self.engine.start_step()
+        self.engine.start_step()
         return
 
     def step_state(self):
         """
-        Nothing, for a declared model: all of its transitions are taken together in `step()`, after the
-        interventions, so a delivery sees the same people under every solver (as agents and as compartments).
-        A disease written as code changes its states here, before transmission (e.g. recovery).
+        Nothing: all of the transitions are taken together in `step()`, after the interventions,
+        so a delivery sees the same people under every solver (as agents and as compartments)
         """
         return
 
@@ -417,33 +428,8 @@ class Disease(ss.Module):
         return
 
     def not_naive(self):
-        """ The agents who have left the first state (e.g. who are no longer susceptible), for dynamic rescaling (see `ss.Sim.rescale()`); none, for a disease written as code """
-        if self.graph is None:
-            return ss.uids()
+        """ The agents who have left the first state (e.g. who are no longer susceptible), for dynamic rescaling (see `ss.Sim.rescale()`) """
         return (~self[self.graph.first.name]).uids
-
-    @property
-    def ti_entry(self):
-        """
-        The time point that an infection in this step is dated at: the end of the step (`self.ti + 1`), since it has happened by then, or the start of the run for seeds
-
-        A declared disease dates infections this way (`ti_I`); a disease written as code dates them the same way by
-        setting e.g. `self.ti_infected[uids] = self.ti_entry` in `set_prognoses()`, and schedules what follows from it.
-        So in `update_results()` and analyzers, where `self.ti` is the end of the step, this step's infections are `ti_infected == self.ti`.
-        """
-        return self.ti + 1 if self.sim.initialized else self.ti
-
-    @property
-    def now_entry(self):
-        """ The time (e.g. a date) of `ti_entry`, which an infection log records """
-        ti, tvec = self.ti_entry, self.t.tvec
-        return tvec[ti] if ti < len(tvec) else tvec[0] + self.t.dt*ti # E.g. an infection after the last step
-
-    def set_prognoses(self, uids, sources=None):
-        """ For a disease written as code: set prognoses upon acquiring the disease (by default, only adding to the log if there is an `ss.infection_log` analyzer) """
-        if self.infection_log:
-            self.infection_log.add_entries(uids, sources, self.now_entry)
-        return
 
     def move_to(self, uids, to, src=None):
         """
@@ -461,9 +447,9 @@ class Disease(ss.Module):
 
             sir.move_to(uids, 'R', src='I') # A cure, from code
         """
-        graph = getattr(self, 'graph', None)
-        if graph is None or self.engine is None:
-            raise ss.CapabilityError(f'"{self.name}" is not a declared disease (or the sim is not initialized), so it has no states to move people between; set its arrays directly')
+        graph = self.graph
+        if self.engine is None:
+            raise RuntimeError(f'"{self.name}" moves people once the sim is initialized (sim.init())')
         if self.sim.solver != 'abm':
             raise ss.CapabilityError(f'disease.move_to() moves agents, but "{self.name}" is run with solver="{self.sim.solver}"; use an intervention (e.g. ss.Delivery(move=...)) for a compartmental run')
         name = lambda s: s if isinstance(s, str) else s.name
@@ -485,9 +471,9 @@ class Disease(ss.Module):
             cs = sir.current_state() # 0 for S, 1 for I, 2 for R
             cs.labels[cs[uid]] # The name of an agent's state
         """
-        graph = getattr(self, 'graph', None)
-        if graph is None or self.engine is None:
-            raise ss.CapabilityError(f'"{self.name}" is not a declared disease (or the sim is not initialized), so it has no states to look in')
+        graph = self.graph
+        if self.engine is None:
+            raise RuntimeError(f'"{self.name}" has the state of each agent once the sim is initialized (sim.init())')
         if self.sim.solver != 'abm':
             raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.n_S) instead')
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
@@ -505,25 +491,13 @@ class Disease(ss.Module):
         out.labels = names
         return out
 
-    def make_naive(self, uids, skip_states=None):
+    def make_naive(self, uids):
         """
-        Reset agents to the state of never having had the disease; for dynamic rescaling (see `ss.Sim.rescale()`)
-
-        A declared disease puts them back in its first state. A disease written as code
-        resets every state to its default value, except `rel_sus` and `rel_trans`, which
-        are often modified by other modules (e.g. vaccines); override this method if the
-        disease needs something different.
+        Put agents back in the first state, as if they had never had the disease; for dynamic rescaling (see `ss.Sim.rescale()`)
 
         Args:
             uids (`ss.uids`): the agents to make naive
-            skip_states (list): for a disease written as code, the names of states not to reset (default `['rel_sus', 'rel_trans']`)
         """
-        if self.graph is None:
-            skip_states = sc.tolist(skip_states) if skip_states is not None else ['rel_sus', 'rel_trans']
-            for state in self.state_list:
-                if state.name not in skip_states:
-                    state.set(uids)
-            return
         states = self.graph.people_states
         for state in states:
             self[state.name][uids] = False
@@ -533,9 +507,7 @@ class Disease(ss.Module):
         return
 
     def step(self):
-        """ Take the transitions of the step, those that are not contact-mediated and then those that are, followed by any custom functions (nothing, for a disease written as code that does not define it) """
-        if self.engine is None:
-            return
+        """ Take the transitions of the step, those that are not contact-mediated and then those that are, followed by any custom functions """
         self.engine.step_state()
         self.engine.step()
         for func in self.graph.funcs.values():
@@ -543,25 +515,21 @@ class Disease(ss.Module):
         return
 
     def update_results(self):
-        if self.engine is None: # Written as code: the counts of its states
-            return super().update_results()
         self.engine.update_results()
         return
 
     def finalize_results(self):
         super().finalize_results()
-        if self.engine is not None:
-            self.engine.finalize_results()
+        self.engine.finalize_results()
         return
 
     def shrink(self):
         super().shrink()
-        if self.engine is not None:
-            self.engine.shrink()
+        self.engine.shrink()
         return
 
 
-class Infection(Disease):
+class Infection(DiseaseBase, ss.Module):
     """
     Base class for diseases written as code
 
@@ -571,12 +539,25 @@ class Infection(Disease):
     that wanes, a time since infection. It runs as agents. This class implements
     network-based transmission with directional beta values, and defines the attributes
     (`rel_sus`, `rel_trans`) that other modules act on; a disease that is not transmitted
-    (such as `ssl.NCD`) defines no `beta` and its own `step()`.
+    (such as `ssl.NCD`) defines no `beta`.
 
     A disease that can be written as states and transitions is declared instead, with
     `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
     and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
     conditions such as `hiv.cd4 < 200`, and fitting the values in `pars`.
+
+    Examples:
+        ```python
+        class Anemia(ss.Infection):
+            def __init__(self, **kwargs):
+                super().__init__()
+                self.define_pars(p_onset=ss.bernoulli(0.01))
+                self.update_pars(**kwargs)
+                self.define_states(ss.BoolState('anemic', label='Anemic'))
+
+            def step_state(self):
+                self.anemic[self.pars.p_onset.filter()] = True
+        ```
     """
 
     def __init__(self, pars=None, **kwargs):
@@ -626,7 +607,7 @@ class Infection(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        ss.Module.init_post(self)
+        super().init_post()
         if self.pars.init_prev is None:
             return
 
@@ -714,27 +695,27 @@ class Infection(Disease):
         """
         pass
 
-    def step_die(self, uids):
-        """
-        Carry out state changes upon death
-
-        This function is triggered after deaths are resolved, and before analyzers are run.
-        See `ssl.AgentSIR` for a typical use case - deaths are requested as an autonomous
-        update, to take effect after transmission on the same timestep. State changes that occur
-        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
-        allows an intervention to avert a death scheduled on the same timestep, without having
-        to undo any state changes that have already been applied (because they only run via this
-        function if the death actually occurs).
-
-        Unlike other methods during the integration loop, this method is not called directly
-        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
-        the agents who will die.
-        """
-        pass
-
     def not_naive(self):
         """ The agents who have ever been infected, for dynamic rescaling (see `ss.Sim.rescale()`) """
         return self.ti_infected.notnan.uids
+
+    def make_naive(self, uids, skip_states=None):
+        """
+        Reset agents to the state of never having had the disease; for dynamic rescaling (see `ss.Sim.rescale()`)
+
+        Every state is reset to its default value, except `rel_sus` and `rel_trans`, which
+        are often modified by other modules (e.g. vaccines); override this method if the
+        disease needs something different.
+
+        Args:
+            uids (`ss.uids`): the agents to make naive
+            skip_states (list): the names of states not to reset (default `['rel_sus', 'rel_trans']`)
+        """
+        skip_states = sc.tolist(skip_states) if skip_states is not None else ['rel_sus', 'rel_trans']
+        for state in self.state_list:
+            if state.name not in skip_states:
+                state.set(uids)
+        return
 
     def set_prognoses(self, uids, sources=None):
         """
@@ -921,7 +902,7 @@ class Infection(Disease):
 
     def update_results(self):
         """ Update prevalence; new_infections is recorded by set_prognoses() as infections happen """
-        ss.Module.update_results(self)
+        super().update_results()
         res = self.results
         ti = self.ti
         res.prevalence[ti] = res.n_infected[ti] / self.sim.people.n_alive
@@ -929,7 +910,7 @@ class Infection(Disease):
 
     def finalize_results(self):
         """ Compute cumulative infections from the new-infections timeseries. """
-        ss.Module.finalize_results(self) # Called first to scale the results
+        super().finalize_results() # Called first to scale the results
         res = self.results
         res.cum_infections[:] = np.cumsum(res.new_infections[:]) # Computed after scaling, since the scale can vary over time (see ss.Sim.rescale())
         ti_infected = getattr(self, 'ti_infected', None) # A subclass can remove it (define_states(reset=...))

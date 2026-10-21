@@ -467,7 +467,7 @@ def observer(mod):
     """ Whether a module written as code, which does not say whether it works on groups, runs beside the compartments: an analyzer, a plain `ss.Module`, or a function given as a module """
     if callable(getattr(mod, 'func', None)) and not isinstance(mod, ss.Demographics): # e.g. interventions=func
         return True
-    return isinstance(mod, ss.Analyzer) or not isinstance(mod, (ss.Disease, ss.Network, ss.Demographics, ss.Intervention, ss.Connector))
+    return isinstance(mod, ss.Analyzer) or not isinstance(mod, (ss.diseases.DiseaseBase, ss.Network, ss.Demographics, ss.Intervention, ss.Connector))
 
 
 def init_capabilities(sim, modules):

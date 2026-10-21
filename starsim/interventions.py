@@ -223,7 +223,7 @@ def remembered(selector, cond):
 def coded_disease(sim, name):
     """ The disease of this name if it is written as code (not declared), else None """
     dis = sim.diseases.get(name) if name is not None and sim.diseases is not None else None
-    return dis if dis is not None and getattr(dis, 'graph', None) is None and not isinstance(dis, ss.Strains) else None
+    return dis if isinstance(dis, ss.Infection) else None
 
 
 def trigger_moves(owner, outcome, sel, eng=None, before=None):
@@ -1019,7 +1019,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def infected_states(self):
         """ The infected states of the disease, which a test with no detects= finds and a treatment with no where= is for; raises if there are none (TL52: nobody was found, with no message) """
-        if self.dis.graph is None: # Written as code: see check_coded()
+        if isinstance(self.dis, ss.Infection): # Written as code: see check_coded()
             return ['infected']
         out = [s.name for s in self.dis.graph.infected if s.people]
         if not out:

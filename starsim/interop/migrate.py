@@ -9,7 +9,7 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
 
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
-(`ss.SIS` to `ssl.AgentSIS`; a subclass of `ss.Disease` written as code is unchanged), a `beta` pair on
+(`ss.SIS` to `ssl.AgentSIS`, and `ss.Disease` to `ss.Infection`, which is now the base of a disease written as code), a `beta` pair on
 `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those
 networks transmit one way), and the time index: in
@@ -231,6 +231,8 @@ def migrate_ast(text, analyzers=None):
                 new = agent_bases[name]
                 uses_ssl = True
                 edits.add(b, new, f'Starsim 3\'s ss.{name}, written as code, is {new} (ss.{name} is now declared)')
+            elif name == 'Disease' and not is_declared(cls):
+                edits.add(b, 'ss.Infection', 'a disease written as code subclasses ss.Infection (ss.Disease is now declared)')
         for stmt in cls.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit_func(stmt, analyzer)

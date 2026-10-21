@@ -292,8 +292,8 @@ def test_ncd():
     plt.xlabel('Year')
     plt.title('NCD')
 
-    # A disease written as code with no states of its own (as Starsim 3's ss.Disease), and an infection with no beta
-    class Anemia(ss.Disease):
+    # A disease written as code that is not an infection (Starsim 3's ss.Disease), and an infection with no beta
+    class Anemia(ss.Infection):
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.bernoulli(0.1))
@@ -309,9 +309,8 @@ def test_ncd():
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
     assert sim2.results.anemia.n_anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
-    assert Anemia().transitions is None # Written as code, since it declares nothing
-    with pytest.raises(ss.CapabilityError): # A disease that declares nothing and defines no states or step()
-        ss.Sim(diseases=type('Empty', (ss.Disease,), {})(), verbose=0).init()
+    with pytest.raises(ss.CapabilityError, match='ss.Infection'): # ss.Disease is declared, so one that declares nothing points to ss.Infection
+        type('Empty', (ss.Disease,), {})()
     return sim
 
 

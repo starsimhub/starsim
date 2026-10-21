@@ -67,6 +67,20 @@ Work that has been looked at and set aside for now: worth doing, but not yet. Ea
 
 - **Normalizing the order of operands** (`design/14-model-spec.md`). Sorting the terms of `+` and `*` when a rate is written for the spec would make `beta * I` and `I * beta` write and hash the same. It changes every hash once and needs care with nested expressions; a spurious difference is the safe direction, so it waits until hashes change anyway (R29).
 
+## Carried over from the October 19 plan
+
+Set aside on 2026-10-21 when the simplification plan ([oct21/plan.md](../oct21/plan.md)) was closed off: none blocks it, and each was written before S3 made many compartmental forms agents only, so each is to be checked against the support matrix and narrowed (to agents) before it is started. The detail of each ID is in [oct19/implementation.md](../oct19/implementation.md).
+
+- **Vector models**: standard `prevalence`/`new_infections` from the acquisitions, not only from a transmission (about 8 sites in `compartmental.py`); MA11 (weighted counts), MA12 (per-node EIR from coded modules), MA14 (a product's coverage in a rate), MA33 (a neutral held product, and several wanings). Waits for the malaria port, which is what needs them.
+- **MA15, re-dosing a product whose waning is a function**: such a product is held for good, so a second round reaches nobody who had the first (600 against 3,237 people in the review's example). A wrong answer, but a loud one to anyone who checks coverage, and it needs a spelling (e.g. `redose=`) from Cliff; agents only since S3.4.
+- **HP19, a general per-person write on events** (a running maximum, a value frozen at entry), as agents: `ss.attr` with recorded values. Its compartmental form went with B6. Waits for a model that needs more than a module written as code gives.
+- **Demography**: N11/SW3 (births from one stratum into another; `tests/switching/test_emulsion.py` xfail), and whether `ss.birth(per=)` should cover SW2 (offspring by prototype) now that S7.1 removed `offspring=`. Waits for a model that needs either.
+- **Superseded by S3, unless Cliff says otherwise**: the care cascade's steps 11 and 12 (the delivery program in the Numba kernels, then JAX; see the second item under Performance) and its leftovers from steps 5 to 10 (a drawn delay's compartmental form, `delay=` breaking a dependency cycle, `on=` another disease's event under compartments); HP28 with D-A2 (hyperexponential dwells under the compartmental solvers; S3.1 keeps exponential, Erlang and fixed dwells). To check first: whether `delay=` breaking a dependency cycle still matters for agents.
+- **Performance**: MA28, N29, N25/SW7, FP34, ST27, D-P5, MA26, SC6, W16, DF7, X27/PL12, PL11. Each is to be re-measured after the simplification (S8.1 measures the benchmark set) before any is fixed.
+- **Inference and the saved form**: X26, DF15, DF26, R16, KI21, N20, DF22/R29, DF30, R23, DF38, PL10, C12c, X19, MA30, KI14, DF14/R17, DF12, FP38, X10.
+- **Importers** (lowest priority, as before).
+- **Reviews**: the canon gallery, the naive review's xfails, real models at full complexity, D-T1's rest, D-T2, D-T3, P7/D45/X30, and the downstream CI gate.
+
 ## Won't do
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.

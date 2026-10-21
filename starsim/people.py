@@ -678,7 +678,7 @@ class People:
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.Disease)]
+        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.diseases.DiseaseBase)]
         diseases += [mod for mod in getattr(self.sim, 'declared', []) if all(mod is not disease for disease in diseases)] # A declared disease given as another kind of module: its agents leave its states as well
         for disease in diseases:
             disease.step_die(death_uids)

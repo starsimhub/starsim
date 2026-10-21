@@ -110,7 +110,7 @@ def test_forms():
     assert base.hash().data is None and make(0.05, data=pd.DataFrame(dict(t=[10], n_I=[5]))).hash().data is not None
 
     # A module written as code is told apart by its callbacks, by where a function without source comes from, and by a version; a function with none of these is refused
-    class Coded(ss.Disease):
+    class Coded(ss.Infection):
         def __init__(self, fn=None):
             super().__init__()
             self.define_pars(fn=fn)
@@ -2111,7 +2111,7 @@ def test_messages_and_crashes():
     ss.Sim(d, networks=['random', ss.MFNet()], interventions=ss.change('d.pars.beta', at=2001, by=0.5), **kw).run()
 
     # A module's array as a modifier's amount (HP17: crashed, saying a state was already added)
-    class Coded(ss.Disease):
+    class Coded(ss.Infection):
         def __init__(self, **kwargs):
             super().__init__(name='coded', **kwargs)
             self.define_states(ss.FloatArr('factor', default=2.0))

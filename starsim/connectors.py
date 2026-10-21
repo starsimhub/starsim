@@ -357,7 +357,7 @@ class modify(Connector):
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
-        coded = {key:dis for key,dis in sim.diseases.items() if dis.graph is None and not isinstance(dis, ss.Strains)}
+        coded = {key:dis for key,dis in sim.diseases.items() if isinstance(dis, ss.Infection)}
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
             found = kind in [None, 'par'] and name == 'n_contacts'
             kind = 'par'

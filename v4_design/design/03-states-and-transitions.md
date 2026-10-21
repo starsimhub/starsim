@@ -474,7 +474,7 @@ sir = ss.Disease(infection, recovery, seeding=seed_cluster)
 
 The function is called with the sim, after the module's transitions, every step; there is nothing to wrap it in. To pass a function as a named *parameter* rather than as behavior, wrap it in `ss.par(fn)`.
 
-The other way is the class form: subclass `ss.Disease`, declare the states and transitions in the class body, and override `step()` ([01-objects.md](01-objects.md#the-class-form)). A disease written entirely as code, with per-agent arrays and no declared states, subclasses `ss.Infection` (or `ss.Disease`, declaring nothing, for no infection states of its own), as in Starsim 3, and runs as agents. Both are ordinary, supported ways to write a model. What they cost is the choice of solver: custom code runs as agents unless it happens to work on groups, by the same try-it rule, and `describe()` and `solvers()` say which.
+The other way is the class form: subclass `ss.Disease`, declare the states and transitions in the class body, and override `step()` ([01-objects.md](01-objects.md#the-class-form)). A disease written entirely as code, with per-agent arrays and no declared states, subclasses `ss.Infection` (Starsim 3's `ss.Disease` and `ss.Infection` both become it), and runs as agents. Both are ordinary, supported ways to write a model. What they cost is the choice of solver: custom code runs as agents unless it happens to work on groups, by the same try-it rule, and `describe()` and `solvers()` say which.
 
 ## States that are not people
 

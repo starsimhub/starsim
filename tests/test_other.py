@@ -141,9 +141,9 @@ class Counter(ss.Module):
         sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
         assert sim.results.counter.seen.sum() == seen
 
-    # Renames, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
+    # Renames, a fractional verbose, and Starsim 3's diseases written as code
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
-    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
+    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Infection): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
     assert 'sim.calibrate()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead

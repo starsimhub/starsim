@@ -270,6 +270,34 @@ class Count(Expr):
         return
 
 
+class Stock(Expr):
+    """
+    The number in a state, kept by group: what a bare state means in a result (`prevalence = I/N`)
+
+    A bare state means something else in each place it can be written, and each is told apart when the
+    model is made: in a rate, exposure to the people in it (`beta * I`); in a result, this; in a condition
+    (`where=I`), being in it; and its number over every group is `I.n` (a `Count`).
+    """
+    def __init__(self, state):
+        self.state = state
+        return
+
+    @property
+    def name(self):
+        return self.state.name
+
+
+def as_stocks(expr):
+    """ A result with each bare state in it read as the number in that state, by group (see `Stock`) """
+    if isinstance(expr, ss.transitions.State):
+        return Stock(expr)
+    elif isinstance(expr, BinOp):
+        return BinOp(expr.op, as_stocks(expr.a), as_stocks(expr.b))
+    elif isinstance(expr, Func):
+        return Func(expr.name, *[as_stocks(arg) for arg in expr.args])
+    return expr
+
+
 def count_power(expr):
     """ How many counts of people (`I.n`) a rate is multiplied by, net of those it is divided by: 1 for `beta * I.n` (density-dependent), 0 for `beta * I.frac` or `k * N.n / S.n` """
     if isinstance(expr, Count):
@@ -542,27 +570,37 @@ class Since(Expr):
     def __deepcopy__(self, memo): return self
 
 
-def mothers_in(obj, seen=None):
-    """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` """
+def nodes(obj, seen=None):
+    """ Every part of an expression, a condition, or a list or dict of them, each once: e.g. the clocks a model reads are the parts that are clocks (see `clocks_in()`) """
     seen = set() if seen is None else seen
     if id(obj) in seen:
-        return False
+        return
     seen.add(id(obj))
-    if isinstance(obj, mother):
-        return not obj.born # Only the unborn need fetuses as agents
-    elif isinstance(obj, par):
-        return mothers_in(obj.value, seen) if isinstance(obj.value, (Expr, ss.conditions.Cond)) else False
+    yield obj
+    if isinstance(obj, par):
+        parts = [obj.value] if isinstance(obj.value, (Expr, ss.conditions.Cond)) else []
+    elif isinstance(obj, attr): # What a derived one is worked out from (one set at an event has the value it had then)
+        parts = ([expr for names,expr in obj.cases] if obj.cases is not None else [obj.value]) if obj.kind == 'derived' else []
     elif isinstance(obj, Expr):
-        return any(mothers_in(leaf, seen) for leaf in obj.leaves if leaf is not obj) or any(mothers_in(arg, seen) for arg in getattr(obj, 'args', [])) or any(mothers_in(getattr(obj, key, None), seen) for key in ['a', 'b'])
+        parts = [leaf for leaf in obj.leaves if leaf is not obj] + list(getattr(obj, 'args', [])) + [getattr(obj, key, None) for key in ['a', 'b']] # E.g. a clock inside a comparison (Func)
     elif isinstance(obj, ss.transitions.on):
-        return mothers_in(obj.x, seen)
+        parts = [obj.x]
     elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
-        return any(mothers_in(arg, seen) for arg in obj.args)
+        parts = obj.args
     elif isinstance(obj, (list, tuple)):
-        return any(mothers_in(item, seen) for item in obj)
+        parts = obj
     elif isinstance(obj, dict):
-        return any(mothers_in(item, seen) for item in obj.values())
-    return False
+        parts = obj.values()
+    else:
+        parts = []
+    for part in parts:
+        yield from nodes(part, seen)
+    return
+
+
+def mothers_in(obj):
+    """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` of the unborn (who need fetuses as agents) """
+    return any(isinstance(part, mother) and not part.born for part in nodes(obj))
 
 
 combines = dict(last=lambda old, new: new, first=lambda old, new: np.where(np.isnan(old), new, old), max=np.fmax, min=np.fmin, sum=lambda old, new: old + new)
@@ -696,36 +734,9 @@ def rebind(expr, memo):
     return new
 
 
-def clocks_in(obj, out=None, seen=None):
-    """ The clocks an expression, a condition, or a list or dict of them reads """
-    out = [] if out is None else out
-    seen = set() if seen is None else seen
-    if id(obj) in seen:
-        return out
-    seen.add(id(obj))
-    if isinstance(obj, (Clock, Since)): # The time since an event is kept per agent too
-        out.append(obj)
-    elif isinstance(obj, attr): # What a derived one is worked out from (one set at an event has the value it had then)
-        if obj.kind == 'derived':
-            clocks_in([expr for names,expr in obj.cases] if obj.cases is not None else obj.value, out, seen)
-    elif isinstance(obj, Expr):
-        for leaf in obj.leaves:
-            if leaf is not obj:
-                clocks_in(leaf, out, seen)
-        for arg in getattr(obj, 'args', []): # E.g. a clock inside a comparison (Func)
-            clocks_in(arg, out, seen)
-        for key in ['a', 'b']:
-            clocks_in(getattr(obj, key, None), out, seen)
-    elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
-        for arg in obj.args:
-            clocks_in(arg, out, seen)
-    elif isinstance(obj, (list, tuple)):
-        for item in obj:
-            clocks_in(item, out, seen)
-    elif isinstance(obj, dict):
-        for item in obj.values():
-            clocks_in(item, out, seen)
-    return out
+def clocks_in(obj):
+    """ The clocks an expression, a condition, or a list or dict of them reads (the time since an event is kept per agent too) """
+    return [part for part in nodes(obj) if isinstance(part, (Clock, Since))]
 
 
 class BinOp(Expr):
@@ -850,6 +861,8 @@ def evaluate(expr, ctx):
         return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.total_count(expr.states) if expr.kind == 'total' else ctx.local_frac(expr.states)
     elif isinstance(expr, ss.transitions.State):
         return ctx.exposure(expr)
+    elif isinstance(expr, Stock):
+        return ctx.stock(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
     elif isinstance(expr, Share):
@@ -950,6 +963,8 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return text
         elif isinstance(e, ss.transitions.State):
             return e.label_name if bare is None else bare(e)
+        elif isinstance(e, Stock):
+            return fmt(e.state)
         elif isinstance(e, Prop):
             return repr(e.cond)
         elif isinstance(e, Count):

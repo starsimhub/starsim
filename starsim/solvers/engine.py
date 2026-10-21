@@ -1233,10 +1233,10 @@ class Engine:
             self.denom_dims = sc.objdict() # For a ratio whose denominator has fewer dimensions than its numerator: the denominator's
             for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
                 parts = [expr.a, expr.b] if isinstance(expr, ss.transitions.BinOp) and expr.op == '/' else [expr]
-                plain = all(all(isinstance(leaf, (ss.State, ss.par, ss.transitions.Flow)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
+                plain = all(all(isinstance(leaf, (ss.expressions.Stock, ss.par, ss.transitions.Flow)) for leaf in part.leaves) and not any(op in ss.transitions.format_expr(part) for op in ['/', '**']) for part in parts)
                 if not plain: # E.g. a count (I.n), which is the total over every group, so the result is not by group
                     continue
-                flags = [[self.applies[leaf.name] if isinstance(leaf, ss.State) else dims[leaf.name] for leaf in part.leaves if not isinstance(leaf, ss.par)] for part in parts]
+                flags = [[self.applies[leaf.name] if isinstance(leaf, ss.expressions.Stock) else dims[leaf.name] for leaf in part.leaves if not isinstance(leaf, ss.par)] for part in parts]
                 same = all(len(f) for f in flags) and all(np.array_equal(x, flags[0][0]) for x in flags[0]) # Within the numerator (or the sum)
                 if same and len(parts) == 1:
                     dims[name] = flags[0][0]
@@ -1248,7 +1248,7 @@ class Engine:
                         if not all(np.array_equal(x, flags[0][0]) for x in flags[1]): # E.g. infection/S with a strain, which susceptibles do not carry
                             self.denom_dims[name] = [n for n,flag in zip(names, den) if flag]
             if self.standard and 'prevalence' in mod.results and 'prevalence' not in graph.exprs: # The standard prevalence, as the declared ratio of the infected over people, so it is by group as one is (ST20)
-                parts = [sum(states[1:], states[0]) for states in [[s for s in graph.infected if s.people], graph.people_states] if states]
+                parts = [ss.expressions.as_stocks(sum(states[1:], states[0])) for states in [[s for s in graph.infected if s.people], graph.people_states] if states]
                 flags = [self.applies[leaf.name] for part in parts for leaf in part.leaves]
                 if len(parts) == 2 and all(np.array_equal(f, flags[0]) for f in flags):
                     dims['prevalence'] = flags[0]
@@ -1621,6 +1621,3 @@ class StockCtx:
 
     local_count = count # A result is a total, wherever the people are
     local_frac = frac
-
-    def exposure(self, state): # In a result, a bare state stands for the number of people in it
-        return self.stock(state)

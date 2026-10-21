@@ -257,7 +257,7 @@ class Loop:
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in sim.diseases():
-            if isinstance(disease, ss.Disease):
+            if isinstance(disease, ss.diseases.DiseaseBase):
                 self += disease.step_state
 
         # Update connectors
