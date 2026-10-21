@@ -165,7 +165,7 @@ def test_combine_merge():
     df = msim.compare(output=True)
     assert df.shape[1] == 3 and 'bysex_n_infected_male' in df.index # One column per sim, one row per result
     assert msim.compare(t=-1, output=True).loc['sis_cum_infections'].tolist() == [s.results.sis.cum_infections[-1] for s in sims]
-    msim.plot_compare(t='2005-01-01')
+    msim.compare(t='2005-01-01', do_plot=True)
 
     # Merge and split
     m1, m2 = msim.split(chunks=[1,2])

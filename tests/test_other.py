@@ -59,7 +59,7 @@ def test_deepcopy():
     s1.plot()
     s2.plot()
 
-    ss.diff_sims(s1, s2, full=True)
+    ss.debugtools.diff_sims(s1, s2, full=True)
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2

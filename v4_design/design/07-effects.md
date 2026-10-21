@@ -250,7 +250,7 @@ CapabilityError: a condition uses people.age and 70, but the model's age bins ar
 
 The lazy form is checked this way. A function of the sim that compares ages with a number that is not a bin edge is not: it runs, with each group at the age of its midpoint.
 
-A condition on another module's state (`where=syphilis.active` on an HIV quantity) needs the two modules' states tracked jointly. In an agent-based run that is free. In a compartmental run the two diseases' states are tracked jointly, each as a dimension of the other (so `hiv.results.n_I.by('syph')` splits HIV by syphilis state), and the model grows to the product. The crossed diseases then run as one model ([12-backends.md](12-backends.md)), and each disease's results are its view of the product.
+A condition on another module's state (`where=syphilis.active` on an HIV quantity) needs the two modules' states tracked jointly. In an agent-based run that is free. In a compartmental run the two diseases' states are tracked jointly, each as a dimension of the other (so `hiv.results.n_I.by('syph')` splits HIV by syphilis state), and the model grows to the product. The crossed diseases then run as one model ([12-backends.md](12-backends.md)), and each disease's results are its view of the product. Diseases are also tracked jointly when people are born or die ([03-states-and-transitions.md](03-states-and-transitions.md)) or die of one of them (a transition to `ss.null`), since those people leave every disease; the members of a family (`ss.Strains`) already have people who die of one die in the others, so dying of a member crosses the family only with diseases outside it. The product is counted before anything is made, including the stages of dwell times, the slots of fixed delays, and a copy of each count for each combination of the others: above `ss.options.max_joint` compartments (10,000 by default, counting the joint states in each group of the other dimensions), `auto` runs agents, and a compartmental solver that was asked for raises `CapabilityError` naming the limit, which can be raised where there is the memory. `describe()` shows why the diseases are tracked jointly, the product's size, the memory of a whole run, and what is assumed: the diseases start independent of each other, and step together at one timestep.
 
 ## Plain code in `step()`
 
@@ -317,8 +317,6 @@ A function can be used in place of a class when no state is needed: a plain func
 ### No required declarations
 
 A module does not declare what it reads or writes. Declarations of that kind get forgotten and drift away from the code, and an out-of-date declaration is worse than none. What modifies a quantity through `ss.modify` is declared, and `what_modifies()` lists it; code that writes a quantity directly is not tracked.
-
-`requires = [ss.Requires(...)]` is optional metadata that says what input data a module expects, for `sim.requires()` ([04-parameters.md](04-parameters.md#requirements)). It is never enforced as access control: a module can read anything in the sim.
 
 ## Execution order
 

@@ -157,7 +157,7 @@ These are from Starsim's switching demo for EMULSION users (`tests/switching/tes
 | Births from one stratum into another (`productions: {from: A, to: J}`) as compartments | **Fails**: a birth rate by level raises an error that says this cannot be declared yet; crossing the machines by hand into six states works and agrees (above) |
 | Herds linked by a trade register, with selective sales by state (`states='S,R'`) | **Works**: `ss.Mobility(data=register)`; 2,000 herds with 26,486 sales in 1.15 s a run as compartments, and the same within noise as agents |
 | The same file as compartments or individuals | **Works** for models without offspring or conditions across machines (above); hybrid groups are not needed at these speeds |
-| A posterior, from surveillance data | **Works**: `ss.par(..., bounds=)`, `data=`, and `sim.calibrate()`; EMULSION has no fitting |
+| A posterior, from surveillance data | **Works**: `ss.par(..., bounds=)`, `data=`, and `sim.calibrate(method='pmcmc')` (or `'abc-smc'` for agents); EMULSION has no fitting |
 
 ## Bringing your model in
 

@@ -284,7 +284,7 @@ class Module(Base):
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
-    requires = None # The data the module needs, as a list of ss.Requires; metadata for sim.requires(), never enforced
+    requires = None # Other modules this one needs, by class or name, as in Starsim 3; not checked (see ss.check_requires())
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -403,7 +403,7 @@ class Module(Base):
                 if req:
                     valid = [True, 'disable']
                     if req not in valid:
-                        errormsg = f'ss.require() must be True or "disable", not "{req}"'
+                        errormsg = f'ss.required() must be True or "disable", not "{req}"'
                         raise ValueError(errormsg)
                     elif req == 'disable':
                         disabled.append(attr)
@@ -861,16 +861,6 @@ class Module(Base):
         automatic result (e.g. `n_infected`) in the same way a `BoolState` does.
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
-
-    @property
-    def alias_state_dict(self):
-        """
-        Dictionary of state aliases (see `define_aliases()`)
-
-        Returns a dictionary mapping alias names to the state (including derived states) 
-        that they point to. If an alias is a callable, the result is returned.
-        """
-        return {key:self[key] for key in self._state_aliases.keys()}
 
     def match_time_inds(self, inds=None):
         """ Find the nearest matching sim time indices for the current module """

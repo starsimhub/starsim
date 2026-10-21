@@ -203,16 +203,14 @@ class Births(Demographics):
         p = self.pars
 
         if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
-            this_birth_rate = p.birth_rate.loc[period_year(p.birth_rate.index, sim.t.now('year'))]
-            scaled_birth_prob = ss.prob.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
+            this_birth_rate = p.birth_rate.loc[period_year(p.birth_rate.index, sim.t.now('year'))] * p.rate_units * p.rel_birth
         else:
             this_birth_rate = p.birth_rate
             if isinstance(this_birth_rate, ss.Rate):
                 this_birth_rate = ss.prob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
             else: # number
                 this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_birth
-
-            scaled_birth_prob = ss.prob.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
+        scaled_birth_prob = ss.probperyear(np.asarray(this_birth_rate, dtype=float)).to_prob(self.t.dt) # A probability per year, over the step
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
@@ -397,12 +395,12 @@ class Deaths(Demographics):
 
         # We are going to set up death_rate as a prob with unit=ss.years(1). That is the probability of death in 1 year
         if sc.isnumber(drd):
-            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a prob with unit=ss.years(1) by ss.prob.array_to_prob
+            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # A rate per year, converted to a probability per timestep below
         elif isinstance(drd, ss.Rate):
             if drd.unit == ss.years(1): # drd is already in years so don't need to translate
                 death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
             else:
-                # Convert from prob per drd.unit to prob per year, ss.prob.array_to_prob will convert to prob per timestep later
+                # Convert from prob per drd.unit to prob per year, converted to a probability per timestep below
                 death_rate = np.array([ss.prob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(ss.years(1))])
 
         # Process data

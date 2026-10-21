@@ -202,7 +202,7 @@ class par(Nameable, Expr):
         self.slot = None # The kind of slot it fills: 'rate', 'dur', or None (a plain number)
         self.module = None # Set by the graph when the parameter is registered
         self.midpoint = None # The value it starts from, if it was given only bounds (a guess, which describe() marks)
-        if value is None and bounds is not None: # Start a fitted parameter from the middle of its bounds, on the scale they are searched on (see ss.fit())
+        if value is None and bounds is not None: # Start a fitted parameter from the middle of its bounds, on the scale they are searched on (see sim.calibrate())
             low, high = bounds
             self.value = self.midpoint = float(np.sqrt(low*high) if low > 0 and high >= 10*low else (low + high)/2)
         return

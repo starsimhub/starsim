@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.fit
 
 ref_peak = 0.5446 # switching/epydemix.md, "The second week" §1: epydemix's peak share infected in the Kenya tutorial (v4: 0.5448)
 ref_peak_day = 40 # Same section: epydemix's day of the peak (v4: 39)
@@ -40,7 +41,7 @@ def weekly_data():
     """ Weekly new infections from one run at the true value """
     dates = pd.date_range('2020-03-01', periods=13, freq='W')
     truth = make_seasonal(data=ss.data(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
-    weekly = ss.calibration.compare(truth)['new_infections'][1]
+    weekly = ss.results.compare(truth)['new_infections'][1]
     return ss.data(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
 
 
@@ -73,7 +74,7 @@ def test_epydemix_vaccine_by_age():
 def test_epydemix_filter():
     sc.heading('epydemix: the particle filter peaks at the true value for a seasonal × mobility beta')
     sim = make_seasonal(data=weekly_data()).init()
-    filt = ss.ParticleFilter(sim, likelihood=dict(new_infections=ss.poisson()))
+    filt = ss.fit.ParticleFilter(sim, likelihood=dict(new_infections=ss.poisson()))
     loglik = {}
     for b in [0.4, true_b, 0.6]:
         sim.restart(pars=dict(b=b), rand_seed=0)

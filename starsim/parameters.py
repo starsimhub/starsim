@@ -660,37 +660,6 @@ def check_verbose(verbose):
     raise ValueError(errormsg)
 
 
-class Requires(sc.prettyobj):
-    """
-    One item of the data a module needs, for `sim.requires()`
-
-    This is metadata only: it says what to supply, and is never enforced.
-
-    Args:
-        name (str): the name of the item; a parameter or attribute of the module with this name supplies it
-        shape (str): its shape, e.g. 'age x age'
-        source (str): where the data usually come from
-        doc (str): a description
-        default (any): the value used if none is supplied
-
-    Examples:
-        ```python
-        class MyNetwork(ss.Network):
-            requires = [
-                ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
-                ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
-            ]
-        ```
-    """
-    def __init__(self, name, shape=None, source=None, doc=None, default=None):
-        self.name = name
-        self.shape = shape
-        self.source = source
-        self.doc = doc
-        self.default = default
-        return
-
-
 def load_pars(filename):
     """
     Read parameter values by name from a file, for `ss.Sim(pars=...)`
@@ -1246,7 +1215,7 @@ class timeseries(TimeValue):
             as the second argument (`ss.timeseries(times, values)`). A time is a date, or a number, which is
             a time in the sim's unit (in a sim with dates, that long after the start)
         values (list): the values, if `data` is the times
-        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings), or 'spline'
+        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
 
     Examples:
@@ -1269,8 +1238,8 @@ class timeseries(TimeValue):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if not isinstance(data, dict):
             data = dict(zip(data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()))
-        if mode not in ['constant', 'linear', 'cosine', 'spline']:
-            errormsg = f'The mode of ss.timeseries() is "constant", "linear", "cosine", or "spline", not "{mode}"'
+        if mode not in ['constant', 'linear', 'cosine']:
+            errormsg = f'The mode of ss.timeseries() is "constant", "linear", or "cosine", not "{mode}"'
             raise ValueError(errormsg)
         self.times = list(data.keys())
         self.values = list(data.values())
@@ -1325,22 +1294,11 @@ class timeseries(TimeValue):
         i, j, w = int(i), int(j), float(w)
         if w == 0: # At or outside the times given, or with mode 'constant'
             return vals[i]
-        elif self.mode == 'spline':
-            import scipy.interpolate as spi
-            typed = isinstance(vals[0], ss.TimePar)
-            if typed: # Interpolate the values in the units of the first, and give a value of that type
-                vals = [v.to(type(vals[0])) for v in vals]
-            value = float(spi.CubicSpline(self.years(sim), np.array([v.value if typed else v for v in vals], dtype=float))(year))
-            if typed:
-                out = sc.dcp(vals[0])
-                out.value = value
-                return out
-            return value
         return vals[i]*(1 - w) + vals[j]*w
 
     def series(self, years, sim, convert):
         vals = [const_value(v) for v in self.values]
-        if self.mode == 'spline' or any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
+        if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
         vals = np.array([convert(v) for v in vals], dtype=float) # Converted once, rather than at each time
         year, i, j, w = self.weights(np.asarray(years, dtype=float), sim)

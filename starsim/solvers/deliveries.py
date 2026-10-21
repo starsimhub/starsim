@@ -440,37 +440,31 @@ class CompartmentalDelivery:
         """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and of them, the cured (where they are now) and those who failed """
         d = self.delivery
         rows = eng.people_comps
-        full = eng.y.copy()
-        cross, eng.cross = eng.cross, None # Moved as a population of their own, which the crossing takes once they are back with the rest
-        try:
-            eng.y[:] = 0
-            eng.y[rows] = C
-            states = eng.selector.states
-            treated = 0.0
-            sources = sorted({rows.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]})
-            failed = np.zeros_like(C)
-            for e in edges:
-                comps = [c for s in e.srcs for c in eng.state_comps[s.name]]
-                frac = eng.selector.nobody()
-                for s in e.srcs:
-                    frac[states.index(s.name)] = np.broadcast_to(d.edge_prob(e, eng, state=s), frac.shape)[states.index(s.name)]
-                before = eng.y[comps].sum(axis=0)
-                eng.force(frac, e.tr, e.dst, srcs=e.srcs)
-                after = eng.y[comps].sum(axis=0)
-                part = (eng.mod.name, None if e.tr is None else e.tr.name)
-                d.add('cured', groups=before - after, part=part)
-                d.add('failed', groups=after, part=part)
-                treated = treated + before
-            d.add('unneeded', groups=C.sum(axis=0) - treated, part=(eng.mod.name, None))
-            after = eng.y[rows].copy()
-            failed[sources] = after[sources] # Still in a source: not moved
-            untouched = C.copy()
-            untouched[sources] = 0
-            cured = np.clip(after - failed - untouched, 0, None)
-            eng.y[:] = full
-            eng.y[rows] += after - C
-        finally:
-            eng.cross = cross
+        y = np.zeros_like(eng.y) # Moved as a population of their own, then added back to the rest
+        y[rows] = C
+        states = eng.selector.states
+        treated = 0.0
+        sources = sorted({rows.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]})
+        failed = np.zeros_like(C)
+        for e in edges:
+            comps = [c for s in e.srcs for c in eng.state_comps[s.name]]
+            frac = eng.selector.nobody()
+            for s in e.srcs:
+                frac[states.index(s.name)] = np.broadcast_to(d.edge_prob(e, eng, state=s), frac.shape)[states.index(s.name)]
+            before = y[comps].sum(axis=0)
+            eng.force(frac, e.tr, e.dst, srcs=e.srcs, y=y)
+            after = y[comps].sum(axis=0)
+            part = (eng.mod.name, None if e.tr is None else e.tr.name)
+            d.add('cured', groups=before - after, part=part)
+            d.add('failed', groups=after, part=part)
+            treated = treated + before
+        d.add('unneeded', groups=C.sum(axis=0) - treated, part=(eng.mod.name, None))
+        after = y[rows].copy()
+        failed[sources] = after[sources] # Still in a source: not moved
+        untouched = C.copy()
+        untouched[sources] = 0
+        cured = np.clip(after - failed - untouched, 0, None)
+        eng.y[rows] += after - C
         eng.changed()
         return after, cured, failed
 

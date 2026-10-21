@@ -64,7 +64,7 @@ def test_demo(do_plot=do_plot):
     sir = ss.SIR()
     net = ss.RandomNet()
     s3 = ss.Sim(diseases=sir, networks=net).run()
-    assert ss.check_sims_match(s1, s2, s3), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
     return s1
 
 
@@ -119,7 +119,7 @@ def test_api():
     s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random').run() # Supply strings directly
     s2 = ss.Sim(pars=dict(n_agents=n_agents, diseases='sir', networks='random')).run() # Supply as parameters
     s3 = ss.Sim(n_agents=n_agents, diseases=ss.SIR(), networks=ss.RandomNet()).run() # Supply as objects
-    ss.check_sims_match(s1, s2, s3), 'Sims should match'
+    ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
 
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
@@ -129,19 +129,19 @@ def test_api():
     # Check specifying a duration with a scalar, which is in years, as the default
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
     s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
-    ss.check_sims_match(s4, s5), 'Sims should match'
+    ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
 
     # Check specifying dist with a dict
     s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='lognorm_ex', mean=10, std=2)), **kw).run() # Supply values as a dict
     s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
-    ss.check_sims_match(s7, s8), 'Sims should match'
+    ss.debugtools.check_sims_match(s7, s8), 'Sims should match'
     with pytest.raises(TypeError):
         ss.SIR(dur_inf=[10, 2]) # Starsim 3's values of its default lognormal
 
     # Check changing dist type
     s9  = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='normal', loc=10)), **kw).run() # Supply values as a dict
     s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
-    ss.check_sims_match(s9, s10), 'Sims should match'
+    ss.debugtools.check_sims_match(s9, s10), 'Sims should match'
 
     # Check that Bernoulli distributions can't be changed
     with pytest.raises(TypeError):
@@ -210,7 +210,7 @@ def test_complex_api():
     # Run
     s1.run()
     s2.run()
-    assert ss.check_sims_match(s1, s2), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s1, s2), 'Sims should match'
     with pytest.raises(ValueError): # verbose is 0, 1, or 2; Starsim 3's fraction of steps is now verbose=1
         ss.Sim(n_agents=100, verbose=0.1).init()
 

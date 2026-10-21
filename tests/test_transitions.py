@@ -15,6 +15,7 @@ import pandas as pd
 import scipy.stats as stats
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import starsim.library as ssl
 
 kw = dict(verbose=0)
@@ -762,23 +763,6 @@ def test_describe():
     return sim
 
 
-def test_requires():
-    sc.heading('Testing requires and sim.requires()')
-    class Net(ss.RandomNet):
-        requires = [ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'), ss.Requires('n_contacts')]
-    beta = ss.par(0.3, source='Smith 2020')
-    dur = ss.par(None, name='dur') # Not yet known, so the sim cannot be initialized
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=dur), name='sir')
-    sim = ss.Sim(sir, networks=Net(name='net'), n_agents=1000, stop=10, **kw)
-    df = sim.requires(output=True)
-    print(df)
-    status = dict(zip(df.name, df.status))
-    assert status == dict(contact_matrix='missing', n_contacts='given', beta='given', dur='missing')
-    assert df.set_index('name').source.beta == 'Smith 2020'
-    sim.requires()
-    return df
-
-
 @sc.timer()
 def test_load():
     sc.heading('Testing ss.load() of a model spec')
@@ -1042,7 +1026,7 @@ def test_outcomes():
     assert fit.mismatch < 0.01 < fit.mismatch_before
     assert fit.converged and not sim.calibrate(method='nelder-mead', maxiter=3, scan=0, verbose=0).converged
     assert np.isclose(sim.new().init().diseases.sir.pars.beta.value, 0.15) # The original is not changed
-    zeros = ss.calibration.mismatch(truth, fit.sim.data.assign(deaths=0.0)) # An all-zero series is scaled by the model, not counted raw
+    zeros = ss.fit.mismatch(truth, fit.sim.data.assign(deaths=0.0)) # An all-zero series is scaled by the model, not counted raw
     assert np.isclose(zeros, 0.5) # Cases exact (0), deaths 1; before, the raw count of deaths (about 420 a week) swamped the cases
     refit = ss.Sim(make(0.15), pars=fit.pars, **pars).run() # The best-fit values can be passed to another sim
     assert np.allclose(refit.results.sir.n_I, fit.sim.results.sir.n_I)
@@ -1141,12 +1125,12 @@ def test_likelihood():
     df = sc.dataframe(t=weekly.timevec, cases=rng.negative_binomial(10, 10/(10 + weekly.values)))
 
     # The declared likelihood is used, and its dispersion is fitted with beta
-    fit = make(beta=0.2, k=3, exposed=True).calibrate(data=df, method='l-bfgs-b') # The maximum likelihood (the default, NUTS, is tested in test_gradients.py)
+    fit = make(beta=0.2, k=3, exposed=True).calibrate(data=df, method='l-bfgs-b') # The maximum likelihood (NUTS is tested in test_gradients.py)
     fit.summarize()
     assert fit.measure == 'negative log-likelihood'
     assert np.isclose(fit.pars.beta.value, 0.4, rtol=0.05)
     assert 2 < fit.pars.k < 100
-    assert np.isclose(ss.loglik(fit.sim), -fit.mismatch)
+    assert np.isclose(ss.fit.loglik(fit.sim), -fit.mismatch)
     pulled = make(beta=0.2, k=3, exposed=True, prior=ss.normal(0.3, 0.002)).calibrate(data=df, method='l-bfgs-b') # With a prior, the most probable value
     assert pulled.measure == 'negative log-posterior' and pulled.pars.beta.value < 0.35
 
@@ -1163,10 +1147,10 @@ def test_likelihood():
     assert np.isclose(fit2.pars.beta.value, 0.4, rtol=0.01)
 
     # The model that made the data predicts the held-out weeks better
-    comp = ss.compare_models([make(), make(exposed=True)], data=df)
+    comp = ss.fit.compare_models([make(), make(exposed=True)], data=df)
     assert comp.table.index[0] == 'SEIR'
     assert list(comp.fits.keys()) == ['SIR', 'SEIR']
-    mixed = ss.compare_models(dict(lik=make(), nolik=make(lik=False)), data=df).table # One measure for both, although only one has a likelihood
+    mixed = ss.fit.compare_models(dict(lik=make(), nolik=make(lik=False)), data=df).table # One measure for both, although only one has a likelihood
     assert np.isclose(mixed.fit_error['lik'], mixed.fit_error['nolik'])
 
     # Data with its dates as text can be plotted with the sim
@@ -1442,10 +1426,6 @@ def test_time_values():
     with pytest.raises(ValueError):
         ss.Sim(make(ss.timeseries({50: 1.0, 0: 0.2})), stop=10, **kw).run()
 
-    # A spline over typed values is the same as over the numbers in the sim's unit
-    spline = lambda vals: ss.Sim(make(ss.timeseries(dict(zip(['2020-01-01', '2020-03-01', '2020-05-01'], vals)), mode='spline')), unit='day', **dates).run().results.sis.n_I
-    assert np.allclose(spline([ss.perday(0.3), ss.perweek(0.7), ss.perday(0.2)]), spline([0.3, 0.1, 0.2]))
-
     # A time series inside ss.by: the same as a function that gives the value for each group, run in the kernels or not
     def by_age(beta):
         sis = make(beta)
@@ -1604,7 +1584,7 @@ def test_stays_and_offspring():
 def test_found_by_docs():
     sc.heading('Testing what porting the docs found: everyday calls that failed')
     import pickle
-    assert pickle.loads(pickle.dumps(ss.time.UnitFactors(dict(day=1.0, year=365.0), 'year'))).day == 1/365 # Parallel workers unpickle these
+    assert pickle.loads(pickle.dumps(ss.time.factors)).years.days == 365 # Parallel workers unpickle these
     assert 'init' in ss.Sim(ss.SIR(), stop=50, verbose=0).describe(output=True) # init_prev is an ss.par
     ss.SIR().equations() # Before the disease is in a sim
     seasonal = ss.seasonal(mean=ss.peryear(0.4), amplitude=0.6, peak='January')
@@ -2472,7 +2452,6 @@ if __name__ == '__main__':
     count = test_counts()
     birth = test_births()
     desc  = test_describe()
-    reqs  = test_requires()
     load  = test_load()
     strat = test_stratify()
     trans = test_transfer()

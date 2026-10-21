@@ -99,7 +99,6 @@ class Loop:
         self.funcs = None
         self.at_start = None # The functions that also run at the first time point, by function order: those that record the start
         self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
-        self.func_list = []
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
         self._plan = None # Made when it is first needed: see the plan property
@@ -192,7 +191,7 @@ class Loop:
         if self.initialized:
             return len(self.plan)
         else:
-            return 0 # Or None?
+            return 0
 
     def __iadd__(self, func):
         """ Allow functions to be added to the function list """
@@ -302,10 +301,8 @@ class Loop:
                 self += mod.update_results
 
         # Apply analyzers
-        self.analyzer_names = set()
         for ana in sim.analyzers():
             self += ana.step
-            self.analyzer_names.add(ana.name)
         self.at_start = set(range(first, len(self.funcs)))
 
         # Clean up dead agents, and perform other housekeeping tasks

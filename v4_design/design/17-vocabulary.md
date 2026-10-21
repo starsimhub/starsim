@@ -105,32 +105,30 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | **`ss.Vaccine`** **`ss.Diagnostic`** **`ss.Treatment`** | Products: nouns for things (Starsim 3's `ss.Vx`, `ss.Dx`, `ss.Tx` remain only as base classes for products written as code, not as aliases; `ss.Diagnostic` was `ss.Test`, renamed so that no product and delivery differ only by case) |
 | **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** | Deliveries: verbs (`ss.Delivery` with no product is a step people attend, a visit) |
 
-### Running, comparing, saving: 8
+### Running, comparing, saving: 6
 
-`ss.MultiSim` (several runs of a sim, or several sims, whose results have a run dimension), `ss.parallel` (run them in parallel: `ss.parallel(sim, n_runs=100)` for replicates, with `sim.run(n_runs=100)` as its shortcut, and `ss.parallel(baseline=..., vaccine=...)` for scenarios), `ss.options` (Starsim's global options; `ss.options.crn = False` turns common random numbers off), **`ss.compare_models`** (fit and compare by out-of-sample prediction), **`ss.optimize`** (reallocate spending between programs to maximize or minimize a result), **`ss.diff`** (what differs between two models), `ss.load` (a sim saved by `ss.save`, or a model in another framework's format), `ss.save` (a sim with its results, or a model as code with `ss.save('model.py', sim)`, or in another format).
+`ss.MultiSim` (several runs of a sim, or several sims, whose results have a run dimension), `ss.parallel` (run them in parallel: `ss.parallel(sim, n_runs=100)` for replicates, with `sim.run(n_runs=100)` as its shortcut, and `ss.parallel(baseline=..., vaccine=...)` for scenarios), `ss.options` (Starsim's global options; `ss.options.crn = False` turns common random numbers off), **`ss.diff`** (what differs between two models), `ss.load` (a sim saved by `ss.save`, or a model in another framework's format), `ss.save` (a sim with its results, or a model as code with `ss.save('model.py', sim)`, or in another format).
 
-### Optional metadata: 1
+### Types you get back or subclass: 5
 
-**`ss.Requires`**: one entry in a module's `requires` list, saying what data the module needs (`ss.Requires('population', shape='patch', source='UN WPP 2024')`). `sim.requires()` prints the table, and which are missing. It is never enforced. Generating a data-entry form from it (`sim.requires(to='form.csv')`) is deferred ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)).
+`ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's. Users rarely construct these.
 
-### Types you get back or subclass: 6
+Fitting is the submodule `ss.fit`, which `import starsim` does not import (`sim.calibrate()` does, or `import starsim.fit`), so its names are not counted here: `ss.fit.Fit`, what `sim.calibrate()` returns (called `fit` below), `ss.fit.compare_models` (fit and compare by out-of-sample prediction), and `ss.fit.optimize` (reallocate spending between programs to maximize or minimize a result). (Starsim 3's `ss.Calibration` is removed.)
 
-`ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's, and **`ss.Fit`**, what `sim.calibrate()` returns (called `fit` below). Users rarely construct these. (Starsim 3's `ss.Calibration` is removed.)
-
-### Methods and attributes: 44 distinct names
+### Methods and attributes: 43 distinct names
 
 | On | Names |
 |---|---|
 | A model (`ss.Disease`, any module) | **`describe`** **`diagram`** **`equations`** **`transitions`** **`stratify`** **`to_spec`** `copy` `pars` **`R0`** |
 | A state or a sum of states | **`n`** **`frac`** **`total`** |
 | A modifiable array (`sir.rel_sus`) | **`effective`** |
-| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`requires`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`calibrate`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** |
+| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`calibrate`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** |
 | `sim.loop` | `insert` `to_df` `plot` `plot_step_order` |
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
 | A result of an `ss.MultiSim`, which has a run dimension | **`quantiles`** `values` |
 | An `ss.MultiSim`, which is what `ss.parallel` returns | `run` `plot` `summarize` `to_df` `results` **`diff`** |
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
-| What `ss.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
+| What `ss.fit.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
 Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `stratify`, `to_spec`, `pars`, `run`, `results`) are counted once. The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place, and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
 
@@ -147,12 +145,11 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Parameter forms | 3 | 3 |
 | Mixing and space | 10 | 5 |
 | Interactions and interventions | 9 | 9 |
-| Running, comparing, saving | 8 | 3 |
-| Optional metadata | 1 | 1 |
-| Types you get back or subclass | 6 | 1 |
-| **`ss.` names** | **107** | **44** |
-| Methods and attributes | 44 | 29 |
-| **Total** | **151** | **73** |
+| Running, comparing, saving | 6 | 1 |
+| Types you get back or subclass | 5 | 0 |
+| **`ss.` names** | **103** | **40** |
+| Methods and attributes | 43 | 28 |
+| **Total** | **146** | **68** |
 
 <!-- counts end -->
 
@@ -186,7 +183,6 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | Products | `efficacy` `waning` `cost` (all); `leaky` (`ss.Vaccine`); `sensitivity` `specificity` `delay` `detects` (`ss.Diagnostic`); `cure` (a number, or a dict by state) `transition` `to` (`ss.Treatment`) |
 | `ss.outcome` | `delay` `duration` `likelihood` |
 | `ss.data` | `aliases` `ignore_extra` |
-| `ss.Requires` | `shape` `source` `doc` `default` |
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
 | `ss.MFNet` | Starsim's `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` |
 | `ss.Mobility` | `matrix` `data` `kind` `away` |
@@ -194,8 +190,8 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
 | Networks | `sides` (and `net.directions`, which follow from them) |
 | `sim.calibrate` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
-| `ss.optimize` | `maximize` `minimize` `at` `start` `total` `spend` `bounds` |
-| `ss.compare_models` | `data` `holdout` `folds` |
+| `ss.fit.optimize` | `maximize` `minimize` `at` `start` `total` `spend` `bounds` |
+| `ss.fit.compare_models` | `data` `holdout` `folds` |
 
 ## Slots and their types
 
@@ -231,7 +227,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.Effect` | Renamed and split: scaling a quantity is one thing, complex logic another | `ss.modify`, or Python in `step()` |
 | `ss.Expr`, and `ss.age`, `ss.sex`, `ss.uid`, `ss.time`, `ss.year`, `ss.weekday`, `ss.has`, `ss.scheduled` | A second set of names for things the sim already has | Conditions on the real attributes: `(ppl.age > 65) & ~sir.vaccinated`, or a function of the sim |
 | `ss.Continuous` | A special kind of state and route for reservoirs | An ordinary `ss.State` that is not people, with counts (`W.n`) in rates |
-| `ss.radiation`/`ss.stouffer`/`ss.competing_destinations`, `msim.check_runs()`, `sim.requires(to=)` | Deferred from v1: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | A mobility matrix; `check_dt`; `sim.requires()` |
+| `ss.radiation`/`ss.stouffer`/`ss.competing_destinations`, `msim.check_runs()` | Deferred from v1: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | A mobility matrix; `check_dt` |
 | `ss.process` | A penalty-box name for custom code | A plain function as a keyword, or `step()` |
 | `ss.Homogeneous` | Not needed | No network given, or `ss.MixingPool(n_contacts=10)` |
 | `ss.SexualNet`, `ss.Network(edges=)` | Starsim already has names | `ss.MFNet` and Starsim's other networks; `ssl.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |
@@ -263,7 +259,7 @@ The second draft's names that went in this revision:
 | `n_reps` on `ss.Sim`, `.trajectories`, `check_reps` | A sim is one run | `ss.MultiSim(sim, n_runs=100)` or `ss.parallel(sim, n_runs=100)`; `.values` and `.quantiles` on its results; `check_runs` (deferred) |
 | `crn_key` | No case found where keying common random numbers on agent attributes beats Starsim's slots | Slots; `ss.options.crn = False` to turn CRN off |
 | `ss.export` | A model is a Python script, which is already the thing to share | The script, which `ss.save('model.py', sim)` writes (`sim.to_code()`); `ss.save` of the sim |
-| `ss.Needs`, `sim.needs()` | One word for data requirements | `requires = [ss.Requires(...)]`, `sim.requires()` |
+| `ss.Needs`, `sim.needs()` (later `ss.Requires`, `sim.requires()`) | Metadata that was never enforced and that no model used (removed 2026-10-21) | A docstring; `doc=` and `source=` on `ss.par` |
 | `ss.People('Kenya')` | A loader is lowercase, like `ss.contacts` | `ss.people('Kenya')` |
 | `.sel()` | Spelled out | `.select()`, and `.by()` for one series per group |
 | `sim.transmissions` | The log is large and slows the run, so it is recorded on request | `analyzers='infection_log'`, Starsim's analyzer |
@@ -288,7 +284,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.rel_sus.effective` for the value with modifiers applied |
 | `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
 | `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
-| `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.Fit` | `ss.Fit` (Starsim 3's `ss.Calibration` is removed) |
+| `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
 | `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.n_I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
 | `ss.outcome(every=)`, `annualize()` | Resampling belongs to a result | `result.resample('year')` |

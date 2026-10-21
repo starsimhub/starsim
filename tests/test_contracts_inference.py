@@ -14,6 +14,7 @@ import scipy.stats as sps
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import corpus
 
 slow = pytest.mark.skipif(not os.getenv('STARSIM_SLOW'), reason='A longer run; set STARSIM_SLOW=1 to run it')
@@ -69,7 +70,7 @@ def simulate(model, x=None, seed=1, col=None, **kwargs):
     x = sc.ifelse(x, model.truth)
     col = sc.ifelse(col, model.col)
     probe = model.build(x, data=pd.DataFrame({col:0.0}, index=model.dates), **kwargs).run()
-    expected = ss.calibration.compare(probe)[col][1]
+    expected = ss.results.compare(probe)[col][1]
     return pd.DataFrame({col:np.random.default_rng(seed).poisson(expected)}, index=model.dates)
 
 
@@ -90,10 +91,10 @@ def jax_loglik(sim, points, likelihood=None):
     out = []
     for x in points:
         x = np.atleast_1d(np.array(x, dtype=float))
-        prior = sum(ss.calibration.logprior(p, val) for p,val in zip(fitted.values(), x))
+        prior = sum(ss.fit.logprior(p, val) for p,val in zip(fitted.values(), x))
         with jax.enable_x64(True):
             from_jax = float(density(jax.numpy.asarray(x))) - prior
-        from_run = ss.loglik(set_pars(x).run(), likelihood=likelihood)
+        from_run = ss.fit.loglik(set_pars(x).run(), likelihood=likelihood)
         out.append((float(x[0]), from_jax, from_run))
     return out
 
@@ -147,7 +148,7 @@ def test_particle_filter(key):
     lik = {model.col:ss.nbinom(n=20)} # Wider than a Poisson, so that the noise in the data, not the chance in a run, dominates at a large population, and the likelihood has an ODE limit
     data = simulate(model, **kw)
     sim = model.build(model.truth, data=data, solver='tau', **kw).init()
-    filt = ss.ParticleFilter(sim, likelihood=lik)
+    filt = ss.fit.ParticleFilter(sim, likelihood=lik)
     with ss.options.context(threads=1):
         one = filt(n_particles=20, seed=0)
     assert filt(n_particles=20, seed=0) == one # Each particle has its own random numbers, so the estimate does not depend on the threads
@@ -159,12 +160,12 @@ def test_particle_filter(key):
     for x in values:
         sim.restart(pars={name:x})
         pf[x] = np.array([filt(n_particles=50, seed=seed) for seed in range(n_seeds)])
-        direct[x] = np.array([ss.loglik(model.build(x, data=data, solver='tau', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
+        direct[x] = np.array([ss.fit.loglik(model.build(x, data=data, solver='tau', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
         print(f'{key} at {x:.3g}: filter {pf[x].mean():.2f} +- {pf[x].std(ddof=1)/np.sqrt(n_seeds):.2f}; direct runs {direct[x].mean():.2f} +- {direct[x].std(ddof=1)/np.sqrt(n_seeds):.2f}')
 
     # At the truth: the filter, direct runs, and the ODE agree
     x = model.truth
-    ode = ss.loglik(model.build(x, data=data, **kw).run(), likelihood=lik)
+    ode = ss.fit.loglik(model.build(x, data=data, **kw).run(), likelihood=lik)
     se = np.sqrt(pf[x].var(ddof=1)/n_seeds + direct[x].var(ddof=1)/n_seeds) # The Monte Carlo error of the difference
     print(f'{key} at the truth: ODE {ode:.2f}')
     assert abs(pf[x].mean() - direct[x].mean()) < 3*se + 0.5 # The filter estimates the likelihood of runs of this sim; 0.5 allows for the gap between the mean log-likelihood of runs and the log of their mean likelihood (measured at 0.1 at most here)
@@ -313,8 +314,8 @@ def test_log_density():
     sim = corpus.outcomes(beta=0.3, likelihood=ss.poisson(), data=simulate(models.outcomes, 0.35))
     ld = sim.log_density()
     x = ld.x0
-    prior = ss.calibration.logprior(sim.new().init().diseases.sir.pars.beta, x[0])
-    assert np.isclose(ld(x), ss.loglik(sim.new().run()) + prior, rtol=1e-9) # The sim's log-likelihood, plus the prior
+    prior = ss.fit.logprior(sim.new().init().diseases.sir.pars.beta, x[0])
+    assert np.isclose(ld(x), ss.fit.loglik(sim.new().run()) + prior, rtol=1e-9) # The sim's log-likelihood, plus the prior
     h = 1e-6
     assert np.isclose(ld.grad(x)[0], (ld(x + h) - ld(x - h))/(2*h), rtol=1e-5) # Reverse mode agrees with finite differences
     assert np.allclose(ld.run(x)['sir.n_I'], sim.new().run().results.sir.n_I, rtol=1e-9) # And the run, as a function
@@ -386,7 +387,7 @@ def test_optimize():
         beta = 0.3*(1 - 0.5*cov(a, 0.01) - 0.25*cov(b, 0.01))
         sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init=dict(I=10), name='sir')
         return ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
-    best = ss.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R')
+    best = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R')
     assert best.alloc['a'] > 95 and np.isclose(sum(best.alloc.values()), 100) # Almost all of it to the better program, keeping the total
     assert best.value < best.value_before
     return best
@@ -408,8 +409,8 @@ def test_data_files(tmp_path):
 def test_observations():
     sc.heading('Testing binomial and Bernoulli observations')
     k, p = np.array([0, 3, 10]), np.array([0.1, 0.3, 0.5])
-    assert np.allclose(ss.calibration.logpdf(ss.binom(n=20), k, p), sps.binom.logpmf(k, 20, p)) # The same as SciPy's
-    assert np.allclose(ss.calibration.logpdf(ss.bernoulli(), np.array([0, 1]), np.array([0.2, 0.7])), np.log([0.8, 0.7]))
+    assert np.allclose(ss.fit.logpdf(ss.binom(n=20), k, p), sps.binom.logpmf(k, 20, p)) # The same as SciPy's
+    assert np.allclose(ss.fit.logpdf(ss.bernoulli(), np.array([0, 1]), np.array([0.2, 0.7])), np.log([0.8, 0.7]))
 
     # Surveys of 500 people, the positives drawn from the prevalence: fit beta to them
     def make(beta, data=None):

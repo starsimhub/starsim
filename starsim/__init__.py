@@ -83,7 +83,7 @@ t('timeline')
 from .timeline import Timeline
 
 t('parameters')
-from .parameters import Pars, SimPars, Requires, by, timeseries, seasonal
+from .parameters import Pars, SimPars, by, timeseries, seasonal
 
 t('people')
 from .people import People, Person, people, ppl
@@ -103,7 +103,7 @@ from .networks import (
 )
 
 t('results')
-from .results import Result, Results, data, compare
+from .results import Result, Results, data
 
 t('demographics')
 from .demographics import (
@@ -163,13 +163,12 @@ t('gradients')
 from . import gradients # Used as ss.gradients; JAX is imported only when it is used
 
 t('sim')
-from .sim import Sim, AlreadyRunError, demo, diff_sims, check_sims_match
+from .sim import Sim, AlreadyRunError, demo
 
 t('run')
 from .run import MultiSim, parallel
 
-t('calibration') # Lazy import to save 500 ms
-from .calibration import mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize
+# ss.fit (fitting to data) is imported when it is first used: by sim.calibrate(), or import starsim.fit
 
 # Load fonts
 def _load_fonts(debug=debug):

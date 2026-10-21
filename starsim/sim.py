@@ -5,7 +5,6 @@ import os
 import inspect
 import itertools
 import numpy as np
-import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -482,17 +481,59 @@ class Sim(ss.Base):
             sim.imported = self.imported
         return sim
 
-    def calibrate(self, **kwargs):
+    def calibrate(self, pars=None, data=None, weights=None, likelihood=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
         """
-        Fit every parameter that has bounds to every result that has data; see `ss.fit()` for the arguments
+        Fit every parameter that has bounds to every result that has data
 
-        Returns an `ss.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`.
+        Fits every parameter that has `bounds` (see `ss.par`) to every result that has
+        data (see `ss.Sim(data=...)`). The original sim is not changed. The fitting itself
+        is in `ss.fit`, which is imported when it is first used.
+
+        Args:
+            pars (list): the names of the parameters to fit (default: all that have bounds)
+            data (df): the data to fit to (default: the sim's data)
+            weights (dict): the relative weight of each data series (default: equal)
+            likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
+            gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
+            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
+            scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy), each NUTS chain from one of the best that are apart, and particle MCMC from the best
+            n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance; `fit.mismatch` is the score at the best fit over the first seeds
+            rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
+            verbose (bool): whether to print progress
+            kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
+
+        Returns:
+            An `ss.fit.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`
+
+        Examples:
+            ```python
+            beta = ss.par(0.1, bounds=[0.01, 0.5])
+            S, I, R = ss.states(3)
+            sir = ss.Disease(S >> I @ beta * I, I >> R @ ss.days(10), init_prev=0.01)
+            sim = ss.Sim(sir, data='cases.csv', start='2020-01-01', stop='2020-06-01')
+            fit = sim.calibrate() # A best fit
+            post = sim.calibrate(method='nuts') # A posterior, given a likelihood for each data series
+            fit.sim.plot()
+            ```
         """
-        return ss.fit(self, **kwargs)
+        from . import fit
+        if isinstance(method, (list, tuple)): # Staged fitting: each method starts from the best fit of the one before
+            return fit.fit_stages(self, method, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, n_runs=n_runs, rand_seed=rand_seed, verbose=verbose, **kwargs)
+        if method is not None:
+            method = method.lower()
+            if method not in fit.methods:
+                errormsg = f'Unknown fitting method method="{method}"; the choices are {sc.strjoin(fit.methods.keys())}'
+                raise ValueError(errormsg)
+        problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, n_runs=n_runs, rand_seed=rand_seed, verbose=verbose)
+        method = problem.choose(method)
+        problem.start()
+        out = fit.methods[method](problem, **kwargs)
+        return problem.result(method, out)
 
     def sensitivity(self, **kwargs):
-        """ Which parameters matter: partial rank correlations of each parameter with bounds and each result, over samples within the bounds; see `ss.calibration.sensitivity()` """
-        return ss.calibration.sensitivity(self, **kwargs)
+        """ Which parameters matter: partial rank correlations of each parameter with bounds and each result, over samples within the bounds; see `ss.fit.sensitivity()` """
+        from . import fit
+        return fit.sensitivity(self, **kwargs)
 
     def check_dt(self, factor=2, output=False):
         """
@@ -852,9 +893,11 @@ class Sim(ss.Base):
                 if strat.kind == 'age' and 'use_aging' not in self.given:
                     guesses.append('aging, since people are born or die' if pars.use_aging else 'no aging, since nobody is born or dies')
                 add('dimension', text, f'guessed: {"; ".join(guesses)}' if guesses else None)
-            for crossing in self.crossings:
+            for crossing in self.crossings: # Diseases tracked jointly: why, how big, and what is assumed (see ss.solvers.Crossing)
                 sizes = [self.groups.strats[self.groups.dim_index(name)].n for name in crossing.names]
-                add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} compartments of people in each group', 'a condition in one refers to a state of another')
+                add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} joint states of people', '; '.join(crossing.reasons))
+                for text in crossing.describe():
+                    add('', text)
         for mod in mods:
             if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains)): # A family after its members
                 lines += ['', mod.describe(output=True)]
@@ -882,6 +925,21 @@ class Sim(ss.Base):
                 if ti is not None: # Kept by group every few steps
                     text += f'; by group every {ti[1]} {unit}s'
                 add('results', text, 'guessed: to keep them by group within 100 MB; results=[...] keeps fewer, more often' if ti is not None else None)
+            # What runs where: the declared modules in the kernels or as agents, and the rest in Python (see sim.kernel_reason())
+            stepped = {func['module'] for func in self.loop.funcs} - {'sim', 'people'}
+            declared = [mod.name for mod in self.declared]
+            if self.solver == 'abm':
+                add('plan', f'{sc.strjoin(declared)}: as agents, each step in Python')
+            else:
+                whole = self.kernel_reason()
+                joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in self.crossings)
+                add('plan', f'{sc.strjoin(declared)}: in the kernels, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
+            tabulated = [mod.name for mod in self.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and self.solver != 'abm']
+            python = [mod.name for mod in self.modules if mod.name in stepped and mod.name not in declared + tabulated]
+            if tabulated:
+                add('', f'{sc.strjoin(tabulated)}: in the kernels\' tables, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
+            if python:
+                add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
             for note in self.notes:
                 add('note', note)
 
@@ -931,55 +989,6 @@ class Sim(ss.Base):
                     stages = f' in each of {dw.k} stages' if dw.k > 1 else ''
                     lines.append(f'  {name:12s} rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
         return lines
-
-    def requires(self, output=False):
-        """
-        Print the data the modules in the sim require, and which items are still missing
-
-        Each module's `requires` list (of `ss.Requires`) is shown; for a declared model, the
-        list is its parameters. An item is given if the module has a parameter or attribute
-        of that name that is not None, and otherwise uses its default or is missing.
-
-        Args:
-            output (bool): if True, return a dataframe rather than printing the table
-        """
-        if self.initialized:
-            modules = list(self.modules)
-        else: # Without initializing, since a missing item can stop the sim from initializing
-            pars = sc.dcp(self.pars)
-            pars.validate()
-            modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
-        rows = []
-        for mod in modules:
-            graph = getattr(mod, 'graph', None)
-            if graph is not None: # A declared model requires its parameters
-                for p in graph.all_pars():
-                    if p.literal:
-                        continue
-                    raw = p.raw
-                    shape = ' x '.join(raw.dims) if isinstance(raw, ss.by) else ''
-                    status = 'missing' if raw is None else 'given'
-                    rows.append(dict(module=mod.name, name=p.name, shape=shape, source=p.source or '', status=status, doc=p.doc or ''))
-            for req in sc.tolist(mod.requires):
-                if isinstance(req, ss.Requires):
-                    pars = getattr(mod, 'pars', {})
-                    val = pars[req.name] if req.name in pars else getattr(mod, req.name, None)
-                    status = 'given' if val is not None else 'default' if req.default is not None else 'missing'
-                    rows.append(dict(module=mod.name, name=req.name, shape=req.shape or '', source=req.source or '', status=status, doc=req.doc or ''))
-                else: # Another module, by class or name, as in Starsim 3
-                    name = req if isinstance(req, str) else req.__name__
-                    found = any(m.name == req or type(m) is req for m in modules)
-                    rows.append(dict(module=mod.name, name=name, shape='module', source='', status='given' if found else 'missing', doc=''))
-        df = pd.DataFrame(rows, columns=['module', 'name', 'shape', 'source', 'status', 'doc'])
-        if output:
-            return df
-        if not len(df):
-            print('The modules in this sim list no data that they require')
-            return
-        n_missing = (df.status == 'missing').sum()
-        print(df.to_string(index=False))
-        print(f'\n{n_missing} of {len(df)} item{"s" if len(df) != 1 else ""} missing' if n_missing else f'\nNothing is missing ({len(df)} item{"s" if len(df) != 1 else ""})')
-        return
 
     def hash(self):
         """
@@ -1772,7 +1781,7 @@ class Sim(ss.Base):
         Take a sim back to its start so that it can be run again, without building it again
 
         Only for a sim that is nothing but compartments (see `sim.kernel_only()`), where
-        it makes repeated runs many times faster. `sim.run(n_runs=...)` and `ss.fit()`
+        it makes repeated runs many times faster. `sim.run(n_runs=...)` and `sim.calibrate()`
         use it where they can.
 
         Args:
@@ -2038,16 +2047,10 @@ class Sim(ss.Base):
                     ss.warn(errormsg)
         return missing
 
-    def to_df(self, sep='_', **kwargs):
-        """
-        Export results as a Pandas dataframe
-        Args:
-            sep (str): separator for the keys
-            kwargs: passed to results.to_df()
-        """
+    def to_df(self, **kwargs):
+        """ The results as a dataframe, with a column for each (e.g. `sir_prevalence`); see `ss.Results.to_df()` for the arguments """
         self.check_results_ready('Please run the sim before exporting the results')
-        df = self.results.to_df(sep=sep, descend=True, **kwargs)
-        return df
+        return self.results.to_df(**kwargs)
 
     def profile(self, follow=None, do_run=True, plot=True, **kwargs):
         """
@@ -2310,193 +2313,3 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
                 plt.show()
     return sim
 
-
-def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
-    '''
-    Compute the difference of the summaries of two simulations, and print any
-    values which differ.
-
-    Args:
-        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or the sim.summary dictionary
-        sim2 (im/dict): ditto
-        skip_key_diffs (bool): whether to skip keys that don't match between sims
-        skip (list): a list of values to skip
-        full (bool): whether to print out all values (not just those that differ)
-        output (bool): whether to return the output as a string (otherwise print)
-        die (bool): whether to raise an exception if the sims don't match
-
-    Examples:
-        ```python
-        s1 = ss.Sim(rand_seed=1).run()
-        s2 = ss.Sim(rand_seed=2).run()
-        ss.diff_sims(s1, s2)
-        ```
-    '''
-
-    # Convert to dict
-    if isinstance(sim1, (Sim, ss.MultiSim)):
-        sim1 = sim1.summarize()
-    if isinstance(sim2, (Sim, ss.MultiSim)):
-        sim2 = sim2.summarize()
-    for sim in [sim1, sim2]:
-        if not isinstance(sim, dict):  # pragma: no cover
-            errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
-            raise TypeError(errormsg)
-
-
-    # Check if it's a multisim
-    sim1 = sc.objdict(sim1)
-    sim2 = sc.objdict(sim2)
-    multi = isinstance(sim1[0], dict) # If it's a dict, then it's a multisim
-    if multi:
-        for sim in [sim1, sim2]:
-            assert 'mean' in sim[0], f"Can only compare multisims with summarize(method='mean'), but you have keys {sim[0].keys()}"
-
-    # Compare keys
-    keymatchmsg = ''
-    sim1_keys = set(sim1.keys())
-    sim2_keys = set(sim2.keys())
-    if sim1_keys != sim2_keys and not skip_key_diffs:  # pragma: no cover
-        keymatchmsg = "Keys don't match!\n"
-        missing = list(sim1_keys - sim2_keys)
-        extra = list(sim2_keys - sim1_keys)
-        if missing:
-            keymatchmsg += f'  Missing sim1 keys: {missing}\n'
-        if extra:
-            keymatchmsg += f'  Extra sim2 keys: {extra}\n'
-
-    # Compare values
-    valmatchmsg = ''
-    mismatches = {}
-    n_mismatch = 0
-    skip = sc.tolist(skip)
-    for key in sim2.keys():  # To ensure order
-        if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
-            d = sc.objdict()
-            if multi:
-                d.sim1 = sim1[key]['mean']
-                d.sim2 = sim2[key]['mean']
-                d.sim1_sem = sim1[key]['sem']
-                d.sim2_sem = sim2[key]['sem']
-            else:
-                d.sim1 = sim1[key]
-                d.sim2 = sim2[key]
-            mm = not np.isclose(d.sim1, d.sim2, equal_nan=True)
-            n_mismatch += mm
-            if mm or full:
-                mismatches[key] = d
-
-    df = sc.dataframe() # Preallocate in case there were no mismatches
-    if len(mismatches):
-        valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
-        df = sc.dataframe.from_dict(mismatches).transpose()
-        diff = []
-        ratio = []
-        change = []
-        zscore = []
-        small_change = 1 + 1e-3  # Define a small change, e.g. a rounding error
-        for d in mismatches.values():
-            old = d.sim1
-            new = d.sim2
-            if multi:
-                old_sem = d.sim1_sem
-                new_sem = d.sim2_sem
-                sem = old_sem + new_sem
-                small_change = 1.96 # 95% CI, roughly speaking
-
-            numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
-            if numeric:
-                this_diff = new - old
-                this_ratio = new / old if old else np.nan
-                if multi:
-                    abs_ratio = abs(this_diff)/sem
-                    this_zscore = abs_ratio
-                else:
-                    abs_ratio = max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
-                    this_zscore = np.nan
-
-                # Set the character to use
-                approx_eq = abs_ratio < small_change
-                if approx_eq:    change_char = '≈'
-                elif new > old:  change_char = '↑'
-                elif new < old:  change_char = '↓'
-                elif new == old: change_char = '='
-                else:
-                    errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
-                    raise ValueError(errormsg)
-
-                # Set how many repeats it should have
-                repeats = 1
-                if abs_ratio == 0:   repeats = 0
-                if abs_ratio >= 1.1: repeats = 2
-                if abs_ratio >= 2:   repeats = 3
-                if abs_ratio >= 10:  repeats = 4
-                this_change = change_char * repeats
-            else:  # pragma: no cover
-                this_diff =  np.nan
-                this_ratio  = np.nan
-                this_change = 'N/A'
-                this_zscore = np.nan
-
-            diff.append(this_diff)
-            ratio.append(this_ratio)
-            change.append(this_change)
-            zscore.append(this_zscore)
-
-        df['diff'] = diff
-        df['ratio'] = ratio
-        numeric_cols = ['sim1', 'sim2', 'diff', 'ratio']
-        if multi:
-            numeric_cols += ['sim1_sem', 'sim2_sem']
-        for col in numeric_cols:
-            df[col] = df[col].round(decimals=3)
-        df['change'] = change
-        if multi:
-            df['zscore'] = zscore
-            df['statsig'] = df.zscore > small_change
-        valmatchmsg += str(df)
-
-    # Raise an error if mismatches were found
-    mismatchmsg = keymatchmsg + valmatchmsg
-    if mismatchmsg:  # pragma: no cover
-        if die and n_mismatch: # To catch full=True case
-            raise ValueError(mismatchmsg)
-        elif output:
-            return df
-        else:
-            print(mismatchmsg)
-            return True
-    else:
-        if not output:
-            print('Sims match')
-        return False
-
-
-def check_sims_match(*args, full=False):
-    """
-    Shortcut to using ss.diff_sims() to check if multiple sims match
-
-    Args:
-        args (list): a list of 2 or more sims to compare
-        full (bool): if True, return whether each sim matches the first
-
-    Examples:
-        ```python
-        s1 = ss.Sim(diseases='sir', networks='random').run()
-        s2 = ss.Sim(pars=dict(diseases='sir', networks='random')).run()
-        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()).run()
-        assert ss.check_sims_match(s1, s2, s3)
-        ```
-    """
-    if len(args) < 2:
-        errormsg = 'Must compare at least 2 sims'
-        raise ValueError(errormsg)
-    base = args[0]
-    matches = []
-    for other in args[1:]:
-        diff = diff_sims(base, other, full=False, output=False, die=False)
-        matches.append(not(diff)) # Return the opposite of the diff
-    if full:
-        return matches
-    else:
-        return all(matches)

@@ -183,7 +183,7 @@ Clocks are not conveyors (decided 2026-10-20): a rate, `p=`, or condition that r
 
 ### A family of diseases side by side
 
-A family (`ss.Strains`) is not crossed: members that do not affect each other run side by side, with the sum of their compartments rather than the product. Each member's results are exactly as they would be alone; the union results are `1 − Π_k (1 − f_k)` of each group, with `f_k` member `k`'s share of it (the flows are sums, as agents); and the seeding (`init_prev=`, `split=`) seeds `init_prev × split_k` of each group in each member, so some are seeded with two (at 10% and 4 members, about 0.4%), which is noted.
+A family (`ss.Strains`) is not crossed (unless a disease outside it is tracked jointly with its members, [07-effects.md](07-effects.md)): members that do not affect each other run side by side, with the sum of their compartments rather than the product. Each member's results are exactly as they would be alone; the union results are `1 − Π_k (1 − f_k)` of each group, with `f_k` member `k`'s share of it (the flows are sums, as agents); and the seeding (`init_prev=`, `split=`) seeds `init_prev × split_k` of each group in each member, so some are seeded with two (at 10% and 4 members, about 0.4%), which is noted.
 
 Members that affect each other (`immunity=`, `exclusive=`) run as agents: `auto` runs them so, saying why, and a compartmental solver raises `CapabilityError`, whatever `approx=` (decided 2026-10-20; the approximation from each member's shares, 5 to 8% low against the exact form at 2 members, is gone). As compartments, the couplings are written as `ss.modify(..., where=)` between members, which tracks their states jointly (exactly, with the product of their compartments).
 
@@ -221,7 +221,7 @@ solver       abm                                    [guessed: MFNet is an indivi
              module: partner_notification: no as compartments ("partner_notification" traces contacts, which only a network of agents keeps)
 ```
 
-Ordinary transitions and parameters that run everywhere are not listed. Nothing is run to fill it in (decided 2026-10-20): a module says whether it works on groups with `compartmental = True` or `False`, and functions are listed as running on groups, to be checked when they run (see below). When a solver was asked for, the last line says what `'auto'` would choose, and why; `sim.kernel_reason()` says, separately, why a compartmental run is taken a step at a time rather than in one call to the kernels.
+Ordinary transitions and parameters that run everywhere are not listed. Nothing is run to fill it in (decided 2026-10-20): a module says whether it works on groups with `compartmental = True` or `False`, and functions are listed as running on groups, to be checked when they run (see below). When a solver was asked for, the last line says what `'auto'` would choose, and why; `sim.kernel_reason()` says, separately, why a compartmental run is taken a step at a time rather than in one call to the kernels. Near the end, `plan` says what runs where: the declared modules in the kernels (the whole run in one call, or one step at a time and why, with diseases tracked jointly as one program) or as agents; modifiers that the kernels take into their tables; and the modules that run in Python at their place in each step. It describes the run; it is not a separate set of capabilities to declare.
 
 ## Functions: try it
 

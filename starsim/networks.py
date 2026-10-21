@@ -2515,7 +2515,7 @@ class Mobility:
         """
         df = self.data
         times = sc.dataframe(index=df['date'].values)
-        sim_t, data_t = ss.calibration.data_times(sim, times)
+        sim_t, data_t = ss.results.data_times(sim, times)
         tol = 1e-9*max(np.abs(sim_t).max(initial=1), 1)
         ti = np.searchsorted(sim_t, data_t - tol, side='left') # The first step that starts on or after each date
         inside = (data_t >= sim_t[0] - tol) & (ti < len(sim_t))

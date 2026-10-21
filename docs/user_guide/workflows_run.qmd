@@ -98,10 +98,10 @@ msim.compare() # Compare the summaries
 msim.compare(t='2030-01-01') # Compare the results on a particular date
 ```
 
-Use `output=True` to get the comparison as a dataframe, or `msim.plot_compare()` to plot it as a bar chart, with one panel per result:
+Use `output=True` to get the comparison as a dataframe, or `do_plot=True` to plot it as a bar chart, with one panel per result:
 
 ```{python}
-msim.plot_compare()
+msim.compare(do_plot=True)
 ```
 
 ## Combining, merging, and splitting

@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import starsim.interop
 
 ref_n_quantiles = 23 # switching/flepimop.md, "Who this user is": a hub submission is 23 quantiles by scenario, location, target, and week
@@ -84,7 +85,7 @@ def test_flepimop_fit_per_place(tmp_path):
     truth = sim.new(pars=dict(Ro=ss.by(subpop=true_Ro))).run()
     fitsim = sim.new(pars=dict(Ro=ss.par(ss.by(subpop=[2.2]*len(places)), bounds=[1, 4]))) # One fitted value per county
     fitsim.data = weekly_totals(truth)
-    assert np.isfinite(ss.calibration.loglik(fitsim.new().run(), likelihood=lik)), 'A Poisson likelihood on data that are not whole numbers should be finite'
+    assert np.isfinite(ss.fit.loglik(fitsim.new().run(), likelihood=lik)), 'A Poisson likelihood on data that are not whole numbers should be finite'
     fit = fitsim.calibrate(likelihood=lik, method='l-bfgs-b', verbose=0)
     assert np.allclose(fit.pars.Ro.values, true_Ro, rtol=0.05), f'Expected Ro by county near {true_Ro}, not {fit.pars.Ro}'
     return fit

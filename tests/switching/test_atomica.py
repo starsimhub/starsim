@@ -1,7 +1,7 @@
 """
 Switching demo for the Atomica seat: a library workbook imported, calibrated, and optimized over spending.
 
-Passes when: agreement as today; an allocation from `ss.optimize`.
+Passes when: agreement as today; an allocation from `ss.fit.optimize`.
 Blocked today by: the Atomica importer (N13).
 The workbooks are Atomica's own library demos, read from its installation in the lingua_franca_design repo's environment.
 """
@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import starsim.interop
 sys.path.insert(0, str(sc.thispath().parent)) # For tests/paths.py when run as a script (conftest.py does this under pytest)
 import paths
@@ -86,7 +87,7 @@ def test_atomica_optimize():
     base = sim.new().run()
     assert np.isclose(at_year(base, 'n_vs', 2030), ref_vs_baseline, rtol=1e-6), 'The programs at current spending should give Atomica\'s baseline'
     total = sum(ref_alloc.values())
-    best = ss.optimize(sim, total=total, start=2020, maximize='all_vs', at=2030)
+    best = ss.fit.optimize(sim, total=total, start=2020, maximize='all_vs', at=2030)
     assert set(best.alloc) == set(ref_alloc) and np.isclose(sum(best.alloc.values()), total), 'The allocation should cover every program and spend the total'
     assert best.value >= ref_vs_optimized*0.999, f'Optimized viral suppression {best.value:n} should be at least Atomica\'s {ref_vs_optimized:n}'
     return best

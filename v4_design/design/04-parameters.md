@@ -90,7 +90,7 @@ beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03      # a fu
 ```
 
 - `ss.timeseries(..., period=ss.years(1))` repeats with the period given, as a seasonal pattern written out over one year does.
-- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, `'cosine'` (an S-shaped change between each value and the next), or `'spline'`. A bare number for a time is a time in the sim's unit counted from the start ([02-types.md](02-types.md#bare-numbers)).
+- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, or `'cosine'` (an S-shaped change between each value and the next). A bare number for a time is a time in the sim's unit counted from the start ([02-types.md](02-types.md#bare-numbers)).
 - `ss.seasonal(mean=, amplitude=, peak=)` is `mean × (1 + amplitude × cos(2π(t − peak)))` with `t` in years; a peak given as a month is the middle of that month, and in a sim with no dates time starts at the beginning of a year. Its `mean` may be an `ss.par`, which is then fitted or set like any other.
 - A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the solver provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
 - The forms combine: `ss.by(age=[...])` may hold time series, a time series or a seasonal value may be multiplied by a number or a parameter, and a function may return any of the others' values.
@@ -174,26 +174,6 @@ objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', dat
 ```
 
 A change of values changes `pars` and nothing else, so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file. The hash is a cheap by-product, useful for telling apart the many runs of a sweep or a calibration made from one commit; the git hash or tag of the code remains the main record of what was run.
-
-## Requirements
-
-A module MAY list the data it needs. One word, `requires`, names the list on the module, the entries in it, and the table. This is optional metadata, used to tell the user what to supply and to check inputs before anything runs. It is not enforced: a module can read anything, and a module that lists nothing works as before.
-
-```python
-class MyNetwork(ss.Network):
-    requires = [
-        ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
-        ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
-    ]
-```
-
-`ss.Requires(name, shape=, source=, doc=, default=)` describes one item. For modules made only of states, transitions, and parameters, the list is generated from the parameters, so nothing has to be written.
-
-```python
-sim.requires()                 # the table of what this sim requires, and which items are still missing
-```
-
-`sim.requires()` works without initializing the sim. A data-entry form generated from the list (`sim.requires(to='form.csv')`, Atomica's databook) serves one use case and is deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)). Because the list is optional, the table is as complete as the declarations are; items a module reads without listing do not appear in it.
 
 ## Named data
 

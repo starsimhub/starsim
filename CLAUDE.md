@@ -69,7 +69,6 @@ uv add starsim[dev]  # With dev dependencies
 ### Core modules (`starsim/`)
 - `analyzers.py`: Analyzers for custom results (e.g. `ss.infection_log`, `ss.dynamics_by_age`)
 - `arrays.py`: State management arrays for people/networks
-- `calibration.py`: Model calibration to data
 - `conditions.py`: Conditions on states and people, for `where=` (`ss.conditions.Cond`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
 - `dates.py`: Dates and calendar durations (`ss.date`, `ss.DateArray`, `ss.datedur`)
@@ -78,6 +77,7 @@ uv add starsim[dev]  # With dev dependencies
 - `distributions.py`: Statistical distributions and random number generation
 - `errors.py`: Errors, warnings, and notes, as classes (e.g. `ss.UnknownState`)
 - `expressions.py`: Expressions in rates and results (`ss.par`, `ss.transitions.Expr`), and how they are evaluated and printed
+- `fit.py`: Fitting to data, as `ss.fit` (imported when first used; `sim.calibrate()` is the entry point)
 - `gradients.py`: Gradients and log-densities in JAX (`sim.gradient()`, `sim.log_density()`)
 - `graph.py`: The graph of a declared module: its states, transitions, and parameters, completed with defaults and checked (`ss.transitions.Graph`)
 - `kernels.py`: The Numba kernels that run compartmental models

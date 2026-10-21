@@ -594,10 +594,10 @@ class Compartmental(Engine):
         self.changed()
         return moved
 
-    def force(self, frac, tr, dst, srcs=None):
-        """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures); a synchronized flow moves other modules' coordinates too """
+    def force(self, frac, tr, dst, srcs=None, y=None):
+        """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures); a synchronized flow moves other modules' coordinates too; with `y`, of those people (by compartment and group) rather than the engine's """
         syn = self.syncs_of(tr, dst.name) if tr is not None else []
-        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn)
+        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn, y=y)
         if tr is None:
             return total
         self.flowcounts[tr.name] += recorded.sum()
@@ -606,8 +606,10 @@ class Compartmental(Engine):
             self.pass_syncs({sy.row:recorded*sy.mask for sy in syn})
         return recorded
 
-    def move_states(self, frac, srcs, dst, syn=None):
-        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move='S -> V')`); with `syn` (synchronized flows), also returns the moves in this module's own groups """
+    def move_states(self, frac, srcs, dst, syn=None, y=None):
+        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move='S -> V')`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's """
+        own = y is None
+        y = self.y if own else y
         total = np.zeros(self.n_groups)
         recorded = np.zeros(self.n_groups)
         entry = self.entry[dst.name][0]
@@ -618,20 +620,21 @@ class Compartmental(Engine):
             base = self.dim_map(state.name, dst.name)
             dim_map = self.synced(base, syn) if syn else base
             for comp in self.state_comps[state.name]:
-                n = self.take(self.y[comp], frac[s])
-                self.y[comp] -= n
+                n = self.take(y[comp], frac[s])
+                y[comp] -= n
                 total += n if dim_map is None else n @ dim_map
                 recorded += n if base is None else n @ base # In this module's own groups, before the others' coordinates move
         if self.integer and len(entry) > 1: # Whole people, split at random between the branches of the destination
             left, rest = total.copy(), 1.0
             for ind,w in entry[:-1]:
                 k = self.rng.binomial(left.astype(int), np.clip(w/rest, 0, 1))
-                self.y[ind] += k
+                y[ind] += k
                 left, rest = left - k, rest - w
-            self.y[entry[-1][0]] += left
+            y[entry[-1][0]] += left
         else:
-            self.arrive(dst.name, total, self.y)
-        self.changed()
+            self.arrive(dst.name, total, y)
+        if own:
+            self.changed()
         return (total, recorded) if syn is not None else total
 
     def move_share(self, tr, frac, srcs):

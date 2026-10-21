@@ -459,7 +459,7 @@ def load_atomica(framework, databook=None, progbook=None, start=None, stop=None,
     src.config.update(start=float(start), stop=float(stop), dt=float(dt), unit='year', solver='ode', integrator='euler', substeps=1, total_pop=float(init.sum()))
     sim = build(src, verbose=verbose)
     if programs:
-        sim.imported.programs = programs # For ss.optimize()
+        sim.imported.programs = programs # For ss.fit.optimize()
     return sim
 
 

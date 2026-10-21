@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 from test_kernels import models, largest_diff
 
 pytest.importorskip('jax')
@@ -78,7 +79,8 @@ def test_fit():
     print(fit.table)
     assert fit.method == 'l-bfgs-b'
     assert np.allclose(fit.table.best, [0.5, 6, 0.002], rtol=1e-2)
-    assert ss.calibration.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
+    assert ss.fit.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
+    assert ss.fit.default_method(fit.sim, True)[0] == 'l-bfgs-b' # A best fit, with a likelihood too: a posterior is asked for by name
     return fit
 
 
@@ -108,21 +110,21 @@ def test_posterior():
     truth = make_sir(beta=0.5, dur=6).run().results.sir
     weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
-    fit = make_sir(dur=6, data=data).calibrate(pars=['beta'], likelihood=dict(cases=ss.poisson()), draws=100, warmup=100, chains=2, rand_seed=1, verbose=True) # NUTS, the default when every series has a likelihood
+    fit = make_sir(dur=6, data=data).calibrate(pars=['beta'], likelihood=dict(cases=ss.poisson()), method='nuts', draws=100, warmup=100, chains=2, rand_seed=1, verbose=True)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert len(fit.samples) == 200 and list(fit.samples.columns) == ['chain', 'draw', 'beta']
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     assert np.all(table.rhat < 1.1)
-    assert np.isnan(ss.calibration.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
+    assert np.isnan(ss.fit.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
     chains = np.zeros((4, 4000)) # Four AR(1) chains with a lag-1 correlation of 0.5, whose effective sample size is a third of the draws
     noise = np.random.default_rng(1).standard_normal(chains.shape)
     for t in range(1, chains.shape[1]):
         chains[:, t] = 0.5*chains[:, t-1] + noise[:, t]
-    rhat, ess = ss.calibration.diagnose(chains[:, :, None])
+    rhat, ess = ss.fit.diagnose(chains[:, :, None])
     assert rhat[0] < 1.01 and np.isclose(ess[0], chains.size/3, rtol=0.05)
-    assert ss.calibration.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
+    assert ss.fit.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
     assert fit.diagnostics.band['cases'].shape == (2, len(truth.cases))
     with pytest.raises(ss.NoPosterior): # A posterior needs a likelihood
         make_sir(data=data).calibrate(pars=['beta'], method='nuts')
@@ -186,8 +188,8 @@ def test_crossing():
     large = make_coinfection(beta=0.2, total_pop=1e7).run().results # Large, so that runs differ little
     data = pd.DataFrame({'hiv.n_I':large.hiv.n_I.values, 'syph.n_I':large.syph.n_I.values}, index=large.hiv.timevec)[::8]
     lik = {'hiv.n_I':ss.nbinom(n=20), 'syph.n_I':ss.nbinom(n=20)}
-    pf = np.mean([ss.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, seed=seed) for seed in range(3)])
-    direct = np.mean([ss.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
+    pf = np.mean([ss.fit.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, seed=seed) for seed in range(3)])
+    direct = np.mean([ss.fit.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
     print(f'Particle filter {pf:.2f}, direct runs {direct:.2f}')
     assert abs(pf - direct) < 1 # The filter estimates the likelihood of runs of the sim
 
@@ -195,7 +197,7 @@ def test_crossing():
     if importlib.util.find_spec('blackjax') is not None:
         truth = make_coinfection(beta=0.2).run().results
         data = pd.DataFrame({'hiv.n_I':truth.hiv.n_I.values, 'syph.n_I':truth.syph.n_I.values}, index=truth.hiv.timevec)[::8]
-        fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
         table = fit.table.set_index('par')
         assert fit.method == 'nuts'
         assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
@@ -226,7 +228,7 @@ def test_posterior_data():
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
     with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(n_I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(n_I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
     assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
     table = fit.table.set_index('par')
     assert table.lower.beta < 0.5 < table.upper.beta

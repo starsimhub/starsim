@@ -38,8 +38,8 @@ ss.Result                   a named time series, with a dimension per stratifica
 
 | | Examples |
 |---|---|
-| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.Fit`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
-| lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.compare_models` |
+| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.fit.Fit`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
+| lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.fit.compare_models` |
 
 Methods that describe the model are `describe()`, `diagram()`, and `equations()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.
 
@@ -257,7 +257,6 @@ There is no replicate count on `ss.Sim`: `sim.run(n_runs=100)` is a shortcut for
 | `sim.describe()` | prints the resolved model, with every guess marked ([below](#describe)) |
 | `sim.stratify(age=..., ...)` | stratifies every module by a property of people; the same as `stratify=` ([05-dimensions.md](05-dimensions.md)) |
 | `sim.what_modifies(x)` | lists what changes a quantity ([below](#the-module-contract)) |
-| `sim.requires()` | prints the data the modules say they require ([04-parameters.md](04-parameters.md#requirements)) |
 | `sim.hash()` | the run's identity, as an `sc.objdict` ([below](#equality-copying-and-identity)) |
 | `sim.to_spec()`, `sim.to_code()` | the model spec ([14-model-spec.md](14-model-spec.md)), and a Python file that builds the sim again ([16-interop.md](16-interop.md)) |
 | `sim.plot()`, `sim.summarize()`, `sim.to_df()` | results, as in Starsim ([09-results.md](09-results.md)) |
@@ -294,17 +293,6 @@ sim.what_modifies(hiv.rel_trans)     # the ss.modify() modifiers on it
 ```
 
 Modifiers made with `ss.modify` are always listed, because they are declared; direct writes by code are not tracked. Modules may read and write other modules' state directly. Scaling a quantity through `ss.modify` rather than overwriting it SHOULD be preferred, because modifiers combine by a stated rule and the base value is never lost ([07-effects.md](07-effects.md)); this is guidance, not something the library enforces.
-
-A module MAY list the data it needs, as optional metadata:
-
-```python
-class MyNetwork(ss.Network):
-    requires = [ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021')]   # optional metadata
-
-sim.requires()     # what the modules in this sim require, as a table
-```
-
-`requires` is the one word for the list on the module, the entries in it, and the table. This is never an enforced view of the data: a module with `requires` can still read anything in the sim. Generating a data-entry form from the table (`sim.requires(to='form.csv')`) is deferred from v1. See [04-parameters.md](04-parameters.md#requirements).
 
 ## `describe()`
 

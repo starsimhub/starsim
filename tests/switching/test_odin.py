@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import starsim.interop
 
 ref_final_R = 532_176 # Mean final R over 1,000 odin 1.2.7 runs: switching/odin.md, "The second week" §2
@@ -75,7 +76,7 @@ def test_odin_runs():
 def test_odin_filter():
     sc.heading('Timing the particle filter that PMCMC uses, per particle-step')
     sim = make_seir(fitted=True).init()
-    pf = ss.ParticleFilter(sim)
+    pf = ss.fit.ParticleFilter(sim)
     pf(n_particles=10, seed=0) # Compile
     n = 50
     T = sc.timer()
@@ -83,7 +84,7 @@ def test_odin_filter():
     step_us = T.toc(output=True)/(n*sim.t.npts)*1e6
     assert np.isfinite(loglik)
     assert step_us < 3*ref_step_us, f'Filter {step_us:.1f} µs per particle-step, against 3 × {ref_step_us} µs for dust'
-    # The fit itself, fit = sim.calibrate(), is 4 chains of particle MCMC at 1,000 particles; it is too slow for CI until this passes
+    # The fit itself, fit = sim.calibrate(method='pmcmc'), is 4 chains of particle MCMC at 1,000 particles; it is too slow for CI until this passes
     return step_us
 
 

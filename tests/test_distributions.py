@@ -440,7 +440,8 @@ def test_timepar_dists():
     d = sc.objdict()
     d.a = ss.normal(ss.years(mean), ss.years(std)).mock(**kw)
     d.b = ss.normal(mean, std, unit=ss.years).mock(**kw)
-    d.c = ss.years(ss.normal(mean, std)).mock(**kw)
+    with pytest.raises(TypeError): # The unit goes on the parameters, or unit=
+        ss.years(ss.normal(mean, std))
 
     n = int(1e6)
     rvs = sc.objdict()

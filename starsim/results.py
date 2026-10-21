@@ -13,15 +13,16 @@ import matplotlib.pyplot as plt
 
 class Levels(sc.objdict):
     """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
-    def plot(self, fig=None, ax=None, **kwargs):
-        """ Plot each level's median and interval on the same axes """
-        for label,res in self.items():
-            out = res.plot(fig=fig, ax=ax, label=label, **kwargs)
-            fig = out if fig is None else fig
-            ax = (fig.axes[0] if fig is not None and fig.axes else ax)
-        if ax is not None:
-            ax.legend()
-        return fig
+    def plot(self, fig=None, ax=None, lines=False, **kwargs):
+        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; kwargs: see `ss.plot_args()` """
+        kw = ss.plot_args(kwargs, alpha=0.8)
+        with ss.style(**kw.style):
+            ax = ax if ax is not None else (fig or plt.figure(**kw.fig)).add_subplot(111)
+            for label,res in self.items():
+                res._draw(ax, kw, label=label, lines=lines)
+            ax.legend(**kw.legend)
+            ax.set_title(res.full_label)
+        return ss.return_fig(ax.figure, **kw.return_fig)
 
 
 def people_scale(sim):
@@ -975,81 +976,69 @@ class Result(ss.BaseArr):
 
         return df
 
-    def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, lines=False, **kwargs):
+    def plot(self, fig=None, ax=None, label=None, lines=False, **kwargs):
         """
-        Plot a single result (with one line per column for a 2D result); kwargs are interpreted as plot_kw
+        Plot the result, with one line per column for a 2D result
 
         For a result across runs, plot the median and a 95% interval of each scenario, or every run if `lines=True`;
         for quantiles, the middle one and the interval between the outer ones.
+
+        Args:
+            fig (Figure): if provided, plot into new axes in this figure
+            ax (Axes): if provided, plot into these axes
+            label (str): the label of the line
+            lines (bool): for a result across runs, plot every run instead of the median and interval
+            kwargs (dict): known arguments (e.g. figsize, color, lw, font, or plot_kw) split between the plotting dicts; see `ss.plot_args()`
+
+        Examples:
+            ```python
+            sim = ss.Sim(diseases='sis', networks='random').run()
+            sim.results.sis.prevalence.plot(color='k')
+            ```
         """
-        # Prepare inputs
-        fig_kw = sc.mergedicts(fig_kw)
-        plot_kw = sc.mergedicts(dict(lw=3, alpha=0.8), plot_kw, kwargs)
-        fill_kw = sc.mergedicts(dict(alpha=0.1), fill_kw)
-
-        if self.runs is not None: # Across runs
-            if ax is None:
-                ax = fig.add_subplot(111) if fig is not None else plt.figure(**fig_kw).add_subplot(111)
-            if self.columns is not None:
-                for col,res in self.by_column().items():
-                    res.plot(ax=ax, lines=lines, fill_kw=fill_kw, **sc.mergedicts(plot_kw, dict(label=col)))
-                ax.legend()
-            else:
-                self.plot_runs(ax, lines, plot_kw, fill_kw)
+        kw = ss.plot_args(kwargs, alpha=0.8)
+        with ss.style(**kw.style):
+            ax = ax if ax is not None else (fig or plt.figure(**kw.fig)).add_subplot(111)
+            if self._draw(ax, kw, label=label, lines=lines):
+                ax.legend(**kw.legend)
             ax.set_title(self.full_label)
-            sc.commaticks(ax)
-            return ss.return_fig(ax.figure)
+            ax.set_xlabel('Time')
+        return ss.return_fig(ax.figure, **kw.return_fig)
 
-        if fig is None:
-            if ax is not None:
-                fig = ax.figure
-            else:
-                fig = plt.figure(**fig_kw)
-        if ax is None:
-            ax = fig.add_subplot(111)
-
+    def _draw(self, ax, kw, label=None, lines=False):
+        """ Draw the result into axes, for `plot()` and `ss.Results.plot()`, with the arguments from `ss.plot_args()`; returns whether it drew several lines that need a legend """
         if self.timevec is None:
             errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
             raise ValueError(errormsg)
-
-        # Plot bounds and results, with one line per column for 2D results
-        lines = self.by_column().items() if self.columns is not None else [(None, self)]
-        for col,res in lines:
-            if res.low is not None and res.high is not None:
-                ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
-            col_kw = dict(label=col) if col is not None else None
-            ax.plot(res.timevec, res.values, **sc.mergedicts(col_kw, plot_kw))
-        if self.columns is not None:
-            ax.legend()
-        ax.set_title(self.full_label)
-        ax.set_xlabel('Time')
         sc.commaticks(ax)
-        if (self.values.min() >= 0) and (ax.get_ylim()[0]<0): # Don't allow axis to go negative if results don't
-            ax.set_ylim(bottom=0)
-        return ss.return_fig(fig)
-
-
-    def plot_runs(self, ax, lines=False, plot_kw=None, fill_kw=None):
-        """ Plot a result across runs into an axis: see `plot()` """
-        res = self if lines or 'quantile' in self.runs else self.quantiles()
-        groups = res.scenarios()
-        many = len(groups) > 1
-        label = plot_kw.pop('label', None)
+        if self.columns is not None: # One line (or interval) per column
+            for col,res in self.by_column().items():
+                res._draw(ax, kw, label=f'{col} ({label})' if label else col, lines=lines)
+            return True
+        if self.runs is None: # One run, with its bounds if it has them
+            if self.low is not None and self.high is not None:
+                ax.fill_between(self.timevec, self.low, self.high, **sc.mergedicts(dict(alpha=0.1), kw.fill))
+            ax.plot(self.timevec, self.values, **sc.mergedicts(kw.plot, dict(label=label)))
+            groups = {}
+        else: # Across runs
+            res = self if lines or 'quantile' in self.runs else self.quantiles()
+            groups = res.scenarios()
         for scenario,inds in groups.items():
-            kw = sc.mergedicts(plot_kw, dict(label=scenario if many else label))
+            plot_kw = sc.mergedicts(kw.plot, dict(label=scenario if len(groups) > 1 else label))
             if 'quantile' in res.runs: # The middle quantile, and the interval between the outer ones
                 q = res.runs['quantile'].to_numpy()[inds]
                 vals = res.values[inds]
-                line, = ax.plot(res.timevec, vals[np.argmin(np.abs(q - 0.5))], **kw)
+                line, = ax.plot(res.timevec, vals[np.argmin(np.abs(q - 0.5))], **plot_kw)
                 if len(inds) > 1:
-                    ax.fill_between(res.timevec, vals[np.argmin(q)], vals[np.argmax(q)], **sc.mergedicts(dict(alpha=0.3), fill_kw, dict(color=line.get_color())))
+                    ax.fill_between(res.timevec, vals[np.argmin(q)], vals[np.argmax(q)], **sc.mergedicts(dict(alpha=0.3), kw.fill, dict(color=line.get_color())))
             else: # Every run, in one color for each scenario
-                kw = sc.mergedicts(kw, dict(alpha=0.3, lw=1))
-                drawn = ax.plot(res.timevec, res.values[inds].T, **sc.mergedicts(kw, dict(label=None)))
-                drawn[0].set_label(kw['label'])
+                drawn = ax.plot(res.timevec, res.values[inds].T, **sc.mergedicts(plot_kw, dict(alpha=0.3, lw=1, label=None)))
+                drawn[0].set_label(plot_kw['label'])
                 for line in drawn[1:]:
                     line.set_color(drawn[0].get_color())
-        return ax
+        if (self.values.min() >= 0) and (ax.get_ylim()[0] < 0): # Don't allow the axis to go negative if the results don't
+            ax.set_ylim(bottom=0)
+        return len(groups) > 1
 
 
 class Results(ss.ndict):
@@ -1195,46 +1184,32 @@ class Results(ss.ndict):
             new.timevec = timevec # Replace the original timevec with the resampled one
         return new
 
-    def to_df(self, sep='_', descend=False, **kwargs):
+    def to_df(self, sep='_', set_date_index=False, **kwargs):
         """
-        Merge all results dataframes into one
+        All the results, as one dataframe with a column for each: e.g. `n_alive` for the sim's own, `sir_prevalence` for a module's,
+        and `bysex_n_infected_male` for each column of a 2D result
+
+        If the modules have different time points (e.g. different time steps), a dict of dataframes instead, one for the sim's own results and one for each module.
+
         Args:
             sep (str): separator for the column names
-            descend (bool): whether to descend into nested results
-            kwargs: passed to the `Result.to_df()` method, can include instructions for summarizing results by time
+            set_date_index (bool): if True, use the times as the index rather than as the column `timevec`
+            kwargs (dict): passed to `ss.Result.resample()`, e.g. `resample='year'`
         """
-        if not descend:
-            dfs = []
-            # If resampling, use date index to avoid duplicate timevec columns
-            if 'resample' in kwargs and kwargs.get('resample') is not None:
-                kwargs.setdefault('set_date_index', True)
-            for rname, res in self.all_results_dict.items():
-                col_names = rname
-                res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
-                dfs.append(res_df)
-            if len(dfs):
-                df = pd.concat(dfs, axis=1)
-                df = df.loc[:, ~df.columns.duplicated()]  # Remove duplicate columns
-            else:
-                df = None
-        else:
-            if self.equal_len or 'resample' in kwargs:  # If we're resampling, all results will end up the same length
-                flat = self.flatten(sep=sep, only_results=True, columns=True, **kwargs)
-                if 'resample' in kwargs and kwargs['resample'] is not None:
-                    timevec = flat[0].timevec
-                else:
-                    timevec = self.timevec
-                flat = dict(timevec=timevec) | flat  # Prepend the timevec
-                df = sc.dataframe.from_dict(flat)
-            else:
-                df = sc.objdict()  # For non-equal lengths, actually return an objdict rather than a dataframe
-                df.sim = self.to_df(sep=sep, descend=False)
-                for k,v in self.items():
-                    if isinstance(v, Results):
-                        thisdf = v.to_df(sep=sep, descend=False)  # Only allow one level of nesting
-                        if thisdf is not None:
-                            df[k] = thisdf
-        return df
+        flat = self.flatten(sep=sep, keep_case=True, columns=True, **kwargs)
+        if not flat:
+            return None
+        if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
+            own = Results(self._module, strict=False)
+            for key,val in self.items():
+                if isinstance(val, Result):
+                    own[key] = val
+            parts = sc.objdict(sim=own.to_df(sep=sep, set_date_index=set_date_index, **kwargs))
+            parts.update({key:val.to_df(sep=sep, set_date_index=set_date_index, **kwargs) for key,val in self.items() if isinstance(val, Results)})
+            return sc.objdict({key:df for key,df in parts.items() if df is not None})
+        timevec = flat[0].convert_timevec()
+        data = {key:res.values for key,res in flat.items()}
+        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(timevec=timevec) | data)
 
     def walk(self):
         """ Each result, as (module name, key, result), with the module None for the sim's own results """
@@ -1287,15 +1262,10 @@ class Results(ss.ndict):
                 if (res.module, res.name) in data: # Plot the data
                     x, y = data[(res.module, res.name)]
                     ax.scatter(x, y, **kw.data)
-                if res.runs is not None: # Across runs
-                    res.plot(ax=ax, lines=lines, plot_kw=kw.plot, fill_kw=kw.fill)
-                    many = many or len(res.scenarios()) > 1
-                elif res.columns is None:
-                    ax.plot(res.timevec, res.values, **kw.plot, label=label)
-                else: # One line per column for a 2D result
-                    labels = [f'{col} ({label})' if label else col for col in res.columns]
-                    ax.plot(res.timevec, res.values, **kw.plot, label=labels)
-                    ax.legend()
+                several = res._draw(ax, kw, label=label, lines=lines)
+                if res.columns is not None: # One line per column
+                    ax.legend(**kw.legend)
+                many = many or (several and res.columns is None) # Several scenarios, labelled once
                 format_axes(ax, res, n_ticks, show_module)
             if legend and many:
                 axs[0].legend(**kw.legend)
@@ -1599,65 +1569,54 @@ def data_times(sim, df):
     return sim_t, data_t
 
 
-def alignment(sim, df):
-    """
-    How the results line up with the data, for `compare()` and `lineup()`: the times of the sim and of the data, which data times
-    are inside the simulated period, and for each data time, the steps whose flows are summed for it (those of the interval that ends at it)
-    """
-    sim_t, data_t = data_times(sim, df)
-    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
-    inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
-    spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
-    starts = np.append(data_t[0] - spacing, data_t[:-1]) if len(data_t) else []
-    windows = [(sim_t > lo + eps) & (sim_t <= hi + eps) for lo,hi in zip(starts, data_t)]
-    return sim_t, data_t, inside, windows
-
-
 def compare(sim, df=None):
     """
     Line up a sim's results with its data
 
     A flow (new infections, reported cases) is summed over the interval ending at
-    each data time; a stock or ratio (a count, a prevalence) is read at the data's time.
+    each data time; a stock or ratio (a count, a prevalence) is interpolated at the data's time.
 
     Returns a dict of `{column: (data values, model values)}`.
     """
     df = sim.data if df is None else df
-    sim_t, data_t, inside, windows = alignment(sim, df)
+    sim_t, data_t = data_times(sim, df)
     if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
         raise ss.DataMisaligned(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
     out = sc.objdict()
-    for col in df.columns:
-        res = match_column(sim, col)
-        values = np.asarray(res.values, dtype=float)
-        expected = np.asarray(df[col], dtype=float)
-        if res.kind == 'flow': # A flow: sum over the interval ending at each data time
-            model = np.array([values[window].sum() for window in windows])
-        else:
-            model = np.interp(data_t, sim_t, values)
-        ok = inside & np.isfinite(expected)
-        out[col] = (expected[ok], model[ok])
+    for col,(W,expected,rows) in lineup(sim, df).items():
+        values = np.asarray(match_column(sim, col).values, dtype=float)
+        out[col] = (expected, np.where(W != 0, W*values, 0).sum(axis=1)) # Only the steps used, so a value missing elsewhere (e.g. the prevalence among no one) is not read
     return out
 
 
 def lineup(sim, df=None):
     """
-    The matrix that lines up each result that has data with its data, as `compare()` does
+    The matrix that lines up each result that has data with its data, which `compare()` uses
+
+    For a flow, it sums the steps of the interval that ends at each data time; for a stock or ratio,
+    it interpolates linearly between the steps either side of each data time.
 
     Returns a dict of `{column: (W, data values, rows)}`, where the model's values at the data
     (those that are inside the simulated period and not missing, which are at these rows of the
     data) are W @ the result.
     """
     df = sim.data if df is None else df
-    sim_t, data_t, inside, windows = alignment(sim, df)
+    sim_t, data_t = data_times(sim, df)
+    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
+    spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
+    starts = np.append(data_t[0] - spacing, data_t[:-1]) if len(data_t) else []
+    flow = np.array([(sim_t > lo + eps) & (sim_t <= hi + eps) for lo,hi in zip(starts, data_t)], dtype=float).reshape(len(data_t), len(sim_t))
+    stock = np.zeros((len(data_t), len(sim_t))) # As np.interp(): the first or last value outside the steps
+    j = np.clip(np.searchsorted(sim_t, data_t, side='right') - 1, 0, max(len(sim_t) - 2, 0))
+    f = np.clip((data_t - sim_t[j])/(sim_t[j+1] - sim_t[j]), 0, 1) if len(sim_t) > 1 else np.zeros(len(data_t))
+    stock[np.arange(len(data_t)), j] = 1 - f
+    stock[np.arange(len(data_t)), np.minimum(j+1, len(sim_t)-1)] += f
     out = sc.objdict()
     for col in df.columns:
         res = match_column(sim, col)
         expected = np.asarray(df[col], dtype=float)
         ok = inside & np.isfinite(expected)
-        if res.kind == 'flow':
-            W = np.array(windows, dtype=float)
-        else:
-            W = np.array([np.interp(data_t, sim_t, row) for row in np.eye(len(sim_t))]).T
+        W = flow if res.kind == 'flow' else stock
         out[col] = (W[ok], expected[ok], np.flatnonzero(ok))
     return out

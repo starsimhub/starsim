@@ -111,6 +111,18 @@ def choose_solver(sim):
             if hasattr(mod, 'compartmental_form'):
                 ss.note(mod.compartmental_form(sim), sim=sim)
     init_capabilities(sim, modules)
+    layouts = None
+    if solver == 'auto' and not auto_reasons(sim) and len(sim.declared) > 1: # Diseases tracked jointly, counted before anything is made: agents, if they cannot be, or take more than the budget
+        sim.solver = 'ode'
+        layouts = []
+        for group in crossing_groups(sim):
+            try:
+                layouts.append(joint_layout(sim, group))
+                reason, how = over_budget(layouts[-1]), 'more compartments than ss.options.max_joint'
+            except ss.CapabilityError as e:
+                reason, how = str(e).split('\n')[0], 'no joint form yet'
+            if reason:
+                sim.capabilities.append(sc.objdict(ingredient=f'jointly: {" × ".join(sorted(group.names))}', groups='no', how=how, auto=reason, fatal=False))
     if solver == 'auto':
         reasons = auto_reasons(sim)
         if reasons:
@@ -161,7 +173,7 @@ def choose_solver(sim):
             sim.groups.init()
             sim.mixing = solvers.Mixing(sim)
 
-        init_crossings(sim)
+        init_crossings(sim, layouts)
         sim.mixing.init(approx=pars.approx)
         sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
         pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
@@ -307,12 +319,39 @@ def check_betas(sim, nets):
     return
 
 
+def leaves(mod):
+    """ The transitions by which people die of a declared disease (to `ss.null`), who leave the people of every other disease too """
+    return [tr for tr in mod.graph.transitions.values() if tr.people and tr.src and (not tr.dst or tr.dies) and not getattr(tr, 'every_state', False)]
+
+
 def crossing_groups(sim):
-    """ The groups of diseases whose states are tracked jointly in a compartmental run (see `init_crossings()`), as sets of names """
+    """
+    The groups of diseases whose states are tracked jointly in a compartmental run (see `init_crossings()`), each as Bunch(names, reasons)
+
+    Diseases are tracked jointly when a condition or trigger in one refers to a state or transition of another, or when the
+    people of one change in a way that the others' must follow: people born or dying (`Sim._init_flows()`), or dying of a
+    disease. A disease that refers to none of the others, in a population that nobody enters or leaves, is run apart; its
+    people are the same as the others' at every step, since nothing moves them in or out.
+    """
     names = [mod.name for mod in sim.declared]
     links = {name:{name} for name in names}
-    if any(sim.flows_of(mod) for mod in sim.declared): # People born or dying, who are born or die once in every disease: see Sim._init_flows()
-        links = {name:set(names) for name in names}
+    why = {name:[] for name in names}
+    def join(a, b, reason):
+        group = links[a] | links[b]
+        reasons = list(dict.fromkeys(why[a] + why[b] + [reason]))
+        for name in group:
+            links[name] = group
+            why[name] = reasons
+        return
+    families = [{m.name for m in fam.members} for fam in sim.pars.diseases.values() if isinstance(fam, ss.Strains)] # The members of a family have people who die of one die in the others already (see ss.Strains.step_shares())
+    for mod in sim.declared: # People born or dying, once in every disease
+        flows, deaths = sim.flows_of(mod), leaves(mod)
+        if deaths and not flows and set(names) <= next((f for f in families if mod.name in f), {mod.name}):
+            continue
+        if flows or deaths:
+            reason = 'people are born or die, once, whatever their diseases' if flows else f'people die of {mod.name} ({sc.strjoin(tr.name for tr in deaths)}), so leave the others too'
+            for name in names:
+                join(mod.name, name, reason)
     for mod in list(sim.pars.connectors.values()) + list(sim.pars.interventions.values()):
         home = getattr(mod, 'target_module', None) or getattr(mod, 'disease', None) # The disease whose engine evaluates the conditions
         home = ss.conditions.modname(home)
@@ -320,81 +359,110 @@ def crossing_groups(sim):
             continue
         for other,state in ss.conditions.state_refs(mod):
             if other in links and other != home and state in sim.get_declared(other).graph.states:
-                group = links[home] | links[other]
-                for name in group:
-                    links[name] = group
+                join(home, other, f'"{mod.name}" acts on {home} by a state of {other}')
     for mod in sim.declared: # A trigger on another disease's state: the compartments where it holds are those of the joint states
         for tr in mod.graph.transitions.values():
             ev = ss.solvers.compartmental.synced_event(tr, sim, mod.name) if tr.trigger is not None else None
             if ev is not None: # A trigger on another disease's transition: a synchronized flow, in the joint states
-                group = links[mod.name] | links[ev.mod]
-                for name in group:
-                    links[name] = group
+                join(mod.name, ev.mod, f'{mod.name}.{tr.name} is triggered by {ev.mod}.{ev.tr}')
                 continue
             if tr.trigger is None or tr.trigger.event or not isinstance(tr.trigger.x, ss.conditions.Cond):
                 continue
             for other,state in ss.conditions.leaf_states(tr.trigger.x):
                 other = ss.conditions.modname(other)
                 if other in links and other != mod.name and state in sim.get_declared(other).graph.states:
-                    group = links[mod.name] | links[other]
-                    for name in group:
-                        links[name] = group
+                    join(mod.name, other, f'{mod.name}.{tr.name} is triggered by a state of {other}')
     groups = []
     for name in names:
-        if len(links[name]) > 1 and links[name] not in groups:
-            groups.append(links[name])
+        if len(links[name]) > 1 and links[name] not in [g.names for g in groups]:
+            groups.append(sc.objdict(names=links[name], reasons=why[name]))
     return groups
 
 
-def init_crossings(sim):
+def joint_layout(sim, group):
     """
-    In a compartmental run: track jointly the states of diseases when a condition in one refers to a state of another, or when people are born or die (see `Sim._init_flows()`)
+    For a group of diseases to track jointly (see `crossing_groups()`): a dimension for each, whose levels are its compartments of people,
+    and the size of the program that runs them: its compartments in each group (`rows`: the product of the diseases' compartments of people,
+    including the stages of their dwell times and the slots of their fixed delays, and a copy of each compartment that is not people, such
+    as a reservoir, for each combination of the others'), the groups of the sim's other dimensions (`cols`), and the two multiplied (`cells`).
+    Nothing of the size of the program is made.
+    """
+    members = [mod.name for mod in sim.declared if mod.name in group.names] # In the order of the sim
+    strats, people, others = [], [], []
+    for name in members:
+        mod = sim.get_declared(name)
+        engine = ss.solvers.Compartmental(mod, sim) # Only to lay out the compartments; the module's own engine is made later
+        engine.init_dims()
+        engine.init_dwells()
+        engine.build_layout()
+        labels = []
+        for ind in engine.people_comps: # A state with several compartments (branches, or the stages of a dwell time) has a level for each
+            state = engine.comps[ind].state.name
+            own = engine.state_comps[state]
+            labels.append(state if len(own) == 1 else f'{state}.{own.index(ind) + 1}')
+        first = engine.graph.first.name
+        entered = lambda track: not track.immediate and not (getattr(track, 'stay', False) and track.p is not None) # Not those who took ss.stay in a split, which only the split enters
+        tracks = [track for track in engine.tracks[first] if entered(track)]
+        if len(tracks) != 1:
+            raise ss.CapabilityError(f'the states of "{name}" cannot be tracked jointly with those of {sc.strjoin(n for n in members if n != name)} with solver="{sim.solver}" yet, since people entering its first state ("{first}") are split between branches.\n'
+                                     f'     Run with solver="abm".')
+        placed = [tr for tr in engine.graph.inflows if getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) in members and ss.conditions.modname(tr.per.module) != name]
+        if placed: # Its own state for the children of another disease's transition (ss.birth(per=)), which are all the births there are
+            into = placed[0].dst[0].name
+            tracks = [track for track in engine.tracks[into] if entered(track)]
+            if len(tracks) != 1 or len({(ss.conditions.modname(tr.per.module), tr.per.name, tr.dst[0].name) for tr in placed}) > 1:
+                raise ss.CapabilityError(f'"{name}" places the children of another disease in "{into}", which cannot be done with its states tracked jointly with solver="{sim.solver}" yet (people entering it are split between branches, or it places several transitions\' children).\n'
+                                         f'     Run with solver="abm".')
+        split = np.zeros(len(labels))
+        split[engine.people_comps.index(tracks[0].first)] = 1.0 # Where people born to (or arriving in) the others start: in this disease's first state, as agents do, or where it places them
+        strat = ss.transitions.Strat(name, labels, split=split, kind='disease')
+        strat.holders = [n for n in members if n != name] # The diseases whose people have this dimension
+        strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
+        strats.append(strat)
+        people.append(len(engine.people_comps))
+        others.append(len(engine.comps) - len(engine.people_comps))
+    joint = int(np.prod(people))
+    rows = joint + sum(c*(joint//p) for p,c in zip(people, others))
+    cols = int(np.prod([strat.n for strat in sim.groups.strats if strat.kind != 'disease']))
+    return sc.objdict(names=members, reasons=group.reasons, strats=strats, sizes=people, rows=rows, cols=cols, cells=rows*cols)
+
+
+def over_budget(layout):
+    """ Why a crossing (see `joint_layout()`) is more than `ss.options.max_joint` allows, or None """
+    budget = ss.options.max_joint
+    if budget and layout.cells > budget:
+        return f'tracking {" × ".join(layout.names)} jointly takes {layout.rows:,} compartments in each of {layout.cols:,} group{"s" if layout.cols != 1 else ""} ({layout.cells:,} in all), more than ss.options.max_joint ({budget:,})'
+    return None
+
+
+def init_crossings(sim, layouts=None):
+    """
+    In a compartmental run: track jointly the states of diseases that refer to each other, or whose people are born or die (see `crossing_groups()`)
 
     For example, `ss.modify(hiv.rel_trans, multiply=3, where=syph.I)` needs the number of people with
     HIV who also have syphilis. Each disease in a crossing becomes a dimension of the sim, whose levels
     are its compartments and which applies to the people of the others, so the model grows to the
-    product of their compartments. See `ss.solvers.Crossing`.
+    product of their compartments, which is counted before anything is made, and kept within
+    `ss.options.max_joint`. See `ss.solvers.Crossing`.
+
+    Args:
+        sim (`ss.Sim`): the sim
+        layouts (list): the layouts already worked out for the sim's groups (see `joint_layout()`), if any
     """
     groups = crossing_groups(sim)
     if not groups:
         return
-
-    # A dimension for each disease, whose levels are its compartments of people
-    for group in groups:
-        members = [mod.name for mod in sim.declared if mod.name in group] # In the order of the sim
-        for name in members:
-            mod = sim.get_declared(name)
-            engine = ss.solvers.Compartmental(mod, sim) # Only to lay out the compartments; the module's own engine is made later
-            engine.init_dims()
-            engine.init_dwells()
-            engine.build_layout()
-            labels = []
-            for ind in engine.people_comps: # A state with several compartments (branches, or the stages of a dwell time) has a level for each
-                state = engine.comps[ind].state.name
-                own = engine.state_comps[state]
-                labels.append(state if len(own) == 1 else f'{state}.{own.index(ind) + 1}')
-            first = engine.graph.first.name
-            entered = lambda track: not track.immediate and not (getattr(track, 'stay', False) and track.p is not None) # Not those who took ss.stay in a split, which only the split enters
-            tracks = [track for track in engine.tracks[first] if entered(track)]
-            if len(tracks) != 1:
-                raise ss.CapabilityError(f'the states of "{name}" cannot be tracked jointly with those of {sc.strjoin(n for n in members if n != name)} with solver="{sim.solver}" yet, since people entering its first state ("{first}") are split between branches.\n'
-                                         f'     Run with solver="abm".')
-            placed = [tr for tr in engine.graph.inflows if getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) in members and ss.conditions.modname(tr.per.module) != name]
-            if placed: # Its own state for the children of another disease's transition (ss.birth(per=)), which are all the births there are
-                into = placed[0].dst[0].name
-                tracks = [track for track in engine.tracks[into] if entered(track)]
-                if len(tracks) != 1 or len({(ss.conditions.modname(tr.per.module), tr.per.name, tr.dst[0].name) for tr in placed}) > 1:
-                    raise ss.CapabilityError(f'"{name}" places the children of another disease in "{into}", which cannot be done with its states tracked jointly with solver="{sim.solver}" yet (people entering it are split between branches, or it places several transitions\' children).\n'
-                                             f'     Run with solver="abm".')
-            split = np.zeros(len(labels))
-            split[engine.people_comps.index(tracks[0].first)] = 1.0 # Where people born to (or arriving in) the others start: in this disease's first state, as agents do, or where it places them
-            strat = ss.transitions.Strat(name, labels, split=split, kind='disease')
-            strat.holders = [n for n in members if n != name] # The diseases whose people have this dimension
-            strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
-            sim.groups.cross_strats.append(strat)
-        sim.crossings.append(ss.solvers.Crossing(sim, members))
-        sizes = [strat.n for strat in sim.groups.cross_strats[-len(members):]]
-        ss.note(f'the states of {" × ".join(members)} are tracked jointly: {" × ".join(map(str, sizes))} = {int(np.prod(sizes)):,} joint states per group', sim=sim)
+    cols = int(np.prod([strat.n for strat in sim.groups.strats if strat.kind != 'disease']))
+    if layouts is None or any(layout.cols != cols for layout in layouts): # The groups changed once the solver was known (e.g. the stages of a transfer)
+        layouts = [joint_layout(sim, group) for group in groups]
+    for layout in layouts:
+        reason = over_budget(layout)
+        if reason:
+            raise ss.CapabilityError(f'cannot run with solver="{sim.solver}": {reason}.\n'
+                                     f'     Run with solver="abm" (or "auto", which does), or raise the limit if there is the memory for it, e.g. ss.options(max_joint={layout.cells}).')
+        sim.groups.cross_strats += layout.strats
+        sim.crossings.append(ss.solvers.Crossing(sim, layout.names, reasons=layout.reasons))
+        ss.note(f'the states of {" × ".join(layout.names)} are tracked jointly: {" × ".join(map(str, layout.sizes))} = {int(np.prod(layout.sizes)):,} joint states per group ({"; ".join(layout.reasons)})', sim=sim)
     sim.groups.init()
     sim.mixing = ss.solvers.Mixing(sim)
     return

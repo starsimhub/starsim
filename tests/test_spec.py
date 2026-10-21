@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import matplotlib.pyplot as plt
 
 plt.switch_backend('agg')
@@ -127,18 +128,17 @@ vocabulary = {
     'Parameter forms': ('by timeseries seasonal', 'all'),
     'Mixing and space': ('Network RandomNet MFNet MixingPool MixingPools PartnerNet contacts geo Mobility gravity', 'PartnerNet contacts geo Mobility gravity'),
     'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
-    'Running, comparing, saving': ('MultiSim parallel options compare_models optimize diff load save', 'compare_models optimize diff'),
-    'Optional metadata': ('Requires', 'all'),
-    'Types you get back or subclass': ('Result Loop Timeline Rate TimePar Fit', 'Fit'),
+    'Running, comparing, saving': ('MultiSim parallel options diff load save', 'diff'),
+    'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
 }
 
 # The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr, ss.distributions.link_dists)
 code_names = """
 AgeGroup AlreadyRunError Arr Base BaseArr Births BoolArr
 BoolState BreastfeedingNet DateArray Deaths Delivery Diagnostics
-DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModelComparison ModifiableArr Optimization Pars ParticleFilter Person PostnatalNet
+DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModifiableArr Pars Person PostnatalNet
 Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results SEIR SIR SIS SexualNetwork SimPars beta_dist beta_mean
-check_requires check_sims_match choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
+check_requires choose_n demo dtypes dynamics_by_age histogram infection_log
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
 show shrink standardize_data standardize_netkey state any child mother attr on stay style to_code uids warn
 """.split()
@@ -149,12 +149,12 @@ methods = {
     'Disease': ('describe diagram equations transitions stratify to_spec copy pars R0', 'describe diagram equations transitions stratify to_spec R0'),
     'State': ('n frac total', 'all'),
     'ModifiableArr': ('effective', 'all'),
-    'Sim': ('init run plot summarize to_df loop results describe stratify requires to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify requires to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),
+    'Sim': ('init run plot summarize to_df loop results describe stratify to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
     'MultiSim': ('run plot summarize to_df results diff', 'diff'),
-    'Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
-    'ModelComparison': ('fits plot summarize to_df', 'fits'),
+    'fit.Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
+    'fit.ModelComparison': ('fits plot summarize to_df', 'fits'),
 }
 
 
@@ -240,7 +240,9 @@ def test_vocabulary():
             bold = f'**`ss.{name}`**' in sections[group]
             assert bold == (name in new), f'ss.{name} should {"" if name in new else "not "}be in bold in "{group}" in 17-vocabulary.md, since it is {"" if name in new else "not "}new'
     for clsname,(names,new) in methods.items():
-        cls = getattr(ss, clsname)
+        cls = ss
+        for part in clsname.split('.'): # E.g. ss.fit.Fit
+            cls = getattr(cls, part)
         for name in names.split():
             assert has_attr(cls, name), f'17-vocabulary.md counts the method or attribute "{name}" on ss.{clsname}, which it does not have'
             assert f'`{name}`' in sections['Methods and attributes'], f'"{name}" (on ss.{clsname}) is counted but not listed in the methods of 17-vocabulary.md'

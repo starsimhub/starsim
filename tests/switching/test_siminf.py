@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 sys.path.insert(0, str(sc.thispath().parent)) # For tests/paths.py when run as a script (conftest.py does this under pytest)
 import paths
 
@@ -109,7 +110,7 @@ def test_siminf_ldata():
 
 def test_siminf_filter():
     sc.heading('Timing the particle filter for PMCMC, per particle run')
-    pf = ss.ParticleFilter(make_pmcmc().init(), likelihood=dict(n_I=ss.poisson()))
+    pf = ss.fit.ParticleFilter(make_pmcmc().init(), likelihood=dict(n_I=ss.poisson()))
     pf(10, seed=0) # Compile
     n = 50
     T = sc.timer()

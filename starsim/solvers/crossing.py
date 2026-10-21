@@ -31,14 +31,18 @@ class Crossing:
     those rates, so each disease's moves (e.g. through the stages of a dwell time) are drawn as they
     would be for it alone. The program's compartments (`y`) are the one copy of the people: each engine
     takes its view of them again after each step, and after anything in Python changes them (`put()`).
+    Its size is counted before it is made (see `ss.solvers.choose.joint_layout()`), and kept within
+    `ss.options.max_joint`; `sim.describe()` shows it, with the memory a whole run takes.
 
     Args:
         sim (`ss.Sim`): the sim
         names (list): the names of the diseases
+        reasons (list): why they are tracked jointly (see `ss.solvers.choose.crossing_groups()`)
     """
-    def __init__(self, sim, names):
+    def __init__(self, sim, names, reasons=None):
         self.sim = sim
         self.names = names
+        self.reasons = reasons or []
         self.engines = []
         self.layout = None # Where each engine's compartments and flows are in the program: see init_layout()
         self.program = None # The program of the diseases together: see build()
@@ -75,6 +79,18 @@ class Crossing:
         """ Drop the arrays the run worked in, for saving """
         ss.shrink(self, ['sim', 'program', 'y', 'layout', 'pieces', 'register', 'shifts', 'jax_run', 'outs'])
         return
+
+    def describe(self):
+        """ For `sim.describe()`: the size of the program, the memory a whole run of it takes, and what is assumed """
+        npts = self.engines[0].mod.t.npts
+        flows = sum(len(e.flows)*L.O for e,L in zip(self.engines, self.layout)) # The program's
+        rates = sum(len(e.flows)*e.n_groups for e in self.engines) + flows*self.n_cols # The rate and multiplier of each flow, in each engine's groups and in the program's
+        kept = npts*(2*rates + (self.n_rows + self.n_trans + self.n_movers)*self.n_cols)*8 # Those at each step, and the compartments and flows at each time point
+        budget = ss.options.max_joint
+        size = f'{self.n_rows:,} compartments in each of {self.n_cols:,} group{"s" if self.n_cols != 1 else ""} ({self.n_rows*self.n_cols:,} in all)'
+        return [size + (f', within ss.options.max_joint ({budget:,})' if budget else ''),
+                f'a whole run takes about {f"{kept/1e9:.2g} GB" if kept >= 1e9 else f"{kept/1e6:.2g} MB"} for its rates and its results by group',
+                'assumed: the diseases start independent of each other (the share in each state of one is the same in every state of the others), and step together, at one timestep']
 
     #%% The people
 

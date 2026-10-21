@@ -10,7 +10,7 @@
 6. **Adopt staged fitting with convergence gates** for the cases that need it: `method=` takes a list of fitting methods, run in order, each starting from the previous one's best fit. A stage that does not converge stops the sequence, so a bad starting point is never handed to an expensive sampler.
 7. **Report whether it converged**, not just the best-fit parameters.
 8. **Use common random numbers in stochastic fits.** Each point is scored by the mean of a few runs with the same seeds (4 by default), which makes nearby points much less noisy to compare. The pairing is strong for small changes in the parameters and weakens once trajectories diverge, so it reduces the noise of a fit without removing it.
-9. **Comparing models is part of v1.** `ss.compare_models([sim_sir, sim_seir], data=df)` fits each and compares how well they predict data they were not fitted to.
+9. **Comparing models is part of v1.** `ss.fit.compare_models([sim_sir, sim_seir], data=df)` fits each and compares how well they predict data they were not fitted to.
 
 ## Why
 
@@ -84,7 +84,7 @@ Against that: [summer2](../approaches/summer2.md), [epipack](../approaches/epipa
 
 ## The specification
 
-[13-inference.md](../design/13-inference.md) specifies all of this: `sim.calibrate()` and its arguments, data attached by name, goodness of fit and likelihoods, how the method is chosen, gradients, staged fitting, what the fit reports, `sim.sensitivity()`, and `ss.compare_models()`. Parameters with bounds and priors are in [04-parameters.md](../design/04-parameters.md), and results and outcomes in [09-results.md](../design/09-results.md).
+[13-inference.md](../design/13-inference.md) specifies all of this: `sim.calibrate()` and its arguments, data attached by name, goodness of fit and likelihoods, how the method is chosen, gradients, staged fitting, what the fit reports, `sim.sensitivity()`, and `ss.fit.compare_models()`. Parameters with bounds and priors are in [04-parameters.md](../design/04-parameters.md), and results and outcomes in [09-results.md](../design/09-results.md).
 
 ## Trade-offs
 

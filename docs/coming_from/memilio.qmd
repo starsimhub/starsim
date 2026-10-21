@@ -140,7 +140,7 @@ These are from Starsim's switching demo for MEmilio users (`tests/switching/test
 | Import an `osecirvvs` model | **Not yet** |
 | Commuters with symptoms commuting less, as MEmilio has them | **Not yet**: `ss.Mobility` cannot say it, and this is most of the county-by-county difference above |
 | German counties by name, with Destatis populations and the commuter matrix (`ss.geo('Germany', level=2)`) | **Not yet**: Starsim's data have no German level-2 populations or commuting |
-| A posterior: NUTS on the ODE with gradients, or particle MCMC on a stochastic model | **Works**, with `sim.calibrate()`; MEmilio has no fitting of its own |
+| A posterior: NUTS on the ODE with gradients, or particle MCMC on a stochastic model | **Works**, with `sim.calibrate(method='nuts')` or `method='pmcmc'`; MEmilio has no fitting of its own |
 
 ## Bringing your model in
 

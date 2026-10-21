@@ -198,7 +198,8 @@ class MultiSim:
             if pars is not None:
                 errormsg = 'ss.parallel() takes pars= or priors=True, not both'
                 raise ValueError(errormsg)
-            pars = ss.calibration.prior_draws(sims[0], sc.ifelse(n_runs, 100), seed=sims[0].pars.rand_seed)
+            from .fit import prior_draws
+            pars = prior_draws(sims[0], sc.ifelse(n_runs, 100), seed=sims[0].pars.rand_seed)
             n_runs = 1
         if pars is not None:
             n_runs = sc.ifelse(n_runs, 1)
@@ -395,8 +396,8 @@ class MultiSim:
             t (int/str/date): if None, compare each result over the whole run (see `sim.summarize()`); else, the timestep index or date to compare the results at
             sim_inds (list): the positions of the runs to include (default: all)
             output (bool): whether to return the dataframe (otherwise, print it)
-            do_plot (bool): whether to also plot the comparison (see `msim.plot_compare()`)
-            kwargs (dict): passed to `msim.plot_compare()`
+            do_plot (bool): whether to also plot the comparison as a bar chart, with one panel per result
+            kwargs (dict): for the plot: see `ss.plot_args()`
 
         Examples:
             ```python
@@ -405,6 +406,7 @@ class MultiSim:
             msim = ss.parallel(s1, s2)
             msim.compare() # Print the summaries
             df = msim.compare(t='2030-01-01', output=True) # Results on that date
+            msim.compare(do_plot=True) # Plot the summaries
             ```
         """
         self.check_run('compare')
@@ -430,7 +432,14 @@ class MultiSim:
 
         df = sc.dataframe(resdict, dtype=object) # Object dtype prevents ints being converted to floats
         if do_plot:
-            self.plot_compare(df=df, **kwargs)
+            numeric = df[df.map(sc.isnumber).all(axis=1)] # Skip non-numeric rows
+            kw = ss.plot_args(kwargs)
+            with ss.style(**kw.style):
+                fig, axs = sc.getrowscols(len(numeric), make=True, **kw.fig)
+                for ax, (key, row) in zip(sc.toarray(axs).flatten(), numeric.iterrows()):
+                    ax.barh(row.index, row.values.astype(float), **kw.plot)
+                    ax.set_title(key)
+            ss.return_fig(fig, **kw.return_fig)
         if output:
             return df
         else:
@@ -462,33 +471,6 @@ class MultiSim:
         """ Every result across the runs, as quantiles at each time for each scenario: a long dataframe with columns `module`, `result`, `scenario`, `time`, `quantile`, and `value` (with `quantiles=None`, one row per run and time instead) """
         self.check_run('to_df')
         return self.results.to_df(quantiles=quantiles)
-
-    def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):
-        """
-        Plot a bar chart comparing the runs, with one panel per result; see `msim.compare()`.
-
-        Args:
-            t (int/str/date): passed to `msim.compare()`
-            sim_inds (list): passed to `msim.compare()`
-            df (dataframe): if supplied, plot this instead of calling `msim.compare()`
-            kwargs (dict): see `ss.plot_args()` for all valid options
-
-        Examples:
-            ```python
-            msim = ss.MultiSim(ss.Sim(diseases='sis', networks='random'), n_runs=3).run()
-            msim.plot_compare()
-            ```
-        """
-        if df is None:
-            df = self.compare(t=t, sim_inds=sim_inds, output=True)
-        df = df[df.map(sc.isnumber).all(axis=1)] # Skip non-numeric rows
-        kw = ss.plot_args(kwargs)
-        with ss.style(**kw.style):
-            fig, axs = sc.getrowscols(len(df), make=True, **kw.fig)
-            for ax, (key, row) in zip(sc.toarray(axs).flatten(), df.iterrows()):
-                ax.barh(row.index, row.values.astype(float), **kw.plot)
-                ax.set_title(key)
-        return ss.return_fig(fig, **kw.return_fig)
 
     def plot(self, key=None, fig=None, legend=True, lines=False, **kwargs):
         """

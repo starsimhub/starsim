@@ -437,6 +437,44 @@ def test_coded_beside():
     return numpy
 
 
+def test_joint_population():
+    sc.heading('Testing diseases tracked jointly: the same people in each, as a joint model written by hand, within a budget')
+    def pair(solver='auto', **kwargs):
+        a = ss.Disease(infection=ss.transmission('S -> I', beta=0.5), death=ss.Transition('I', ss.null, dur=2), init_prev=0.1, name='a')
+        b = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> S', dur=3), init_prev=0.1, name='b')
+        return ss.Sim([a, b], total_pop=20_000, stop=2030, solver=solver, verbose=0, **kwargs)
+
+    # Dying of one disease leaves the other too, though neither refers to the other (b kept all 20,000 people, with 1,642 left in a)
+    for solver in ['ode', 'binomial']:
+        sim = pair(solver).run()
+        res = sim.results
+        assert sim.crossings and np.allclose(res.a.n_S + res.a.n_I, res.b.n_S + res.b.n_I)
+
+    # The same as the joint model written as one disease, whose states are the combinations
+    SS, SI, IS, II = ss.states('SS SI IS II')
+    ba, bb = ss.peryear(0.5), ss.peryear(0.3)
+    joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
+                       r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.null, dur=2), d2=ss.Transition(II, ss.null, dur=2),
+                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), name='ab')
+    j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
+    res = pair().run().results
+    assert np.allclose(res.a.n_I.values, j.n_IS.values + j.n_II.values, rtol=1e-9) and np.allclose(res.b.n_I.values, j.n_SI.values + j.n_II.values, rtol=1e-9)
+
+    # Above the budget, auto runs agents, and a compartmental solver that was asked for stops before anything is made
+    with ss.options.context(max_joint=3):
+        sim = pair().init()
+        assert sim.solver == 'abm' and 'max_joint' in sim.solver_reason
+        with pytest.raises(ss.CapabilityError, match='max_joint=4'):
+            pair('ode').init()
+    S, A, B, I = ss.states('S A B I') # A first state that splits on entry has no joint form yet: auto runs agents rather than stopping
+    split = ss.Disease(S, A, B, I, split=ss.Transition(S, [A, B], p=[0.5, None], dur=0), inf=A >> I @ ss.peryear(0.5)*I, init=dict(I=0.1), name='a')
+    assert ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver == 'abm'
+    text = pair().init().describe(output=True)
+    assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
+    assert 'plan         a, b: in the kernels, the whole run in one call; a × b as one program' in text
+    return j
+
+
 if __name__ == '__main__':
     T = sc.timer()
     for row in guesses:
@@ -447,4 +485,5 @@ if __name__ == '__main__':
     for name in corpus.compartmental:
         test_solvers_agree(name)
     behavior = test_behavior_solvers()
+    joint = test_joint_population()
     T.toc()

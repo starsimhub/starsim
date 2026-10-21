@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import starsim.interop
 
 ref_n_I = {1990: 3150.376, 2010: 1527.021, 2025: 1477.900} # switching/summer2.md, "The second week" §1: summer2's active TB (all ages) from tb_summer2.py
@@ -63,7 +64,7 @@ def jax_logdensity(sim, x):
     with jax.enable_x64(True):
         in_jax = float(density(jax.numpy.asarray(x)))
     set_pars(x)
-    from_sim = ss.calibration.loglik(sim.run(), likelihood=lik) + sum(ss.calibration.logprior(p, v) for p,v in zip(fitted.values(), x))
+    from_sim = ss.fit.loglik(sim.run(), likelihood=lik) + sum(ss.fit.logprior(p, v) for p,v in zip(fitted.values(), x))
     return in_jax, from_sim
 
 

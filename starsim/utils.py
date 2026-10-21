@@ -147,8 +147,6 @@ class ndict(sc.objdict):
             errormsg = f'Key must be a str or type, not {key}'
             raise TypeError(errormsg)
 
-        return # Unreachable
-
     def extend(self, *args, **kwargs):
         """ Add new items to the ndict, by item, list, or dict """
         args = sc.mergelists(*args)
@@ -795,7 +793,7 @@ def shrink(obj=None, attrs=None, verbose=False):
 # Specify known/common keywords
 plotting_kw = sc.objdict()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
-plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.plot = ['alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
@@ -828,7 +826,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     Valid kwarg arguments are:
 
         - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
-        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - plot: 'alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
         - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'

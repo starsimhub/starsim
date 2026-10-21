@@ -76,7 +76,7 @@ def test_baseline():
     new.run()
 
     # Compute the comparison
-    ss.diff_sims(old, new, die=True)
+    ss.debugtools.diff_sims(old, new, die=True)
 
     return new
 

@@ -266,7 +266,7 @@ def test_time_points():
     res = sim.results.sir
     weeks = np.arange(7, 85, 7)
     weekly = lambda flow: np.add.reduceat(flow.values[1:], np.arange(0, 84, 7)) # Days 1 to 7, 8 to 14, ...
-    out = ss.calibration.compare(sim, pd.DataFrame(dict(cases=weekly(res.cases), new_infections=weekly(res.infection)), index=weeks))
+    out = ss.results.compare(sim, pd.DataFrame(dict(cases=weekly(res.cases), new_infections=weekly(res.infection)), index=weeks))
     assert len(out.cases[1]) == 12 and np.allclose(*out.cases)
     assert 'new_infections' not in res and np.allclose(*out.new_infections) # Starsim 3's name for the one transmission's flow
     assert np.allclose(res.cases.resample('week'), weekly(res.cases)) # The same weekly totals
@@ -308,6 +308,23 @@ def test_destinations():
 
 
 
+@sc.timer()
+def test_compare_data():
+    sc.heading('Testing lining up results with data')
+    sim = ss.Sim(diseases='sis', networks='random', n_agents=small, start=2000, stop=2010, verbose=0).run()
+    res = sim.results.sis
+    dates = [ss.date(f'{y}-07-01') for y in range(2001, 2010)] # Between steps, so a stock is interpolated
+    df = pd.DataFrame({'sis.prevalence': 0.1, 'sis.new_infections': 5.0}, index=pd.Index(dates, dtype=object))
+    compared = ss.results.compare(sim, df)
+    lined = ss.results.lineup(sim, df)
+    years = ss.results.data_times(sim, df)[1]
+    assert np.allclose(compared['sis.prevalence'][1], np.interp(years, sim.t.yearvec, res.prevalence.values)) # A stock, at the data's times
+    assert np.allclose(compared['sis.new_infections'][1][1:], [res.new_infections.values[(sim.t.yearvec > y-1) & (sim.t.yearvec <= y)].sum() for y in years[1:]]) # A flow, summed over the year to each
+    for col,(W,expected,rows) in lined.items(): # The same matrix as calibration uses
+        assert np.allclose(W @ ss.results.match_column(sim, col).values, compared[col][1])
+    return compared
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -325,6 +342,7 @@ if __name__ == '__main__':
     res6 = test_destinations()
     res6 = test_result_exprs()
     res7 = test_standard_prevalence()
+    res8 = test_compare_data()
 
     sc.toc(T)
     plt.show()

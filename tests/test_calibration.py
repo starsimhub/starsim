@@ -4,6 +4,7 @@ Test calibration
 
 #%% Imports and settings
 import starsim as ss
+import starsim.fit
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -31,7 +32,7 @@ def test_particle_mcmc():
 
     # The particle filter's estimate of the likelihood is highest at the value that made the data
     sim = make(data=data).init()
-    filt = ss.ParticleFilter(sim)
+    filt = ss.fit.ParticleFilter(sim)
     assert filt.series[0].spans[-1][0] > 70 # The last weekly point is worked out from its own week, not from the start
     est = {}
     for beta in [0.4, 0.5, 0.6]:
@@ -39,8 +40,9 @@ def test_particle_mcmc():
         est[beta] = filt(n_particles=100, seed=1)
     assert est[0.5] > max(est[0.4], est[0.6])
 
-    # Particle MCMC is the default for a stochastic compartmental sim whose data has a likelihood
-    fit = make(beta=0.3, data=data).calibrate(draws=150, warmup=150, chains=2, particles=50, parallel=False, rand_seed=1)
+    # Particle MCMC, for a stochastic compartmental sim whose data has a likelihood (asked for by name: the default is a best fit)
+    assert ss.fit.default_method(sim, True)[0] == 'optuna'
+    fit = make(beta=0.3, data=data).calibrate(method='pmcmc', draws=150, warmup=150, chains=2, particles=50, parallel=False, rand_seed=1)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'pmcmc'
@@ -52,7 +54,7 @@ def test_particle_mcmc():
     # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
     best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
     assert len(best.scores) == 4 # The default for a stochastic compartmental sim
-    assert ss.calibration.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
+    assert ss.fit.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
     assert np.isclose(best.mismatch, np.mean(best.scores))
     assert best.trials.objective.nunique() == len(best.trials) # Fresh seeds, so no two trials share their chance
     return fit
