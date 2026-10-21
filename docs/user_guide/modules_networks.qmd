@@ -154,7 +154,7 @@ Starsim provides different network types for different transmission scenarios:
 |-------|---------|------------|----------|
 | `RandomNet` | Random connections | `n_contacts`, `dur`, `dynamic`, `age_range`, `method` | General infectious diseases |
 | `PartnerNet` | Lasting partnerships, between anyone, some people (`where=`), or two groups (`between=`) | `n_contacts`, `dur`, `acts`, `between`, `where` | Needle sharing, sex work, other lasting partnerships |
-| `MFNet` | Male-female partnerships | `dur`, `acts`, `debut`, `participation` | Heterosexual STI transmission |
+| `MFNet` | Male-female partnerships | `dur`, `acts`, `debut`, `participation`, `n_contacts`, `concurrency`, `max_contacts` | Heterosexual STI transmission |
 | `PrenatalNet` | Prenatal transmission | `dur`, `start`, `end` | In-utero (vertical) transmission |
 | `PostnatalNet` | Postnatal transmission | Inherits from `DynamicNetwork` | Breastfeeding, birth canal |
 
@@ -166,7 +166,7 @@ Starsim provides different network types for different transmission scenarios:
 | `ClusterNet` | Fully connected clusters | `cluster_size`, `dynamic`, `age_range` | Households and other small groups |
 | `HybridNet` | Covasim's household, school, work, and community networks | `household_size`, `contacts`, `school_ages`, `work_ages` | Respiratory diseases with structured contacts |
 | `MSMNet` | Male-male partnerships | `dur`, `acts`, `participation` | MSM STI transmission |
-| `DegreeNet`, `DegreeMFNet` | Partnerships with a target number of partners at a time | `n_contacts`, `dur`, `concurrency`, `max_contacts`, `match` | Partnership networks fitted to target statistics (as in EpiModel) |
+| `DegreeNet` | Partnerships with a target number of partners at a time | `n_contacts`, `dur`, `concurrency`, `max_contacts`, `match` | Partnership networks fitted to target statistics (as in EpiModel) |
 | `StaticNet` | NetworkX graph conversion | `graph`, `p`, `n_contacts` | Pre-defined network structures |
 | `RandomSafeNet` | Random connections that are random-number safe | `n_edges`, `dur` | Scenario comparisons that need common random numbers |
 | `ErdosRenyiNet` | Probabilistic edges | `p` (edge probability), `dur` | Theoretical network studies |
@@ -192,7 +192,7 @@ Starsim provides different network types for different transmission scenarios:
 - **For sexually transmitted infections:**
     - `MFNet`: Male-female (heterosexual) transmission
     - `PartnerNet`: Lasting partnerships (e.g. needle sharing, or between sex workers and clients)
-    - `ssl.DegreeNet`, `ssl.DegreeMFNet`: Partnerships with a target number of partners at a time
+    - `ssl.DegreeNet`: Partnerships with a target number of partners at a time
     - `ssl.MSMNet`: Transmission between men who have sex with men (MSM)
 - **For mother-to-child transmission:**
     - `PrenatalNet`: In-utero transmission (HIV, syphilis)

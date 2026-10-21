@@ -69,7 +69,7 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | A contact matrix by age | `networks=ss.contacts(matrix, bands=[...])`, with the disease stratified by the same bins (or a coarser set; `MatrixAggregated` says how it was aggregated) |
 | A matrix for each of several dimensions | `ss.contacts(age=M1, location=M2)` |
 | Coupling between places | `ss.Mobility(matrix=M)` (commuting), `ss.Mobility(kind='force')` (the force of infection moves), `ss.gravity(k=, a=, b=, c=)` |
-| A dynamic partnership network (ERGM-style targets) | `ssl.DegreeNet(n_contacts=, concurrency=, dur=, match=dict(risk=0.9))`, `ssl.DegreeMFNet(...)` for men and women (`import starsim.library as ssl`); `ss.PartnerNet(n_contacts=, dur=)` for lasting partnerships without targets |
+| A dynamic partnership network (ERGM-style targets) | `ssl.DegreeNet(n_contacts=, concurrency=, dur=, match=dict(risk=0.9))` (`import starsim.library as ssl`), or `ss.MFNet(n_contacts=, concurrency=, max_contacts=)` for men and women; `ss.PartnerNet(n_contacts=, dur=)` for lasting partnerships without targets |
 | A random network | `ss.RandomNet(n_contacts=)`, with `method='exact'` for a fixed number of contacts each |
 
 ## Interventions

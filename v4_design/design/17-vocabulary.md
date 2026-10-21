@@ -89,7 +89,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | `ss.Network` | Base class for networks |
 | `ss.RandomNet` `ss.MFNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph) |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
-| **`ss.PartnerNet`** | Lasting partnerships that form and dissolve (not only sexual: needle sharing, sex work), described by the mean number of partners at a time (`n_contacts`), their duration, acts per unit time in each partnership (`acts=`), who takes part (`where=`), and partnerships between two groups only (`between=`, lasting or one-off). Targets for the number of partners (concurrency, a maximum, `match=`, as EpiModel's) are the library's `ssl.DegreeNet` and `ssl.DegreeMFNet` |
+| **`ss.PartnerNet`** | Lasting partnerships that form and dissolve (not only sexual: needle sharing, sex work), described by the mean number of partners at a time (`n_contacts`), their duration, acts per unit time in each partnership (`acts=`), who takes part (`where=`), and partnerships between two groups only (`between=`, lasting or one-off). Targets for the number of partners (concurrency, a maximum, `match=`, as EpiModel's) are the library's `ssl.DegreeNet` (`ss.MFNet` takes `n_contacts`, `concurrency` and `max_contacts`) |
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
 | **`ss.geo`** | A geography: names, populations, centroids, distances; named (`ss.geo('Kenya', level=1)`) or given directly |
 | **`ss.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
@@ -188,7 +188,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.data` | `aliases` `ignore_extra` |
 | `ss.Requires` | `shape` `source` `doc` `default` |
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
-| `ss.MFNet` | Starsim's `dur` `acts` `participation` `debut` |
+| `ss.MFNet` | Starsim's `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` |
 | `ss.Mobility` | `matrix` `data` `kind` `away` |
 | `ss.PartnerNet` | `n_contacts` `dur` `acts` `sides` `between` `where` |
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
