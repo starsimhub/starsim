@@ -111,13 +111,13 @@ def test_clocks():
 
     # Errors: outside the domain (E212), and no scheduled dwell (E213); as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.ClockOutsideDomain):
+    with pytest.raises(ss.errors.ClockOutsideDomain):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
     d, ab = make()
-    with pytest.raises(ss.ClockOutsideDomain):
+    with pytest.raises(ss.errors.ClockOutsideDomain):
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1)), n_agents=100, **kw).init()
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.NoScheduledDwell):
+    with pytest.raises(ss.errors.NoScheduledDwell):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.perday(0.2), bc=ss.Transition(A, C, rate=ss.perday(1)*A.progress))
     d, ab = make()
     with pytest.raises(ss.CapabilityError):
@@ -159,7 +159,7 @@ def test_syphilis_latent():
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.graph.states.EL | s.graph.states.LL
     assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - s.ti_EL[late])/12) # From latent onset, as the workaround meant
-    with pytest.raises(ss.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
+    with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
 

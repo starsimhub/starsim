@@ -8,13 +8,13 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 
 | LASER | Starsim v4 | Fit |
 |---|---|---|
-| Places (`GeoDataFrame` with populations and coordinates) | `ss.geo(names=..., pop=..., lat=..., lon=...)` or `x=`/`y=` in km, or `distances=` | Exact |
+| Places (`GeoDataFrame` with populations and coordinates) | `ss.geo.location(names=..., pop=..., lat=..., lon=...)` or `x=`/`y=` in km, or `distances=` | Exact |
 | `SEIR.Transmission` with `beta` | `S >> E @ ss.perday(beta) * I` | Exact |
 | `SEIR.Exposed`/`Infectious` with `normal(loc, scale)` | `E >> I @ ss.normal(7, 1, unit='days')` | Exact as agents; Erlang stages as an ODE |
 | `gamma(shape=40, scale=0.25)` | `ss.erlang(k=40, mean=ss.days(10))` | Exact |
-| Gravity coupling of the force of infection | `dis.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))` | Exact (`kind='force'` is LASER's form) |
-| Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.Mobility(matrix=gravity, kind='force')` | Exact |
-| Ghana's mixing (residents make a share of contacts elsewhere) | `ss.Mobility(ss.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
+| Gravity coupling of the force of infection | `dis.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(c=2.5), kind='force', away=3/32))` | Exact (`kind='force'` is LASER's form) |
+| Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.geo.Mobility(matrix=gravity, kind='force')` | Exact |
+| Ghana's mixing (residents make a share of contacts elsewhere) | `ss.geo.Mobility(ss.geo.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
 | Initial infections in one place | `init=dict(I=ss.by(patch=[0, 100] + [0]*14))` | Exact |
 | Births at a crude rate | `ss.birth(S, rate=ss.peryear(cbr/1000))`; vaccinated births as a second `ss.birth(R, ...)` | Exact |
 | Deaths at a constant rate | `ss.death(rate=ss.peryear(0.007))` | Exact |
@@ -29,7 +29,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 ## What needs care
 
 - **The coupling moves the force of infection, not people.** LASER adds `f[i]·network[i,j]` to place `j`'s force of infection, unweighted by size. Starsim's default commuting moves people; use `kind='force'` to match.
-- **`ss.gravity`'s exponent `a` is that of `pop[i]^(a−1)`.** LASER's `a=0` is Starsim's `a=1`. And `ss.Mobility(away=)` gives every place the same share exported: for laser-measles' mean-share scaling and per-place cap, build the matrix yourself.
+- **`ss.geo.gravity`'s exponent `a` is that of `pop[i]^(a−1)`.** LASER's `a=0` is Starsim's `a=1`. And `ss.geo.Mobility(away=)` gives every place the same share exported: for laser-measles' mean-share scaling and per-place cap, build the matrix yourself.
 - **`ss.gamma(40, 0.25)` is not shape 40 and scale 0.25** (the second positional argument is SciPy's `loc`). Use `ss.erlang(k=, mean=)`.
 - **The original's order of components changes the durations.** With `Exposed` before `Infectious` in the component list, someone who becomes infectious counts down that same day, so the infectious period is a day shorter than written (`round(normal(8, 2)) − 1`). Check the component order and set the Starsim duration to what the original actually does; say so in a comment.
 - **Bare stops are in the sim's unit.** Write `unit='day', stop=years*365`.
@@ -47,7 +47,7 @@ names  = ['Central City'] + [f'Town {i+1}' for i in range(5)] + [f'Interim {i+1}
 pop    = [1_000_000] + [100_000]*5 + [25_000]*10
 dist   = [0] + [150]*5 + [50, 100]*5 # Distance from the city, in km
 angle  = [0] + list(angles) + list(np.repeat(angles, 2))
-places = ss.geo(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
+places = ss.geo.location(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
 
 S, E, I, R = ss.states('S E I R')
 seir = ss.Disease(
@@ -56,7 +56,7 @@ seir = ss.Disease(
     recovery  = ss.Transition(I, R, dur=ss.normal(14, 2, unit='days')),
     init      = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
 )
-seir.stratify(patch=places, mobility=ss.Mobility(ss.gravity(c=2.5), kind='force', away=3/32))
+seir.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(c=2.5), kind='force', away=3/32))
 sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))
 ```
 

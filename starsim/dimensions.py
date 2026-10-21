@@ -7,7 +7,7 @@ import sciris as sc
 import starsim as ss
 from .expressions import as_expr, did_you_mean
 from .parameters import by
-from .networks import geo, gravity, Mobility
+from .geo import location, gravity, Mobility
 from .transitions import parse_arrow, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
@@ -27,9 +27,9 @@ class Strat:
     Args:
         name (str): the dimension, e.g. 'age'
         levels (list): bin edges (for a continuous property such as age) or labels
-        split (list): the share of the population in each level (if not given: from an `ss.geo`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
+        split (list): the share of the population in each level (if not given: from an `ss.geo.location`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-        kind (str): 'age', 'space', 'strain', 'clock', or 'plain'; if not given, 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for a dimension called age, and otherwise 'plain'
+        kind (str): 'age', 'space', 'strain', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.location` or with `mobility=`, 'strain' with `immunity=`, 'age' for a dimension called age, and otherwise 'plain'
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
         mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
@@ -42,7 +42,7 @@ class Strat:
     """
     def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None, immunity=None):
         self.name = name
-        self.geo = levels if isinstance(levels, geo) else None
+        self.geo = levels if isinstance(levels, location) else None
         self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'strain' if immunity is not None else 'age' if name == 'age' else 'plain')
         self.guessed = sc.objdict()
         self.states = states
@@ -100,9 +100,9 @@ class Strat:
         for key,vals in (adjust or {}).items():
             vals = np.array(vals, dtype=float)
             if len(vals) != self.n:
-                raise ss.ShapeError(f'the adjustment of "{key}" has {len(vals)} values, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
+                raise ss.errors.ShapeError(f'the adjustment of "{key}" has {len(vals)} values, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
             if np.any(vals < 0):
-                raise ss.InvalidAdjustment(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
+                raise ss.errors.InvalidAdjustment(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
         self.immunity = None
         self.combine = 'max' # How the protection from several strains a person has had adds up: see ss.immunity
@@ -120,7 +120,7 @@ class Strat:
                 errormsg = f'immunity= is for a strain dimension, but "{name}" is of kind "{self.kind}"; pass kind="strain" if it is one'
                 raise ValueError(errormsg)
             if immunity.shape != (self.n, self.n):
-                raise ss.ShapeError(f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
+                raise ss.errors.ShapeError(f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
             self.immunity = immunity
         self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
         self.cond = None # For a dimension of some states only, a split given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
@@ -131,7 +131,7 @@ class Strat:
         if split is not None:
             split = np.array(split, dtype=float)
             if len(split) != self.n:
-                raise ss.BadSplit(f'split= has {len(split)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
+                raise ss.errors.BadSplit(f'split= has {len(split)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
             if not np.isclose(split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {split.sum():n}'
                 split = split/split.sum()
@@ -197,9 +197,9 @@ class Strat:
         for label,s in zip(self.labels, sets):
             missing = s - set(names)
             if missing:
-                raise ss.ShapeError(f'the level "{label}" of "{self.name}" carries {sc.strjoin(sorted(missing))}, which has no level of its own; each strain carried needs one.')
+                raise ss.errors.ShapeError(f'the level "{label}" of "{self.name}" carries {sc.strjoin(sorted(missing))}, which has no level of its own; each strain carried needs one.')
         if len(set(sets)) != len(sets):
-            raise ss.ShapeError(f'"{self.name}" has two levels that carry the same strains ({sc.strjoin(self.labels)}).')
+            raise ss.errors.ShapeError(f'"{self.name}" has two levels that carry the same strains ({sc.strjoin(self.labels)}).')
         lookup = {s:i for i,s in enumerate(sets)}
         self.base = np.array(sorted(names.values())) # The levels of a single strain
         self.carries = np.zeros((self.n, self.n), dtype=bool) # carries[l, j]: people at level l carry strain j
@@ -392,7 +392,7 @@ class Transfer:
                 what = f'{len(self.dsts)} levels to move to' if len(self.dsts) > 1 else 'one level to move to'
                 errormsg = (f'p= of ss.transfer() gives the probability of each level it moves people to, one each (or None for the rest), as people move, e.g. ss.transfer(method="none -> pill | iud", p=[0.6, 0.4], dur=...); '
                             f'it has {what} and p={p}. For only some people to move, give a rate (rate=), or where= on the stratification')
-                raise ss.BadBranchSplit(errormsg)
+                raise ss.errors.BadBranchSplit(errormsg)
             self.p = [None if v is None else as_expr(v) for v in p]
         self.rate = None if rate is None else as_expr(rate)
         self.dur = None if dur is None else as_expr(dur)
@@ -493,7 +493,7 @@ def parse_stratify(kwargs, graphs, sim=False):
     """
     kwargs = dict(kwargs)
     opts = {key:kwargs.pop(key, None) for key in strat_options}
-    if opts['immunity'] is not None and np.ndim(opts['immunity']) == 1 and not any(isinstance(v, (list, tuple, np.ndarray, geo)) for v in kwargs.values()): # Levels, not the protection between strains: a dimension called immunity
+    if opts['immunity'] is not None and np.ndim(opts['immunity']) == 1 and not any(isinstance(v, (list, tuple, np.ndarray, location)) for v in kwargs.values()): # Levels, not the protection between strains: a dimension called immunity
         kwargs['immunity'] = opts.pop('immunity')
         opts['immunity'] = None
     misplaced = [key for key in kwargs if key in ['inplace', 'frame']]
@@ -519,7 +519,7 @@ def parse_stratify(kwargs, graphs, sim=False):
         for name in states:
             if graphs and name not in names('states'):
                 where = f'"{graphs[0].module.name}" does not have. Its states are' if not sim else 'no module in the sim has. The states are'
-                raise ss.UnknownState(f'states= names a state "{name}" that {where} {sc.strjoin(names("states"))}{did_you_mean(name, names("states"))}')
+                raise ss.errors.UnknownState(f'states= names a state "{name}" that {where} {sc.strjoin(names("states"))}{did_you_mean(name, names("states"))}')
     adjust = opts['adjust'] or {}
     for key in adjust:
         if key in ['rel_trans', 'rel_sus'] or not graphs:
@@ -530,7 +530,7 @@ def parse_stratify(kwargs, graphs, sim=False):
             options = [f'{g.module.name}.{t}' if sim else t for g in graphs for t in g.transitions]
             what = 'names a transition' if not having else 'names a transition of more than one module,'
             whose = f'"{graphs[0].module.name}" does not have. Its transitions are' if not sim else 'no single module has. The transitions are'
-            raise ss.UnknownTransition(f'adjust= {what} "{key}" that {whose} {sc.strjoin(options)} (and it can also adjust rel_trans and rel_sus).')
+            raise ss.errors.UnknownTransition(f'adjust= {what} "{key}" that {whose} {sc.strjoin(options)} (and it can also adjust rel_trans and rel_sus).')
     strats = []
     for name,levels in dims.items():
         strat = Strat(name, levels, **opts)
@@ -571,7 +571,7 @@ class Groups:
         for call in sc.tolist(sim.pars.stratify):
             for strat in parse_stratify(call, graphs=[mod.graph for mod in sim.declared], sim=True)[0]:
                 if strat.name in strats:
-                    raise ss.DuplicateStructuralDimension(f'the sim is already stratified by "{strat.name}".')
+                    raise ss.errors.DuplicateStructuralDimension(f'the sim is already stratified by "{strat.name}".')
                 strats[strat.name] = strat
                 self.sim_strats.append(strat)
         for strat in strats.values(): # An age group nobody is in: the edges are lower edges, so [0, 15, 120] has a group 120+
@@ -585,11 +585,11 @@ class Groups:
                 if strat.name in strats:
                     other = strats[strat.name]
                     if not strat.same_levels(other):
-                        raise ss.InconsistentDimension(f'"{mod.name}" is stratified by "{strat.name}" with levels {strat.labels}, but another module or the sim uses {other.labels}.\n'
+                        raise ss.errors.InconsistentDimension(f'"{mod.name}" is stratified by "{strat.name}" with levels {strat.labels}, but another module or the sim uses {other.labels}.\n'
                                                        f'     A property of people has the same groups for every module; stratify the sim instead: sim.stratify({strat.name}=[...]).')
                     elif 'split' not in strat.guessed and strat.joint is None and not np.allclose(strat.split, other.split): # An explicit split is used, whichever stratification it is on
                         if 'split' not in other.guessed:
-                            raise ss.InconsistentDimension(f'"{mod.name}" is stratified by "{strat.name}" with split {strat.split.tolist()}, but another module or the sim gives it the split {other.split.tolist()}; give it once.')
+                            raise ss.errors.InconsistentDimension(f'"{mod.name}" is stratified by "{strat.name}" with split {strat.split.tolist()}, but another module or the sim gives it the split {other.split.tolist()}; give it once.')
                         other.split = strat.split
                         other.guessed.pop('split')
                 else:
@@ -600,7 +600,7 @@ class Groups:
                         strats[tf.dim] = Strat(tf.dim, [False, True], split=[1.0, 0.0])
                         mod.graph.strats.append(strats[tf.dim])
                     else:
-                        raise ss.MissingDimension(f'the transfer "{tf.name}" moves people along "{tf.dim}", but the model is not stratified by it. Add e.g. {mod.name}.stratify({tf.dim}=[...]).')
+                        raise ss.errors.MissingDimension(f'the transfer "{tf.name}" moves people along "{tf.dim}", but the model is not stratified by it. Add e.g. {mod.name}.stratify({tf.dim}=[...]).')
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         for mod in sim.pars.interventions.values(): # Properties of people that the interventions need, e.g. holding a product
             if hasattr(mod, 'dims'):
@@ -610,7 +610,7 @@ class Groups:
                 self.dim_moves += [move for move in mod.dim_moves() if move.dim not in [m.dim for m in self.dim_moves]]
                 for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
                     if dim not in strats:
-                        raise ss.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+                        raise ss.errors.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         if sim.solver not in [None, 'abm']: # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
             for mod in sim.declared:
                 for tf in mod.graph.transfers.values():
@@ -627,12 +627,12 @@ class Groups:
                 strat.guessed['split'] = f'everyone at {strat.labels[0]}, the first level, since people are moved between its levels'
         for strat in self.cross_strats:
             if strat.name in strats:
-                raise ss.DuplicateStructuralDimension(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
+                raise ss.errors.DuplicateStructuralDimension(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
         for strat in self.strats: # A clock starts with everyone at none
             if strat.kind == 'clock' and 'split' not in strat.guessed:
-                raise ss.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
+                raise ss.errors.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
@@ -675,7 +675,7 @@ class Groups:
                     strat, total = self.strats[d], grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
                     if strat.joint is None and strat.split_given and 'split' not in strat.guessed and not np.allclose(strat.split, total, atol=1e-6): # TL4: the given split was silently replaced
                         others = [self.strats[dd].name for dd in ds if dd != d]
-                        raise ss.InconsistentDimension(f'"{strat.name}" is given the split {np.round(strat.split, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
+                        raise ss.errors.InconsistentDimension(f'"{strat.name}" is given the split {np.round(strat.split, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
                                                        f'a split over several dimensions is the share at each combination of their levels. For rows that are the shares of {sc.strjoin(others)} given "{strat.name}", '
                                                        f'multiply them by the share at each level of "{strat.name}" ({np.round(strat.split, 4).tolist()}) first, or leave out one of the two splits.')
                     strat.split = total
@@ -766,7 +766,7 @@ class Groups:
         for d in pending:
             for dim in self.strats[d].where:
                 if dim not in names:
-                    raise ss.MissingDimension(f'"{self.strats[d].name}" is stratified where {dim} is given, but the model is not stratified by "{dim}". Add e.g. sim.stratify({dim}=[...]).')
+                    raise ss.errors.MissingDimension(f'"{self.strats[d].name}" is stratified where {dim} is given, but the model is not stratified by "{dim}". Add e.g. sim.stratify({dim}=[...]).')
                 if dim == self.strats[d].name:
                     errormsg = f'The where= of "{dim}" refers to "{dim}" itself'
                     raise ValueError(errormsg)

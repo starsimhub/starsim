@@ -54,8 +54,11 @@ def choose_solver(sim):
     """
     pars = sim.pars
     solvers = ss.solvers
-    ss.pregnancy.add_lactation(sim)
-    modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
+    gather = lambda: [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
+    for mod in gather(): # A module may add the others it needs, or find the ones it works with, before they are gathered (e.g. ss.Pregnancy adds an ss.Lactation)
+        if hasattr(mod, 'link'):
+            mod.link(sim)
+    modules = gather()
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
     sim._resolve_path_triggers() # A trigger on another module's transition by path is its event
     sim._init_flows()
@@ -179,7 +182,7 @@ def choose_solver(sim):
                 p.raw.check(sim)
     # The notes on what was chosen, kept in sim.notes whatever the verbosity
     if sim.unit_source:
-        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.UnitInferred, sim=sim)
+        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.errors.UnitInferred, sim=sim)
     return
 
 
@@ -228,14 +231,14 @@ def check_routes(sim):
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, dict)]:
-                given = [ss.standardize_netkey(k) for k in p.raw if k != 'default']
-                unknown = [k for k in p.raw if k != 'default' and ss.standardize_netkey(k) not in [ss.standardize_netkey(r) for r in routes]]
-                missing = [r for r in routes if ss.standardize_netkey(r) not in given]
+                given = [ss.utils.standardize_netkey(k) for k in p.raw if k != 'default']
+                unknown = [k for k in p.raw if k != 'default' and ss.utils.standardize_netkey(k) not in [ss.utils.standardize_netkey(r) for r in routes]]
+                missing = [r for r in routes if ss.utils.standardize_netkey(r) not in given]
                 if 'default' in p.raw: # Written for any sim, e.g. by a library: the routes it does not name take the default, and the names that are not routes of this sim are not used
                     if unknown:
                         ss.note(f'the beta of "{mod.name}.{tr.name}" names {sc.strjoin(unknown)}, which {"is not a route" if len(unknown) == 1 else "are not routes"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the routes are {sc.strjoin(routes) or "none"}, and those not named take the default', sim=sim)
                 elif unknown or missing:
-                    raise ss.RouteMismatch(f'the beta of "{mod.name}.{tr.name}" is given for each route, as {sc.strjoin(p.raw.keys())}, but the routes are {sc.strjoin(routes) or "none (homogeneous mixing)"}: '
+                    raise ss.errors.RouteMismatch(f'the beta of "{mod.name}.{tr.name}" is given for each route, as {sc.strjoin(p.raw.keys())}, but the routes are {sc.strjoin(routes) or "none (homogeneous mixing)"}: '
                                            f'{"no route is called " + sc.strjoin(unknown) if unknown else ""}{"; " if unknown and missing else ""}{sc.strjoin(missing) + " " + ("has" if len(missing) == 1 else "have") + " no value" if missing else ""}.')
     check_betas(sim, nets)
     for net in nets: # beta times the number of contacts is a hazard, so only one of them may carry a time unit
@@ -246,12 +249,12 @@ def check_routes(sim):
                 for tr in mod.graph.transmissions:
                     typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.Rate)]
                     if typed:
-                        raise ss.WrongDimension(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
+                        raise ss.errors.WrongDimension(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
     if all(getattr(dis, 'graph', None) is not None for dis in sim.pars.diseases.values()):
         for net in nets:
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
             if not (sc.isnumber(beta) and beta == 1):
-                raise ss.RouteMismatch(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
+                raise ss.errors.RouteMismatch(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
 
     # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure)
     for mod in sim.declared if routes else []:
@@ -295,10 +298,10 @@ def check_betas(sim, nets):
                             hint = f'give ss.peract() with a value for each of its directions ({sc.strjoin(dirs) or "it has none, so one value"})'
                         else:
                             hint = f'"{net.name}" has no acts, so give one rate or probability per contact' + (', which goes from the mother to the child only' if getattr(net, 'one_way', False) else '')
-                        raise ss.RouteMismatch(f'{where} is a pair, {list(val)}, which has no direction names: {hint}. In Starsim 3, a pair was [p1 to p2, p2 to p1], which depends on who the network puts in p1.')
+                        raise ss.errors.RouteMismatch(f'{where} is a pair, {list(val)}, which has no direction names: {hint}. In Starsim 3, a pair was [p1 to p2, p2 to p1], which depends on who the network puts in p1.')
                     if isinstance(val, ss.peract):
                         if not acts:
-                            raise ss.RouteMismatch(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
+                            raise ss.errors.RouteMismatch(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
                         val.resolve(net)
                     elif acts and ss.expressions.value_dimension(val) == -1 and getattr(p, 'library_default', False): # The default of ss.SIR, ss.SIS, or ss.SEIR: a probability per act, as in Starsim 3
                         value = getattr(val, 'value', val)
@@ -307,7 +310,7 @@ def check_betas(sim, nets):
                         p.value[net.name].resolve(net)
                         ss.note(f'the default beta of "{mod.name}" ({val!r}) is read as ss.peract({value}) on "{net.name}", which has acts, as in Starsim 3; give beta= to set it', sim=sim)
                     elif acts and ss.expressions.value_dimension(val) == -1:
-                        raise ss.WrongDimension(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
+                        raise ss.errors.WrongDimension(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
     return
 
 

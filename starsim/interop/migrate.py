@@ -24,6 +24,7 @@ import ast
 import sys
 import argparse
 import sciris as sc
+import starsim as ss
 
 __all__ = ['migrate']
 
@@ -44,6 +45,8 @@ renames = [
     (r'\bss\.(demographics\.Pregnancy|LegacyPregnancy)\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments, attributes, results, and callbacks)"),
     (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
     (r'\beligible=',              'where=',                         'eligible= of a delivery (a Starsim 4 prerelease) is where='),
+    (r'\bss\.geo\(',              'ss.geo.location(',               'ss.geo (a Starsim 4 prerelease) is ss.geo.location'),
+    (r'\bss\.(gravity|Mobility)\b', r'ss.geo.\1',                     'ss.gravity and ss.Mobility (a Starsim 4 prerelease) are in ss.geo'),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule
@@ -53,8 +56,9 @@ moved = dict(
     modules       = 'module_map module_types find_modules',
     parameters    = 'load_pars',
     results       = 'validate_sim_data',
-    debugtools    = 'metadata diff_sims check_sims_match',
-    utils         = 'apply_age_range find_contacts',
+    debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
+    utils         = 'apply_age_range find_contacts standardize_data standardize_netkey',
+    errors        = ' '.join(cls.__name__ for cls in ss.errors.classes() if cls.__name__ not in ss.errors.__all__), # Errors, warnings, and notes (a Starsim 4 prerelease), except the base classes and ss.CapabilityError
 )
 for submodule, names in moved.items():
     renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))

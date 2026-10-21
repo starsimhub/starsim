@@ -336,7 +336,7 @@ class Held(Product):
             return {self.disease:self.effects}
         if not all(keyed):
             others = [k for k,ok in zip(eff, keyed) if not ok]
-            raise ss.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
+            raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
                                    f'Give the efficacy against each thing within each disease, e.g. dict(hpv16=dict(acquisition=0.9)).')
         return {ss.conditions.modname(k):(dict(v) if isinstance(v, dict) else {self.default_key:v}) for k,v in eff.items()}
 
@@ -368,7 +368,7 @@ class Held(Product):
                 for key,eff in effects.items():
                     kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
                     if kind is None:
-                        raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
+                        raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
                     ss.connectors.AgentModifiers.attach(coded, kind, sim)
                     sim.modifiers[(disname, kind, None)].append(Effect(self, key, eff))
                 continue
@@ -390,7 +390,7 @@ class Held(Product):
                     states = (graph.transitions.get(key) or graph.destination(key)).src
                 else:
                     options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
-                    raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                    raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
                 self.check_dims(eff, key, dis, states)
                 for kind,name in targets:
                     if kind == 'transition':
@@ -405,7 +405,7 @@ class Held(Product):
         for strat in dis.graph.strats:
             missing = [s.name for s in states if s.people and s.name not in strat.states] if strat.states is not None and strat.name in eff.dims else []
             if missing:
-                raise ss.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
+                raise ss.errors.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
                                            f'For an efficacy against each genotype, make each a disease and key the efficacy by disease: ss.Vaccine(efficacy=dict(hpv16=0.95, hpv18=0.95)).')
         return
 
@@ -638,16 +638,16 @@ class Treatment(Held):
             graph = dis.graph
             trname = spec.rpartition('.')[2] if isinstance(spec, str) else spec.name
             if trname not in graph.transitions:
-                raise ss.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[trname]
             if len(tr.dst) != 1 or not tr.people:
-                raise ss.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
             edges.append(sc.objdict(dis=dis.name, tr=tr, dst=tr.dst[0], srcs=[s for s in tr.src if s.people], eff=eff))
         for i,a in enumerate(edges): # Each person treated moves along at most one transition of each disease
             for b in edges[i+1:]:
                 both = [s.name for s in a.srcs if a.dis == b.dis and s in b.srcs]
                 if both:
-                    raise ss.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
+                    raise ss.errors.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
                                                 f'each person treated can move along only one transition of a disease, so give the sources of each once.')
         return edges
 
@@ -674,11 +674,11 @@ class Treatment(Held):
         tr = None
         if self.transition is not None:
             if self.transition not in graph.transitions:
-                raise ss.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[self.transition]
         if self.to is not None:
             if self.to not in graph.states or not graph.states[self.to].people:
-                raise ss.UnknownState(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                raise ss.errors.UnknownState(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
             dst = graph.states[self.to]
         elif tr is not None:
             dst = tr.dst[0]
@@ -686,7 +686,7 @@ class Treatment(Held):
             dsts = {id(t.dst[0]):t.dst[0] for t in options.values()}
             if len(dsts) != 1:
                 example = next((d for d in dsts.values() if d is graph.first), graph.first)
-                raise ss.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
                                        f'     Give it with to= (e.g. to="{example.name}"), or give efficacy as a dict for a treatment that changes rates without curing.')
             dst = list(dsts.values())[0]
         if tr is None: # The flow that counts the cured: the one recovery into that state, if there is one
@@ -706,7 +706,7 @@ class Treatment(Held):
             for name in self.cure:
                 state = graph.states.get(name)
                 if state is None or not state.people:
-                    raise ss.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                    raise ss.errors.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
                 if state is not dst and not any(s is state for s in srcs):
                     srcs.append(state)
         self.cures = f'from {sc.strjoin(s.name for s in srcs)} to {dst.name}' + (f' (counted in {tr.name})' if tr is not None else '')
@@ -882,7 +882,7 @@ class Diagnostic(Product):
                     raise ss.CapabilityError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for the state "{state}" of "{name}", which is written as code, so has no declared states; give one sensitivity=, for its infected, or detects=')
                 states = sim.get_declared(name).graph.states
                 if state not in states:
-                    raise ss.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
+                    raise ss.errors.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
             vals = [t.get(key, 0.0) for t in tables]
             if all(sc.isnumber(v) for v in vals) and (sum(vals) > 1 + 1e-9 or min(vals) < 0):
                 errormsg = f'The results of the test "{self.name}" for {name if state is None else name + "." + state} have probabilities {vals}, which have to be between 0 and 1 and sum to at most 1'

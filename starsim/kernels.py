@@ -98,7 +98,7 @@ fields = [
 
 Program = collections.namedtuple('Program', fields)
 
-# A movement register (see ss.Mobility), as the kernels apply it
+# A movement register (see ss.geo.Mobility), as the kernels apply it
 register_fields = [
     'starts',     # Where each step's events start and end
     'src',        # The place each event takes people from (-1 if it adds them)

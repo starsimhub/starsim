@@ -231,7 +231,7 @@ def mock_sim(n_agents=100, **kwargs):
 
     Args:
         n_agents (int): the number of agents to create
-        **kwargs (dict): passed to `ss.mock_time()`
+        **kwargs (dict): passed to `ss.debugtools.mock_time()`
     """
     t = mock_time(**kwargs)
     sim = sc.objdict(
@@ -265,7 +265,7 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
 
 
 def mock_module(dur=10, **kwargs):
-    """ Create a minimal mock "Module" object; kwargs are passed to `ss.mock_time()` """
+    """ Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()` """
     mod = sc.objdict(
         name = 'mock_module',
         t = mock_time(dur=dur, **kwargs),

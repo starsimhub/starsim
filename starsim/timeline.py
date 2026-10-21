@@ -6,7 +6,7 @@ import numpy as np
 import starsim as ss
 
 
-class Timeline:
+class Timeline(ss.utils.NoDists):
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
 

@@ -333,11 +333,11 @@ def movers(sim, modname, name):
 
 
 def check_undriven(sim):
-    """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.UndrivenUnused`) """
+    """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.errors.UndrivenUnused`) """
     for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
             if tr.undriven and not movers(sim, mod.name, name):
-                ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.UndrivenUnused)
+                ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.errors.UndrivenUnused)
     return
 
 
@@ -662,7 +662,7 @@ class Delivery(ss.products.EventSource, Intervention):
             names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.Strains) else [n])] # A family by name
             missing = [n for n in names if n not in declared]
             if missing:
-                raise ss.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a declared disease" if len(missing) == 1 else "are not declared diseases"} in the sim; these are {sc.strjoin(declared)}.')
+                raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a declared disease" if len(missing) == 1 else "are not declared diseases"} in the sim; these are {sc.strjoin(declared)}.')
             self.disease_list = names
             self.disease = names[0]
             self.product.key_by([sim.get_declared(n) for n in names])
@@ -684,10 +684,10 @@ class Delivery(ss.products.EventSource, Intervention):
         coded = [name for name in sim.diseases.keys() if coded_disease(sim, name) is not None] # PL2: a disease written as code, as agents
         if self.disease is None:
             if len(declared) != 1 and not (not declared and len(coded) == 1):
-                raise ss.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}{" and " + sc.strjoin(coded) + " written as code" if coded else ""}. Use disease=.')
+                raise ss.errors.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}{" and " + sc.strjoin(coded) + " written as code" if coded else ""}. Use disease=.')
             self.disease = declared[0] if declared else coded[0]
         elif self.disease not in declared + coded:
-            raise ss.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a disease in the sim; these are {sc.strjoin(declared + coded)}.')
+            raise ss.errors.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a disease in the sim; these are {sc.strjoin(declared + coded)}.')
         self._coded = self.disease in coded
         if self._coded:
             self.check_coded(sim)
@@ -696,7 +696,7 @@ class Delivery(ss.products.EventSource, Intervention):
         elif self.product is not None and self.product.disease != self.disease and not (self.holds and len(self.product.disease_effects(sim)) > 1): # One product for one disease, unless its efficacy is keyed by disease (HP7)
             errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}" alone.\n'
                         f'     For a product that acts on both, deliver it once with disease=[\'{self.product.disease}\', \'{self.disease}\'] (or key its values by disease); otherwise make one product for each disease.')
-            raise ss.UnknownDisease(errormsg)
+            raise ss.errors.UnknownDisease(errormsg)
         self.edges = self.product.resolve(sim, self.disease) if isinstance(self.product, ss.Treatment) else [] # What a treatment that cures moves people along
         self.init_events(sim)
         super().init_pre(sim)
@@ -734,7 +734,7 @@ class Delivery(ss.products.EventSource, Intervention):
             states = self.dis.graph.states
             for name in self.move_states:
                 if name not in states or not states[name].people:
-                    raise ss.UnknownState(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
+                    raise ss.errors.UnknownState(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
         self.changes = {} # For a transfer: the level in each dimension that people move to, and the one they move from (if given)
         self.sources = {}
         for dim,level in (self.move or {}).items():
@@ -770,7 +770,7 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ss.CapabilityError(f'"{self.name}" moves people between states of "{dis.name}", which is written as code, so has no declared states; a delivery for it can test (the state "infected"), cure (clear_infection()), or protect (rel_sus and rel_trans)')
         for attr,what in needs:
             if not hasattr(dis, attr):
-                raise ss.UnknownEffect(f'"{self.name}" is for "{dis.name}", which is written as code and has no "{attr}": {what}')
+                raise ss.errors.UnknownEffect(f'"{self.name}" is for "{dis.name}", which is written as code and has no "{attr}": {what}')
         return
 
     def trigger_disease(self, sim):
@@ -1352,7 +1352,7 @@ class Delivery(ss.products.EventSource, Intervention):
         out = 0.0
         for name,val in values.items():
             if name not in states or not states[name].people:
-                raise ss.UnknownState(f'{what} has a value for "{name}", which is not a state of people of "{eng.mod.name}". Its states are {sc.strjoin(k for k,v in states.items() if v.people)}.')
+                raise ss.errors.UnknownState(f'{what} has a value for "{name}", which is not a state of people of "{eng.mod.name}". Its states are {sc.strjoin(k for k,v in states.items() if v.people)}.')
             out = out + selector.in_states([name])*selector.everyone()*selector.per_person(val)
         return out
 

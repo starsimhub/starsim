@@ -1,8 +1,8 @@
 """
 Errors, warnings, and notes.
 
-Each error is an exception class, e.g. `ss.UnknownState`, and each warning a
-warning class, e.g. `ss.ImportIncomplete`. A note is a line about something that
+Each error is an exception class, e.g. `ss.errors.UnknownState`, and each warning a
+warning class, e.g. `ss.errors.ImportIncomplete`. A note is a line about something that
 was assumed or approximated: it is kept in `sim.notes` and printed when `verbose`
 is 1 or more (see `ss.note()`). The docstring of each class says when it is raised,
 and is what the catalog in the specification (`15-errors.md`) is made from: see
@@ -12,23 +12,23 @@ import re
 import sciris as sc
 import starsim as ss
 
-__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note']
+__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note', 'CapabilityError'] # The base classes, and the error for what a solver cannot run, are also ss.<Name>; the rest are ss.errors.<Name>
 
 
 #%% Base classes
 
 class CodedError(ValueError):
-    """ Base class for Starsim's named errors, e.g. `ss.UnknownState`; `except ss.CodedError` catches any of them """
+    """ Base class for Starsim's named errors, e.g. `ss.errors.UnknownState`; `except ss.CodedError` catches any of them """
     __str__ = Exception.__str__ # Not KeyError's, which would quote the message
 
 
 class StarsimWarning(RuntimeWarning):
-    """ Base class for Starsim's named warnings, e.g. `ss.ImportIncomplete` """
+    """ Base class for Starsim's named warnings, e.g. `ss.errors.ImportIncomplete` """
     pass
 
 
 class Note(StarsimWarning):
-    """ Base class for Starsim's named notes, e.g. `ss.UnitInferred`; a note is said with `ss.note()` """
+    """ Base class for Starsim's named notes, e.g. `ss.errors.UnitInferred`; a note is said with `ss.note()` """
     pass
 
 
@@ -41,16 +41,16 @@ def note(msg, category=None, sim=None, verbose=None):
 
     Args:
         msg (str): what was assumed or approximated
-        category (class): the kind of note, if it has a name, e.g. `ss.LargeStep`
+        category (class): the kind of note, if it has a name, e.g. `ss.errors.LargeStep`
         sim (Sim): the sim to keep the note in
         verbose (int): whether to print it
 
     **Example**:
 
-        ss.note("unit='day' (from start and stop dates)", ss.UnitInferred, sim=sim)
+        ss.note("unit='day' (from start and stop dates)", ss.errors.UnitInferred, sim=sim)
     """
     if category is not None and not (isinstance(category, type) and issubclass(category, Note)):
-        errormsg = f'The category of a note must be a subclass of ss.Note (e.g. ss.LargeStep), not {category}'
+        errormsg = f'The category of a note must be a subclass of ss.Note (e.g. ss.errors.LargeStep), not {category}'
         raise TypeError(errormsg)
     if sim is not None and not hasattr(sim, 'notes'): # A stand-in, e.g. for a disease's equations before it is in a sim
         sim = None
@@ -135,7 +135,7 @@ class InconsistentDimension(CodedError):
     """
 
 class NoGeography(CodedError):
-    """ A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances """
+    """ A movement model such as `ss.geo.gravity()` is used on a dimension with no geography to supply distances """
 
 class RouteMismatch(CodedError):
     """
@@ -352,7 +352,7 @@ def catalog():
 
     found = classes()
     counts = {k:sum(kind(cls).startswith(k) for cls in found) for k in ['error', 'warning', 'note']}
-    lines = [f'{len(found)} names: {counts["error"]} errors, {counts["warning"]} warnings, and {counts["note"]} notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).', '']
+    lines = [f'{len(found)} names: {counts["error"]} errors, {counts["warning"]} warnings, and {counts["note"]} notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).', '']
     lines += ['| Name | Kind | When |', '|---|---|---|']
     lines += [f'| `{cls.__name__}` | {kind(cls)} | {when(cls)} |' for cls in found]
     return '\n'.join(lines) + '\n'
@@ -377,5 +377,3 @@ def check_catalog(filename, write=False):
         sc.savetext(filename, text[:match.start(2)] + '\n' + new + '\n' + text[match.end(2):])
     return same
 
-
-__all__ += [cls.__name__ for cls in classes()] # Every error, warning, and note is ss.<Name>

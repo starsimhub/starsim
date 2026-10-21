@@ -248,11 +248,11 @@ class Engine:
             for dim,level in list((tr.move or {}).items()) + [(dim, ('+', k)) for dim,k in (tr.increment or {}).items()]:
                 if dim not in [strat.name for strat in self.sim.groups.strats]:
                     example = f'stratify({dim}=list(range(8)))' if isinstance(level, tuple) else 'stratify(...)'
-                    raise ss.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", which is not a dimension of the sim. Stratify the disease or the sim by it, e.g. sim.{example}.')
+                    raise ss.errors.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", which is not a dimension of the sim. Stratify the disease or the sim by it, e.g. sim.{example}.')
                 d = self.sim.groups.dim_index(dim)
                 for state in tr.dst:
                     if not self.applies[state.name][d]:
-                        raise ss.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", but the state they go to ("{state.name}") has no level of it.')
+                        raise ss.errors.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", but the state they go to ("{state.name}") has no level of it.')
                 strat = self.sim.groups.strats[d]
                 if isinstance(level, tuple):
                     self.note_counter(strat, f'the transition "{tr.name}" of "{self.mod.name}"')
@@ -261,9 +261,7 @@ class Engine:
         return self.move_levels[tr.name]
 
     def note_counter(self, strat, what):
-        """ In a compartmental run, a note when a counter's levels are not one apart, so people within a wider level are taken to be at its lower edge when it goes up """
-        if self.sim.solver != 'abm' and strat.edges is not None and np.any(np.diff(strat.edges) != 1):
-            ss.note(f'{what} adds to "{strat.name}", whose levels ({sc.strjoin(strat.labels)}) are not one apart, so a compartmental run takes the people in each level to be at its lower edge; agents add to each person\'s own value', sim=self.sim)
+        """ Say that a counter's levels are not one apart; agents add to each person's own value (see `Compartmental.note_counter()`) """
         return
 
     def dim_map(self, src, dst, strain=None, record=False, move=None):
@@ -588,7 +586,7 @@ class Engine:
         given = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) + stay # A branch its modifiers rule out (e.g. one for another level of a move= arrow) does not count
         if np.any(np.asarray(given) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # TL13: was used as 1 (or as a negative remainder) with no note
             names = sc.strjoin([getattr(tr, 'name', tr) for tr,p in zip(trs, ps) if p is not None])
-            raise ss.BadBranchSplit(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(given):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
+            raise ss.errors.BadBranchSplit(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(given):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
         rest = 1.0 - given
         ps = [rest if p is None else p for p in ps]
         if all(m is None for m in mults):
@@ -600,7 +598,7 @@ class Engine:
             path = f'{self.mod.name}.{sc.strjoin([getattr(tr, "name", tr) for tr,m in zip(trs, mults) if m is not None])}'
             if path not in self.sim.clipped:
                 self.sim.clipped.add(path)
-                ss.note(f'the modifiers of {path} made the probabilities of the branches come to more than 1, so they were scaled to sum to 1', ss.ClippedToRange, sim=self.sim)
+                ss.note(f'the modifiers of {path} made the probabilities of the branches come to more than 1, so they were scaled to sum to 1', ss.errors.ClippedToRange, sim=self.sim)
         denom = np.where(np.asarray(others) > 0, np.maximum(taken, 1.0), taken) # What the modified ones are divided by
         left = 1.0 - np.minimum(taken, 1.0)
         div = lambda a, b: np.divide(a, b, out=np.zeros(np.broadcast(a, b).shape), where=np.asarray(b) > 0)
@@ -619,7 +617,7 @@ class Engine:
         if np.any(np.asarray(value) < 0):
             if path not in self.sim.clipped:
                 self.sim.clipped.add(path)
-                ss.note(f'the modifiers of {path} made it negative, so it was set to 0 where it was', ss.ClippedToRange, sim=self.sim)
+                ss.note(f'the modifiers of {path} made it negative, so it was set to 0 where it was', ss.errors.ClippedToRange, sim=self.sim)
             value = np.maximum(value, 0)
         return value
 
@@ -672,17 +670,17 @@ class Engine:
                 if name in self.rel_adjust:
                     states = self.graph.infectious if name == 'rel_trans' else [src for tr in self.graph.acquisitions for src in tr.src]
                     if not any(self.applies[state.name][d] for state in states):
-                        raise ss.InvalidAdjustment(f'the adjustment of {name} by "{strat.name}" cannot apply, since the people it is for ({sc.strjoin(s.name for s in states)}) have no level of "{strat.name}".')
+                        raise ss.errors.InvalidAdjustment(f'the adjustment of {name} by "{strat.name}" cannot apply, since the people it is for ({sc.strjoin(s.name for s in states)}) have no level of "{strat.name}".')
                     self.rel_adjust[name].append((d, vals))
                 elif name in self.adjust:
                     tr = self.graph.transitions[name]
                     if tr.trigger is not None:
-                        raise ss.UnmodifiableTarget(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr.trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
+                        raise ss.errors.UnmodifiableTarget(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr.trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
                     if tr.src and not any(self.applies[src.name][d] for src in tr.src) and not (d == self.strain and tr.contact):
-                        raise ss.InvalidAdjustment(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since the people it moves ({sc.strjoin(src.name for src in tr.src)}) have no level of "{strat.name}". '
+                        raise ss.errors.InvalidAdjustment(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since the people it moves ({sc.strjoin(src.name for src in tr.src)}) have no level of "{strat.name}". '
                                                    f'To make where they arrive depend on it, give "{strat.name}" a split instead.')
                     if not tr.src and tr.dst and not any(self.applies[dst.name][d] for dst in tr.dst): # An inflow into states with no level of it: all of it would arrive at the first level, at that level's multiplier
-                        raise ss.InvalidAdjustment(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since what it brings in ({sc.strjoin(dst.name for dst in tr.dst)}) has no level of "{strat.name}". '
+                        raise ss.errors.InvalidAdjustment(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since what it brings in ({sc.strjoin(dst.name for dst in tr.dst)}) has no level of "{strat.name}". '
                                                    f'Stratify {sc.strjoin(dst.name for dst in tr.dst)} by "{strat.name}" too (e.g. kind=\'space\' for a place), or leave the adjustment out.')
                     if d == self.strain and tr.contact:
                         self.strain_adjust[name] = vals
@@ -704,7 +702,7 @@ class Engine:
                         for d in raw.check(sim)[0]:
                             if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
                                 dim = sim.groups.strats[d].name
-                                raise ss.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
+                                raise ss.errors.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
                                                           f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by().')
         self.init_strain_weights()
         self.note_function_reads()
@@ -748,13 +746,13 @@ class Engine:
         if isinstance(raw, dict):
             val = ss.utils.route_beta(raw, nkey)
             if val is None:
-                raise ss.RouteMismatch(f'beta for "{self.mod.name}" has keys {list(raw.keys())}, but there is a network called "{nkey}" with no value.')
+                raise ss.errors.RouteMismatch(f'beta for "{self.mod.name}" has keys {list(raw.keys())}, but there is a network called "{nkey}" with no value.')
             raw = val
         if getattr(route, 'has_acts', False):
             self._per_act = True
             return self.act_hazards(raw, route)
         elif isinstance(raw, ss.peract): # Checked when the sim is built: see ss.solvers.choose.check_betas()
-            raise ss.RouteMismatch(f'beta for "{self.mod.name}" on "{nkey}" is {raw}, a probability per act, but "{nkey}" has no acts')
+            raise ss.errors.RouteMismatch(f'beta for "{self.mod.name}" on "{nkey}" is {raw}, a probability per act, but "{nkey}" has no acts')
         return self.plain_value(raw)
 
     def plain_value(self, val):
@@ -772,7 +770,7 @@ class Engine:
         vals = val.resolve(route) if isinstance(val, ss.peract) else [val]*max(len(route.directions), 1)
         ps = np.array(np.broadcast_arrays(*[np.asarray(self.plain_value(v), dtype=float) for v in vals]))
         if np.any(ps < 0) or np.any(ps > 1):
-            raise ss.OutOfBounds(f'the probability per act of "{self.mod.name}" on "{route.name}" is {val}, which gives {ps.tolist()}, outside 0 to 1')
+            raise ss.errors.OutOfBounds(f'the probability per act of "{self.mod.name}" on "{route.name}" is {val}, which gives {ps.tolist()}, outside 0 to 1')
         return -np.log1p(-np.minimum(ps, 1 - 1e-15))
 
     def n_args(self, func):
@@ -952,8 +950,8 @@ class Engine:
         """
         if self.dt >= 1:
             return
-        nets = {ss.standardize_netkey(k):net for k,net in self.sim.networks.items()}
-        acts = lambda k: getattr(nets.get(ss.standardize_netkey(k)), 'has_acts', False)
+        nets = {ss.utils.standardize_netkey(k):net for k,net in self.sim.networks.items()}
+        acts = lambda k: getattr(nets.get(ss.utils.standardize_netkey(k)), 'has_acts', False)
         for tr in self.graph.transmissions:
             for leaf in tr.rate.leaves:
                 raw = getattr(leaf, 'raw', None)
@@ -986,7 +984,7 @@ class Engine:
                 if name not in inflows and dw.dist is None and not callable(dw.par.raw) and not isinstance(dw.par.raw, ss.by):
                     mean = self.dwell_mean(name)
                     if np.ndim(mean) == 0 and 0 < mean < self.dt:
-                        ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', ss.LargeStep, sim=sim)
+                        ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', ss.errors.LargeStep, sim=sim)
             return
         dt = self.dt/(sim.pars.substeps if euler else 1)
         for name,dw in self.dwells.items():
@@ -1004,70 +1002,15 @@ class Engine:
                 else: # Whole steps are off the ODE by an amount of order rate × dt, which can be large: about 15% in the prevalence of a seasonal SIRS at 0.12
                     fixes = 'a smaller dt, substeps=,' if sim.solver == 'binomial' else 'a smaller dt'
                     msg += f'. Taking whole steps, solver="{sim.solver}" can differ from the ODE by several times that in prevalence; use {fixes} or solver="gillespie"'
-                ss.note(f'{msg}; sim.check_dt() shows how much a smaller step changes the results', ss.LargeStep, sim=sim)
+                ss.note(f'{msg}; sim.check_dt() shows how much a smaller step changes the results', ss.errors.LargeStep, sim=sim)
         return
 
     def varying_dwell(self, name, tr, raw, dw, to_unit):
-        """
-        A dwell time whose distribution has parameters with a value for each group (`ss.by`)
-
-        As agents, the parameters are looked up for each agent, and one draw is made. As compartments, each group gets
-        the Erlang stages that match its own mean and standard deviation (ragged stages); a function as well has no compartmental form.
-        """
-        trans = ss.transitions
-        dw.family = type(raw).__name__
-        dw.staged = True
-        if isinstance(self, ss.solvers.Agents):
-            dw.mean = dw.std = None
-            dw.dist = trans.numeric_dist(raw, to_unit, per_agent=self.agent_values)
-            return
-        funcs = [key for key,val in trans.varying_pars(raw).items() if not isinstance(val, ss.by)]
-        if funcs:
-            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its {dw.family} dwell time has a function as its parameter "{funcs[0]}". Run with solver="abm".')
-        dims = [strat.name for strat in self.sim.groups.strats]
-        for val in trans.varying_pars(raw).values():
-            for dim in val.dims:
-                if dim not in dims:
-                    raise ss.MissingDimension(f'the dwell time of "{name}" is given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}={["female", "male"] if dim in ["sex", "female"] else [...]}).')
-        dw.varying = True
-        grids = {key:val.per_group(self.sim, to_unit) for key,val in trans.varying_pars(raw).items()}
-        plain = {k:v for k,v in trans.numeric_pars(raw, to_unit, per_agent=lambda val: None).items() if k not in grids}
-        stats = [trans.dwell_stats(type(raw)(**{**plain, **{k:float(np.broadcast_to(g, (self.n_groups,))[i]) for k,g in grids.items()}}), lambda v: v) for i in range(self.n_groups)]
-        dw.mean, dw.std = [np.array(x) for x in zip(*stats)]
-        shape = raw.pars.get('a')
-        if tr.stages is not None:
-            dw.kg = np.full(self.n_groups, tr.stages)
-        elif dw.family == 'gamma' and 'a' not in grids and sc.isnumber(shape) and shape == int(shape):
-            dw.kg = np.full(self.n_groups, int(shape))
-        else:
-            dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
-            dw.exact = False
-            ss.note(f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
-        dw.k = int(dw.kg.max())
-        if np.all(dw.kg == dw.k):
-            dw.kg = None # Not ragged
-        return
+        """ A dwell time whose distribution has parameters with a value for each group (`ss.by`): see each engine's own """
+        raise NotImplementedError
 
     def note_stages(self, name, dw):
-        """ In a compartmental run, a dwell time that is not exponential or Erlang is approximated by Erlang stages, which is said in one line """
-        sim = self.sim
-        if sim.solver == 'abm':
-            return
-        approx = sim.pars.approx
-        unit = f' {sim.unit_name}s'
-        std = dw.mean/np.sqrt(dw.k)
-        if f'{std:.3g}' == f'{dw.std:.3g}':
-            kept = f'mean {dw.mean:n}{unit} and std {std:.3g}{unit}, as given'
-        else:
-            kept = f'mean {dw.mean:n}{unit} kept; std {std:.3g}{unit}, against {dw.std:.3g}{unit} given'
-        what = f'{dw.k} Erlang stage{"s" if dw.k > 1 else ""} ({kept})'
-        if approx is False:
-            raise ss.CapabilityError(f'"{name}" cannot run with solver="{sim.solver}" and approx=False.\n'
-                                     f'     It has a {dw.family} dwell time, which would be approximated by {what}.\n'
-                                     f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
-        else:
-            fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
-            ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', ss.StagesUnderAuto, sim=sim, verbose=0 if approx else None)
+        """ Say how a dwell time that is not exponential or Erlang is approximated; agents draw it as it is (see `Compartmental.note_stages()`) """
         return
 
     def dwell_mean(self, name):
@@ -1113,7 +1056,7 @@ class Engine:
                         cells = sorted({'(' + ', '.join(f'{strats[d].name}={strats[d].labels[ix[g]]}' for d,ix in zip(ds, index) if ix[g] < strats[d].n) + ')' for g in np.flatnonzero(lost)})
                         msg = f'init= of "{state.name}" in "{self.mod.name}" is given at {sc.strjoin(cells[:3])}{" and more" if len(cells) > 3 else ""}, where the split puts nobody'
                         if not np.any((vals > 0) & (size > 0)):
-                            raise ss.InitWhereNobodyIs(f'{msg}, so nobody would start in {state.name}. Give a split= that puts people there, or init= at levels that have people.')
+                            raise ss.errors.InitWhereNobodyIs(f'{msg}, so nobody would start in {state.name}. Give a split= that puts people there, or init= at levels that have people.')
                         ss.note(f'{msg}; nobody starts in {state.name} there', sim=sim)
                 else:
                     share = np.divide(self.state_split[state.name], split, out=np.zeros(sim.groups.n_groups), where=split>0) # Its split over the other dimensions
@@ -1148,7 +1091,7 @@ class Engine:
             elif isinstance(init_prev, ss.choose_n): # A number of people, as Starsim 3 gave it
                 init_prev = init_prev.pars.n
             if np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
-                raise ss.OutOfBounds(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
+                raise ss.errors.OutOfBounds(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
             elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
                 init_prev = init_prev/self.total_pop
             init_prev = init_prev*share
@@ -1171,7 +1114,7 @@ class Engine:
 
         for name,val in list(fracs.items()) + list(counts.items()):
             if not np.all(np.isfinite(val)) or np.any(np.asarray(val) < 0):
-                raise ss.OutOfBounds(f'the initial value of "{name}" in "{self.mod.name}" is {val}; an initial value must be finite and not negative.')
+                raise ss.errors.OutOfBounds(f'the initial value of "{name}" in "{self.mod.name}" is {val}; an initial value must be finite and not negative.')
 
         # Whatever is left over goes to the first state, or, if that is given a value, to the one state that is not (see Graph.resolve_rest())
         total = sum(fracs.values())
@@ -1196,24 +1139,7 @@ class Engine:
         return fracs, counts
 
     def seed_dist(self):
-        """
-        As agents, an init_prev that chooses who starts infected one by one, as in Starsim 3: `ss.choose_n()` (a number of agents),
-        `ss.bernoulli()` with a probability for each agent, a function of the sim (and the agents), or `ss.by` over a property of people that is not a dimension
-        """
-        init_prev = self.graph.init_prev
-        if isinstance(init_prev, ss.transitions.par):
-            init_prev = init_prev.raw
-        trs = self.graph.transmissions
-        if self.sim.solver != 'abm' or not len(trs):
-            return None
-        elif isinstance(init_prev, ss.choose_n): # With several destinations, a number of people shared between them as a fraction is
-            return init_prev if len(trs[0].dst) == 1 else None
-        elif isinstance(init_prev, ss.bernoulli) and callable(init_prev.pars.p):
-            return init_prev
-        elif isinstance(init_prev, ss.by) and init_prev.on_people(self.sim):
-            return init_prev
-        elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
-            return init_prev
+        """ An init_prev that chooses who starts infected one by one, which only agents have (see `Agents.seed_dist()`) """
         return None
 
     def branch_probs(self, tr, ps=None):
@@ -1400,7 +1326,7 @@ class Engine:
                     key = ss.transitions.flow_key(base)
                     if key not in graph.transitions and key not in graph.outcomes and graph.destination(key) is None:
                         options = list(graph.transitions.keys()) + list(graph.outcomes.keys()) + graph.destinations()
-                        raise ss.UnknownOutcomeSource(f'the source of the outcome "{name}" is not a transition or outcome of "{self.mod.name}" ({key}){trans.did_you_mean(str(key), options)}')
+                        raise ss.errors.UnknownOutcomeSource(f'the source of the outcome "{name}" is not a transition or outcome of "{self.mod.name}" ({key}){trans.did_you_mean(str(key), options)}')
                     sources.append((key, weight))
                 if any(key in todo for key,weight in sources):
                     continue
@@ -1436,7 +1362,7 @@ class Engine:
                 del todo[name]
                 progress = True
             if not progress:
-                raise ss.OutcomeCycle(f'the outcomes {sc.strjoin(todo.keys())} of "{self.mod.name}" depend on each other in a loop.')
+                raise ss.errors.OutcomeCycle(f'the outcomes {sc.strjoin(todo.keys())} of "{self.mod.name}" depend on each other in a loop.')
         return
 
     def sample(self, dist, n):
@@ -1629,7 +1555,7 @@ class Engine:
         return
 
     def note_chance(self):
-        """ For a run with real numbers (ode): say where chance would matter, as a stochastic run would show (ss.SmallCounts, ss.ExtinctionPossible) """
+        """ For a run with real numbers (ode): say where chance would matter, as a stochastic run would show (ss.errors.SmallCounts, ss.errors.ExtinctionPossible) """
         sim = self.sim
         infected = [s for s in self.graph.infected if s.people]
         if sim.solver != 'ode' or not infected or not self.graph.transmissions:
@@ -1639,13 +1565,13 @@ class Engine:
         name = self.mod.name
         if 0 < self.n_start < 10:
             ss.note(f'"{name}" starts with {self.n_start:.3g} infected, so whether it takes off is a matter of chance, which solver="{sim.solver}" does not show; '
-                    f'solver="gillespie" with ss.parallel(n_runs=...) does', ss.SmallCounts, sim=sim)
+                    f'solver="gillespie" with ss.parallel(n_runs=...) does', ss.errors.SmallCounts, sim=sim)
         low = np.flatnonzero((n > 0) & (n < 1))
         if len(low) and n[low[0]:].max() > 10:
             when = res[f'n_{infected[0].name}'].timevec[low[0]]
             when = f'{sim.unit_name} {float(when):.4g}' if sc.isnumber(when) else when # e.g. day 125, not 124.99999984
             ss.note(f'the number infected in "{name}" falls to {n[low[0]]:.2g} (at {when}) and then rises to {n[low[0]:].max():,.0f}; a stochastic run would usually die out there. '
-                    f'solver="gillespie" with ss.parallel(n_runs=...) shows how often, in the runs of msim.results.{name}.n_{infected[0].name} after that point', ss.ExtinctionPossible, sim=sim)
+                    f'solver="gillespie" with ss.parallel(n_runs=...) shows how often, in the runs of msim.results.{name}.n_{infected[0].name} after that point', ss.errors.ExtinctionPossible, sim=sim)
         return
 
     def finalize_results(self):

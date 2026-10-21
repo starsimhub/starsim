@@ -16,7 +16,7 @@ So `ss.Sim`, `ss.MultiSim`, `ss.Disease`, `ss.RandomNet`, `ss.MixingPool`, and `
 
 ## The names
 
-The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: Starsim's library modules, the errors, the classes for writing modules as code, and internals; sorting them into tiers is a separate item of the review's plan.
+The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: the classes and helpers for writing modules as code (the second tier, listed in `tests/test_spec.py`), and the base classes of the errors (`ss.CodedError`, `ss.StarsimWarning`, `ss.Note`), `ss.note`, and `ss.CapabilityError`. The other errors, warnings, and notes are in `ss.errors` (`ss.errors.UnknownState`), the testing and profiling tools in `ss.debugtools`, and everything else in its own submodule (`ss.solvers.Compartmental`, `ss.transitions.Expr`).
 
 ### Sim and modules: 12
 
@@ -35,7 +35,7 @@ The names below are checked against the code: each one is exported by `starsim`,
 | `ss.Connector` | Base class for cross-module `step()` code |
 | `ss.Analyzer` | Base class for extra results |
 
-Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.UnknownState`, `ss.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
+Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.errors.UnknownState`, `ss.errors.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
 ### States, transitions, parameters, results: 13
 
@@ -82,6 +82,8 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 ### Mixing and space: 10
 
+Everything spatial is in the submodule `ss.geo`.
+
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
@@ -89,9 +91,9 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
 | **`ss.PartnerNet`** | Lasting partnerships that form and dissolve (not only sexual: needle sharing, sex work), described by the mean number of partners at a time (`n_contacts`), their duration, acts per unit time in each partnership (`acts=`), who takes part (`where=`), and partnerships between two groups only (`between=`, lasting or one-off). Targets for the number of partners (concurrency, a maximum, `match=`, as EpiModel's) are the library's `ssl.DegreeNet` (`ss.MFNet` takes `n_contacts`, `concurrency` and `max_contacts`) |
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
-| **`ss.geo`** | A geography: names, populations, centroids, distances; named (`ss.geo('Kenya', level=1)`) or given directly |
-| **`ss.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
-| **`ss.gravity`** | Movement model (radiation, Stouffer, and competing destinations are deferred; a matrix covers them) |
+| **`ss.geo.location`** | A geography: names, populations, centroids, distances; named (`ss.geo.location('Kenya', level=1)`) or given directly |
+| **`ss.geo.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
+| **`ss.geo.gravity`** | Movement model (radiation, Stouffer, and competing destinations are deferred; a matrix covers them) |
 
 ### Interactions and interventions: 9
 
@@ -181,7 +183,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.data` | `aliases` `ignore_extra` |
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
 | `ss.MFNet` | Starsim's `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` |
-| `ss.Mobility` | `matrix` `data` `kind` `away` |
+| `ss.geo.Mobility` | `matrix` `data` `kind` `away` |
 | `ss.PartnerNet` | `n_contacts` `dur` `acts` `sides` `between` `where` |
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
 | Networks | `sides` (and `net.directions`, which follow from them) |
@@ -210,9 +212,9 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `efficacy=`, `sensitivity=`, `specificity=` | a probability | products; `efficacy=` also on `ss.modify` (`multiply=1 - efficacy`) |
 | `waning=` | a duration: the product is lost at an exponentially distributed time with that mean (a function of the time since delivery fades the efficacy instead, as agents only) | products |
 | `delay=`, `duration=` | a duration | `ss.outcome`, `ss.Diagnostic` |
-| `interval=`, `away=` | a duration; `away` is a fraction of time | deliveries, `ss.Mobility` |
+| `interval=`, `away=` | a duration; `away` is a fraction of time | deliveries, `ss.geo.Mobility` |
 | `multiply=`, `add=`, `set=`, `by=`, `to=` | a multiplier, or a value in the target's own type | `ss.modify`, `ss.change` |
-| `at=`, `start=`, `stop=` | a time in the sim's unit, counted from the start (a calendar year only in a sim whose own `start` and `stop` are year-like numbers); dates are written as dates. A time outside the sim raises `ss.TimeOutsideSim` | `ss.change`, `ss.modify`, deliveries |
+| `at=`, `start=`, `stop=` | a time in the sim's unit, counted from the start (a calendar year only in a sim whose own `start` and `stop` are year-like numbers); dates are written as dates. A time outside the sim raises `ss.errors.TimeOutsideSim` | `ss.change`, `ss.modify`, deliveries |
 | `bounds=` | a pair, in the unit of the parameter's value | `ss.par` |
 | `cost=` | a plain number | products |
 

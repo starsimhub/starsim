@@ -18,11 +18,11 @@ def make_sis(cure=None):
 
 
 def w209(sim):
-    """ The ss.UndrivenUnused warnings raised when a sim is initialized """
+    """ The ss.errors.UndrivenUnused warnings raised when a sim is initialized """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
         sim.init()
-    return [str(x.message) for x in w if issubclass(x.category, ss.UndrivenUnused)]
+    return [str(x.message) for x in w if issubclass(x.category, ss.errors.UndrivenUnused)]
 
 
 # %% Define the tests
@@ -58,7 +58,7 @@ def test_undriven():
         assert np.isclose(res.sis.cure.sum(), 0.9*res.tx.delivered.sum(), rtol=0.05)
         assert res.sis.cure.sum() > 0
 
-    with pytest.raises(ss.UndrivenTransition): # An inflow still needs a rate
+    with pytest.raises(ss.errors.UndrivenTransition): # An inflow still needs a rate
         S, I = ss.states('S I')
         ss.Disease(births=ss.Transition(ss.null, S), infection=ss.Transition(S, I, rate=0.3 * I))
     return sim
@@ -235,7 +235,7 @@ def test_syphilis_stages():
 
     # A person who could match two transitions of one disease is an error
     syph = make_syph()
-    with pytest.raises(ss.OverlappingSources):
+    with pytest.raises(ss.errors.OverlappingSources):
         ss.Sim(syph, interventions=ss.treat(ss.Treatment(moves=[syph.cure_early, syph.late])), **kw).init()
     return sims
 

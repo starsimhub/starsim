@@ -38,7 +38,7 @@ Converting to a timestep is the type's job, not the user's. For a step of length
 
 A solver MUST NOT substitute `r·dt` for `1 − exp(−r·dt)`.
 
-**Large steps.** In a run that takes whole steps (`'binomial'`, `'abm'`, or the ODE with Euler steps of a given size), when `rate × dt > 0.1` for a dwell time, the build gives the note `ss.LargeStep`, naming the transition, `rate × dt`, the share of people who leave in a step, and what to do (a smaller `dt`, `substeps=`, or `solver='gillespie'`). Under the other solvers, which follow the rates within a step, it is given only for a mean dwell time shorter than the step, which is usually a rate meant as a duration (`rate=10`). It is a note, not an error; `sim.check_dt()` shows how much the results change with a smaller step ([10-execution.md](10-execution.md)).
+**Large steps.** In a run that takes whole steps (`'binomial'`, `'abm'`, or the ODE with Euler steps of a given size), when `rate × dt > 0.1` for a dwell time, the build gives the note `ss.errors.LargeStep`, naming the transition, `rate × dt`, the share of people who leave in a step, and what to do (a smaller `dt`, `substeps=`, or `solver='gillespie'`). Under the other solvers, which follow the rates within a step, it is given only for a mean dwell time shorter than the step, which is usually a rate meant as a duration (`rate=10`). It is a note, not an error; `sim.check_dt()` shows how much the results change with a smaller step ([10-execution.md](10-execution.md)).
 
 Continuous-time solvers (`'ode'`, `'gillespie'`) have no `dt` in this sense and do no conversion at all.
 
@@ -146,7 +146,7 @@ This is what a textbook model means. No note is printed, because nothing was gue
 
 - The timestep is one step. With a different `dt`, the bare numbers are per unit of time, a unit with no name: `describe()` then says `time is in units with no name, and a step is 0.1 of them`, `beta = 0.3 per unit`, and `every 0.1 units`, not "per step".
 - The times have no dates: `sim.t.datevec` raises, and so does an `ss.seasonal()`, which is a yearly cycle. (The arithmetic is done in days underneath, so a module written as code with typed values, such as `ss.peryear`, takes a step as a day.)
-- A unitless sim has no calendar, so it cannot be compared with dated data or given a dated intervention: a date on an intervention is outside the sim (`ss.TimeOutsideSim`). Give the sim a unit or dates.
+- A unitless sim has no calendar, so it cannot be compared with dated data or given a dated intervention: a date on an intervention is outside the sim (`ss.errors.TimeOutsideSim`). Give the sim a unit or dates.
 - This differs from Starsim 3, which assumes years when nothing is specified, and which sims with no declared states still do.
 
 ## Time in a sim

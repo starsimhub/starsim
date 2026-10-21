@@ -170,8 +170,8 @@ class Cond:
 
     @staticmethod
     def arith(op, a, b):
-        """ Arithmetic on a condition: with an expression (a parameter, a state's count) or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
-        if any(isinstance(x, (ss.expressions.Expr, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
+        if any(isinstance(x, (ss.expressions.Expr, ss.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
             return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
         elif op == '**':
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
@@ -425,14 +425,14 @@ def bounding_states(cond):
 
 
 def check_clocks(amount, where, what):
-    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.ClockOutsideDomain`) """
+    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.errors.ClockOutsideDomain`) """
     for clock in ss.expressions.clocks_in(amount):
         names = set(clock.names)
         if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
             continue
         inside = bounding_states(where)
         if inside is None or not inside <= names:
-            raise ss.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
+            raise ss.errors.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
                                         f'     Add where={clock.to_str().rsplit(".", 1)[0]} (or a condition inside it).')
     return
 

@@ -33,7 +33,7 @@ def synced_event(tr, sim, home):
     return Bunch(mod=name, tr=obj.name, to=getattr(dst, 'name', dst))
 
 
-class Compartmental(Engine):
+class Compartmental(ss.utils.NoDists, Engine): # Never searched for distributions: it draws from its own generator, and the distributions in the model are found through its graph
     """
     Runs a graph as compartments: deterministically (`ode`) or stochastically
     (`binomial`, `gillespie`, or `tau`, the exact solver's fallback for long runs)
@@ -367,6 +367,69 @@ class Compartmental(Engine):
                 self.chains[c] = (d, flow, stage_flows[c + d - 1])
         return
 
+    def note_counter(self, strat, what):
+        """ In a compartmental run, a note when a counter's levels are not one apart, so people within a wider level are taken to be at its lower edge when it goes up """
+        if strat.edges is not None and np.any(np.diff(strat.edges) != 1):
+            ss.note(f'{what} adds to "{strat.name}", whose levels ({sc.strjoin(strat.labels)}) are not one apart, so a compartmental run takes the people in each level to be at its lower edge; agents add to each person\'s own value', sim=self.sim)
+        return
+
+    def varying_dwell(self, name, tr, raw, dw, to_unit):
+        """
+        A dwell time whose distribution has parameters with a value for each group (`ss.by`)
+
+        Each group gets the Erlang stages that match its own mean and standard deviation (ragged stages); a function as well has no
+        compartmental form. (Agents look the parameters up for each agent, and make one draw: see `Agents.varying_dwell()`.)
+        """
+        trans = ss.transitions
+        dw.family = type(raw).__name__
+        dw.staged = True
+        funcs = [key for key,val in trans.varying_pars(raw).items() if not isinstance(val, ss.by)]
+        if funcs:
+            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its {dw.family} dwell time has a function as its parameter "{funcs[0]}". Run with solver="abm".')
+        dims = [strat.name for strat in self.sim.groups.strats]
+        for val in trans.varying_pars(raw).values():
+            for dim in val.dims:
+                if dim not in dims:
+                    raise ss.errors.MissingDimension(f'the dwell time of "{name}" is given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}={["female", "male"] if dim in ["sex", "female"] else [...]}).')
+        dw.varying = True
+        grids = {key:val.per_group(self.sim, to_unit) for key,val in trans.varying_pars(raw).items()}
+        plain = {k:v for k,v in trans.numeric_pars(raw, to_unit, per_agent=lambda val: None).items() if k not in grids}
+        stats = [trans.dwell_stats(type(raw)(**{**plain, **{k:float(np.broadcast_to(g, (self.n_groups,))[i]) for k,g in grids.items()}}), lambda v: v) for i in range(self.n_groups)]
+        dw.mean, dw.std = [np.array(x) for x in zip(*stats)]
+        shape = raw.pars.get('a')
+        if tr.stages is not None:
+            dw.kg = np.full(self.n_groups, tr.stages)
+        elif dw.family == 'gamma' and 'a' not in grids and sc.isnumber(shape) and shape == int(shape):
+            dw.kg = np.full(self.n_groups, int(shape))
+        else:
+            dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
+            dw.exact = False
+            ss.note(f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
+        dw.k = int(dw.kg.max())
+        if np.all(dw.kg == dw.k):
+            dw.kg = None # Not ragged
+        return
+
+    def note_stages(self, name, dw):
+        """ In a compartmental run, a dwell time that is not exponential or Erlang is approximated by Erlang stages, which is said in one line """
+        sim = self.sim
+        approx = sim.pars.approx
+        unit = f' {sim.unit_name}s'
+        std = dw.mean/np.sqrt(dw.k)
+        if f'{std:.3g}' == f'{dw.std:.3g}':
+            kept = f'mean {dw.mean:n}{unit} and std {std:.3g}{unit}, as given'
+        else:
+            kept = f'mean {dw.mean:n}{unit} kept; std {std:.3g}{unit}, against {dw.std:.3g}{unit} given'
+        what = f'{dw.k} Erlang stage{"s" if dw.k > 1 else ""} ({kept})'
+        if approx is False:
+            raise ss.CapabilityError(f'"{name}" cannot run with solver="{sim.solver}" and approx=False.\n'
+                                     f'     It has a {dw.family} dwell time, which would be approximated by {what}.\n'
+                                     f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
+        else:
+            fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
+            ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', ss.errors.StagesUnderAuto, sim=sim, verbose=0 if approx else None)
+        return
+
     def unsupported(self, tr, what):
         raise ss.CapabilityError(f'"{tr.name}" cannot run with solver="{self.sim.solver}": {what} has no compartmental form yet.\n'
                                  f'     Run with solver="abm".')
@@ -381,7 +444,7 @@ class Compartmental(Engine):
         if abs(x - round(x)) > 1e-6:
             unit = self.sim.unit_name
             dt = float(self.convert(dur))/x
-            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s), as agents take it; a step that divides it makes it exact', ss.LargeStep, sim=self.sim)
+            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s), as agents take it; a step that divides it makes it exact', ss.errors.LargeStep, sim=self.sim)
         return n
 
     def delay_steps(self, tr):
@@ -460,7 +523,7 @@ class Compartmental(Engine):
 
     def restart_movement(self):
         """
-        Put the movement between places, worked out again from new values of its parameters (see `ss.Mobility.fitted()`), into the program, as a restart with them needs (see `ss.Sim.restart()`)
+        Put the movement between places, worked out again from new values of its parameters (see `ss.geo.Mobility.fitted()`), into the program, as a restart with them needs (see `ss.Sim.restart()`)
 
         The program keeps its entries, which the new values fill (one that becomes 0 stays as an
         entry of 0), so a compiled run and the gradients' check that the layout is the same both hold.
@@ -740,8 +803,8 @@ class Compartmental(Engine):
                     raise ss.CapabilityError(f'{where}: a synchronized flow moves people between states of people (not to ss.null or a count). Run with solver="abm".')
                 self.syncs.append(Bunch(tr=tr, to=ev.to, mod=mod, otr=otr, row=self.n_trans, S=None, mask=None, rec=None))
                 self.n_trans += 1
-                ss.note(f'{mod.name}.{otr.name} is triggered by {otr.trigger.x.label}: a synchronized flow, which moves people in {mod.name} as {self.mod.name}.{tr.name} moves them (exact)'
-                        + (f'; with solver="{sim.solver}" its count is drawn apart from the move, so agrees with it on average' if self.integer and len(tr.dst) > 1 else ''), sim=sim)
+                if self.integer and len(tr.dst) > 1: # Otherwise it is exact
+                    ss.note(f'{mod.name}.{otr.name} is triggered by {otr.trigger.x.label}, a synchronized flow, which moves people in {mod.name} as {self.mod.name}.{tr.name} moves them; with solver="{sim.solver}" its count is drawn apart from the move, so agrees with it on average', sim=sim)
         return
 
     def syncs_of(self, tr, dst):
@@ -861,9 +924,7 @@ class Compartmental(Engine):
         self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None] # An event of this module: moved at the end of the step, see step_triggers()
         for tr in self.triggers:
             tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
-            if not tr.static:
-                ss.note(f'{tr.name} is triggered by {tr.trigger}, which is not only on states and strata; applied at each step', sim=sim)
-            else:
+            if tr.static:
                 ss.note(f'{tr.name} is triggered by {tr.trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dst)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
         return
 
@@ -926,7 +987,7 @@ class Compartmental(Engine):
         def enter(name, weight, comps, credits, path=(), parent=-1):
             if name in path: # The same-step cascade, by construction: see ss.solvers.Agents.junctions
                 cycle = ' -> '.join(path[path.index(name):] + (name,))
-                raise ss.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
+                raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
                                      f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
@@ -1094,7 +1155,7 @@ class Compartmental(Engine):
         flow.routes = None
         if flow.kind != 'contact':
             return None
-        nets = {ss.standardize_netkey(name):net for name,net in self.sim.all_networks().items()}
+        nets = {ss.utils.standardize_netkey(name):net for name,net in self.sim.all_networks().items()}
         terms = self.sim.mixing.terms
         lasting = any('partnership' in term for term in terms) # Under the partnership approximation, by source state
         acts = lasting or any(getattr(net, 'has_acts', False) for net in nets.values())
@@ -1102,7 +1163,7 @@ class Compartmental(Engine):
         if betas:
             raw = betas[0].raw
             def route(term, state=None): # The keys of a dict are checked when the sim is initialized
-                key = ss.standardize_netkey(term.name)
+                key = ss.utils.standardize_netkey(term.name)
                 val = ss.utils.route_beta(raw, term.name) if isinstance(raw, dict) else raw
                 net = nets.get(key)
                 if 'partnership' in term:

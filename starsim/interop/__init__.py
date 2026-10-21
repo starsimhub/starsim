@@ -5,7 +5,7 @@ Import models from other frameworks
 `v4_design/design/16-interop.md`. Each importer reads its format into an
 `ss.interop.Source`, and `ss.interop.build()` turns that into a sim by the same
 rules for every format: how each rate was read is printed, and what could not be
-translated is listed as `ss.ImportIncomplete` and kept in `sim.imported`.
+translated is listed as `ss.errors.ImportIncomplete` and kept in `sim.imported`.
 """
 import re
 import sciris as sc

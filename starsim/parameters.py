@@ -890,7 +890,7 @@ class by:
         others = [dim for dim in self.dims if dim != 'to']
         def position(n):
             if n != len(labels):
-                raise ss.ShapeError(f'{self} gives {n} values over "to" by position, but the entry of p= it is in covers {len(labels)} destinations ({sc.strjoin(labels)})')
+                raise ss.errors.ShapeError(f'{self} gives {n} values over "to" by position, but the entry of p= it is in covers {len(labels)} destinations ({sc.strjoin(labels)})')
             return labels.index(to)
         if self.array is not None:
             axis = self.dims.index('to')
@@ -920,7 +920,7 @@ class by:
         return None
 
     def check(self, sim):
-        """ Check the values against the sim's dimensions (`ss.ShapeError`), and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
+        """ Check the values against the sim's dimensions (`ss.errors.ShapeError`), and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
         names = [strat.name for strat in sim.groups.strats]
         if 'to' in self.dims: # Over the destinations of a transition, which is taken a destination at a time (see at())
             return [], []
@@ -932,13 +932,13 @@ class by:
                     fix = 'give a table by age with the lower edge of each bin, e.g. ss.by(dict(age=[0, 15, 50], value=[...])), or add sim.stratify(age=[...])'
                 else:
                     fix = f'give them by value, ss.by({dim}=dict(...)), which is read from people.{dim}, or add sim.stratify({dim}=[...])'
-                raise ss.MissingDimension(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
+                raise ss.errors.MissingDimension(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
         ds = [names.index(dim) for dim in self.dims if dim in names]
         strats = [sim.groups.strats[d] for d in ds]
         if self.array is not None:
             shape = tuple(strat.n for strat in strats)
             if self.array.shape != shape:
-                raise ss.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
+                raise ss.errors.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
         elif self.table is None:
             for strat in strats:
                 vals = self.given[strat.name]
@@ -946,11 +946,11 @@ class by:
                 if isinstance(vals, dict):
                     missing = [str(label) for label in labels if str(label) not in [str(k) for k in vals]]
                     if missing:
-                        raise ss.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
+                        raise ss.errors.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
                     continue
                 n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else len(labels) # One value is for every level, e.g. ss.by(subpop=2.2)
                 if n != len(labels):
-                    raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
+                    raise ss.errors.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
         return ds, strats
 
     def split_groups(self, sim):
@@ -1015,7 +1015,7 @@ class by:
                 labels = [str(label) for label in strat.labels]
                 label = str(row[strat.name])
                 if label not in labels:
-                    raise ss.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                    raise ss.errors.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                 index.append(labels.index(label))
             out[tuple(index)] += convert(row['value'])
         return ds, out
@@ -1035,7 +1035,7 @@ class by:
                 if kind == 'keys':
                     labels = [str(label) for label in strat.labels]
                     if str(val) not in labels:
-                        raise ss.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                        raise ss.errors.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                     index.append([labels.index(str(val))])
                 elif isnull(val) or strat.edges is None: # People with no value, who are in no group
                     index.append([])
@@ -1084,7 +1084,7 @@ class by:
             try:
                 raw = people[dim].raw
             except AttributeError:
-                raise ss.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
+                raise ss.errors.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         n = len(keys)
         if kind == 'edges':
             pos = np.digitize(raw, keys) - 1

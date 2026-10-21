@@ -147,7 +147,7 @@ In a discrete-time run this MUST be implemented as a single multinomial draw per
 Details:
 
 - Separate transitions out of one state that carry `p=` are a split decided on entry to the state, not a competition, and one transition with several destinations splits when it is taken ([03-states-and-transitions.md](03-states-and-transitions.md) §Branching); the split is one draw as well.
-- As agents, exits are scheduled at entry. Moves with no wait (a split with no dwell time, or a dwell time that rounds to no steps) happen in the step that caused them: the moves cascade until nobody moves (a cycle raises `ss.TriggerLoop`). Compartments pass such moves straight through, so this is what makes agents agree with them.
+- As agents, exits are scheduled at entry. Moves with no wait (a split with no dwell time, or a dwell time that rounds to no steps) happen in the step that caused them: the moves cascade until nobody moves (a cycle raises `ss.errors.TriggerLoop`). Compartments pass such moves straight through, so this is what makes agents agree with them.
 - A dwell time competing with a rate: someone who enters a state during a step, after its rates were drawn, has the rates drawn for them in the step their dwell time ends too, so the rate acts for as long as the dwell time says.
 - As agents, a state with both spontaneous exits and a contact-mediated exit resolves the spontaneous ones jointly first, and transmission then acts on whoever is still in the state (both in row 9). This is an ordering effect of size O(dt); the compartmental solvers draw them together (the chain-binomial solver draws the number leaving each compartment once, then shares it between the exits).
 - Hazards from *different* modules acting on the same people (background mortality from a demographics module, disease mortality from a disease) are not pooled; they run in module order. Because deaths are deferred (next section), neither prevents the other from being recorded. The exception is diseases whose states are crossed in a compartmental run ([07-effects.md](07-effects.md)): they are one model, whose rates are all worked out from the people at the start of the step.
@@ -176,7 +176,7 @@ So a disease at `dt=ss.days(1)` and a demographics module at `dt=ss.years(1)` sh
 - A declared disease with a timestep of its own is taken a step at a time (it is not run in one call to the kernels).
 - `sim.loop.plot_step_order()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
 
-Events inside a step use the same mechanism: a network given a sub-daily `dt` appears in the plan at those times. Commuting between places (`ss.Mobility`) is not a module and has no place in the loop: it is a share of time spent in each place, applied within every step ([06-routes.md](06-routes.md)).
+Events inside a step use the same mechanism: a network given a sub-daily `dt` appears in the plan at those times. Commuting between places (`ss.geo.Mobility`) is not a module and has no place in the loop: it is a share of time spent in each place, applied within every step ([06-routes.md](06-routes.md)).
 
 ## Order under each solver
 
@@ -218,7 +218,7 @@ Requirement 2 rules out one random number stream shared across workers, and is o
 1. Resolve the declarations: states (and which of them are people), the kind of each transition, the sim's unit (from `unit=`, else the model's typed values, else dates; none of these means time is in steps; [02-types.md](02-types.md)), and defaults. Every guessed default is recorded for `describe()`.
 2. Expand stratifications into strata and generate the transitions between them.
 3. Load named data: parameters from data sources, and observed data attached to results by name.
-4. Check the dimension of every rate, the shape of every array-valued parameter, and every parameter's value against its bounds (`ss.UnvaluedParameter`, `ss.OutOfBounds`).
+4. Check the dimension of every rate, the shape of every array-valued parameter, and every parameter's value against its bounds (`ss.errors.UnvaluedParameter`, `ss.errors.OutOfBounds`).
 5. Register modifiers against their targets.
 6. Choose the solver if `solver='auto'`, and work out any approximations the solver needs ([12-backends.md](12-backends.md)).
 7. Collect the loop's functions (the plan itself is made when the loop first runs).

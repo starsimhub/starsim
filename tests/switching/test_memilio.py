@@ -69,7 +69,7 @@ def make_secir(d, beta=None, damping=True):
 def stratify(target, d):
     """ Ages, and counties with MEmilio's commuters away half the day """
     target.stratify(age=ages, split=split)
-    target.stratify(patch=ss.geo(names=d.names, pop=d.popsize, x=d.x, y=d.y), mobility=ss.Mobility(matrix=0.5*d.M, kind='commute'))
+    target.stratify(patch=ss.geo.location(names=d.names, pop=d.popsize, x=d.x, y=d.y), mobility=ss.geo.Mobility(matrix=0.5*d.M, kind='commute'))
     return target
 
 

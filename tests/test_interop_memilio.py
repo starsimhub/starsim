@@ -151,7 +151,7 @@ def test_secir():
         CriticalPerSevere=age(0.25, 0.4), DeathsPerSevere=age(0.0, 0.05), DeathsPerCritical=age(0.3, 0.5),
         Seasonality=num(0.2), StartDay=num(60.0), TestAndTraceCapacity=num(20.0), TestAndTraceCapacityMaxRisk=num(5.0), ICUCapacity=num(15.0),
     )
-    with pytest.warns(ss.ImportIncomplete): # The share who recover without symptoms differs by age where the groups are summed, for test and trace
+    with pytest.warns(ss.errors.ImportIncomplete): # The share who recover without symptoms differs by age where the groups are summed, for test and trace
         sim = load_memilio(d, **kw)
     assert [k for k,_ in sim.imported.incomplete] == ['RecoveredPerInfectedNoSymptoms by age group']
     sim.run()
@@ -194,7 +194,7 @@ def test_graph_json():
     )
     totals = np.array([[6000, 2000], [4000, 1000]])
     seir.stratify(age=['0', '1'], split=[8/13, 5/13])
-    seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
+    seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
     ref = ss.Sim(seir, networks=ss.contacts(age=[[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     assert np.allclose(res.n_Infected.values, ref.results.oseir.n_Infected.values, rtol=1e-9), 'The import should match the model written by hand'
     return sim

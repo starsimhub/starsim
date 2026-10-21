@@ -18,8 +18,6 @@ import starsim.fit
 import corpus
 
 slow = pytest.mark.skipif(not os.getenv('STARSIM_SLOW'), reason='A longer run; set STARSIM_SLOW=1 to run it')
-has_jax = ss.gradients.available()
-has_blackjax = importlib.util.find_spec('blackjax') is not None
 has_optuna = importlib.util.find_spec('optuna') is not None
 
 start, stop = '2020-02-23', '2020-05-31' # As corpus.seasonal()
@@ -111,7 +109,6 @@ jax_cases = [
     'poisson_weekly',
 ]
 
-@pytest.mark.skipif(not has_jax, reason='JAX is not installed')
 @pytest.mark.parametrize('key', jax_cases)
 def test_jax_loglik(key):
     sc.heading(f'Testing that the log-density in JAX equals the sim\'s log-likelihood: {key}')
@@ -221,9 +218,9 @@ def check_fit(fit, truth, rtol=None, rhat_max=1.1):
 
 methods = [
     'nelder-mead',
-    pytest.param('l-bfgs-b', marks=pytest.mark.skipif(not has_jax, reason='JAX is not installed')),
+    'l-bfgs-b',
     pytest.param('optuna', marks=pytest.mark.skipif(not has_optuna, reason='Optuna is not installed')),
-    pytest.param('nuts', marks=pytest.mark.skipif(not (has_jax and has_blackjax), reason='JAX and BlackJAX are not installed')),
+    'nuts',
     'pmcmc',
     'abc-smc',
     'if2',
@@ -259,7 +256,6 @@ def test_sbc(method):
     return fit
 
 
-@pytest.mark.skipif(not has_blackjax, reason='BlackJAX is not installed')
 def test_two_optima():
     sc.heading('Testing that a fit with two local optima finds the better one, or says it has not converged')
     def make(counts):
@@ -309,7 +305,6 @@ def test_staged_and_sensitivity():
     return table
 
 
-@pytest.mark.skipif(not has_jax, reason='JAX is not installed')
 def test_log_density():
     sc.heading('Testing the log-density as a function, with its gradient by reverse mode')
     sim = corpus.outcomes(beta=0.3, likelihood=ss.poisson(), data=simulate(models.outcomes, 0.35))
@@ -405,7 +400,7 @@ def test_data_files(tmp_path):
     def make(name):
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.2*I.frac, recovery=I >> R @ ss.days(10), init=dict(I=10), name=name)
-    with pytest.raises(ss.UnknownDataColumn, match='flu.infection'):
+    with pytest.raises(ss.errors.UnknownDataColumn, match='flu.infection'):
         ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.data(path)).init()
     return path
 

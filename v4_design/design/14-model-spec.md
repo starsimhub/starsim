@@ -233,7 +233,7 @@ Values by stratum, time series, and seasonal curves:
 {"seasonal": {"mean": 0.05, "amplitude": 0.3, "peak": "January"}}
 ```
 
-Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).
+Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo.location(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).
 
 ## Functions
 
@@ -304,11 +304,11 @@ Each part is a plain string or number, so `sim.hash().pars` can go in a file nam
 
 ## Saved forms
 
-A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). Only the declared parts of a model are written as code: declared diseases (with their functions, from their source), families of strains, deliveries with their products (each as a variable, so a step can refer to another's events), cascades, `ss.modify`, contact matrices (by name or as numbers), transfers, and priors that are distributions. Nothing is added to reconstruct the rest. What `to_code()` does not write (the attached data, a module or network written as code, named by its `factory`, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand, and in an `ss.LossyExport` warning; a part of a declared disease that it cannot write (the migration of a transition, a disease's custom functions) is an error rather than a different model. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`; saved partway through a run (`sim.run(until=...)`), it is a checkpoint that can continue. There is no third form: the spec itself is not read back, and the results as JSON (`sim.to_json()`) are output, not a model.
+A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). Only the declared parts of a model are written as code: declared diseases (with their functions, from their source), families of strains, deliveries with their products (each as a variable, so a step can refer to another's events), cascades, `ss.modify`, contact matrices (by name or as numbers), transfers, and priors that are distributions. Nothing is added to reconstruct the rest. What `to_code()` does not write (the attached data, a module or network written as code, named by its `factory`, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand, and in an `ss.errors.LossyExport` warning; a part of a declared disease that it cannot write (the migration of a transition, a disease's custom functions) is an error rather than a different model. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`; saved partway through a run (`sim.run(until=...)`), it is a checkpoint that can continue. There is no third form: the spec itself is not read back, and the results as JSON (`sim.to_json()`) are output, not a model.
 
 ## Export to other formats
 
-The model spec and the code `sim.to_code()` writes are the only complete forms. Exports to other frameworks' formats ([16-interop.md](16-interop.md)) usually cannot carry everything, and each MUST say what was left out or changed, one line per declaration, in an `ss.LossyExport` warning:
+The model spec and the code `sim.to_code()` writes are the only complete forms. Exports to other frameworks' formats ([16-interop.md](16-interop.md)) usually cannot carry everything, and each MUST say what was left out or changed, one line per declaration, in an `ss.errors.LossyExport` warning:
 
 ```text
 >>> ss.save('model.xml', sim, format='sbml')

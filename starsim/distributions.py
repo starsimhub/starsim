@@ -119,7 +119,7 @@ def timepar_of(val):
 
 def no_dists():
     """ The classes of objects that never hold a distribution (or a time parameter), so are not searched for them """
-    return (ss.Result, ss.Results, ss.Timeline, ss.arrays.Watch, np.dtype, type)
+    return (ss.utils.NoDists, np.dtype, type)
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
@@ -196,7 +196,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', 'declared'], subclasses=(Dists, ss.solvers.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', 'declared'], subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
@@ -474,8 +474,8 @@ class Dist:
             if mock is True: # Convert from boolean to a reasonable int
                 mock = 100
             strict = False
-            self.sim = ss.mock_sim(mock)
-            self.module = ss.mock_module()
+            self.sim = ss.debugtools.mock_sim(mock)
+            self.module = ss.debugtools.mock_module()
             self.trace = 'mock_dist'
 
         if not strict: # Otherwise, wait for a sim
@@ -749,7 +749,7 @@ class Dist:
 
         Args:
             trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
-            **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
+            **kwargs (dict): passed to `ss.debugtools.mock_sim()` as well as `ss.debugtools.mock_module()` (typically time args, e.g. dt)
 
         Examples:
             ```python
@@ -757,8 +757,8 @@ class Dist:
             dist.rvs(10)
             ```
         """
-        mock_sim = ss.mock_sim(**kwargs)
-        mock_mod = ss.mock_module(**kwargs)
+        mock_sim = ss.debugtools.mock_sim(**kwargs)
+        mock_mod = ss.debugtools.mock_module(**kwargs)
         self.init(trace=trace, module=mock_mod, sim=mock_sim)
         return self
 

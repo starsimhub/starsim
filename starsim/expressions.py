@@ -400,7 +400,7 @@ class Share(Expr):
         num = evaluate(parts[self.label], ctx)
         den = sum(evaluate(part, ctx) for part in parts.values())
         if np.any(np.asarray(den) <= 0):
-            raise ss.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
+            raise ss.errors.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
         out = num/den
         return out if self.row.scalar is None else evaluate(self.row.scalar, ctx)*out
 
@@ -766,11 +766,11 @@ def linear(expr):
     Split an expression into a constant part and a coefficient for each bare state
 
     Returns `(const, terms)`, where `const` is an expression with no bare states
-    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.NonlinearExposure` if
+    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.errors.NonlinearExposure` if
     the expression is not linear in its bare states.
     """
     def nonlinear():
-        raise ss.NonlinearExposure(f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
+        raise ss.errors.NonlinearExposure(f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
 
     if isinstance(expr, ss.transitions.State):
         return None, {expr: par(1, literal=True)}

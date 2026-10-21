@@ -453,7 +453,7 @@ def build(sources, verbose=None, **kwargs):
     Build a sim from one or more models read from another framework
 
     Each source becomes a disease. Prints how each flow was read and, as
-    `ss.ImportIncomplete`, what could not be translated; both are kept in
+    `ss.errors.ImportIncomplete`, what could not be translated; both are kept in
     `sim.imported`.
 
     Args:
@@ -501,7 +501,7 @@ def build(sources, verbose=None, **kwargs):
         sim.imported.prompt = handoff(sim.imported)
         items = '\n'.join(f'  {name}: {why}' for name,why in incomplete)
         ss.warn(f'{len(incomplete)} part(s) of the model were not translated:\n{items}\n'
-                f'The sim runs without them. {sim.imported.prompt}', ss.ImportIncomplete)
+                f'The sim runs without them. {sim.imported.prompt}', ss.errors.ImportIncomplete)
     return sim
 
 

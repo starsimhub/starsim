@@ -210,7 +210,7 @@ class Disease(ss.Module):
         self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
         for key in sc.mergedicts(pars):
             if key not in self.pars:
-                raise ss.UnknownParameter(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(key, self.pars.keys())}')
+                raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(key, self.pars.keys())}')
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
@@ -245,10 +245,10 @@ class Disease(ss.Module):
         Args:
             split (list): the share of the population in each level (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-            kind (str): 'age', 'space', 'strain', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo` or with `mobility=`, 'strain' with `immunity=`, 'age' for `age=`, and otherwise 'plain' (whatever the name)
+            kind (str): 'age', 'space', 'strain', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo.location` or with `mobility=`, 'strain' with `immunity=`, 'age' for `age=`, and otherwise 'plain' (whatever the name)
             states (list): the states the dimension applies to (default: every state that is people; for a strain, every state reached only through infection)
             where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
-            mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.gravity()`, `ss.Mobility()`, or a matrix
+            mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.Mobility()`, or a matrix
             inplace (bool): if False, return a stratified copy and leave this disease unchanged
             kwargs (dict): the dimension and its levels (bin edges or labels), e.g. `age=[0, 15, 65]`;
                 an `ss.transfer` passed as a keyword is added under that name
@@ -377,7 +377,7 @@ class Disease(ss.Module):
             unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
             if unknown:
                 hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=100)), and cannot be set through pars.' if 'init' in unknown else ''
-                raise ss.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
+                raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
             self.engine = ss.solvers.make_engine(self, sim)
             self.engine.define()
         elif not self.state_list and type(self).step is Disease.step and type(self).step_state is Disease.step_state:
@@ -521,7 +521,7 @@ class Disease(ss.Module):
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
         unknown = [name for name in names if name not in graph.states]
         if unknown:
-            raise ss.UnknownState(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+            raise ss.errors.UnknownState(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
         age = self.sim.people.age # A plain array of the people, to copy
         raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
         for i,name in enumerate(names):
@@ -685,9 +685,9 @@ class Infection(Disease):
         def scalar_beta(β):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
 
-        nets = {ss.standardize_netkey(k):net for k,net in sim.networks.items()}
+        nets = {ss.utils.standardize_netkey(k):net for k,net in sim.networks.items()}
         def both_ways(k, β): # A single beta applies in both directions, except on a maternal network: from mother to child only
-            net = nets.get(ss.standardize_netkey(k))
+            net = nets.get(ss.utils.standardize_netkey(k))
             return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
 
         def as_pair(β, nkey):
@@ -702,18 +702,18 @@ class Infection(Disease):
 
         # If beta is a scalar, apply this bi-directionally to all networks
         if scalar_beta(β) or isinstance(β, ss.peract):
-            betamap = {ss.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.standardize_netkey(k)) for k in sim.networks.keys()}
+            betamap = {ss.utils.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.utils.standardize_netkey(k)) for k in sim.networks.keys()}
 
         # If beta is a dict, check all entries are bi-directional; a default is the beta of every network it does not name, and the names that are not networks are not used
         elif isinstance(β, dict):
             betamap = dict()
             if 'default' in β:
-                unknown = [k for k in β if k != 'default' and ss.standardize_netkey(k) not in nets]
+                unknown = [k for k in β if k != 'default' and ss.utils.standardize_netkey(k) not in nets]
                 if unknown:
                     ss.note(f'the beta of "{self.name}" names {sc.strjoin(unknown)}, which {"is not a network" if len(unknown) == 1 else "are not networks"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the networks not named take the default', sim=sim)
                 β = {k:ss.utils.route_beta(β, k) for k in sim.networks.keys()}
             for k,thisbeta in β.items():
-                nkey = ss.standardize_netkey(k)
+                nkey = ss.utils.standardize_netkey(k)
                 if scalar_beta(thisbeta):
                     betamap[nkey] = both_ways(nkey, thisbeta)
                 else:
@@ -724,7 +724,7 @@ class Infection(Disease):
             raise TypeError(errormsg)
 
         # Check that it matches the network
-        netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
+        netkeys = [ss.utils.standardize_netkey(k) for k in list(sim.networks.keys())]
         if set(betamap.keys()) != set(netkeys):
             missing = sorted(set(netkeys) - set(betamap.keys()))
             extra = sorted(set(betamap.keys()) - set(netkeys))
@@ -821,7 +821,7 @@ class Infection(Disease):
         sources = []
         networks = []
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
-            betas = betamap[ss.standardize_netkey(nkey)]
+            betas = betamap[ss.utils.standardize_netkey(nkey)]
             target_uids, source_uids, network_ids = self.infect_route(i, route, betas, rel_trans, rel_sus)
             new_cases.append(target_uids)
             sources.append(source_uids)

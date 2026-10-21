@@ -748,24 +748,24 @@ def test_beta_readings():
     assert Couples().directions == ['m2f', 'f2m'] and ssl.MSMNet().directions == [] # Men only: one beta
     sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples'), **kw).run()
     assert sim.results.sis.infection.sum() > 0
-    with pytest.raises(ss.RouteMismatch, match='sides = dict'):
+    with pytest.raises(ss.errors.RouteMismatch, match='sides = dict'):
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ssl.MSMNet(), **kw).init()
     assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
-    with pytest.raises(ss.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard (D2)
+    with pytest.raises(ss.errors.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard (D2)
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.MFNet(), **kw).init()
     sim = ss.Sim(diseases='sis', networks=['mf', 'random'], n_agents=500, verbose=0).init() # But the default of ss.SIS is a probability per act there, as in Starsim 3
     assert sim.diseases.sis.pars.beta.raw['mfnet'] == ss.peract(0.05) and any('as in Starsim 3' in note for note in sim.notes)
-    with pytest.raises(ss.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names (D3, N7)
+    with pytest.raises(ss.errors.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names (D3, N7)
         ss.Sim(sis(dict(mfnet=[0.3, 0.15])), networks=ss.MFNet(), **kw).init()
-    with pytest.raises(ss.RouteMismatch, match='no acts'): # No act to be per
+    with pytest.raises(ss.errors.RouteMismatch, match='no acts'): # No act to be per
         ss.Sim(sis(ss.peract(0.01)), networks='random', **kw).init()
-    with pytest.raises(ss.RouteMismatch, match='f2m'): # Every direction needs a value ...
+    with pytest.raises(ss.errors.RouteMismatch, match='f2m'): # Every direction needs a value ...
         ss.Sim(sis(ss.peract(m2f=0.01)), networks=ss.MFNet(), **kw).init()
-    with pytest.raises(ss.RouteMismatch, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
+    with pytest.raises(ss.errors.RouteMismatch, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01, m2m=0.02)), networks=ss.MFNet(), **kw).init()
-    with pytest.raises(ss.RouteMismatch, match='no sides'):
+    with pytest.raises(ss.errors.RouteMismatch, match='no sides'):
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.PartnerNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
-    with pytest.raises(ss.OutOfBounds):
+    with pytest.raises(ss.errors.OutOfBounds):
         ss.peract(1.5)
     with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step (D4)
         ss.Sim(sis(0.01), networks=ss.MFNet(acts=ss.poisson(lam=ss.freqperyear(80))), **kw).init()
@@ -797,7 +797,7 @@ def test_route_modifiers():
         si = ss.Disease(infection=ss.Transition(S, I, rate=dict(mfnet=ss.peract(0.05), randomnet=beta) * I), init_prev=0.05, name='si')
         return ss.Sim(si, networks=[ss.MFNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.n_I[-1]
     assert run(condoms(multiply=0, share=1)) > run(condoms(multiply=0, share=1), beta=0) > 0 # Infections only over the random network
-    with pytest.raises(ss.RouteMismatch, match='not a route'):
+    with pytest.raises(ss.errors.RouteMismatch, match='not a route'):
         run(condoms(multiply=0, share=1) + [ss.modify('si.infection', multiply=0.5, route='needles')])
     with pytest.raises(ValueError, match='transmission'):
         run([ss.modify('si.rel_sus', multiply=0.5, route='mfnet')])
@@ -936,7 +936,7 @@ def test_peract_spec():
         spec = sim.to_spec()['modules'][0]
         assert next(p['value'] for p in spec['pars'] if p['name'] == 'beta') == value
         assert ('transitions.infection.beta' in spec['guessed']) == sc.isnumber(beta) # A bare number on a network with acts is read as per act, which the spec says
-        with pytest.warns(ss.LossyExport): # The network is not written
+        with pytest.warns(ss.errors.LossyExport): # The network is not written
             code = sim.to_code()
         assert "efficacy=0.5, share=ss.timeseries" in code and "route=['mfnet']" in code
         ns = {}
@@ -961,9 +961,9 @@ def test_beta_default():
     assert 'beta on maternalnet' in sim.diseases.d.describe(output=True)
 
     # Without a default, a name that is not a route, or a route with no value, still raises, since it is likely a typo
-    with pytest.raises(ss.RouteMismatch, match='no route is called msm'):
+    with pytest.raises(ss.errors.RouteMismatch, match='no route is called msm'):
         ss.Sim(make(mfnet=ss.peract(0.01), maternalnet=0, msm=ss.peract(0.1)), networks=[ss.MFNet(), ss.MaternalNet()], **kw).init()
-    with pytest.raises(ss.RouteMismatch, match='maternalnet has no value'):
+    with pytest.raises(ss.errors.RouteMismatch, match='maternalnet has no value'):
         ss.Sim(make(mfnet=ss.peract(0.01)), networks=[ss.MFNet(), ss.MaternalNet()], **kw).init()
 
     # The default is the same as giving each route its value, as agents and as an ODE, which agree; it can be a typed rate or a parameter
@@ -984,7 +984,7 @@ def test_beta_default():
     sim = ss.Sim(make(mfnet=ss.peract(0.01), msm=ss.peract(0.1), default=0), networks=[ss.MFNet(), ss.MaternalNet()], **kw)
     beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
     assert beta['default'] == 0 and 'msm' in beta # Bare, since it is per act on a route with acts
-    with pytest.warns(ss.LossyExport):
+    with pytest.warns(ss.errors.LossyExport):
         assert "'default': 0.0" in sim.to_code()
 
     # A disease written as code reads the default too

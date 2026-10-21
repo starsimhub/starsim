@@ -14,7 +14,7 @@ A message is read once, by an epidemiologist or by an AI writing a model for one
 
 Every named error SHOULD have:
 
-1. **A name**, the exception class, such as `ss.UnknownParameter`. Names are stable across versions so they can be searched for and documented, and caught: `except ss.UnknownParameter`, or `except ss.CodedError` for any of them. (Drafts of this specification numbered them, e.g. `E602 UnknownParameter`; the numbers were dropped.)
+1. **A name**, the exception class, such as `ss.errors.UnknownParameter`. Names are stable across versions so they can be searched for and documented, and caught: `except ss.errors.UnknownParameter`, or `except ss.CodedError` for any of them. (Drafts of this specification numbered them, e.g. `E602 UnknownParameter`; the numbers were dropped.)
 2. **One line saying what is wrong**, using the names the user gave things.
 3. **What to do about it**, as code the user could paste where possible, with the closest matching names for anything misspelled (and none when nothing is close).
 
@@ -44,7 +44,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-59 names: 43 errors, 7 warnings, and 9 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+59 names: 43 errors, 7 warnings, and 9 notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
@@ -64,7 +64,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `InvalidAdjustment` | error | A negative multiplier in `adjust=`. (A multiplier that pushes a probability above 1 is clipped, with a note) |
 | `PartialStratificationMixing` | error | Contacts are given by a dimension that some of the people who mix do not have: a state the dimension does not apply to (`states=`) is the origin or the source of a transmission, or the dimension has `where=`. There is no coordinate for those people to mix as |
 | `InconsistentDimension` | error | Two modules in one sim are stratified by the same people property (age, sex, place) with different groups. Names both modules and their groups, and suggests stratifying the sim: `sim.stratify(age=[...])` |
-| `NoGeography` | error | A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances |
+| `NoGeography` | error | A movement model such as `ss.geo.gravity()` is used on a dimension with no geography to supply distances |
 | `RouteMismatch` | error | A key of a per-layer `beta` dict matches no network or layer, or a network or layer has no key; a route has a `beta` of its own in a declared model; a `beta` is a positional pair (directions are named: `ss.peract(m2f=..., f2m=...)`); `ss.peract` is used on a route without acts, or names a direction the network does not have (or leaves one out, or has keys on a network with no sides), listing its directions; or a modifier's `route=` names no route |
 | `UnmodifiableTarget` | error | The target of `ss.modify` or `ss.change` cannot be resolved to a named numeric quantity (a plain number, a boolean state, a name that does not exist). Lists the closest names |
 | `UnknownEffect` | error (also a `KeyError`) | A product names something it cannot act on: a key of a product's `efficacy` that is not something it can act on in the disease, a `transition=` of a treatment that the disease does not have (or a cure with no single transition to leave by), or a sensitivity of a test for a state the disease does not have. Lists the valid names |
@@ -129,4 +129,4 @@ Since the review of October 2026: the numbers were dropped, and each error, warn
 
 ## Documentation and tests
 
-The catalog above is the documentation of each name: the docstring of its class, which `help(ss.UnknownState)` also shows. A page per name with a minimal example that triggers it is not written yet. Every name SHOULD have a test that triggers exactly it ([18-conformance.md](18-conformance.md)); most errors have one, but about twenty names (most of the notes and warnings) are not yet triggered by name in any test ([deferred.md](../admin/deferred.md)).
+The catalog above is the documentation of each name: the docstring of its class, which `help(ss.errors.UnknownState)` also shows. A page per name with a minimal example that triggers it is not written yet. Every name SHOULD have a test that triggers exactly it ([18-conformance.md](18-conformance.md)); most errors have one, but about twenty names (most of the notes and warnings) are not yet triggered by name in any test ([deferred.md](../admin/deferred.md)).

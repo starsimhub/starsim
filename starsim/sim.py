@@ -24,7 +24,7 @@ class Sim(ss.Base):
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`.
             Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
         pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`), and of sim
-            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises `ss.UnknownParameter`
+            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises `ss.errors.UnknownParameter`
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
         demographics (str/Demographics/list/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, for every solver), or modules (e.g. `ss.Births()`, `ss.Pregnancy()`), or a list; True for births and deaths at default rates
@@ -93,7 +93,7 @@ class Sim(ss.Base):
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in mod.pars.keys()}
             settings = [key for key in pars if key in self.pars and key not in names]
-            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.UnknownParameter when the sim is initialized
+            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.errors.UnknownParameter when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
             if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): in order too, before they are copied
                 pars['interventions'] = self._order_steps(pars['interventions'])
@@ -369,7 +369,7 @@ class Sim(ss.Base):
                 mods = mods or [mod for mod in coded if name in mod.pars and modname in ['', mod.name]]
             if len(mods) != 1:
                 options = [f'{mod.name}.{k}' for mod in self.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
-                raise ss.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
+                raise ss.errors.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
                                           f'Parameters are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
             mods[0].pars.update({name:val})
         return
@@ -381,14 +381,14 @@ class Sim(ss.Base):
         raw = whole if whole is not None else (mods[0].pars.get(name) if mods else None)
         raw = raw.raw if isinstance(raw, ss.par) else raw # E.g. given as pars=dict(beta=ss.par(ss.by(patch=[...]), bounds=...))
         if not isinstance(raw, ss.by) or raw.dim is None:
-            raise ss.UnknownParameter(f'pars= has values for levels of "{key}" ({sc.strjoin(given.keys())}), which is not a parameter with a value for each level of one stratification, e.g. ss.par(ss.by(patch=[0.2, 0.3]))')
+            raise ss.errors.UnknownParameter(f'pars= has values for levels of "{key}" ({sc.strjoin(given.keys())}), which is not a parameter with a value for each level of one stratification, e.g. ss.par(ss.by(patch=[0.2, 0.3]))')
         strats = [strat for mod in self.declared for strat in mod.graph.strats] + list(self.groups.sim_strats)
         strat = next((strat for strat in strats if strat.name == raw.dim), None)
         labels = [str(label) for label in strat.labels] if strat is not None else [str(i) for i in range(len(raw.values))]
         vals = list(sc.tolist(raw.values))
         for label,val in given.items():
             if label not in labels:
-                raise ss.UnknownParameter(f'pars= has a value for "{key}[{label}]", but "{raw.dim}" has no level "{label}"; its levels are {sc.strjoin(labels)}')
+                raise ss.errors.UnknownParameter(f'pars= has a value for "{key}[{label}]", but "{raw.dim}" has no level "{label}"; its levels are {sc.strjoin(labels)}')
             vals[labels.index(label)] = val
         return ss.by(**{raw.dim:vals})
 
@@ -429,12 +429,12 @@ class Sim(ss.Base):
         return
 
     def check_par_values(self):
-        """ Check that every parameter of the model has a value (`ss.UnvaluedParameter`), inside its bounds (`ss.OutOfBounds`) """
+        """ Check that every parameter of the model has a value (`ss.errors.UnvaluedParameter`), inside its bounds (`ss.errors.OutOfBounds`) """
         for mod in self.declared:
             for name,p in mod.graph.pars.items():
                 raw = p.raw
                 if raw is None:
-                    raise ss.UnvaluedParameter(f'the parameter "{name}" of "{mod.name}" has no value. Give it one (ss.par(0.1)), or bounds to start from (ss.par(bounds=[0.01, 0.5])), or a value by name (ss.Sim(pars=dict({name}=...))).')
+                    raise ss.errors.UnvaluedParameter(f'the parameter "{name}" of "{mod.name}" has no value. Give it one (ss.par(0.1)), or bounds to start from (ss.par(bounds=[0.01, 0.5])), or a value by name (ss.Sim(pars=dict({name}=...))).')
                 if p.bounds is None:
                     continue
                 val = raw.value if isinstance(raw, ss.TimePar) else raw.array if isinstance(raw, ss.by) else raw
@@ -444,7 +444,7 @@ class Sim(ss.Base):
                 tol = 1e-9*abs(high - low) # For rounding, e.g. on a log scale
                 val = np.asarray(val, dtype=float)
                 if np.any(val < low - tol) or np.any(val > high + tol):
-                    raise ss.OutOfBounds(f'the parameter "{name}" of "{mod.name}" is {ss.transitions.value_str(raw)}, outside its bounds [{low:n}, {high:n}].')
+                    raise ss.errors.OutOfBounds(f'the parameter "{name}" of "{mod.name}" is {ss.transitions.value_str(raw)}, outside its bounds [{low:n}, {high:n}].')
         return
 
     def new(self, pars=None, **kwargs):
@@ -674,7 +674,7 @@ class Sim(ss.Base):
                 holder.graph.add_flow(tr)
         holders = [mod.name for mod in self.declared if self.flows_of(mod)]
         if len(holders) > 1:
-            raise ss.DuplicateDeclaration(f'births or deaths of everyone are declared in {sc.strjoin(holders)}; people are born and die once, whatever their diseases, so this would count them twice.\n'
+            raise ss.errors.DuplicateDeclaration(f'births or deaths of everyone are declared in {sc.strjoin(holders)}; people are born and die once, whatever their diseases, so this would count them twice.\n'
                                           f'     Declare them once, for the population: ss.Sim(..., demographics=[ss.birth(rate=...), ss.death(rate=...)]).')
         return
 
@@ -789,7 +789,7 @@ class Sim(ss.Base):
                 self.units_disagree = sorted(set(units), key=order.index)
                 bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] # 0 is 0 in any unit
                 if bare: # Which unit they are in cannot be guessed
-                    raise ss.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
+                    raise ss.errors.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
         elif dates and self.declared: # A model written as code keeps its step in years, as in Starsim 3
             unit, source = 'day', 'start and stop dates'
         elif is_dur(pars.dt) or isinstance(pars.dt, str):
@@ -801,7 +801,7 @@ class Sim(ss.Base):
         elif not self.declared: # A model written as code, with nothing to say otherwise: years, as in Starsim 3
             unit, source = 'year', 'the default'
         if years and pars.unit is None and unit not in [None, 'year'] and sc.isnumber(pars.dt) and not isinstance(pars.dt, bool): # A bare step beside calendar years is in years, as start and stop are
-            ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.UnitInferred)
+            ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.errors.UnitInferred)
             pars.dt = ss.years(pars.dt)
         self.unit = unit
         self.unit_source = source
@@ -1091,7 +1091,7 @@ class Sim(ss.Base):
         The sim as a Python file that builds it again, from its model spec (see `ss.to_code()`)
 
         Only the declared parts are written; what is not (e.g. a module written as code)
-        is listed in the file and in an `ss.LossyExport` warning. A sim imported from another framework (`ss.load(..., format=...)`) also says
+        is listed in the file and in an `ss.errors.LossyExport` warning. A sim imported from another framework (`ss.load(..., format=...)`) also says
         where it came from, how each rate was read, and what was not translated.
 
         Args:
@@ -1302,7 +1302,7 @@ class Sim(ss.Base):
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
                 if strat.name in self.groups.kept and strat.split_given:
-                    raise ss.BadSplit(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
+                    raise ss.errors.BadSplit(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
                 if strat.name in self.groups.kept:
                     strat.guessed.pop('split', None) # Not "everyone at the first level" (TL3): the people's own values are used
                 if strat.attr not in people.states:
@@ -1580,7 +1580,7 @@ class Sim(ss.Base):
         """
         if rvs or states:
             print('Enabling sim diagnostics ...') # Always print regardless of verbosity
-            self.diagnostics = ss.Diagnostics(sim=self, rvs=rvs, states=states, detailed=detailed)
+            self.diagnostics = ss.debugtools.Diagnostics(sim=self, rvs=rvs, states=states, detailed=detailed)
         else:
             errormsg = 'sim.set_diagnostics() was invoked, but nothing is being tracked'
             raise ValueError(errormsg)
@@ -1652,7 +1652,7 @@ class Sim(ss.Base):
         if unwarned and not self.initialized:
             imp.warned = True
             ss.warn(f'running an import with {len(imp.incomplete)} part(s) of the model not translated (sim.imported.incomplete); '
-                    f'its results leave them out. {imp.prompt}', ss.ImportIncomplete)
+                    f'its results leave them out. {imp.prompt}', ss.errors.ImportIncomplete)
         if n_runs is not None:
             return ss.parallel(self, n_runs=n_runs)
         if solver is not None:
@@ -2074,7 +2074,7 @@ class Sim(ss.Base):
             prof = sim.profile(follow=[net.add_pairs, sis.infect])
             ```
         """
-        prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
+        prof = ss.debugtools.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
         return prof
 
     def cprofile(self, sort='cumtime', mintime=1e-3, **kwargs):

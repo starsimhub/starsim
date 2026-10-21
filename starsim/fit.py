@@ -725,11 +725,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
         The draws (chains × draws × values), the log-density at each (chains × draws), and whether each followed a divergent trajectory (chains × draws)
     """
     jax = ss.gradients.jax()
-    try:
-        import blackjax
-    except ImportError as e:
-        errormsg = 'NUTS needs BlackJAX, which is not installed: pip install blackjax (or pip install starsim[jax])'
-        raise ImportError(errormsg) from e
+    import blackjax
     jnp = jax.numpy
     starts = np.broadcast_to(np.asarray(z0, dtype=float), (chains, np.shape(z0)[-1])) # Each chain's start
     d = starts.shape[1]
@@ -996,7 +992,7 @@ class Fit(sc.prettyobj):
             unsettled = self.table.par[self.table.rhat > 1.01].tolist() if 'rhat' in self.table else []
             if unsettled or divergences:
                 ss.warn(f'{f"the chains disagree about {sc.strjoin(unsettled)} (R-hat above 1.01)" if unsettled else ""}{"; " if unsettled and divergences else ""}{f"{divergences} draws diverged" if divergences else ""}; '
-                        f'try more warm-up (warmup=), or check that the parameters are identifiable', ss.NotConverged)
+                        f'try more warm-up (warmup=), or check that the parameters are identifiable', ss.errors.NotConverged)
         return self.table
 
     def to_df(self):
@@ -1175,7 +1171,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
     for name in names:
         found = [mod.pars[name] for mod in probe.declared if name in mod.pars]
         if not found:
-            raise ss.UnknownParameter(f'ss.fit.optimize() has spend="{name}", which is not a parameter of the model')
+            raise ss.errors.UnknownParameter(f'ss.fit.optimize() has spend="{name}", which is not a parameter of the model')
         current[name] = found[0].raw if isinstance(found[0], ss.par) else found[0]
     t0 = float(probe.t.yearvec[0])
     begin = None if start is None else (ss.date(start).years if isinstance(start, (str, ss.date)) else float(start))
@@ -1298,7 +1294,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
     probe = sim.new(verbose=0).init()
     bounded = bounded_pars(probe, pars)[0]
     if not bounded:
-        raise ss.NothingToFit('sensitivity() needs parameters with bounds, e.g. beta = ss.par(0.3, bounds=[0.1, 0.5]).')
+        raise ss.errors.NothingToFit('sensitivity() needs parameters with bounds, e.g. beta = ss.par(0.3, bounds=[0.1, 0.5]).')
     names = list(bounded.keys())
     lows, highs = [np.array([float(p.bounds[k]) for p in bounded.values()]) for k in [0, 1]]
     logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are sampled on a log scale, as calibrate() searches them
@@ -1374,7 +1370,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     Staged fitting: run each method in turn, each starting from the best fit of the one before; see `sim.calibrate()` with `method=` a list
 
     Each stage is a method's name, or a dict with `method=` and that method's settings. A stage
-    that does not converge stops the sequence (`ss.StageStopped`), and the fit returned is that
+    that does not converge stops the sequence (`ss.errors.StageStopped`), and the fit returned is that
     of the last stage that did, or the first stage's best attempt if it was the one that failed.
     """
     verbose = sc.ifelse(verbose, ss.options.verbose)
@@ -1388,7 +1384,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
         fit = current.calibrate(method=method, verbose=verbose, **sc.mergedicts(kwargs, stage))
         if not fit.converged:
             if i < len(stages) - 1:
-                ss.warn(f'stage {i+1} ({method}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}', ss.StageStopped)
+                ss.warn(f'stage {i+1} ({method}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}', ss.errors.StageStopped)
             return good if good is not None else fit
         good = fit
         current = fit.sim.new() # With the best-fit values
@@ -1451,7 +1447,7 @@ class Problem:
             probe.data = data
         probe.init()
         if probe.data is None and not callable(gof): # A loss that is a function of the sim brings its own data
-            raise ss.NoData('calibrate() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
+            raise ss.errors.NoData('calibrate() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
         self.verbose = verbose = sc.ifelse(verbose, ss.options.verbose)
         check_gof(gof)
         self.base, self.likelihood, self.weights, self.gof = base, likelihood, weights, gof
@@ -1482,7 +1478,7 @@ class Problem:
             why = f'gof="{gof}" was given' if gof is not None else 'not every data series has a likelihood'
             print(f'Note: {why}, so the likelihoods of {sc.strjoin([k for k,v in liks.items() if v is not None])} are not used')
         if not fitted:
-            raise ss.NothingToFit('calibrate() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
+            raise ss.errors.NothingToFit('calibrate() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
         self.fitted = fitted
         self.names = names = list(fitted.keys())
         self.products = product_pairs(probe, names[:self.n_model]) # Parameters that the data cannot tell apart, from the model
@@ -1530,10 +1526,10 @@ class Problem:
         filtered = ParticleFilter.reason(self.runner)
         if method == 'nuts' and (not self.use_lik or self.no_grad):
             why = 'not every data series has a likelihood' if not self.use_lik else f'it has no gradients, since {self.no_grad}'
-            raise ss.NoPosterior(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
+            raise ss.errors.NoPosterior(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
         elif method == 'pmcmc' and (not self.use_lik or filtered):
             why = 'not every data series has a likelihood' if not self.use_lik else filtered
-            raise ss.NoPosterior(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, but {why}.')
+            raise ss.errors.NoPosterior(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, but {why}.')
         elif method == 'if2' and (not self.use_lik or filtered or self.levels or self.n_model < len(self.fitted)):
             why = 'not every data series has a likelihood' if not self.use_lik else filtered or ('a parameter has a value for each level' if self.levels else 'a parameter of a likelihood is fitted')
             raise ValueError(f'method="if2" needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, and fits the parameters of the model\'s rates, but {why}; use method="pmcmc"')
@@ -1729,11 +1725,11 @@ class Problem:
         after = self.run(best, seed=seeds[0], fresh=True) # A run at the best values, for plotting; also the last, so a likelihood's own parameters keep their best values
         scores = [self.measure(after)] + [self.measure(self.run(best, seed=seed)) for seed in seeds[1:]] # The score of the best values, as in the search
         for msg in notes:
-            ss.note(msg, ss.Unidentifiable, sim=after, verbose=self.verbose)
+            ss.note(msg, ss.errors.Unidentifiable, sim=after, verbose=self.verbose)
         zs, zlo, zhi = self.encode(best), self.encode(self.lows), self.encode(self.highs) # On the scale searched on, so a value near the low end of a log scale is not at its bound
         for name,z,lo,hi,val,low,high in zip(names, zs, zlo, zhi, best, self.lows, self.highs):
             if min(z - lo, hi - z) < 0.01*(hi - lo):
-                ss.warn(f'the best-fit value of "{name}" ({val:n}) is at one of its bounds [{low:n}, {high:n}]; consider widening them', ss.AtBound)
+                ss.warn(f'the best-fit value of "{name}" ({val:n}) is at one of its bounds [{low:n}, {high:n}]; consider widening them', ss.errors.AtBound)
         if self.verbose:
             print(f'{"Converged" if out.converged else "Not converged"}: {out.why}')
         best_pars = sc.objdict()
@@ -2117,7 +2113,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
         probes.append(probe.init())
     dfs = [probe.data for probe in probes]
     if any(df is None for df in dfs):
-        raise ss.NoData('compare_models() needs data: pass data=, or attach the same data to every sim.')
+        raise ss.errors.NoData('compare_models() needs data: pass data=, or attach the same data to every sim.')
     if data is None and not all(df.equals(dfs[0]) for df in dfs[1:]):
         errormsg = 'The sims have different data; pass data= to compare them on the same data'
         raise ValueError(errormsg)

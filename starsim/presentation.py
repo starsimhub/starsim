@@ -314,8 +314,8 @@ class Presentation:
             transitions.append(entry)
         out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
         per_act = [] # Betas read as probabilities per act, which the spec says were guessed
-        nets = {ss.standardize_netkey(k):net for k,net in sim.all_networks().items()} if sim is not None and hasattr(sim, 'all_networks') else {}
-        acts = lambda key: getattr(nets.get(ss.standardize_netkey(key)), 'has_acts', False)
+        nets = {ss.utils.standardize_netkey(k):net for k,net in sim.all_networks().items()} if sim is not None and hasattr(sim, 'all_networks') else {}
+        acts = lambda key: getattr(nets.get(ss.utils.standardize_netkey(key)), 'has_acts', False)
         for name,tr in self.transitions.items(): # A bare number on a network with acts is a probability per act, written as one, so the spec is read the same without the network
             leaf = beta_leaf(tr) if tr.contact else None
             spec = next((p for p in out.pars if leaf is not None and p['name'] == leaf.name), None)

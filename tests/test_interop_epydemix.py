@@ -43,7 +43,7 @@ def seird_model():
 
 def test_epydemix():
     sc.heading('Testing importing an epydemix model')
-    with pytest.warns(ss.ImportIncomplete): # The school closure is listed, not translated
+    with pytest.warns(ss.errors.ImportIncomplete): # The school closure is listed, not translated
         sim = load_epydemix(seird_model(), solver='ode', **kw)
     assert [k for k,_ in sim.imported.incomplete] == ['intervention closure']
     sim.run()

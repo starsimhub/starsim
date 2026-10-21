@@ -80,7 +80,7 @@ ss.Sim                          modules, a population, mixing, a timeline, a sol
  │     ├── ss.Intervention      deliveries: ss.vaccinate, ss.screen, ss.treat
  │     └── ss.Connector, ss.Analyzer
  ├── people:   ss.People        size, demography, per-agent attributes
- ├── stratifications            dimensions such as age and place (sim.stratify), with ss.Mobility between places
+ ├── stratifications            dimensions such as age and place (sim.stratify), with ss.geo.Mobility between places
  ├── networks: ss.Network, ss.MixingPool     none given means homogeneous mixing
  ├── modifiers: ss.modify, ss.change     changes to named quantities while a condition holds, or at given times
  ├── loop                       the order modules run in each step (sim.loop)

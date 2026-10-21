@@ -335,7 +335,7 @@ class Agents(Engine):
         people = self.sim.people
         for name in sorted({name for leaf in self.graph.leaves() if isinstance(leaf, ss.expressions.Prop) for name in leaf.names}): # The properties of people that its rates read (ss.ppl.<name>)
             if not hasattr(people, name):
-                raise ss.UnknownState(f'"{mod.name}" reads people.{name}, which is not a property of the people{ss.expressions.did_you_mean(name, list(people.states.keys()))}')
+                raise ss.errors.UnknownState(f'"{mod.name}" reads people.{name}, which is not a property of the people{ss.expressions.did_you_mean(name, list(people.states.keys()))}')
         fracs, counts = self.init_fractions()
         for name,count in counts.items():
             self.counts[name] = count*self.state_split[name]
@@ -407,6 +407,35 @@ class Agents(Engine):
                 self.schedule_transfer(name, self.transfer_uids(name, tf)[1], self.dt, -1)
         self.n_seen = self.sim.people.uid.len_used # Agents made after this (e.g. born of ss.Births) are put in the first state: see place_newcomers()
         self.record_stocks() # The results at the first time point are the start
+        return
+
+    def seed_dist(self):
+        """
+        As agents, an init_prev that chooses who starts infected one by one, as in Starsim 3: `ss.choose_n()` (a number of agents),
+        `ss.bernoulli()` with a probability for each agent, a function of the sim (and the agents), or `ss.by` over a property of people that is not a dimension
+        """
+        init_prev = self.graph.init_prev
+        if isinstance(init_prev, ss.transitions.par):
+            init_prev = init_prev.raw
+        trs = self.graph.transmissions
+        if not len(trs):
+            return None
+        elif isinstance(init_prev, ss.choose_n): # With several destinations, a number of people shared between them as a fraction is
+            return init_prev if len(trs[0].dst) == 1 else None
+        elif isinstance(init_prev, ss.bernoulli) and callable(init_prev.pars.p):
+            return init_prev
+        elif isinstance(init_prev, ss.by) and init_prev.on_people(self.sim):
+            return init_prev
+        elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
+            return init_prev
+        return None
+
+    def varying_dwell(self, name, tr, raw, dw, to_unit):
+        """ A dwell time whose distribution has parameters with a value for each group (`ss.by`): the parameters are looked up for each agent, and one draw is made (see `Compartmental.varying_dwell()`) """
+        dw.family = type(raw).__name__
+        dw.staged = True
+        dw.mean = dw.std = None
+        dw.dist = ss.transitions.numeric_dist(raw, to_unit, per_agent=self.agent_values)
         return
 
     def seed(self, uids, log=True):
@@ -743,14 +772,14 @@ class Agents(Engine):
             vals = self.convert(raw) if isinstance(raw, ss.TimePar) else [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(raw)]
             vals = np.asarray(vals, dtype=float).ravel()
             if len(vals) != strat.n:
-                raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(vals)} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                raise ss.errors.ShapeError(f'ss.by({strat.name}=...) has {len(vals)} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
             return vals[self.derived_level(strat, uids)]
         if by.on_people(sim): # Read from each person's own properties, e.g. ss.by(sex=dict(female=..., male=...))
             return self.by_people(by, uids)
         if by.dim in ['sex', 'female'] and by.dim not in [strat.name for strat in sim.groups.strats]:
             vals = [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(by.values)]
             if len(vals) != 2:
-                raise ss.ShapeError(f'ss.by({by.dim}=...) has {len(vals)} values; sex has two levels, women and then men.')
+                raise ss.errors.ShapeError(f'ss.by({by.dim}=...) has {len(vals)} values; sex has two levels, women and then men.')
             return np.where(sim.people.female.raw[uids], vals[0], vals[1])
         return np.asarray(super().by_group(by))[self.groups(uids)]
 
@@ -883,7 +912,7 @@ class Agents(Engine):
             name = names[0]
             exits = self.graph.exits[name]
             if not (exits.branches or exits.remainder or exits.timed):
-                raise ss.NoScheduledDwell(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
+                raise ss.errors.NoScheduledDwell(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
             end = np.asarray(mod[f'ti_exit_{name}'][uids], dtype=float) # The step the exit is due in
             if isinstance(leaving, tuple) and 'left_exit' in mod.__dict__: # Leaving it now: the exit they had
                 end = np.where(np.isnan(end), mod.left_exit.raw[uids], end)
@@ -1075,7 +1104,7 @@ class Agents(Engine):
         """ The level of a stratification by a derived attribute for some agents """
         vals = self.attr_values(strat.attr_of, uids)
         if np.isnan(vals).any():
-            raise ss.ClockOutsideDomain(f'"{strat.name}" is read for people for whom {strat.attr_of.name} has no value (it is NaN in {sc.strjoin(sorted({s.name for s in self.graph.people_states if self.mod[s.name].raw[uids[np.isnan(vals)]].any()}))}); give it a value there, or read it only inside the states that have one.')
+            raise ss.errors.ClockOutsideDomain(f'"{strat.name}" is read for people for whom {strat.attr_of.name} has no value (it is NaN in {sc.strjoin(sorted({s.name for s in self.graph.people_states if self.mod[s.name].raw[uids[np.isnan(vals)]].any()}))}); give it a value there, or read it only inside the states that have one.')
         return np.clip(np.searchsorted(strat.edges, vals, side='right') - 1, 0, strat.n - 1)
 
     def derived_flows(self, tr, src, uids):
@@ -1239,7 +1268,7 @@ class Agents(Engine):
         if onward or self._moved: # Or left by a competing rate on entry
             if depth > (len(self.graph.people_states) + 1)*(1 if row is None else 2): # A rate drawn on entry, once a step each, can start one more chain of moves
                 cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in onward}))
-                raise ss.TriggerLoop(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n'
+                raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n'
                                      f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
             for tr,state,uids in onward:
                 self.move(tr, state, uids)
@@ -1422,7 +1451,7 @@ class Agents(Engine):
         depth = getattr(sim, '_trigger_depth', 0)
         limit = sum(len(m.graph.people_states) for m in sim.declared) + 1
         if depth > limit:
-            raise ss.TriggerLoop(f'triggers in {sc.strjoin(m.name for m in sim.declared)} kept moving people back and forth within a step (from "{self.mod.name}").\n'
+            raise ss.errors.TriggerLoop(f'triggers in {sc.strjoin(m.name for m in sim.declared)} kept moving people back and forth within a step (from "{self.mod.name}").\n'
                                  f'     Change the conditions so they do not lead back.')
         sim._trigger_depth = depth + 1
         try:
@@ -1487,7 +1516,7 @@ class Agents(Engine):
             def walk(name, path=()): # People passed through at once must reach a state they wait in
                 if name in path:
                     cycle = ' -> '.join(path[path.index(name):] + (name,))
-                    raise ss.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
+                    raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
                                          f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
                 if name in self._junctions:
                     exits = self.graph.exits[name]
@@ -2039,7 +2068,7 @@ class Agents(Engine):
         total = np.sum(hazards, axis=0)
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
-            raise ss.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
+            raise ss.errors.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
         p_exit = -np.expm1(-total*dt)
         rvs = self.dists[f'exit_{state.name}'].rvs(uids) if key is None else self.draw(key, uids) # Drawn on entry as well, so perhaps more than once a step
         leaving = rvs < p_exit
@@ -2386,7 +2415,7 @@ class Agents(Engine):
 
     def step_register(self, ti):
         """
-        Apply the events of a movement register that happen at the start of a step, in order: see `ss.Mobility`
+        Apply the events of a movement register that happen at the start of a step, in order: see `ss.geo.Mobility`
 
         The people in each place are put in a random order once, and each event that moves or
         removes people takes the first of them who are still there and in its states. People

@@ -405,7 +405,7 @@ def test_lactation_subclass():
         named = ss.Sim(demographics=[fp, ss.Lactation(pregnancy=given or fp)], n_agents=2000, **kw).run()
         assert named.results.lactation.start.sum() > 0
     with pytest.raises(ValueError, match='pregnancy='): # Two pregnancy modules, and neither given
-        ss.Lactation().link([FP(), ss.Pregnancy()])
+        ss.Sim(demographics=[FP(), ss.Pregnancy(), ss.Lactation()], n_agents=100, **kw).init()
     return sim
 
 
@@ -421,11 +421,11 @@ def test_code_pars():
     base = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
     half = ss.Sim(demographics=FP(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
     assert half.results.pregnancy.conception.sum() < 0.7*base.results.pregnancy.conception.sum()
-    with pytest.raises(ss.UnknownParameter): # A misspelled parameter from the user is still an error
+    with pytest.raises(ss.errors.UnknownParameter): # A misspelled parameter from the user is still an error
         FP(age_scal=0.3)
     preg = ss.Pregnancy()
     preg.pars['rel_fertilty'] = 2 # ... and so is one added later that nothing reads
-    with pytest.raises(ss.UnknownParameter, match='nothing would read it'):
+    with pytest.raises(ss.errors.UnknownParameter, match='nothing would read it'):
         ss.Sim(demographics=preg, n_agents=500, **kw).init()
     return half
 

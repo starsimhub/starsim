@@ -92,7 +92,7 @@ def strat_kwargs(strat):
         split = joint_split(split)
     levels = strat['levels']
     if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
-        levels = ss.geo(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
+        levels = ss.geo.location(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
     if strat['kind'] == 'clock' and strat.get('unit'): # Durations
         levels = Code(f"ss.{strat['unit']}s({levels})")
     out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
@@ -444,13 +444,13 @@ def contacts_code(net):
 
 
 def movable(strat, left):
-    """ The arguments to stratify(), with the movement between places written as ss.Mobility() where it is a matrix """
+    """ The arguments to stratify(), with the movement between places written as ss.geo.Mobility() where it is a matrix """
     mob = strat['mobility']
     plain = {k:v for k,v in strat.items() if k not in ['geo', 'split_from']}
     out = strat_kwargs({**plain, 'mobility':None})
     if strat.get('geo'): # A named geography as the call that looks it up, with its own split
         ref = strat['geo']
-        out[strat['name']] = Code(f"ss.geo({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
+        out[strat['name']] = Code(f"ss.geo.location({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
         out.pop('split')
     if strat.get('split_from'):
         out.pop('split', None)
@@ -458,9 +458,9 @@ def movable(strat, left):
         return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
         args = ', '.join(f'{k}={v if k == "away" and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name
-        out['mobility'] = Code(f'ss.Mobility({args})')
+        out['mobility'] = Code(f'ss.geo.Mobility({args})')
     else:
-        left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.Mobility(...) in stratify()')
+        left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.geo.Mobility(...) in stratify()')
     return out
 
 
@@ -614,7 +614,7 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     networks written as code (named by the class that makes them, `factory`, with their
     parameters in the spec), other interventions, movement between places from data,
     likelihoods other than a distribution, and functions whose source is not a plain
-    definition are listed in comments at the end, and in a warning (`ss.LossyExport`),
+    definition are listed in comments at the end, and in a warning (`ss.errors.LossyExport`),
     since the code then builds a different model until they are added by hand. A part of
     a declared disease that cannot be written (the migration of a transition, custom
     functions of the disease) raises `NotImplementedError` rather than write a different model.
@@ -690,7 +690,7 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     footer = list(footer or [])
     if left:
         footer += ['Not written as code (LossyExport; add by hand):'] + [f'  {item}' for item in left]
-        ss.warn(f'the code builds a different model until these are added by hand: {"; ".join(left)}', ss.LossyExport)
+        ss.warn(f'the code builds a different model until these are added by hand: {"; ".join(left)}', ss.errors.LossyExport)
     if footer:
         lines += [''] + [f'# {line}' for line in footer]
     lines += ['', "if __name__ == '__main__':", '    sim.run()', '    sim.plot()', '']

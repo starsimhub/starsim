@@ -48,7 +48,7 @@ Each document starts with a pointer to the `best-practices` document that justif
 ### Machinery
 
 - [14-model-spec.md](14-model-spec.md): the model spec, the normalized JSON form of a model from which `sim.hash()`, `ss.diff()`, and `sim.to_code()` work: its structure, rate expressions, functions, normalization, hashing, and versioning.
-- [15-errors.md](15-errors.md): errors, warnings, and notes: the message shape, and the catalog of every one, each an exception or warning class (`ss.UnknownState`, `ss.LargeStep`), generated from the code.
+- [15-errors.md](15-errors.md): errors, warnings, and notes: the message shape, and the catalog of every one, each an exception or warning class (`ss.errors.UnknownState`, `ss.errors.LargeStep`), generated from the code.
 - [16-interop.md](16-interop.md): importing from and exporting to other frameworks, and the vignette test.
 
 ### Discipline

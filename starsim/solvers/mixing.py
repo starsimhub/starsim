@@ -78,7 +78,7 @@ class Mixing:
         return out.ravel()
 
     def events(self):
-        """ The events of the movement register, on the sim's timeline: see `ss.Mobility.events()` """
+        """ The events of the movement register, on the sim's timeline: see `ss.geo.Mobility.events()` """
         if self._events is None:
             self._events = self.register.events(self.sim.groups.strats[self.space], self.sim)
         return self._events
@@ -123,8 +123,8 @@ class Mixing:
         self.terms = []
         for net in nets:
             named = all(isinstance(getattr(coef, 'raw', coef), dict) for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values()) # Every transmission names its routes
-            key = ss.standardize_netkey(net.name)
-            betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.standardize_netkey(k) == key] if named else None
+            key = ss.utils.standardize_netkey(net.name)
+            betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.utils.standardize_netkey(k) == key] if named else None
             if betas and not any(np.any(np.asarray(convert(val, sim.unit_base)) > 0) for val in betas): # Named by transmissions, but none over it
                 ss.note(f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
                 continue
@@ -392,7 +392,7 @@ class Mixing:
         contacts = np.vectorize(lambda n: self.mean(n, sim.unit_base))(contacts).astype(float) # [source band, destination band]
         matrix = to_dst @ contacts.T @ from_src # Contacts per unit time of one person in model group i with people in model group j
         if len(bands) != len(levels) or not np.allclose(bands, levels):
-            ss.note(f'contact matrix "{net.name}" aggregated from {len(bands)} age groups to the model\'s {strat.n} ({sc.strjoin(strat.labels)})', ss.MatrixAggregated, sim=sim)
+            ss.note(f'contact matrix "{net.name}" aggregated from {len(bands)} age groups to the model\'s {strat.n} ({sc.strjoin(strat.labels)})', ss.errors.MatrixAggregated, sim=sim)
         return sc.objdict(kind='matrix', dim=d, matrix=matrix*beta, name=net.name)
 
     def age_cdf(self, strat):
@@ -413,7 +413,7 @@ class Mixing:
         strat = sim.groups.strats[d]
         if not sim.groups.group_inside[:, d].all():
             where = ', '.join(f'{k}={sc.strjoin(sc.tolist(v))}' for k,v in strat.where.items())
-            raise ss.PartialStratificationMixing(f'the contacts "{net.name}" are given by "{strat.name}", but only people where {where} have a level of it, so there is no level for the others to mix as.\n'
+            raise ss.errors.PartialStratificationMixing(f'the contacts "{net.name}" are given by "{strat.name}", but only people where {where} have a level of it, so there is no level for the others to mix as.\n'
                                                  f'     Fix: leave out where=, or use contacts that do not depend on "{strat.name}".')
         for mod in sim.declared:
             own = [s for s in mod.graph.strats if s.name == strat.name and s.states is not None]
@@ -422,7 +422,7 @@ class Mixing:
             mixing = [s.name for tr in mod.graph.transmissions for s in tr.src] + [s.name for s in mod.graph.infectious]
             missing = [name for name in dict.fromkeys(mixing) if name not in own[0].states]
             if missing:
-                raise ss.PartialStratificationMixing(f'the contacts "{net.name}" are given by "{strat.name}", but "{mod.name}" is stratified by it in {sc.strjoin(own[0].states)} only, so there is no level of it for the people in {sc.strjoin(missing)} to mix as.\n'
+                raise ss.errors.PartialStratificationMixing(f'the contacts "{net.name}" are given by "{strat.name}", but "{mod.name}" is stratified by it in {sc.strjoin(own[0].states)} only, so there is no level of it for the people in {sc.strjoin(missing)} to mix as.\n'
                                                      f'     Fix: leave out states= to stratify every state, or use contacts that do not depend on "{strat.name}".')
         return
 
@@ -458,10 +458,10 @@ class Mixing:
         for dim,mat in net.dims.items():
             names = [strat.name for strat in sim.groups.strats]
             if dim not in names:
-                raise ss.MissingDimension(f'the contacts "{net.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+                raise ss.errors.MissingDimension(f'the contacts "{net.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
             strat = sim.groups.strats[names.index(dim)]
             if len(mat) != strat.n:
-                raise ss.ShapeError(f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                raise ss.errors.ShapeError(f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
             self.check_ragged(names.index(dim), net)
             self.check_reciprocal(net, strat, np.asarray(mat, dtype=float))
             cells = cells*strat.n + sim.groups.group_coords[:, names.index(dim)]

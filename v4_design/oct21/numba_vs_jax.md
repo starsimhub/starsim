@@ -57,6 +57,8 @@ All runs use one thread (`OMP_NUM_THREADS=1`, XLA single-threaded) on the shared
 
 Two things in the current integration need fixing before this could be the default. First, `sim.jax = True` compiled again for every new sim, even an identical one: 0.17–0.55 s a sim for the small models, and 14–25 s for Ghana against 7–13 s for the bare run. Each engine keeps its own `Run`, and a new function object means a new trace. A module-level cache keyed by `Run.key()` would fix it. Second, `Run.share()` adds the time share in with `.at[].add()`, one entry per pair of places (67,600 for Ghana), which XLA runs slowly on a CPU. The JAX chain-binomial prototype below uses a dense matrix product for it instead. For a sparse share, a segment sum would do the same. That is likely most of the 2–3× gap at 50 and 260 places, but it was not measured separately for the ODE.
 
+Update (2026-10-21, S1.6): with a dense time share taken as a matrix, made once a run, the JAX run takes 6.5 ms for `spatial` (against 17.5 ms for a whole Numba `sim.run()`) and 1.7 s for Ghana (against 3.7 s); `sir` 0.4 against 1.4 ms, `sir_age` 3.0 against 2.2 ms.
+
 ### JAX: the chain binomial
 
 [jax_binomial.py](numba_vs_jax/jax_binomial.py) builds the whole run as one `lax.scan`, with the rates from `ss.gradients.Run.rates()` and the draws from `jax.random.binomial` and `poisson`. Everything is preallocated (fixed shapes), and the time share is a dense matrix.

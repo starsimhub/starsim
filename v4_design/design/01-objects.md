@@ -25,7 +25,7 @@ ss.Transition               a movement between states; built by >> and @, or by
                             ss.transmission, ss.progression, ss.birth, ss.death, ss.transfer
 ss.par                      a named parameter with bounds, prior, and provenance
 ss.dur, ss.per, ss.prob      time types (base classes ss.TimePar, ss.Rate); 02-types.md
-ss.Mobility                 movement between the places of a stratification (06-routes.md)
+ss.geo.Mobility                 movement between the places of a stratification (06-routes.md)
 ss.Dist                     distributions: ss.normal, ss.lognorm_ex, ...
 ss.Result                   a named time series, with a dimension per stratification and, for many runs, a run axis
 ```
@@ -38,7 +38,7 @@ ss.Result                   a named time series, with a dimension per stratifica
 
 | | Examples |
 |---|---|
-| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.fit.Fit`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
+| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.geo.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.fit.Fit`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
 | lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.fit.compare_models` |
 
 Methods that describe the model are `describe()`, `diagram()`, and `equations()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.

@@ -86,7 +86,7 @@ def test_callable_dists():
     sc.heading('Testing callable distributions')
     def loc(module, sim, uids):
         return np.arange(uids)
-    module = ss.mock_module(dt=ss.days(1))
+    module = ss.debugtools.mock_module(dt=ss.days(1))
     d = ss.normal(loc, 2, unit='days', module=module, strict=False)
     d.init()
     d.rvs(10)
@@ -183,7 +183,7 @@ def test_datearray_operations():
     assert len(ss.date.arange('2020-03-01', '2020-01-01', ss.months(1))) == 0
 
     # A rate cannot be subtracted from a number
-    with pytest.raises(ss.IncompatibleTypes, match='cannot be subtracted'):
+    with pytest.raises(ss.errors.IncompatibleTypes, match='cannot be subtracted'):
         1 - ss.peryear(0.1)
 
     a = ss.DateArray([ss.date('2020-01-01'), ss.date('2021-01-01')])
@@ -349,7 +349,7 @@ def test_to_dt():
         ss.years(100).to_dt()
 
     # Inside a module, the timestep is filled in automatically
-    module = ss.mock_module(dt=ss.months(1))
+    module = ss.debugtools.mock_module(dt=ss.months(1))
     dur = ss.years(100).set_default_dur(module.dt)
     assert dur.to_dt() == 1200
 
@@ -449,8 +449,8 @@ def test_arithmetic():
         (p(0.1), '*', d(2), 0.19),
         (r(0.2), '/', r(0.1), 2),
         (1, '/', d(10), r(0.1)),  (2, '/', r(0.1), d(20)),  (2, '/', f(0.1), d(20)),
-        (r(0.1), '+', p(0.1), ss.IncompatibleTypes),  (r(0.1), '-', f(0.1), ss.IncompatibleTypes),  (r(0.1), '+', 1, ss.IncompatibleTypes),  (1, '-', r(0.1), ss.IncompatibleTypes),  (d(3), '+', r(0.1), ss.IncompatibleTypes),  (1, '/', p(0.1), ss.IncompatibleTypes),
-        (r(0.1), '*', r(0.1), ss.WrongDimension),  (r(0.1), '/', d(3), ss.WrongDimension),  (d(3), '*', d(3), ss.WrongDimension),  (d(3), '/', r(0.1), ss.WrongDimension),
+        (r(0.1), '+', p(0.1), ss.errors.IncompatibleTypes),  (r(0.1), '-', f(0.1), ss.errors.IncompatibleTypes),  (r(0.1), '+', 1, ss.errors.IncompatibleTypes),  (1, '-', r(0.1), ss.errors.IncompatibleTypes),  (d(3), '+', r(0.1), ss.errors.IncompatibleTypes),  (1, '/', p(0.1), ss.errors.IncompatibleTypes),
+        (r(0.1), '*', r(0.1), ss.errors.WrongDimension),  (r(0.1), '/', d(3), ss.errors.WrongDimension),  (d(3), '*', d(3), ss.errors.WrongDimension),  (d(3), '/', r(0.1), ss.errors.WrongDimension),
     ]
     for a, op, b, expected in rows:
         row = f'{a!r} {op} {b!r}'
@@ -472,7 +472,7 @@ def test_arithmetic():
     for slip in [lambda: ss.Transition(I, R, rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
                  lambda: ss.Transition(I, R, rate=ss.days(10)), lambda: ss.Transition(I, R, dur=ss.prob(0.1, 'day')),
                  lambda: ss.Disease(S >> I @ ss.perday(0.3) * I * ss.days(3), I >> R @ ss.days(10), name='sir')]:
-        with pytest.raises(ss.WrongDimension):
+        with pytest.raises(ss.errors.WrongDimension):
             slip()
     sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), I >> R @ (1/ss.days(10)), name='sir') # A duration that divides is fine
     assert ss.Transition(I, R, dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
@@ -488,7 +488,7 @@ def test_bare_units():
         return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init=dict(I=1000), name='d')
 
     # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (FP21: 2,881 points instead of 241)
-    with pytest.warns(ss.UnitInferred):
+    with pytest.warns(ss.errors.UnitInferred):
         sim = ss.Sim(sis(ss.months(6)), start=2000, stop=2020, dt=1/12, n_agents=1000, verbose=0).init()
     assert sim.t.npts == 241
 

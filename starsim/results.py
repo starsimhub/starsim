@@ -45,7 +45,7 @@ def in_people(*results):
     return
 
 
-class Result(ss.BaseArr):
+class Result(ss.utils.NoDists, ss.BaseArr):
     """
     Array-like container for holding sim results.
 
@@ -1041,7 +1041,7 @@ class Result(ss.BaseArr):
         return len(groups) > 1
 
 
-class Results(ss.ndict):
+class Results(ss.utils.NoDists, ss.ndict):
     """ Container for storing results """
     def __init__(self, module=None, *args, strict=True, **kwargs):
         if module is not None and not isinstance(module, str):
@@ -1528,20 +1528,20 @@ def check_data(sim, df):
             for dim,level in dims.items():
                 strat = sim.groups.strats[sim.groups.dim_index(dim)]
                 if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
-                    raise ss.UnknownDataColumn(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
+                    raise ss.errors.UnknownDataColumn(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
             if getattr(base, 'strata', None) is None:
-                raise ss.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
+                raise ss.errors.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
             elif getattr(base, 'group_ti', None) is not None:
-                raise ss.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
+                raise ss.errors.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
                                            f'Give the data to the sim when it is made (ss.Sim(..., data=...)), or name fewer results to keep by group with results=[...].')
         if match_column(sim, col) is None:
             several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
             if len(several) > 1: # The name of a result of more than one module
-                raise ss.UnknownDataColumn(f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.data(..., aliases=dict(...)).')
-            raise ss.UnknownDataColumn(f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
+                raise ss.errors.UnknownDataColumn(f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.data(..., aliases=dict(...)).')
+            raise ss.errors.UnknownDataColumn(f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
                                        f"     Rename it with ss.data(..., aliases=dict(result='{col}')), or drop it with ss.data(..., ignore_extra=True).")
     sim_t, data_t = data_times(sim, df)
-    if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared (ss.DataMisaligned); partly outside, the rest is left out of the comparison
+    if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared (ss.errors.DataMisaligned); partly outside, the rest is left out of the comparison
         eps = np.median(np.diff(sim_t))/2
         outside = (data_t < sim_t.min() - eps) | (data_t > sim_t.max() + eps)
         if outside.any() and not outside.all():
@@ -1581,7 +1581,7 @@ def compare(sim, df=None):
     df = sim.data if df is None else df
     sim_t, data_t = data_times(sim, df)
     if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
-        raise ss.DataMisaligned(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+        raise ss.errors.DataMisaligned(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
     out = sc.objdict()
     for col,(W,expected,rows) in lineup(sim, df).items():
         values = np.asarray(match_column(sim, col).values, dtype=float)

@@ -39,8 +39,8 @@ sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
 # Finish imports
 t('utils')
 from .utils import (
-    ndict, warn, standardize_netkey, parse_age_range,
-    standardize_data, load, save, shrink, plot_args, show,
+    ndict, warn, parse_age_range,
+    load, save, shrink, plot_args, show,
     return_fig,
 )
 
@@ -48,10 +48,7 @@ t('errors')
 from .errors import *
 
 t('debugtools')
-from .debugtools import (
-    Profile, Diagnostics, check_requires,
-    mock_time, mock_sim, mock_people, mock_module,
-)
+from .debugtools import check_requires # Also ss.debugtools.Profile, the mock_* objects for testing, and Diagnostics
 
 t('arrays')
 from .arrays import (
@@ -99,8 +96,9 @@ from .networks import (
     Network, DynamicNetwork, SexualNetwork,
     RandomNet, PartnerNet, MFNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
-    AgeGroup, MixingPools, MixingPool, contacts, geo, gravity, Mobility,
+    AgeGroup, MixingPools, MixingPool, contacts,
 )
+from . import geo # Places and the movement between them: ss.geo.location, ss.geo.Mobility, ss.geo.gravity
 
 t('results')
 from .results import Result, Results, data
@@ -158,7 +156,7 @@ t('spec')
 from .spec import to_code, diff
 
 t('named')
-from . import named # Places and contact matrices by name (ss.geo('Kenya'), ss.contacts('Kenya')); starsim_data is imported only when they are used
+from . import named # Places and contact matrices by name (ss.geo.location('Kenya'), ss.contacts('Kenya')); starsim_data is imported only when they are used
 
 t('gradients')
 from . import gradients # Used as ss.gradients; JAX is imported only when it is used

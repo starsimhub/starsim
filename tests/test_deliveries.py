@@ -83,9 +83,9 @@ def test_change():
     sir = make_sir()
     bare = ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=[20, 60], to=[0.09, 0.3]), start='2020-01-01', stop='2020-04-30', total_pop=50_000, verbose=0).run()
     assert np.allclose(bare.results.sir.n_S, res.n_S) # In a sim with dates, a number is days since the start (not the year 20, which was taken as the first day)
-    with pytest.raises(ss.TimeOutsideSim): # A time outside the sim, such as the year 2030 written as a number of days
+    with pytest.raises(ss.errors.TimeOutsideSim): # A time outside the sim, such as the year 2030 written as a number of days
         ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=[2030], to=[0.09]), start='2020-01-01', stop='2020-04-30', verbose=0).init()
-    with pytest.raises(ss.TimeOutsideSim): # At the stop, where no step starts, so it would never apply
+    with pytest.raises(ss.errors.TimeOutsideSim): # At the stop, where no step starts, so it would never apply
         ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=['2020-04-30'], to=[0.09]), start='2020-01-01', stop='2020-04-30', verbose=0).init()
     with pytest.raises(ValueError):
         ss.change(sir.pars.beta, at=[20, 60], by=[0.3])
@@ -275,14 +275,14 @@ def test_vaccinate():
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=100, start=10), **kw).init()
 
     # Errors
-    with pytest.raises(ss.UnknownEffect):
+    with pytest.raises(ss.errors.UnknownEffect):
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
     with pytest.raises(TypeError):
         ss.vaccinate(ss.Diagnostic())
     S, I = ss.states('S I')
     a, b = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), init_prev=0.01, name=name) for name in 'ab']
     vx = ss.Vaccine(efficacy=0.9)
-    with pytest.raises(ss.UnknownDisease): # A product acts on one disease, so delivered for a second it would protect against nothing
+    with pytest.raises(ss.errors.UnknownDisease): # A product acts on one disease, so delivered for a second it would protect against nothing
         ss.Sim([a, b], interventions=[ss.vaccinate(vx, at=[5], disease='a', name='d1'), ss.vaccinate(vx, at=[5], disease='b', name='d2')], **kw).init()
 
     # Coverage and capacity that vary in time
@@ -372,7 +372,7 @@ def test_treat():
     assert fades.results.sird.death.sum() > 1.2*sims.abm.results.sird.death.sum()
     check_agents(rates, waning=lambda t: np.exp(-t/5), **kw)
 
-    with pytest.raises(ss.UnknownEffect):
+    with pytest.raises(ss.errors.UnknownEffect):
         ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(cure=0.5, transition='cure')), **kw).init()
 
     # A cure takes people out of every infected state, not only the sources of the transition named (before, those in Y stayed)
@@ -382,7 +382,7 @@ def test_treat():
         tx = ss.treat(ss.Treatment(transition='clear_a'), at=[5], name='tx')
         res = ss.Sim(sti, interventions=tx, unit='day', stop=10, solver=solver, n_agents=2000, verbose=0).run().results.sti
         assert res.n_A[-1] == 0 and res.n_Y[-1] == 0 # Was 995 left in Y
-    with pytest.raises(ss.UnknownEffect): # Its recoveries go to Y and S, so it does not guess which (to= says)
+    with pytest.raises(ss.errors.UnknownEffect): # Its recoveries go to Y and S, so it does not guess which (to= says)
         S, I, C, R = ss.states('S I C R')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), carrier=ss.Transition(I, C, dur=5), recovery=ss.Transition(I, R, dur=10), name='sic'), interventions=ss.treat(ss.Treatment(cure=0.5)), **kw).init()
     with pytest.raises(TypeError): # A value of the sim's time, not of the time since delivery
@@ -888,7 +888,7 @@ def test_hold_by_place():
         beta = ss.par(0.3)
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
-        sir.stratify(patch=['a', 'b', 'c'], mobility=ss.Mobility(matrix=0.01*(1 - np.eye(3)))) # The other places are infected later
+        sir.stratify(patch=['a', 'b', 'c'], mobility=ss.geo.Mobility(matrix=0.01*(1 - np.eye(3)))) # The other places are infected later
         cond = sir.infection.incidence(over=ss.days(7), by=by) > 0.02 # A week's infections in each place, as a share of its people
         rule = ss.modify(beta, multiply=0.3, where=cond, hold=hold) if npi else None
         sim = ss.Sim(sir, interventions=rule, unit='day', stop=200, solver=solver, n_agents=20_000, verbose=0, rand_seed=1).run()
@@ -918,7 +918,7 @@ def test_sensitivity_by_state():
         expected = 0.5*(0.5*before('I', age=0) + 0.9*before('I', age=1) + 0.2*before('E')) # Nobody else tests positive
         print(f'{solver}: {res.screening.positive[ti]:.0f} positive, expected {expected:.0f}')
         assert np.isclose(res.screening.positive[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
-    with pytest.raises(ss.UnknownEffect):
+    with pytest.raises(ss.errors.UnknownEffect):
         ss.Sim(make_sis(), interventions=ss.screen(ss.Diagnostic(sensitivity=dict(X=0.5)), interval=10), stop=20, **kw).run()
     return res
 
@@ -1049,7 +1049,7 @@ def test_network_contacts():
         assert np.isclose(halved, 0.8*base, rtol=0.1) # Agents differ from the ODE by an amount of order dt
 
     # Only a network's contacts can be targeted
-    with pytest.raises(ss.UnmodifiableTarget):
+    with pytest.raises(ss.errors.UnmodifiableTarget):
         make('ode', ss.modify('school.pars.dur', multiply=0.5))
     return halved
 
@@ -1099,16 +1099,15 @@ def test_whole_run():
     assert np.array_equal(msim.results.sir.n_I.values[2], single.results.sir.n_I.values)
 
     # And in JAX, with gradients
-    if ss.gradients.available():
-        jax = make(solver='ode').init()
-        jax.jax = True # A whole run in JAX, as ss.parallel() takes many
-        jax.run()
-        assert np.allclose(jax.results.sir.n_I.values, whole.results.sir.n_I.values, rtol=1e-10)
-        assert np.allclose(jax.results.offer.delivered.values, whole.results.offer.delivered.values, rtol=1e-10)
-        grad = make(solver='ode').gradient('n_I', pars='beta').beta.sir.n_I
-        h = 1e-5
-        up, down = [make(solver='ode').new(pars=dict(beta=0.3 + d)).run().results.sir.n_I.values for d in [h, -h]]
-        assert np.allclose(grad, (up - down)/(2*h), rtol=1e-4, atol=1e-3*np.abs(grad).max())
+    jax = make(solver='ode').init()
+    jax.jax = True # A whole run in JAX, as ss.parallel() takes many
+    jax.run()
+    assert np.allclose(jax.results.sir.n_I.values, whole.results.sir.n_I.values, rtol=1e-10)
+    assert np.allclose(jax.results.offer.delivered.values, whole.results.offer.delivered.values, rtol=1e-10)
+    grad = make(solver='ode').gradient('n_I', pars='beta').beta.sir.n_I
+    h = 1e-5
+    up, down = [make(solver='ode').new(pars=dict(beta=0.3 + d)).run().results.sir.n_I.values for d in [h, -h]]
+    assert np.allclose(grad, (up - down)/(2*h), rtol=1e-4, atol=1e-3*np.abs(grad).max())
     return whole
 
 
@@ -1152,7 +1151,7 @@ def test_coded_disease():
     vx = ss.vaccinate(ss.Vaccine(efficacy=1.0), coverage=0.5, at=[2000])
     assert make(vx).results.agentsir.n_infected.max() < 0.9*base.max() # Through rel_sus
 
-    with pytest.raises(ss.UnknownEffect, match='has no "clear_infection"'): # A part the product uses that the disease lacks
+    with pytest.raises(ss.errors.UnknownEffect, match='has no "clear_infection"'): # A part the product uses that the disease lacks
         class NoCure(ssl.AgentSIR):
             clear_infection = property(lambda self: (_ for _ in ()).throw(AttributeError('clear_infection')))
         ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, interval=1), verbose=0).init()

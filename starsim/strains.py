@@ -22,9 +22,9 @@ def combine_protection(p, rule):
     if callable(rule):
         out = np.asarray(rule(p), dtype=float)
         if out.shape != p.shape[1:]:
-            raise ss.ShapeError(f'combine= gave an array of shape {out.shape} from protections of shape {p.shape}; it takes the protections with the sources on the first axis, and returns one protection for each of the rest, e.g. lambda p: p.max(0)')
+            raise ss.errors.ShapeError(f'combine= gave an array of shape {out.shape} from protections of shape {p.shape}; it takes the protections with the sources on the first axis, and returns one protection for each of the rest, e.g. lambda p: p.max(0)')
         if np.any(out < -1e-9) or np.any(out > 1 + 1e-9):
-            raise ss.OutOfBounds(f'combine= gave a protection of {out.min():n} to {out.max():n}; a protection is between 0 and 1')
+            raise ss.errors.OutOfBounds(f'combine= gave a protection of {out.min():n} to {out.max():n}; a protection is between 0 and 1')
         return np.clip(out, 0, 1)
     elif rule == 'max':
         return p.max(axis=0)
@@ -91,9 +91,9 @@ class immunity:
             if val is not None:
                 val = np.array(val, dtype=float)
                 if val.ndim not in [0, 2] or (val.ndim == 2 and val.shape[0] != val.shape[1]):
-                    raise ss.ShapeError(f'the protection on {key} has shape {val.shape}; it is a square matrix (rows from the strain held, columns against the strain) or a single number')
+                    raise ss.errors.ShapeError(f'the protection on {key} has shape {val.shape}; it is a square matrix (rows from the strain held, columns against the strain) or a single number')
                 if np.any(val < 0) or np.any(val > 1):
-                    raise ss.OutOfBounds(f'the protection on {key} is {val.min():n} to {val.max():n}; a protection is between 0 (none) and 1 (complete)')
+                    raise ss.errors.OutOfBounds(f'the protection on {key} is {val.min():n} to {val.max():n}; a protection is between 0 (none) and 1 (complete)')
                 self.values[key] = val
         if not self.values:
             errormsg = 'ss.immunity() needs the quantity it lowers, with the protection, e.g. rel_sus=matrix, rel_trans=0.5, or dur=dict(In=matrix)'
@@ -111,7 +111,7 @@ class immunity:
         if val.ndim == 0:
             return np.full((n, n), float(val))
         if val.shape != (n, n):
-            raise ss.ShapeError(f'the protection on {key} has shape {val.shape}, but there are {n} strains, so it needs to be {n}×{n} (rows from the strain held, columns against the strain).')
+            raise ss.errors.ShapeError(f'the protection on {key} has shape {val.shape}, but there are {n} strains, so it needs to be {n}×{n} (rows from the strain held, columns against the strain).')
         return val
 
     def largest(self, key, n):
@@ -170,7 +170,7 @@ class Protection:
                 return value*(1 - p)
             row = engine.selector.states.index(self.state)
             if np.any(p[row] >= 1):
-                raise ss.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
+                raise ss.errors.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
             out = np.ones(np.shape(p))
             out[row] = 1/(1 - p[row])
             return value*out
@@ -181,7 +181,7 @@ class Protection:
             return value*(1 - p)
         inside = engine.mod[self.state].raw
         if np.any(p[inside] >= 1):
-            raise ss.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
+            raise ss.errors.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
         return value*np.where(inside, 1/(1 - np.where(inside, p, 0)), 1.0)
 
     def describe(self):
@@ -276,7 +276,7 @@ class Strains(ss.Module):
         self.guessed = sc.objdict()
         if self.split is not None:
             if len(self.split) != len(names):
-                raise ss.BadSplit(f'split= of "{name}" has {len(self.split)} entries, but there are {len(names)} members ({sc.strjoin(names)})')
+                raise ss.errors.BadSplit(f'split= of "{name}" has {len(self.split)} entries, but there are {len(names)} members ({sc.strjoin(names)})')
             if not np.isclose(self.split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {self.split.sum():n}'
                 self.split = self.split/self.split.sum()
@@ -408,7 +408,7 @@ class Strains(ss.Module):
                 gives = any(np.any(imm.matrix(key, n)[k] > 0) for key in imm.values)
                 if states is None and gives:
                     lacking = [m.name for m in members if self.states_of(m, imm.protected) is None]
-                    raise ss.UnknownState(f'an ss.immunity of "{self.name}" is protected by "{sc.strjoin(sc.tolist(imm.protected))}", which {sc.strjoin(lacking)} {"has" if len(lacking) == 1 else "have"} no state or named sum of states for; add it, or give that member a row of zeros')
+                    raise ss.errors.UnknownState(f'an ss.immunity of "{self.name}" is protected by "{sc.strjoin(sc.tolist(imm.protected))}", which {sc.strjoin(lacking)} {"has" if len(lacking) == 1 else "have"} no state or named sum of states for; add it, or give that member a row of zeros')
                 sources.append(states if gives else None)
             self.sources.append(sources)
             for key in imm.values:
@@ -419,10 +419,10 @@ class Strains(ss.Module):
                     if key.startswith('dur.'):
                         state = key.split('.', 1)[1]
                         if state not in mod.graph.states or not mod.graph.states[state].people:
-                            raise ss.UnknownState(f'an ss.immunity of "{self.name}" shortens the time in "{state}", which "{mod.name}" has no state of people called; its states are {sc.strjoin(s.name for s in mod.graph.people_states)}')
+                            raise ss.errors.UnknownState(f'an ss.immunity of "{self.name}" shortens the time in "{state}", which "{mod.name}" has no state of people called; its states are {sc.strjoin(s.name for s in mod.graph.people_states)}')
                         largest = imm.largest(key, n)[g] if not callable(imm.combine) else 0
                         if largest >= 1:
-                            raise ss.OutOfBounds(f'an ss.immunity of "{self.name}" can give a protection of {largest:n} on the time in {state} of "{mod.name}" (combine={imm.combine!r}), which would make its exits infinitely fast; scale the matrix, or combine="multiply", so it stays below 1')
+                            raise ss.errors.OutOfBounds(f'an ss.immunity of "{self.name}" can give a protection of {largest:n} on the time in {state} of "{mod.name}" (combine={imm.combine!r}), which would make its exits infinitely fast; scale the matrix, or combine="multiply", so it stays below 1')
                         exits = mod.graph.exits[state]
                         for tr in exits.branches + sc.tolist(exits.remainder) + exits.timed + exits.hazards:
                             sim.modifiers[(mod.name, 'transition', tr.name)].append(Protection(self, i, key, g, state=state))
@@ -434,14 +434,14 @@ class Strains(ss.Module):
         if self.exclusive is not None:
             lacking = [mod.name for mod in members if self.exclusive not in mod.graph.states]
             if lacking:
-                raise ss.UnknownState(f'exclusive="{self.exclusive}" of "{self.name}" is not a state of {sc.strjoin(lacking)}')
+                raise ss.errors.UnknownState(f'exclusive="{self.exclusive}" of "{self.name}" is not a state of {sc.strjoin(lacking)}')
             self.blocked = []
             for mod in members:
                 graph = mod.graph
                 exits = lambda state: [tr for key in ['branches', 'timed', 'hazards', 'contact'] for tr in graph.exits[state][key]] + sc.tolist(graph.exits[state].remainder)
                 ends = [s.name for s in graph.people_states if s.name != self.exclusive and all(tr.outflow for tr in exits(s.name))] # No way out but leaving the population (deaths)
                 if not ends:
-                    raise ss.UnknownState(f'"{mod.name}" has no state with no exits for people with {self.exclusive} in another member of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
+                    raise ss.errors.UnknownState(f'"{mod.name}" has no state with no exits for people with {self.exclusive} in another member of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
                 self.blocked.append(ends[-1])
 
         # Under the compartmental solvers: the members side by side, seeded from their shares (members that affect each other need agents: see ss.solvers.init_capabilities())
@@ -561,7 +561,7 @@ class Strains(ss.Module):
         """ The value of a member's attribute for each agent (by UID), as a level of protection between 0 and 1; none (0) where it is NaN """
         vals = np.nan_to_num(mod.engine.attr_values(a, ss.uids(np.arange(n_agents))), nan=0.0)
         if np.any(vals < 0) or np.any(vals > 1):
-            raise ss.OutOfBounds(f'the attribute "{a.name}" of "{mod.name}" scales a protection of "{self.name}", so it needs to be between 0 and 1, but it is {vals.min():n} to {vals.max():n}; scale it, e.g. with a derived attribute')
+            raise ss.errors.OutOfBounds(f'the attribute "{a.name}" of "{mod.name}" scales a protection of "{self.name}", so it needs to be between 0 and 1, but it is {vals.min():n} to {vals.max():n}; scale it, e.g. with a derived attribute')
         return vals
 
     def protection(self, index, key, g):

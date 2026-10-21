@@ -176,7 +176,7 @@ class Births(Demographics):
 
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
-        birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
+        birth_rate = ss.utils.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
         if sc.isnumber(birth_rate):
@@ -375,7 +375,7 @@ class Deaths(Demographics):
 
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
-        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        death_rate = ss.utils.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
             if death_rate.isna().any(axis=None):

@@ -79,7 +79,7 @@ class dimless(np.float64):
 
     It behaves exactly as a NumPy float (and any arithmetic on it gives one), but remembers
     the two values it came from, so that a `rate=` or `dur=` slot can refuse it with
-    `ss.WrongDimension` rather than taking it as a rate or a duration.
+    `ss.errors.WrongDimension` rather than taking it as a rate or a duration.
     """
     __slots__ = ('src',)
 
@@ -111,14 +111,14 @@ def type_str(obj):
 
 
 def incompatible(a, op, b, hint=''):
-    """ Raise `ss.IncompatibleTypes` for two values that cannot be combined, e.g. `ss.perday(0.1) + ss.prob(0.1, 'day')` """
-    raise ss.IncompatibleTypes(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} has no meaning. {hint}'.strip())
+    """ Raise `ss.errors.IncompatibleTypes` for two values that cannot be combined, e.g. `ss.perday(0.1) + ss.prob(0.1, 'day')` """
+    raise ss.errors.IncompatibleTypes(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} has no meaning. {hint}'.strip())
 
 
 def wrong_dimension(a, op, b):
-    """ Raise `ss.WrongDimension` for arithmetic whose result has a time dimension that no type has, e.g. a rate times a rate """
+    """ Raise `ss.errors.WrongDimension` for arithmetic whose result has a time dimension that no type has, e.g. a rate times a rate """
     units = 'per time squared' if isinstance(a, Rate) else 'time squared'
-    raise ss.WrongDimension(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} is in units of {units}, which no value in a model can be.')
+    raise ss.errors.WrongDimension(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} is in units of {units}, which no value in a model can be.')
 
 
 #%% Define TimePars
@@ -148,9 +148,10 @@ class TimePar:
         """ Let model expressions (states, parameters; see transitions.py) handle arithmetic with a TimePar, e.g. ss.peryear(0.02) * N.n, and a function of the sim, which is a parameter in one (ss.peryear(0.02) * trend); with an ss.by, it applies to each of its values (ss.peryear(0.02) * ss.by(sex=...)) """
         def defer(func, swap):
             def wrapper(self, other):
-                if isinstance(other, ss.Arr) and not other.initialized or getattr(other, '_is_cond', False): # A module's array before the sim exists (hiv.cd4), or a property of people: a term of a rate
-                    return getattr(ss.transitions.as_expr(ss.conditions.as_cond(other)), swap)(self)
-                elif getattr(other, '_is_expr', False):
+                if isinstance(other, ss.Arr):
+                    if not other.initialized: # A module's array before the sim exists (hiv.cd4) makes the term of a rate itself
+                        return NotImplemented
+                elif getattr(other, '_is_expr', False) or getattr(other, '_is_cond', False): # As does an expression, or a property of people
                     return NotImplemented
                 elif isinstance(other, ss.by):
                     return other.map(lambda v: func(self, v))
@@ -1189,7 +1190,7 @@ class peract:
     `ss.by` over a dimension of the susceptible. A direction can also be written as a pair of sides,
     `{('m', 'f'): 0.3}`, which is the same as `m2f=0.3`. Every direction of the network needs a value
     (unless one is given for all), and a direction it does not have raises; both are checked when the sim
-    is initialized. On a route without acts (`ss.RandomNet`, mixing pools), it raises `ss.RouteMismatch`.
+    is initialized. On a route without acts (`ss.RandomNet`, mixing pools), it raises `ss.errors.RouteMismatch`.
 
     Examples:
         ```python
@@ -1240,7 +1241,7 @@ class peract:
         """ A probability per act must be in [0, 1] """
         if isinstance(val, ss.TimePar):
             errormsg = f'ss.peract() takes a probability per act, which has no time unit, not {val}{where}'
-            raise ss.WrongDimension(errormsg)
+            raise ss.errors.WrongDimension(errormsg)
         raw = val.raw if isinstance(val, ss.par) else val
         raw = raw.values if isinstance(raw, ss.by) else raw
         try:
@@ -1249,7 +1250,7 @@ class peract:
             return
         if np.any(vals < 0) or np.any(vals > 1):
             errormsg = f'A probability per act must be between 0 and 1, not {val}{where}'
-            raise ss.OutOfBounds(errormsg)
+            raise ss.errors.OutOfBounds(errormsg)
         return
 
     def resolve(self, net):
@@ -1260,16 +1261,16 @@ class peract:
             return [self.value]*max(len(dirs), 1)
         if not dirs:
             errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides (sides= when it is made, or in its class, e.g. sides = dict(m="male", f="female"))'
-            raise ss.RouteMismatch(errormsg)
+            raise ss.errors.RouteMismatch(errormsg)
         sides = f"{name}'s {net.sides_str()}"
         for key in self.directions:
             if key not in dirs:
                 errormsg = f'beta for "{name}" has a direction "{key}", which {name} does not have; its directions are {sc.strjoin(dirs, sep=" and ")} ({sides}: see {name}.directions)'
-                raise ss.RouteMismatch(errormsg)
+                raise ss.errors.RouteMismatch(errormsg)
         missing = [d for d in dirs if d not in self.directions]
         if missing:
             errormsg = f'beta for "{name}" has no value for the direction{"s" if len(missing) > 1 else ""} {sc.strjoin(missing, sep=" and ")}; its directions are {sc.strjoin(dirs, sep=" and ")} ({sides}). Give each one, or one value for all, e.g. ss.peract(0.01)'
-            raise ss.RouteMismatch(errormsg)
+            raise ss.errors.RouteMismatch(errormsg)
         return [self.directions[d] for d in dirs]
 
     def __repr__(self):

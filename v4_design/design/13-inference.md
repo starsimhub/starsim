@@ -167,7 +167,7 @@ By default a fit is a best fit (a point estimate), by the method that suits the 
 
 | The sim | The default: a best fit | A posterior, by name |
 |---|---|---|
-| `solver='ode'`, with gradients (JAX installed, and the kernels run the sim whole) | L-BFGS-B, with gradients by automatic differentiation (Nelder-Mead for one or two parameters, where it is faster) | `'nuts'`, with a likelihood for every series (needs BlackJAX) |
+| `solver='ode'`, with gradients (the kernels run the sim whole) | L-BFGS-B, with gradients by automatic differentiation (Nelder-Mead for one or two parameters, where it is faster) | `'nuts'`, with a likelihood for every series |
 | `solver='ode'`, without gradients | Nelder-Mead | `'abc-smc'` |
 | Stochastic compartmental, run whole by the kernels | Optuna | `'pmcmc'` (particle MCMC), with a likelihood for every series |
 | Agent-based, or a stochastic run stepped from Python | Optuna | `'abc-smc'` |
@@ -218,7 +218,6 @@ For a sim with `solver='ode'`, the fit has gradients. The ODE is run by the kern
 Conditions and limits:
 
 - Gradients need a sim that the kernels run from start to finish: no interventions other than the deliveries the kernels take, no modifier with `when=`, no transfer whose rate varies, and no movement register. A rate written with NumPy functions of counts has gradients; a rate that is a Python function of the sim has none. Without gradients the fit uses Nelder-Mead, and the printed reason says why.
-- Without JAX installed, ODE models are fitted by Nelder-Mead; NUTS also needs BlackJAX.
 - Gradients exist for `solver='ode'` only. Stochastic compartmental and agent-based sims are fitted by the methods in the table that need none.
 - The same machinery is available directly: `sim.gradient()` gives the derivatives of results with respect to parameters, and `sim.log_density()` the log-density as a function in JAX, with its gradient by reverse mode.
 - Symbolic Jacobians, fixed points, and eigenvalues are not part of this and stay out of v1.

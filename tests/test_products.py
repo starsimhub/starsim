@@ -75,7 +75,7 @@ def test_vaccine_diseases():
     check_close(sims, lambda sim: sim.results.hpv18.infection.sum(), rtol=0.15)
     assert sims.abm.people.has_vx.sum() > 0 and 'has_vx' not in [s.name for s in sims.abm.diseases.hpv16.graph.strats]
 
-    with pytest.raises(ss.UnknownEffect): # Keyed by a disease and by something else
+    with pytest.raises(ss.errors.UnknownEffect): # Keyed by a disease and by something else
         make(lambda a, b: {a: 0.9, 'acquisition': 0.5}, solver='abm', **kw).init()
     return sims
 
@@ -122,7 +122,7 @@ def test_test_diseases():
 
     g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
     bad = ss.screen(ss.Diagnostic(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
-    with pytest.raises(ss.UnknownEffect, match='for "X", which is not a state of "hpv18". Its states are S, I, CIN, CA'):
+    with pytest.raises(ss.errors.UnknownEffect, match='for "X", which is not a state of "hpv18". Its states are S, I, CIN, CA'):
         ss.Sim([g16, g18], interventions=bad, solver='abm', **kw).run()
     return sims
 
@@ -262,7 +262,7 @@ def test_strain_efficacy():
         hpv.stratify(genotype=['hpv16', 'hpv18'], kind='strain') # In v4 a name only suggests a kind
         return ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=eff), at=[2005]), **kwargs)
     for solver in ['abm', 'ode']:
-        with pytest.raises(ss.InvalidAdjustment, match='"genotype", but people in S of "hpv" have no level of it.*efficacy=dict.hpv16=0.95'):
+        with pytest.raises(ss.errors.InvalidAdjustment, match='"genotype", but people in S of "hpv" have no level of it.*efficacy=dict.hpv16=0.95'):
             make(ss.by(genotype=[0.95, 0.0]), solver=solver, **kw).init()
     sim = make(dict(transmission=ss.by(genotype=[0.5, 0.0])), solver='abm', **kw).run() # Infectious people do carry a genotype
     assert sim.results.vaccinate.delivered.sum() > 0
@@ -302,7 +302,7 @@ def test_disease_list():
     # One product for one disease, delivered for another, says to give both
     g16, g18 = make_geno('hpv16'), make_geno('hpv18')
     test = ss.Diagnostic(sensitivity=0.9)
-    with pytest.raises(ss.UnknownDisease, match=r"disease=\['hpv16', 'hpv18'\]"):
+    with pytest.raises(ss.errors.UnknownDisease, match=r"disease=\['hpv16', 'hpv18'\]"):
         ss.Sim([g16, g18], interventions=[ss.screen(test, at=[2005], disease=g16, name='a'), ss.screen(test, at=[2006], disease=g18, name='b')], solver='abm', **kw).init()
     return sim
 

@@ -277,14 +277,14 @@ def test_burnin():
 @sc.timer()
 def test_attr_errors():
     sc.heading('Attributes: read where they have no value')
-    with pytest.raises(ss.ClockOutsideDomain): # A case of a derived attribute reads a clock of another state
+    with pytest.raises(ss.errors.ClockOutsideDomain): # A case of a derived attribute reads a clock of another state
         A, B = ss.states('A B')
         ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time}), name='d')
     S, I = ss.states('S I')
     infection = S >> I @ ss.perday(0.1)*I
     rec = ss.attr(ss.normal(10, 1), on=infection)
     d = ss.Disease(S, I, infection=infection, back=S >> I @ ss.perday(0.01)*rec/10, rec=rec, init_prev=0.01, name='d')
-    with pytest.raises(ss.ClockOutsideDomain): # Read by a rate from S, where people who were never infected have none
+    with pytest.raises(ss.errors.ClockOutsideDomain): # Read by a rate from S, where people who were never infected have none
         ss.Sim(d, n_agents=1000, stop=20, unit='day', **kw).run()
     with pytest.raises(ValueError):
         ss.attr(ss.normal(), combine='mean')
@@ -320,7 +320,7 @@ def test_attr_births():
     """ An attribute with init= read by a modifier, in a sim with births: newborns have the init, and spare slots in the arrays are not read """
     d = make_nab(ss.uniform(0.5, 0.95), rate=ss.peryear(2))
     demog = lambda: [ss.Births(birth_rate=25), ss.Deaths(death_rate=10)]
-    sim = ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised ss.ClockOutsideDomain at the first step
+    sim = ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised ss.errors.ClockOutsideDomain at the first step
     nab = sim.diseases.d.nab
     auids = sim.people.auids
     born = auids[auids >= 1000]
@@ -330,7 +330,7 @@ def test_attr_births():
 
     # With no init=, people who have not recovered have no value, which the error names
     d = make_nab(ss.uniform(0.5, 0.95), init=None, rate=ss.peryear(2))
-    with pytest.raises(ss.ClockOutsideDomain, match='nab'):
+    with pytest.raises(ss.errors.ClockOutsideDomain, match='nab'):
         ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run()
     return
 

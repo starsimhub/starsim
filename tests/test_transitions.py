@@ -192,7 +192,7 @@ def test_names():
     assert peak(ss.Sim([shared('c'), shared('d')], stop=60, pars=dict(R0=3.0), **kw)) == peak(ss.Sim(shared('e'), stop=60, pars=dict(R0=3.0), **kw))
 
     # A state with no name is an error
-    with pytest.raises(ss.UnnamedState):
+    with pytest.raises(ss.errors.UnnamedState):
         states = ss.states(2)
         ss.Disease(states[0] >> states[1] @ 0.1)
 
@@ -202,41 +202,41 @@ def test_names():
         ss.Disease(ss.Transition(S, I, rate=0.1 * I), ss.Transition(I, 'Q', dur=3))
 
     # Reserved names, undriven transitions, and bad splits
-    with pytest.raises(ss.ReservedName):
+    with pytest.raises(ss.errors.ReservedName):
         I, R = ss.states('I R')
         ss.Disease(step=ss.Transition(I, R, dur=3))
-    with pytest.raises(ss.ReservedName): # A method of ss.Disease, not of every module
+    with pytest.raises(ss.errors.ReservedName): # A method of ss.Disease, not of every module
         I, R = ss.states('I R')
         ss.Disease(describe=ss.Transition(I, R, dur=3))
-    with pytest.raises(ss.UndrivenTransition): # An inflow needs a rate; a transition between states with none is undriven
+    with pytest.raises(ss.errors.UndrivenTransition): # An inflow needs a rate; a transition between states with none is undriven
         ss.Disease(recovery=ss.Transition(I, R, dur=3), births=ss.Transition(ss.null, S))
-    with pytest.raises(ss.BadBranchSplit):
+    with pytest.raises(ss.errors.BadBranchSplit):
         I, H, R = ss.states('I H R')
         ss.Disease(a=ss.Transition(I, H, p=0.2, dur=3), b=ss.Transition(I, R, p=0.7, dur=3))
     with pytest.raises(TypeError): # Several destinations are a list, not a weighted sum
         S, I, R = ss.states('S I R')
         I >> (0.9*R + 0.1*S) @ 0.1
-    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # Below 1, an error that suggests ss.stay
+    with pytest.raises(ss.errors.BadBranchSplit, match='ss.stay'): # Below 1, an error that suggests ss.stay
         I, H, R = ss.states('I H R')
         ss.Disease(a=ss.Transition(I, H, p=0.2, dur=3), b=ss.Transition(I, R, p=0.7, dur=3))
-    with pytest.raises(ss.NonlinearExposure):
+    with pytest.raises(ss.errors.NonlinearExposure):
         S, I = ss.states(2)
         ss.Disease(infection = S >> I @ 0.1 * I * I)
 
     # The named errors that no other test raises (with these, every error class is raised by some test)
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(infection=ss.Transition(S, E, rate=ss.par(0.3, bounds=[0.1, 0.5]) * I), latency=ss.Transition(E, I, dur=5), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='seir')
-    with pytest.raises(ss.UnknownDisease):
+    with pytest.raises(ss.errors.UnknownDisease):
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.5), at=[5], disease='flu'), **kw).init()
     cyclic = make_sir()
     late = ss.outcome(cyclic.infection, name='late')
     early = ss.outcome(late, name='early')
     late.source = early
-    with pytest.raises(ss.OutcomeCycle):
+    with pytest.raises(ss.errors.OutcomeCycle):
         ss.Sim(make_sir(late=late, early=early), **kw).init()
-    with pytest.raises(ss.DataMisaligned): # Entirely after the run
+    with pytest.raises(ss.errors.DataMisaligned): # Entirely after the run
         ss.Sim(seir, data=pd.DataFrame({'time': [500], 'n_I': [10]}), stop=100, **kw).calibrate()
-    with pytest.raises(ss.NothingToFit):
+    with pytest.raises(ss.errors.NothingToFit):
         ss.Sim(make_sir(), data=pd.DataFrame({'time': [50], 'n_I': [10]}), stop=100, **kw).calibrate()
 
     # Operators that would silently drop something
@@ -258,9 +258,9 @@ def test_names():
     S, E, I, R = ss.states('S E I R')
     with pytest.raises(ValueError, match='not clear where the rest start'): # With E and R both open, the rest have no obvious home
         ss.Sim(ss.Disease(S >> E @ ss.perday(0.5)*I, E >> I @ ss.days(3), I >> R @ ss.days(7), init=dict(S=0.1, I=1e-4), name='seir'), **kw).init()
-    with pytest.raises(ss.UnknownParameter): # ... and is an error if there is none
+    with pytest.raises(ss.errors.UnknownParameter): # ... and is an error if there is none
         make_sir(gamma=0.1)
-    with pytest.raises(ss.UnknownParameter, match='init='): # A seeding keyword points to init=
+    with pytest.raises(ss.errors.UnknownParameter, match='init='): # A seeding keyword points to init=
         make_sir(init_infected=100)
     S, I, R = ss.states('S I R')
     with pytest.raises(TypeError): # A second driver
@@ -333,9 +333,9 @@ def test_time():
     daily, weekly = [ss.Sim(typed, stop=84, dt=dt, **kw).run() for dt in [ss.days(1), ss.weeks(1)]]
     assert weekly.unit == 'day' and daily.results.sir.n_I.max() > 1000 and weekly.results.sir.n_I.max() > 1000 # beta stays per day
     S, I, R = ss.states('S I R')
-    with pytest.raises(ss.IncompatibleTypes):
+    with pytest.raises(ss.errors.IncompatibleTypes):
         ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(1), R >> S @ ss.days(100), name='mixed'), **kw).init()
-    with pytest.raises(ss.IncompatibleTypes, match='rate_deaths'): # As is a bare number in demographics=
+    with pytest.raises(ss.errors.IncompatibleTypes, match='rate_deaths'): # As is a bare number in demographics=
         ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=ss.death(rate=0.01), **kw).init()
     zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit
     assert ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), R >> S @ zero, name='mixed'), **kw).init().unit == 'day'
@@ -363,7 +363,7 @@ def test_time():
     later = infected[sir.ti_I.raw[infected] >= 0] # Those infected at the start are dated a step before it, as if infected in the step before, as infections are dated by their step
     assert np.allclose(sir.ti_I.years[later], sir.t.yearvec[sir.ti_I.raw[later]])
     assert (sir.ti_I[infected] >= -1).all() and (sir.ti_I[infected] == -1).sum() == sir.results.n_I[0]
-    with pytest.raises(ss.TimeNotKept): # Nothing in the sim read ti_R, so it was not kept
+    with pytest.raises(ss.errors.TimeNotKept): # Nothing in the sim read ti_R, so it was not kept
         sir.ti_R.notnan
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, so it is kept
         def step(self):
@@ -564,7 +564,7 @@ def test_counts():
         assert np.isclose(sim.results.vector.n_Sv[-1] + sim.results.vector.n_Iv[-1], 1000/mult, rtol=0.01) # Emergence over mortality
 
     # A bare count in a rate is an error
-    with pytest.raises(ss.ExposureToCount):
+    with pytest.raises(ss.errors.ExposureToCount):
         S, I = ss.states(2)
         W = ss.State(people=False)
         ss.Disease(infection = S >> I @ 0.5 * W, shedding = ss.null >> W @ 10 * I.n)
@@ -574,7 +574,7 @@ def test_counts():
     d = ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]), name='d')
     assert X.people
     assert np.isclose(ss.Sim(d, n_agents=1000, stop=5, **kw).run().results.d.n_X[-1], 50, atol=25)
-    with pytest.raises(ss.PeopleAndCounts, match='people=False'): # Unless one is declared not to be
+    with pytest.raises(ss.errors.PeopleAndCounts, match='people=False'): # Unless one is declared not to be
         S, X = ss.states('S X')
         X.people = False
         ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
@@ -692,7 +692,7 @@ def test_births():
         assert np.isclose(n_flu, 2000*np.exp(0.03*20), rtol=0.06) # 3,644
     assert ss.Sim(flu(), demographics=demog, **kw).init().solver == 'ode' # Not agents, as birth_rate= gave
     assert ss.Sim(demographics=True, **kw).run().results.births.cumulative[-1] > 0 # With no declared disease, ss.Births and ss.Deaths
-    with pytest.raises(ss.DuplicateDeclaration): # Births in two diseases would count people twice
+    with pytest.raises(ss.errors.DuplicateDeclaration): # Births in two diseases would count people twice
         ss.Sim(ss.SIR(name='a', births=ss.birth(rate=0.02)), ss.SIS(name='b', births=ss.birth(rate=0.02)), **kw).init()
 
     # An inflow given for each level arrives at that level as given, whatever the split
@@ -884,7 +884,7 @@ def test_stratify():
         if key == 'net_ode':
             assert any('approximated' in note for note in sim.notes) # Asking for an ODE of a network model gives the standard approximation, and says so
     assert np.allclose(finals[:], finals[0], rtol=0.03), f'Expected the same attack rate from each, not {finals}'
-    with pytest.raises(ss.WrongDimension): # beta and n_contacts both per unit time
+    with pytest.raises(ss.errors.WrongDimension): # beta and n_contacts both per unit time
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.03) * I), init_prev=0.01), networks=ss.MixingPool(n_contacts=ss.perday(10)), **kw).init()
 
@@ -904,16 +904,16 @@ def test_stratify():
     again = make_sir().stratify(age=[0, 15]).stratify(age=[0, 15]) # The same line run twice does nothing more
     assert len(again.graph.strats) == 1
     assert ss.Sim(make_sir(), **kw).stratify(age=[0, 15]).stratify(age=[0, 15]).init().groups.n_groups == 2 # Likewise for the sim
-    with pytest.raises(ss.DuplicateStructuralDimension): # In another way, it is an error
+    with pytest.raises(ss.errors.DuplicateStructuralDimension): # In another way, it is an error
         make_sir().stratify(age=[0, 15]).stratify(age=[0, 20])
-    with pytest.raises(ss.UnknownTransition):
+    with pytest.raises(ss.errors.UnknownTransition):
         make_sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
-    with pytest.raises(ss.BadSplit):
+    with pytest.raises(ss.errors.BadSplit):
         make_sir().stratify(risk=['low', 'high'], split=[0.5, 0.3, 0.2])
-    with pytest.raises(ss.ShapeError): # Caught when the sim is built, not when it runs
+    with pytest.raises(ss.errors.ShapeError): # Caught when the sim is built, not when it runs
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.by(age=[0.3, 0.2]) * I), init_prev=0.01), stratify=dict(age=[0, 15, 65]), **kw).init()
-    with pytest.raises(ss.InconsistentDimension):
+    with pytest.raises(ss.errors.InconsistentDimension):
         a = make_sir().stratify(age=[0, 15])
         I, R = ss.states('I R')
         b = ss.Disease(recovery=ss.Transition(I, R, dur=3), name='other').stratify(age=[0, 20])
@@ -921,7 +921,7 @@ def test_stratify():
 
     # One parser for the sim and the disease: an option is never a dimension, and the sim's adjust= is checked too
     assert [strat.name for strat in ss.Sim(make_sir(), stratify=dict(age=[0, 15], states=['S', 'I']), **kw).init().groups.strats] == ['age'] # Not a dimension called states
-    with pytest.raises(ss.UnknownTransition):
+    with pytest.raises(ss.errors.UnknownTransition):
         ss.Sim(make_sir(), stratify=dict(age=[0, 15], adjust={'recovry': [1, 2]}), **kw).init()
     with pytest.raises(ValueError):
         make_sir().stratify(split=[0.5, 0.5]) # No dimension
@@ -965,7 +965,7 @@ def test_transfer():
     assert np.allclose(ss.Sim(staged, unit='day', stop=10, **kw).init().groups.strats[0].split, [1, 0])
 
     # A transfer along a dimension the model does not have is an error
-    with pytest.raises(ss.MissingDimension):
+    with pytest.raises(ss.errors.MissingDimension):
         I, R = ss.states('I R')
         ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), move=ss.transfer(risk='low -> high', rate=0.1)), **kw).init()
     # A transfer given to stratify() registers its parameters too, and a transition can be called "stop"
@@ -1007,7 +1007,7 @@ def test_transfer():
         fp.stratify(method=['none', 'pill', 'iud'], split=[1, 0, 0], start=ss.transfer(method='none -> pill | iud', p=[0.6, None], dur=ss.lognorm_ex(ss.years(2), ss.years(1))))
         n = ss.Sim(fp, unit='year', dt=0.25, start=0, stop=10, solver=solver, **agents, **kw).run().results.fp.n_S.by('method').values[-1]
         assert np.allclose(n/n.sum(), [0, 0.6, 0.4], atol=0.02), f'{solver}: {n/n.sum()}'
-    with pytest.raises(ss.BadBranchSplit, match='rate='): # One level to move to
+    with pytest.raises(ss.errors.BadBranchSplit, match='rate='): # One level to move to
         ss.transfer(v=True, p=0.5, rate=0.1)
     return sims
 
@@ -1058,24 +1058,24 @@ def test_outcomes():
     assert any('outside the simulated period' in note for note in short.notes) # Data that the comparison leaves out is noted
 
     # Mistakes in the data and the parameters are caught by name
-    with pytest.raises(ss.UnknownDataColumn):
+    with pytest.raises(ss.errors.UnknownDataColumn):
         ss.Sim(make(0.3), data=df.rename(columns=dict(cases='casess')), **pars).init()
     renamed = ss.data(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
     assert 'cases' in ss.Sim(make(0.3), data=renamed, **pars).init().data.columns
     assert 'cases' in ss.Sim(make(0.3), **pars).new(data=renamed).init().data.columns # Or to a new sim
-    with pytest.raises(ss.UnknownParameter):
+    with pytest.raises(ss.errors.UnknownParameter):
         ss.Sim(make(0.3), pars=dict(betta=0.2), **pars).init()
     assert ss.transitions.did_you_mean('betta', ['sir.beta', 'sir.dur']) == '; did you mean sir.beta?' # The closest only, matched without the module's name
-    with pytest.raises(ss.OutOfBounds): # A value outside its bounds
+    with pytest.raises(ss.errors.OutOfBounds): # A value outside its bounds
         ss.Sim(make(0.3), pars=dict(beta=5), **pars).init()
-    with pytest.raises(ss.UnvaluedParameter): # A parameter with no value
+    with pytest.raises(ss.errors.UnvaluedParameter): # A parameter with no value
         S, I, R = ss.states('S I R')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.par() * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01), **pars).init()
-    with pytest.raises(ss.NoData):
+    with pytest.raises(ss.errors.NoData):
         ss.Sim(make(0.3), **pars).calibrate()
     with pytest.raises(ValueError, match='gof'): # Rather than the default in its place
         sim.calibrate(gof='nea')
-    with pytest.raises(ss.UnknownOutcomeSource):
+    with pytest.raises(ss.errors.UnknownOutcomeSource):
         I, R = ss.states('I R')
         ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), cases=ss.outcome('infection')), **kw).init()
 
@@ -1093,7 +1093,7 @@ def test_outcomes():
         S, I, R = ss.states(3)
         infection = S >> I @ 0.3 * I
         sir = ss.Disease(infection, I >> R @ 0.1, ss.outcome(0.5 * infection, name='cases', delay=ss.days(3)), ss.outcome(infection, name='hosp', duration=ss.days(5)), init=dict(I=ss.by(patch=[5, 0])), name='sir')
-        sir.stratify(patch=['a', 'b'], mobility=ss.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
+        sir.stratify(patch=['a', 'b'], mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
         return ss.Sim(sir, total_pop=1000, unit='day', stop=80, **kw)
     kernel, stepped = by_patch().run().results.sir, by_patch().run(profile=True).results.sir # Recording the time of each step needs the loop
     agents = by_patch().new(n_agents=1000).run().results.sir
@@ -1277,7 +1277,7 @@ def test_modify():
     both = [ss.modify('sir.pars.beta', multiply=0.5, start=20, name='a'), ss.modify('sir.pars.beta', multiply=0.5, start=20, name='b')]
     twice = ss.Sim(sir, interventions=both, **pars).run()
     assert twice.results.sir.n_R[-1] < n_R.select(scenario='masks').values[0, -1]
-    with pytest.raises(ss.UnmodifiableTarget):
+    with pytest.raises(ss.errors.UnmodifiableTarget):
         ss.Sim(sir, interventions=ss.modify('sir.pars.betta', multiply=0.5), **pars).init()
 
     # One sim is one run; many runs are a MultiSim
@@ -1416,7 +1416,7 @@ def test_functions():
     with pytest.warns(RuntimeWarning, match='Starsim 3') as record: # Bare numbers in a beta dict were probabilities per step in Starsim 3, so a verbatim port is 12x too low at monthly steps
         ss.Sim(monthly, networks=['random', ss.MFNet()], start=2000, stop=2002, dt=ss.years(1/12), **kw).init()
     assert "'random'" in str(record[0].message) and "'mf'" not in str(record[0].message) # Not on a network with acts, where a bare number is per act, as in Starsim 3
-    with pytest.raises(ss.RouteMismatch):
+    with pytest.raises(ss.errors.RouteMismatch):
         S, I = ss.states('S I')
         other = ss.Disease(infection=ss.Transition(S, I, rate=dict(needles=0.1) * I), init_prev=0.05, name='hiv')
         ss.Sim(other, networks=ss.MFNet(), start=2000, stop=2005, **kw).run()
@@ -1699,7 +1699,7 @@ def test_cross_disease_rate():
     # A state of the other disease read before that disease is declared: a would keep an empty state of its own, so it is refused
     Sa, Ia, Sb, Ib, Rb = ss.states('Sa Ia Sb Ib Rb')
     a = ss.Disease(infection=Sa >> Ia @ ss.peryear(1.5)*Ia*(1 - 0.9*Rb.frac), name='a')
-    with pytest.raises(ss.DuplicateDeclaration):
+    with pytest.raises(ss.errors.DuplicateDeclaration):
         ss.Disease(infection=Sb >> Ib @ ss.peryear(1.5)*Ib, recovery=Ib >> Rb @ ss.years(1), name='b')
     return
 
@@ -1804,7 +1804,7 @@ def test_immediate():
     assert res.n_X.max() == 0 and min(times[True]) < 2*min(times[False]) + 0.05, f'dur=0 took {min(times[True]):.3f} s, against {min(times[False]):.3f} s without it'
 
     # A split with p= and no rate or duration still raises, saying dur=0
-    with pytest.raises(ss.UndrivenTransition, match='dur=0'):
+    with pytest.raises(ss.errors.UndrivenTransition, match='dur=0'):
         S, P, A, B = ss.states('S P A B')
         ss.Disease(go=ss.Transition(S, P, rate=0.1), triage=ss.Transition(P, [A, B], p=[0.8, None]), name='d')
     return res
@@ -1888,10 +1888,10 @@ def test_branches():
             res = sim.results.d
             share = res.rec[1:].sum()/(res.rec[1:].sum() + res.rec2[1:].sum())
             assert np.isclose(share, 0.3, atol=0.05), f'{which} ({solver}): {share:.2f} went to P, not 0.3'
-    with pytest.raises(ss.BadBranchSplit): # Only one can take the remainder
+    with pytest.raises(ss.errors.BadBranchSplit): # Only one can take the remainder
         E, P, A, R = ss.states('E P A R')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), a=ss.Transition(E, A, dur=2), b=ss.Transition(E, R, dur=2))
-    with pytest.raises(ss.BadBranchSplit, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
+    with pytest.raises(ss.errors.BadBranchSplit, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
         E, P, A = ss.states('E P A')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), mild=ss.Transition(E, A))
 
@@ -1902,7 +1902,7 @@ def test_branches():
     res = ss.Sim(d, n_agents=2000, start=2000, stop=2001, dt=ss.months(1), unit='year', **kw).run().results.d
     assert res.n_A[-1] == 0 and np.isclose(res.n_C[-1]/2000, 0.1, atol=0.03)
     A, B, C = ss.states('A B C')
-    with pytest.raises(ss.BadBranchSplit, match=r'1.8.*\(b1: .*c1: '): # But still within each
+    with pytest.raises(ss.errors.BadBranchSplit, match=r'1.8.*\(b1: .*c1: '): # But still within each
         ss.Disease(A, B, C, b0=ss.Transition(A, B, p=0.9, dur=1, move=dict(k='0 -> 1')), c0=ss.Transition(A, C, p=0.1, dur=1, move=dict(k='0 -> 1')),
                    b1=ss.Transition(A, B, p=0.9, dur=1, move=dict(k='1 -> 1')), c1=ss.Transition(A, C, p=0.9, dur=1, move=dict(k='1 -> 1')))
     return sim
@@ -2020,7 +2020,7 @@ def test_cascade():
         S, A, B = ss.states('S A B')
         loop = ss.Disease(S, A, B, sa=S >> A @ 0.1, ab=ss.Transition(A, B, p=1.0), ba=ss.Transition(B, A, p=1.0), name='loop')
         size = dict(n_agents=1000) if solver == 'abm' else {}
-        with pytest.raises(ss.TriggerLoop, match='A -> B'):
+        with pytest.raises(ss.errors.TriggerLoop, match='A -> B'):
             ss.Sim(loop, solver=solver, stop=5, **size, **kw).run()
     return res
 
@@ -2082,7 +2082,7 @@ def test_messages_and_crashes():
 
     # An immediate split as one transition says how to write it (HP16: crashed); a source that is a sum of states is several sources, as in A + B >> C (FP36: crashed in its own error)
     S, J, A, B = ss.states('S J A B')
-    with pytest.raises(ss.UndrivenTransition, match='give it dur=0'):
+    with pytest.raises(ss.errors.UndrivenTransition, match='give it dur=0'):
         ss.Sim(ss.Disease(go=S >> J @ ss.peryear(1), branch=ss.Transition(J, [A, B], p=[0.5, 0.5]), name='d'), **kw).init()
     A, B, C = ss.states('A B C')
     d = ss.Disease(A, B, C, tr=ss.Transition(A + B, C, rate=ss.peryear(0.1)), name='d')
@@ -2240,7 +2240,7 @@ def test_tlo_review():
         S, D, R = ss.states('S D R')
         d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.null, dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.Transition(D, R, dur=ss.days(5)), name='d')
         d.stratify(type=['watery', 'bloody'], states=[D])
-        with pytest.raises(ss.BadBranchSplit, match='1.5'):
+        with pytest.raises(ss.errors.BadBranchSplit, match='1.5'):
             ss.Sim(d, n_agents=1000, solver=solver, **kw).run()
 
     # adjust= on a branch chosen with p= scales its probability, as ss.modify does, under every solver (TL16: it divided the dwell; the ODE read a share by a dimension split on entry at its first level)
@@ -2291,7 +2291,7 @@ def test_tlo_review():
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=A >> B @ 0.1, name='d')
     d.pars.init = dict(B=100.0)
-    with pytest.raises(ss.UnknownParameter, match='init='):
+    with pytest.raises(ss.errors.UnknownParameter, match='init='):
         ss.Sim(d, n_agents=1000, **kw).init()
 
     # A rate given as a function of the sim with one value per person alive, once people have died (TL8: IndexError)

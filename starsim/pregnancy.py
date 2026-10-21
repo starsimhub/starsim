@@ -109,7 +109,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.rng_md = ss.random() # For a plain number as p_maternal_death
         self.rng_dur = ss.random() # For the durations of pregnancies with a relative risk of preterm birth: see preterm_risk()
         self.fetus = fetus # Whether fetuses are agents, from conception: see init_fetus()
-        self.lactation_opt = lactation # Whether to add an ss.Lactation: see add_lactation()
+        self.lactation_opt = lactation # Whether to add an ss.Lactation: see link()
         self._callbacks = sc.objdict(conception=[], delivery=[]) # Starsim 3: see add_conception_callback()
         self._nnd = 0 # Neonatal deaths in the step
         self._mothers = [] # The ages of the women who delivered in the step, for the ASFR (agents)
@@ -208,6 +208,21 @@ class Pregnancy(ss.Demographics, ss.Disease):
         note = f'{self.name}: women pregnant at the start, conceived over the {steps} steps before it (burnin=True)'
         return sc.objdict(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
+    def link(self, sim):
+        """
+        `lactation='auto'`: add an `ss.Lactation` to a sim that has none, if it has a `BreastfeedingNet` (or `lactation=True`),
+        with this module's breastfeeding parameters; called by `ss.solvers.choose_solver()`
+        """
+        pars = sim.pars
+        mods = [m for key in ss.modules.module_types() + ['custom'] for m in pars[key].values()]
+        if self.lactation_opt is False or any(isinstance(m, Lactation) for m in mods):
+            return
+        if self.lactation_opt is True or any(isinstance(net, ss.BreastfeedingNet) for net in pars.networks.values()):
+            lact = Lactation(p_breastfeed=self.pars.p_breastfeed, dur_breastfeed=self.pars.dur_breastfeed, pregnancy=self)
+            pars.demographics.append(lact)
+            lact.link(sim)
+        return
+
     def compartmental_form(self, sim):
         """
         The small compartmental form, used only when a compartmental solver is named (`solver='auto'` runs a pregnancy as
@@ -262,6 +277,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         if self.fetus and not self.abm:
             raise ss.CapabilityError(f'"{self.name}" cannot have fetuses (fetus=True) with solver="{sim.solver}": fetuses are agents, and the compartmental form of a pregnancy has none. Run with solver="abm".')
         self.fetus_reason = sc.strjoin(reasons) if reasons else None
+        if self.fetus: # Not counted among the people until they are born
+            sim.people.has_unborn = True
         return
 
     def unborn(self, moms):
@@ -652,11 +669,11 @@ class Lactation(ss.Demographics, ss.Disease):
         self.pregnancy = pregnancy # The pregnancy module, or its name; found by link() if None
         return
 
-    def link(self, mods):
-        """ Find the pregnancy module whose events drive this one (`pregnancy=`, else the only `ss.Pregnancy` in `mods`), and point the triggers of the transitions at it by name """
+    def link(self, sim):
+        """ Find the pregnancy module whose events drive this one (`pregnancy=`, else the sim's only `ss.Pregnancy`), and point the triggers of the transitions at it by name; called by `ss.solvers.choose_solver()` """
         preg = self.pregnancy
         if preg is None:
-            pregs = [m for m in mods if isinstance(m, Pregnancy)]
+            pregs = [m for key in ss.modules.module_types() + ['custom'] for m in sim.pars[key].values() if isinstance(m, Pregnancy)]
             if len(pregs) > 1:
                 errormsg = f'"{self.name}" is driven by the events of a pregnancy module, but the sim has several ({sc.strjoin([m.name for m in pregs])}); give the one to use, e.g. ss.Lactation(pregnancy="{pregs[0].name}")'
                 raise ValueError(errormsg)
@@ -675,31 +692,9 @@ class Lactation(ss.Demographics, ss.Disease):
         return
 
 
-def add_lactation(sim):
-    """
-    `lactation='auto'`: add an `ss.Lactation` to a sim whose `ss.Pregnancy` has none, if it has a `BreastfeedingNet`
-    (or `lactation=True`), with the pregnancy's breastfeeding parameters; and link each `ss.Lactation` to its pregnancy
-    module (see `Lactation.link()`)
-    """
-    pars = sim.pars
-    mods = [m for key in ss.modules.module_types() + ['custom'] for m in pars[key].values()]
-    if not any(isinstance(m, Lactation) for m in mods):
-        for preg in mods:
-            if isinstance(preg, Pregnancy) and preg.lactation_opt is not False:
-                if preg.lactation_opt is True or any(isinstance(net, ss.BreastfeedingNet) for net in pars.networks.values()):
-                    lact = Lactation(p_breastfeed=preg.pars.p_breastfeed, dur_breastfeed=preg.pars.dur_breastfeed, pregnancy=preg)
-                    pars.demographics.append(lact)
-                    mods.append(lact)
-                break
-    for lact in mods:
-        if isinstance(lact, Lactation):
-            lact.link(mods)
-    return
-
-
 def standardize_fertility_data(mod):
     """ The fertility rates of a pregnancy module (`pars.fertility_rate`, with `metadata` for a dataframe): a rate, or by year and age, with 1-year steps and a 0 past the last age group """
-    fertility_rate = ss.standardize_data(data=mod.pars.fertility_rate, metadata=mod.metadata)
+    fertility_rate = ss.utils.standardize_data(data=mod.pars.fertility_rate, metadata=mod.metadata)
     if isinstance(fertility_rate, (pd.Series, pd.DataFrame)):
         fertility_rate = fertility_rate.unstack()
         fertility_rate = fertility_rate.reindex(np.arange(fertility_rate.index.min(), fertility_rate.index.max() + 1)).interpolate() # Interpolate to 1-year steps

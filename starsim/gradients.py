@@ -17,7 +17,6 @@ and smooth, so this is accurate to about 1e-9 of the value.
 import os
 import sys
 import itertools
-import importlib.util
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -31,7 +30,7 @@ table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the ste
 
 def jax():
     """
-    Import JAX, or say that it is needed
+    Import JAX (imported only when first used, since it takes a few tenths of a second)
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), so that the chains of a posterior run on
@@ -39,30 +38,18 @@ def jax():
     """
     if 'jax' not in sys.modules and 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
         os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
-    try:
-        import jax
-    except ImportError as e:
-        errormsg = 'This needs JAX, which is not installed: pip install jax'
-        raise ImportError(errormsg) from e
+    import jax
     if ss.options.jax_cache and jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise
         jax.config.update('jax_compilation_cache_dir', ss.options.jax_cache)
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
     return jax
 
 
-def available():
-    """ Whether JAX is installed (without importing it) """
-    return importlib.util.find_spec('jax') is not None
-
-
-
 def reason(sim):
     """ Why the sim cannot be run in JAX, in a few words, or None if it can """
     families = [mod for mod in sim.diseases() if isinstance(mod, ss.Strains)]
     funcs = [(fam.name, getattr(imm.combine, '__name__', 'function')) for fam in families for imm in fam.immunity if callable(imm.combine)]
-    if not available():
-        return 'JAX is not installed'
-    elif funcs:
+    if funcs:
         return f'"{funcs[0][0]}" combines protection with a function ({funcs[0][1]}), which has no gradient; the rules "max", "sum", and "multiply" do'
     elif not getattr(sim, 'declared', None): # Code of its own, whose gradient is not known (a fit of it uses the runs alone)
         return 'the model is written as code, with no declared states and transitions, so it has no gradient'
@@ -148,6 +135,7 @@ class Run:
         self.gather_crd = np.zeros((ncr, nf))
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
+        self.dense_share = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time share with at least an eighth of its entries is taken as a matrix (see function())
         conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.kernels.convey())
         self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
         slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
@@ -262,6 +250,8 @@ class Run:
         jnp = jax().numpy
         p = self.p
         v = v.reshape(-1, block)
+        if self.dense_share:
+            return (X['sh_mat'] @ v if by_columns else X['sh_mat'].T @ v).ravel()
         frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
         return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
 
@@ -416,6 +406,9 @@ class Run:
         jnp = jx.numpy
 
         def run(X):
+            if self.dense_share: # As a matrix, from place to place, made once a run: a product with it is much faster in XLA than adding into an array at indices (4x for 50 places)
+                p = self.p
+                X = dict(X, sh_mat=jnp.zeros((p.n_places, p.n_places)).at[p.sh_pair[1], p.sh_pair[0]].add(X['sh_val']))
             step = self.stepper(X, clamp)
             def body(y, ti):
                 y = self.deliver(y, X, ti)

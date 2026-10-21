@@ -81,6 +81,7 @@ class People:
         # a selection of the states e.g., module states could be added in there, while intervention states might not.
         self._states = {}
         self.version = ss.__version__  # Store version info
+        self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
         self.n_agents_init = n_agents
         self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
@@ -434,7 +435,7 @@ class People:
 
     def init_mock(self):
         """ Initialize with a mock simulation (for debugging purposes only) """
-        sim = ss.mock_sim(n_agents=self.n_agents)
+        sim = ss.debugtools.mock_sim(n_agents=self.n_agents)
         self.link_sim(sim, init=True)
         self.init_vals()
         return
@@ -767,9 +768,8 @@ class People:
         return
 
     def unborn_uids(self):
-        """ The active agents not yet born: those made at conception by `ss.Pregnancy`, with a negative age, who are not counted among the people (e.g. in `n_alive`) """
-        sim = self.sim
-        if sim.solver != 'abm' or not any(getattr(mod, 'fetus', False) is True for mod in sim.demographics()): # Made at conception by ss.Pregnancy, with fetuses as agents
+        """ The active agents not yet born, with a negative age (e.g. made at conception by `ss.Pregnancy`), who are not counted among the people (e.g. in `n_alive`) """
+        if not self.has_unborn:
             return ss.uids()
         auids = self.auids
         return auids[self.age.raw[auids] < 0]

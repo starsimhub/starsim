@@ -47,7 +47,7 @@ Tested by `test_transitions.py::test_forms` on the SIR (the spellings, a class, 
 - The code `sim.to_code()` writes builds a sim with an identical spec and hash, and the same results (`test_transitions.py::test_load`, on a stratified cholera model under `gillespie`, and `test_stratify` with a likelihood). Not yet run over every corpus model.
 - A sim saved with `ss.save('run.sim', sim)` after a run loads with the same results, under every solver (`test_transitions.py::test_load`).
 - A saved model spec is not read back, and `ss.load()` of one says what to do instead (`test_transitions.py::test_load`).
-- Each export lists what it changed and left out (`ss.LossyExport`): `test_interop_export.py` checks the list for Erlang stages, a network, an agent-based sim, and a stratification, and that SBML and odin exports read back with the same results. That the list matches everything missing from the file is not checked.
+- Each export lists what it changed and left out (`ss.errors.LossyExport`): `test_interop_export.py` checks the list for Erlang stages, a network, an agent-based sim, and a stratification, and that SBML and odin exports read back with the same results. That the list matches everything missing from the file is not checked.
 
 ### 3. Agreement between solvers, on simple models
 
@@ -73,7 +73,7 @@ The tolerances are stated per test with the reasoning, so that a failure means s
 For every approximation in [12-backends.md](12-backends.md#the-standard-approximations):
 
 - under `solver='auto'`, an approximation of the mixing is never made: the model runs as agents, and the printed reason names the piece that made it agent-based;
-- under `solver='auto'`, a dwell time that is not exponential or Erlang is the one exception: the model stays an ODE with fitted Erlang stages, and one note (`ss.StagesUnderAuto`) names the transition, the number of stages, and the mean and standard deviation kept;
+- under `solver='auto'`, a dwell time that is not exponential or Erlang is the one exception: the model stays an ODE with fitted Erlang stages, and one note (`ss.errors.StagesUnderAuto`) names the transition, the number of stages, and the mean and standard deviation kept;
 - under an explicit solver, the run completes and prints one line naming the piece and what it was approximated by;
 - with `approx=True`, the same run prints nothing, and the note is still kept in `sim.notes`;
 - with an explicit solver and `approx=False`, the same request raises `ss.CapabilityError` naming the piece and the approximation that would have been used;
@@ -111,31 +111,31 @@ Tested by `test_transitions.py::test_functions` and `test_auto`, `test_deliverie
 ### 7. `ss.modify`
 
 - **Base and effective.** While a modifier is active, reading the array (`sir.rel_sus`) gives the base, and `sir.rel_sus.effective` the value with the active modifiers applied (agents only). When the modifier's condition stops holding, or `stop=` passes, the value the engine uses is the base again, exactly, with no bookkeeping by the user (`test_deliveries.py::test_effective_and_writes`, `test_change`).
-- **Combination.** Set, then multiply, then add, whatever order the modifiers were declared in. Two `set=` modifiers active at the same time give the note `ss.OverlappingSet`, and the later one in the loop is used (`test_deliveries.py::test_modify_where`).
+- **Combination.** Set, then multiply, then add, whatever order the modifiers were declared in. Two `set=` modifiers active at the same time give the note `ss.errors.OverlappingSet`, and the later one in the loop is used (`test_deliveries.py::test_modify_where`).
 - **Assignment goes to the base.** `arr[uids] = x` while a modifier is active changes the base, and the modifier still applies on top (`test_deliveries.py::test_effective_and_writes`).
-- **Any named numeric quantity.** A parameter, `rel_sus` and `rel_trans`, a transition, and a network parameter as a path (`'school.pars.n_contacts'`) work as targets (`test_deliveries.py::test_modify_where`, `test_network_contacts`); a boolean state or a plain number raises `ss.UnmodifiableTarget` (`test_transitions.py::test_modify`, `test_deliveries.py::test_network_contacts`).
+- **Any named numeric quantity.** A parameter, `rel_sus` and `rel_trans`, a transition, and a network parameter as a path (`'school.pars.n_contacts'`) work as targets (`test_deliveries.py::test_modify_where`, `test_network_contacts`); a boolean state or a plain number raises `ss.errors.UnmodifiableTarget` (`test_transitions.py::test_modify`, `test_deliveries.py::test_network_contacts`).
 - **Acquisition by any rate.** On the Ross-Macdonald model (corpus 12), the bednet idiom `ss.modify(malaria.rel_sus, multiply=0)` and a vaccine of efficacy 1 stop every human infection, `ss.treat` reaches the infected (`Eh`, `Ih`), and `R0()` is the next-generation value with the mosquitoes at their disease-free equilibrium, under `ode` and `abm` (`test_contracts.py::test_acquisition`).
 - **`what_modifies()`** lists every modifier on the target; code that assigns `rel_sus` or `rel_trans` directly is not a modifier, and is not tracked (`test_deliveries.py::test_effective_and_writes`).
 
 ### 8. Stratification
 
-- **In place by default.** After `sir.stratify(age=[0, 15, 65])`, `sir` is stratified, and the call returned `sir` itself, so `ss.Sim(sir.stratify(age=[0, 15, 65]))` works. Running the same line again does nothing more (with a note); stratifying by the same dimension in another way raises `ss.DuplicateStructuralDimension`.
+- **In place by default.** After `sir.stratify(age=[0, 15, 65])`, `sir` is stratified, and the call returned `sir` itself, so `ss.Sim(sir.stratify(age=[0, 15, 65]))` works. Running the same line again does nothing more (with a note); stratifying by the same dimension in another way raises `ss.errors.DuplicateStructuralDimension`.
 - **A copy on request.** After `sir_age = sir.stratify(age=[0, 15, 65], inplace=False)`, the spec and hash of `sir` are what they were before, and `sir_age` is identical to a model stratified in place.
-- **Stratifying the sim.** `sim.stratify(age=[0, 5, 18, 65])` and `ss.Sim(..., stratify=dict(age=[0, 5, 18, 65]))` give the same spec, and every module in the sim has the same age groups. Two diseases stratified by age with different groups raise `ss.InconsistentDimension`.
+- **Stratifying the sim.** `sim.stratify(age=[0, 5, 18, 65])` and `ss.Sim(..., stratify=dict(age=[0, 5, 18, 65]))` give the same spec, and every module in the sim has the same age groups. Two diseases stratified by age with different groups raise `ss.errors.InconsistentDimension`.
 - **States that are not people** are not split by a people dimension (age, sex, risk), are split by `patch`, and are split by their own dimensions when named in `states=`.
-- **A contact matrix with other age groups** is aggregated to the model's groups by population in a compartmental run, with the note `ss.MatrixAggregated`.
+- **A contact matrix with other age groups** is aggregated to the model's groups by population in a compartmental run, with the note `ss.errors.MatrixAggregated`.
 - **Coverage delivers `f`.** `coverage=0.7` on a model with `P` strata reaches 70% of the eligible people in total, not `1 − (1 − 0.7)^P`; realized coverage is read from the delivery's results.
 - **Capacity is a total.** `capacity=50_000` delivers 50,000 doses however many strata there are, shared in proportion to the eligible population.
 - **Continuous properties stay continuous in an agent-based run** and are binned only for adjustments, conditions, and results.
 - **Space without mobility** builds and runs with no warning.
 
-Tested by `test_transitions.py::test_stratify` (in place, twice, `ss.stratify`, `ss.InconsistentDimension`), `test_dimensions.py` (states that are not people, space, mixing, strains), and `test_deliveries.py::test_vaccinate` and `test_coverage_by_group` (coverage reached in a round, a capacity per day, and coverage over several groups). Not yet tested: `inplace=False` leaving the original's hash unchanged, the aggregation of a contact matrix against one aggregated by hand, and coverage and capacity on 1, 3, and 16 age groups.
+Tested by `test_transitions.py::test_stratify` (in place, twice, `ss.stratify`, `ss.errors.InconsistentDimension`), `test_dimensions.py` (states that are not people, space, mixing, strains), and `test_deliveries.py::test_vaccinate` and `test_coverage_by_group` (coverage reached in a round, a capacity per day, and coverage over several groups). Not yet tested: `inplace=False` leaving the original's hash unchanged, the aggregation of a contact matrix against one aggregated by hand, and coverage and capacity on 1, 3, and 16 age groups.
 
 ### 9. Defaults are printed
 
 Every default the library guessed appears in `describe()`, marked `[guessed]` with the rule that produced it. `test_contracts.py::test_guesses_marked` checks, for each row of the guess table in [03](03-states-and-transitions.md#what-is-guessed), one model that triggers the guess (and is marked) and one that does not (and is not); `test_transitions.py::test_describe` checks the text of `describe()` for the SIR. A published expected `describe()` output for each corpus model, diffed so that a change is reviewed, is not yet written.
 
-**Time with no unit.** A model in which nothing has a unit (no `unit=`, no dates, no typed values) runs in timesteps: `stop=100` is 100 steps, `beta=0.3` is per step, results are indexed by step, `describe()` shows no unit, and nothing is printed about days or years. Giving `unit=`, dates, or a typed value gives the sim that unit, and the note `ss.UnitInferred` says where it came from when it was not given. Typed values with different units alongside bare numbers raise `ss.IncompatibleTypes`, since the unit of the bare numbers is not known (`test_transitions.py::test_time`).
+**Time with no unit.** A model in which nothing has a unit (no `unit=`, no dates, no typed values) runs in timesteps: `stop=100` is 100 steps, `beta=0.3` is per step, results are indexed by step, `describe()` shows no unit, and nothing is printed about days or years. Giving `unit=`, dates, or a typed value gives the sim that unit, and the note `ss.errors.UnitInferred` says where it came from when it was not given. Typed values with different units alongside bare numbers raise `ss.errors.IncompatibleTypes`, since the unit of the bare numbers is not known (`test_transitions.py::test_time`).
 
 ### 10. Reproducibility
 
@@ -147,7 +147,7 @@ Every default the library guessed appears in `describe()`, marked `[guessed]` wi
 
 ### 11. Errors
 
-The catalog in [15-errors.md](15-errors.md) is generated from the classes in `starsim/errors.py` (their docstrings), and `test_spec.py::test_error_catalog` checks that the page matches the code and that each class is `ss.<Name>` with a docstring. Each class SHOULD have a minimal example that triggers exactly it, with a message that contains the name the user gave the thing and a suggested fix; about half have one today (as `pytest.raises(ss.<Name>)` in the feature tests), and there is not yet one parametrized test over every class.
+The catalog in [15-errors.md](15-errors.md) is generated from the classes in `starsim/errors.py` (their docstrings), and `test_spec.py::test_error_catalog` checks that the page matches the code and that each class is `ss.errors.<Name>` with a docstring. Each class SHOULD have a minimal example that triggers exactly it, with a message that contains the name the user gave the thing and a suggested fix; about half have one today (as `pytest.raises(ss.errors.<Name>)` in the feature tests), and there is not yet one parametrized test over every class.
 
 ### 12. Calibration
 

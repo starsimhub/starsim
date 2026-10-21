@@ -118,7 +118,7 @@ def test_rates():
 def test_emulsion(tmp_path):
     sc.heading('Testing an EMULSION import')
     filename = emulsion_file(tmp_path)
-    with pytest.warns(ss.ImportIncomplete):
+    with pytest.warns(ss.errors.ImportIncomplete):
         sim = ss.interop.load(filename, **kw) # The format is told from the file
     imp = sim.imported
     assert imp.format == 'EMULSION'
@@ -144,7 +144,7 @@ def test_emulsion(tmp_path):
 
     # A probability is per time unit, as EMULSION reads it, not per step
     sc.savetext(tmp_path/'weekly.yaml', emulsion_weekly)
-    with pytest.warns(ss.ImportIncomplete):
+    with pytest.warns(ss.errors.ImportIncomplete):
         weekly = ss.interop.load(tmp_path/'weekly.yaml', format='emulsion', **kw)
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
@@ -190,7 +190,7 @@ def test_to_code(tmp_path):
     same(ss.Sim(sir, total_pop=1000, stop=ss.days(50), unit='day', **kw))
 
     # An imported model: the code says how it was read and what was not translated
-    with pytest.warns(ss.ImportIncomplete):
+    with pytest.warns(ss.errors.ImportIncomplete):
         sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     code = same(sim)
     assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code
@@ -213,7 +213,7 @@ def test_to_code(tmp_path):
     assert np.isclose(peak(ns['sim'].new(unit='week', dt=ss.days(1))), peak(sim), rtol=1e-3)
 
     # What cannot be written is listed in the code and in a warning
-    with pytest.warns(ss.LossyExport):
+    with pytest.warns(ss.errors.LossyExport):
         code = ss.Sim(make(beta=0.05), networks=ss.RandomNet(), n_agents=100, **kw).to_code()
     assert 'network "randomnet"' in code
     return code
@@ -240,7 +240,7 @@ def test_round_trip(tmp_path):
     lossy = ['coinfection', 'network', 'threshold', 'starsim3', 'poisson_weekly'] # Networks of agents, a lambda, and data
     for name,make in corpus.models.items():
         if name in lossy:
-            with pytest.warns(ss.LossyExport):
+            with pytest.warns(ss.errors.LossyExport):
                 make().to_code()
         else:
             check(name, make())
@@ -266,7 +266,7 @@ def clearance(sim):
 
 def test_diff(tmp_path):
     sc.heading('Testing ss.diff(): an import and a hand translation are the same model')
-    with pytest.warns(ss.ImportIncomplete):
+    with pytest.warns(ss.errors.ImportIncomplete):
         sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     def hand(beta=0.5):
         S, E, I, Q, R = ss.states('S E I Q R')

@@ -198,7 +198,7 @@ def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
 
-    sim = ss.mock_sim(n_agents=10)
+    sim = ss.debugtools.mock_sim(n_agents=10)
 
     # Define a parameter as a function
     def custom_loc(module, sim, uids):
@@ -317,9 +317,9 @@ def test_choice_slots():
 def make_mock_modules():
     """ Create mock modules for the tests to use """
     mod = sc.objdict()
-    mod.year  = ss.mock_module(dt=ss.years(1))
-    mod.month = ss.mock_module(dt=ss.months(1))
-    mod.week  = ss.mock_module(dt=ss.weeks(1))
+    mod.year  = ss.debugtools.mock_module(dt=ss.years(1))
+    mod.month = ss.debugtools.mock_module(dt=ss.months(1))
+    mod.week  = ss.debugtools.mock_module(dt=ss.weeks(1))
     return mod
 
 
@@ -481,7 +481,7 @@ def test_timepar_callable():
 
     print('Testing callable parameters with Bernoulli distributions')
     n = 1000
-    sim = ss.mock_sim(n_agents=n)
+    sim = ss.debugtools.mock_sim(n_agents=n)
     uids = np.random.choice(n, size=n//2, replace=False)
     age = sim.people.age[uids]
     mean = age.mean()
@@ -497,7 +497,7 @@ def test_timepar_callable():
         out[old]   = ss.peryear(p_old)*dt
         return out
 
-    sim = ss.mock_sim(n_agents=100_000)
+    sim = ss.debugtools.mock_sim(n_agents=100_000)
     uids = np.random.choice(n, size=n//2, replace=False)
     age = sim.people.age[uids]
     mean = age.mean()

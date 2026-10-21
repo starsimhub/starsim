@@ -84,10 +84,10 @@ def ages(**kwargs):
 
 def patches(mobility=True, **kwargs):
     """ 7. An SIR on three patches, with gravity mobility or with none """
-    towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+    towns = ss.geo.location(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
-    sir.stratify(patch=towns, mobility=ss.gravity(k=2e-4) if mobility else None)
+    sir.stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4) if mobility else None)
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=100_000)
 
 

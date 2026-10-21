@@ -22,11 +22,10 @@ import sciris as sc
 import starsim as ss
 from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
-from .networks import geo, gravity, Mobility
 
 __all__ = ['Expr', 'par', 'State', 'states', 'null',
            'Transition', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
-           'by', 'timeseries', 'seasonal', 'geo', 'gravity', 'Mobility', 'Strat', 'Transfer', 'transfer']
+           'by', 'timeseries', 'seasonal', 'Strat', 'Transfer', 'transfer']
 
 
 #%% States
@@ -519,7 +518,7 @@ class Transition(Nameable):
     def check_dimensions(self):
         """
         Check the typed values in the rate and the dwell time: the rate must be per unit time, and
-        the dwell time a duration; otherwise raise `ss.WrongDimension`, e.g. for rate=ss.peryear(0.1) * ss.days(3)
+        the dwell time a duration; otherwise raise `ss.errors.WrongDimension`, e.g. for rate=ss.peryear(0.1) * ss.days(3)
         """
         words = {-1:'a rate', 1:'a duration', 0:'a plain number (a rate times a duration)'}
         hints = {
@@ -536,7 +535,7 @@ class Transition(Nameable):
             given = f'{raw.src[0]!r} * {raw.src[1]!r} = {raw:n}' if isinstance(raw, ss.time.dimless) and raw.src else format_expr(expr, values=True)
             word = words.get(dim, 'a sum of values with different time dimensions' if np.isnan(dim) else f'in units of time to the power {dim:n}')
             label = self.name or (self.arrow if self.src is not None else f'... {self.arrow}') # Before its source is known, e.g. R @ rate in I >> R @ rate
-            raise ss.WrongDimension(f'the {slot} of the transition "{label}" is {word}, not {words[want]}:\n       {slot} = {given}\n     {hints.get((slot, dim), "")}'.rstrip())
+            raise ss.errors.WrongDimension(f'the {slot} of the transition "{label}" is {word}, not {words[want]}:\n       {slot} = {given}\n     {hints.get((slot, dim), "")}'.rstrip())
         return
 
     def _copy(self):
@@ -562,7 +561,7 @@ class Transition(Nameable):
             new.rate = BinOp(op, other, self.rate) if reverse else BinOp(op, self.rate, other)
         elif self.dur is not None and self.src is None: # e.g. R @ ss.days(10) * 2, which would otherwise be dropped
             if isinstance(other, Expr): # e.g. S >> I @ ss.days(3) * I, a duration in a rate
-                raise ss.WrongDimension(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
+                raise ss.errors.WrongDimension(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
             errormsg = f'Cannot apply "{op}" to the transition {self}, which is driven by a duration; write the duration itself, e.g. @ ss.days(20)'
             raise TypeError(errormsg)
         elif op != '*':

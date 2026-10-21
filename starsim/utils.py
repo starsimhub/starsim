@@ -16,6 +16,11 @@ import starsim as ss
 
 # %% Helper functions
 
+class NoDists:
+    """ A base for objects that never hold a distribution (or a time parameter), so are not searched for them (see `ss.distributions.no_dists()`) """
+    pass
+
+
 class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.

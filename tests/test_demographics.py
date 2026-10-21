@@ -551,7 +551,7 @@ def test_births_parents():
     sc.heading('Testing the parents of births...')
     S, I = ss.states(2)
     dis = ss.Disease(onset=S >> I @ ss.peryear(0.01), name='dis')
-    sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2003, verbose=0, stratify=dict(district=ss.geo(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]),
+    sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2003, verbose=0, stratify=dict(district=ss.geo.location(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]),
                  demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run()
     ppl = sim.people
     kids = ss.uids(np.flatnonzero(ppl.parent.raw >= 0))
@@ -563,7 +563,7 @@ def test_births_parents():
     assert np.array_equal(ppl.district.raw[kids], ppl.district.raw[parents]) # MA18: born where the parent is
 
     # The same for ss.Pregnancy, including the pregnancies before the start, and a dimension called sex is the newborn's
-    sim = ss.Sim(diseases=dis.copy(), n_agents=5000, start=2000, stop=2003, verbose=0, stratify=[dict(district=ss.geo(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]), dict(sex=['female', 'male'])],
+    sim = ss.Sim(diseases=dis.copy(), n_agents=5000, start=2000, stop=2003, verbose=0, stratify=[dict(district=ss.geo.location(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]), dict(sex=['female', 'male'])],
                  demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.15), rate_units=1)).run()
     ppl = sim.people
     kids = ss.uids(np.flatnonzero(ppl.parent.raw >= 0))
