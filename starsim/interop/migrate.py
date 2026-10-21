@@ -102,12 +102,12 @@ def is_ti(node):
 
 
 def is_declared(cls):
-    """ Whether a class body declares states or transitions (Starsim 4 code, left alone) """
-    for stmt in cls.body:
-        if isinstance(stmt, ast.Assign) and isinstance(stmt.value, (ast.BinOp, ast.Call)):
-            src = ast.unparse(stmt.value)
-            if '>>' in src or 'ss.states(' in src or 'ss.State(' in src or 'ss.Transition(' in src:
-                return True
+    """ Whether a class declares states or transitions, in its body or its methods, e.g. in __init__() (Starsim 4 code, left alone) """
+    for node in ast.walk(cls):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.RShift):
+            return True
+        if isinstance(node, ast.Call) and ast.unparse(node.func) in ['ss.states', 'ss.State', 'ss.Transition']:
+            return True
     return False
 
 
