@@ -986,7 +986,7 @@ class Sim(ss.Base):
 
     def hash(self):
         """
-        The run's identity: short hashes of the model's structure, its parameter values, the run settings, the scenario, and the data, plus the seed
+        The model's fingerprint: short hashes of its structure, its parameter values, the run settings, the scenario, and the data, plus the seed
 
         Two sims with the same `model` hash have the same states, transitions, and
         modifiers (including the source of any function in them); the same `pars` hash,
@@ -994,10 +994,18 @@ class Sim(ss.Base):
         (e.g. `ss.options.crn`), `scenario` the interventions, and `data` the data
         attached for fitting. This tells apart the many runs that come from one script
         (a sweep, a calibration), and tests whether two models written differently are
-        the same model. A sim that is not initialized is hashed without initializing it.
-        A module written as code is seen through its parameters: a value it keeps
-        elsewhere (e.g. a grid set in its `__init__()` as `self.grid`) is not, so give it
-        with `define_pars()` for the hash to tell two such sims apart.
+        the same model. Each is SHA-256 of the canonical model spec (`sim.to_spec()`), so it is
+        the same in every process and on every machine. A sim that is not initialized
+        is hashed without initializing it. Running and fitting a sim do not need it.
+
+        A function is known by its source text and the plain values it uses (see
+        `ss.presentation.func_json()`), or by where it can be imported from if its source
+        is not available. User code can give its own identity, which is used in place
+        of the source: a `version` attribute on a function (`fn.version = '2'`) or on
+        the class of a module written as code. A module written as code is seen through
+        its class and its parameters, not its code (see `ss.Module.to_spec()`). A function
+        with none of these (e.g. a `functools.partial`) cannot be told apart from another,
+        so the hash raises an error rather than treat two such sims as the same model.
         """
         if not self.initialized: # A copy, so that this sim is not changed
             return sc.dcp(self).init().hash()
@@ -1015,6 +1023,10 @@ class Sim(ss.Base):
                 state = next(s for s in mod['states'] if s['name'] == dis.graph.transmissions[0].dst[0].name)
                 if state.get('init') is None:
                     state['init'], mod['init_prev'] = mod['init_prev'], None
+        unknown = ss.presentation.unknown_funcs(dict(model, interventions=spec['interventions']))
+        if unknown:
+            errormsg = f'sim.hash() cannot tell these functions apart from others, since their source is not available and they have no name to import them by: {sc.strjoin(unknown)}. Define each with def, or give it a version (e.g. fn.version = "1")'
+            raise ValueError(errormsg)
         structure, values = ss.utils.split_numbers(model, unit=self.unit, skip=['guessed', 'label', 'doc'])
         config = {k:v for k,v in spec['config'].items() if k != 'rand_seed'}
         data = None if self.data is None else digest(self.data.to_csv())
@@ -1022,7 +1034,13 @@ class Sim(ss.Base):
 
     def to_spec(self, filename=None, **kwargs):
         """
-        The model spec: everything needed to rebuild the model (modules, networks, interventions, and run settings), as plain data
+        The model spec: the model (modules, networks, stratifications, interventions, and run settings) as plain, canonical data
+
+        The spec is the normalized form of the model that `sim.hash()` fingerprints and
+        `ss.diff()` compares, and that `sim.to_code()` writes as code for the declared parts.
+        It holds no results and no state of a run, and is not read back into a sim. For
+        the results as JSON, see `sim.to_json()`; to save a sim with its state and results
+        (including partway through a run, to continue it), see `sim.save()`.
 
         A sim that is not initialized is described without initializing it, as for `sim.hash()`.
 
@@ -1033,38 +1051,6 @@ class Sim(ss.Base):
         if not self.initialized: # A copy, so that this sim is not changed
             return sc.dcp(self).init().to_spec(filename=filename, **kwargs)
         pars = self.pars
-        def parspec(val):
-            """ A parameter of a module that is not declared, as plain data: typed values and distributions as in the rest of the spec """
-            if isinstance(val, ss.par):
-                val = val.raw
-            if isinstance(val, ss.Dist):
-                return dict(dist=type(val).__name__) | {k:parspec(v) for k,v in val.pars.items()}
-            elif isinstance(val, (ss.dur, ss.Rate)):
-                return ss.transitions.quantity_json(val, None, None)
-            elif isinstance(val, dict):
-                return {k:parspec(v) for k,v in val.items()}
-            elif isinstance(val, (list, tuple)):
-                return [parspec(v) for v in val]
-            return sc.jsonify(val)
-        def modspec(mod):
-            if getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains):
-                return mod.to_spec()
-            if isinstance(mod, (ss.modify, ss.Delivery)):
-                return mod.to_json()
-            out = sc.objdict(type=type(mod).__name__, name=mod.name, label=mod.label)
-            ref = getattr(mod, 'ref', None)
-            if ref is not None: # Named data, e.g. ss.contacts('Kenya'): where it came from, and the parameters that are single values (the rest come from the data)
-                out.pars = {k:parspec(v) for k,v in mod.pars.items() if v is None or isinstance(v, (str, bool, int, float, ss.dur, ss.Rate, ss.Dist))}
-                out.data = sc.jsonify(ref)
-            else:
-                out.pars = {k:parspec(v) for k,v in mod.pars.items()}
-            if getattr(mod, 'dims', None) is not None: # A matrix over each of the model's stratifications, from ss.contacts(); only then, so that the hash of every other model is as it was
-                out.contacts = {dim:mat.tolist() for dim,mat in mod.dims.items()}
-            elif getattr(mod, 'full', None) is not None: # One matrix over several stratifications together
-                out.contacts = dict(matrix=mod.full.matrix.tolist(), dims=mod.full.dims)
-            elif getattr(mod, 'bands', None) is not None: # A matrix with its own age bands
-                out.contacts = dict(matrix=mod.pars.n_contacts.T.tolist(), bands=mod.bands)
-            return out
         def tstr(val):
             if isinstance(val, ss.dur) and type(val).base != self.unit_base + 's': # A duration in another unit than the sim's (e.g. start=2000 in years, with rates per day) is written with its unit
                 return ss.transitions.quantity_json(val, 'dur', None)
@@ -1073,20 +1059,18 @@ class Sim(ss.Base):
             return val.strftime('%Y-%m-%d') if isinstance(val, ss.date) and val == val.normalize() else str(val) # Dates as ISO 8601
         out = sc.objdict()
         out.schema = 'lingua-franca/1.0'
-        out.modules = [modspec(mod) for key in ['custom', 'demographics', 'diseases'] for mod in self[key]() if not isinstance(mod, ss.demographics.Flows)] # Births and deaths declared for the population are, by now, transitions of a disease
-        out.networks = [modspec(mod) for mod in list(self.networks()) + getattr(self, 'mixed', [])]
+        out.modules = [mod.to_spec() for key in ['custom', 'demographics', 'diseases'] for mod in self[key]() if not isinstance(mod, ss.demographics.Flows)] # Births and deaths declared for the population are, by now, transitions of a disease
+        out.networks = [mod.to_spec() for mod in list(self.networks()) + getattr(self, 'mixed', [])]
         out.stratify = [sc.dcp(strat.spec) for strat in self.groups.sim_strats] # Those of a module are in its own spec, and those of an intervention are part of the scenario
-        out.modifiers = [modspec(mod) for mod in self.connectors()]
-        out.interventions = [modspec(mod) for mod in self.interventions()]
+        out.modifiers = [mod.to_spec() for mod in self.connectors()]
+        out.interventions = [mod.to_spec() for mod in self.interventions()]
         out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=self.unit or pars.unit, # A sim of no declared modules has only the unit it was given
                                 start=tstr(self.t.start), stop=tstr(self.t.stop), dt=float(self.t.dt.to(self.unit_base).value),
                                 total_pop=float(pars.total_pop), n_agents=int(pars.n_agents) if self.solver == 'abm' else None, rand_seed=pars.rand_seed)
         out.config.crn = ss.options.crn # Numerical options that change the results
         out.config.precision = ss.options.precision
-        if pars.substeps is not None: # Only when given, so that the hash of every other sim is as it was
-            out.config.substeps = pars.substeps
-        if 'use_aging' in self.given: # Likewise; e.g. an age stratification without aging
-            out.config.use_aging = bool(pars.use_aging)
+        out.config.substeps = pars.substeps
+        out.config.use_aging = bool(pars.use_aging) if 'use_aging' in self.given else None # Only when given, e.g. an age stratification without aging
         if getattr(self, 'named_people', None) is not None and self.people_from is None: # Where a named population came from (people that come with a contact matrix come with it again)
             out.config.people = dict(self.named_people.ref, total=self.named_people.total)
         out.meta = sc.objdict(library_version=ss.__version__, solver_chosen=self.solver, solver_reason=self.solver_reason, notes=list(self.notes))
@@ -1099,7 +1083,8 @@ class Sim(ss.Base):
         """
         The sim as a Python file that builds it again, from its model spec (see `ss.to_code()`)
 
-        A sim imported from another framework (`ss.load(..., format=...)`) also says
+        Only the declared parts are written; what is not (e.g. a module written as code)
+        is listed in the file and in an `ss.LossyExport` warning. A sim imported from another framework (`ss.load(..., format=...)`) also says
         where it came from, how each rate was read, and what was not translated.
 
         Args:
@@ -2116,7 +2101,13 @@ class Sim(ss.Base):
 
     def save(self, filename=None, shrink=None, **kwargs):
         """
-        Save to disk as a gzipped pickle.
+        Save to disk as a gzipped pickle: the sim itself, with its results, read back by `ss.load()`
+
+        This is the checkpoint of a sim: saved before it has finished, it keeps its full
+        state (it is not shrunk), so the loaded sim can continue the run. A pickle needs the
+        same code (Starsim and any modules written as code) to be read. For the model
+        as plain data, see `sim.to_spec()`; for the results as JSON, `sim.to_json()`; for the
+        model as Python, `sim.to_code()`.
 
         Args:
             filename (str or None): the name or path of the file to save to; if None, uses stored
@@ -2148,7 +2139,10 @@ class Sim(ss.Base):
 
     def to_json(self, filename=None, keys=None, indent=2, verbose=False, **kwargs):
         """
-        Export results and parameters as JSON.
+        Export the results and the sim's parameters as JSON
+
+        This is a record of a run's output, for reading elsewhere; it is not the model
+        (see `sim.to_spec()`), and cannot be loaded back into a sim (see `sim.save()`).
 
         Args:
             filename (str): if None, return string; else, write to file

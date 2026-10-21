@@ -1,5 +1,5 @@
 """
-The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`), and the parser of expressions in it
+The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`, for the declared parts of a model), and the parser of expressions in it
 """
 import ast
 import keyword
@@ -20,7 +20,8 @@ comparisons = {ast.Lt:'<', ast.LtE:'<=', ast.Gt:'>', ast.GtE:'>='}
 
 
 def unknown(what):
-    errormsg = f'ss.load() cannot yet read {what} from a model spec'
+    """ Refuse to write a part of a declared module that to_code() does not write, rather than write a different model """
+    errormsg = f'ss.to_code() cannot write {what}: only the declared parts of a model are written as code. Save the sim with ss.save("run.sim", sim) instead'
     raise NotImplementedError(errormsg)
 
 
@@ -214,7 +215,7 @@ def func_code(fn, funcs, left):
 def with_functions(obj, funcs, left):
     """ The model spec with each function written as the name of its definition; see `func_code()` """
     if isinstance(obj, dict):
-        if 'fn' in obj and set(obj) <= {'fn', 'source', 'values'}:
+        if 'fn' in obj and set(obj) <= {'fn', 'source', 'values', 'ref', 'version'}:
             return func_code(obj, funcs, left)
         return {k:with_functions(v, funcs, left) for k,v in obj.items()}
     elif isinstance(obj, list):
@@ -239,8 +240,6 @@ def unitless_dur(val):
 
 def disease_code(spec, lines, left):
     """ The Python for one declared disease; returns the name of its variable """
-    if spec['type'] != 'Disease':
-        unknown(f'a module of type {spec["type"]}')
     if spec['functions']:
         unknown(f'functions ({sc.strjoin(f["name"] for f in spec["functions"])})')
     name = spec['name']
@@ -356,7 +355,7 @@ def disease_code(spec, lines, left):
             source = r['source']
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
 
-    for u in spec.get('updates', []): # Counts set each step
+    for u in spec.get('updates') or []: # Counts set each step
         members.append((u['name'], f"ss.update({u['state']}, {code_expr(u['value'])})"))
 
     # Initial values
@@ -389,7 +388,7 @@ def disease_code(spec, lines, left):
     for k,v in kwargs:
         add(f'    {k:{width}s} = {v},')
     add(')')
-    transfers = spec.get('transfers', [])
+    transfers = spec.get('transfers') or []
     dims = [strat['name'] for strat in spec['stratifications']]
     for strat in spec['stratifications']: # Each with the transfers along it
         own = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] == strat['name']}
@@ -620,13 +619,17 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     """
     Write a model spec as a Python file that builds the same sim
 
-    The diseases are written in the operator form (`S >> I @ beta * I`), with each
-    parameter and state declared first, and each function used in the model defined
-    before them (from its source). What cannot be written (networks other than contact
-    matrices, interventions other than `ss.modify` and the deliveries, movement between places
-    from data, likelihoods other than a distribution, and functions whose source is not a plain definition) is listed
-    in comments at the end, and in a warning (`ss.LossyExport`), since the code then
-    builds a different model until it is added by hand.
+    Only the declared parts of a model are written: the declared diseases, in the operator
+    form (`S >> I @ beta * I`), with each parameter and state declared first, and each
+    function used in the model defined before them (from its source); contact matrices;
+    `ss.modify`; and the deliveries. Everything else is not reconstructed: modules and
+    networks written as code (named by the class that makes them, `factory`, with their
+    parameters in the spec), other interventions, movement between places from data,
+    likelihoods other than a distribution, and functions whose source is not a plain
+    definition are listed in comments at the end, and in a warning (`ss.LossyExport`),
+    since the code then builds a different model until they are added by hand. A part of
+    a declared disease that cannot be written (the migration of a transition, custom
+    functions of the disease) raises `NotImplementedError` rather than write a different model.
 
     Args:
         spec (dict/str): the spec (from `sim.to_spec()`), or a JSON file holding one
@@ -664,7 +667,12 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     lines += ['import starsim as ss', '']
     if funcs:
         lines += ['# Functions'] + [line for block in funcs for line in block.splitlines() + ['']]
-    names = [disease_code(mod, lines, left) for mod in spec['modules'] if mod['type'] != 'Strains']
+    names = []
+    for mod in [mod for mod in spec['modules'] if mod['type'] != 'Strains']:
+        if mod['type'] == 'Disease':
+            names.append(disease_code(mod, lines, left))
+        else: # Written as code (or declared, but not a disease): by the class that makes it, with its parameters, which the user can add
+            left.append(f'module "{mod["name"]}" ({mod.get("factory") or mod["type"]}): make it and add it to ss.Sim(...)')
     for fam in [mod for mod in spec['modules'] if mod['type'] == 'Strains']: # A family after its members, in their place among the sim's diseases
         names = strains_code(fam, names, lines)
     if prelude:

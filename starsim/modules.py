@@ -4,6 +4,7 @@ defines Analyzers and Connectors.
 """
 import inspect
 import functools as ft
+import numpy as np
 import sciris as sc
 import starsim as ss
 
@@ -11,6 +12,21 @@ import starsim as ss
 module_args = ['name', 'label']  # Define allowable module arguments
 
 custom_modules = []  # Allow the user to register custom modules
+
+
+def par_spec(val):
+    """ A parameter of a module written as code, as plain data: typed values, distributions, and functions as in the rest of the model spec """
+    if isinstance(val, ss.par):
+        val = val.raw
+    if isinstance(val, ss.Dist):
+        return dict(dist=type(val).__name__) | {k:par_spec(v) for k,v in val.pars.items()}
+    elif isinstance(val, (ss.dur, ss.Rate, ss.parameters.TimeValue, ss.by)) or inspect.isroutine(val) or isinstance(val, (ft.partial, np.ufunc)): # A function, but not any object that can be called
+        return ss.presentation.quantity_json(val, None, None)
+    elif isinstance(val, dict):
+        return {k:par_spec(v) for k,v in val.items()}
+    elif isinstance(val, (list, tuple)):
+        return [par_spec(v) for v in val]
+    return sc.jsonify(val)
 
 
 def module_map(key=None):
@@ -139,7 +155,9 @@ def required(val=True):
 
     Examples:
         ```python
-        class CustomSIS(ss.library.AgentSIS):
+        import starsim.library as ssl
+
+        class CustomSIS(ssl.AgentSIS):
 
             def step(self):
                 super().step()
@@ -921,14 +939,25 @@ class Module(Base):
                 res.apply_scale(scale)
         return
 
-    def to_json(self):
-        """ Export to a JSON-compatible format """
-        out = sc.objdict()
-        out.type = self.__class__.__name__
-        out.name = self.name
-        out.label = self.label
-        out.pars = self.pars.to_json()
+    def to_spec(self):
+        """
+        The module's part of the model spec (`sim.to_spec()`): for a module written as code, its type, the factory that makes it, and its parameters, as plain data
+
+        A module written as code is seen through its parameters and the class that makes
+        it (`factory`, as `module.Class`), not through its code: a value it keeps elsewhere
+        (e.g. a grid set in its `__init__()`) is not seen, and neither is a change to its
+        methods. Give such a value with `define_pars()`, and give the class a `version`
+        (e.g. `version = '2'`) to change when its code does, so that `sim.hash()` tells the
+        two apart. Declared modules (`ss.Disease`), interventions, and modifiers write more.
+        """
+        cls = type(self)
+        out = sc.objdict(type=cls.__name__, name=self.name, label=self.label, factory=f'{cls.__module__}.{cls.__qualname__}', version=getattr(self, 'version', None))
+        out.pars = {k:par_spec(v) for k,v in self.pars.items()}
         return out
+
+    def to_json(self):
+        """ The module as a reference by its type and name, for `sc.jsonify()`: e.g. a module among the parameters in `sim.to_json()`, or in a parameter of another module; its definition is `to_spec()` """
+        return dict(type=type(self).__name__, name=self.name)
 
     def shrink(self):
         """ Shrink the size of the module for saving to disk """

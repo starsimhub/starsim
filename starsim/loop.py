@@ -813,7 +813,8 @@ class Loop:
 
         Examples:
             ```python
-            sis = ss.library.AgentSIS(dt=0.1) # A module written as code can have a timestep of its own
+            import starsim.library as ssl
+            sis = ssl.AgentSIS(dt=0.1) # A module written as code can have a timestep of its own
             net = ss.RandomNet(dt=0.5)
             births = ss.Births(dt=1)
             sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)

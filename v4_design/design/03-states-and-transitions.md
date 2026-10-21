@@ -646,7 +646,7 @@ Because the model is a set of state and transition objects, these are derived ra
 
 ```python
 sir.describe()      # the resolved model as text, with every guessed default marked
-sir.diagram()       # the state-transition diagram
+sir.diagram()       # the state-transition diagram, as the text of a Mermaid flowchart
 sir.equations()     # the ODE system, with symbolic parameter names
 sir.transitions     # the table of transitions; printing it shows the state-by-state matrix
 sir.to_spec()       # the model spec (14-model-spec.md)

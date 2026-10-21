@@ -66,6 +66,7 @@ In Starsim, a stratification is one call, with its split and its adjustments, an
 
 ```{python}
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
 sir = ss.Disease(
@@ -124,4 +125,4 @@ These are from Starsim's switching demo for summer2 users (`tests/switching/test
 
 ## Bringing your model in
 
-`ss.load(model, pars=params)` reads a live summer2 `CompartmentalModel` (if summer2 is installed alongside Starsim), and `ss.load('model.json', format='summer2')` reads the JSON written by `dump_summer2.py` (in `starsim/interop/`), which runs in summer2's own environment. Each flow becomes one transition with the matching kind of rate, and each `stratify_with()` a stratification, with its population split, flow adjustments, infectiousness adjustments, and mixing matrix. `ss.interop.summer2.outputs(sim)` works out summer2's derived outputs from the results. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.interop.load(model, pars=params)` reads a live summer2 `CompartmentalModel` (if summer2 is installed alongside Starsim), and `ss.interop.load('model.json', format='summer2')` reads the JSON written by `dump_summer2.py` (in `starsim/interop/`), which runs in summer2's own environment. Each flow becomes one transition with the matching kind of rate, and each `stratify_with()` a stratification, with its population split, flow adjustments, infectiousness adjustments, and mixing matrix. `ss.interop.summer2.outputs(sim)` works out summer2's derived outputs from the results. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

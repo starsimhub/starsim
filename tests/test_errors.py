@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.interop
 
 kw = dict(verbose=0)
 triggers = {} # The trigger of each class, by class

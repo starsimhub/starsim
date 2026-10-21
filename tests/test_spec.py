@@ -146,7 +146,7 @@ show shrink standardize_data standardize_netkey state any child mother attr func
 
 # The counted methods and attributes, by the class they are on, and which of them the specification adds
 methods = {
-    'Disease': ('describe diagram equations transitions stratify to_spec to_json copy pars R0', 'describe diagram equations transitions stratify to_spec R0'),
+    'Disease': ('describe diagram equations transitions stratify to_spec copy pars R0', 'describe diagram equations transitions stratify to_spec R0'),
     'State': ('n frac total', 'all'),
     'ModifiableArr': ('effective', 'all'),
     'Sim': ('init run plot summarize to_df loop results describe stratify requires to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify requires to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),

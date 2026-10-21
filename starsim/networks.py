@@ -2043,6 +2043,21 @@ class MixingPools(Route):
         try:    return len(self.pools)
         except: return 0
 
+    def to_spec(self):
+        """ The mixing pools' part of the model spec (see `ss.Module.to_spec()`): a contact matrix from `ss.contacts()` as its numbers, or a named one as where it came from """
+        out = super().to_spec()
+        ref = getattr(self, 'ref', None)
+        if ref is not None: # Named data, e.g. ss.contacts('Kenya'): the parameters that are single values (the rest come from the data)
+            out.pars = {k:v for k,v in out.pars.items() if self.pars[k] is None or isinstance(self.pars[k], (str, bool, int, float, ss.dur, ss.Rate, ss.Dist))}
+            out.data = sc.jsonify(ref)
+        if getattr(self, 'dims', None) is not None: # A matrix over each of the model's stratifications
+            out.contacts = {dim:mat.tolist() for dim,mat in self.dims.items()}
+        elif getattr(self, 'full', None) is not None: # One matrix over several stratifications together
+            out.contacts = dict(matrix=self.full.matrix.tolist(), dims=self.full.dims)
+        elif getattr(self, 'bands', None) is not None: # A matrix with its own age bands
+            out.contacts = dict(matrix=self.pars.n_contacts.T.tolist(), bands=self.bands)
+        return out
+
     def validate_pars(self):
         """ Check that src and dst have correct types, and contacts is the correct shape """
         p = self.pars

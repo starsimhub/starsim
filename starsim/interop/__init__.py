@@ -88,18 +88,23 @@ def sniff(source):
     return None
 
 
-def load(source, format, **kwargs):
+def load(source, format=None, **kwargs):
     """
-    Read another framework's model into a sim; usually called as `ss.load(source, format=...)`
+    Read another framework's model into a sim, e.g. `ss.interop.load('workbook.xlsx')` (after `import starsim.interop`)
 
     Args:
         source (str/any): the file (or, for some formats, the model object)
-        format (str): the framework, one of `ss.interop.formats`
+        format (str): the framework, one of `ss.interop.formats`; if not given, told from the file or object (see `sniff()`)
         kwargs (dict): passed to the importer
 
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
     """
+    if format is None:
+        format = sniff(source)
+        if format is None:
+            errormsg = f'Cannot tell which framework {source} is from; give format=, one of {sc.strjoin(formats)}'
+            raise ValueError(errormsg)
     key = str(format).lower().replace('-', '').replace('_', '')
     if key not in formats:
         errormsg = f'Cannot import format "{format}"; the formats are {sc.strjoin(formats)}'

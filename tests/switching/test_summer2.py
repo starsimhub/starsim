@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.interop
 
 ref_n_I = {1990: 3150.376, 2010: 1527.021, 2025: 1477.900} # switching/summer2.md, "The second week" §1: summer2's active TB (all ages) from tb_summer2.py
 ref_notifications = {1990: 2341.466, 2010: 2263.245, 2024: 2194.623} # Same section: summer2's notifications (v4: 2,341, 2,260, 2,195)
@@ -94,7 +95,7 @@ def test_summer2_import_live():
     m.add_death_flow('tb_death', 0.2, 'I')
     m.add_universal_death_flows('universal_death', death_rate=1/70)
     m.add_crude_birth_flow('birth', 0.02, 'S')
-    sim = ss.load(m, pars=dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5), verbose=0)
+    sim = ss.interop.load(m, pars=dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5), verbose=0)
     assert not sim.imported.incomplete, f'Not translated: {sim.imported.incomplete}'
     ours = np.asarray(make_tb(ages=False).run().results.tb.detection.values)
     theirs = np.asarray(sim.run().results.summer2.detection.values) # The flow in each year, as make_tb's (summer2's own output is the mean of the rates at either end of the year)

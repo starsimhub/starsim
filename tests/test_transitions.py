@@ -15,6 +15,7 @@ import pandas as pd
 import scipy.stats as stats
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 
 kw = dict(verbose=0)
 
@@ -110,6 +111,27 @@ def test_forms():
     with ss.options.context(crn=False):
         assert make(0.05).hash().config != config
     assert base.hash().data is None and make(0.05, data=pd.DataFrame(dict(t=[10], n_I=[5]))).hash().data is not None
+
+    # A module written as code is told apart by its callbacks, by where a function without source comes from, and by a version; a function with none of these is refused
+    class Coded(ss.Disease):
+        def __init__(self, fn=None):
+            super().__init__()
+            self.define_pars(fn=fn)
+        def step(self):
+            pass
+    def coded(fn):
+        return ss.Sim(diseases=Coded(fn), n_agents=100, **kw).hash()
+    def low(sim, uids):
+        return 0.1
+    def high(sim, uids):
+        return 0.2
+    assert coded(low).model != coded(high).model and coded(np.exp).model != coded(np.log).model
+    partial = functools.partial(low, None)
+    with pytest.raises(ValueError, match='cannot tell these functions apart'):
+        coded(partial)
+    partial.version = '1'
+    assert coded(partial).model != coded(low).model
+
     # Several sources as a sum of states, in the explicit form
     S, I, R, D = ss.states(4)
     death = ss.Transition(I + R, D, rate=0.01, name='death')
@@ -481,7 +503,7 @@ def test_auto():
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make_sir(), demographics=ss.Births(), solver='ode', start=2000, stop=2010, **kw).init()
     with pytest.raises(ss.CapabilityError): # Nor can a model with nothing declared
-        ss.Sim(diseases=ss.library.AgentSIR(), networks='random', solver='ode', **kw).init()
+        ss.Sim(diseases=ssl.AgentSIR(), networks='random', solver='ode', **kw).init()
     return sim
 
 
@@ -715,8 +737,7 @@ def test_describe():
     seasonal = ss.Sim(ss.Disease(S >> I @ ss.seasonal(mean=ss.perday(17/13), amplitude=0.1, peak=0.25) * I, I >> R @ ss.perday(1/13), init=dict(I=1e-4), name='sir'), unit='day', total_pop=1.0, **kw).init()
     assert 'beta = 1.30769 per day × (1 + 0.1 cos(2π(t − 0.25)))' in seasonal.describe(output=True) # As the book writes it (it was "seasonal(mean=1.3076923076923077, ...)")
 
-    assert sir.diagram('mermaid').splitlines() == ['flowchart LR', '    S -.->|infection| I', '    I -->|recovery| R']
-    sir.diagram()
+    assert sir.diagram().splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: beta * I"| I', '    I -->|"recovery: dur = dur"| R']
 
     eqs = sir.equations(output=True)
     print(eqs)
@@ -2065,7 +2086,7 @@ def test_messages_and_crashes():
     d = ss.Disease(infection=ss.transmission('S -> I', beta=0.1), init_prev=0.1, name='d')
     with pytest.raises(AttributeError, match='another name'):
         ss.Sim(d, people=ss.People(1000, extra_states=[ss.FloatArr('nab_imm')]), connectors=ss.modify(d.rel_sus, multiply=0.5, name='nab_imm'), start=2000, stop=2001, verbose=0).run()
-    assert 'beta' in ss.diff(*[ss.Sim(diseases=ss.library.AgentSIR(beta=b), networks='random', **kw) for b in [0.1, 0.2]], output=True)
+    assert 'beta' in ss.diff(*[ss.Sim(diseases=ssl.AgentSIR(beta=b), networks='random', **kw) for b in [0.1, 0.2]], output=True)
     sim = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.1), init_prev=0.1, name='d'), networks='random', solver='ode', **kw).init()
     with pytest.raises(AttributeError, match='all_networks'):
         sim.networks.randomnet

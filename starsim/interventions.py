@@ -1919,8 +1919,9 @@ class Delivery(ss.products.EventSource, Intervention):
         waiting = '; nobody waiting for a result is tested again' if self.waits else ''
         return f'{self.name}: {what}; delivery {how}{waiting}{added}'
 
-    def to_json(self):
-        out = super().to_json()
+    def to_spec(self):
+        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `ss.to_code()` """
+        out = super().to_spec()
         out.pop('pars', None)
         move = f'{self.move_states[0]} -> {self.move_states[1]}' if self.move_states is not None else self.move
         names = [d if isinstance(d, str) else d.name for d in self.disease_list] if self.disease_list else None

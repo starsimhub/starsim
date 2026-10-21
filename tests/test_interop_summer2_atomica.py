@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.interop
 import paths
 from starsim.interop.summer2 import load_summer2, outputs
 from starsim.interop.atomica import load_atomica

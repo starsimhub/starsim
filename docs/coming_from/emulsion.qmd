@@ -104,6 +104,7 @@ In Starsim, one model is run two ways, as compartments (`solver='binomial'`, sto
 
 ```{python}
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
 sir = ss.Disease(
@@ -160,4 +161,4 @@ These are from Starsim's switching demo for EMULSION users (`tests/switching/tes
 
 ## Bringing your model in
 
-`ss.load('model.yaml', format='emulsion')` reads an EMULSION model. Each state machine becomes a disease, whose states are the machine's states and whose transitions are its transitions; rates and probabilities (per time unit, as EMULSION reads them) are translated, a state's minimum stay becomes `after=` on the ways out of it, and the level's `aggregation_type` chooses the solver. Conditions, calendars, actions on crossing, offspring and productions, levels above the population, and variables of individuals are listed as not translated (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.interop.load('model.yaml', format='emulsion')` reads an EMULSION model. Each state machine becomes a disease, whose states are the machine's states and whose transitions are its transitions; rates and probabilities (per time unit, as EMULSION reads them) are translated, a state's minimum stay becomes `after=` on the ways out of it, and the level's `aggregation_type` chooses the solver. Conditions, calendars, actions on crossing, offspring and productions, levels above the population, and variables of individuals are listed as not translated (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

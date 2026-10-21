@@ -1,5 +1,5 @@
 """
-Test importing models from other frameworks (ss.load(..., format=...)), writing a sim as code, and comparing two models
+Test importing models from other frameworks (ss.interop.load()), writing a sim as code, and comparing two models
 """
 
 # %% Imports and settings
@@ -8,6 +8,7 @@ import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
+import starsim.interop
 import paths
 import corpus
 
@@ -118,7 +119,7 @@ def test_emulsion(tmp_path):
     sc.heading('Testing an EMULSION import')
     filename = emulsion_file(tmp_path)
     with pytest.warns(ss.ImportIncomplete):
-        sim = ss.load(filename, **kw) # The format is told from the file
+        sim = ss.interop.load(filename, **kw) # The format is told from the file
     imp = sim.imported
     assert imp.format == 'EMULSION'
     assert any('when' in name for name,why in imp.incomplete), 'The calendar condition should be listed as not translated'
@@ -135,16 +136,16 @@ def test_emulsion(tmp_path):
     assert np.isclose(res.prevalence_pct[10], 100*(res.n_E[10] + res.n_I[10])/(res.n_S[10] + res.n_E[10] + res.n_I[10] + res.n_Q[10] + res.n_R[10]))
 
     # The same model as an ODE agrees with the stochastic one on average
-    ode = ss.load(filename, format='emulsion', **kw)
+    ode = ss.interop.load(filename, format='emulsion', **kw)
     ode.pars.solver = 'ode'
     ode.run()
-    runs = ss.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.n_R.values[:, -1].mean()
+    runs = ss.interop.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.n_R.values[:, -1].mean()
     assert np.isclose(runs, ode.results.seirq.n_R[-1], rtol=0.1)
 
     # A probability is per time unit, as EMULSION reads it, not per step
     sc.savetext(tmp_path/'weekly.yaml', emulsion_weekly)
     with pytest.warns(ss.ImportIncomplete):
-        weekly = ss.load(tmp_path/'weekly.yaml', format='emulsion', **kw)
+        weekly = ss.interop.load(tmp_path/'weekly.yaml', format='emulsion', **kw)
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
     assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
@@ -156,7 +157,7 @@ def test_emulsion(tmp_path):
         folder = paths.lfd/'examples/emulsion/sir'
         ref = sc.dataframe.read_csv(folder/'reference/results.csv')
         for kind in ['compart', 'IBM', 'hybrid']:
-            sir = ss.load(folder/f'original/{kind}_SIR.yaml', **kw)
+            sir = ss.interop.load(folder/f'original/{kind}_SIR.yaml', **kw)
             assert not sir.imported.incomplete and 'n=100;' in repr(sir) # 100 animals, not the default number of agents
             final = sir.run(n_runs=200).results[f'{kind}_SIR'].n_R.values[:, -1].mean() # With one infected at the start, many runs die out, so the mean needs many
             series = dict(compart='compartment', IBM='ibm', hybrid='hybrid')[kind] + '_R'
@@ -190,7 +191,7 @@ def test_to_code(tmp_path):
 
     # An imported model: the code says how it was read and what was not translated
     with pytest.warns(ss.ImportIncomplete):
-        sim = ss.load(emulsion_file(tmp_path), **kw)
+        sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     code = same(sim)
     assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code
 
@@ -266,7 +267,7 @@ def clearance(sim):
 def test_diff(tmp_path):
     sc.heading('Testing ss.diff(): an import and a hand translation are the same model')
     with pytest.warns(ss.ImportIncomplete):
-        sim = ss.load(emulsion_file(tmp_path), **kw)
+        sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     def hand(beta=0.5):
         S, E, I, Q, R = ss.states('S E I Q R')
         seirq = ss.Disease(

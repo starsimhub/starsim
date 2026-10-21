@@ -253,8 +253,21 @@ def n_args(func):
 
 
 def short_hash(obj, n=6):
-    """ A short hash of a JSON-compatible object, e.g. for telling model specs apart """
-    string = json.dumps(sc.jsonify(obj), sort_keys=True)
+    """
+    A short hash of a JSON-compatible object, e.g. for telling model specs apart
+
+    The keys of a dict whose value is None are left out, so that a key a new feature
+    writes as None when it is not used does not change the hash of any other object.
+    The hash is SHA-256 of the canonical JSON (keys sorted), so it is the same in every
+    process and on every machine.
+    """
+    def drop(item):
+        if isinstance(item, dict):
+            return {k:drop(v) for k,v in item.items() if v is not None}
+        elif isinstance(item, (list, tuple)):
+            return [drop(v) for v in item]
+        return item
+    string = json.dumps(drop(sc.jsonify(obj)), sort_keys=True)
     return hashlib.sha256(string.encode()).hexdigest()[:n]
 
 
@@ -632,33 +645,23 @@ def combine_rands(a, b):
 
 #%% Other helper functions
 
-def load(filename, format=None, **kwargs):
+def load(filename, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`, which also reads other frameworks' models
+    Alias to Sciris `sc.loadany()`, for Starsim's own objects
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model from
-    another framework is built into a sim, given its format or one that can be told
-    from the file (see `ss.interop`). A model saved as code (`ss.save('model.py', sim)`)
-    is a script: run or import it.
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model saved as
+    code (`ss.save('model.py', sim)`) is a script: run or import it. Another
+    framework's model is read with `ss.interop.load()`.
 
     Args:
-        filename (str/path/any): the name of the file to load, or another framework's model object
-        format (str): the framework the model is from (e.g. 'emulsion'); see `ss.interop.formats`
-        kwargs (dict): passed to the importer, or to `sc.loadany()`
-
-    Returns:
-        The loaded object; another framework's model is returned as an `ss.Sim`
+        filename (str/path): the name of the file to load
+        kwargs (dict): passed to `sc.loadany()`
 
     **Examples**:
 
         sim = ss.load('run.sim') # A sim saved with ss.save()
-        sim = ss.load('compart_SIR.yaml', format='emulsion')
     """
-    if format is None:
-        format = ss.interop.sniff(filename)
-    if format is not None:
-        return ss.interop.load(filename, format=format, **kwargs)
     if str(filename).endswith('.json'):
         spec = sc.loadjson(filename)
         if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
@@ -668,33 +671,25 @@ def load(filename, format=None, **kwargs):
     return sc.loadany(filename, **kwargs)
 
 
-def save(filename, obj, format=None, **kwargs):
+def save(filename, obj, **kwargs):
     """
-    Alias to Sciris `sc.save()`, which also writes a sim in another framework's format
+    Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with ss.load().
-
-    A sim saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
-    With `format`, a sim is exported instead (see `ss.interop.export()`), and what
-    the format cannot carry is listed as `ss.LossyExport`.
+    used to save any arbitrary object. It can then be loaded with ss.load(). A sim
+    saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
+    To write a sim in another framework's format, use `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        format (str): the format to export a sim to: 'mermaid', 'sbml', or 'odin'
-        kwargs (dict): passed to `sc.save()`, or to `ss.interop.export()`
+        kwargs (dict): passed to `sc.save()`, or to `sim.to_code()`
 
     **Examples**:
 
         ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
-        ss.save('sir.xml', sim, format='sbml')
-        ss.save('sir.md', sim, format='mermaid')
     """
-    if format is not None:
-        ss.interop.export(obj, format, filename=filename, **kwargs)
-        return sc.path(filename)
     if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
         obj.to_code(filename, **kwargs)
         return sc.path(filename)

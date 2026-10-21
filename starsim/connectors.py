@@ -6,7 +6,6 @@ While most of the coupling between disease modules happens automatically via sha
 forcing or co-infection effects; `ss.modify()` changes a named quantity, e.g. a seasonal
 `ss.modify(sir.rel_trans, multiply=ss.seasonal(amplitude=0.2, peak='January'))`.
 """
-import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -547,14 +546,15 @@ class modify(Connector):
     def step(self):
         pass
 
-    def to_json(self):
-        out = super().to_json()
+    def to_spec(self):
+        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `ss.to_code()` """
+        out = super().to_spec()
         out.update(type=type(self).__name__, target=self.target, multiply=None, add=None, set=None,
                    start=None if self.start is None else str(self.start), stop=None if self.stop is None else str(self.stop))
-        spec = lambda val: ss.transitions.func_json(val) if inspect.isfunction(val) else str(getattr(val, '__name__', val)) # A function with its source, as in a disease
-        out['efficacy' if self.efficacy is not None else self.op] = self.amount if sc.isnumber(self.amount) else spec(self.amount)
+        spec = lambda val: val if sc.isnumber(val) else ss.presentation.quantity_json(val, None, None) if callable(val) or isinstance(val, (ss.transitions.TimeValue, ss.by)) else str(val) # A function with its source, as in a disease
+        out['efficacy' if self.efficacy is not None else self.op] = spec(self.amount)
         if self.share is not None:
-            out['share'] = self.share if sc.isnumber(self.share) else ss.presentation.quantity_json(self.share, None, None) if isinstance(self.share, (ss.transitions.TimeValue, ss.by)) else spec(self.share)
+            out['share'] = spec(self.share)
         if self.route is not None:
             out['route'] = self.route
         if self.where is not None:

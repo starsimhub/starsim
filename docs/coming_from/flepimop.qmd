@@ -63,6 +63,7 @@ with three CSV files: the populations (9,000 and 1,000), the commuters (100 from
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
 pop     = dict(large_province=9000, small_province=1000)
@@ -87,7 +88,7 @@ Or the configuration can be imported as it is, with the CSV files next to it:
 ```{python}
 #| eval: false
 #| label: starsim-import
-sim = ss.load('config_sample_2pop.yml', format='flepimop')
+sim = ss.interop.load('config_sample_2pop.yml', format='flepimop')
 sim.run()
 ```
 
@@ -97,7 +98,7 @@ sim.run()
 |---|---|
 | The two-population tutorial (above) | Agree: every compartment in both provinces within 0.05 people |
 | The vaccine scenarios tutorial (vaccination, three scenarios of stacked modifiers, `Ro` and the share of cases detected drawn for each run, outcomes chained with delays) | Agree exactly, by province: run with the values flepiMoP drew, the mean, 5%, and 95% of all 28 series in each province agree within 1e-9 of their largest value in all three scenarios. With Starsim's own draws, they agree in distribution |
-| A configuration with 3,000 places and 29,958 commuting links, imported with `ss.load()` | Agree: incident cases, hospitalizations, deaths, and current hospitalizations within 0.007% of each place's peak on every day |
+| A configuration with 3,000 places and 29,958 commuting links, imported with `ss.interop.load()` | Agree: incident cases, hospitalizations, deaths, and current hospitalizations within 0.007% of each place's peak on every day |
 
 ## Timings
 
@@ -146,4 +147,4 @@ hub.head()
 
 ## Bringing your model in
 
-`ss.load('config.yml', format='flepimop')` reads a flepiMoP configuration. The compartments become states (with several dimensions, one state for each combination, named as flepiMoP names them, e.g. `S_unvaccinated`); the places become a stratification `subpop` with commuting (`ss.Mobility(kind='visit')`); each transition becomes a flow; the modifiers of a scenario become `ss.modify` interventions; and the outcomes become `ss.outcome`s. A configuration with age, vaccination, and variant as dimensions comes in as a flat product of states, which runs the same as flepiMoP but is not how it would be written in Starsim, where each dimension is a stratification. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.interop.load('config.yml', format='flepimop')` reads a flepiMoP configuration. The compartments become states (with several dimensions, one state for each combination, named as flepiMoP names them, e.g. `S_unvaccinated`); the places become a stratification `subpop` with commuting (`ss.Mobility(kind='visit')`); each transition becomes a flow; the modifiers of a scenario become `ss.modify` interventions; and the outcomes become `ss.outcome`s. A configuration with age, vaccination, and variant as dimensions comes in as a flat product of states, which runs the same as flepiMoP but is not how it would be written in Starsim, where each dimension is a stratification. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

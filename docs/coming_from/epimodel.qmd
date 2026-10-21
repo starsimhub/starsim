@@ -39,6 +39,7 @@ In Starsim, `ss.PartnerNet` takes the same targets: a mean of 0.7 partners each 
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
 sis = ss.Disease(
@@ -115,4 +116,4 @@ print(f'Prevalence: {low:.1%} low risk, {high:.1%} high risk (EpiModel: 20.7%, 7
 
 ## Bringing your model in
 
-`ss.load('model.R', format='epimodel')` reads an EpiModel model. Since EpiModel models are R scripts, the script is first run in EpiModel's own environment by `dump_epimodel.R` (in `starsim/interop/`), with EpiModel's fitting and simulating functions replaced by ones that record their arguments, and that writes a JSON file for `ss.load()`. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`) becomes a disease with its transitions, and a network fitted by `netest()` becomes an `ss.PartnerNet` with the same targets. Modules written in R (`infection.FUN = ...`) are listed as not translated, with their source in `sim.imported.modules`, to be written by hand; `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.
+`ss.interop.load('model.R', format='epimodel')` reads an EpiModel model. Since EpiModel models are R scripts, the script is first run in EpiModel's own environment by `dump_epimodel.R` (in `starsim/interop/`), with EpiModel's fitting and simulating functions replaced by ones that record their arguments, and that writes a JSON file for `ss.interop.load()`. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`) becomes a disease with its transitions, and a network fitted by `netest()` becomes an `ss.PartnerNet` with the same targets. Modules written in R (`infection.FUN = ...`) are listed as not translated, with their source in `sim.imported.modules`, to be written by hand; `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.

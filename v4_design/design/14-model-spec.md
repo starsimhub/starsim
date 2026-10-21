@@ -2,6 +2,14 @@
 
 What a model is, written out as data. The model spec is a JSON-compatible document that holds the whole model: its states, transitions, parameters, stratifications, mixing, interventions, results, and run settings. It is the normalized form of the model, for hashing and comparing; it is not read back into a sim.
 
+Three things are kept apart, each with its own method:
+
+| What | Method | Holds | Read back |
+|---|---|---|---|
+| The model spec | `sim.to_spec()`, `sir.to_spec()` | the model as plain data: no results and no state of a run | no; it is hashed (`sim.hash()`), compared (`ss.diff()`), and written as code (`sim.to_code()`) |
+| The results as JSON | `sim.to_json()` | the sim's parameters (a module among them as a reference, its type and name), its summary, and its results, for reading elsewhere | no |
+| A saved sim (a checkpoint) | `sim.save()`, `ss.save('run.sim', sim)` | the sim itself, as a pickle, with its results; saved partway through a run, with its full state, so that it can continue | yes, with `ss.load()`, by the same code |
+
 Justified by [best-practices/model-structure.md](../best-practices/model-structure.md) and [best-practices/principles.md](../best-practices/principles.md).
 
 ## What it is for
@@ -22,7 +30,7 @@ sir = ss.Disease(
 )
 sim = ss.Sim(sir, stop=100)
 
-sir.to_spec()                  # the model spec of one disease, as a dict (sir.to_json() gives the same)
+sir.to_spec()                  # the model spec of one disease, as a dict
 sir.to_spec('sir.json')        # ... saved to a file
 sim.to_spec()                  # the whole sim: modules, networks, stratifications, interventions, settings
 ss.save('model.py', sim)       # the model as code, which builds it again (sim.to_code())
@@ -53,9 +61,9 @@ This is the spec of the model on the first page of [00-overview.md](00-overview.
       ],
       "transitions": [
         {"name": "infection", "kind": "contact-mediated", "src": ["S"], "dst": ["I"], "rate": "beta * I",
-         "dur": null, "p": null, "stages": null, "label": null},
+         "dur": null, "p": null, "stages": null, "label": null, "migration": null, "after": null, "before": null, "acquisition": null, "move": null, "increment": null},
         {"name": "recovery", "kind": "spontaneous", "src": ["I"], "dst": ["R"], "rate": null,
-         "dur": {"dist": "expon", "mean": ["par", "dur"]}, "p": null, "stages": null, "label": null}
+         "dur": {"dist": "expon", "mean": ["par", "dur"]}, "p": null, "stages": null, "label": null, "migration": null, "after": null, "before": null, "acquisition": null, "move": null, "increment": null}
       ],
       "stratifications": [],
       "results": [
@@ -63,27 +71,30 @@ This is the spec of the model on the first page of [00-overview.md](00-overview.
          "delay": {"type": "dur", "value": 5.0, "unit": "day"}, "duration": null, "likelihood": null}
       ],
       "functions": [],
+      "transfers": null,
+      "updates": null,
       "guessed": ["states.I.infectious", "transitions.recovery.dwell"]
     }
   ],
   "networks": [
-    {"type": "MixingPools", "name": "contacts", "label": "contacts", "pars": {"diseases": null, "beta": 1.0},
+    {"type": "MixingPools", "name": "contacts", "label": "contacts", "factory": "starsim.networks.MixingPools", "version": null, "pars": {"diseases": null, "beta": 1.0},
      "data": {"provider": "starsim_data", "version": "0.4.0", "place": "Kenya", "source": "prem2021", "layer": "all",
               "location": "Kenya", "study": "Prem et al. 2021", "license": "GPL-3.0"}}
   ],
   "stratify": [
-    {"split_from": "people", "name": "age", "kind": "age", "levels": [0.0, 15.0, 65.0],
+    {"geo": null, "split_from": "people", "unit": null, "name": "age", "kind": "age", "levels": [0.0, 15.0, 65.0],
      "split": [0.39284168924481755, 0.5792660879552572, 0.02789222279992524],
      "adjust": {}, "states": null, "where": null, "mobility": null}
   ],
   "modifiers": [],
   "interventions": [
-    {"type": "modify", "name": "masks", "label": "masks", "target": "sir.pars.beta", "multiply": 0.6, "add": null, "set": null,
+    {"type": "modify", "name": "masks", "label": "masks", "factory": "starsim.connectors.modify", "version": null, "target": "sir.pars.beta", "multiply": 0.6, "add": null, "set": null,
      "start": "2020-03-15", "stop": null}
   ],
   "config": {
     "solver": "auto", "integrator": null, "approx": null, "unit": "day", "start": "2020-01-01", "stop": "2021-01-01",
-    "dt": 1.0, "total_pop": 50000000.0, "n_agents": null, "rand_seed": 1, "crn": true, "precision": 32
+    "dt": 1.0, "total_pop": 50000000.0, "n_agents": null, "rand_seed": 1, "crn": true, "precision": 32,
+    "substeps": null, "use_aging": null
   },
   "meta": {
     "library_version": "4.0.0", "solver_chosen": "ode", "solver_reason": "every part of the model has a compartmental form",
@@ -97,13 +108,13 @@ This is the spec of the model on the first page of [00-overview.md](00-overview.
 }
 ```
 
-The fields of each kind of object are always written, in the same order; a value that was not given and has no default is `null`, not left out. A fixed shape makes two specs easy to compare. (A few fields are written only when set, so that other specs are unchanged: `migration`, `after`, and `before` on a transition, `updates` on a module (each with its `name`, the `state` it sets, and its `value` as an expression), `where` on a modifier.)
+The fields of each kind of object are always written, in the same order; a value that was not given and has no default (or a feature that is not used) is `null`, not left out. A fixed shape makes two specs easy to compare. The hash leaves out every field whose value is `null` ([hashing](#hashing)), so a field added for a new feature, written as `null` where it is not used, changes no other model's hash, and the feature needs no code of its own to keep them as they were. `updates` on a module is each with its `name`, the `state` it sets, and its `value` as an expression.
 
 The top-level parts:
 
 | Part | Holds |
 |---|---|
-| `modules` | Declared diseases, each with its states (people or not), parameters, transitions, stratifications, declared results, and functions. A module written as code is written as its type, name, label, and parameters |
+| `modules` | Declared diseases, each with its states (people or not), parameters, transitions, stratifications, declared results, and functions. A module written as code is written as its type, name, label, `factory` (the class that makes it, as `module.Class`), `version` (the class's `version` attribute, if it has one), and parameters: it is seen through these, not through its code ([hashing](#hashing)) |
 | `networks` | Networks, mixing pools, and mobility, as passed to `networks=`: each as its `type`, `name`, `label`, and `pars` (typed values and distributions written as elsewhere in the spec), and, for named data such as `ss.contacts('Kenya')`, a `data` reference saying where it came from |
 | `stratify` | Stratifications applied to the whole sim (`sim.stratify(age=...)` or `ss.Sim(..., stratify=...)`), in the order applied, in the same form as a module's `stratifications`, with the split resolved (`split_from` says where it came from). They apply to every module; a module's own list holds the dimensions and adjustments that belong to it alone |
 | `modifiers` | `ss.modify` objects passed to `connectors=`: interactions that are part of the model |
@@ -132,7 +143,7 @@ There is one transition object, matching the one class `ss.Transition` ([03-stat
 | `p` | Branch probabilities: one per destination, or one number for a transition that is one branch of several out of its source state |
 | `stages` | The number of sub-stages asked for with `stages=`, or `null` |
 | `kind` | `"contact-mediated"` if the rate contains a bare state, otherwise `"spontaneous"` |
-| `acquisition` | `true` or `false` if given with `acquisition=` ([03-states-and-transitions.md](03-states-and-transitions.md#what-counts-as-acquisition)); left out when it is worked out, so other specs are unchanged |
+| `acquisition` | `true` or `false` if given with `acquisition=` ([03-states-and-transitions.md](03-states-and-transitions.md#what-counts-as-acquisition)); `null` when it is worked out |
 
 JSON `null` in `src` or `dst` is `ss.null`, outside the model: `ss.null >> W @ rate` is written `"src": null, "dst": ["W"]`.
 
@@ -157,7 +168,7 @@ A result that is a ratio or a sum of states (`prev = I / (S + I + R)`) is writte
 
 A model stores its stratifications as a list, in the order they were applied, and does not write out the strata, the aging transfers, or the sub-stages they generate. Those follow from the rules in [05-dimensions.md](05-dimensions.md) and [03-states-and-transitions.md](03-states-and-transitions.md), and a model with 4,512 compartments per state should still be a readable file. A clock is written with `"kind": "clock"`, its levels as given (not the steps a compartmental run keeps it in), their `"unit"`, and no split: `{"unit": "month", "name": "since_birth", "kind": "clock", "levels": [0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0], "split": null, ...}`.
 
-A transition that moves people along a dimension carries, only when it does, `"move"` (the level, arrow, or clock time as given, `{"since_birth": 0.0}`) and `"increment"` (the amount for each counter, `{"parity": 2}`); a transfer along a counter carries `"increment"` as a number, and a delivery `"increment"` as a dict. An entry of `p=` with a `to` axis is written as given (`"p": ["1 - p_use", "p_use * mix * w"]`), its tables among the parameters.
+A transition that moves people along a dimension carries (and otherwise has `null`) `"move"` (the level, arrow, or clock time as given, `{"since_birth": 0.0}`) and `"increment"` (the amount for each counter, `{"parity": 2}`); a transfer along a counter carries `"increment"` as a number, and a delivery `"increment"` as a dict. An entry of `p=` with a `to` axis is written as given (`"p": ["1 - p_use", "p_use * mix * w"]`), its tables among the parameters.
 
 ### Guessed values
 
@@ -228,11 +239,13 @@ Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Keny
 A function in a slot is the value of its parameter, written as its name, its source text, and the plain values (numbers, strings) it takes from outside its source (the variables it closes over, the globals it uses, its defaults):
 
 ```json
-{"name": "rate_discharge", "value": {"fn": "clearance", "source": "def clearance(sim, uids):\n    return 0.2 / (1 + sim.people.viral_load[uids])\n", "values": null},
+{"name": "rate_discharge", "value": {"fn": "clearance", "source": "def clearance(sim, uids):\n    return 0.2 / (1 + sim.people.viral_load[uids])\n", "values": null, "ref": null, "version": null},
  "bounds": null, "prior": null, "source": null, "doc": null}
 ```
 
-Like any inline value, the parameter is named after its slot. A function passed to the disease as custom per-step behavior is listed in the module's `functions`, by name and source text.
+Like any inline value, the parameter is named after its slot. A function passed to the disease as custom per-step behavior is listed in the module's `functions`, by name, in the same form. A function in a parameter of a module written as code, or in a modifier, is written the same way.
+
+The source is what identifies a function. A function whose source is not available (NumPy's `np.exp`, a function from a compiled library) is identified instead by where it can be imported from, `ref` (`"numpy.exp"`). User code can give a function its own identity, `version` (`fn.version = '2'`), which is used in place of its source, so that the hash changes when the version does and not when a comment does. A function with none of these (a `functools.partial`, a lambda typed at a prompt) cannot be told apart from another, and `sim.hash()` raises an error that names it rather than treat two such models as the same; running and fitting do not need the hash, so they are not affected.
 
 **A spec that contains functions is not portable.** It can be compared and hashed, but the model can only be run by Python, and only if everything the function refers to (imports, other functions, global variables) is available. The source text is recorded so that a person can see what the function does and so that the hash changes when it does. The code written by `sim.to_code()` includes the source text of each function.
 
@@ -250,7 +263,7 @@ After normalization, the three spellings of the same model ([01-objects.md](01-o
 
 ## Hashing
 
-`sim.hash()` returns an `sc.objdict` with six parts ([11-random.md](11-random.md#run-identity)): five hashes and the seed. Each hash is SHA-256, shortened to six characters, of one slice of the normalized spec:
+`sim.hash()` returns an `sc.objdict` with six parts ([11-random.md](11-random.md#run-identity)): five hashes and the seed. Each hash is SHA-256, shortened to six characters, of one slice of the normalized spec, written as JSON with sorted keys and without the fields that are `null`. It depends only on that data, not on Python's `hash()` (which differs between processes) or on where objects are in memory, so it is the same in every process and on every machine, and is a durable fingerprint of the model's definition:
 
 | Part | Computed from |
 |---|---|
@@ -279,7 +292,8 @@ Each part is a plain string or number, so `sim.hash().pars` can go in a file nam
 - Fitting settings are not part of `sim.hash()`, so changing the number of trials does not look like a change to the model. The data is its own part, `data`.
 - `init_prev=0.01` and `init=dict(I=0.01)` are the same model, and hash the same.
 - The runs of an `ss.MultiSim` differ only in `seed`.
-- A function contributes its source text to `model`, and the plain values it closes over or has as defaults (numbers, strings) to `pars`. This is a best effort: a function that depends on something else outside its own source (a global, an object) can change behavior without changing the hash.
+- A function contributes its source text (or its `ref` or `version`, [above](#functions)) to `model`, and the plain values it closes over or has as defaults (numbers, strings) to `pars`. This is a best effort: a function that depends on something else outside its own source (a global, an object) can change behavior without changing the hash. Two different functions in the same slot, with the same parameters, do not hash the same.
+- A module written as code contributes its class (`factory`), its `version` if its class gives one, and its parameters, but not its code: a change to its methods does not change the hash unless its `version` changes. Its source is not captured; giving a module a factory and its configuration as parameters is what makes it identifiable.
 - Numbers written in rates are kept at full precision, so `beta * (1 + 1e-9) * I` and `beta * I` hash differently. A sim that is not initialized is hashed (from an initialized copy) without being changed.
 - Two models that are the same mathematically but declared differently (two transitions out of a state versus one branching transition, say) may hash differently. A spurious difference is the safe direction to fail in.
 
@@ -289,7 +303,7 @@ Each part is a plain string or number, so `sim.hash().pars` can go in a file nam
 
 ## Saved forms
 
-A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). What `to_code()` cannot write (the attached data, a network of agents, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand; deliveries with their products (each as a variable, so a step can refer to another's events), cascades, contact matrices (by name or as numbers), transfers, and priors that are distributions are written. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`. There is no third form: the spec itself is not read back.
+A model is saved as code, `ss.save('model.py', sim)` (which writes `sim.to_code()`); running it MUST give a model whose own spec is identical, and therefore the same hash (`tests/test_transitions.py::test_load`). Only the declared parts of a model are written as code: declared diseases (with their functions, from their source), families of strains, deliveries with their products (each as a variable, so a step can refer to another's events), cascades, `ss.modify`, contact matrices (by name or as numbers), transfers, and priors that are distributions. Nothing is added to reconstruct the rest. What `to_code()` does not write (the attached data, a module or network written as code, named by its `factory`, a function whose source is not a plain definition, a prior that is not a distribution) it lists in the code, for adding by hand, and in an `ss.LossyExport` warning; a part of a declared disease that it cannot write (the migration of a transition, a disease's custom functions) is an error rather than a different model. A round trip of every model in the test corpus (`tests/test_interop.py::test_round_trip`) checks this. A sim with its results is saved with `ss.save('run.sim', sim)` and read with `ss.load('run.sim')`; saved partway through a run (`sim.run(until=...)`), it is a checkpoint that can continue. There is no third form: the spec itself is not read back, and the results as JSON (`sim.to_json()`) are output, not a model.
 
 ## Export to other formats
 

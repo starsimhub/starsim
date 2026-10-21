@@ -28,9 +28,10 @@ class Profile(sc.profile):
     Examples:
         ```python
         import starsim as ss
+        import starsim.library as ssl
 
         net = ss.RandomNet()
-        hiv = ss.library.HIV() # A disease written as code
+        hiv = ssl.HIV() # A disease written as code
         sim = ss.Sim(networks=net, diseases=hiv)
         prof = sim.profile(follow=[net.add_pairs, hiv.infect])
         prof.disp()

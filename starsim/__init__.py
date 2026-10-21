@@ -159,9 +159,6 @@ from .spec import to_code, diff
 t('named')
 from . import named # Places and contact matrices by name (ss.geo('Kenya'), ss.contacts('Kenya')); starsim_data is imported only when they are used
 
-t('interop')
-from . import interop # Used by ss.load(..., format=...)
-
 t('gradients')
 from . import gradients # Used as ss.gradients; JAX is imported only when it is used
 
@@ -173,10 +170,6 @@ from .run import MultiSim, parallel
 
 t('calibration') # Lazy import to save 500 ms
 from .calibration import mismatch, loglik, ParticleFilter, Fit, fit, ModelComparison, compare_models, Optimization, optimize
-
-# The library of example/reference modules; not exported at the top level, access via e.g. ss.library.mnch.FetalHealth
-t('library')
-from . import library
 
 # Load fonts
 def _load_fonts(debug=debug):

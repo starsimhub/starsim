@@ -191,28 +191,12 @@ def flatten(sim):
 
 #%% Mermaid
 
-def label(tr):
-    """ A transition's rate as text, for a diagram """
-    fmt = ss.transitions.format_expr
-    if tr.dur is not None:
-        p = tr.dur
-        text = f'dur = {ss.transitions.format_expr(p)}'
-    elif tr.rate is not None:
-        text = fmt(tr.rate)
-    else:
-        text = ''
-    if tr.p is not None and len(tr.dst) > 1:
-        text += ' (p = ' + ', '.join('rest' if p is None else fmt(p) for p in tr.p) + ')'
-    return f'{tr.name}: {text}' if text else tr.name
-
-
 def to_mermaid(sim):
     """ A Mermaid flowchart of each disease's states and transitions, labelled with their rates; transmissions are dashed """
     sim = initialized(sim)
     diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
     many = len(diseases) > 1
     lines = ['flowchart LR']
-    nulls = 0
     n_states = n_transitions = 0
     for mod in diseases:
         g = mod.graph
@@ -224,20 +208,7 @@ def to_mermaid(sim):
             lines.append(f'    subgraph {mod.name}["{title}"]')
         elif strats: # A title above the chart
             lines = ['---', f'title: {title}', '---'] + lines
-        for state in g.states.values():
-            shape = ('(["', '"])') if state.people else ('[/"', '"/]')
-            lines.append(f'{indent}{pre}{state.name}{shape[0]}{state.label_name}{shape[1]}')
-        for src,dst,name,kind in g.edges():
-            ends = []
-            for state in [src, dst]:
-                if state is None:
-                    nulls += 1
-                    ends.append(f'null{nulls}(( ))')
-                else:
-                    ends.append(pre + state.name)
-            arrow = '-.->' if kind == 'contact' else '-->'
-            text = label(g.transitions[name]).replace('"', '#quot;')
-            lines.append(f'{indent}{ends[0]} {arrow}|"{text}"| {ends[1]}')
+        lines += g.diagram(prefix=pre, indent=indent)
         if many:
             lines.append('    end')
         n_states += len(g.states)

@@ -294,14 +294,22 @@ class Strat:
     def spec(self):
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        named = dict(geo=self.geo.ref) if self.geo is not None and self.geo.ref is not None else {} # Where a named geography came from; only when there is one, so that the hash of every other model is as it was
-        if getattr(self, 'split_from', None): # A split taken from a named population (ss.people)
-            named['split_from'] = self.split_from
+        unit = None
         if self.kind == 'clock': # Its levels as given, in their unit; everyone starts at none, so there is no split
             levels = self.declared.tolist()
-            named['unit'] = None if self.clock_unit is None else self.clock_unit.base.removesuffix('s')
-        return dict(**named, name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where,
-                    mobility=None if self.mobility is None else dict(kind=self.mobility.kind, away=self.mobility.away if self.mobility.away is None else self.mobility.away.name if isinstance(self.mobility.away, ss.par) and self.mobility.away.name else float(self.mobility.away), **({} if self.mobility.scale == 'each' else dict(scale='mean')), **({} if self.mobility.cap is None else dict(cap=float(self.mobility.cap))), **({} if self.mobility.back is None else dict(back=f'ss.{self.mobility.back!r}' if isinstance(self.mobility.back, ss.TimePar) else float(self.mobility.back))), **(dict(matrix=self.mobility.matrix(self).tolist()) if self.mobility.data is None else dict(register=dict(events=len(self.mobility.data), hash=sc.sha(self.mobility.data.astype(str).to_csv()).hexdigest())))))
+            unit = None if self.clock_unit is None else self.clock_unit.base.removesuffix('s')
+        mobility = None
+        if self.mobility is not None:
+            mob = self.mobility
+            away = mob.away if mob.away is None else mob.away.name if isinstance(mob.away, ss.par) and mob.away.name else float(mob.away) # A fitted share by its parameter's name
+            back = None if mob.back is None else f'ss.{mob.back!r}' if isinstance(mob.back, ss.TimePar) else float(mob.back)
+            mobility = dict(kind=mob.kind, away=away, scale=None if mob.scale == 'each' else 'mean', cap=None if mob.cap is None else float(mob.cap), back=back)
+            if mob.data is None:
+                mobility['matrix'] = mob.matrix(self).tolist()
+            else: # A register of movements, by its size and a hash of its contents
+                mobility['register'] = dict(events=len(mob.data), hash=sc.sha(mob.data.astype(str).to_csv()).hexdigest())
+        return dict(geo=self.geo.ref if self.geo is not None else None, split_from=getattr(self, 'split_from', None) or None, unit=unit, # Where a named geography or split came from
+                    name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where, mobility=mobility)
 
     @property
     def mids(self):

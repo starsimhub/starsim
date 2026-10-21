@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.interop
 import paths
 from starsim.interop.memilio import load_memilio
 
@@ -204,7 +205,7 @@ def test_graph(tmp_path):
     sc.heading('Testing importing a MEmilio MobilityGraph against MEmilio\'s own run')
     (tmp_path/'graph.py').write_text(graph_script)
     subprocess.run([str(python), '-I', str(dump), 'graph.py', 'graph.json'], check=True, cwd=tmp_path, capture_output=True)
-    sim = ss.load(str(tmp_path/'graph.json'), format='memilio', **kw)
+    sim = ss.interop.load(str(tmp_path/'graph.json'), format='memilio', **kw)
     assert not sim.imported.incomplete
     res = sim.run().results.osecir.n_InfectedSymptoms
     theirs = np.load(tmp_path/'graph.npy') # The number with symptoms in each place on each day
@@ -221,7 +222,7 @@ def test_study(tmp_path):
     sc.heading('Testing importing a MEmilio GraphParameterStudy, with its distributions as priors')
     (tmp_path/'graph.py').write_text(graph_script)
     subprocess.run([str(python), '-I', str(dump), 'graph.py', 'study.json'], check=True, cwd=tmp_path, capture_output=True, env=dict(STUDY='10'))
-    sim = ss.load(str(tmp_path/'study.json'), format='memilio', **kw)
+    sim = ss.interop.load(str(tmp_path/'study.json'), format='memilio', **kw)
     assert not sim.imported.incomplete and sim.imported.runs == 10
 
     # MEmilio's draws, given to the import: TransmissionProbabilityOnContact is drawn in each age group from its own range, so the import draws a share of the range
@@ -260,7 +261,7 @@ def test_examples(example, tmp_path):
     script = next((folder / 'original').glob('*.py'))
     path = tmp_path / 'model.json'
     subprocess.run([str(python), '-I', str(dump), str(script), str(path)], check=True, cwd=tmp_path, capture_output=True)
-    sim = ss.load(str(path), format=ss.interop.sniff(str(path)), **kw).run()
+    sim = ss.interop.load(str(path), format=ss.interop.sniff(str(path)), **kw).run()
     ref = pd.read_csv(folder / 'reference/results.csv')
     total = ref[ref.time == 0].value.sum()
     res = sim.results.osecir

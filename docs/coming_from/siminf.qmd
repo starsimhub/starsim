@@ -35,6 +35,7 @@ In Starsim, SimInf's events become a movement register, a table with columns `da
 #| label: starsim-herds
 import pandas as pd
 import starsim as ss
+import starsim.interop
 
 u0 = pd.read_csv('u0.csv')
 events = pd.read_csv('events.csv.gz')
@@ -125,4 +126,4 @@ Both intervals cover the true values, and are wider than those of particle MCMC 
 
 ## Bringing your model in
 
-`ss.load('model.R', format='siminf')` reads a SimInf model: transitions written with `mparse()`, or one of SimInf's predefined models (`SIR()`, `SIS()`, `SEIR()`, `SISe()`, `SISe3()`). The R is read, not run, so what the script computes (such as `u0_SIR()` or a data file) can be passed in, e.g. `ss.load('model.R', format='siminf', u0='u0.csv', events='events.csv')`. The nodes become a stratification of places, the events a movement register, and the continuous state of the SISe models a state that is not people. C code (`pts_fun`) is listed as not translated, and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.
+`ss.interop.load('model.R', format='siminf')` reads a SimInf model: transitions written with `mparse()`, or one of SimInf's predefined models (`SIR()`, `SIS()`, `SEIR()`, `SISe()`, `SISe3()`). The R is read, not run, so what the script computes (such as `u0_SIR()` or a data file) can be passed in, e.g. `ss.interop.load('model.R', format='siminf', u0='u0.csv', events='events.csv')`. The nodes become a stratification of places, the events a movement register, and the continuous state of the SISe models a state that is not people. C code (`pts_fun`) is listed as not translated, and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.

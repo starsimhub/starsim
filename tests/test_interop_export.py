@@ -1,5 +1,5 @@
 """
-Test exporting a sim to other formats (ss.save(..., format=...)): Mermaid, SBML, and odin, read back with ss.load()
+Test exporting a sim to other formats (ss.interop.export()): Mermaid, SBML, and odin, read back with ss.interop.load()
 """
 import tempfile
 import warnings
@@ -7,6 +7,7 @@ import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
+import starsim.interop
 
 kw = dict(verbose=0)
 
@@ -39,7 +40,7 @@ def test_mermaid(tmp_path):
     assert text.startswith('flowchart LR')
     assert 'S -.->|"infection: beta * I"| I' in text # A transmission is dashed, and labelled with its rate
     assert 'I -->|"recovery: dur = dur"| R' in text
-    ss.save(tmp_path/'sir.md', sim, format='mermaid', verbose=False)
+    ss.interop.export(sim, 'mermaid', filename=tmp_path/'sir.md', verbose=False)
     assert sc.loadtext(tmp_path/'sir.md').startswith('```mermaid\nflowchart LR') # A Markdown file has the diagram in a fenced block
 
     # Two diseases are a subgraph each; a stratification is in the title
@@ -57,8 +58,8 @@ def test_sbml(tmp_path):
         sim = make()
         with warnings.catch_warnings(): # What is lost is tested below
             warnings.simplefilter('ignore')
-            ss.save(tmp_path/file, sim, format='sbml', verbose=False)
-        back = ss.load(tmp_path/file, stop=sim.pars.stop, **kw) # The unit is read from the file
+            ss.interop.export(sim, 'sbml', filename=tmp_path/file, verbose=False)
+        back = ss.interop.load(tmp_path/file, stop=sim.pars.stop, **kw) # The unit is read from the file
         sim.run(); back.run()
         assert back.unit == sim.unit
         a, b = sim.results[sim.diseases[0].name], back.results[back.diseases[0].name]
@@ -83,10 +84,10 @@ def test_odin(tmp_path):
     sc.heading('Testing export to odin and back')
     sim = make_seird()
     with pytest.warns(ss.LossyExport):
-        ss.save(tmp_path/'seird.R', sim, format='odin')
+        ss.interop.export(sim, 'odin', filename=tmp_path/'seird.R')
     text = sc.loadtext(tmp_path/'seird.R')
     assert 'deriv(S) <- births - deaths_1 - infection' in text and 'beta <- user(0.4)' in text
-    back = ss.load(tmp_path/'seird.R', unit='day', stop=120, **kw)
+    back = ss.interop.load(tmp_path/'seird.R', unit='day', stop=120, **kw)
     sim.run(); back.run()
     assert {'infection', 'onset', 'births'} <= set(back.diseases[0].graph.transitions) # Each flow is named after its transition
     a, b = sim.results.seird, back.results[back.diseases[0].name]

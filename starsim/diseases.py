@@ -303,27 +303,21 @@ class Disease(ss.Module):
         text = '\n'.join(self.graph.equations(self.engine))
         return text if output else print(text)
 
-    def diagram(self, format='plot', **kwargs):
+    def diagram(self):
         """
-        Draw the state-transition diagram
+        The state-transition diagram, as the text of a Mermaid flowchart (https://mermaid.js.org)
 
-        States are placed in columns by how many transitions they are from the first
-        state, with counts (states that are not people) in a row below. Transmissions
-        are dashed and red, infectious states are shaded, and a dotted grey line shows
-        a state that a rate depends on (the source of an infection, or a count).
-
-        Args:
-            format (str): 'plot' (a Matplotlib figure), or 'mermaid' (the text of a Mermaid flowchart)
-            kwargs (dict): passed to `plt.figure()`
+        People states are rounded and counts slanted; transmissions are dashed; each
+        arrow is labelled with its transition's name and rate. `ss.save('sir.md', sim, format='mermaid')`
+        writes the diagram of every disease in a sim.
 
         **Example**:
 
             sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
-            sir.diagram()
-            print(sir.diagram('mermaid'))
+            print(sir.diagram())
         """
         self.check_declared('diagram()')
-        return self.graph.diagram(format=format, **kwargs)
+        return '\n'.join(['flowchart LR'] + self.graph.diagram())
 
     def R0(self, matrix=False):
         """
@@ -362,20 +356,16 @@ class Disease(ss.Module):
 
     def to_spec(self, filename=None, **kwargs):
         """
-        The model spec: the states, parameters, and transitions as plain data (as `sim.to_spec()` holds it, for `sim.hash()` and `ss.diff()`); for a disease written as code, its parameters
+        The disease's part of the model spec (`sim.to_spec()`): its states, parameters, and transitions as plain data, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`; for a disease written as code, see `ss.Module.to_spec()`
 
         Args:
             filename (str): if provided, save to this file
             kwargs (dict): passed to `sc.savejson()`
         """
-        out = self.graph.to_json(self.sim) if self.graph is not None else super().to_json()
+        out = self.graph.to_spec(self.sim) if self.graph is not None else super().to_spec()
         if filename is not None:
             return sc.savejson(filename, out, **kwargs)
         return out
-
-    def to_json(self, filename=None, **kwargs):
-        """ The model spec, as in `sim.to_json()`; see `to_spec()` """
-        return self.to_spec(filename=filename, **kwargs)
 
     @ss.required()
     def init_pre(self, sim):

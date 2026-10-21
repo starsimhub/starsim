@@ -985,7 +985,7 @@ class outcome(Nameable):
         """ The weights of its sources that are expressions, e.g. the rho in rho * infection """
         return [weight for base,weight in self.flows if isinstance(weight, Expr)]
 
-    def to_json(self, unit=None):
+    def to_spec(self, unit=None):
         """ The outcome as it is written in the model spec """
         def flow_str(base, weight):
             if isinstance(base, ss.conditions.Event) and base.args[0] == 'to': # One branch, written as it is given
