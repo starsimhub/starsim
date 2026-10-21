@@ -136,8 +136,8 @@ class HouseholdNet(ss.Network):
         # so it is initialized before networks and its states are populated by this point.)
         if self.dynamic:
             preg = ppl.pregnancy
-            preg_uids = preg.pregnant.uids
-            self.ti_move_out_check[preg_uids] = preg.ti_pregnant[preg_uids]
+            preg_uids = preg.P.uids
+            self.ti_move_out_check[preg_uids] = preg.ti_P[preg_uids]
         return
 
     def _parse_dhs(self):
@@ -299,13 +299,13 @@ class HouseholdNet(ss.Network):
         """
         ppl = self.sim.people
         # Evaluate each pregnancy for move-out exactly once (at its start). `ti_move_out_check`
-        # stores the `ti_pregnant` of the pregnancy a woman was last evaluated for; she is eligible
-        # only when her current `ti_pregnant` is newer than that. This is dt-agnostic: comparing
-        # against `ti_pregnant` (rather than the sim timestep vs. `ti_delivery`) avoids mis-timed,
+        # stores the `ti_P` of the pregnancy a woman was last evaluated for; she is eligible
+        # only when her current `ti_P` is newer than that. This is dt-agnostic: comparing
+        # against `ti_P` (rather than the sim timestep vs. the scheduled delivery) avoids mis-timed,
         # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
         # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
         # to the previous logic when pregnancy dt == sim dt.
-        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.pregnant & (self.ti_move_out_check < ppl.pregnancy.ti_pregnant))
+        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.P & (self.ti_move_out_check < ppl.pregnancy.ti_P))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)
         if len(moving_out) > 0:
             self.fhoh[moving_out] = True
@@ -323,7 +323,7 @@ class HouseholdNet(ss.Network):
             self.household_ids[moving_out] = new_cids
             self.household_ids[partners] = new_cids
 
-        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_pregnant[potential_movers]
+        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_P[potential_movers]
         return
 
     @staticmethod

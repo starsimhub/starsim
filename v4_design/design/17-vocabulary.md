@@ -96,7 +96,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | **`ss.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
 | **`ss.gravity`** | Movement model (radiation, Stouffer, and competing destinations are deferred; a matrix covers them) |
 
-### Interactions and interventions: 11
+### Interactions and interventions: 9
 
 | Name | What it is |
 |---|---|
@@ -104,8 +104,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 | **`ss.change`** | A parameter change at given times; shorthand for a modifier |
 | **`ss.immunity`** | Protection between strains, combined by a rule: the quantity it lowers is the keyword and the protection its value, a matrix (rows from, columns against) or a number (`ss.immunity(protected='nab', rel_sus=m, combine='sum')`, `rel_trans=`, `dur=dict(In=m)`); for `ss.Strains`, and for a strain dimension's `immunity=` |
 | **`ss.Vaccine`** **`ss.Diagnostic`** **`ss.Treatment`** | Products: nouns for things (Starsim 3's `ss.Vx`, `ss.Dx`, `ss.Tx` remain only as base classes for products written as code, not as aliases; `ss.Diagnostic` was `ss.Test`, renamed so that no product and delivery differ only by case) |
-| **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** **`ss.visit`** | Deliveries: verbs (`ss.visit` is a step people attend, with no product) |
-| **`ss.cascade`** | Steps of care grouped, named, and tabulated (who each step reached and lost); it runs as its steps would as a list |
+| **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** | Deliveries: verbs (`ss.Delivery` with no product is a step people attend, a visit) |
 
 ### Running, comparing, saving: 8
 
@@ -149,13 +148,13 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
 | Mixing and space | 11 | 5 |
-| Interactions and interventions | 11 | 11 |
+| Interactions and interventions | 9 | 9 |
 | Running, comparing, saving | 8 | 3 |
 | Optional metadata | 1 | 1 |
 | Types you get back or subclass | 6 | 1 |
-| **`ss.` names** | **111** | **47** |
+| **`ss.` names** | **109** | **45** |
 | Methods and attributes | 45 | 30 |
-| **Total** | **156** | **77** |
+| **Total** | **154** | **75** |
 
 <!-- counts end -->
 
@@ -185,8 +184,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.immunity` | `protected` `rel_sus` `rel_trans` `dur` `combine` |
 | `ss.modify` | `multiply` `add` `set` `efficacy` `share` `route` `where` `when` `start` `stop` `hold` `name` |
 | `ss.change` | `at` `by` `to` |
-| Deliveries | `what` `who` `operator` `start` `stop` `at` `interval` `at_age` `where` `coverage` `capacity` `deliver` `on` `when` `trace` `move` `increment` `disease` `count_events`; `cost` (`ss.visit`) |
-| `ss.cascade` | the steps, `name` `count_events` |
+| Deliveries | `what` `who` `operator` `start` `stop` `at` `interval` `at_age` `where` `coverage` `capacity` `deliver` `on` `when` `trace` `move` `increment` `disease` |
 | Products | `efficacy` `waning` `cost` (all); `leaky` (`ss.Vaccine`); `sensitivity` `specificity` `delay` `detects` (`ss.Diagnostic`); `cure` (a number, or a dict by state) `transition` `to` (`ss.Treatment`) |
 | `ss.outcome` | `delay` `duration` `likelihood` |
 | `ss.data` | `aliases` `ignore_extra` |
@@ -240,7 +238,8 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.Homogeneous` | Not needed | No network given, or `ss.MixingPool(n_contacts=10)` |
 | `ss.SexualNet`, `ss.Network(edges=)` | Starsim already has names | `ss.MFNet` and Starsim's other networks; `ss.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |
 | `ss.Par`, `ss.Outcome` | Capitalization rule | `ss.par`, `ss.outcome` |
-| `ss.cascade`, `observe()`, `Model.results()` | A separate observation step | Results declared as keywords with the model |
+| `ss.cascade`, `observe()`, `Model.results()` | A separate observation step (`ss.cascade` came back as a group of steps, and was removed again on 2026-10-20: it ran as its steps would as a list) | Results declared as keywords with the model; the steps as a list |
+| `ss.visit`, `ss.Resource`, `ss.share` | Delivery extras, removed 2026-10-20 with stock targets (`target=`, `above=`), shared resources (`uses=`), and `count_events=` | `ss.Delivery(who=...)` with no product; `capacity=` or `deliver=` as a function of the sim; an analyzer |
 | `ss.N`, `ss.count` | Extra names for a sum and a keyword | `N = S + I + R`; `capacity=` |
 | `ss.dist(...)` | Duplicate | `ss.Dist(dist=...)` |
 | `ss.lognorm`, `ss.binomial`, `ss.neg_binomial`, `ss.rate` | Not Starsim's names | `ss.lognorm_ex` / `ss.lognorm_im`, Starsim's set, `ss.nbinom`, `ss.per` |

@@ -516,9 +516,9 @@ def test_congenital():
     sim.run()
 
     preg = sim.demographics.pregnancy
-    sb           = preg.results['stillbirths'].sum()
+    sb           = preg.results['stillbirth'].sum()
     neonatal_deaths = preg.results['neonatal_deaths'].sum()
-    births          = preg.results['births'].sum()
+    births          = preg.results['birth'].sum()
     n_congenital    = sim.diseases[0].congenital.sum()
     print(f'  Stillbirths: {sb}, Neonatal deaths: {neonatal_deaths}, Births: {births}, Congenital: {n_congenital}')
 

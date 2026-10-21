@@ -24,7 +24,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
     solver named explicitly runs a small approximate form (see `compartmental_form()`).
 
     Takes the parameters of the Starsim 3 module (see `ss.PregnancyPars`), with the same names and meanings,
-    plus `p_abortion`; and Starsim 3's attributes (`pregnant`, `ti_delivery`, `gestation`, ...), results, and callbacks.
+    plus `p_abortion`, and Starsim 3's callbacks (`add_conception_callback()`, `add_delivery_callback()`). Its states and
+    results have v4's names: `P` (pregnant), `ti_P`, the scheduled delivery `ti_exit_P` (`set_delivery()` reschedules it),
+    and the flows `conception`, `birth`, `miscarriage`, `stillbirth`, `abortion` (see the migrate-starsim3 skill).
 
     Args:
         fertility_rate (rate/dataframe): age-specific fertility rates, or one rate (default per 1000: see `rate_units`)
@@ -408,30 +410,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
             fn(ss.uids(ppl.parent.raw[new]), new)
         return new
 
-    #%% Starsim 3 attributes, read by code written for Starsim 3's pregnancy (agents only)
-
-    @property
-    def pregnant(self):
-        """ Starsim 3: whether pregnant (`P`) """
-        return self.P
-
-    @property
-    def ti_pregnant(self):
-        """ Starsim 3: the step the pregnancy began (`ti_P`) """
-        return self.ti_P
-
-    @property
-    def ti_delivery(self):
-        """
-        Starsim 3: the step of each pregnant woman's scheduled delivery (of the last one for anyone else, NaN if none). Setting it reschedules the
-        delivery, e.g. `preg.ti_delivery[uids] = preg.ti_delivery[uids] - 2` to bring it forward two steps (agents only)
-        """
-        due = np.where(self.P.raw & (self.exit_P.raw >= 0), np.ceil(self.ti_exit_P.raw), self.ti_delivered.raw) # For anyone not pregnant, the last delivery, as in Starsim 3
-        out = self.ti_exit_P.asnew(due.astype(ss.dtypes.float), cls=DeliveryTimes)
-        out.nan = np.nan
-        out.preg = self
-        return out
-
     def set_delivery(self, uids, ti, weeks=None):
         """
         Reschedule the deliveries of some pregnant women to a step (each scheduled exit of P is the delivery: losses are
@@ -446,56 +424,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.dur_gestation[uids] = (ti - self.ti_P.raw[uids])*self.t.dt.weeks if weeks is None else np.asarray(weeks, dtype=float)[keep]
         return
 
-    @property
-    def gestation(self):
-        """ Starsim 3: weeks into the pregnancy (NaN if not pregnant) """
-        ga = np.where(self.P.raw, (self.ti - self.ti_P.raw)*self.t.dt.weeks, np.nan)
-        out = self.ti_P.asnew(ga.astype(ss.dtypes.float), cls=ss.FloatArr)
-        out.nan = np.nan
-        return out
-
-    @property
-    def breastfeeding(self):
-        """ Starsim 3: whether breastfeeding (`lactation.L`) """
-        lact = self.lactation
-        return lact.L if lact is not None else None
-
-    def _trimester(self, i):
-        """ Starsim 3: the UIDs of women in a trimester (0, 1, 2), by `pars.trimesters` """
-        uids = self.P.uids
-        ga = ss.years((self.ti - self.ti_P[uids])*self.t.dt_year)
-        lo, hi = ([None] + list(self.pars.trimesters) + [None])[i:i+2]
-        keep = np.ones(len(uids), dtype=bool)
-        if lo is not None: keep &= ga >= lo
-        if hi is not None: keep &= ga < hi
-        return uids[keep]
-
-    @property
-    def tri1_uids(self):
-        """ Starsim 3: the UIDs of women in their first trimester """
-        return self._trimester(0)
-
-    @property
-    def tri2_uids(self):
-        """ Starsim 3: the UIDs of women in their second trimester """
-        return self._trimester(1)
-
-    @property
-    def tri3_uids(self):
-        """ Starsim 3: the UIDs of women in their third trimester """
-        return self._trimester(2)
-
-    def set_ptb(self):
-        """ Starsim 3: reset `rel_ptb` to `rel_ptb_base` times the risk by maternal age (`pars.rr_ptb_age`); it is also set at each conception (see preterm_risk()) """
-        bins, rr = self.pars.rr_ptb_age
-        age_ind = np.searchsorted(np.asarray(bins).astype(int), self.sim.people.age, side='left')
-        self.rel_ptb[:] = self.rel_ptb_base[:]*np.asarray(rr)[np.minimum(age_ind, len(rr) - 1)]
-        return
-
-    def find_unborn_children(self, parent_uids):
-        """ Starsim 3: the fetuses (as agents) of some mothers """
-        return self.unborn(parent_uids) if self.fetus else ss.uids()
-
     def add_conception_callback(self, fn):
         """ Call `fn(uids)` at each conception, e.g. from a module written as code (as `ssl.mnch.FetalHealth` does); a declared module can use `ss.on(preg.conception)` instead """
         self._callbacks.conception.append(fn)
@@ -506,13 +434,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self._callbacks.delivery.append(fn)
         return
 
-    v3_results = dict(pregnancies='conception', births='birth', miscarriages='miscarriage', stillbirths='stillbirth', abortions='abortion') # Starsim 3 names, as aliases of flows
-    v3_counts = dict(n_fecund='Women of childbearing age', n_fertile='Fecund women not infertile', n_susceptible='Fertile women not pregnant') # Starsim 3 counts (agents only)
-
     def init_results(self):
         super().init_results()
         kw = dict(dtype=float, scale=False)
-        self.define_results(*[ss.Result(k, label=f'{k.capitalize()} (= {v})', summarize_by='sum', auto_plot=False, **kw) for k,v in self.v3_results.items()],
+        self.define_results(
             ss.Result('maternal_deaths', label='Maternal deaths', summarize_by='sum', auto_plot=False, **kw),
             ss.Result('n_preterm', label='Preterm births', summarize_by='sum', auto_plot=False, **kw),
             ss.Result('n_very_preterm', label='Very preterm births', summarize_by='sum', auto_plot=False, **kw),
@@ -522,7 +447,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.Result('cbr', label='Crude birth rate', summarize_by='mean', **kw),
             ss.Result('tfr', label='Total fertility rate', summarize_by='sum', **kw),
             ss.Result('mmr', label='Maternal mortality ratio (per 100,000 births)', summarize_by='mean', auto_plot=False, **kw),
-            *[ss.Result(k, label=v, auto_plot=False, **kw) for k,v in self.v3_counts.items()],
         )
         self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
         return
@@ -533,21 +457,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self._nnd = 0
         if self.abm and self.fetus:
             self.results.n_unborn[self.ti] = np.count_nonzero(self.fetal.raw & self.sim.people.alive.raw)*self.sim._current_scale
-        if self.abm:
-            self.count_women()
         self.compute_asfr()
-        return
-
-    def count_women(self):
-        """ As agents: the counts of Starsim 3, of women of childbearing age (`min_age` to `max_age`, inclusive), those not infertile, and those also not pregnant """
-        ppl = self.sim.people
-        age = ppl.age.raw
-        fecund = ppl.alive.raw & ppl.female.raw & (age >= self.pars.min_age) & (age <= self.pars.max_age)
-        fertile = fecund & ~self.infertile.raw
-        susceptible = fertile & ~self.P.raw
-        scale = self.sim._current_scale
-        for key,mask in zip(self.v3_counts, [fecund, fertile, susceptible]):
-            self.results[key][self.ti] = np.count_nonzero(mask)*scale
         return
 
     def compute_asfr(self):
@@ -587,10 +497,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
     def finalize_results(self):
         super().finalize_results()
         res = self.results
-        for k,v in self.v3_results.items():
-            res[k][:] = res[v][:]
         res.maternal_deaths[:] += res.antepartum[:]
-        res.mmr[:] = sc.safedivide(res.maternal_deaths[:], res.births[:], default=0)*100e3 # Antepartum deaths and deaths at delivery, per 100,000 births
+        res.mmr[:] = sc.safedivide(res.maternal_deaths[:], res.birth[:], default=0)*100e3 # Antepartum deaths and deaths at delivery, per 100,000 births
         res.preterm_rate[:] = sc.safedivide(res.n_preterm[:], res.birth[:], default=0)
         inds = self.match_time_inds()
         units = self.pars.rate_units*self.t.dt_year
@@ -788,15 +696,6 @@ def add_lactation(sim):
         if isinstance(lact, Lactation):
             lact.link(mods)
     return
-
-
-class DeliveryTimes(ss.FloatArr):
-    """ The steps of the scheduled deliveries (`ss.Pregnancy.ti_delivery`): setting some reschedules them """
-    def __setitem__(self, key, value):
-        super().__setitem__(key, value)
-        uids = ss.uids(key) if not isinstance(key, ss.uids) else key
-        self.preg.set_delivery(uids, self[uids])
-        return
 
 
 def standardize_fertility_data(mod):

@@ -68,7 +68,7 @@ class FetalHealth(ss.Module):
     Each pregnancy gets a baseline weight percentile drawn at conception.
     Two modification levers are available:
 
-        1. **Delivery timing**: bring `ti_delivery` forward (preterm birth risk)
+        1. **Delivery timing**: bring the delivery (`ti_exit_P`) forward (preterm birth risk)
         2. **Growth restriction**: accumulate fractional weight reduction
 
     At delivery: `birth_weight = baseline_for_GA × percentile × (1 - restriction)`
@@ -248,13 +248,13 @@ class FetalHealth(ss.Module):
         shifts_ts = shift_weeks / weeks_per_ts
 
         min_ga_ts = self.pars.min_ga.weeks / weeks_per_ts
-        current_delivery = preg.ti_delivery[uids]
+        current_delivery = np.ceil(preg.ti_exit_P[uids]) # The step each delivery is due in
         new_delivery = current_delivery - shifts_ts
-        min_delivery = preg.ti_pregnant[uids] + min_ga_ts
+        min_delivery = preg.ti_P[uids] + min_ga_ts
         new_delivery = np.maximum(new_delivery, min_delivery)
 
         actually_shifted_ts = np.maximum(0, current_delivery - new_delivery)
-        preg.ti_delivery[uids] = np.minimum(current_delivery, new_delivery)
+        preg.set_delivery(uids, np.minimum(current_delivery, new_delivery))
         self.timing_shift[uids] += actually_shifted_ts * weeks_per_ts
         return
 
@@ -301,8 +301,8 @@ class FetalHealth(ss.Module):
         recover_wk   = recover_weeks[has_shift]
         recover_ts   = recover_wk / self.dt.weeks
 
-        current_delivery = preg.ti_delivery[recover_uids]
-        preg.ti_delivery[recover_uids] = current_delivery + recover_ts
+        current_delivery = np.ceil(preg.ti_exit_P[recover_uids])
+        preg.set_delivery(recover_uids, current_delivery + recover_ts)
         self.timing_shift[recover_uids] -= recover_wk
         return
 
@@ -332,7 +332,7 @@ class FetalHealth(ss.Module):
             tuple: (birth_weights, ga_weeks) arrays
         """
         preg = self.sim.people.pregnancy
-        ga_wk = (preg.ti_delivery[uids] - preg.ti_pregnant[uids]) * self.dt.weeks
+        ga_wk = (preg.ti_delivered[uids] - preg.ti_P[uids]) * self.dt.weeks # At delivery, which has just happened
 
         ref = self.pars.weight_by_ga
         baseline    = self.pars.interp_fn(ga_wk, ref[:, 0], ref[:, 1])
@@ -414,7 +414,7 @@ class treat_pregnant(ss.Intervention):
         fh      = sim.custom['fetal_health']
 
         # Find pregnant women infected with the target disease
-        eligible = preg.pregnant & disease.infected
+        eligible = preg.P & disease.infected
         treated = self.pars.p_treat.filter(eligible)
         if len(treated):
             # Cure infection
@@ -524,12 +524,12 @@ class fetal_infection(ss.Connector):
         """ Each timestep, check for new infections in pregnant women and apply damage """
         sim  = self.sim
         preg = sim.people.pregnancy
-        if not preg.pregnant.any():
+        if not preg.P.any():
             return
 
         # Find pregnant women infected on the previous timestep (since transmission happens after connectors; dated at its end, see ss.Disease.ti_entry), excluding new pregnancies (handled at conception)
-        pregnant_uids  = preg.pregnant.uids
-        newly_infected = (sim.diseases.sir.ti_infected == self.ti) & (preg.ti_pregnant < self.ti)
+        pregnant_uids  = preg.P.uids
+        newly_infected = (sim.diseases.sir.ti_infected == self.ti) & (preg.ti_P < self.ti)
         affected = pregnant_uids[newly_infected[pregnant_uids]]
         if len(affected):
             self.fh.n_exposures[affected] += 1

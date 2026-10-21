@@ -133,119 +133,6 @@ def test_queue():
     return out
 
 
-def test_resource():
-    sc.heading('Testing a resource shared by steps: by their class (priority), then pro rata')
-    def make(ranks=(1, 2), **kwargs):
-        sis = make_sis()
-        clinic = ss.Resource(ss.perday(300))
-        drug = ss.Treatment(moves=sis.cure)
-        symptomatic = ss.treat(drug, where=sis.I, uses=clinic, priority=ranks[0])
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), coverage=0.1, interval=1, uses=clinic, priority=ranks[1])
-        treatment = ss.treat(drug, who=screening.positive)
-        return ss.Sim(sis, interventions=[symptomatic, screening, treatment], **kwargs)
-    sims = run_both(make, stop=60)
-    for solver,sim in sims.items():
-        res = sim.results
-        used = res.symptomatic.delivered + res.screening.delivered
-        assert np.allclose(res.clinic.used, used) and np.allclose(res.clinic.available[:-1], 300)
-        assert np.allclose(res.clinic.fraction_used[:-1], used[:-1]/300)
-        full = res.symptomatic.delivered[:-1] > 299.99 # Symptomatic first: screening gets what is left
-        assert full[0] and np.all(res.screening.delivered[:-1][full] < 1e-9)
-        assert np.allclose(used[:-1], 300) and not full.all() # The rest of the clinic's time is spent on screening
-        assert res.screening.delivered.sum() > 1000
-    check_close(sims, lambda sim: sim.results.screening.delivered.sum(), rtol=0.15)
-
-    # Equal priorities: shared pro rata, by what each would serve
-    for solver,sim in run_both(make, stop=10, ranks=(0, 0)).items():
-        res = sim.results
-        n_I = res.sis.n_I[0]
-        share = res.symptomatic.delivered[0]/(res.symptomatic.delivered[0] + res.screening.delivered[0])
-        expected = n_I/(n_I + 0.1*50_000)
-        assert np.isclose(share, expected, rtol=0.1), f'{solver}: {share:.3f} vs {expected:.3f}'
-    return sims
-
-
-def make_tx(name='tx'):
-    """ Infection, and treatment as a state: started only by a delivery, and stopped at a rate """
-    S, I, T = ss.states('S I T')
-    return ss.Disease(infection=S >> I @ 0.002*(I + T), start=I >> T, dropout=T >> I @ ss.days(200), init=dict(I=0.4), name=name)
-
-
-def test_target():
-    sc.heading('Testing stock targets: the gap delivered each step, removal over it, by stratum, and as a share')
-    n_on = ss.timeseries({0: 0, 50: 8000, 100: 4000}, mode='linear') # People
-    def make(target=n_on, **kwargs):
-        tx = make_tx()
-        prog = ss.treat(ss.Treatment(moves=tx.start), target=target, above=tx.dropout)
-        return ss.Sim(tx, interventions=prog, **kwargs)
-    sims = run_both(make, stop=150)
-    for solver,sim in sims.items():
-        r = sim.results.prog
-        assert np.allclose(r.holding[1:149], r.target[1:149], atol=5.1), f'{solver}: {np.abs(r.holding - r.target)[1:149].max()}' # Within an agent (5 people)
-        assert np.allclose(r.holding[10:149], sim.results.tx.n_T[11:150], rtol=0.015) # The number on treatment at the start of each step, less those who stop during it (about 0.5%, give or take an agent of 5 people)
-        assert r.stopped[50:100].sum() > 0 and r.stopped[:50].sum() == 0 and r.shortfall.max() < 5.1
-        assert any('counts tx.T' in note for note in sim.notes)
-    check_close(sims, lambda sim: sim.results.prog.stopped.sum(), rtol=0.15) # Agents vary by about 6% between runs
-
-    # By stratum, and a share of some people
-    def by_risk(**kwargs):
-        tx = make_tx().stratify(risk=['low', 'high'], split=[0.5, 0.5])
-        prog = ss.treat(ss.Treatment(moves=tx.start), target=ss.by(risk=[1000, 3000]))
-        return ss.Sim(tx, interventions=prog, **kwargs)
-    for solver,sim in run_both(by_risk, stop=30).items():
-        n_T = sim.results.tx.n_T.by('risk').values
-        assert np.allclose(n_T[2:29], [1000, 3000], rtol=0.02), f'{solver}: {n_T[2:5]}' # Less those who stopped in the step (about 0.5%), give or take an agent of 5 people
-    def shared(**kwargs):
-        sir = make_sir().stratify(age=[0, 15, 65])
-        adults = ss.ppl.age >= 15
-        vmmc = ss.vaccinate(ss.Vaccine(efficacy=0.6), target=ss.share(ss.timeseries({0: 0.2, 20: 0.6}, mode='linear'), among=adults), coverage=0.5)
-        return ss.Sim(sir, interventions=vmmc, **kwargs)
-    for solver,sim in run_both(shared, stop=30).items():
-        r = sim.results.vmmc
-        n_adults = sim.results.sir.n_S.by('age').values[0, 1:].sum() + sim.results.sir.n_I.by('age').values[0, 1:].sum()
-        assert np.isclose(r.holding[25], 0.6*n_adults, rtol=0.02) and np.isclose(r.target[10], 0.4*n_adults, rtol=0.02)
-        assert np.isclose(r.delivered.by('age').values[:, 0].sum(), 0) # Only adults
-    return sims
-
-
-def test_target_stop():
-    sc.heading('Testing above= a target that falls: "stop" follows it down, lowest priority first, and a rate drifts down')
-    n = ss.timeseries({0: 0, 20: 4000, 40: 1000}, mode='linear') # People: up, then down
-    def make(above='stop', **kwargs):
-        sir = make_sir().stratify(risk=['low', 'high'], split=[0.8, 0.2])
-        prog = ss.vaccinate(ss.Vaccine(efficacy=0.9), target=n, above=above, priority=[sir.risk == 'high'], name='prog')
-        return ss.Sim(sir, interventions=prog, **kwargs)
-    for solver,sim in run_both(make, stop=50, pop=10_000).items():
-        r = sim.results.prog
-        assert np.allclose(r.holding[1:50], r.target[1:50], rtol=0.01, atol=5.1), f'{solver}: {np.abs(r.holding - r.target)[1:50].max()}'
-        stopped = r.stopped.by('risk').values.sum(axis=0) # 3000 stopped: all 2000 of the low risk first, then 1000 of the high
-        assert np.allclose(stopped, [2000, 1000], atol=5.1), f'{solver}: {stopped}'
-    for solver,sim in run_both(make, stop=50, pop=10_000, above=ss.perday(0.05)).items(): # At a rate, toward the target
-        r = sim.results.prog
-        assert r.target[45] < r.holding[45] < r.holding[30] < r.holding[20] and r.stopped.by('risk').values[:, 1].sum() == 0, solver
-    return sim
-
-
-def test_target_limits():
-    sc.heading('Testing a target within a capacity, and a target on a counter')
-    def make(**kwargs):
-        prog = ss.vaccinate(ss.Vaccine(efficacy=0.9), target=2000, capacity=ss.perday(100), coverage=0.5, name='prog')
-        return ss.Sim(make_sir(), interventions=prog, **kwargs)
-    for solver,sim in run_both(make, stop=30, pop=10_000).items(): # 100 a day toward 2000: only the gap not served is lost, not everyone chosen
-        r = sim.results.prog
-        assert np.allclose(r.holding[:19], 100*np.arange(1, 20), atol=5.1) and np.allclose(r.holding[20:29], 2000, atol=5.1), solver
-        assert np.allclose(r.lost_capacity[:19], 2000 - r.holding[:19], atol=5.1) and r.lost_capacity[20:].sum() == 0, solver
-    def counter(**kwargs): # A target on a counter counts those it has reached
-        camp = ss.Delivery(increment='doses', coverage=0.5, target=3000, name='camp')
-        sim = ss.Sim(make_sir(), interventions=camp, **kwargs)
-        return sim.stratify(doses=[0, 1, 2])
-    for solver,sim in run_both(counter, stop=10, pop=10_000).items():
-        assert np.allclose(sim.results.camp.holding[1:9], 3000, atol=5.1), solver
-    with pytest.raises(ValueError, match='goes down'):
-        ss.Sim(make_sir(), interventions=ss.Delivery(increment=dict(doses=-1), target=10), verbose=0).stratify(doses=[0, 1]).init()
-    return sim
-
-
 def test_memory():
     sc.heading('Testing delivery memory: once per spell, .ever, .since, .held, and doses')
 
@@ -336,7 +223,7 @@ def test_same_visit():
 # %% Acceptance tests: the worked examples of proposal 02, small
 
 def test_hiv_art():
-    sc.heading('Acceptance: HIV ART as a stock target, lowest CD4 first, with removal over the target (hiv/port.py art_deliver)')
+    sc.heading('Acceptance: HIV ART within a capacity, lowest CD4 first (hiv/port.py art_deliver)')
     def make(prioritize=True, **kwargs):
         S, acute, cd4_hi, cd4_mid, cd4_lo, on_art, post_art = ss.states('S acute cd4_hi cd4_mid cd4_lo on_art post_art') # CD4 as states, so it runs both ways
         hiv = ss.Disease(
@@ -350,20 +237,17 @@ def test_hiv_art():
             relapse    = post_art >> cd4_lo @ ss.years(1),
             init=dict(cd4_hi=0.04, cd4_mid=0.03, cd4_lo=0.02), name='hiv',
         )
-        n_art = ss.timeseries({2000: 0, 2005: 3000, 2010: 6000, 2012: 4000}, mode='linear') # People, from data
         priority = [hiv.cd4_lo, hiv.post_art, hiv.cd4_mid, hiv.cd4_hi] if prioritize else None # Lowest CD4 first
-        art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), target=n_art, priority=priority, above=hiv.dropout)
+        art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), capacity=ss.peryear(1200), priority=priority)
         return ss.Sim(hiv, interventions=art_prog, start=2000, stop=2014, dt=ss.months(1), unit='year', **kwargs) # The bare numbers (the years) are years
     kwa = dict(verbose=0)
     sims = sc.objdict(ode=make(solver='ode', total_pop=100_000, **kwa).run(), abm=make(solver='abm', total_pop=100_000, n_agents=20_000, **kwa).run())
     base = sc.objdict(ode=make(prioritize=False, solver='ode', total_pop=100_000, **kwa).run(), abm=make(prioritize=False, solver='abm', total_pop=100_000, n_agents=20_000, **kwa).run())
     for solver,sim in sims.items():
         r, res, res0 = sim.results.art_prog, sim.results.hiv, base[solver].results.hiv
-        assert np.allclose(r.holding[1:-1], r.target[1:-1], atol=10.1), f'{solver}: {np.abs(r.holding - r.target)[1:-1].max():.1f}' # Within two agents (as agents, a dwell on ART drawn shorter than a step ends at once)
-        assert r.stopped[132:144].sum() > 0 and r.stopped[:120].sum() == 0 # Over the target in 2011-2012 only
+        assert np.allclose(r.delivered[:-1], 100, atol=5.1), f'{solver}: {r.delivered[:-1].min():.1f}' # 100 a month, within an agent
         k = 30 # The lowest CD4 is treated first: fewer left in it than at random, and more in the highest
-        assert res0.n_cd4_lo[k] - res.n_cd4_lo[k] > 0.5*r.target[k] and res.n_cd4_hi[k] > res0.n_cd4_hi[k]
-        assert any('counts hiv.on_art' in note for note in sim.notes)
+        assert res.n_cd4_lo[k] < 0.8*res0.n_cd4_lo[k] and res.n_cd4_hi[k] > res0.n_cd4_hi[k], f'{solver}: {res.n_cd4_lo[k]:.0f} vs {res0.n_cd4_lo[k]:.0f}'
     check_close(sims, lambda sim: sim.results.hiv.aids_death.sum(), rtol=0.15)
     return sims
 
@@ -387,7 +271,7 @@ def test_hpv_algorithm():
         tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~hpv.CA), who=primary.positive, coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6))
         ablate = ss.treat(ss.Treatment(moves={hpv.excised: 0.85}, name='ablation'), who=tx_visit.positive)
         excise = ss.treat(ss.Treatment(moves={hpv.excised: 0.95}, name='excision'), who=tx_visit.negative)
-        return ss.Sim(hpv, interventions=ss.cascade(primary, tx_visit, ablate, excise), start=2015, stop=2030, dt=ss.months(3), use_aging=False, **kwargs)
+        return ss.Sim(hpv, interventions=[primary, tx_visit, ablate, excise], start=2015, stop=2030, dt=ss.months(3), use_aging=False, **kwargs)
     kwa = dict(verbose=0)
     with pytest.raises(ss.CapabilityError): # The queue, and hpv_dna.since
         make(solver='ode', total_pop=100_000, **kwa).init()
@@ -428,10 +312,10 @@ def test_clinic():
     sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial), as agents')
     def make(**kwargs):
         ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
-        clinic = ss.Resource(ss.perweek(250))
         discharge = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})
-        syndromic = ss.treat(discharge, where=ng.C | ct.C, uses=clinic, queue=ss.days(28), priority=1)
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), uses=clinic, priority=2)
+        syndromic = ss.treat(discharge, where=ng.C | ct.C, capacity=ss.perweek(250), queue=ss.days(28))
+        left = lambda sim: 250 - sim.interventions.syndromic.results.delivered[sim.ti] # What symptomatic care leaves of the clinic's week (it runs first)
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), capacity=left)
         treatment = ss.treat(discharge, who=screening.positive)
         return ss.Sim([ng, ct], interventions=[syndromic, screening, treatment], dt=7, **kwargs)
     check_agents(make, stop=364, pop=20_000) # The queue
@@ -439,7 +323,7 @@ def test_clinic():
     for solver,sim in sims.items():
         res = sim.results
         used = res.syndromic.delivered + res.screening.delivered
-        assert np.allclose(res.clinic.used, used) and np.all(used <= 250.01)
+        assert np.all(used <= 250.01)
         full = res.syndromic.delivered > 249.99
         assert full.any() and np.all(res.screening.delivered[full] < 1e-9) # Screening only gets what symptomatic care leaves
         assert res.screening.delivered.sum() > 0
@@ -455,15 +339,12 @@ def test_rescreen():
     def make(**kwargs):
         sir = make_sir()
         test = ss.Diagnostic()
-        primary = ss.screen(test, who=test.since >= ss.years(5), coverage=ss.probperyear(0.3), count_events=True)
+        primary = ss.screen(test, who=test.since >= ss.years(5), coverage=ss.probperyear(0.3))
         return ss.Sim(sir, interventions=primary, start=2020, stop=2040, dt=ss.months(3), **kwargs)
     kwa = dict(verbose=0)
     with pytest.raises(ss.CapabilityError): # test.since
         make(solver='ode', total_pop=10_000, **kwa).init()
     sims = sc.objdict(abm=make(total_pop=10_000, n_agents=10_000, **kwa).run())
-    df = sims.abm.interventions.primary.events_df()
-    tested = df[df.event == 'primary'].sort_values(['uid', 'time'])
-    assert tested.groupby('uid').time.diff().dropna().min() >= np.timedelta64(5*365, 'D') # As agents: nobody screened twice within 5 years
     for solver,sim in sims.items():
         d, e = sim.results.primary.delivered, sim.results.primary.eligible
         assert np.isclose(d[0], 10_000*(1 - 0.7**0.25), rtol=0.05)
@@ -499,10 +380,6 @@ if __name__ == '__main__':
     people = test_people()
     priority = test_priority()
     queue = test_queue()
-    resource = test_resource()
-    target = test_target()
-    tstop = test_target_stop()
-    limits = test_target_limits()
     memory = test_memory()
     visit = test_same_visit()
     hiv = test_hiv_art()

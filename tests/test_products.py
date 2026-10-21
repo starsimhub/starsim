@@ -349,7 +349,7 @@ def test_hpv_screen_treat():
         tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~any_ca), who=primary.positive, coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6), name='tx_visit')
         ablate = ss.treat(tx('ablation', 0.936), who=tx_visit.positive, name='ablate')
         excise = ss.treat(tx('excision', 0.81), who=tx_visit.negative, name='excise')
-        return ss.Sim(genos, interventions=ss.cascade(primary, tx_visit, ablate, excise), **kwargs)
+        return ss.Sim(genos, interventions=[primary, tx_visit, ablate, excise], **kwargs)
     check_agents(make) # A queue, and hpv_dna.since
     sim = run_abm(make)
     cap = 10*365.25/4/7 # 10 a week, about 13 weeks a quarter

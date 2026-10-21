@@ -126,7 +126,7 @@ vocabulary = {
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
     'Mixing and space': ('Network RandomNet MFNet StaticNet MixingPool MixingPools PartnerNet contacts geo Mobility gravity', 'PartnerNet contacts geo Mobility gravity'),
-    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat visit cascade', 'all'),
+    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
     'Running, comparing, saving': ('MultiSim parallel options compare_models optimize diff load save', 'compare_models optimize diff'),
     'Optional metadata': ('Requires', 'all'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar Fit', 'Fit'),
@@ -140,7 +140,7 @@ DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModelComparison Modifi
 Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results SEIR SIR SIS SexualNetwork SimPars beta_dist beta_mean
 check_requires check_sims_match choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
 mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink standardize_data standardize_netkey state any child mother attr func spread on Resource share stay clock style to_code uids warn
+show shrink standardize_data standardize_netkey state any child mother attr func spread on stay clock style to_code uids warn
 """.split()
 
 

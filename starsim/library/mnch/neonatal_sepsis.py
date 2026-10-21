@@ -30,7 +30,7 @@ Usage::
 
     # NND results are on the Pregnancy module, not the disease
     print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
-    print('Total births:', sim.results.pregnancy.births.sum())
+    print('Total births:', sim.results.pregnancy.birth.sum())
 """
 
 import numpy as np

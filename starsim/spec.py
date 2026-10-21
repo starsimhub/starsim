@@ -508,8 +508,8 @@ def modify_code(mod, mods):
     return f"ss.modify({', '.join(args)}, name={mod['name']!r})"
 
 
-delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen', 'visit']
-delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease', 'cost', 'count_events']
+delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen']
+delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease']
 cond_keys = ['where', 'on', 'detects']
 
 
@@ -559,8 +559,6 @@ def delivery_code(iv, mods):
     def value(key, val):
         if key in cond_keys and isinstance(val, str) and not isinstance(val, Code):
             return cond_code(val, mods)
-        elif key == 'count_events' and isinstance(val, list):
-            return '[' + ', '.join(cond_code(v, mods) for v in val) + ']'
         return code_value(val)
     args = []
     prod = iv.get('product_spec')
@@ -577,7 +575,7 @@ def delivery_code(iv, mods):
 
 def interventions_code(mods, diseases, lines):
     """
-    The deliveries, cascades, and modifiers of the model spec as Python: each product and delivery as a variable (so that a step can be
+    The deliveries and modifiers of the model spec as Python: each product and delivery as a variable (so that a step can be
     triggered by another's event, e.g. `who=screening.positive`), defined before the steps that refer to them; returns what goes in
     `interventions=`, and the lines that define them are added to `lines`
     """
@@ -592,7 +590,7 @@ def interventions_code(mods, diseases, lines):
     deliveries = [m for m in mods if m.get('type') in delivery_types]
     for prod in {iv['product_spec']['name']:iv['product_spec'] for iv in deliveries if iv.get('product_spec') is not None}.values():
         names[prod['name']] = (var(prod['name']), set())
-    for m in deliveries + [m for m in mods if m.get('type') == 'cascade']:
+    for m in deliveries:
         names[m['name']] = (var(m['name']), set())
     refs = sc.mergedicts(diseases, names)
     defined = set()
@@ -607,19 +605,13 @@ def interventions_code(mods, diseases, lines):
         lines.append(f"{names[iv['name']][0]} = {delivery_code(iv, refs)}")
         defined.add(iv['name'])
         todo.remove(iv)
-    in_cascade = set()
-    for m in mods:
-        if m.get('type') == 'cascade':
-            kwargs = f", count_events={code_value(m['count_events'])}" if m.get('count_events') is not None else ''
-            lines.append(f"{names[m['name']][0]} = ss.cascade({', '.join(names[s][0] for s in m['steps'])}{kwargs}, name={m['name']!r})")
-            in_cascade |= set(m['steps'])
     out = []
     for m in mods: # In the order given (anything else is listed as not written: see to_code())
         if m.get('type') == 'modify':
             out.append(modify_code(m, diseases))
         elif contacts_code(m):
             out.append(contacts_code(m))
-        elif m.get('type') in delivery_types + ['cascade'] and m['name'] not in in_cascade:
+        elif m.get('type') in delivery_types:
             out.append(names[m['name']][0])
     return out
 
@@ -661,9 +653,9 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
             continue
         mods = with_functions(spec.get(key) or [], funcs, left)
         for mod in mods:
-            if mod.get('type') not in ['modify'] + delivery_types + ['cascade'] and not contacts_code(mod):
+            if mod.get('type') not in ['modify'] + delivery_types and not contacts_code(mod):
                 left.append(f'{key[:-1]} "{mod.get("name", "?")}" ({mod.get("type", "?")}): add it to ss.Sim({simkey}=...)')
-        written = interventions_code(mods, owners(spec), prelude) # Deliveries and cascades as variables, defined before the sim
+        written = interventions_code(mods, owners(spec), prelude) # Deliveries as variables, defined before the sim
         if written:
             extra[simkey] = '[' + ', '.join(written) + ']'
     lines = []

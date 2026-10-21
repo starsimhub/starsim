@@ -190,23 +190,12 @@ def test_burnin_pregnancies():
 
 
 @sc.timer()
-def test_v3_results():
-    sc.heading('Testing the Starsim 3 results: the maternal mortality ratio and the counts of fecund, fertile, and susceptible women')
+def test_mmr():
+    sc.heading('Testing the maternal mortality ratio')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2))
-    counts = []
-    def check(sim):
-        p, ppl = sim.demographics.pregnancy, sim.people
-        fecund = ppl.alive & ppl.female & (ppl.age >= p.pars.min_age) & (ppl.age <= p.pars.max_age)
-        fertile = fecund & ~p.infertile
-        counts.append([fecund.sum(), fertile.sum(), (fertile & ~p.pregnant).sum()])
-    sim = ss.Sim(demographics=preg, analyzers=check, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
+    sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
-    counts = np.array(counts)
-    for i,key in enumerate(['n_fecund', 'n_fertile', 'n_susceptible']):
-        assert np.array_equal(r[key].values, counts[:,i]), key
-    assert np.all(r.n_fertile.values < r.n_fecund.values) and np.all(r.n_susceptible.values < r.n_fertile.values)
-
-    births, md = r.births.values, r.maternal_deaths.values
+    births, md = r.birth.values, r.maternal_deaths.values
     assert md.sum() > 30
     assert np.allclose(r.mmr.values, sc.safedivide(md, births, default=0)*100e3), 'MMR: maternal deaths per 100,000 births'
     assert r.mmr.summarize_by == 'mean'
@@ -480,15 +469,12 @@ def test_starsim3():
             p.add_delivery_callback(lambda moms, kids: seen.__setitem__('delivered', seen.delivered + len(kids)))
     sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), analyzers=count, n_agents=5000, **kw).run()
     r, p = sim.results, sim.demographics.pregnancy
-    assert r.d.flag.sum() > 0.5*r.pregnancy.pregnancies.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
+    assert r.d.flag.sum() > 0.5*r.pregnancy.conception.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
     assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
-    assert np.all(p.pregnant[p.pregnant.uids]) and np.all(p.ti_delivery[p.pregnant.uids] >= p.ti)
-    assert np.nanmax(p.gestation[p.pregnant.uids]) < 45 and np.all(p.parity >= 0)
-    tris = [p.tri1_uids, p.tri2_uids, p.tri3_uids] # Starsim 3 names read by STIsim (e.g. BV, PMTCT)
-    assert all(len(t) for t in tris) and sum(len(t) for t in tris) == len(p.pregnant.uids)
-    p.set_ptb()
-    assert np.all(p.rel_ptb[p.pregnant.uids] > 0)
-    assert seen.conceived > 0.8*r.pregnancy.pregnancies.sum() and seen.delivered > 0.8*r.pregnancy.births.sum()
+    assert np.all(np.ceil(p.ti_exit_P[p.P.uids]) >= p.ti) and np.all(p.parity >= 0) # Each due at the end of this step or later
+    assert np.max((p.ti - p.ti_P[p.P.uids])*p.t.dt.weeks) < 45 # Weeks of gestation
+    assert np.all(p.rel_ptb[p.P.uids] > 0)
+    assert seen.conceived > 0.8*r.pregnancy.conception.sum() and seen.delivered > 0.8*r.pregnancy.birth.sum()
     born = (sim.people.age > 0) & np.isfinite(p.gestation_at_birth)
     assert born.sum() > 100 and np.isclose(r.pregnancy.n_preterm.sum(), np.sum(p.gestation_at_birth[born.uids] < 37), rtol=0.2)
 
@@ -500,17 +486,17 @@ def test_starsim3():
 
 
 def test_delivery_shift():
-    """ Setting ti_delivery reschedules deliveries, as code written for Starsim 3 does (e.g. ssl.mnch.FetalHealth) """
+    """ set_delivery() reschedules deliveries, as ssl.mnch.FetalHealth does """
     sc.heading('Testing rescheduled deliveries')
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=False), n_agents=3000, **kw)
     sim.init()
     sim.run(until=24)
     p = sim.demographics.pregnancy
     uids = p.P.uids
-    due = p.ti_delivery[uids]
+    due = np.ceil(p.ti_exit_P[uids])
     later = uids[due > p.ti + 3]
-    p.ti_delivery[later] = p.ti + 1 # Due at the next step
-    assert np.all(p.ti_delivery[later] == p.ti + 1)
+    p.set_delivery(later, p.ti + 1) # Due at the next step
+    assert np.all(np.ceil(p.ti_exit_P[later]) == p.ti + 1)
     sim.run(until=sim.ti + 2)
     assert not np.any(p.P[later]) and np.all(p.ti_delivered[later] >= p.ti - 2), 'Every rescheduled delivery happened'
     return sim
@@ -668,7 +654,7 @@ if __name__ == '__main__':
     starsim3 = test_starsim3()
     shift = test_delivery_shift()
     npreg = test_burnin_pregnancies()
-    v3res = test_v3_results()
+    mmr = test_mmr()
     syph = test_syphilis()
     pp = test_postpartum()
     T.toc()

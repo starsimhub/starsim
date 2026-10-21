@@ -115,7 +115,7 @@ from .products import Product, Vaccine, Treatment, Diagnostic
 
 t('interventions')
 from .interventions import (
-    Intervention, Event, Delivery, Resource, vaccinate, treat, screen, visit, cascade, share,
+    Intervention, Event, Delivery, vaccinate, treat, screen,
 )
 
 t('analyzers')

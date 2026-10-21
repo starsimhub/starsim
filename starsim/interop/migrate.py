@@ -16,7 +16,7 @@ networks transmit one way), and the time index: in
 `update_results()` and in analyzers, `self.ti` is the end of the step, so an event dated
 during the step is at `self.ti - 1`; and a result written in `step()` goes at `self.ti + 1`; and, from Starsim 4's
 prereleases, a test's follow-ups nested in it (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of
-their own, grouped with it in a cascade, and `ss.Test`, now `ss.Diagnostic`.
+their own (to add to the interventions), and `ss.Test`, now `ss.Diagnostic`.
 Read the diff afterwards: each change is listed with its line.
 """
 import re
@@ -258,7 +258,7 @@ def migrate_ast(text, analyzers=None):
             else:
                 found.append((val.lineno, f'the beta pair {ast.unparse(val)} on "{key}" was [p1 to p2, p2 to p1]: on a network with acts, give ss.peract() with a value for each of its directions (net.directions, e.g. m2f and f2m for sides m and f); on any other network, one value'))
 
-    # A test with follow-ups nested in it, from Starsim 4's prereleases: each follow-up a step of its own, grouped with the test in a cascade under the same variable
+    # A test with follow-ups nested in it, from Starsim 4's prereleases: each follow-up a step of its own, to add to the interventions
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Call):
             if any(kw.arg in ['on_positive', 'on_negative'] for kw in node.value.keywords):
@@ -267,9 +267,9 @@ def migrate_ast(text, analyzers=None):
                 indent = line[:len(line) - len(line.lstrip())]
                 stmts, steps = split_followups(var, node.value, found, node.lineno)
                 if len(steps) > 1:
-                    stmts.append(ast.parse(f"{var} = ss.cascade({', '.join(steps)}, name='{var}_cascade')").body[0])
+                    found.append((node.lineno, f'add {sc.strjoin(steps[1:])} to the interventions, beside {var}: the follow-ups are steps of their own'))
                 text = ''.join(f'{indent}{ast.unparse(ast.fix_missing_locations(stmt))}\n' for stmt in stmts)
-                edits.add_lines(node, text, f'the follow-ups of {var} are steps of their own, triggered by its results (who={var}.positive), grouped with it in a cascade (which runs as its steps would as a list)')
+                edits.add_lines(node, text, f'the follow-ups of {var} are steps of their own, triggered by its results (who={var}.positive)')
 
     # Calls to the methods of the base written as code, e.g. ss.SIS.set_prognoses(self, ...)
     for node in ast.walk(tree):

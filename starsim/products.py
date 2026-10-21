@@ -14,7 +14,7 @@ class EventSource:
 
     Each is a condition that triggers a delivery (`ss.treat(who=screening.positive)`), and remembers per person whether
     (`.ever`), how often (`.count`), and how long ago (`.since`) it happened, including on the current step once the delivery
-    that fired it has run. The memory is kept only for the events that something in the sim reads, or with `count_events=`.
+    that fired it has run. The memory is kept only for the events that something in the sim reads.
     """
     def outcome_names(self):
         """ The names of its outcomes, e.g. ['positive', 'negative'] for a test """
@@ -62,15 +62,14 @@ class EventSource:
         return AttributeError(f'"{name}" has no attribute or outcome "{attr}"; its outcomes (events) are {sc.strjoin(names) if names else "none"}{ss.transitions.did_you_mean(attr, names)}')
 
     def init_events(self, sim):
-        """ Before a run: the people of each event on the current step, and the memory and log the sim needs (as agents, arrays of each person's last time and count) """
+        """ Before a run: the people of each event on the current step, and the memory the sim needs (as agents, arrays of each person's last time and count) """
         self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
         self._pending = [] # Fired, not yet in the memory: (outcome, entry)
-        self._log = [] # (time index, outcome, UIDs) for count_events=
         needs = ss.interventions.memory_needs(sim)
         self._needs = {o:needs[(self.name, o)] for o in [None] + self.outcome_names() if (self.name, o) in needs}
         self._mem = {}
         if sim.solver == 'abm':
-            for o,need in self._needs.items():
+            for o in self._needs:
                 key = 'event' if o is None else o
                 last, count = ss.FloatArr(f'last_{key}', label=f'Time index of the last {key}'), ss.FloatArr(f'count_{key}', default=0, label=f'Number of times: {key}')
                 for arr in [last, count]:
@@ -93,8 +92,6 @@ class EventSource:
         live.append(entry)
         if outcome in self._needs:
             self._pending.append((outcome, entry))
-            if self._needs[outcome].log and sim.solver == 'abm':
-                self._log.append((ti, outcome, entry[1]))
         ss.interventions.trigger_moves(self, outcome, entry[1], eng, entry[2])
         return
 
@@ -133,11 +130,6 @@ class EventSource:
                 ss.interventions.remember_levels(self, outcome, sel, before, eng)
         self._pending = keep
         return
-
-    def events_df(self):
-        """ The log of events kept with count_events=, as agents: one row for each person and event """
-        rows = [(int(uid), self.sim.t.timevec[t] if t < len(self.sim.t.timevec) else t, self.name if o is None else f'{self.name}.{o}') for t,o,uids in self.__dict__.get('_log', []) for uid in uids]
-        return sc.dataframe(rows, columns=['uid', 'time', 'event'])
 
 
 class Product(EventSource, ss.Module):

@@ -46,7 +46,7 @@ Usage::
     sim.run()
 
     # Check results; note that stillbirths are recorded by the Pregnancy module
-    print('Stillbirths:', sim.results.pregnancy.stillbirths.sum())
+    print('Stillbirths:', sim.results.pregnancy.stillbirth.sum())
     print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 """
 

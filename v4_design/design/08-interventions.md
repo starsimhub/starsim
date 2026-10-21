@@ -79,7 +79,7 @@ Products are nouns for things (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`); t
 ss.vaccinate(vaccine, who=None, **delivery)
 ss.screen(diagnostic, who=None, **delivery)
 ss.treat(treatment, who=None, **delivery)
-ss.visit(who=None, cost=None, **delivery)       # a step people attend, with no product
+ss.Delivery(who=None, **delivery)               # a step people attend, with no product (a visit)
 ```
 
 `who=` says who receives it, and the product is `what=`, also the first argument (`ss.screen(cytology, who=due)` is `ss.screen(who=due, what=cytology)`). `who=` takes:
@@ -113,8 +113,7 @@ With an event in it, delivery is triggered; otherwise it is routine or in rounds
 | `move=` | instead of a product, a move between two states for the people reached, e.g. `move='S -> V'` (a one-off campaign); with `capacity=`, it seeds a number of people on a schedule |
 | `trace=` | deliver to the contacts, in this network (or these), of the people that the event in `who=` selects, instead of to them (contact tracing, partner notification). Agents only |
 | `deliver=` | a function of the sim returning who receives it this step ([below](#the-deliver-function)) |
-| `disease=` | the disease the product acts on (default: the only one; for `ss.visit`, the disease of its trigger, or the first). A list or an `ss.Strains` (HP7) delivers it for each: a vaccine's efficacy against each disease, a test detecting each one's infected (or each one's state of a name, `results=dict(high=dict(cin=0.9))`), the worst result over them per person, and a cure of each one's infected; as if its values were keyed by disease, which they then are. A list is agents only (decided 2026-10-20); a product keyed by the diseases itself (`ss.Vaccine(efficacy=dict(hpv16=0.9, hpv18=0.9))`, `ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})`, or a test's `sensitivity=` by their states, whose diseases are then tracked jointly) has a compartmental form. A disease written as code (PL2) is a `disease=` too, as agents: a test detects its `infected`, a cure calls its `clear_infection(uids)`, and a vaccine scales its `rel_sus` and `rel_trans`; a missing part raises naming it |
-| `count_events=` | keep the [memory](#memory-ever-count-since) of every event of the step (`True`), or of those listed (`[screening.positive]`), whether or not something reads it; as agents, also a log of each person's events (`events_df()`) |
+| `disease=` | the disease the product acts on (default: the only one; for a step with no product, the disease of its trigger, or the first). A list or an `ss.Strains` (HP7) delivers it for each: a vaccine's efficacy against each disease, a test detecting each one's infected (or each one's state of a name, `results=dict(high=dict(cin=0.9))`), the worst result over them per person, and a cure of each one's infected; as if its values were keyed by disease, which they then are. A list is agents only (decided 2026-10-20); a product keyed by the diseases itself (`ss.Vaccine(efficacy=dict(hpv16=0.9, hpv18=0.9))`, `ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})`, or a test's `sensitivity=` by their states, whose diseases are then tracked jointly) has a compartmental form. A disease written as code (PL2) is a `disease=` too, as agents: a test detects its `infected`, a cure calls its `clear_infection(uids)`, and a vaccine scales its `rel_sus` and `rel_trans`; a missing part raises naming it |
 
 <!-- fragment -->
 ```python
@@ -123,7 +122,7 @@ ss.vaccinate(bcg, who=ppl.age < 5, coverage=0.7, interval=ss.years(1), start=202
 ss.vaccinate(bcg, coverage=0.9, start=2021, at_age=ss.months(9))                        # routine: each child as they reach 9 months
 ```
 
-**Rounds and routine delivery.** With `at=` or `interval=`, delivery happens in rounds, and in each round every eligible person is offered the product once. With only `start=`/`stop=` (or nothing), delivery is routine: each person is offered the product once, at the first step on which they are eligible, and the record that they were offered it is a property of people named `offered_<delivery>`. Routine versus campaign is therefore a keyword, not a class. A routine delivery by age is given as people reach the age: on its first step, the people already past it (eligible a step earlier, and not eligible as newborns) are recorded as offered it, so `at_age=ss.months(9)` (the same as `where=ppl.age >= 0.75`) vaccinates children as they turn 9 months and not everyone older on the first day, while `where=ppl.age < 5` reaches every child under 5. A catch-up of those already older is a campaign round.
+**Rounds and routine delivery.** With `at=` or `interval=`, delivery happens in rounds, and in each round every eligible person is offered the product once. With only `start=`/`stop=` (or nothing), delivery is routine: each person is offered the product once in each spell of being eligible, at its first step, and the record that they were offered it is a property of people named `offered_<delivery>`. Routine versus campaign is therefore a keyword, not a class. `at_age=` is given as people reach the age: on its first step, the people already past it (as agents, older by more than a step; in a compartmental run, everyone in an age group at or above it) are recorded as offered it, so `at_age=ss.months(9)` vaccinates children as they turn 9 months and not everyone older on the first day. A condition on age is not read this way: `where=ppl.age >= 0.75` is ordinary routine delivery, which reaches everyone that old on the first step. A catch-up of those already older is a campaign round.
 
 **`coverage=` versus `capacity=`.** These are different specifications and both are common.
 
@@ -166,20 +165,19 @@ drug  = ss.Treatment(cure=0.95)
 screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))   # not tested in the last four weeks
 confirm   = ss.screen(who=screening.positive, what=pcr, coverage=0.9)                                    # a follow-up is a step of its own
 treatment = ss.treat(who=confirm.positive, what=drug, capacity=ss.perday(50))                            # while stocks last
-care      = ss.cascade(screening, confirm, treatment)
 
-sim = ss.Sim(sis, interventions=care, unit='day', stop=120, total_pop=50_000).run()
-sim.results.care.to_df()     # who each step reached, and who it lost to coverage and to capacity
+sim = ss.Sim(sis, interventions=[screening, confirm, treatment], unit='day', stop=120, total_pop=50_000).run()
+sim.results.treatment.lost_capacity     # who each step lost to capacity; eligible and delivered give those lost to coverage
 ```
 
 - **Steps are peers.** Any number of steps take the same trigger (a treatment and a vaccination of the same positives); a step can be triggered by several events (`who=screening.high_grade | triage.positive`, or a list); one result can feed steps months apart, through memory. `on_positive=` and `on_negative=` are removed: they raise, showing the two steps to write instead.
 - **Order within a step.** Each step runs after the steps whose events trigger it, whatever order they are given in, so a follow-up acts on the step its trigger happens (on the step a test's result is available, after its `delay`). A cycle of triggers raises, naming it. Reading another step's memory (`screening.positive.ever`) does not order them.
-- **`ss.cascade(*steps, name=None, count_events=None)`** groups the steps, which may be any deliveries in any number and order, referring to each other. It names them from their variables (else from the product). Running it is identical to passing the steps as a list (`interventions=[screening, confirm, treatment]`); what it adds is the name; `sim.results.<name>`, whose `to_df()` is a table of who each step reached and lost (to coverage and to capacity), with its outcomes, and whose `plot()` is a funnel; a block in `sim.describe()` that reads as a flowchart, which lists any events outside the cascade that its steps refer to; and one object to pass to `interventions=`, `sim.new()`, and scenarios.
-- **`ss.visit(who=..., cost=None)`** is a step people attend with no product: an antenatal visit, a clinic visit for symptoms. Its attendees are its event, so several steps triggered by the same visit reach the same people (one visit, several tests).
+- **The steps are a list.** They are passed to `interventions=` like any other module, in any number and order, and are named from their variables.
+- **A visit is a step with no product**, `ss.Delivery(who=...)`: an antenatal visit, a clinic visit for symptoms. Its attendees are its event, so several steps triggered by the same visit reach the same people (one visit, several tests).
 
 <!-- fragment -->
 ```python
-anc_visit = ss.visit(who=preg.conception, coverage=0.85)             # preg = ss.Pregnancy(): its events are conception, delivery, and loss
+anc_visit = ss.Delivery(who=preg.conception, coverage=0.85)          # preg = ss.Pregnancy(): its events are conception, delivery, and loss
 anc_hiv   = ss.screen(hiv_rdt, who=anc_visit, disease='hiv')
 anc_syph  = ss.screen(rpr, who=anc_visit, disease='syph')
 newborn   = ss.screen(pcr, who=preg.delivery & anc_hiv.positive.ever, trace='postnatalnet')
@@ -328,8 +326,6 @@ Conditions, coverage functions, and `deliver=` functions are tried on what the s
 | an event in `who=` (a step, an outcome, a product, a transition) | the share of each state and group it happened to on the step, carried along the moves of later steps in the step; a transfer, or an `ss.Event` of a module written as code, needs agents | UIDs |
 | `\|` and `&` of events | agents only | union and intersection of UIDs |
 | `.ever`, `.count`, `.since` | `.ever` a property of people with two levels (`ever_<event>`), added only if read; `.count` and `.since` agents only | a time and a count per agent |
-| `count_events=` | no log (flows by group are results already) | a log of each person's events |
-| `ss.cascade` | the table, from its steps' results | the same |
 | `when=fn(sim)` | called once per step | called once per step |
 | a module with `step()` (a trigger with memory) | works if the code uses only what groups have | works |
 | `where=` using stratifications and states | selects groups | selects agents |
@@ -351,4 +347,5 @@ Conditions, coverage functions, and `deliver=` functions are tried on what the s
 - **`days=` as the time keyword of `ss.change`.** `at=` takes dates, years, or durations.
 - **Follow-ups nested in a test (`on_positive=`, `on_negative=`).** A cascade is not a tree: a trigger can be the union of several events, one result feeds several steps, and memory carries a result forward. Steps are peers, triggered by events.
 - **`who >> what` as the spelling of a step** (`screening.ascus >> ss.screen(hpv_dna)`), by analogy with `S >> I`. Keywords (`who=`, `what=`) say the same without parentheses around a trigger of several parts.
+- **Delivery extras, removed 2026-10-20 (they can come back if needed):** stock targets (`target=`, `above=`, `ss.share`; STIsim keeps its own), a resource shared by steps (`ss.Resource`, `uses=`, and numeric `priority=` classes), `ss.cascade` (it ran as its steps would as a list), `ss.visit` (a delivery with no product), `count_events=` and `events_df()`, a delivery that makes its own product from the product's keywords (`ss.vaccinate(efficacy=0.9)`), and reading any condition on age as delivery by age (only `at_age=` is). A target is `deliver=` or `capacity=` as a function of the sim, a shared clinic a `capacity=` function that reads what the steps before it used, and a log of events an analyzer.
 - **Budget optimization and optimal control in v1.** `cost=` keeps the door open. (Allocating a fixed budget between imported programs, `ss.optimize`, was added for Atomica's users; optimal control was not.)

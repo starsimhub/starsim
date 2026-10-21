@@ -80,12 +80,12 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     if which == 'pregnancy':
 
         print("Check we don't have more births than pregnancies")
-        assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
+        assert sum(sim.results.pregnancy.birth) <= sum(sim.results.pregnancy.conception)
         print('✓ (births <= pregnancies)')
 
         if dt == 1:
             print("Checking that births equal pregnancies with dt=1")
-            assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
+            assert np.array_equal(sim.results.pregnancy.conception, sim.results.pregnancy.birth)
             print('✓ (births == pregnancies)')
 
     rtol = 0.05
@@ -116,8 +116,8 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
         ax[2].legend()
 
         if which == 'pregnancy':
-            ax[3].plot(tvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
-            ax[3].plot(tvec, sim.results.pregnancy.births, label='Births')
+            ax[3].plot(tvec, sim.results.pregnancy.conception, label='Pregnancies')
+            ax[3].plot(tvec, sim.results.pregnancy.birth, label='Births')
             ax[3].set_title('Pregnancies and births')
             ax[3].legend()
 
@@ -210,19 +210,12 @@ def test_pregnancy():
 
     # Tests
     # Check that everyone in their 2nd trimester conceived 3-6 months ago
-    tri2 = sim.demographics.pregnancy.tri2_uids
-    conception_time = sim.people.pregnancy.ti_pregnant[tri2]
-    time_since_conception = ss.years((sim.ti - conception_time) * sim.t.dt_year).weeks
-    assert np.all((time_since_conception >= 13) & (time_since_conception <= 26)), 'Some people in 2nd trimester did not conceive 3-6 months ago'
+    preg = sim.demographics.pregnancy
+    weeks = ss.years((sim.ti - preg.ti_P[preg.P.uids]) * sim.t.dt_year).weeks # Since conception
+    assert np.all((weeks >= 0) & (weeks <= 45)), 'Some pregnancies are longer than 45 weeks'
 
-    # Check that gestational clock is present for all pregnant women, and that they all have a defined delivery time
-    pregnant = sim.people.pregnancy.pregnant
-    assert np.all(~np.isnan(sim.people.pregnancy.gestation[pregnant])), 'Some pregnant people are missing gestational clock'
-    ti_delivery = sim.people.pregnancy.ti_delivery[pregnant]
-    assert np.all(~np.isnan(ti_delivery)), 'Some people with ti_pregnant are missing ti_delivery'
-
-    # Check that gestational clock is NaN for all non-pregnant women
-    assert np.all(np.isnan(sim.people.pregnancy.gestation[~sim.people.pregnancy.pregnant])), 'Some non-pregnant people have gestational clock'
+    # Check that every pregnant woman has a defined delivery time
+    assert np.all(~np.isnan(preg.ti_exit_P[preg.P.uids])), 'Some pregnant women have no scheduled delivery'
     sc.printgreen('✓ Pregnancy duration tests passed')
 
     # Check that everyone born during the sim has gestational age at birth recorded
@@ -321,9 +314,9 @@ def test_loss_classification():
     sim.run()
 
     preg = sim.demographics.pregnancy
-    mc = preg.results['miscarriages'].sum()
-    sb = preg.results['stillbirths'].sum()
-    births = preg.results['births'].sum()
+    mc = preg.results['miscarriage'].sum()
+    sb = preg.results['stillbirth'].sum()
+    births = preg.results['birth'].sum()
     print(f'  Miscarriages: {mc}, Stillbirths: {sb}, Births: {births}')
 
     assert mc > 0, 'Expected some miscarriages with p_loss=0.05'
@@ -358,8 +351,8 @@ def test_background_loss():
         )
         sim.run()
         preg = sim.demographics.pregnancy
-        total_losses = preg.results['miscarriages'].sum() + preg.results['stillbirths'].sum()
-        births = preg.results['births'].sum()
+        total_losses = preg.results['miscarriage'].sum() + preg.results['stillbirth'].sum()
+        births = preg.results['birth'].sum()
         results[label] = dict(losses=total_losses, births=births)
         print(f'  p_loss={p_loss}: losses={total_losses}, births={births}')
 
@@ -395,7 +388,7 @@ def test_nnd():
 
     preg = sim.demographics.pregnancy
     neonatal_deaths = preg.results['neonatal_deaths'].sum()
-    births = preg.results['births'].sum()
+    births = preg.results['birth'].sum()
     print(f'  Neonatal deaths: {neonatal_deaths}, Births: {births}')
 
     assert neonatal_deaths > 0, 'Expected neonatal deaths from neonatal sepsis'
@@ -611,7 +604,7 @@ def test_pregnancy_risks():
         sim = ss.Sim(n_agents=10_000, start=2000, stop=2003, dt=dt, demographics=preg, rand_seed=1, verbose=0).run()
         p = sim.demographics.pregnancy
         ga = p.gestation_at_birth.raw[~np.isnan(p.gestation_at_birth.raw)]
-        return np.mean(ga < 37), 1 - sim.results.pregnancy.births.sum()/np.nansum(p.n_pregnancies.raw)
+        return np.mean(ga < 37), 1 - sim.results.pregnancy.birth.sum()/np.nansum(p.n_pregnancies.raw)
 
     # TL29: before, 0.01 a step lost 44% weekly and 26% monthly
     weekly, monthly = [run(dt, p_loss=0.01)[1] for dt in [ss.weeks(1), ss.months(1)]]

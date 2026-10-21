@@ -1048,7 +1048,7 @@ class Infection(Disease):
 
         # Schedule events at delivery time
         preg = self.sim.demographics.pregnancy
-        dt_delivery = preg.ti_delivery - self.ti  # Full array, indexed by UID below
+        dt_delivery = np.ceil(preg.ti_exit_P.raw) - self.ti  # The step each pregnancy is due to end in delivery; full array, indexed by UID below
         for oi, key in enumerate(self.pars.birth_outcome_keys):
             o_uids = target_uids[assigned == oi]
             s_uids = source_uids[assigned == oi]
@@ -1059,7 +1059,7 @@ class Infection(Disease):
                     if key in self.prenatal_death_keys:
                         # Fetal losses must fire while the agent is still unborn. Pregnancy.step()
                         # runs before diseases' step_state() in the integration loop, so an event
-                        # scheduled at ti_delivery would kill an already-delivered newborn: it would
+                        # scheduled at the delivery would kill an already-delivered newborn: it would
                         # be counted as a live birth and then as a neonatal death, rather than as a
                         # fetal loss. Firing a timestep early also matches the biology, since a
                         # stillborn fetus dies in utero before labor.

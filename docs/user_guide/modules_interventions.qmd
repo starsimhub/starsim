@@ -96,7 +96,7 @@ msim.plot('sis.prevalence')
 
 *Note*: Starsim 3's `ss.routine_vx(prob=0.2)` gave each eligible person a 20% chance of vaccination every year, which is delivery in yearly rounds (`interval=ss.years(1)`), not Starsim 4's routine delivery.
 
-A routine delivery by age is given as people reach the age: `at_age=ss.months(9)`, or `where=lambda sim: sim.people.age >= 0.75`, vaccinates children as they turn 9 months old and not everyone older on the first day. A catch-up of those already older is a campaign round.
+`at_age=` is routine delivery as people reach the age: `at_age=ss.months(9)` vaccinates children as they turn 9 months old and not everyone older on the first day (a condition on age, such as `where=ss.ppl.age >= 0.75`, is ordinary routine delivery, which reaches everyone that old at once). A catch-up of those already older is a campaign round.
 
 ### Coverage and capacity
 

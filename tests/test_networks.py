@@ -417,7 +417,7 @@ def test_household_coarse_pregnancy_dt():
 
     Move-out is evaluated once per pregnancy, so the resulting number of households should be
     ~invariant to the pregnancy module's dt. Previously, HouseholdNet compared
-    pregnancy.ti_delivery (an index in the pregnancy module's own timeline) against sim.ti; when
+    pregnancy.ti_exit_P (an index in the pregnancy module's own timeline) against sim.ti; when
     pregnancy ran on a coarser dt (e.g. ss.Pregnancy(dt=ss.months(3))), pregnant non-heads became
     re-eligible far too often, greatly over-fragmenting households. """
     sc.heading('Testing HouseholdNet with a coarse-dt Pregnancy module...')

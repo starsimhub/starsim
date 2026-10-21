@@ -454,7 +454,7 @@ def init_capabilities(sim, modules):
     for strat in [strat for strat in sim.groups.strats if strat.kind == 'clock'][:1]: # The time since an event, kept per agent (see ss.dimensions.Strat)
         add(f'dimension: {strat.name}', 'no', 'a clock', auto=f'the dimension "{strat.name}" is a clock (the time since an event), which only agents keep', fatal=True)
     for (name,outcome),need in ss.interventions.memory_needs(sim).items(): # Whether an event happened (.ever) is a level of people; how often and how long ago are each person's own
-        for kind in sorted(need.kinds - {'ever'})[:1]:
+        for kind in sorted(need - {'ever'})[:1]:
             event = name if outcome is None else f'{name}.{outcome}'
             add(f'memory: {event}', 'no', f'.{kind} kept per agent', auto=f'a condition reads {event}.{kind}, which only agents keep (.ever is the memory a compartmental run has)', fatal=True)
     deliveries = [mod for mod in modules if isinstance(mod, ss.Delivery)]

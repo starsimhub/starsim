@@ -170,8 +170,8 @@ sim = ss.Sim(
 )
 sim.run()
 preg = sim.results.pregnancy
-print('Births:', preg.births.sum())
-print('Stillbirths:', preg.stillbirths.sum())
+print('Births:', preg.birth.sum())
+print('Stillbirths:', preg.stillbirth.sum())
 print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 ```
 
@@ -192,7 +192,7 @@ sim = ss.Sim(
 )
 sim.run()
 print('New infections:', sim.results.neonatalsepsis.new_infections.sum())
-print('Births:', sim.results.pregnancy.births.sum())
+print('Births:', sim.results.pregnancy.birth.sum())
 print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
 ```
 

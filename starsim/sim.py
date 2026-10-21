@@ -85,7 +85,7 @@ class Sim(ss.Base):
         if positional:
             modules = sc.mergelists(*positional, modules)
         self._name_modules(ss.utils.getframe(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
-        interventions = self._add_steps(interventions)
+        interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
         if isinstance(pars, (str, os.PathLike)): # A file of values by name
@@ -96,8 +96,8 @@ class Sim(ss.Base):
             settings = [key for key in pars if key in self.pars and key not in names]
             values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.UnknownParameter when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
-            if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): their steps too, before they are copied
-                pars['interventions'] = self._add_steps(pars['interventions'])
+            if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): in order too, before they are copied
+                pars['interventions'] = self._order_steps(pars['interventions'])
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
@@ -149,7 +149,7 @@ class Sim(ss.Base):
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:
-                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet, ss.cascade)) else []
+                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
                     if obj is not None and obj._default_name:
@@ -159,31 +159,14 @@ class Sim(ss.Base):
                         if name is not None:
                             obj.name = obj.label = name
                             obj._default_name = False
-                if isinstance(mod, ss.Delivery):
-                    mod.name_product()
         return
 
     @staticmethod
-    def _add_steps(interventions):
-        """
-        The steps of a cascade are modules of their own, so are added to the list (before it); the deliveries run in the order of
-        their triggers (see `ss.interventions.order_steps()`); and a resource that steps share runs just before the first of them
-        """
-        if not any(isinstance(mod, (ss.Delivery, ss.cascade)) for mod in sc.tolist(interventions)):
+    def _order_steps(interventions):
+        """ The deliveries run in the order of their triggers (see `ss.interventions.order_steps()`) """
+        if not any(isinstance(mod, ss.Delivery) for mod in sc.tolist(interventions)):
             return interventions
-        out = []
-        for mod in sc.tolist(interventions):
-            for m in (mod.steps if isinstance(mod, ss.cascade) else []) + [mod]:
-                if not any(m is other for other in out):
-                    out.append(m)
-        out = ss.interventions.order_steps([m for m in out if not isinstance(m, ss.Resource)])
-        placed = []
-        for mod in list(out):
-            for res in (getattr(mod, 'uses', None) or {}):
-                if not any(res is other for other in placed):
-                    out.insert(out.index(mod), res)
-                    placed.append(res)
-        return out
+        return ss.interventions.order_steps(sc.tolist(interventions))
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -298,9 +281,6 @@ class Sim(ss.Base):
         self._made = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
-        ivs = sc.tolist(self.pars.interventions) # Steps of a cascade are added in __init__(), before the modules are copied; these are any put in pars later (e.g. by a subclass of ss.Sim)
-        if any(all(step is not mod for mod in ivs) for casc in ivs if isinstance(casc, ss.cascade) for step in casc.steps):
-            self.pars.interventions = self._add_steps(ivs)
         self.pars.validate() # Validate parameters
         for mod in self.pars.diseases.values(): # A state that only a delivery moves people into is not where they start
             if getattr(mod, 'graph', None) is not None:
@@ -897,8 +877,6 @@ class Sim(ss.Base):
                     add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
                 elif isinstance(mod, ss.Delivery):
                     add('delivery', mod.describe())
-                elif isinstance(mod, ss.cascade):
-                    add('cascade', mod.describe())
             for mod in self.declared:
                 names = [f'n_{name}' for name in mod.graph.states]
                 extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
@@ -1071,7 +1049,7 @@ class Sim(ss.Base):
         def modspec(mod):
             if getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains):
                 return mod.to_spec()
-            if isinstance(mod, (ss.modify, ss.Delivery, ss.cascade)):
+            if isinstance(mod, (ss.modify, ss.Delivery)):
                 return mod.to_json()
             out = sc.objdict(type=type(mod).__name__, name=mod.name, label=mod.label)
             ref = getattr(mod, 'ref', None)
