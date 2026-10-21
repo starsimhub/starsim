@@ -1,8 +1,6 @@
 """
 Base classes for diseases
 """
-import re
-import inspect
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -423,32 +421,6 @@ class Disease(ss.Module):
         if self.graph is None:
             return ss.uids()
         return (~self[self.graph.first.name]).uids
-
-    def times_read(self, sim=None):
-        """
-        The states whose time of entering (`ti_X`) code in the sim reads, for a declared disease run as agents: a set of names, or None for all
-
-        The code of the sim's modules, other than Starsim's own, and of this disease's class is
-        searched for `ti_X` (e.g. a Starsim 3-style analyzer that reads `sir.ti_R`). A name made
-        from pieces (e.g. `f'ti_{state}'`), or code whose source cannot be found, counts as reading
-        them all, as does `ss.options.keep_times`. The engine keeps these, as well as the ones it
-        needs itself (see `ss.solvers.Agents.define()`); the others are `ss.arrays.Unkept`.
-        """
-        if ss.options.keep_times:
-            return None
-        names = set()
-        for mod in (sim or self.sim).modules:
-            code = [cls for cls in type(mod).__mro__ if cls.__module__.split('.')[0] not in ['starsim', 'sciris', 'builtins']] # Starsim's own modules read none
-            code += [f for f in vars(mod).values() if inspect.isfunction(f) or inspect.ismethod(f)] # E.g. a function as an analyzer (see ss.Module.from_func())
-            for obj in code:
-                try:
-                    source = inspect.getsource(obj)
-                except (OSError, TypeError): # E.g. defined at the prompt
-                    return None
-                if re.search(r"""ti_\{|['"]ti_['"]""", source): # A name made from pieces
-                    return None
-                names.update(re.findall(r'\bti_(\w+)', source))
-        return names
 
     @property
     def ti_entry(self):

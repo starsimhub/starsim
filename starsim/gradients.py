@@ -242,7 +242,9 @@ class Run:
                 elif op == kn.LT:  stack.append(jnp.where(x < y, 1.0, 0.0))
                 elif op == kn.LE:  stack.append(jnp.where(x <= y, 1.0, 0.0))
                 elif op == kn.GT:  stack.append(jnp.where(x > y, 1.0, 0.0))
-                else:              stack.append(jnp.where(x >= y, 1.0, 0.0))
+                elif op == kn.GE:  stack.append(jnp.where(x >= y, 1.0, 0.0))
+                else:
+                    raise ValueError(f'Unknown operation {op} on two values in the program of a rate')
         return stack[0]
 
     def share(self, v, block, X, by_columns):

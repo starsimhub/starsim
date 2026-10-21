@@ -396,11 +396,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         plain = {k:v for k,v in trans.numeric_pars(raw, to_unit, per_agent=lambda val: None).items() if k not in grids}
         stats = [trans.dwell_stats(type(raw)(**{**plain, **{k:float(np.broadcast_to(g, (self.n_groups,))[i]) for k,g in grids.items()}}), lambda v: v) for i in range(self.n_groups)]
         dw.mean, dw.std = [np.array(x) for x in zip(*stats)]
-        shape = raw.pars.get('a')
         if tr.stages is not None:
             dw.kg = np.full(self.n_groups, tr.stages)
-        elif dw.family == 'gamma' and 'a' not in grids and sc.isnumber(shape) and shape == int(shape):
-            dw.kg = np.full(self.n_groups, int(shape))
+        elif trans.exact_stages(raw) is not None: # A gamma with the same whole-number shape in every group
+            dw.kg = np.full(self.n_groups, trans.exact_stages(raw))
         else:
             dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
             dw.exact = False
@@ -1420,7 +1419,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             mult       = np.ones((nf, ng)),
             depth      = depth,
             starts     = np.array(starts, dtype=int),
-            ops        = np.array(ops, dtype=int),
+            ops        = kn.check_ops(ops),
             args       = np.array(args, dtype=int),
             consts     = np.zeros((len(pars), ng)),
             set_starts = ends(setlist),

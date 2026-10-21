@@ -363,12 +363,13 @@ def test_time():
     later = infected[sir.ti_I.raw[infected] >= 0] # Those infected at the start are dated a step before it, as if infected in the step before, as infections are dated by their step
     assert np.allclose(sir.ti_I.years[later], sir.t.yearvec[sir.ti_I.raw[later]])
     assert (sir.ti_I[infected] >= -1).all() and (sir.ti_I[infected] == -1).sum() == sir.results.n_I[0]
-    with pytest.raises(ss.errors.TimeNotKept): # Nothing in the sim read ti_R, so it was not kept
+    with pytest.raises(ss.errors.TimeNotKept): # The engine does not need ti_R, so it was not kept
         sir.ti_R.notnan
-    class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, so it is kept
+    class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, which needs it kept
         def step(self):
             self.n = (self.sim.diseases.sir.ti_R == self.ti - 1).sum() # Progressions are dated at the start of their step
-    sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
+    with ss.options.context(keep_times=True):
+        sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
     assert np.array_equal(sim.diseases.sir.results.n_I, sir.results.n_I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step
     S, I, R = ss.states('S I R')
     seeded = ss.Sim(ss.Disease(S >> I @ 0*I, I >> R @ ss.days(5), name='seeded'), stop=30, unit='day', n_agents=100, **kw).init()

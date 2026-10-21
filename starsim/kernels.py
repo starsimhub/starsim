@@ -605,6 +605,45 @@ def sum_exposures(expo, e, s):
     return v
 
 
+def check_ops(ops):
+    """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
+    ops = np.asarray(ops, dtype=int)
+    unknown = sorted(set(ops[(ops < CONST) | (ops > CONVEY)].tolist()))
+    if unknown:
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {CONVEY}'
+        raise ValueError(errormsg)
+    return ops
+
+
+@kernel(inline='always')
+def unary(op, x):
+    """ A function of one value, as an operation on the stack of a rate (see `step()`) """
+    if   op == EXP:  return np.exp(x)
+    elif op == LOG:  return np.log(x)
+    elif op == SQRT: return np.sqrt(x)
+    elif op == ABS:  return abs(x)
+    elif op == SIN:  return np.sin(x)
+    elif op == COS:  return np.cos(x)
+    return np.nan # Never reached: every program's operations are checked when it is made (see check_ops()); a raise here would make the exact solver 5x slower
+
+
+@kernel(inline='always')
+def binary(op, a, b):
+    """ A function of two values, as an operation on the stack of a rate (see `step()`) """
+    if   op == ADD: return a + b
+    elif op == SUB: return a - b
+    elif op == MUL: return a * b
+    elif op == DIV: return a / b if a != 0 else 0.0 # Nothing divided by anything is nothing, e.g. the share of an empty group
+    elif op == POW: return a ** b
+    elif op == MIN: return min(a, b)
+    elif op == MAX: return max(a, b)
+    elif op == LT:  return 1.0 if a < b else 0.0
+    elif op == LE:  return 1.0 if a <= b else 0.0
+    elif op == GT:  return 1.0 if a > b else 0.0
+    elif op == GE:  return 1.0 if a >= b else 0.0
+    return np.nan # Never reached: see unary()
+
+
 @jit
 def place_rates(ys, p, a, b, rates, stack, expo):
     """
@@ -664,28 +703,10 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
                     stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
                 elif op >= EXP:
-                    x = stack[top, 0]
-                    if   op == EXP:  stack[top, 0] = np.exp(x)
-                    elif op == LOG:  stack[top, 0] = np.log(x)
-                    elif op == SQRT: stack[top, 0] = np.sqrt(x)
-                    elif op == ABS:  stack[top, 0] = abs(x)
-                    elif op == SIN:  stack[top, 0] = np.sin(x)
-                    else:            stack[top, 0] = np.cos(x)
+                    stack[top, 0] = unary(op, stack[top, 0])
                 else:
                     top -= 1
-                    x = stack[top, 0]
-                    z = stack[top+1, 0]
-                    if   op == ADD: stack[top, 0] = x + z
-                    elif op == SUB: stack[top, 0] = x - z
-                    elif op == MUL: stack[top, 0] = x * z
-                    elif op == DIV: stack[top, 0] = x / z if x != 0 else 0.0 # Nothing divided by anything is nothing, e.g. the share of an empty group
-                    elif op == POW: stack[top, 0] = x ** z
-                    elif op == MIN: stack[top, 0] = min(x, z)
-                    elif op == MAX: stack[top, 0] = max(x, z)
-                    elif op == LT:  stack[top, 0] = 1.0 if x < z else 0.0
-                    elif op == LE:  stack[top, 0] = 1.0 if x <= z else 0.0
-                    elif op == GT:  stack[top, 0] = 1.0 if x > z else 0.0
-                    else:           stack[top, 0] = 1.0 if x >= z else 0.0
+                    stack[top, 0] = binary(op, stack[top, 0], stack[top+1, 0])
             if top >= 0:
                 rates[f, g] = stack[0, 0]*p.mult[f, g]
     return
@@ -1004,28 +1025,10 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             v = counts[arg]
                             stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
                         elif op >= EXP:
-                            x = stack[top, 0]
-                            if   op == EXP:  stack[top, 0] = np.exp(x)
-                            elif op == LOG:  stack[top, 0] = np.log(x)
-                            elif op == SQRT: stack[top, 0] = np.sqrt(x)
-                            elif op == ABS:  stack[top, 0] = abs(x)
-                            elif op == SIN:  stack[top, 0] = np.sin(x)
-                            else:            stack[top, 0] = np.cos(x)
+                            stack[top, 0] = unary(op, stack[top, 0])
                         else:
                             top -= 1
-                            x = stack[top, 0]
-                            u = stack[top+1, 0]
-                            if   op == ADD: stack[top, 0] = x + u
-                            elif op == SUB: stack[top, 0] = x - u
-                            elif op == MUL: stack[top, 0] = x * u
-                            elif op == DIV: stack[top, 0] = x / u if x != 0 else 0.0
-                            elif op == POW: stack[top, 0] = x ** u
-                            elif op == MIN: stack[top, 0] = min(x, u)
-                            elif op == MAX: stack[top, 0] = max(x, u)
-                            elif op == LT:  stack[top, 0] = 1.0 if x < u else 0.0
-                            elif op == LE:  stack[top, 0] = 1.0 if x <= u else 0.0
-                            elif op == GT:  stack[top, 0] = 1.0 if x > u else 0.0
-                            else:           stack[top, 0] = 1.0 if x >= u else 0.0
+                            stack[top, 0] = binary(op, stack[top, 0], stack[top+1, 0])
                     if top >= 0:
                         rate = stack[0, 0]*p.mult[f, g]
                     kept[key] = rate
@@ -1616,29 +1619,11 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                 stack[top, g] = num[p.places[g]]/local_n[g] if op == FRAC else num[p.places[g]]
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
-                                a = stack[top, g]
-                                if   op == EXP:  stack[top, g] = np.exp(a)
-                                elif op == LOG:  stack[top, g] = np.log(a)
-                                elif op == SQRT: stack[top, g] = np.sqrt(a)
-                                elif op == ABS:  stack[top, g] = abs(a)
-                                elif op == SIN:  stack[top, g] = np.sin(a)
-                                else:            stack[top, g] = np.cos(a)
+                                stack[top, g] = unary(op, stack[top, g])
                         else:
                             top -= 1
                             for g in range(ng):
-                                a = stack[top, g]
-                                b = stack[top+1, g]
-                                if   op == ADD: stack[top, g] = a + b
-                                elif op == SUB: stack[top, g] = a - b
-                                elif op == MUL: stack[top, g] = a * b
-                                elif op == DIV: stack[top, g] = a / b if a != 0 else 0.0
-                                elif op == POW: stack[top, g] = a ** b
-                                elif op == MIN: stack[top, g] = min(a, b)
-                                elif op == MAX: stack[top, g] = max(a, b)
-                                elif op == LT:  stack[top, g] = 1.0 if a < b else 0.0
-                                elif op == LE:  stack[top, g] = 1.0 if a <= b else 0.0
-                                elif op == GT:  stack[top, g] = 1.0 if a > b else 0.0
-                                else:           stack[top, g] = 1.0 if a >= b else 0.0
+                                stack[top, g] = binary(op, stack[top, g], stack[top+1, g])
                     if top >= 0:
                         for g in range(ng):
                             rates[f, g] = stack[0, g]*p.mult[f, g]

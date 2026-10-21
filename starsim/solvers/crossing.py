@@ -482,7 +482,7 @@ class Crossing:
             mult       = np.ones((nf, R)),
             depth      = max(p.depth for p in progs) + 1,
             starts     = arr(starts),
-            ops        = arr(ops),
+            ops        = kn.check_ops(arr(ops)),
             args       = arr(args),
             consts     = np.zeros((n_consts, R)),
             set_starts = ends(setlist),

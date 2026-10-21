@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 
 sc.options(interactive=False)
 
@@ -136,10 +137,54 @@ def test_fit_numpy():
     return fit
 
 
+@sc.timer()
+def test_coded_and_declared():
+    sc.heading('Testing code that writes the states of a declared disease run as agents, and a declared intervention on a disease written as code')
+    class Mover(ss.Intervention): # Moves ten people from S to I at step 3: by indexing, and with an in-place operator
+        def __init__(self, raw=False, **kwargs):
+            super().__init__(**kwargs)
+            self.raw = raw
+            return
+        def step(self):
+            sir = self.sim.diseases.sir
+            if self.ti == 3:
+                uids = sir.S.uids[:10]
+                if self.raw: # Through the NumPy array behind each state, which is not tracked
+                    sir.S.raw[uids] = False
+                    sir.I.raw[uids] = True
+                else:
+                    sir.S[uids] = False
+                    sir.I |= ~(sir.S | sir.R)
+            return
+    class Reader(ss.Intervention): # Reads the number infected later in the same step
+        def step(self):
+            if self.ti == 3:
+                self.n = np.sum(self.sim.diseases.sir.I.n)
+            return
+    def make(raw=False):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S >> I @ 0*I, I >> R @ ss.days(1000), init_prev=0, name='sir')
+        return ss.Sim(sir, interventions=[Mover(raw=raw), Reader()], unit='day', stop=6, n_agents=100, solver='abm', verbose=0).run()
+    sim = make()
+    res = sim.results.sir
+    assert sim.interventions.reader.n == 10 and res.n_I[4] == 10 and res.n_S[4] == 90 # Seen in the same step, and in the results
+    raw = make(raw=True) # Not tracked: the counts and results do not see it, which STARSIM_CHECK_COUNTS=1 checks at each step
+    assert raw.diseases.sir.I.count() == 10 and raw.results.sir.n_I[4] == 0
+    with pytest.raises(RuntimeError, match='differs from a new count'):
+        raw.diseases.sir.engine.check_counts()
+
+    # A disease written as code takes a declared vaccine
+    kw = dict(networks='random', n_agents=5000, stop=100, rand_seed=2, verbose=0)
+    infections = [ss.Sim(ssl.AgentSIR(beta=0.1, init_prev=0.02), interventions=vx, **kw).run().results.agentsir.cum_infections[-1] for vx in [None, ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5, at=0)]]
+    assert infections[1] < 0.8*infections[0]
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     s1 = test_numpy_ode_beside()
     s2 = test_numpy_agents_beside()
     s3 = test_callback_changes_component()
     s4 = test_fit_numpy()
+    s5 = test_coded_and_declared()
     T.toc()

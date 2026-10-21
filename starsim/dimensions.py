@@ -459,8 +459,7 @@ def transfer_stages(sim, mod, tf, strat):
     if not isinstance(raw, ss.Dist) or isinstance(raw, ss.expon) or trans.varying_pars(raw): # Values by group stay at the rate of their mean, with a note
         return None
     mean, std = trans.dwell_stats(raw, lambda val: ss.solvers.engine.convert(val, sim.unit_base))
-    shape = raw.pars.get('a')
-    k = int(shape) if (type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape)) else trans.erlang_stages(mean, std)
+    k = trans.exact_stages(raw) or trans.erlang_stages(mean, std)
     if k == 1:
         return None
     if tf.increment is not None:
@@ -470,7 +469,7 @@ def transfer_stages(sim, mod, tf, strat):
     out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], split=[1.0] + [0.0]*(k - 1), states=tf.states, where={tf.dim:levels})
     out.owner = mod.name
     out.stages_of = (mod.name, tf.name)
-    out.dwell = sc.objdict(mean=mean, std=std, k=k, family=type(raw).__name__, exact=type(raw) is ss.gamma and k == shape) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
+    out.dwell = sc.objdict(mean=mean, std=std, k=k, family=type(raw).__name__, exact=trans.exact_stages(raw) is not None) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
     return out
 
 

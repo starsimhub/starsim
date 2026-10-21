@@ -882,10 +882,8 @@ class Engine:
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
                     dw.fixed = True
                 elif tr.stages is None:
-                    shape = raw.pars.get('a')
-                    if dw.family == 'gamma' and sc.isnumber(shape) and shape == int(shape):
-                        dw.k = int(shape)
-                    else:
+                    dw.k = trans.exact_stages(raw)
+                    if dw.k is None:
                         dw.k = trans.erlang_stages(mean, std)
                         dw.exact = False
                         self.note_stages(name, dw)

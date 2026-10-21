@@ -1122,6 +1122,12 @@ def by_dist(raw):
     return type(dists[0])(**pars)
 
 
+def exact_stages(dist):
+    """ The number of Erlang stages a dwell time is exactly: the shape of a gamma distribution, if it is a whole number; else None """
+    shape = dist.pars.get('a')
+    return int(shape) if isinstance(dist, ss.gamma) and sc.isnumber(shape) and shape == int(shape) else None
+
+
 def erlang_stages(mean, std, max_stages=50):
     """ The number of Erlang stages that best matches a mean and standard deviation: k = round((mean/std)²), at least 1 """
     if std <= 0:

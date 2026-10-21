@@ -1095,7 +1095,7 @@ class StepArr(Arr):
 
 class Unkept(BaseArr):
     """
-    A declared disease's time of entering a state (`ti_X`) that is not kept, since nothing in the sim reads it (see `ss.Disease.times_read()`)
+    A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.options.keep_times`)
 
     Setting it does nothing, and reading it raises `ss.errors.TimeNotKept`, which says how to keep it.
     It takes no memory, and is not one of the module's states.
@@ -1107,7 +1107,7 @@ class Unkept(BaseArr):
 
     @property
     def values(self):
-        errormsg = (f'{self.mod.name}.{self.name} is not kept, since nothing in the sim read it when it was initialized (to save memory).\n'
+        errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
                     f'     Set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
         raise ss.errors.TimeNotKept(errormsg)
 
