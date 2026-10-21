@@ -41,6 +41,40 @@ def fisher_yates_shuffle(arr, randvals):
     return arr
 
 
+@nb.jit(cache=True) # No fastmath: a stray NaN must compare False (no transmission), not be assumed absent
+def nb_transmit(src, trg, rel_trans, rel_sus, beta, randvals):
+    """ Optimized transmission kernel: returns the (source, target) UIDs of transmitting edges.
+
+    Fuses the gather/multiply/compare *and* the UID extraction into a single branchless pass.
+    This avoids the full-length boolean temporary and the two separate gather passes
+    (`trg[mask]`, `src[mask]`) of the previous approach -- ~1.4x faster at typical transmission
+    rates, more when transmission is common. UIDs are emitted in edge order, preserving CRN behavior.
+    """
+    n = src.shape[0]
+    src_out = np.empty(n, dtype=np.int64) # int64 = uid dtype, so the caller can .view(uids) without a copy
+    trg_out = np.empty(n, dtype=np.int64)
+    m = 0
+    for i in range(n):
+        transmitted = rel_trans[src[i]] * rel_sus[trg[i]] * beta[i] > randvals[i]
+        src_out[m] = src[i] # Written every iteration (branchless); kept only if m advances
+        trg_out[m] = trg[i]
+        m += transmitted
+    return src_out[:m], trg_out[:m]
+
+
+@nb.jit(cache=True) # No fastmath: a stray NaN must compare False (edge dropped), as in nb_transmit()
+def nb_can_transmit(src, trg, rel_trans, rel_sus, beta):
+    """ Return the indices of the edges with a nonzero transmission probability, in edge order """
+    n = src.shape[0]
+    inds = np.empty(n, dtype=np.int64)
+    m = 0
+    for i in range(n):
+        can_transmit = rel_trans[src[i]] * rel_sus[trg[i]] * beta[i] > 0 # Same expression as nb_transmit()
+        inds[m] = i # Written every iteration (branchless); kept only if m advances
+        m += can_transmit
+    return inds[:m]
+
+
 
 # %% General network classes
 
@@ -205,11 +239,9 @@ class Network(Route):
         return out
 
     def edge_directions(self, src, trg):
-        """ The direction of each edge from `src` to `trg`, as a position in `directions` (-1 if it has none); None for a network with no sides """
-        if not self.sides:
-            return None
-        if self.one_way:
-            return np.zeros(len(src), dtype=np.int8) # Edges are from p1 to p2
+        """ The direction of each edge from `src` to `trg`, as a position in `directions` (0 for a network with no sides); raises `ss.RouteMismatch` for an edge with no direction """
+        if not self.sides or self.one_way:
+            return np.zeros(len(src), dtype=np.int8) # One direction, or edges from p1 to p2
         dirs = self.directions
         names = list(self.sides)
         n = len(names)
@@ -219,7 +251,61 @@ class Network(Route):
             if d in dirs:
                 table[a, b] = dirs.index(d)
         side = self.side_raw()
-        return table[side[src], side[trg]]
+        out = table[side[src], side[trg]]
+        if np.any(out < 0):
+            k = np.flatnonzero(out < 0)[0]
+            raise ss.RouteMismatch(f'"{self.name}" has a partnership from {src[k]} to {trg[k]}, whose sides give no direction it has ({sc.strjoin(dirs)}; {self.name} has {self.sides_str()})')
+        return out
+
+    @property
+    def custom_beta(self):
+        """
+        Whether it defines its own `net_beta()`, as in Starsim 3: a declared disease then gives it the probability per act
+        of each edge, in place of the hazard per act, and what it returns (the probability for the partnership in the step)
+        is multiplied by `rel_trans`, `rel_sus`, and the modifiers on the route
+        """
+        return type(self).net_beta is not Network.net_beta
+
+    def transmit(self, rel_trans, rel_sus, edge_beta, rng, prob=None):
+        """
+        The edges that transmit in a step, in each direction the network transmits in (p1 to p2, then p2 to p1 unless it is one way)
+
+        An edge from `src` to `trg` transmits with probability `rel_trans[src]·rel_sus[trg]·beta`, or `prob()` if it is given.
+        Random numbers are drawn only for the edges that can transmit: with CRN, each edge's number depends only on its source
+        and target, so this gives the same result as drawing one for every edge.
+
+        Args:
+            rel_trans (array): the transmissibility of each agent, by UID (0 if not infectious)
+            rel_sus (array): the susceptibility of each agent, by UID (0 if not susceptible)
+            edge_beta (func): of the direction (0 or 1) and its sources and targets (all edges), the beta of each edge (an array, or a number for all): with
+                `prob`, only where it is 0 matters (no transmission); None to skip the direction (no random numbers are drawn)
+            rng (`ss.multi_random`): the random numbers, by source and target
+            prob (func): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the product above
+
+        Returns:
+            A list of the (source UIDs, target UIDs) that transmit, for each direction not skipped
+        """
+        out = []
+        if not len(self):
+            return out
+        edges = self.edges
+        for d in range(1 if self.one_way else 2): # Mother-to-child networks transmit one way
+            src, trg = (edges.p1, edges.p2) if d == 0 else (edges.p2, edges.p1)
+            beta = edge_beta(d, src, trg)
+            if beta is None:
+                continue
+            if np.ndim(beta) == 0:
+                beta = np.full(len(src), beta, dtype=ss_float)
+            inds = nb_can_transmit(src, trg, rel_trans, rel_sus, beta)
+            src, trg = src[inds], trg[inds]
+            rvs = rng.rvs(src, trg) # Called even if empty, to keep CRN draws in sync
+            if prob is None:
+                src, trg = nb_transmit(np.asarray(src), np.asarray(trg), rel_trans, rel_sus, beta[inds], rvs)
+            else:
+                hit = rvs < prob(d, inds, src, trg)
+                src, trg = np.asarray(src)[hit], np.asarray(trg)[hit]
+            out.append((src.view(ss.uids), trg.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
+        return out
 
     def init_results(self):
         """ Store network length by default """
@@ -583,8 +669,14 @@ class Network(Route):
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
-        """ Calculate the beta for the given disease and network """
+        """
+        The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act)
+
+        A network written as code can override this, as in Starsim 3 (see `custom_beta`).
+        """
         if inds is None: inds = Ellipsis
+        if self.has_acts: # The number of acts in each partnership in the step
+            return self.edges.beta[inds] * (1 - (1 - disease_beta) ** self.edges.acts[inds])
         return self.edges.beta[inds] * disease_beta # Beta should already include dt if desired
 
 
@@ -689,11 +781,6 @@ class SexualNetwork(DynamicNetwork):
         available[self.edges.p1] = False
         available[self.edges.p2] = False
         return available.uids
-
-    def net_beta(self, disease_beta=None, inds=None, disease=None):
-        """ Compute per-edge transmission probability accounting for number of sex acts. """
-        if inds is None: inds = Ellipsis
-        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds]))
 
 
 # %% Specific instances of networks
@@ -1350,13 +1437,6 @@ class PartnerNet(DegreeTargets, DynamicNetwork):
         if self.pars.between is not None:
             uids = uids[self.side_raw()[uids] >= 0]
         return uids
-
-    def net_beta(self, disease_beta=None, inds=None, disease=None):
-        """ With acts=: the probability that a partnership transmits in a step, from beta per act """
-        if self.pars.acts is None:
-            return super().net_beta(disease_beta=disease_beta, inds=inds, disease=disease)
-        if inds is None: inds = Ellipsis
-        return self.edges.beta[inds]*(1 - (1 - disease_beta)**self.edges.acts[inds])
 
     def dwell_mean(self):
         """ The mean of a distribution of durations, in steps """

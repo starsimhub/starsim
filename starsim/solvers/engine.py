@@ -516,11 +516,7 @@ class Engine:
             return 1.0
         key = ('contacts', name, None)
         if key not in self.cache:
-            val = self.sim.all_networks()[name].pars.n_contacts
-            base = ss.solvers.Mixing.mean(val, self.sim.unit_base) if np.ndim(val) == 0 else 1.0 # A matrix of contacts can only be scaled
-            base = base if base > 0 else 1.0
-            value = self.reduce(ss.connectors.combine(mods, base, self), what=f'{name}.pars.n_contacts')
-            self.cache[key] = self.clip(value, f'{name}.pars.n_contacts')/base
+            self.cache[key] = ss.connectors.contact_mult(self, name, mods)
         return self.cache[key]
 
     def branch_mult(self, tr, uids=None):

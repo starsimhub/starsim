@@ -62,6 +62,18 @@ UnknownParameter: "dur_inff=3" was given to "sir", but it has no parameter calle
      To add a parameter, use it in a transition, e.g. infection = S >> I @ dur_inff * I with dur_inff = ss.par(3).
 ```
 
+### Setting a parameter
+
+A value given for a parameter (as a keyword, in `pars=`, or by `pars.update()`) replaces it. There are three exceptions, and each keeps the parameter rather than changing what it means:
+
+- **A declared parameter** (an `ss.par`) takes the new value and keeps its name and bounds (`sir.pars.beta = 0.1`), since the module's transitions use that same object. A new `ss.par` gives its bounds, prior and description as well.
+- **A bare number for a typed value** keeps the unit of the default: `ss.MFNet(dur=5)` on a default in years is `ss.years(5)`, with a warning if the sim runs in another unit.
+- **A single value for a distribution** is the fixed value of that kind. For `ss.bernoulli` that is its probability (`init_prev=0.05` is `ss.bernoulli(p=0.05)`), and for any other distribution it is `ss.constant` (`dur=ss.days(15)`: every partnership lasts 15 days), in the default's unit if the value is a bare number. A dict with a `type` is a distribution (`n_contacts=dict(type='poisson', lam=4)`).
+
+To change one parameter of a distribution and keep the others, use the distribution's own method, `pars.dur_inf.set(mean=8)`. A list or another dict given for a distribution raises `TypeError` and names that method, since it could mean the distribution's arguments or the values themselves.
+
+The value of a parameter in the current context, with the modifiers that are active on it applied, is `mod.value(name)`: a number in the sim's unit, or one for each group or agent when the modifiers differ between them. `float(sir.pars.beta)` is the same number when it is one number, so a function that reads a parameter sees an `ss.change` to it; when the modifiers give it different values for different people, `float()` raises rather than averaging them. `par.raw` is the value without the modifiers.
+
 ## The ladder
 
 Every slot that takes a value accepts every form below. The slot fixes what the value means; the form is free.

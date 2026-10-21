@@ -215,12 +215,20 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change), so a function that reads it sees the change """
+        """
+        A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change),
+        so a function that reads it sees the change. If the modifiers give it a different value for different people or groups, it is not one number,
+        so this raises: use `mod.value(name)`, the value in the current context (one for each group or agent)
+        """
         raw = self.raw
         if sc.isnumber(raw):
             engine = getattr(self.module, 'engine', None)
             if engine is not None and self.name and not self.literal and engine.sim.modifiers.get((self.module.name, 'par', self.name)):
-                return float(np.mean(engine.modified(self, raw)))
+                vals = np.asarray(engine.modified(self, raw), dtype=float)
+                if np.any(vals != vals.flat[0]):
+                    errormsg = f'The parameter {self.name} of "{self.module.name}" has modifiers that give it a value for each group or agent, so it is not one number; use {self.module.name}.value("{self.name}") for its values'
+                    raise ValueError(errormsg)
+                return float(vals.flat[0])
             return float(raw)
         errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
         raise TypeError(errormsg)

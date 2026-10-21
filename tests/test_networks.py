@@ -706,8 +706,8 @@ def test_per_act():
 
     # A network written as code with Starsim 3's net_beta() keeps Starsim 3's numbers: the chance for the partnership in the step, which rel_sus then scales (0.44 at p=0.3, 6 acts, rel_sus=0.5, against 0.66 per act)
     class V3Net(ss.MFNet):
-        def net_beta(self, disease_beta=None, inds=None, disease=None):
-            return self.edges.beta[inds]*(1 - (1 - disease_beta)**self.edges.acts[inds])
+        def net_beta(self, disease_beta=None, inds=None, disease=None): # As Starsim 3 calls it: for every edge (STIsim's takes uids= instead of inds=)
+            return self.edges.beta*(1 - (1 - disease_beta)**self.edges.acts)
     half = lambda: [ss.modify('si.rel_sus', multiply=0.5)]
     core = chance(ss.peract(0.3), acts=ss.constant(ss.freqperyear(6)), connectors=half())
     coded = chance(ss.peract(0.3), acts=ss.constant(ss.freqperyear(6)), connectors=half(), net=V3Net)
@@ -1011,6 +1011,58 @@ def test_condoms():
     return
 
 
+def test_coded_declared_transmission():
+    """ A disease written as code and a declared one, run as agents, infect the same people over the same contacts with the same seed """
+    sc.heading('Testing that coded and declared diseases transmit the same way')
+    class SI(ss.Infection):
+        def __init__(self, beta, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(beta=beta)
+        def set_prognoses(self, uids, sources=None):
+            super().set_prognoses(uids, sources)
+            self.infected[uids] = True
+            return
+
+    def pairs(coded, beta, net, mods=None):
+        si = SI(beta=beta, name='si') if coded else ss.Disease(infection=ss.transmission('S -> I', beta=beta), init_prev=0, name='si')
+        sim = ss.Sim(diseases=si, networks=net, connectors=mods, analyzers=ss.infection_log(), n_agents=2000, start=2000, stop=2003, verbose=0, rand_seed=3).init()
+        seeds = ss.uids(np.arange(0, 2000, 10)) # The same people infected at the start
+        si = sim.diseases.si
+        if coded:
+            si.set_prognoses(seeds, sources=-1)
+        else:
+            si.S[seeds] = False
+            si.I[seeds] = True
+        df = sim.run().analyzers[0].to_df()
+        df = df[df.source >= 0].sort_values('target')
+        return list(zip(df.source, df.target, df.t))
+
+    # Over a random network, with and without modifiers of its contacts and of the transmission on it
+    random = lambda: ss.RandomNet(n_contacts=4)
+    mods = lambda target: [ss.modify(target, multiply=0.5, route='randomnet'), ss.modify('randomnet.pars.n_contacts', multiply=0.6)]
+    plain = pairs(True, ss.peryear(0.3), random())
+    assert len(plain) > 100 and plain == pairs(False, ss.peryear(0.3), random())
+    modified = pairs(True, ss.peryear(0.3), random(), mods('si.rel_sus')) # A disease written as code has no transmission to name, so a modifier on a route is of its rel_sus
+    assert 0 < len(modified) < 0.6*len(plain) and modified == pairs(False, ss.peryear(0.3), random(), mods('si.infection'))
+
+    # Over a sexual network with acts (in which the same couples form whatever the disease), with a probability per act in each direction
+    class Couples(ss.SexualNetwork):
+        def step(self):
+            self.end_pairs()
+            self.participant[self.sim.people.auids] = True
+            m, f = [self.available(self.sim.people, sex) for sex in ['male', 'female']]
+            n = min(len(m), len(f))
+            self.append(p1=m[:n], p2=f[:n], beta=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, 4.0))
+            return
+    beta = ss.peract(m2f=0.1, f2m=0.05)
+    directed = pairs(True, beta, Couples(name='mf'))
+    assert len(directed) > 50 and directed == pairs(False, beta, Couples(name='mf'))
+    assert pairs(True, beta, Couples(name='mf'), [ss.modify('si.rel_sus', multiply=0, route='mf')]) == [] # No transmission on that route
+    with pytest.raises(ValueError, match='rel_sus'):
+        pairs(True, beta, Couples(name='mf'), [ss.modify('si.rel_trans', multiply=0, route='mf')])
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1040,6 +1092,7 @@ if __name__ == '__main__':
     bare = test_bare_units()
     acts = test_per_act_beta()
     cond = test_condoms()
+    same = test_coded_declared_transmission()
     peract = test_per_act()
     read = test_beta_readings()
     route = test_route_modifiers()

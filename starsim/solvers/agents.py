@@ -9,7 +9,6 @@ from .compartmental import Compartmental
 
 __all__ = ['Agents']
 
-ss_float = ss.dtypes.float
 check_counts = sc.parse_env('STARSIM_CHECK_COUNTS', False, bool) # Whether the agent engine checks the counts it keeps against a new count at each step: see ss.solvers.Agents.check_counts()
 
 
@@ -2684,31 +2683,17 @@ class Agents(Engine):
             ref = max([np.max(c) for c in coefs.values()] + [0])
             if ref <= 0:
                 continue
-            contacts = self.contact_mult(route.name) # The share of its contacts that happen, from the modifiers of its n_contacts
+            mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg) # From the modifiers of its contacts and of the transmission on it
             weights = mod.rel_trans.raw*0
             for state,c in coefs.items():
                 weights = weights + mod[state.name].raw*(c/ref)*state.rel_trans
             rel_trans = mod.rel_trans.asnew(weights*mod.rel_trans.raw*self.mult_raw('rel_trans')*by_strain, copy=False)
             beta = -np.expm1(-ref*dt)
             if isinstance(route, ss.Network):
-                if not len(route):
-                    continue
-                edges = route.edges
-                beta_per_dt = route.net_beta(disease_beta=beta, disease=mod)
-                if np.ndim(beta_per_dt) == 0:
-                    beta_per_dt = np.full(len(edges.p1), beta_per_dt, dtype=ss_float)
-                if np.ndim(contacts) == 0 and contacts != 1:
-                    beta_per_dt = beta_per_dt*contacts
-                for d in range(1 if route.one_way else 2): # Each edge in both directions, unless it transmits one way (mother to child)
-                    p1, p2 = (edges.p1, edges.p2) if d == 0 else (edges.p2, edges.p1)
-                    beta_d = beta_per_dt*contacts[p2] if np.ndim(contacts) else beta_per_dt # For the people they would infect
-                    beta_d = beta_d*self.route_mult(tr, route, Ellipsis, p2)
-                    kernel = ss.Infection
-                    inds = kernel._nb_can_transmit(p1, p2, rel_trans.raw, rel_sus.raw, beta_d)
-                    p1c, p2c = p1[inds], p2[inds]
-                    rvs = mod.trans_rng.rvs(p1c, p2c)
-                    srcs, trgs = kernel._nb_transmit(np.asarray(p1c), np.asarray(p2c), rel_trans.raw, rel_sus.raw, beta_d[inds], rvs)
-                    new_cases.append(trgs.view(ss.uids))
+                beta_per_dt = route.net_beta(disease_beta=beta, disease=mod) if len(route) else None
+                edge_beta = lambda d, src, trg: beta_per_dt*mult(Ellipsis, trg) # For the people they would infect
+                for srcs, trgs in route.transmit(rel_trans.raw, rel_sus.raw, edge_beta, mod.trans_rng):
+                    new_cases.append(trgs)
                     pairs.append((srcs, trgs, i))
             elif isinstance(route, (ss.MixingPool, ss.MixingPools)) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.solvers.Mixing.init_pools()
                 any_pools = True
@@ -2719,7 +2704,7 @@ class Agents(Engine):
                     share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
                     infectious = np.bincount(groups[auids], weights=(rel_trans.raw*share)[auids], minlength=sim.groups.n_groups)
                     expo = sim.mixing.term_exposure(sim.mixing.pool_terms[route.name], infectious, n)
-                    pool_hazard[k] += ref*expo[groups]*rel_sus.raw*contacts*self.route_mult(tr, route, None, slice(None))
+                    pool_hazard[k] += ref*expo[groups]*rel_sus.raw*mult(None, slice(None))
             elif isinstance(route, (ss.MixingPool, ss.MixingPools)): # Has no direction
                 any_pools = True
                 for pool in (route.pools if isinstance(route, ss.MixingPools) else [route]):
@@ -2728,7 +2713,7 @@ class Agents(Engine):
                         for k,strain in enumerate(strains):
                             share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.src_uids], strain]
                             trans = np.mean(rel_trans.raw[pool.src_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
-                            pool_hazard[k][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*rel_sus.raw[dst]*(contacts[dst] if np.ndim(contacts) else contacts)*self.route_mult(tr, route, None, dst)
+                            pool_hazard[k][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*rel_sus.raw[dst]*mult(None, dst)
             else: # Any other route works out its own transmission
                 new_cases.append(ss.uids(route.compute_transmission(rel_sus, rel_trans, beta, disease=mod)))
         if self.strain is not None and pairs: # Each new case takes the strain of whoever infected them
@@ -2865,85 +2850,36 @@ class Agents(Engine):
         probability 1 − exp(−H), where H = (edge weight) × (acts in the step) × (hazard per act in the edge's direction, for
         `u`'s state) × rel_trans[u] × rel_sus[v] × (the modifiers on this route); so `rel_trans`, `rel_sus`, source weights,
         and modifiers all scale the hazard of each act. A network written as code that overrides `net_beta()` keeps
-        Starsim 3's contract instead: it is given the probability per act in each direction, and what it returns is the
-        probability for the partnership in the step, which `rel_trans` and `rel_sus` then multiply.
+        Starsim 3's contract instead (see `ss.Network.custom_beta`): it is given the probability per act of each edge, and what
+        it returns is the probability for the partnership in the step, which `rel_trans`, `rel_sus` and the modifiers then multiply.
         """
         mod = self.mod
         sim = self.sim
         hazards = {state: np.asarray(self.route_beta(coef, nkey, route), dtype=float) for state,coef in tr.terms.items()} # Directions (by groups) for each source state
         if not any(np.any(h > 0) for h in hazards.values()):
             return
-        edges = route.edges
         trans = mod.rel_trans.raw*self.mult_raw('rel_trans')*by_strain
-        source = sum(mod[state.name].raw*state.rel_trans for state in hazards) # Whether each agent is infectious, with the rel_trans of their state
-        contacts = self.contact_mult(route.name)
-        coded = type(route).net_beta.__module__ != 'starsim.networks' # A network written as code with its own net_beta(), as in Starsim 3
-        weight = np.ones(len(edges.p1)) if coded else edges.beta*edges.acts
-        by_group = any(h.ndim > 1 for h in hazards.values())
-        groups = sim.groups.group_raw() if by_group else None
-        for d in range(1 if route.one_way else 2): # Each edge in both directions, unless it transmits one way (mother to child)
-            p1, p2 = (edges.p1, edges.p2) if d == 0 else (edges.p2, edges.p1)
-            inds = ss.Infection._nb_can_transmit(p1, p2, trans*source, rel_sus.raw, weight)
-            src, trg = p1[inds], p2[inds]
+        groups = sim.groups.group_raw() if any(h.ndim > 1 for h in hazards.values()) else None
+        mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg)
+
+        def act_hazard(src, trg):
+            """ The hazard per act of each edge, for the state its infectious end is in """
             dirs = route.edge_directions(src, trg)
-            if dirs is None:
-                dirs = np.zeros(len(inds), dtype=np.int8)
-            elif np.any(dirs < 0):
-                k = np.flatnonzero(dirs < 0)[0]
-                raise ss.RouteMismatch(f'"{route.name}" has a partnership from {src[k]} to {trg[k]}, whose sides give no direction it has ({sc.strjoin(route.directions)}; {route.name} has {route.sides_str()})')
-            act = np.zeros(len(inds)) # The hazard per act of each edge, for the state its infectious end is in
+            act = np.zeros(len(src))
             for state,h in hazards.items():
                 hs = h[dirs] if h.ndim == 1 else h[dirs, groups[trg]] # A value for each group is for the group of the people they would infect
                 act += mod[state.name].raw[src]*state.rel_trans*hs
-            mult = trans[src]*rel_sus.raw[trg]*(contacts[trg] if np.ndim(contacts) else contacts)*self.route_mult(tr, route, inds, trg)
-            if coded:
-                ref = np.max([np.max(h, axis=tuple(range(1, h.ndim))) for h in hazards.values()], axis=0) # The largest hazard in each direction, whose probability net_beta() is given
-                per_edge = np.zeros(len(inds))
-                for k in np.unique(dirs):
-                    on = dirs == k
-                    if ref[k] > 0:
-                        per_edge[on] = route.net_beta(disease_beta=-np.expm1(-ref[k]), inds=inds[on], disease=mod)*act[on]/ref[k]
-                p = per_edge*mult
-            else:
-                p = -np.expm1(-weight[inds]*act*mult)
-            rvs = mod.trans_rng.rvs(src, trg)
-            hit = rvs < p
-            srcs, trgs = np.asarray(src)[hit], np.asarray(trg)[hit]
-            new_cases.append(trgs.view(ss.uids))
+            return act
+
+        if route.custom_beta: # Starsim 3's contract
+            edge_beta = lambda d, src, trg: route.net_beta(disease_beta=-np.expm1(-act_hazard(src, trg)), disease=mod)*mult(Ellipsis, trg)
+            out = route.transmit(trans, rel_sus.raw, edge_beta, mod.trans_rng)
+        else:
+            source = sum(mod[state.name].raw*state.rel_trans for state in hazards) # Whether each agent is infectious, with the rel_trans of their state
+            weight = route.edges.beta*route.edges.acts
+            prob = lambda d, inds, src, trg: -np.expm1(-weight[inds]*act_hazard(src, trg)*trans[src]*rel_sus.raw[trg]*mult(inds, trg))
+            out = route.transmit(trans*source, rel_sus.raw, lambda d, src, trg: weight, mod.trans_rng, prob=prob)
+        for srcs, trgs in out:
+            new_cases.append(trgs)
             pairs.append((srcs, trgs, i))
         return
-
-    def route_mult(self, tr, route, inds, trg):
-        """
-        The multiplier on a transmission on one route from the modifiers given that route (`ss.modify(..., route=)`), 1 if there are none:
-        for each, `1 − share·(1 − multiply)` for the people it applies to (`where=`, of the people who would be infected)
-
-        Args:
-            tr (Transition): the transmission
-            route (Route): the route
-            inds (array): the edges of a network (Ellipsis for all), for a share given per edge; None for a route with no edges
-            trg (array): the people who would be infected, by UID (or a slice of every agent)
-        """
-        mods = self.sim.modifiers.get((self.mod.name, 'route', f'{tr.name}@{route.name}'))
-        out = 1.0
-        for m in mods or []:
-            if not m.active:
-                continue
-            at = lambda val: val[trg] if np.ndim(val) else val # Per agent, for the people who would be infected
-            amount = at(np.asarray(m.current(self, share=False), dtype=float))
-            if m.share is None:
-                share = 1.0
-            elif m.per_edge:
-                if inds is None:
-                    raise ss.CapabilityError(f'share= of the modifier "{m.name}" is a function of the network, one value per edge, but "{route.name}" has no edges; give a number, an ss.timeseries, or an ss.by')
-                share = np.asarray(m.share_of(self, route), dtype=float)[inds]
-            else:
-                share = at(np.asarray(m.share_of(self), dtype=float))
-            mult = 1 - share*(1 - amount)
-            if m.where is not None:
-                mask = self.selector.select(m.where)
-                if m.hold is not None:
-                    mask = m.held_mask(mask, self)
-                mult = np.where(at(mask) > 0, mult, 1.0)
-            out = out*mult
-        return out

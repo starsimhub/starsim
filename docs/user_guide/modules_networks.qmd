@@ -402,7 +402,7 @@ sim.plot('sis')
 `ssl.HybridNet` reproduces [Covasim](https://covasim.org/)'s "hybrid" population: when added to a sim, it expands into four separate networks, households (`h`, an `ssl.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each an `ss.RandomNet` restricted by age where appropriate. Any `dt`, `start`, or `stop` given to `ssl.HybridNet` is passed to all four networks, and each network can then be accessed (or modified) separately, e.g. `sim.networks.s`:
 
 ```{python}
-sim = ss.Sim(n_agents=2000, diseases='sis', networks=ssl.HybridNet(household_size=3), verbose=0)
+sim = ss.Sim(n_agents=2000, diseases='sis', networks=ssl.HybridNet(household_size=ss.poisson(3)), verbose=0)
 sim.run()
 for net in sim.networks():
     print(f'{net.name} ({net.label}): {len(net)} edges')

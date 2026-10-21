@@ -1997,6 +1997,13 @@ def test_change_in_function():
         sim = ss.Sim(m, interventions=intv, start=2000, stop=2010, dt=1/12, n_agents=2000, verbose=0).run()
         starts.append(sim.results.meth.start[61:].sum())
     assert starts[0] > 100 and starts[1] == 0
+
+    # A change that differs between groups is not one number, so float() raises rather than averaging; mod.value() gives the value of each
+    m = ss.Disease(start=ss.Transition('none', 'on', rate=initiation), stop=ss.Transition('on', 'none', rate=ss.peryear(0.5)), init=dict(none=1.0), b0=ss.par(-1.0), name='meth')
+    m.stratify(risk=['low', 'high'])
+    intv = ss.modify('meth.pars.b0', multiply=ss.by(risk=[1, 2]))
+    with pytest.raises(ValueError, match='not one number'):
+        ss.Sim(m, interventions=intv, start=2000, stop=2002, n_agents=500, verbose=0).run()
     return
 
 

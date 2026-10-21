@@ -4,14 +4,12 @@ Base classes for diseases
 import re
 import inspect
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
 ss_int = ss.dtypes.int
-ss_float = ss.dtypes.float
 _ = None # For function signatures
 
 
@@ -700,17 +698,14 @@ class Infection(Disease):
             return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
 
         def as_pair(β, nkey):
-            """ A probability per act is [p1 to p2, p2 to p1], as Starsim 3's pair: on ss.MFNet, whose p1 are men, [m2f, f2m] """
+            """ A probability per act is one value for both [p1 to p2, p2 to p1], as Starsim 3's pair; with directions, an array of a value for each of the network's (see `infect_route()`) """
             if not isinstance(β, ss.peract):
                 return β
             net = nets.get(nkey)
             vals = β.resolve(net) if net is not None else β.values
             if len(vals) == 1:
                 return vals*2
-            elif isinstance(net, ss.MFNet):
-                return vals
-            errormsg = f'"{self.name}" is written as code, so its beta on "{nkey}" is a pair [p1 to p2, p2 to p1], or one value; {β} has directions, which only ss.MFNet (men in p1) maps to a pair'
-            raise ss.RouteMismatch(errormsg)
+            return [np.asarray(vals, dtype=float)]*2
 
         # If beta is a scalar, apply this bi-directionally to all networks
         if scalar_beta(β) or isinstance(β, ss.peract):
@@ -809,47 +804,6 @@ class Infection(Disease):
 
         return new_cases, sources, networks
 
-    @staticmethod
-    @nb.jit(cache=True) # No fastmath: a stray NaN must compare False (no transmission), not be assumed absent
-    def _nb_transmit(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
-        """ Optimized transmission kernel: returns the (source, target) UIDs of transmitting edges.
-
-        Fuses the gather/multiply/compare *and* the UID extraction into a single branchless pass.
-        This avoids the full-length boolean temporary and the two separate gather passes
-        (`trg[mask]`, `src[mask]`) of the previous approach -- ~1.4x faster at typical transmission
-        rates, more when transmission is common. UIDs are emitted in edge order, preserving CRN behavior.
-        """
-        n = src.shape[0]
-        src_out = np.empty(n, dtype=np.int64) # int64 = uid dtype, so the caller can .view(uids) without a copy
-        trg_out = np.empty(n, dtype=np.int64)
-        m = 0
-        for i in range(n):
-            transmitted = rel_trans[src[i]] * rel_sus[trg[i]] * beta_per_dt[i] > randvals[i]
-            src_out[m] = src[i] # Written every iteration (branchless); kept only if m advances
-            trg_out[m] = trg[i]
-            m += transmitted
-        return src_out[:m], trg_out[:m]
-
-    @staticmethod
-    @nb.jit(cache=True) # No fastmath: a stray NaN must compare False (edge dropped), as in _nb_transmit()
-    def _nb_can_transmit(src, trg, rel_trans, rel_sus, beta_per_dt):
-        """ Return the indices of the edges with a nonzero transmission probability, in edge order """
-        n = src.shape[0]
-        inds = np.empty(n, dtype=np.int64)
-        m = 0
-        for i in range(n):
-            can_transmit = rel_trans[src[i]] * rel_sus[trg[i]] * beta_per_dt[i] > 0 # Same expression as _nb_transmit()
-            inds[m] = i # Written every iteration (branchless); kept only if m advances
-            m += can_transmit
-        return inds[:m]
-
-    def compute_transmission(self, src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
-        """ Compute the probability of a->b transmission for networks (for other routes, the Route handles this) """
-        if np.ndim(beta_per_dt) == 0: # net_beta returns a per-edge array, but tolerate a scalar
-            beta_per_dt = np.full(len(src), beta_per_dt, dtype=ss_float)
-        source_arr, target_arr = self._nb_transmit(np.asarray(src), np.asarray(trg), rel_trans.raw, rel_sus.raw, beta_per_dt, randvals)
-        return target_arr.view(ss.uids), source_arr.view(ss.uids) # view (no copy): kernel output is uniquely owned int64; concatenate() compacts later
-
     def infect(self):
         """
         Determine who gets infected on this timestep via transmission on the network
@@ -893,10 +847,13 @@ class Infection(Disease):
         """
         Compute the transmission along a single network (or other route)
 
+        On a network, each edge transmits with probability `rel_trans·rel_sus·net_beta()` (see `ss.Network.transmit()`), times the modifiers
+        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., route=)`), as for a declared disease run as agents.
+
         Args:
             i (int): the index of the route in `sim.networks`, stored as the network ID of each infection
             route (`ss.networks.Route`): the network or other route (e.g. a mixing pool)
-            betas (list): the pair of betas for the route (p1→p2 and p2→p1); routes other than networks only use the first
+            betas (list): the pair of betas for the route (p1→p2 and p2→p1), each a number or rate, or an array of a probability per act for each direction of the network; routes other than networks only use the first
             rel_trans (`ss.FloatArr`): the effective transmissibility of each agent (0 if not infectious)
             rel_sus (`ss.FloatArr`): the effective susceptibility of each agent (0 if not susceptible)
 
@@ -905,36 +862,36 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
+        mods = self.sim.modifiers
+        if mods.get((route.name, 'par', 'n_contacts')) or mods.get((self.name, 'route', f'rel_sus@{route.name}')): # Modifiers of its contacts, or on this route
+            engine = ss.connectors.AgentModifiers.engine(self, self.sim)
+            mult = lambda inds, trg: ss.connectors.route_mult(engine, 'rel_sus', route, inds, trg)
+        else:
+            mult = lambda inds, trg: 1.0
 
         # Main use case: networks
         if isinstance(route, ss.Network):
-            if len(route): # Skip networks with no edges
-                edges = route.edges
-                p1_to_p2 = [edges.p1, edges.p2, betas[0]]  # p1→p2 direction, beta 0
-                p2_to_p1 = [edges.p2, edges.p1, betas[1]]  # p2→p1 direction, beta 1
-                for src, trg, beta in [p1_to_p2] if route.one_way else [p1_to_p2, p2_to_p1]: # Mother-to-child networks transmit one way
-                    if beta: # Skip networks with no transmission
-                        disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-                        beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-                        if np.ndim(beta_per_dt) == 0: # net_beta returns a per-edge array, but tolerate a scalar
-                            beta_per_dt = np.full(len(src), beta_per_dt, dtype=ss_float)
-
-                        # Only draw random numbers for edges that can transmit (infectious source, susceptible target). With CRN, each
-                        # edge's random number depends only on its source and target, so this gives identical results to drawing for every edge.
-                        inds = self._nb_can_transmit(src, trg, rel_trans.raw, rel_sus.raw, beta_per_dt)
-                        src_can = src[inds]
-                        trg_can = trg[inds]
-                        beta_can = beta_per_dt[inds]
-                        randvals = self.trans_rng.rvs(src_can, trg_can) # Generate a new random number based on the two other random numbers (called even if empty, to keep CRN draws in sync)
-                        args = (src_can, trg_can, rel_trans, rel_sus, beta_can, randvals) # Set up the arguments to calculate transmission
-                        target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
-                        new_cases.append(target_uids)
-                        sources.append(source_uids)
+            def edge_beta(d, src, trg):
+                beta = betas[d]
+                if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
+                    beta = beta[route.edge_directions(src, trg)]
+                elif not beta: # Skip directions with no transmission
+                    return None
+                disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
+                beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+                m = mult(Ellipsis, trg)
+                return beta_per_dt*m if np.ndim(m) or m != 1 else beta_per_dt # Bit for bit as before, with no modifiers
+            for source_uids, target_uids in route.transmit(rel_trans.raw, rel_sus.raw, edge_beta, self.trans_rng):
+                new_cases.append(target_uids)
+                sources.append(source_uids)
 
         # Handle everything else: mixing pools, environmental transmission, etc.
         elif isinstance(route, ss.networks.Route):
             # Mixing pools are unidirectional, only use the first beta value
             disease_beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.Rate) else betas[0]
+            m = mult(None, slice(None))
+            if np.ndim(m) or m != 1:
+                rel_sus = rel_sus.asnew(rel_sus.raw*m, copy=False)
             target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
             new_cases.append(target_uids)
             sources.append(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan))

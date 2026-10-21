@@ -22,7 +22,7 @@ class ClusterNet(ss.Network):
     there, clusters of size 0 are skipped, and the last cluster is truncated to fit.
 
     Args:
-        cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution
+        cluster_size (int/`ss.Dist`): the size of each cluster: a distribution (default `ss.poisson(lam=4)`), or a number for every cluster
         age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
         beta (float): the beta value for each edge
         dynamic (bool): if True, the clusters are recreated on each timestep; if False (default), they are created once and never change
@@ -113,7 +113,7 @@ class HybridNet(ss.Network):
     on the disease instead, set them to 1 and use e.g. `ss.SIS(beta=dict(h=0.3, s=0.06, w=0.06, c=0.03))`.
 
     Args:
-        household_size (int/`ss.Dist`): the size of each household; a number is the mean of a Poisson distribution
+        household_size (int/`ss.Dist`): the size of each household: a distribution (default `ss.poisson(lam=2)`), or a number for every household
         contacts (dict): the mean number of contacts per agent in schools, workplaces, and community (numbers or `ss.Dist`s)
         beta (dict): the beta value for each edge in each network
         school_ages (list): the age range of agents in schools

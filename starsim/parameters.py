@@ -102,6 +102,10 @@ class Pars(sc.objdict):
         """
         Update internal dict with new pars.
 
+        A new value replaces the old one, except that a declared parameter (`ss.par`) takes the value and keeps its name and bounds,
+        a bare number for a typed value keeps its unit, and a single value for a distribution is the fixed value of that kind
+        (see `_update_dist()`). To change one parameter of a distribution, use its own method, e.g. `pars.dur_inf.set(mean=8)`.
+
         Args:
             pars (dict): the parameters to update (if None, do nothing)
             create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
@@ -213,50 +217,39 @@ class Pars(sc.objdict):
         return
 
     def _update_dist(self, key, old, new):
-        """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
+        """
+        Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf
+
+        A new value replaces the distribution. A distribution (or a dict with a `type`) is used as it is; any other value
+        (a number, duration, rate, or function) is the fixed value of that kind: for `ss.bernoulli`, its probability
+        (`init_prev=0.05` is `ss.bernoulli(p=0.05)`), and otherwise `ss.constant` (`dur=ss.days(15)` is every partnership
+        lasting 15 days). A bare number keeps the unit of the distribution it replaces (see `note_bare()`). To change one
+        parameter of a distribution and keep the others, use its own method, e.g. `pars.dur_inf.set(mean=8)`.
+        """
+        if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', lam=4)
+            new = ss.distributions.make_dist(new)
 
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist):
             if isinstance(old, ss.bernoulli) and not isinstance(new, (ss.bernoulli, ss.choose_n)): # Both have filter()
                 errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {type(new)} is invalid"
                 raise TypeError(errormsg)
-            else:
-                self[key] = new
+            self[key] = new
 
-        # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
-        elif isinstance(new, (Number, ss.dur, ss.Rate)):
-            old.set(new)
+        # It's a single value, e.g. dur_inf = 6: the fixed value of that kind
+        elif isinstance(new, (Number, ss.dur, ss.Rate)) or sc.isfunc(new):
             if isinstance(new, Number):
                 self.note_bare(key, old, new)
-
-        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
-        elif isinstance(new, list):
-            old.set(*new)
-            if all(isinstance(v, Number) for v in new):
-                self.note_bare(key, old, new)
-
-        # It's a dict, figure out what to do
-        elif isinstance(new, dict):
-            newtype = new.get('type')
-            if newtype is None: # Same type of dist, set parameters
-                old.set(**new)
-            else: # We need to create a new distribution
-                if isinstance(old, ss.bernoulli) and newtype not in ['bernoulli', 'choose_n']:
-                    errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {newtype} is invalid"
-                    raise TypeError(errormsg)
-                else:
-                    dist = ss.distributions.make_dist(new)
-                    self[key] = dist
-
-        # It's a function, treat it like a number
-        elif sc.isfunc(new):
-            old.set(new)
+                unit = old.unit or next((type(v) for v in old.pars.values() if isinstance(v, ss.TimePar)), None) # The unit it is read in
+                if unit is not None and not isinstance(old, ss.bernoulli):
+                    new = unit(new)
+            self[key] = ss.bernoulli(p=new) if isinstance(old, ss.bernoulli) else ss.constant(v=new)
 
         # Give up
         else:
-            errormsg = f'Updating dist from {type(old)} to {type(new)} is not supported'
+            what = f'use pars.{key}.set({", ".join(map(str, new))})' if isinstance(new, (list, tuple)) else f'use pars.{key}.set(**{new})' if isinstance(new, dict) else 'give a distribution'
+            errormsg = f'"{key}" is {old}; a {type(new).__name__} ({new}) is not a value for it. To change its parameters, {what}; to replace it, give a distribution (e.g. {type(old).__name__}(...)) or a single value'
             raise TypeError(errormsg)
-
         return
 
     def check_key_mismatch(self, pars):
