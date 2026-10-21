@@ -167,28 +167,6 @@ def memory_needs(sim):
     return out
 
 
-def memory_layout(sim, key):
-    """ In a compartmental run: the stratification that keeps whether an event happened (`.ever`, the only memory with a compartmental form: see `ss.solvers.init_capabilities()`), or None if nothing reads it """
-    cache = sim.__dict__.setdefault('_memory_layout', {})
-    if key not in cache:
-        name, outcome = key
-        cache[key] = None if not memory_needs(sim).get(key) else ss.transitions.Strat(f'ever_{name if outcome is None else f"{name}_{outcome}"}', [False, True], split=[1.0, 0.0])
-    return cache[key]
-
-
-def remember_levels(owner, outcome, sel, before, eng):
-    """ In a compartmental run: move the people an event happened to (a share of the people in each state and group of `eng` as they were in `before`) to the level of its memory that says it happened """
-    sim = owner.sim
-    strat = memory_layout(sim, (owner.name, outcome))
-    if strat is None:
-        return
-    shifter = owner if isinstance(owner, Delivery) else next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is owner)
-    after = eng.state_counts()
-    now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
-    shifter.follow(now, now, {sim.groups.dim_index(strat.name):1}, ss.conditions.Cond('event', owner, outcome))
-    return
-
-
 def flush_memory(sim):
     """ At the start of a step: put any events not yet there into the memory """
     ti = sim.ti
@@ -232,8 +210,8 @@ def remembered(selector, cond):
         last, count = arr.raw, arr.counts.raw
     elif selector.abm:
         last, count = [a.raw for a in owner._mem[outcome]]
-    else: # Only .ever, as a level (see memory_layout())
-        return selector.dim(memory_layout(sim, (owner.name, outcome)).name) > 0
+    else: # Only .ever, as a level (see ss.solvers.memory_layout())
+        return selector.dim(ss.solvers.memory_layout(sim, (owner.name, outcome)).name) > 0
     if kind == 'ever':
         return count > 0
     elif kind == 'count':
@@ -267,68 +245,22 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
             event, cond = ss.conditions.split_who(tr.trigger.x)
             if not any(leaf.op == 'event' and ss.conditions.modname(leaf.args[0]) == owner.name and leaf.args[1] == outcome for leaf in ss.conditions.event_leaves(event)):
                 continue
+            if sim.solver != 'abm': # As shares of each state and group
+                ss.solvers.trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before)
+                continue
             tgt = mod.engine
             srcs = [s for s in tr.src if s.people]
-            if sim.solver == 'abm':
-                uids = sel if isinstance(sel, ss.uids) else ss.uids(np.flatnonzero(sel))
-                uids = uids[np.logical_or.reduce([mod[s.name].raw[uids] for s in srcs])] if len(uids) else uids
-                if cond is not None and len(uids):
-                    uids = uids[np.asarray(tgt.selector.select(cond), dtype=bool)[uids]]
-                if not len(uids):
-                    continue
-                ps = [np.broadcast_to(p, len(uids)) for p in (tgt.branch_probs_for(tr, uids) if tr.split else [tgt.eval_for(tr.p[0], uids) if tr.p else 1.0])]
-                rvs = tgt.dists[f'trig_{tr.name}'].rvs(uids)
-                edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
-                for k,dst in enumerate(tr.dst):
-                    tgt.force(uids[(rvs >= edges[k]) & (rvs < edges[k+1])], tr, dst, srcs=srcs)
-            else:
-                after = eng.state_counts()
-                now = sel if before is None else np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, as a share of those now in each state and group
-                if tgt is not eng:
-                    if not np.allclose(now, now[0]):
-                        raise ss.CapabilityError(f'"{tr.name}" of "{mod.name}" is triggered by {event}, whose people are chosen by their state in "{eng.mod.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-                    now = np.broadcast_to(now[0], tgt.selector.shape).astype(float)
-                frac = now*tgt.selector.in_states([s.name for s in srcs])
-                if cond is not None:
-                    frac = frac*tgt.selector.select(cond)
-                counts = tgt.state_counts()
-                tgt.move_share(tr, frac, srcs)
-                if tgt is eng: # The event's people who moved are found where they are now, by steps that read it later in the step
-                    carry_moved(owner, outcome, eng, counts)
-    return
-
-
-def carry_moved(owner, outcome, eng, before):
-    """
-    In a compartmental run: carry the events of this step along a move of the people of one of them (by a transition that
-    event triggered: see `trigger_moves()`), from the people it took out of each state and group to those it put in, so a step
-    that reads them later in the step finds them where they are now. An event with the same people (e.g. a delivery's
-    outcome, and its product's) moves as they did; any other, the same share as of everyone in their state and group
-    """
-    sim = owner.sim
-    after = eng.state_counts()
-    left, came = np.maximum(before - after, 0), np.maximum(after - before, 0)
-    share = np.divide(left, before, out=np.zeros_like(before), where=before>0)
-    entries = [e for e in owner.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti and e[3] is eng]
-    if not entries:
-        return
-    mine = entries[-1][1]*(before if entries[-1][2] is None else entries[-1][2]) # The people of the event that triggered the move
-    for m in [m for m in list(sim.interventions()) + list(sim.products()) if m.__dict__.get('_live')]:
-        for out,es in m._live.items():
-            for entry in es:
-                t, sel, b, e = entry
-                if t != sim.ti or e is not eng:
-                    continue
-                people = sel*(before if b is None else b)
-                if np.allclose(people, mine):
-                    new = np.maximum(people - left, 0) + came
-                else:
-                    moved = people*share
-                    new = people - moved
-                    total = moved.sum()
-                    if total > 0 and came.sum() > 0:
-                        new = new + came*(total/came.sum())
-                entry[1:3] = [np.clip(np.divide(new, after, out=np.zeros_like(after), where=after>0), 0, 1), after]
+            uids = sel if isinstance(sel, ss.uids) else ss.uids(np.flatnonzero(sel))
+            uids = uids[np.logical_or.reduce([mod[s.name].raw[uids] for s in srcs])] if len(uids) else uids
+            if cond is not None and len(uids):
+                uids = uids[np.asarray(tgt.selector.select(cond), dtype=bool)[uids]]
+            if not len(uids):
+                continue
+            ps = [np.broadcast_to(p, len(uids)) for p in (tgt.branch_probs_for(tr, uids) if tr.split else [tgt.eval_for(tr.p[0], uids) if tr.p else 1.0])]
+            rvs = tgt.dists[f'trig_{tr.name}'].rvs(uids)
+            edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
+            for k,dst in enumerate(tr.dst):
+                tgt.force(uids[(rvs >= edges[k]) & (rvs < edges[k+1])], tr, dst, srcs=srcs)
     return
 
 
@@ -387,30 +319,6 @@ def order_steps(mods):
 delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'priority', 'queue']
 
 
-def water_fill(amount, n, keys):
-    """
-    Take `n` people from cells holding `amount` each: whole cells in the order of their keys (lowest first, the first key before the second), and pro rata within a tie
-
-    Args:
-        amount (array): the people that can be taken from each cell
-        n (float): the number to take
-        keys (list): arrays of the same shape as `amount` (or that broadcast to it)
-    """
-    flat = np.asarray(amount, dtype=float).ravel()
-    out = np.zeros_like(flat)
-    some = np.flatnonzero(flat > 0)
-    if not len(some) or n <= 0:
-        return out.reshape(np.shape(amount))
-    K = np.stack([np.broadcast_to(k, np.shape(amount)).ravel()[some] for k in keys], axis=1)
-    _, inv = np.unique(K, axis=0, return_inverse=True) # Sorted, by the first key and then the next
-    inv = inv.ravel()
-    tot = np.bincount(inv, weights=flat[some])
-    before = np.cumsum(tot) - tot
-    frac = np.clip(n - before, 0, tot)/tot
-    out[some] = flat[some]*frac[inv]
-    return out.reshape(np.shape(amount))
-
-
 def movers(sim, modname, name):
     """ The names of the products and deliveries that name a transition: those that move people along it, and those triggered by it """
     out = []
@@ -448,7 +356,11 @@ class Delivery(ss.products.EventSource, Intervention):
     (`ss.treat(drug, who=screening.positive)`), and runs after it in the same step. Each event remembers per person whether
     (`.ever`), how often (`.count`), and how long ago (`.since`) it happened, including on this step once the delivery has run.
     With no product and no move, a delivery is a step people attend (e.g. a clinic visit): its event is who attended, which
-    several steps can take.
+    several steps can take. `delivery.reached()` is the UIDs of the people it reached on the step (agents only).
+
+    Its methods are how it runs as agents; in a compartmental run, what differs is `delivery.compartments`
+    (see `ss.solvers.CompartmentalDelivery`). A product whose effect is code of your own is an `ss.Product` with
+    an `administer(uids)` method.
 
     Args:
         what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment` (also the first argument)
@@ -576,6 +488,7 @@ class Delivery(ss.products.EventSource, Intervention):
             disease = self.disease_list[0]
         self.disease = disease
         self.started = False # For at_age=: whether the people already past the age have been left out (see skip_past())
+        self.compartments = None # In a compartmental run, what differs from agents: see ss.solvers.CompartmentalDelivery
         self.carry = 0.0 # The part of the capacity not yet used, when it is less than one agent per step
         self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.FloatArr('result', label='Test result, waited for'))
         if self.queue is not None:
@@ -698,15 +611,8 @@ class Delivery(ss.products.EventSource, Intervention):
                 out.append(Strat(dim, [False, True], split=[1.0, 0.0]))
         if self.remembers:
             out.append(Strat(self.offered, [False, True], split=[1.0, 0.0]))
-        out += self.memory_strats(sim)
+        out += ss.solvers.memory_strats(self, sim)
         return out
-
-    def memory_strats(self, sim=None):
-        """ In a compartmental run: the properties of people that keep whether its events, and its product's (by its first delivery), happened, if something reads it """
-        if sim is None or sim.solver in [None, 'abm']:
-            return []
-        owners = [self.name] + ([self.product.name] if self.product is not None and next((d for d in modules_of(sim, 'interventions') if isinstance(d, Delivery) and d.product is self.product), None) is self else [])
-        return [strat for key in memory_needs(sim) if key[0] in owners and (strat := memory_layout(sim, key)) is not None]
 
     def dim_moves(self):
         """ Movement along those properties that happens by itself: losing the protection of a product """
@@ -852,6 +758,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.queue is not None and self.capacity is None:
             errormsg = f'queue= of "{self.name}" is how long people wait when there is not enough capacity, so it needs capacity='
             raise ValueError(errormsg)
+        self.compartments = ss.solvers.CompartmentalDelivery(self) if sim.solver != 'abm' else None
         return
 
     def check_coded(self, sim):
@@ -947,16 +854,15 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def tally(self, key, sel, weight=1.0):
         """ Add the people selected to a result, in total and by group; returns the total """
+        if self.compartments is not None:
+            return self.compartments.tally(key, sel, weight)
         res = self.results[key]
         ti = self.sim.ti
         n = self.n_selected(sel)*weight
         res[ti] += n
         if getattr(res, 'strata', None) is not None and n:
-            if self.selector.abm:
-                uids = self.uids(sel)
-                res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight*ss.results.people_scale(self.sim)
-            else:
-                res.strata[self.row(ti)] += (sel*self.eng.state_counts()).sum(axis=0)*weight
+            uids = self.uids(sel)
+            res.strata[self.row(ti)] += np.bincount(self.sim.groups.group_raw()[uids], minlength=self.sim.groups.n_groups)*weight*ss.results.people_scale(self.sim)
         return n
 
     def add(self, key, uids=None, groups=None, part=None):
@@ -975,7 +881,7 @@ class Delivery(ss.products.EventSource, Intervention):
                     res.strata[self.row(ti)] += groups
         return
 
-    #%% Selections: a boolean per agent, or the fraction of each state and group
+    #%% Selections: a boolean per agent (in a compartmental run, the fraction of each state and group: see ss.solvers.CompartmentalDelivery)
 
     def uids(self, sel):
         auids = self.sim.people.auids
@@ -983,9 +889,9 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def n_selected(self, sel):
         """ The number of people selected, as results count them (see `ss.results.people_scale()`) """
-        if self.selector.abm:
-            return self.n_agents(sel)*ss.results.people_scale(self.sim)
-        return float((sel*self.eng.state_counts()).sum())
+        if self.compartments is not None:
+            return self.compartments.n_selected(sel)
+        return self.n_agents(sel)*ss.results.people_scale(self.sim)
 
     def n_agents(self, sel):
         """ As agents, the number of agents selected """
@@ -993,73 +899,24 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def people(self, sel):
         """ The number of people selected, whatever the results count in """
-        return self.n_agents(sel)*self.sim._current_scale if self.selector.abm else self.n_selected(sel)
+        if self.compartments is not None:
+            return self.compartments.n_selected(sel)
+        return self.n_agents(sel)*self.sim._current_scale
 
     def shift(self, sel, changes, mover=None):
-        """ Move the selected people to other levels of some dimensions (`mover` is the event they are, if known: see `carry_events()`) """
+        """ Move the selected people to other levels of some dimensions (`mover` is the event they are, if known, which a compartmental run uses) """
         sim = self.sim
         if not changes:
             return
-        if self.selector.abm:
-            uids = self.uids(sel)
-            for d,level in changes.items():
-                strat = sim.groups.strats[d]
-                arr = sim.people[strat.attr]
-                arr[uids] = strat.moved(arr[uids], level)
-            sim.groups.groups_changed(uids)
-        else:
-            for mod in sim.declared:
-                frac = sel
-                if mod is not self.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.solvers.Crossing
-                    continue
-                if mod is not self.dis: # Another disease has other states, so the selection cannot depend on the state
-                    if not np.allclose(sel, sel[0]):
-                        raise ss.CapabilityError(f'"{self.name}" selects people by their state in "{self.dis.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-                    frac = np.broadcast_to(sel[0], mod.engine.selector.shape)
-                before = mod.engine.state_counts() if mod is self.dis else None
-                moved = mod.engine.shift(frac, changes)
-                if mod is self.dis:
-                    self.moved_groups = moved
-                    target = mod.engine.targets(changes)
-                    self.carry_events(frac*(target != np.arange(len(target)))[None, :], before, mover, target=target)
+        if self.compartments is not None:
+            return self.compartments.shift(sel, changes, mover)
+        uids = self.uids(sel)
+        for d,level in changes.items():
+            strat = sim.groups.strats[d]
+            arr = sim.people[strat.attr]
+            arr[uids] = strat.moved(arr[uids], level)
+        sim.groups.groups_changed(uids)
         return
-
-    def carry_events(self, frac, before, mover=None, target=None, dst=None):
-        """
-        In a compartmental run: carry the events of this step (see `fire()`) along a move this delivery has just made, between
-        groups (to `target`) or into a state (`dst`), so that the steps that read them later in the step find their people where
-        they now are. Of the people of an event, those moved are: all the movers, if the movers are within the event (e.g. a step
-        it triggered, `mover`); none, if they are disjoint from it; and otherwise the same share as of everyone in their state and group.
-        """
-        sim = self.sim
-        eng = self.eng
-        selector = self.selector
-        after = eng.state_counts()
-        frac = np.clip(frac, 0, 1)
-        moved = frac*before
-        for owner in [m for m in list(sim.interventions()) + list(sim.products()) if m.__dict__.get('_live')]:
-            for outcome,entries in owner._live.items():
-                for i,(t,sel,b,e) in enumerate(entries):
-                    if t != sim.ti or e is not eng:
-                        continue
-                    people = np.clip(np.divide(sel*b, before, out=np.zeros_like(before), where=before>0), 0, 1)*before # As they were just before the move
-                    rel = None
-                    if isinstance(mover, ss.conditions.Cond):
-                        same = (owner.name, outcome) == (ss.conditions.modname(mover.args[0]), mover.args[1])
-                        rel = 'same' if same else selector.relation(ss.conditions.Cond('event', owner, outcome), mover)
-                    m = 0*people if rel == 'disjoint' else np.minimum(moved, people) if rel in ['same', 'b_in_a', 'a_in_b'] else people*frac # One within the other: as many as are in both
-                    new = people - m
-                    if target is not None:
-                        np.add.at(new, (slice(None), target), m)
-                    else:
-                        new[selector.states.index(dst.name)] += m.sum(axis=0)
-                    entries[i][1:3] = [np.clip(np.divide(new, after, out=np.zeros_like(after), where=after>0), 0, 1), after] # In place, so a pending memory has it too
-        return
-
-    def same_people(self, sel, before):
-        """ In a compartmental run: a selection made from the people in each state and group as they were (`before`), as a fraction of them as they are now that some have moved """
-        after = self.eng.state_counts()
-        return np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
 
     def mark_offered(self, sel, chosen):
         """ Record that the selected people have been offered the product; returns those chosen, as they now are """
@@ -1067,17 +924,10 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def follow(self, sel, chosen, changes, mover=None):
         """ Move the selected people to other levels of some dimensions; returns those chosen among them, as they now are """
-        if self.selector.abm:
-            self.shift(sel, changes)
-            return chosen
-        eng = self.eng
-        before = eng.state_counts()
-        target = eng.targets(changes)
-        self.shift(sel, changes, mover)
-        after = eng.state_counts()
-        moved = np.zeros_like(chosen)
-        np.add.at(moved, (slice(None), target), chosen*before) # The people chosen are now in another group, along with whoever was offered it before
-        return np.clip(np.divide(moved, after, out=np.zeros_like(moved), where=after>0), 0, 1)
+        if self.compartments is not None: # They are now in other groups
+            return self.compartments.follow(sel, chosen, changes, mover)
+        self.shift(sel, changes)
+        return chosen
 
     #%% Stepping
 
@@ -1095,6 +945,7 @@ class Delivery(ss.products.EventSource, Intervention):
         flush_memory(self.sim)
         self.step_deliver()
         for owner in [self] + ([self.product] if self.product is not None else []): # The memory of its events, for the steps after it
+            owner._ti_step = self.sim.ti # Its last step, for reached()
             if owner.__dict__.get('_pending'):
                 owner.flush(self.sim.ti)
         return
@@ -1151,17 +1002,10 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def delivered_by_function(self):
         """ Who the deliver= function says receives the product: UIDs, or a number of people per group """
-        selector = self.selector
         out = self.deliver(self.sim)
-        if selector.abm or isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
-            return selector.to_selection(out, 'deliver=')
-        n = self.eng.n_people(total=False)
-        out = np.asarray(out, dtype=float)
-        if out.shape != n.shape:
-            errormsg = f'In a compartmental run, the deliver= function of "{self.name}" has to return a number of people per group ({len(n)} values), not an array of shape {out.shape}'
-            raise ValueError(errormsg)
-        frac = np.clip(np.divide(out, n, out=np.zeros(len(n)), where=n>0), 0, 1)
-        return np.broadcast_to(frac[None, :], selector.shape).astype(float)
+        if self.compartments is not None and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
+            return self.compartments.delivered(out)
+        return self.selector.to_selection(out, 'deliver=')
 
     def default_eligible(self):
         """ Who is eligible if nothing is said: for a treatment that is not triggered, the people it can cure (those in the sources of its moves, or who are infected) """
@@ -1194,17 +1038,16 @@ class Delivery(ss.products.EventSource, Intervention):
     def receive(self, sel):
         """ Offer the product to some people: those eligible among them, thinned by coverage, served within capacity, and recorded as offered it """
         selector = self.selector
-        abm = selector.abm
         sel = self.offer(sel)
         self.tally('eligible', sel)
         cov = selector.per_person(1.0 if self.coverage is None else self.coverage, convert=lambda val: -np.expm1(-self.convert(val)*self.span)) # A typed probability or rate is over the step or the round
-        if abm:
+        if self.compartments is not None: # That share of each state and group
+            chosen = sel*np.clip(cov, 0, 1)
+        else:
             uids = self.uids(sel)
             p = cov if np.ndim(cov) == 0 else cov[uids]
             chosen = selector.nobody()
             chosen[uids[self.rng_cov.rvs(uids) < p] if not (np.ndim(p) == 0 and p >= 1) else uids] = True
-        else:
-            chosen = sel*np.clip(cov, 0, 1)
         sel, chosen = self.serve(sel, chosen)
         if self.remembers:
             chosen = self.mark_offered(sel, chosen)
@@ -1219,7 +1062,7 @@ class Delivery(ss.products.EventSource, Intervention):
         d = self.sim.groups.dim_index(self.offered)
         gone = (selector.dim(self.offered) == 1)*selector.everyone()
         now = self.eligible_now(held=False) # Holding the product does not end a spell, so it is not offered again when protection is lost
-        gone = gone & ~now if selector.abm else gone*(1 - now)
+        gone = gone*(1 - now) if self.compartments is not None else gone & ~now
         if np.any(gone):
             self.shift(gone, {d:0})
         return
@@ -1227,7 +1070,6 @@ class Delivery(ss.products.EventSource, Intervention):
     def offer(self, sel):
         """ Those of some people who are eligible: not holding the product already, not yet offered it (for routine delivery), and so on """
         selector = self.selector
-        abm = selector.abm
         if self.trace is not None: # Their contacts instead
             uids = self.uids(sel)
             contacts = [net.find_contacts(uids) for net in self.trace_nets]
@@ -1262,102 +1104,14 @@ class Delivery(ss.products.EventSource, Intervention):
             sel = sel & selector.to_selection(self.sim.people.auids)
         return sel
 
-    #%% In a whole run in the kernels
-
     @property
     def tabulated(self):
         """
         Whether the kernels can take this delivery in a whole run (see `ss.kernels.apply_shifts()`): in a compartmental run of one disease, a
         product that people hold or a transfer, given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
-        with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups
+        with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups (see `ss.solvers.CompartmentalDelivery.shifts()`)
         """
-        sim = self.sim
-        if sim.solver == 'abm' or len(sim.declared) != 1 or self.eng.cross is not None:
-            return False
-        product = self.product
-        moves = (product is None and self.move_states is None) or (product is not None and product.holds and getattr(product, 'take', None) is None) # Not a move between states, or an all-or-nothing vaccine, whose doses are not all held
-        scheduled = self.routine or (self.in_rounds and self.on is None)
-        watched = self.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, Delivery) for leaf in ss.conditions.event_leaves(mod.on)] or self._needs # Its events are read, which the kernels do not keep
-        static = ss.conditions.is_static(self.eligible, sim) and (sc.isnumber(self.coverage) or self.coverage is None or isinstance(self.coverage, ss.by))
-        past = self.at_age is not None # The people past the age are left out on the first step: see skip_past()
-        limited = self.capacity is not None or self.queue is not None or bool(getattr(product, 'doses', None)) # Served in an order, or given in doses, which the kernels do not take
-        return moves and scheduled and static and not limited and self.when is None and not watched and not past
-
-    def shifts(self):
-        """
-        This delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the share of the people in each state and group
-        who are eligible, and of those, who are reached; and the group that each group's people move to if reached, and if not
-        """
-        sim = self.sim
-        eng = self.eng
-        selector = self.selector
-        npts = sim.t.npts
-        due = np.zeros(npts, dtype=np.bool_)
-        for ti in range(npts):
-            due[ti] = self.ti_start <= ti < self.ti_stop and (self.round_tis is None or ti in self.round_tis)
-        sel = self.offer(self.default_eligible() if self.eligible is None else selector.select(self.eligible))
-        cov = np.broadcast_to(np.clip(selector.per_person(1.0 if self.coverage is None else self.coverage), 0, 1), selector.shape)
-        changes = dict(self.changes) if self.product is None else {sim.groups.dim_index(self.product.dim):1}
-        offered = {sim.groups.dim_index(self.offered):1} if self.remembers else {}
-        to = eng.targets(changes | offered)
-        rest = eng.targets(offered) if offered else np.arange(eng.n_groups)
-        return due, np.broadcast_to(sel, selector.shape), cov, to, rest
-
-    def store_shifts(self, tally, start=0, done=True):
-        """
-        The results of a whole run, from the number reached and eligible in each group at each time point
-
-        Args:
-            tally (array): time points by 2 by groups
-            start (int): the time point of its first row, for a run stored a part at a time (see `ss.solvers.Compartmental.run_parts()`)
-            done (bool): whether this is the last part
-        """
-        res = self.results
-        tis = start + np.arange(len(tally))
-        delivered, eligible = tally[:, 0], tally[:, 1]
-        for key,vals in [('delivered', delivered), ('eligible', eligible)] + ([('cost', delivered*self.product.cost)] if 'cost' in res else []):
-            res[key][tis] = vals.sum(axis=1)
-            strata = getattr(res[key], 'strata', None)
-            if strata is not None and self.rows is None:
-                strata[tis] = vals
-            elif strata is not None: # Added up over the steps of each row
-                if start == 0:
-                    strata[:] = 0
-                ss.solvers.add_rows(strata, self.rows, tis, vals)
-        if done:
-            res.coverage[:] = np.divide(res.delivered.values, res.eligible.values, out=np.zeros(len(res.coverage)), where=res.eligible.values>0)
-            if getattr(res.coverage, 'strata', None) is not None:
-                res.coverage.strata[:] = res.delivered.strata
-                res.coverage.denom[:] = res.eligible.strata
-        return
-
-    def many_shifts(self, tally, tally_g=None, group_ti=None):
-        """
-        The results of many runs, as `store_shifts()` but with runs first: each series as runs by time points, and (as `out.groups`) by group too, if kept
-
-        Args:
-            tally (array): runs by time points by 2 by groups (or by one group, the total)
-            tally_g (array): the same by group, as runs by rows by 2 by groups, if they are kept apart from the totals
-            group_ti (array): the time point of each row of `tally_g`, if they are not every time point (see `ss.Sim.group_rows()`)
-        """
-        delivered, eligible = tally[:, :, 0], tally[:, :, 1]
-        out = sc.objdict(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
-        if 'cost' in self.results:
-            out.cost = out.delivered*self.product.cost
-        out.coverage = np.divide(out.delivered, out.eligible, out=np.zeros_like(out.delivered), where=out.eligible>0)
-        out.groups = sc.objdict()
-        out.group_ti = group_ti
-        if tally_g is not None:
-            delivered, eligible = tally_g[:, :, 0], tally_g[:, :, 1]
-        if delivered.shape[-1] == self.sim.groups.n_groups and self.sim.groups.n_groups > 1:
-            out.groups.delivered, out.groups.eligible = delivered, eligible
-            out.groups.coverage = np.divide(delivered, eligible, out=np.zeros_like(delivered), where=eligible>0)
-            if 'cost' in self.results:
-                out.groups.cost = delivered*self.product.cost
-            for key in list(out.groups.keys()): # Only those kept by group (see the sim parameter results)
-                if getattr(self.results[key], 'strata', None) is None:
-                    del out.groups[key]
-        return out
+        return self.compartments is not None and self.compartments.tabulated()
 
     @property
     def span(self):
@@ -1372,9 +1126,10 @@ class Delivery(ss.products.EventSource, Intervention):
             return sel, chosen
         served = self.take(chosen, self.limit(), carry=True)
         self.use(served)
-        dropped = chosen & ~served if self.selector.abm else chosen - served
+        shares = self.compartments is not None # Of each state and group
+        dropped = chosen - served if shares else chosen & ~served
         self.tally('lost_capacity', dropped)
-        return (sel & ~dropped if self.selector.abm else sel - dropped), served
+        return (sel - dropped if shares else sel & ~dropped), served
 
     def limit(self):
         """ The most people that can be served now: what is left of the capacity this step """
@@ -1434,34 +1189,6 @@ class Delivery(ss.products.EventSource, Intervention):
         self.results.waiting[ti] = np.count_nonzero(~np.isnan(q[sim.people.auids]))*ss.results.people_scale(sim)
         return sel, served
 
-    def relocate(self, amount, changes):
-        """ In a compartmental run: move some people (by state and group) to other levels; returns where they are now """
-        eng = self.eng
-        N = eng.state_counts()
-        target = eng.targets(changes)
-        self.shift(np.clip(np.divide(amount, N, out=np.zeros_like(N), where=N>0), 0, 1), changes)
-        out = np.zeros_like(N)
-        np.add.at(out, (slice(None), target), amount)
-        return out
-
-    def relocated(self, chosen, bumps):
-        """ In a compartmental run: move the chosen up one level of some dimensions (the last kept); returns them, as a fraction of where they now are """
-        eng = self.eng
-        selector = self.selector
-        A = chosen*eng.state_counts()
-        for d in bumps:
-            strat = self.sim.groups.strats[d]
-            lev = np.broadcast_to(selector.dim(strat.name), A.shape)
-            top = strat.n - 1
-            B = A*(lev == top)
-            for j in range(top - 1, -1, -1):
-                part = A*(lev == j)
-                if part.sum():
-                    B = B + self.relocate(part, {d:j + 1})
-            A = B
-        N = eng.state_counts()
-        return np.clip(np.divide(A, N, out=np.zeros_like(N), where=N>0), 0, 1)
-
     #%% Choosing in an order: priority=
 
     def take(self, cands, n, carry=False, wait=None):
@@ -1477,16 +1204,8 @@ class Delivery(ss.products.EventSource, Intervention):
         """
         selector = self.selector
         key = self.key()
-        if not selector.abm:
-            N = self.eng.state_counts()
-            amount = cands*N
-            if amount.sum() <= n:
-                return cands
-            keys = ([] if key is None else [key]) + ([] if wait is None else [-np.broadcast_to(wait, N.shape)])
-            if not keys:
-                return cands*(n/amount.sum())
-            served = water_fill(amount, n, keys)
-            return np.clip(np.divide(served, N, out=np.zeros_like(N), where=N>0), 0, 1)
+        if self.compartments is not None:
+            return self.compartments.take(cands, n, key, wait)
         uids = self.uids(cands)
         k = n/self.sim._current_scale # In agents
         if carry:
@@ -1571,11 +1290,8 @@ class Delivery(ss.products.EventSource, Intervention):
     def give(self, chosen, capped=False):
         """ Deliver the product to the people chosen, and record them (and the outcomes) as its events """
         sim = self.sim
-        selector = self.selector
-        abm = selector.abm
         product = self.product
         res = self.results
-        eng = self.eng
         if (self.capacity is not None or self.queue is not None) and not capped:
             chosen = self.serve(chosen.copy(), chosen)[1]
         n = self.tally('delivered', chosen)
@@ -1583,58 +1299,50 @@ class Delivery(ss.products.EventSource, Intervention):
             self.tally('cost', chosen, self.cost)
         if not n:
             return
+        if self.compartments is not None:
+            return self.compartments.give(chosen)
 
         if self.move_states is not None: # A one-off move between states
             src, dst = [self.dis.graph.states[name] for name in self.move_states]
-            before = None if abm else eng.state_counts()
-            moved = eng.move_states(self.uids(chosen) if abm else chosen, [src], dst)
-            if not abm:
-                self.carry_events(chosen*selector.in_states([src.name]), before, self.event, dst=dst)
-            self.fire(None, moved if abm else self.arrived(dst, moved))
+            self.fire(None, self.eng.move_states(self.uids(chosen), [src], dst))
             return
         if product is None: # A transfer, or a step with neither (a visit)
-            self.fire(None, self.follow(chosen, chosen, self.changes, self.event) if self.changes else chosen)
+            self.fire(None, self.follow(chosen, chosen, self.changes) if self.changes else chosen)
             return
-        reached = self.uids(chosen) if abm else None
-        parts = [] # In a compartmental run: those reached, as they now are, with the people in each state and group they are a share of
+        reached = self.uids(chosen)
         if getattr(product, 'take', None) is not None: # All or nothing: a share of those reached are protected, and the rest are not (they have still received it)
-            if abm:
-                chosen = chosen.copy()
-                chosen[reached[self.rng_eff.rvs(reached) >= product.take]] = False
-            else:
-                parts.append((chosen*(1 - product.take), eng.state_counts()))
-                chosen = chosen*product.take
+            chosen = chosen.copy()
+            chosen[reached[self.rng_eff.rvs(reached) >= product.take]] = False
         if product.holds:
-            if abm:
-                product.ti_delivered[self.uids(chosen)] = sim.ti
-            chosen = self.hold(chosen) # Those chosen as they are now, holding it (to cure them too)
+            product.ti_delivered[self.uids(chosen)] = sim.ti
+            chosen = self.hold(chosen)
         if self.edges: # A treatment that cures with a probability
-            parts += self.cure(chosen)
-        else:
-            parts.append((chosen, None))
-        if abm:
-            self.fire(None, reached)
-        else:
-            for sel,before in parts:
-                self.fire(None, sel, before=before)
+            self.cure(chosen)
+        self.fire(None, reached)
         if isinstance(product, ss.Diagnostic):
             self.test(chosen)
+        outcomes = product.administer(reached) # The product's own code, if it has any
+        for name,uids in (outcomes or {}).items():
+            if name not in self.outcome_names():
+                errormsg = f'administer() of "{product.name}" returned the outcome "{name}", which is not one of its outcome_names(): {sc.strjoin(self.outcome_names()) or "none"}'
+                raise ValueError(errormsg)
+            uids = ss.uids(uids)
+            self.add(name, uids)
+            self.fire(name, uids)
         return
 
     def hold(self, chosen):
-        """ Those chosen now hold the product: at level 1, or with doses (`doses=`), the next dose; returns them, as they now are """
+        """ Those chosen now hold the product: at level 1, or with doses (`doses=`), the next dose """
         sim = self.sim
         product = self.product
         d = sim.groups.dim_index(product.dim)
         if not product.doses:
-            return self.follow(chosen, chosen, {d:1}, self.event)
-        if self.selector.abm:
-            uids = self.uids(chosen)
-            arr = sim.people[sim.groups.strats[d].attr]
-            arr[uids] = np.minimum(np.nan_to_num(arr[uids]) + 1, len(product.doses))
-            sim.groups.groups_changed(uids)
-            return chosen
-        return self.relocated(chosen, [d])
+            return self.follow(chosen, chosen, {d:1})
+        uids = self.uids(chosen)
+        arr = sim.people[sim.groups.strats[d].attr]
+        arr[uids] = np.minimum(np.nan_to_num(arr[uids]) + 1, len(product.doses))
+        sim.groups.groups_changed(uids)
+        return chosen
 
     def fire(self, outcome, sel, eng=None, before=None):
         """ Record an event of this delivery, which is one of its product too (see `ss.products.EventSource`) """
@@ -1643,14 +1351,6 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.product is not None:
             self.product.fire(outcome, sel, eng, before)
         return
-
-    def arrived(self, dst, total):
-        """ In a compartmental run: the people who have just moved into a state (a number per group), as a share of those in it """
-        eng = self.eng
-        out = self.selector.nobody()
-        n = eng.count([dst], total=False)
-        out[self.selector.states.index(dst.name)] = np.clip(np.divide(total, n, out=np.zeros(len(n)), where=n>0), 0, 1)
-        return out
 
     def per_state(self, values, what, eng=None):
         """ A value for each state (each a number or an `ss.by`), as a value for each agent, or each state and group (of `eng`, the delivery's disease by default) """
@@ -1678,14 +1378,10 @@ class Delivery(ss.products.EventSource, Intervention):
         """
         Move the people treated along the transitions of the treatment (see `ss.Treatment`), and record the outcomes as results
         and events: each person in a source of one of a disease's moves along it with its probability (`cured`), or does not
-        (`failed`); one in none is `unneeded`. In a compartmental run, returns those treated as they now are, in parts.
+        (`failed`); one in none is `unneeded`.
         """
         sim = self.sim
         diseases = list(dict.fromkeys(e.dis for e in self.edges))
-        if not self.selector.abm:
-            if diseases == [self.dis.name]:
-                return self.cure_groups(chosen)
-            return self.cure_crossed(chosen, diseases)
         uids = self.uids(chosen)
         cured_any = np.zeros(len(uids), dtype=bool)
         failed_any = np.zeros(len(uids), dtype=bool)
@@ -1712,139 +1408,29 @@ class Delivery(ss.products.EventSource, Intervention):
             treated_any |= treated
         for key,who in [('cured', cured_any), ('failed', failed_any), ('unneeded', ~treated_any)]:
             self.fire(key, uids[who])
-        return []
-
-    def cure_groups(self, chosen):
-        """ In a compartmental run, the treatment of one disease: each move in turn, from those in its sources """
-        selector = self.selector
-        eng = self.eng
-        before = eng.state_counts()
-        has_any = 0.0
-        failed = 0.0
-        totals = {} # Cured, by the state they went to
-        N = before
-        for e in self.edges:
-            has = selector.in_states([s.name for s in e.srcs])*selector.everyone() # In a source, so the treatment can move them
-            p = np.clip(self.edge_prob(e, eng), 0, 1)
-            cured = chosen*p*has
-            fail = chosen*(1 - p)*has
-            part = (e.dis, None if e.tr is None else e.tr.name)
-            self.add('cured', groups=(cured*N).sum(axis=0), part=part)
-            self.add('failed', groups=(fail*N).sum(axis=0), part=part)
-            now = self.same_people(cured, before) # After the moves before it
-            b = eng.state_counts()
-            total = eng.force(now, e.tr, e.dst, srcs=e.srcs)
-            self.carry_events(now, b, ss.conditions.Cond('event', self, 'cured'), dst=e.dst)
-            totals[e.dst.name] = totals.get(e.dst.name, 0.0) + total
-            failed = failed + fail
-            has_any = has_any + has
-        unneeded = chosen*(1 - np.clip(has_any, 0, 1))
-        self.add('unneeded', groups=(unneeded*N).sum(axis=0), part=(self.dis.name, None))
-        cured = sum(self.arrived(self.dis.graph.states[name], total) for name,total in totals.items())
-        self.fire('cured', cured)
-        self.fire('failed', failed, before=before)
-        self.fire('unneeded', unneeded, before=before)
-        return [(cured, None), (failed + unneeded, before)]
-
-    def cure_crossed(self, chosen, diseases):
-        """
-        In a compartmental run, a treatment of several diseases: the people chosen in each compartment and group are moved as a
-        population of their own (with `force()`), so the share forced is chosen × probability in each, and the rest of them have
-        failed. Diseases tracked jointly (see `ss.solvers.Crossing`) pass the same people on, by way of the joint array, so each
-        sees those the others treated. Its outcomes are events as shares of this disease's states and groups; someone cured of
-        one disease and failed for another counts in both, and anyone in both outcomes for two diseases counts twice (clipped at all)
-        """
-        sim = self.sim
-        home = self.eng
-        cross = home.cross
-        rows = home.people_comps
-        state_of = [home.selector.states.index(home.comps[i].state.name) for i in rows]
-        C = home.take(home.y[rows], chosen[state_of]) # The people chosen, by compartment and group
-        U = C.copy() # Of them, those in no source of any disease's moves so far
-        cur = home
-        parts = []
-        for dis in diseases:
-            eng = sim.get_declared(dis).engine
-            if eng is not cur:
-                if cross is None or eng.cross is not cross:
-                    raise ss.CapabilityError(f'"{self.name}" treats "{dis}" and "{cur.mod.name}", whose states are not tracked jointly, with solver="{sim.solver}". Run with solver="abm".')
-                C, U = [cross.local(cross.joint(cur, X), eng) for X in [C, U]]
-            edges = [e for e in self.edges if e.dis == dis]
-            U = U.copy()
-            U[[eng.people_comps.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]]] = 0
-            C, cured, failed = self.force_part(eng, C, edges)
-            parts.append((eng, cured, failed))
-            cur = eng
-        def home_share(*pairs): # People by compartment of their engines, as a share of each state and group of this disease now
-            X = sum(X if eng is home else cross.local(cross.joint(eng, X), home) for eng,X in pairs)
-            counts = np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
-            n = home.state_counts()
-            return np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1)
-        self.fire('cured', home_share(*[(eng, c) for eng,c,_ in parts]))
-        self.fire('failed', home_share(*[(eng, f) for eng,_,f in parts]))
-        self.fire('unneeded', home_share((cur, U)))
-        return [(home_share((cur, C)), None)] # Where the people treated are now
-
-    def force_part(self, eng, C, edges):
-        """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and of them, the cured (where they are now) and those who failed """
-        rows = eng.people_comps
-        full = eng.y.copy()
-        cross, eng.cross = eng.cross, None # Moved as a population of their own, which the crossing takes once they are back with the rest
-        try:
-            eng.y[:] = 0
-            eng.y[rows] = C
-            states = eng.selector.states
-            treated = 0.0
-            sources = sorted({rows.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]})
-            failed = np.zeros_like(C)
-            for e in edges:
-                comps = [c for s in e.srcs for c in eng.state_comps[s.name]]
-                frac = eng.selector.nobody()
-                for s in e.srcs:
-                    frac[states.index(s.name)] = np.broadcast_to(self.edge_prob(e, eng, state=s), frac.shape)[states.index(s.name)]
-                before = eng.y[comps].sum(axis=0)
-                eng.force(frac, e.tr, e.dst, srcs=e.srcs)
-                after = eng.y[comps].sum(axis=0)
-                part = (eng.mod.name, None if e.tr is None else e.tr.name)
-                self.add('cured', groups=before - after, part=part)
-                self.add('failed', groups=after, part=part)
-                treated = treated + before
-            self.add('unneeded', groups=C.sum(axis=0) - treated, part=(eng.mod.name, None))
-            after = eng.y[rows].copy()
-            failed[sources] = after[sources] # Still in a source: not moved
-            untouched = C.copy()
-            untouched[sources] = 0
-            cured = np.clip(after - failed - untouched, 0, None)
-            eng.y[:] = full
-            eng.y[rows] += after - C
-        finally:
-            eng.cross = cross
-        eng.changed()
-        return after, cured, failed
+        return
 
     def test(self, chosen):
         """ Work out the result of each test (one draw per person, from the probability of each result: see `ss.Diagnostic.tails()`), and either act on it or wait for it """
         selector = self.selector
         product = self.product
         tails = product.tails(selector, self.dis.name, self.infected_states)
+        if self.compartments is not None:
+            return self.compartments.test(chosen, tails)
         n = len(product.result_names)
         steps = [None if d is None else self.convert(d)/self.dt_sim for d in product.delays()]
-        if selector.abm:
-            uids = self.uids(chosen)
-            u = self.rng_test.rvs(uids)
-            result = np.zeros(len(uids), dtype=int)
-            for t in tails:
-                result += u < (t if np.ndim(t) == 0 else t[uids])
-            wait = np.array([st is not None for st in steps])[result]
-            if wait.any():
-                later = uids[wait]
-                self.ti_result[later] = self.sim.ti + np.array([st or 0.0 for st in steps])[result[wait]]
-                self.result[later] = result[wait]
-            if not all(st is not None for st in steps): # Some results now
-                self.report([selector.to_selection(uids[(result == k) & ~wait]) for k in range(n)])
-            return
-        probs = [1 - tails[0]] + [tails[k] - tails[k+1] for k in range(len(tails) - 1)] + [tails[-1]]
-        self.report([chosen*np.clip(p, 0, 1) for p in probs]) # In a compartmental run, every result now (a delay is agents only)
+        uids = self.uids(chosen)
+        u = self.rng_test.rvs(uids)
+        result = np.zeros(len(uids), dtype=int)
+        for t in tails:
+            result += u < (t if np.ndim(t) == 0 else t[uids])
+        wait = np.array([st is not None for st in steps])[result]
+        if wait.any():
+            later = uids[wait]
+            self.ti_result[later] = self.sim.ti + np.array([st or 0.0 for st in steps])[result[wait]]
+            self.result[later] = result[wait]
+        if not all(st is not None for st in steps): # Some results now
+            self.report([selector.to_selection(uids[(result == k) & ~wait]) for k in range(n)])
         return
 
     def step_results(self):

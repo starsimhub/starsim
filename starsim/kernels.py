@@ -116,7 +116,7 @@ register_fields = [
 
 Register = collections.namedtuple('Register', register_fields)
 
-# The deliveries of a whole run (see ss.Delivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
+# The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
 shift_fields = [
     'due',  # Whether each delivery happens at each time point (deliveries by time points)
     'sel',  # The share of the people in each compartment and group who are eligible (deliveries by compartments by groups)

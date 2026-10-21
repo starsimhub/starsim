@@ -85,7 +85,7 @@ class EventSource:
         if sim.solver == 'abm':
             entry = [ti, ss.uids(np.flatnonzero(sel)) if not isinstance(sel, ss.uids) else sel, None, None]
         else:
-            entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.Delivery.carry_events()
+            entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.solvers.CompartmentalDelivery.carry_events()
         live = self._live.setdefault(outcome, [])
         if live and live[0][0] != ti:
             live.clear()
@@ -97,23 +97,28 @@ class EventSource:
 
     def current(self, outcome, selector):
         """ The people an event happened to on this step, as a selection for a module's selector """
-        sim = self.sim
-        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti]
-        if selector.abm:
-            out = selector.nobody()
-            for e in entries:
-                out[e[1]] = True
-            return out
-        out = None
-        for _,sel,before,eng in entries: # Parts of the people one delivery reached (e.g. those cured, and the rest), which are disjoint; a product delivered by several steps is agents only (see ss.solvers.init_capabilities())
-            after = eng.state_counts()
-            now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, now that others may have moved
-            if eng.mod is not selector.mod:
-                if not np.allclose(now, now[0]):
-                    raise ss.CapabilityError(f'the event "{self.name}{"." + outcome if outcome else ""}" selects people by their state in "{eng.mod.name}", which cannot be carried over to "{selector.mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-                now = np.broadcast_to(now[0], selector.shape).astype(float)
-            out = now if out is None else out + now
-        return selector.nobody() if out is None else np.clip(out, 0, 1)
+        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == self.sim.ti]
+        if not selector.abm:
+            return ss.solvers.current_groups(self, outcome, entries, selector)
+        out = selector.nobody()
+        for e in entries:
+            out[e[1]] = True
+        return out
+
+    def reached(self, outcome=None):
+        """
+        The UIDs of the people it reached on its last step (agents only), or of those with one of its outcomes (e.g. `screening.reached('positive')`)
+
+        Its last step is the current one once it has run in it, and otherwise the one before: so code that runs after the
+        interventions (a disease or an analyzer) reads the people of the step just taken, as for an event.
+        """
+        if self.sim.solver != 'abm':
+            raise ss.CapabilityError(f'"{self.name}".reached() is the UIDs of the people it reached, which exist only per agent; with solver="{self.sim.solver}", read its results')
+        if outcome is not None and outcome not in self.outcome_names():
+            raise self.no_outcome(outcome)
+        ti = self.__dict__.get('_ti_step') # Set by its deliveries: see ss.Delivery.step()
+        entries = [e[1] for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == ti]
+        return ss.uids.concatenate(entries).unique() if entries else ss.uids()
 
     def flush(self, ti):
         """ Put the people events happened to, up to and including time index ti, into the memory """
@@ -127,7 +132,7 @@ class EventSource:
                 last[sel] = t
                 count[sel] = count[sel] + 1
             else:
-                ss.interventions.remember_levels(self, outcome, sel, before, eng)
+                ss.solvers.remember_levels(self, outcome, sel, before, eng)
         self._pending = keep
         return
 
@@ -139,7 +144,12 @@ class Product(EventSource, ss.Module):
     Products represent diagnostic tests, treatments, or vaccines, delivered by `ss.vaccinate()`,
     `ss.screen()`, and `ss.treat()`. A product is an event too: the people any delivery of it reached on the
     step (`cytology`), with its outcomes (`cytology.positive`), and their memory (`cytology.since`): see `ss.products.EventSource`.
+    A product whose effect is code of your own defines `administer()`.
     """
+    holds = False # Whether people hold it (see ss.products.Held)
+    cost = None
+    disease = None # Set by its delivery
+
     def __getattr__(self, attr):
         """ An outcome of the product over all its deliveries, as an event: e.g. `hiv_rdt.positive` """
         out = self.outcome_attr(attr)
@@ -152,6 +162,34 @@ class Product(EventSource, ss.Module):
                 raise self.no_outcome(attr) from None
             raise
 
+    def administer(self, uids):
+        """
+        The effect of a product written as code: called with the UIDs of the people a delivery gave it to on the step, after
+        what a product of its kind does (agents only). Override it in a subclass of `ss.Product` (or of `ss.Vaccine` etc.).
+
+        It may return the UIDs with each of its outcomes, as a dict (e.g. `dict(positive=uids)`): they are then results and
+        events of the delivery, as a test's are, which can trigger the steps that follow. The outcomes are those that
+        `outcome_names()` lists.
+
+        Examples:
+            ```python
+            class Bednet(ss.Product):
+                def administer(self, uids):
+                    self.sim.diseases.malaria.rel_sus[uids] *= 0.5
+            ```
+        """
+        return None
+
+    def step_waning(self):
+        """ Called by its deliveries at the start of each step, before anyone is offered it: see `ss.products.Held` """
+        return
+
+    def agent_reasons(self):
+        """ The reasons, if any, that this product needs agents """
+        if type(self).administer is not Product.administer:
+            return [f'the product "{self.name}" has an administer() of its own, which acts on agents']
+        return []
+
     def key_by(self, mods):
         """ For a delivery with `disease=` several diseases (a list or an `ss.Strains`, HP7): the product's values as keyed by each, if they are not already (see the subclasses) """
         return
@@ -163,11 +201,13 @@ class Product(EventSource, ss.Module):
         return isinstance(vals, dict) and any(isinstance(k, ss.Module) or k in names for k in vals)
 
     def init_pre(self, sim):
-        """ Initialize the product; skips if already initialized """
-        if not self.initialized:
-            super().init_pre(sim)
-        else:
+        """ Initialize the product, and its events, once: both the sim and its deliveries initialize it """
+        if getattr(self, 'linked', False):
             return
+        self.linked = True
+        self.init_events(sim)
+        super().init_pre(sim)
+        return
 
     spec_keys = [] # The keywords that make the product, for the model spec
 
@@ -311,15 +351,14 @@ class Held(Product):
         return self.waning is not None and not callable(self.waning)
 
     def agent_reasons(self):
+        out = super().agent_reasons()
         if callable(self.waning):
-            return [f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep']
-        return []
+            out.append(f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep')
+        return out
 
     def init_pre(self, sim):
         if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
             return
-        self.linked = True
-        self.init_events(sim)
         super().init_pre(sim)
         if not self.holds:
             return
@@ -721,7 +760,6 @@ class Diagnostic(Product):
         ```
     """
     compartmental = True
-    holds = False
     waning = None
     doses = None
     spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
@@ -797,23 +835,13 @@ class Diagnostic(Product):
         return self.sim.solver != 'abm'
 
     def agent_reasons(self):
-        out = []
+        out = super().agent_reasons()
         detects = self.detects
         if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.n_args(detects) >= 2:
             out.append(f'what the test "{self.name}" detects is a function of uids')
         if self.delay is not None:
             out.append(f'the results of the test "{self.name}" come after a delay, which only agents wait for')
         return out
-
-    def init_pre(self, sim):
-        if not getattr(self, 'linked', False):
-            self.linked = True
-            self.init_events(sim)
-            super().init_pre(sim)
-        return
-
-    def step_waning(self):
-        return
 
     @staticmethod
     def key_ref(key):

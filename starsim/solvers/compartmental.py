@@ -1908,7 +1908,7 @@ class Compartmental(Engine):
         sel, cov = np.zeros((K, nc, ng)), np.zeros((K, nc, ng))
         to, rest = np.zeros((K, ng), dtype=np.int64), np.zeros((K, ng), dtype=np.int64)
         for k,mod in enumerate(self.deliveries):
-            due[k], sel_k, cov_k, to[k], rest[k] = mod.shifts()
+            due[k], sel_k, cov_k, to[k], rest[k] = mod.compartments.shifts()
             for s,name in enumerate(self.selector.states):
                 for comp in self.state_comps[name]:
                     sel[k, comp], cov[k, comp] = sel_k[s], cov_k[s]
@@ -1935,7 +1935,7 @@ class Compartmental(Engine):
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
             out = ss.kernels.run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step())
             for k,mod in enumerate(self.deliveries):
-                mod.store_shifts(tally[:, k])
+                mod.compartments.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
         flows = self.count_deaths(flows)
         if (use_jax or tally is None) and getattr(self, 'deliveries', None): # A run taken in JAX: the deliveries' results, from the compartments at each time point they happened at
@@ -2022,7 +2022,7 @@ class Compartmental(Engine):
             short += more
             last = end == npts - 1
             for k,mod in enumerate(self.deliveries):
-                mod.store_shifts(tally[:, k] if last else tally[:-1, k], start=start, done=last) # The last row is the start of the next part's first step
+                mod.compartments.store_shifts(tally[:, k] if last else tally[:-1, k], start=start, done=last) # The last row is the start of the next part's first step
             yield (start, stocks, flows) if start == 0 else (start + 1, stocks[1:], flows[1:])
             start = end
         self.y = y
@@ -2103,7 +2103,7 @@ class Compartmental(Engine):
             if ti < len(stocks) - 1: # No step follows the last time point
                 ss.kernels.apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti]) # Expected numbers, so nothing is drawn
         for k,mod in enumerate(self.deliveries):
-            mod.store_shifts(tally[:, k])
+            mod.compartments.store_shifts(tally[:, k])
         return
 
     def run_many(self, seeds):
@@ -2155,7 +2155,7 @@ class Compartmental(Engine):
                 break
             start = end
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
-        out.deliveries = sc.objdict({mod.name:mod.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries)})
+        out.deliveries = sc.objdict({mod.name:mod.compartments.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
 
     def collect(self, stocks, flows, expected=False, grouped=None, seeds=None):

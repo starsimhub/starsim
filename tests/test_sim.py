@@ -396,12 +396,12 @@ def test_locked_pars():
 
 @sc.timer()
 def test_update_pars():
-    """ A value given for a parameter replaces it; a distribution's own parameters are changed with its own method """
+    """ A single value given for a distribution sets its main parameter, as in Starsim 3; a distribution replaces it """
     sc.heading('Testing parameter updates...')
     sir = ssl.AgentSIR(init_prev=0.05, dur_inf=6, p_death=0)
     assert isinstance(sir.pars.init_prev, ss.bernoulli) and sir.pars.init_prev.pars.p == 0.05 # A probability
-    assert isinstance(sir.pars.dur_inf, ss.constant) and sir.pars.dur_inf.pars.v == ss.years(6) # A fixed value, in the unit of the default
-    assert isinstance(ss.MFNet(dur=ss.days(15)).pars.dur, ss.constant)
+    assert isinstance(sir.pars.dur_inf, ss.lognorm_ex) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
+    assert isinstance(ss.MFNet(dur=ss.days(15)).pars.dur, ss.lognorm_ex) and isinstance(ss.MFNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A fixed value is a constant
     assert isinstance(ss.RandomNet(n_contacts=dict(type='poisson', lam=4)).pars.n_contacts, ss.poisson) # A distribution given by its type
     for value in [[6, 2], dict(mean=6)]: # The distribution's arguments, or values? Neither: use its own method
         with pytest.raises(TypeError, match='set'):

@@ -8,7 +8,8 @@ the sim's loop like any other module code.
 
 The modules: `engine` (what the engines share), `mixing` (who meets whom in a
 compartmental run), `compartmental` and `agents` (the two engines), `crossing`
-(diseases tracked jointly), and `choose` (which solver runs a model, and why).
+(diseases tracked jointly), `choose` (which solver runs a model, and why), and
+`deliveries` (what a delivery does differently in a compartmental run).
 Their names are all found here, e.g. `ss.solvers.Compartmental`.
 """
 from .engine import *
@@ -17,3 +18,4 @@ from .compartmental import *
 from .crossing import *
 from .agents import *
 from .choose import *
+from .deliveries import *

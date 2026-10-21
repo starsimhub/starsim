@@ -220,11 +220,11 @@ class Pars(sc.objdict):
         """
         Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf
 
-        A new value replaces the distribution. A distribution (or a dict with a `type`) is used as it is; any other value
-        (a number, duration, rate, or function) is the fixed value of that kind: for `ss.bernoulli`, its probability
-        (`init_prev=0.05` is `ss.bernoulli(p=0.05)`), and otherwise `ss.constant` (`dur=ss.days(15)` is every partnership
-        lasting 15 days). A bare number keeps the unit of the distribution it replaces (see `note_bare()`). To change one
-        parameter of a distribution and keep the others, use its own method, e.g. `pars.dur_inf.set(mean=8)`.
+        A distribution (or a dict with a `type`) replaces it. A single value (a number, duration, rate, or function) sets
+        its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli`, its probability (`init_prev=0.05`);
+        for `ss.lognorm_ex`, its mean (`dur=5` is a lognormal of mean 5, with the same standard deviation); for
+        `ss.constant`, its value. A bare number keeps the unit of the distribution (see `note_bare()`). To change other
+        parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`; for a fixed value, give `ss.constant(...)`.
         """
         if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', lam=4)
             new = ss.distributions.make_dist(new)
@@ -236,14 +236,11 @@ class Pars(sc.objdict):
                 raise TypeError(errormsg)
             self[key] = new
 
-        # It's a single value, e.g. dur_inf = 6: the fixed value of that kind
+        # It's a single value, e.g. dur_inf = 6: its main parameter
         elif isinstance(new, (Number, ss.dur, ss.Rate)) or sc.isfunc(new):
+            old.set(new)
             if isinstance(new, Number):
                 self.note_bare(key, old, new)
-                unit = old.unit or next((type(v) for v in old.pars.values() if isinstance(v, ss.TimePar)), None) # The unit it is read in
-                if unit is not None and not isinstance(old, ss.bernoulli):
-                    new = unit(new)
-            self[key] = ss.bernoulli(p=new) if isinstance(old, ss.bernoulli) else ss.constant(v=new)
 
         # Give up
         else:

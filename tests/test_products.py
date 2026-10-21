@@ -363,6 +363,44 @@ def test_hpv_screen_treat():
     return sim
 
 
+def test_own_product():
+    sc.heading('Testing a product written as code: administer() is given the UIDs reached, its outcomes trigger a step, and delivery.reached() is who it reached')
+
+    class Swab(ss.Product):
+        """ A test of our own, which finds the infected exactly """
+        def outcome_names(self):
+            return ['positive']
+
+        def administer(self, uids):
+            return dict(positive=uids[self.sim.diseases.flu.I[uids]])
+
+    class Reached(ss.Analyzer):
+        """ The number each step reached, read after it has run """
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('swabbed', dtype=float), ss.Result('positive', dtype=float))
+
+        def step(self):
+            screening = self.sim.interventions.screening
+            self.results.swabbed[self.ti] = len(screening.reached())
+            self.results.positive[self.ti] = len(screening.reached('positive'))
+
+    def make(**kwargs):
+        screening = ss.Delivery(Swab(), coverage=0.2, interval=ss.months(3), name='screening')
+        treatment = ss.treat(ss.Treatment(cure=1.0), who=screening.positive, name='treatment')
+        return ss.Sim(make_geno('flu'), interventions=[screening, treatment], analyzers=Reached(), **kwargs)
+    check_agents(make) # Its own code acts on agents
+    sim = run_abm(make)
+    r = sim.results
+    assert r.screening.delivered.sum() > 0 and r.screening.positive.sum() > 0
+    assert np.array_equal(r.reached.swabbed[1:], r.screening.delivered[:-1]) # An analyzer reads the step just taken
+    assert np.array_equal(r.reached.positive[1:], r.screening.positive[:-1])
+    assert np.array_equal(r.treatment.cured, r.screening.positive) # Every one found is treated, and cured
+    with pytest.raises(AttributeError):
+        sim.interventions.screening.reached('negative')
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     vaccine = test_vaccine_diseases()
@@ -374,3 +412,4 @@ if __name__ == '__main__':
     dlist  = test_disease_list()
     hpv_vx = test_hpv_vaccines()
     hpv_st = test_hpv_screen_treat()
+    own    = test_own_product()
