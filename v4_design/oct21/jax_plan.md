@@ -97,11 +97,11 @@ Deferred (to [admin/deferred.md](../admin/deferred.md) if Cliff agrees): GPU run
 
 ## Decisions for Cliff
 
-1. **Which engine by default** for a supported stochastic compartmental model: the JAX engine (faster for more than a few groups, compiles in about 1 s, but a second engine to keep in agreement), the kernels (now uncompiled by default, per S5.11), or chosen by size? Or should the JAX engine replace the kernels' chain binomial altogether, once it covers everything (one engine, not two)?
-2. **New streams**: J2 changes every stochastic result for a given seed (not its distribution). Accept and rebaseline?
-3. **Modelers' own loops**: how much should v4 offer for code like the hand-written Ghana model: only the draws (J8), or also a way to compile a module's step?
-4. **Uniforms**: splitmix64 (cheaper, a good hash) or Philox (the standard counter-based generator, as JAX and NumPy offer; 5–15 ns a draw more)?
-5. **The JAX pull request** (`binomial(method='approximate')`, on the fork's `binomial-approximate` branch, uncommitted): submit it? It helps GPU runs, not CPU ones.
+1. **Which engine by default** for a supported stochastic compartmental model: the JAX engine (faster for more than a few groups, compiles in about 1 s, but a second engine to keep in agreement), the kernels (now uncompiled by default, per S5.11), or chosen by size? Or should the JAX engine replace the kernels' chain binomial altogether, once it covers everything (one engine, not two)? [CK: i'm hopeful that JAX can replace the kernel chain binomial, if it's faster for big cases and not too much slower for small ones]
+2. **New streams**: J2 changes every stochastic result for a given seed (not its distribution). Accept and rebaseline? [CK: sure]
+3. **Modelers' own loops**: how much should v4 offer for code like the hand-written Ghana model: only the draws (J8), or also a way to compile a module's step? [CK: would love a compiler: @ss.jit would be the dream! which could be jax, numba, or a combination]
+4. **Uniforms**: splitmix64 (cheaper, a good hash) or Philox (the standard counter-based generator, as JAX and NumPy offer; 5–15 ns a draw more)? [CK: let's go with fast, unless it's <5% overall runtime, but i feel 15 ns per draw will add up]
+5. **The JAX pull request** (`binomial(method='approximate')`, on the fork's `binomial-approximate` branch, uncommitted): submit it? It helps GPU runs, not CPU ones. [CK: no not yet]
 
 ## Definition of done
 
