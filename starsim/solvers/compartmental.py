@@ -765,7 +765,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             infectious = infectious*self.strain_weights[self.sim.groups.group_coords[:, self.strain], self._strain]
         mixing = self.sim.mixing
         mults = [self.contact_mult(term.name) for term in mixing.terms] if self.net_mods else None
-        if self._routes is not None: # A beta for each route (for each source state, under the partnership approximation)
+        if self._routes is not None: # A beta for each route (for each source state, under the partner-change model)
             routes = self._routes[state.name] if isinstance(self._routes, dict) else self._routes
             mults = [beta*mult for beta,mult in zip(routes, mults or [1.0]*len(routes))]
         if getattr(self, '_rtr', None) is not None: # Modifiers of the transmission on some routes
@@ -1164,16 +1164,14 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def route_betas(self, flow):
         """
         For a transmission with a beta for each route (beta=dict(home=..., school=...)), or with a route that has acts: the beta
-        of each term of the mixing, which exposure() applies (and the beta itself is then 1); None otherwise. On one-off contacts
-        with acts (`ss.PartnerNet(between=...)`), it is the chance that a contact transmits, for the people in each group (see
-        `contact_chance()`)
+        of each term of the mixing, which exposure() applies (and the beta itself is then 1); None otherwise
         """
         flow.routes = None
         if flow.kind != 'contact':
             return None
         nets = {ss.utils.standardize_netkey(name):net for name,net in self.sim.all_networks().items()}
         terms = self.sim.mixing.terms
-        lasting = any('partnership' in term for term in terms) # Under the partnership approximation, by source state
+        lasting = any('partnership' in term for term in terms) # Under the partner-change model, by source state
         acts = lasting or any(getattr(net, 'has_acts', False) for net in nets.values())
         betas = [leaf for leaf in flow.expr.leaves if isinstance(leaf, ss.par) and (isinstance(leaf.raw, (dict, ss.peract)) or (acts and leaf.slot == 'rate'))]
         if betas:
@@ -1184,14 +1182,14 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 net = nets.get(key)
                 if 'partnership' in term:
                     return self.partnership_chance(val, net, term, flow, state)
-                return self.contact_chance(val, net, term) if getattr(net, 'has_acts', False) else float(self.plain_value(val))
+                return float(self.plain_value(val))
             flow.routes = {state.name:[route(term, state) for term in terms] for state in flow.tr.terms} if lasting else [route(term) for term in terms]
             self.routed.add(id(betas[0]))
         return flow.routes
 
     def partnership_chance(self, val, net, term, flow, state):
         """
-        Under the partnership approximation (see `ss.solvers.Mixing.partnerships()`), the chance that a partnership with
+        Under the partner-change model (see `ss.solvers.Mixing.partnerships()`), the chance that a partnership with
         someone in a source state, formed now, transmits to the people in each group before it stops being able to:
         `H/(H + k)` with `k = 1/D̄ + c`, for partnerships that end at a constant rate, or `H/(H + c)·(1 − E[exp(−(H + c)·T)])`
         over their duration `T` otherwise; `H` is the hazard per unit time in the partnership (acts per unit time times the
@@ -1233,19 +1231,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if branches: # Split on entry: one over the mean of their times
             rate += 1/mean([mean(self.dwell_mean(tr.name)) for tr in branches])
         return rate
-
-    def contact_chance(self, val, net, term):
-        """ The chance that a one-off contact with acts transmits, for the people in each group: 1 − E[exp(−K·h)], with K the acts in a contact and h the hazard per act in the direction from the other group to theirs """
-        h = np.asarray(self.act_hazards(val, net), dtype=float)
-        acts = net.pars.acts
-        draws = np.asarray(sc.dcp(acts).init(force=True).rvs(10_000), dtype=float) if isinstance(acts, ss.Dist) else np.array([net.acts_per_contact()])
-        level = self.sim.groups.group_coords[:, term.dim]
-        a, b = term.sides
-        out = np.zeros(self.n_groups)
-        for k,dst in enumerate([b, a]): # The directions, a2b then b2a, as in net.directions: for the people in the group infected
-            hk = h[k] if h.ndim == 1 else h[k][level == dst]
-            out[level == dst] = 1 - np.mean(np.exp(-np.multiply.outer(draws, np.atleast_1d(hk))), axis=0)
-        return out
 
     def branch_where(self, tr):
         """ Whether a transition is a branch out of each of its sources whose where= is on states and strata, so closes it at entry (see `branch_mult()`) rather than changing its rate """
@@ -1346,7 +1331,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     self.foreign_pars[key] = ss.par(self.prop(expr.cond), name=str(expr.cond), literal=True)
                 return flatten(self.foreign_pars[key], strain, routes, rtr)
             elif isinstance(expr, ss.State):
-                routes = routes[expr.name] if isinstance(routes, dict) else routes # Under the partnership approximation, for each source state
+                routes = routes[expr.name] if isinstance(routes, dict) else routes # Under the partner-change model, for each source state
                 ops.append(kn.EXPOSURE)
                 args.append(add(exposures, (expr.name, strain, None if routes is None else tuple(tuple(np.atleast_1d(r).tolist()) for r in routes), None if rtr is None else (rtr[0].name, rtr[1].name)), (expr, routes, rtr)))
             else:

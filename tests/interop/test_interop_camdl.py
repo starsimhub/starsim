@@ -180,5 +180,6 @@ if __name__ == '__main__':
     sim2 = test_camdl_flat()
     sim3 = test_camdl_file()
     sim5 = test_camdl_golden()
-    sim4 = test_pycamdl(sc.path(tempfile.mkdtemp()))
+    with tempfile.TemporaryDirectory() as tmp:
+        sim4 = test_pycamdl(sc.path(tmp))
     T.toc()

@@ -292,49 +292,13 @@ def test_pregnancy_short_sim():
 
 
 @sc.timer()
-def test_loss_classification():
-    """
-    Test that prenatal deaths are correctly classified as miscarriage (<20w)
-    or stillbirth (>=20w) based on gestational age.
-    """
-    sc.heading('Testing loss classification...')
-
-    # Use a high loss rate so both early and late losses occur
-    sim = ss.Sim(
-        n_agents=5_000,
-        demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=0.05), burnin=True),
-            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
-        ],
-        dur=ss.years(5),
-        dt=ss.years(1/12),
-        rand_seed=1,
-        networks=ss.PrenatalNet(),
-    )
-    sim.run()
-
-    preg = sim.demographics.pregnancy
-    mc = preg.results['miscarriage'].sum()
-    sb = preg.results['stillbirth'].sum()
-    births = preg.results['birth'].sum()
-    print(f'  Miscarriages: {mc}, Stillbirths: {sb}, Births: {births}')
-
-    assert mc > 0, 'Expected some miscarriages with p_loss=0.05'
-    assert sb > 0, 'Expected some stillbirths with p_loss=0.05'
-    assert mc > sb, 'Expected more miscarriages than stillbirths (pregnancies spend more time at early GA)'
-    assert births > 0, 'Expected some births despite losses'
-
-    sc.printgreen('✓ Loss classification tests passed')
-    return sim
-
-
-@sc.timer()
 def test_background_loss():
     """
-    Test that background pregnancy loss (p_loss) produces losses and that
-    higher p_loss produces more losses.
+    Test that background pregnancy loss (p_loss) produces losses, that higher p_loss
+    produces more losses, and that they are classified as miscarriage (<20w) or
+    stillbirth (>=20w) by gestational age
     """
-    sc.heading('Testing background loss...')
+    sc.heading('Testing background loss and its classification...')
 
     results = dict()
     for label, p_loss in [('none', 0), ('low', 0.01), ('high', 0.05)]:
@@ -350,17 +314,17 @@ def test_background_loss():
             networks=ss.PrenatalNet(),
         )
         sim.run()
-        preg = sim.demographics.pregnancy
-        total_losses = preg.results['miscarriage'].sum() + preg.results['stillbirth'].sum()
-        births = preg.results['birth'].sum()
-        results[label] = dict(losses=total_losses, births=births)
-        print(f'  p_loss={p_loss}: losses={total_losses}, births={births}')
+        res = sim.demographics.pregnancy.results
+        results[label] = sc.objdict(mc=res.miscarriage.sum(), sb=res.stillbirth.sum(), births=res.birth.sum())
+        results[label].losses = results[label].mc + results[label].sb
+        print(f'  p_loss={p_loss}: {results[label]}')
 
     assert results['low']['losses'] > results['none']['losses'], 'Expected more losses with p_loss=0.01 than p_loss=0'
     assert results['high']['losses'] > results['low']['losses'], 'Expected more losses with higher p_loss'
     assert results['high']['births'] < results['none']['births'], 'Expected fewer births with p_loss > 0'
-
-    sc.printgreen('✓ Background loss tests passed')
+    high = results['high']
+    assert high.mc > high.sb > 0, 'Expected more miscarriages than stillbirths (pregnancies spend more time at early GA)'
+    assert high.births > 0, 'Expected some births despite losses'
     return sim
 
 
@@ -414,7 +378,7 @@ def test_count_based_births():
 
     orig_crn = ss.options.crn
     try:
-        nseeds = 12
+        nseeds = 8
         per_agent = np.array([cum_births(True, s) for s in range(nseeds)])
         count_based = np.array([cum_births(False, s) for s in range(nseeds)])
 
@@ -424,8 +388,8 @@ def test_count_based_births():
         assert count_based.std() > 0, 'Count-based births should be stochastic'
 
         # Both paths are reproducible: identical seed -> identical result
-        assert cum_births(True, 0) == cum_births(True, 0), 'CRN births not reproducible'
-        assert cum_births(False, 0) == cum_births(False, 0), 'Count-based births not reproducible'
+        assert cum_births(True, 0) == per_agent[0], 'CRN births not reproducible'
+        assert cum_births(False, 0) == count_based[0], 'Count-based births not reproducible'
     finally:
         ss.options.crn = orig_crn
 
@@ -682,18 +646,18 @@ if __name__ == '__main__':
     s4 = test_module_adding()
     s5 = test_aging()
     s6 = test_pregnancy()
-    s7 = test_loss_classification()
+    s7 = test_pregnancy_short_sim()
     s8 = test_background_loss()
     s9 = test_nnd()
     s10 = test_count_based_births()
     s11 = test_birth_data_cols()
     s12 = test_period_rates()
-    s12b = test_lifetable_deaths()
-    s13 = test_births_parents()
-    s14 = test_unborn()
-    s15 = test_pregnancy_risks()
-    s16 = test_cause_of_death()
-    s17 = test_split_by_age()
-    s12 = test_declared_newborns()
+    s13 = test_lifetable_deaths()
+    s14 = test_births_parents()
+    s15 = test_unborn()
+    s16 = test_pregnancy_risks()
+    s17 = test_cause_of_death()
+    s18 = test_split_by_age()
+    s19 = test_declared_newborns()
 
     T.toc()

@@ -54,7 +54,7 @@ class Sim(ss.Base):
         ```python
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
-        sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
+        sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'sexual']) # Example using list inputs; can mix and match types
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
@@ -146,7 +146,7 @@ class Sim(ss.Base):
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:
-                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery, ss.PartnerNet)) else []
+                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
                     if obj is not None and obj._default_name:
@@ -755,7 +755,10 @@ class Sim(ss.Base):
     def _init_unit(self):
         """
         Work out the sim's unit, which is the unit of the model's bare numbers: from unit=, then the typed
-        values in the model, then calendar dates (days), then a typed dt, start, or stop; else time is in timesteps
+        values in the modules (declared or written as code), then calendar dates (days), then a typed dt, start,
+        or stop, then calendar years, then the typed values of the other modules (networks, interventions, ...); else
+        time is in timesteps.
+        A model in years with no start starts in the year 2000
 
         The unit belongs to the model, so how the run is written (its step, or a stop given as weeks) does
         not change what the bare numbers mean. A year-like number for start or stop is a calendar year.
@@ -774,9 +777,13 @@ class Sim(ss.Base):
         if unit_given and sc.isnumber(pars.start) and time.assume_cal_year(pars.start): # Read in the unit given, as it says, but it looks like a year
             ss.note(f"start={pars.start} is {pars.start} {pars.unit.removesuffix('s')}s, since unit='{pars.unit}'; for a calendar year, give a date, e.g. start='{int(pars.start)}-01-01'", sim=self)
         durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
-        setters = [mod for mod in self.declared if getattr(mod, 'sets_unit', True)] # A module with typed defaults of its own (ss.Pregnancy's weeks and years) says nothing of the user's bare numbers
-        units = [u.removesuffix('s') for mod in setters for u in mod.graph.unit_values()]
-        units += [base(mod.t.dt) for mod in setters if is_dur(mod.t.dt)]
+        mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
+        setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in self.declared or isinstance(mod, ss.diseases.DiseaseBase))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
+        def mod_units(mod):
+            vals = mod.graph.unit_values() if mod in self.declared else ss.graph.unit_values(mod.pars.values())
+            return [u.removesuffix('s') for u in vals] + ([base(mod.t.dt)] if is_dur(mod.t.dt) else [])
+        units = [u for mod in setters for u in mod_units(mod)]
+        defaults = [u for mod in mods if mod not in setters for u in mod_units(mod)] # Used only if nothing else gives a unit
         if pars.unit is not None:
             unit = pars.unit.removesuffix('s')
         elif units:
@@ -785,10 +792,12 @@ class Sim(ss.Base):
             source = 'the typed values in the model'
             if len(set(units)) > 1:
                 self.units_disagree = sorted(set(units), key=order.index)
-                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] # 0 is 0 in any unit
+                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters if mod in self.declared for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] # 0 is 0 in any unit
                 if bare: # Which unit they are in cannot be guessed
                     raise ss.errors.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
-        elif dates and self.declared: # A model written as code keeps its step in years, as in Starsim 3
+                if pars.dt is None: # The finest, as the most likely, but the step is then that small
+                    ss.warn(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so its unit is the finest, {unit}s, and it steps by one {unit}; give dt= (e.g. dt=ss.{self.units_disagree[-1]}s(1)) or unit= to say otherwise', ss.errors.UnitInferred)
+        elif dates:
             unit, source = 'day', 'start and stop dates'
         elif is_dur(pars.dt) or isinstance(pars.dt, str):
             unit, source = (base(pars.dt) if is_dur(pars.dt) else pars.dt.removesuffix('s')), 'dt'
@@ -796,8 +805,9 @@ class Sim(ss.Base):
             unit, source = base(durs[0]), 'start and stop'
         elif years:
             unit, source = 'year', 'start and stop years'
-        elif not self.declared: # A model written as code, with nothing to say otherwise: years, as in Starsim 3
-            unit, source = 'year', 'the default'
+        elif defaults:
+            unit = sorted(set(defaults), key=['day', 'week', 'month', 'year'].index)[0]
+            source = 'the typed values of the networks, demographics, and interventions'
         if years and pars.unit is None and unit not in [None, 'year'] and sc.isnumber(pars.dt) and not isinstance(pars.dt, bool): # A bare step beside calendar years is in years, as start and stop are
             ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.errors.UnitInferred)
             pars.dt = ss.years(pars.dt)
@@ -817,8 +827,8 @@ class Sim(ss.Base):
         dur_class = time.get_dur_class(self.unit_base)
         if pars.dt is None or sc.isnumber(pars.dt):
             pars.dt = dur_class(sc.ifelse(pars.dt, 1.0))
-        coded_years = not self.declared and unit == 'year' and pars.start is None # A model written as code in years starts in the year 2000 by default, as in Starsim 3 (see ss.Timeline)
-        if not dates and not years and not coded_years:
+        in_years = unit == 'year' and pars.start is None # A model in years with no start starts in the year 2000 (see ss.Timeline)
+        if not dates and not years and not in_years:
             if pars.start is None or sc.isnumber(pars.start):
                 pars.start = dur_class(sc.ifelse(pars.start, 0))
             if sc.isnumber(pars.stop):
@@ -907,7 +917,7 @@ class Sim(ss.Base):
             if nets:
                 for net in nets:
                     term = [term for term in self.mixing.terms if term.name == net.name] if self.solver != 'abm' else []
-                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partnership approximation (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {self.groups.strats[term[0].dim].name}'
+                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partner-change model (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {self.groups.strats[term[0].dim].name}'
                     add('mixing', f'{net.name} ({type(net).__name__}){how}')
             elif any(mod.graph.transmissions for mod in self.declared): # How a state in a rate is read is shown with each rate
                 add('mixing', f'homogeneous{place}, 1 contact per {unit}', 'guessed: no network given')
@@ -1259,6 +1269,8 @@ class Sim(ss.Base):
         """ Time indexing; derived values live in the sim rather than in the pars """
         self.t = ss.Timeline(name='sim')
         self.t.init(self)
+        if self.t.npts > 3001 and 'dt' not in self.given: # The step was not asked for
+            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} (the model\'s unit, from {self.unit_source}); give dt= for a longer step, e.g. dt=ss.weeks(1)', ss.errors.UnitInferred)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
@@ -1293,7 +1305,7 @@ class Sim(ss.Base):
                         kwargs['age_data'] = np.column_stack([np.append(strat.edges, top), np.append(strat.split, 0)])
                     elif strat.female is not None and 'p_female' not in kwargs: # A sex dimension is people.female, so its split is the share of women
                         kwargs['p_female'] = strat.split[strat.female]
-            if self.declared and 'age_data' not in kwargs: # Otherwise the ages of a declared model are the world's, as a guess (as is the split of age groups that are not given one)
+            if 'age_data' not in kwargs: # Otherwise the ages are a named population's, or the world's, as a guess (as is the split of age groups that are not given one)
                 kwargs['age_data'] = ss.named.age_data(*self.pyramid())
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
         elif self.solver == 'abm':
@@ -2296,7 +2308,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
     Examples:
         ```python
         ss.demo() # Run, plot, and show results
-        ss.demo(diseases='hiv', networks='mf') # Run with different defaults
+        ss.demo(diseases='hiv', networks='sexual') # Run with different defaults
         ```
     """
     pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)

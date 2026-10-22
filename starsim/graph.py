@@ -422,7 +422,7 @@ class Graph(Presentation):
                 raise ss.errors.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
                                           f'     If another module reads it from this disease, add it after making the disease: {self.module.name}.define_pars({name}={value!r}).' +
-                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, route="mfnet").' if 'condom' in name else ''))
+                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, route="sexualnet").' if 'condom' in name else ''))
             self.pars[name].value = value
         return
 
@@ -825,29 +825,9 @@ class Graph(Presentation):
 
     def unit_values(self):
         """ All the typed values (durations and rates) in the graph, used to infer the sim's unit """
-        out = []
-        def check(val):
-            if isinstance(val, ss.dur) and not isinstance(val, ss.datedur):
-                out.append(type(val).base)
-            elif isinstance(val, ss.Rate) and val.unit is not None:
-                out.append(type(val.unit).base)
-            elif isinstance(val, ss.Dist):
-                if val.unit is not None:
-                    out.append(val.unit.base)
-                for v in val.pars.values():
-                    check(v)
-            elif isinstance(val, TimeValue):
-                for v in val.typed:
-                    check(v)
-            elif isinstance(val, by):
-                for v in val.items:
-                    check(v)
-        for p in self.all_pars():
-            check(p.raw)
-        for oc in self.outcomes.values():
-            for val in [oc.delay, oc.duration]:
-                check(val)
-        return out
+        vals = [p.raw for p in self.all_pars()] + [val for oc in self.outcomes.values() for val in [oc.delay, oc.duration]]
+        return unit_values(vals)
+
 
     def modifier_kind(self, name):
         """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry) or one destination of a transition with several (`'recovery.R'`), and otherwise its rate """
@@ -896,3 +876,27 @@ class Graph(Presentation):
         """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognorm_ex(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """
         dwells = [tr.dur for tr in self.transitions.values()]
         return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
+
+
+def unit_values(vals):
+    """ The units of the typed values (durations and rates) among some values, including those inside distributions and values by level or in time """
+    out = []
+    def check(val):
+        if isinstance(val, ss.dur) and not isinstance(val, ss.datedur):
+            out.append(type(val).base)
+        elif isinstance(val, ss.Rate) and val.unit is not None:
+            out.append(type(val.unit).base)
+        elif isinstance(val, ss.Dist):
+            if val.unit is not None:
+                out.append(val.unit.base)
+            for v in val.pars.values():
+                check(v)
+        elif isinstance(val, TimeValue):
+            for v in val.typed:
+                check(v)
+        elif isinstance(val, by):
+            for v in val.items:
+                check(v)
+    for val in vals:
+        check(val)
+    return out

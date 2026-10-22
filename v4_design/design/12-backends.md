@@ -60,7 +60,7 @@ A lognormal recovery time does not by itself turn a simple model into an agent-b
 
 A model runs as agents under `'auto'` if it contains any of these:
 
-- an individual-level network (`ss.RandomNet`, `ss.MFNet`, `ss.PartnerNet` and other networks of partnerships, `ssl.StaticNet`, a maternal network), or a mixing pool between some people only (`src=`, `dst=`) or with a number of contacts that differs between people;
+- an individual-level network (`ss.RandomNet`, `ss.SexualNet` and other networks of partnerships, `ssl.StaticNet`, a maternal network), or a mixing pool between some people only (`src=`, `dst=`) or with a number of contacts that differs between people;
 - `n_agents=` given to the sim or to `ss.People`;
 - a per-agent function (`fn(sim, uids)`) or a per-agent attribute that is not a stratification (viral load, an individual's partner count);
 - a distribution on a per-person quantity other than a dwell time (`beta`, `rel_sus = ss.lognorm_ex(mean=1, std=0.3)`) that has not been binned into a dimension;
@@ -132,7 +132,7 @@ solver: ode (requested)
   note: acute has a lognorm_ex dwell time, approximated by 6 Erlang stages (mean 0.25 years kept; std 0.102 instead of 0.1 years)
 ```
 
-A network model run as an ODE is a different, coarser model, not an invalid one, and the user who typed `solver='ode'` has asked for it. A network of lasting partnerships (`ss.MFNet`, `ss.PartnerNet` with `dur=`) uses the partnership approximation of [`06-routes.md`](06-routes.md) ("Networks of partnerships"), with a note; `'auto'` keeps it as agents.
+A network model run as an ODE is a different, coarser model, not an invalid one, and the user who typed `solver='ode'` has asked for it. A network of lasting partnerships (`ss.SexualNet`, `ssl.DegreeNet`) uses the partner-change model of [`06-routes.md`](06-routes.md) ("Networks of partnerships"), with a note; `'auto'` keeps it as agents.
 
 `approx=` says what to do about approximations:
 
@@ -151,7 +151,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 | The model has | Solver | Approximated by | Reported |
 |---|---|---|---|
 | A random or static network (`ss.RandomNet`, `ssl.StaticNet`) | compartmental, explicit | homogeneous mixing with the network's mean number of contacts (for a static network, the mean degree of its graph) | the contact rate and where it came from |
-| A network of lasting partnerships (`ss.MFNet`, `ss.PartnerNet` with `dur=`) | compartmental, explicit | the partnership approximation ([`06-routes.md`](06-routes.md)): partnerships formed at `n/D̄` per person, each transmitting with its chance over its whole length, from partners drawn from the population; its sides, and the property it matches or counts partners by, must be dimensions. Against agents (20 runs of 10,000, prevalence at 10 and 20 years, ODE over agents): risk groups with 6-month partnerships 1.00 and 0.99; HIV-like, 5-year monogamous partnerships 1.11 and 1.25 (infection kept within pairs, which it spreads); gonorrhea-like with Poisson partners at a time, 0.19 and 0.13 (concurrency, which it leaves out; 1.0 and 1.5 near the threshold with one partner at a time) | the rate partnerships form, and under the route in `describe()`, the chance over a partnership in each direction |
+| A network of lasting partnerships (`ss.SexualNet`, `ssl.DegreeNet`) | compartmental, explicit | the partner-change model ([`06-routes.md`](06-routes.md)): partnerships formed at `n/D̄` per person, each transmitting with its chance over its whole length, from partners drawn from the population; its sides, and the property it matches or counts partners by, must be dimensions. Against agents (20 runs of 10,000, prevalence at 10 and 20 years, ODE over agents): risk groups with 6-month partnerships 1.00 and 0.99; HIV-like, 5-year monogamous partnerships 1.11 and 1.25 (infection kept within pairs, which it spreads); gonorrhea-like with Poisson partners at a time, 0.19 and 0.13 (concurrency, which it leaves out; 1.0 and 1.5 near the threshold with one partner at a time) | the rate partnerships form, and under the route in `describe()`, the chance over a partnership in each direction |
 | A modifier of a transmission on a route with a share for each edge (`share=lambda net: ...`) | compartmental, explicit | none: `CapabilityError` (a share that is a number, a time series, or by a dimension is exact) | |
 | A dwell time that is not exponential, Erlang, or fixed (`ss.constant`) | compartmental, explicit or `'auto'` | Erlang stages matching the mean and, as closely as possible, the standard deviation; `stages=k` sets the number directly | the number of stages, and the mean and standard deviation that result |
 | A distribution on a per-person quantity that is not a dwell time (`beta`, `rel_sus`) | compartmental, explicit | its mean. To keep the variation, the user bins it into a dimension (`sir.stratify(rel_sus=[...])`), which is exact for the bins and needs no note | the mean used |
@@ -217,8 +217,8 @@ sim.describe()    # networks, interventions, and custom code included
 Under the solver, `describe()` lists one line per ingredient that matters (each network, each non-exponential dwell time, each function, each module that needs agents, `n_agents=`), saying whether it runs as compartments: `yes`, `approx` (with how), or `no` (with why). For an HIV model with a sexual network, a lognormal dwell time, and partner notification (`trace=`):
 
 ```text
-solver       abm                                    [guessed: MFNet is an individual-level network]
-             network: mfnet: approx as compartments (the partnership approximation)
+solver       abm                                    [guessed: SexualNet is an individual-level network]
+             network: sexualnet: approx as compartments (the partner-change model)
              dwell time: acute (lognorm_ex): approx as compartments (Erlang stages)
              module: partner_notification: no as compartments ("partner_notification" traces contacts, which only a network of agents keeps)
 ```

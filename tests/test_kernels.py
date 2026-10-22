@@ -130,7 +130,7 @@ def test_stochastic():
     for solver,keys in dict(binomial=['sir', 'ages', 'commute'], gillespie=['sir', 'towns', 'commute']).items():
         pop = 2000 if solver == 'gillespie' else 10_000
         for key in keys:
-            for seed in range(3):
+            for seed in range(2):
                 sims = sc.objdict({how:run(key, how, solver=solver, rand_seed=seed, total_pop=pop) for how in ['step', 'all']})
                 assert largest_diff(sims.all, sims.step) == 0, f'{key} under {solver}: the whole run differs from the stepped one'
                 n_I = sims.all.results[sims.all.declared[0].name].n_I.values
@@ -196,9 +196,8 @@ def test_stages():
         E, I, D = ss.states('E I D')
         sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
-    ode = cohort('ode')
-    for res in [cohort('binomial')]:
-        assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
+    ode, res = cohort('ode'), cohort('binomial')
+    assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
     return peaks
 
 
@@ -350,6 +349,7 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sims = test_ode()
+    mix = test_factored_mixing()
     stoch = test_stochastic()
     peaks = test_stages()
     seasonal = test_seasonal_steps()

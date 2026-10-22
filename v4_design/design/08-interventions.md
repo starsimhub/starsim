@@ -304,8 +304,8 @@ The class decides and remembers; the modifier applies the effect, so the base co
 
 <!-- fragment -->
 ```python
-base = ss.Sim(hiv, networks=ss.MFNet(), interventions=art_program)                 # what is really in place
-prep = ss.Sim(hiv, networks=ss.MFNet(), interventions=[art_program, prep_rollout])
+base = ss.Sim(hiv, networks=ss.SexualNet(), interventions=art_program)                 # what is really in place
+prep = ss.Sim(hiv, networks=ss.SexualNet(), interventions=[art_program, prep_rollout])
 
 sims = ss.parallel(baseline=base, prep=prep, n_runs=10)
 sims.plot()

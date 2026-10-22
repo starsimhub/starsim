@@ -296,7 +296,7 @@ class modify(Connector):
 
         # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
-        condoms = ss.modify(ng.infection, efficacy=0.9, share=use, route='mfnet')
+        condoms = ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet')
         ```
     """
     compartmental = True # It works on groups as well as on agents

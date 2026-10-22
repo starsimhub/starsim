@@ -1174,7 +1174,7 @@ class freq(Rate):
 
 class peract:
     """
-    A probability per act, for a transmission over a network that defines acts (e.g. `ss.MFNet`)
+    A probability per act, for a transmission over a network that defines acts (e.g. `ss.SexualNet`)
 
     It is not a time value: it has no unit and no conversion, so it means the same at any
     timestep. A partnership with `a` acts per unit time transmits over a step `dt` with
@@ -1184,7 +1184,7 @@ class peract:
 
     Args:
         value (float/par/dict): one probability for every direction of the network; or a dict of a value for each direction, keyed as below
-        **directions: a value for each direction of the network, named `<side>2<side>` from the network's sides (`net.directions`), e.g. `m2f` and `f2m` on `ss.MFNet`
+        **directions: a value for each direction of the network, named `<side>2<side>` from the network's sides (`net.directions`), e.g. `m2f` and `f2m` on `ss.SexualNet`
 
     Each value is a number in [0, 1], an `ss.par`, an expression of them, an `ss.timeseries`, or an
     `ss.by` over a dimension of the susceptible. A direction can also be written as a pair of sides,
@@ -1195,7 +1195,7 @@ class peract:
     Examples:
         ```python
         S, I = ss.states(2)
-        hiv = ss.Disease(infection=S >> I @ dict(mfnet=ss.peract(m2f=0.001, f2m=0.0005), needles=ss.peract(0.006))*I)
+        hiv = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(m2f=0.001, f2m=0.0005), needles=ss.peract(0.006))*I)
         syph = ss.Disease(infection=S >> I @ ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15})*I)
         ```
     """

@@ -93,8 +93,8 @@ from .modules import (
 
 t('networks')
 from .networks import (
-    Network, DynamicNetwork, SexualNetwork,
-    RandomNet, PartnerNet, MFNet,
+    Network, DynamicNetwork,
+    RandomNet, SexualNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )

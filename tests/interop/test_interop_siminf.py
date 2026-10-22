@@ -1,7 +1,6 @@
 """
 Test importing SimInf models
 """
-import os
 import tempfile
 import pytest
 import numpy as np
@@ -32,8 +31,7 @@ plot(result, I ~ .)
 def test_r_reader():
     sc.heading('Testing reading the literal parts of an R script')
     with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, 'model.R')
-        sc.savetext(path, script)
+        sc.savetext(path := f'{tmp}/model.R', script)
         args = read_script(path)
     assert args['model'] == 'mparse'
     assert args['compartments'] == ['S', 'I', 'R']
@@ -46,8 +44,7 @@ def test_r_reader():
 def test_mparse():
     sc.heading('Testing an mparse() model with births, deaths, and nodes')
     with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, 'model.R')
-        sc.savetext(path, script)
+        sc.savetext(path := f'{tmp}/model.R', script)
         sim = load_siminf(path, **kw)
     choices = '\n'.join(sim.imported.choices)
     assert 'exposure to I' in choices # beta*S*I/N, with N <- S + I + R
@@ -106,7 +103,9 @@ def test_examples():
     assert ref.low - 50 <= S <= ref.high + 50, f'Expected S on day 100 near SimInf\'s {ref.low:n} to {ref.high:n}, not {S:n}'
 
     folder = examples / 'sise3'
-    sim = load_siminf(folder/'original'/'events_SISe3.R', u0=folder/'reference'/'u0.csv', events=folder/'reference'/'events.csv.gz', stop=20, **kw)
+    events = pd.read_csv(folder/'reference'/'events.csv.gz')
+    events = events[events.time <= 20] # Only those in the run, since translating all 780k events takes ~15 s
+    sim = load_siminf(folder/'original'/'events_SISe3.R', u0=folder/'reference'/'u0.csv', events=events, stop=20, **kw)
     sim.run()
     res = sim.results.events_SISe3
     assert res.n_phi.values[-1] > 0 # The infected shed into phi

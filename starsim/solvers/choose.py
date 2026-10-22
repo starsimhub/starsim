@@ -293,7 +293,7 @@ def check_betas(sim, nets):
                     dirs = net.directions if isinstance(net, ss.Network) else []
                     if isinstance(val, (list, tuple, np.ndarray)) and np.ndim(val) == 1 and len(val) == 2:
                         if acts and len(dirs) == 2:
-                            hint = f'give ss.peract({dirs[0]}={val[0]}, {dirs[1]}={val[1]}) if the first is from p1 to p2, as on ss.MFNet, whose p1 are men'
+                            hint = f'give ss.peract({dirs[0]}={val[0]}, {dirs[1]}={val[1]}) if the first is from p1 to p2, as on ss.SexualNet, whose p1 are men'
                         elif acts:
                             hint = f'give ss.peract() with a value for each of its directions ({sc.strjoin(dirs) or "it has none, so one value"})'
                         else:
@@ -527,10 +527,8 @@ def init_capabilities(sim, modules):
                 add(f'family: {mod.name}', 'yes', 'members side by side')
             continue
         if graph is None:
-            if isinstance(mod, ss.PartnerNet) and mod.one_off: # A contact matrix between its two groups, which is exact
-                add(f'network: {mod.name}', 'yes', 'a contact matrix between its two groups', auto=f'the one-off contacts of "{mod.name}" are between agents')
-            elif isinstance(mod, (ss.PartnerNet, ss.MFNet)): # Lasting partnerships: approximate, so 'auto' keeps agents (R4)
-                add(f'network: {mod.name}', 'approx', 'the partnership approximation', auto=f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
+            if isinstance(mod, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): approximate, so 'auto' keeps agents (R4)
+                add(f'network: {mod.name}', 'approx', 'the partner-change model', auto=f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
             elif isinstance(mod, ss.Network):
                 contacts = sim.mixing.net_contacts(mod)[0]
                 add(f'network: {type(mod).__name__}', 'approx' if contacts is not None else 'no', 'contact rates' if contacts is not None else 'no approximation', auto=f'{type(mod).__name__} is an individual-level network')

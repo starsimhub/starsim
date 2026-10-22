@@ -68,7 +68,7 @@ UnknownParameter: "dur_inff=3" was given to "sir", but it has no parameter calle
 A value given for a parameter (as a keyword, in `pars=`, or by `pars.update()`) replaces it. There are three exceptions, and each keeps the parameter rather than changing what it means:
 
 - **A declared parameter** (an `ss.par`) takes the new value and keeps its name and bounds (`sir.pars.beta = 0.1`), since the module's transitions use that same object. A new `ss.par` gives its bounds, prior and description as well.
-- **A bare number for a typed value** keeps the unit of the default: `ss.MFNet(dur=5)` on a default in years is `ss.years(5)`, with a warning if the sim runs in another unit.
+- **A bare number for a typed value** keeps the unit of the default: `ss.SexualNet(dur=5)` on a default in years is `ss.years(5)`, with a warning if the sim runs in another unit.
 - **A single value for a distribution** sets its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli` its probability (`init_prev=0.05`), for `ss.lognorm_ex` its mean (`dur=5` is a lognormal of mean 5 with the default's standard deviation), in the default's unit if the value is a bare number. A fixed value is `ss.constant(...)`. A dict with a `type` is a distribution (`n_contacts=dict(type='poisson', lam=4)`).
 
 To change one parameter of a distribution and keep the others, use the distribution's own method, `pars.dur_inf.set(mean=8)`. A list or another dict given for a distribution raises `TypeError` and names that method, since it could mean the distribution's arguments or the values themselves.

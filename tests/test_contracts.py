@@ -14,11 +14,6 @@ import corpus
 stochastic = ['binomial', 'gillespie', 'abm']
 
 
-def people_states(sim, mod):
-    """ The names of the states of a declared module that are people """
-    return [state.name for state in mod.graph.people_states]
-
-
 # %% The guesses are marked
 
 def guessed(text):
@@ -83,12 +78,6 @@ def test_guesses_marked(row):
 
 # %% Streams are independent
 
-def two_sirs(names=('a', 'b'), solver='binomial', **kwargs):
-    """ Two SIRs that share no states, in one sim """
-    mods = [corpus.make_sir(name=name) for name in names]
-    return ss.Sim(mods, solver=solver, total_pop=10_000, unit='day', stop=100, verbose=0, **kwargs)
-
-
 class Counter(ss.Analyzer):
     """ An analyzer that changes nothing """
     compartmental = True
@@ -101,18 +90,18 @@ class Counter(ss.Analyzer):
 def test_streams(solver):
     sc.heading(f'Testing that random streams are independent under {solver}')
     agents = dict(n_agents=2000) if solver == 'abm' else {}
+    two_sirs = lambda *names: ss.Sim([corpus.make_sir(name=name) for name in names], solver=solver, unit='day', stop=100, total_pop=10_000, verbose=0, **agents) # Two SIRs that share no states
     alone = corpus.sir(solver=solver, unit='day', **agents).run().results.sir.n_I.values
 
     # An analyzer, or an unrelated disease, does not change the draws of a disease, whether the run is whole or stepped
     withan = corpus.sir(solver=solver, unit='day', analyzers=Counter(), **agents).run().results.sir.n_I.values
     assert np.array_equal(alone, withan), 'An analyzer changed the draws'
     for profile in [False, True]: # Profiling makes the run step from Python
-        both = ss.Sim([corpus.make_sir(), corpus.make_sir(name='other')], solver=solver, unit='day', stop=100, total_pop=10_000, verbose=0, **agents)
-        both = both.run(profile=profile).results.sir.n_I.values
+        both = two_sirs('sir', 'other').run(profile=profile).results.sir.n_I.values
         assert np.array_equal(alone, both), f'Another disease changed the draws (profile={profile}): max difference {np.abs(alone - both).max():n}'
 
     # Two identical diseases whose names are anagrams have their own streams
-    ab = two_sirs(('ab', 'ba'), solver=solver, **agents).run().results
+    ab = two_sirs('ab', 'ba').run().results
     assert not np.array_equal(ab.ab.n_I.values, ab.ba.n_I.values), 'Two modules got the same stream'
 
     if solver != 'abm':
@@ -272,7 +261,7 @@ def test_conservation(name):
             continue
         sim = corpus.models[name](solver=solver, total_pop=10_000).run()
         for mod in sim.declared:
-            total = sum(mod.results[f'n_{state}'].values for state in people_states(sim, mod))
+            total = sum(mod.results[f'n_{state.name}'].values for state in mod.graph.people_states)
             assert np.allclose(total, total[0], rtol=1e-9), f'{name} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
     return
 
@@ -338,7 +327,7 @@ def test_acquisition():
 
 # %% Behavior: a regression, a counter, and a table over the destinations
 
-def behavior(solver, seed=1, n=5000):
+def behavior(solver, seed=1, n=2000):
     """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age and destination (a clock since the last birth is agents only: see test_dimensions.py::test_clocks) """
     from scipy.special import expit
     none, pill, iud, P = ss.states('none pill iud P')
@@ -380,7 +369,6 @@ def test_behavior_solvers():
         mean, se = runs.mean(axis=0), runs.std(axis=0, ddof=1)/np.sqrt(len(runs))
         assert np.all(np.abs(mean - ode) < 3*se), f'Expected {solver} to match the ODE within 3 standard errors: {mean} against {ode}, z = {(mean - ode)/se}'
     return ode
-
 
 
 # %% Code beside a declared model

@@ -2601,6 +2601,12 @@ class Agents(Engine):
                     infectious = np.bincount(groups[auids], weights=(rel_trans.raw*share)[auids], minlength=sim.groups.n_groups)
                     expo = sim.mixing.term_exposure(sim.mixing.pool_terms[route.name], infectious, n)
                     pool_hazard[k] += ref*expo[groups]*rel_sus.raw*mult(None, slice(None))
+            elif isinstance(route, ss.MixingPools) and route.edges is not None and not route.pools: # A matrix with its own age bands: from the counts in each band
+                any_pools = True
+                for k,strain in enumerate(strains):
+                    share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
+                    auids, expo = route.band_exposure(rel_trans.raw*share)
+                    pool_hazard[k][auids] += ref*expo*rel_sus.raw[auids]*mult(None, auids)
             elif isinstance(route, (ss.MixingPool, ss.MixingPools)): # Has no direction
                 any_pools = True
                 for pool in (route.pools if isinstance(route, ss.MixingPools) else [route]):

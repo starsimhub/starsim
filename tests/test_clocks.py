@@ -164,17 +164,18 @@ def test_syphilis_latent():
     return sim
 
 
+class BV(ss.Disease):
+    CST1, CST4, P = ss.states('CST1 CST4 P')
+    recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
+    onset  = CST1 >> CST4 @ ss.permonth(0.05)
+    tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average: a dwell time, which ends in the state-change row
+    recur  = ss.Transition(P, CST4, rate=recur0*np.exp(-P.time/recur_tau)) # Largest on entry
+    settle = ss.Transition(P, CST1, dur=ss.months(6))
+
+
 @sc.timer()
 def test_bv_recurrence():
     sc.heading('Port: BV recurrence hazard decays with time since treatment, P.time')
-    class BV(ss.Disease):
-        CST1, CST4, P = ss.states('CST1 CST4 P')
-        recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
-        onset  = CST1 >> CST4 @ ss.permonth(0.05)
-        tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average
-        recur  = ss.Transition(P, CST4, rate=recur0*np.exp(-P.time/recur_tau))
-        settle = ss.Transition(P, CST1, dur=ss.months(6))
-
     def recur_rate(sim, uids): # The workaround (bv_gud_connectors/port.py)
         bv = sim.diseases.bv
         months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months
@@ -193,12 +194,6 @@ def test_bv_recurrence():
 @sc.timer()
 def test_entry_hazard():
     sc.heading('As agents, people entering a state in the state-change row face half a step of its hazards then')
-    class BV(ss.Disease):
-        CST1, CST4, P = ss.states('CST1 CST4 P')
-        onset  = CST1 >> CST4 @ ss.permonth(0.05)
-        tx     = CST4 >> P @ ss.months(2) # A dwell time, which ends in the state-change row
-        recur  = ss.Transition(P, CST4, rate=ss.permonth(0.06)*np.exp(-P.time/ss.months(3))) # Largest on entry
-        settle = ss.Transition(P, CST1, dur=ss.months(6))
     kw2 = dict(n_agents=50_000, start=2000, stop=2005, unit='year', **kw)
     weekly, monthly = [ss.Sim(BV(name='bv'), dt=dt, **kw2).run().results.bv.recur.sum() for dt in [ss.weeks(1), ss.months(1)]]
     assert np.isclose(weekly, monthly, rtol=0.03), f'weekly {weekly:n}, monthly {monthly:n}' # Without the hazard on entry, monthly steps were about 20% lower

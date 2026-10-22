@@ -12,6 +12,7 @@ import pandas as pd
 import scipy.sparse as sps
 import scipy.integrate as sp_integrate
 import scipy.stats as stats
+from scipy.special import expit
 import sciris as sc
 import starsim as ss
 import corpus
@@ -109,6 +110,15 @@ def seed_north(sim):
     return
 
 
+def check_code(sim, spec=None):
+    """ Write the sim to the model spec and back as code, which gives the same hash """
+    code = ss.to_code(spec or sim.to_spec())
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == sim.hash()
+    return code
+
+
 # %% Define the tests
 
 @sc.timer()
@@ -119,7 +129,7 @@ def test_states():
         malaria = make_malaria()
         states = malaria.graph.states
         malaria.stratify(species=['gambiae', 'funestus'], split=[0.75, 0.25], states=[states.Sv, states.Ev, states.Iv], adjust={'mortality': [1.0, 2.0]})
-        sims[solver] = run(malaria, solver, unit='day', stop=2*365, total_pop=20_000, stratify=dict(age=[0, 5, 15]))
+        sims[solver] = run(malaria, solver, unit='day', stop=365, total_pop=20_000, stratify=dict(age=[0, 5, 15]))
     res = sims.ode.results.malaria
     assert [s.name for s in malaria.graph.count_states] == ['Sv', 'Ev', 'Iv'] # Nobody moves between humans and mosquitoes, so the mosquitoes are counts
     assert np.allclose(res.n_Sv.by('species').values[0], [37_500, 12_500], rtol=0.1) # Split by species (after the first day, in which funestus dies twice as fast) ...
@@ -289,8 +299,7 @@ def test_carriage():
         la, lb = 6*(IA + IAB/2)/N, 6*(IB + IAB/2)/N
         return [-(la + lb)*S + IA + IB + IAB, la*S - lb/2*LA - 0.5*LA, lb*S - la/2*LB - 0.5*LB, lb/2*LA + la/2*LB - 0.7*LAB,
                 0.5*LA + 0.3*LAB - IA, 0.5*LB + 0.2*LAB - IB, 0.2*LAB - IAB]
-    from scipy.integrate import solve_ivp
-    ref = solve_ivp(deriv, [0, 20], [0.98*N, 0, 0, 0, 0.01*N, 0.01*N, 0], rtol=1e-10, atol=1e-6).y[:, -1]
+    ref = sp_integrate.solve_ivp(deriv, [0, 20], [0.98*N, 0, 0, 0, 0.01*N, 0.01*N, 0], rtol=1e-10, atol=1e-6).y[:, -1]
     for solver in solvers:
         res = run(make(), solver, start=2000, stop=2020, dt=ss.years(0.02), total_pop=N).results.dis
         n_L, n_I = res.n_L.by('strain').values[-1], res.n_I.by('strain').values[-1]
@@ -754,7 +763,7 @@ def test_ragged():
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.5 * I), recovery=ss.Transition(I, R, dur=30), init_prev=0.05, name='sir')
     sir.stratify(sex=['female', 'male'], split=[0.6, 0.4], adjust={'infection': [0, 1]})
-    sim = ss.Sim(sir, networks=ss.MFNet(), n_agents=5_000, unit='day', stop=50, **kw).run()
+    sim = ss.Sim(sir, networks=ss.SexualNet(), n_agents=5_000, unit='day', stop=50, **kw).run()
     res, women = sim.results.sir, sim.people.female.uids
     assert np.isclose(len(women), 3_000, rtol=0.05) and np.all(sim.people.sex[women] == 0) # The split is the share of women
     assert sim.diseases.sir.I[women].sum() + sim.diseases.sir.R[women].sum() == res.n_I.select(sex='female')[-1] + res.n_R.select(sex='female')[-1] # Not 51 women infected through the network and 0 in the results
@@ -791,7 +800,6 @@ def test_property_values():
 @sc.timer()
 def test_properties_in_rates():
     sc.heading('Testing people\'s properties and conditions in rates, as a regression')
-    from scipy.special import expit
 
     # A probability of use as a regression on a property (FP26), the same as agents and as compartments, and stopped by ss.change on its intercept (FP14: 3,531 starts with and without it)
     def make(solver, change=False):
@@ -824,11 +832,8 @@ def test_properties_in_rates():
     sim = make('abm')
     spec = sim.to_spec()
     assert 'expit(b0 + b_urban * people.urban)' in spec['modules'][0]['transitions'][0]['rate']
-    code = ss.to_code(spec)
+    code = check_code(sim, spec)
     assert 'from scipy.special import expit' in code and 'ss.ppl.urban' in code
-    ns = {}
-    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == sim.hash()
 
     # A property that is not one of the people's says what is
     bad = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*ss.ppl.agee, name='bad')
@@ -1003,12 +1008,8 @@ def test_counters():
     assert np.isclose(total(ode, 'episodes')[1], ode.results.sir.recovery.values.sum())
 
     # Written to the spec and back as code
-    spec = abm.to_spec()
-    code = ss.to_code(spec)
+    code = check_code(abm)
     assert "increment='episodes'" in code and 'increment=dict(immunity=-1)' in code and "increment='doses'" in code
-    ns = {}
-    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == abm.hash()
     with pytest.raises(ValueError, match='whole number'):
         I, R = ss.states('I R')
         ss.Transition(I, R, dur=10, increment=dict(episodes=0.5))
@@ -1041,12 +1042,8 @@ def test_clocks():
     born = sim.results.preg.deliver.values.sum() > 0
     assert born and np.isnan(since).any() and np.allclose(since[~np.isnan(since)] % 1, 0) # Whole months, and none for those with no birth
     assert np.isclose(shares(sim)[-1], np.isnan(since).mean()) # none holds those with no birth
-    spec = sim.to_spec()
-    code = ss.to_code(spec)
+    code = check_code(sim)
     assert "since_birth=ss.months([0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0])" in code and "kind='clock'" in code and 'move=dict(since_birth=0.0)' in code
-    ns = {}
-    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == sim.hash()
     with pytest.raises(ss.errors.BadSplit, match='none'):
         I, R = ss.states('I R')
         bad = ss.Sim(ss.Disease(ss.Transition(I, R, dur=10), init=dict(I=0.1), name='d'), n_agents=100, verbose=0)
@@ -1058,7 +1055,6 @@ def test_clocks():
 @sc.timer()
 def test_rows():
     sc.heading('Testing p= with a to axis (a table over the destinations), and a function for each destination')
-    from scipy.special import expit
     methods = ['pill', 'iud', 'inj']
     def make(solver, fn=False, **kw):
         none = ss.State('none')
@@ -1069,7 +1065,7 @@ def test_rows():
         w = ss.par(ss.by(to=[1.0, 2.0, 1.0])) # Weights by method, by position
         row = [lambda sim, uids, v=v: np.full(len(uids), v) for v in [0.5, 0.2, 0.2, 0.1]] # A function for each destination
         trs = {f'from_{src.name}':ss.Transition(src, [none, *on.values()], dur=ss.months(12), p=row if fn else [1 - p_use, p_use*mix*w]) for src in [none, *on.values()]}
-        sim = ss.Sim(ss.Disease(none, *on.values(), **trs, b0=b0, mix=mix, w=w, name='contra'), solver=solver, start=2000, stop=2020, dt=ss.months(1), use_aging=False, verbose=0, **kw)
+        sim = ss.Sim(ss.Disease(none, *on.values(), **trs, b0=b0, mix=mix, w=w, name='contra'), solver=solver, start=2000, stop=2008, dt=ss.months(1), use_aging=False, verbose=0, **kw)
         sim.stratify(age=[0, 30])
         sim.stratify(urban=[False, True], split=[0.4, 0.6])
         return sim
@@ -1086,10 +1082,7 @@ def test_rows():
     assert 'mix * w normalized over pill, iud, inj' in '\n'.join(abm.diseases.contra.graph.describe(abm))
     spec = abm.to_spec()
     assert spec['modules'][0]['transitions'][0]['p'][1] == 'expit(b0 + (1.0 * people.urban)) * mix * w' # As given
-    code = ss.to_code(spec)
-    ns = {}
-    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == abm.hash()
+    check_code(abm, spec)
     with pytest.raises(ss.errors.UnknownState, match='implant'):
         none, pill = ss.states('none pill')
         ss.Disease(go=ss.Transition(none, [none, pill], rate=ss.peryear(1), p=[0.5, 0.5*ss.par(ss.by(to=dict(pill=1.0, implant=1.0)))]), name='bad')
@@ -1127,7 +1120,7 @@ def test_sex():
     for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex=['female', 'male'], split=[0.7, 0.3])]:
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), init_prev=0.05, name='si')
-        sim = ss.Sim(si, networks=ss.MFNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
+        sim = ss.Sim(si, networks=ss.SexualNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
         if 'split' in kw:
             assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
         sim.run()
@@ -1140,6 +1133,8 @@ def test_sex():
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), name='si'), n_agents=100, stratify=dict(sex=['a', 'b']), verbose=0).init()
     return
+
+
 def test_init_prev_by_agent():
     """ Initial prevalence by a property of agents that is not a stratification: a function of the sim (or of the sim and uids) """
     sc.heading('Testing initial prevalence for each agent')
@@ -1172,6 +1167,7 @@ if __name__ == '__main__':
     carriage = test_carriage()
     space   = test_space()
     commuting = test_commuting()
+    unnamed = test_unnamed_data()
     register = test_register()
     ragged  = test_ragged()
     values  = test_property_values()
@@ -1182,7 +1178,6 @@ if __name__ == '__main__':
     counters = test_counters()
     clocks  = test_clocks()
     rows    = test_rows()
-
-
-    cdims = test_contacts_dims()
+    cdims   = test_contacts_dims()
     sex     = test_sex()
+    initp   = test_init_prev_by_agent()

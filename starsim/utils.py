@@ -33,9 +33,9 @@ class ndict(sc.objdict):
 
     Examples:
         ```python
-        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
-        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
+        networks = ss.ndict(ss.SexualNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.SexualNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
@@ -502,7 +502,7 @@ def route_beta(betas, route):
     The value of a beta for each route (a dict by route name) on one route, or None if it has none
 
     The dict may give `default`, the value of every route it does not name, e.g.
-    `dict(mfnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
+    `dict(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
     """
     keys = {standardize_netkey(k):v for k,v in betas.items() if k != 'default'}
     return keys.get(standardize_netkey(route), betas.get('default'))

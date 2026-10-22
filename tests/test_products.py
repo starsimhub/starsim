@@ -273,13 +273,12 @@ def test_disease_list():
     sc.heading('Testing disease= as a list or an ss.Strains (HP7, agents only): a bivalent vaccine, a test and a cure of each, and their counts')
     def make(dis=None, vx=True, **kwargs):
         g16, g18 = make_geno('hpv16'), make_geno('hpv18')
-        diseases = ss.Strains('hpv', [g16, g18]) if dis == 'strains' else [g16, g18]
-        given = diseases if dis == 'strains' else [g16, g18]
+        given = ss.Strains('hpv', [g16, g18]) if dis == 'strains' else [g16, g18]
         ivs = [ss.vaccinate(ss.Vaccine(efficacy=0.95 if vx else 0.0), coverage=0.8, at=[2001], disease=given, name='vx')]
         if kwargs.get('solver') == 'abm':
             dna = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=1.0), coverage=0.5, at=[2005], disease=given, name='dna')
             ivs += [dna, ss.treat(ss.Treatment(cure=1.0), who=dna.positive, disease=given, name='tx')]
-        return ss.Sim(diseases, interventions=ivs, **kwargs)
+        return ss.Sim(given, interventions=ivs, **kwargs)
     check_agents(make) # A product keyed by the diseases has a compartmental form (see test_vaccine_diseases())
     base, sim = run_abm(make, vx=False), run_abm(make)
     r, r0 = sim.results, base.results
@@ -305,7 +304,6 @@ def test_disease_list():
     with pytest.raises(ss.errors.UnknownDisease, match=r"disease=\['hpv16', 'hpv18'\]"):
         ss.Sim([g16, g18], interventions=[ss.screen(test, at=[2005], disease=g16, name='a'), ss.screen(test, at=[2006], disease=g18, name='b')], solver='abm', **kw).init()
     return sim
-
 
 
 # %% Acceptance: hpvsim_interventions/port.py, with genotypes as diseases

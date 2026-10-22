@@ -671,13 +671,12 @@ def event_register(ev, compartments, E, N):
         if E is None or pd.isna(col) or int(col) < 1 or int(col) > E.shape[1]:
             return None
         return [c for c,v in zip(compartments, E[:, int(col) - 1]) if v > 0]
-    def shifted(row):
-        if row.event != 'intTrans':
+    def shifted(select, shift):
+        """ Where an internal transfer moves the compartments it selects, by a column of the shift matrix """
+        if int(shift) < 1:
             return None
-        if N is None or int(row['shift']) < 1:
-            return None
-        sel = selected(row.select) or compartments
-        return ','.join(compartments[compartments.index(c) + int(N[compartments.index(c), int(row['shift']) - 1])] for c in sel)
+        sel = selected(select) or compartments
+        return ','.join(compartments[compartments.index(c) + int(N[compartments.index(c), int(shift) - 1])] for c in sel)
     sel = {s:selected(s) for s in ev.select.unique()}
     sel = {s:(None if v is not None and len(v) == len(compartments) else v) for s,v in sel.items()} # Every compartment is the register's default (naming them all gives different results: see the report)
     states = ev.select.map(lambda s: ','.join(sel[s]) if sel[s] else None)
@@ -690,7 +689,9 @@ def event_register(ev, compartments, E, N):
             notes.append(('events', f'{is_int.sum()} internal transfers (intTrans) need a shift matrix (N); they were left out'))
             ev, states, to_states = ev[~is_int], states[~is_int], to_states[~is_int]
         else:
-            to_states[is_int] = [shifted(row) for _,row in ev[is_int].iterrows()]
+            pairs = list(zip(ev.select[is_int], ev['shift'][is_int]))
+            found = {pair:shifted(*pair) for pair in set(pairs)} # Each pair of a select and a shift column once, since there can be many events
+            to_states[is_int] = [found[pair] for pair in pairs]
     register = pd.DataFrame({
         'date':      ev.time.values,
         'from':      ev.node.where(ev.event != 'enter').values,

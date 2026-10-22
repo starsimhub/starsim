@@ -57,7 +57,7 @@ class Pars(sc.objdict):
         return
 
     def bare_units(self, unit, label):
-        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.MFNet(dur=5) in a sim in days """
+        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.SexualNet(dur=5) in a sim in days """
         for key,base in (self._bare or {}).items():
             if base != unit:
                 runs = f'runs in {unit}' if unit else 'counts time in timesteps'

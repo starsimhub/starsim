@@ -200,7 +200,7 @@ The models are the functions of `tests/corpus.py`, each returning an unrun sim s
 | 7 | **A model on patches with gravity mobility**, and the same patches with no mobility | Space as a stratification; commuting as a share of time |
 | 8 | **Vaccination as a stratification plus a transfer** | The disease never mentions vaccination; coverage delivers `f`; capacity is a total |
 | 9 | **Two diseases with `ss.modify` in both directions** (HIV and syphilis) | Mutual dependence; combination rules; base and effective values; `what_modifies()` |
-| 10 | **A sexual-network model** (`ss.MFNet`) | `'auto'` runs it as agents; `solver='ode'` raises `CapabilityError` (there is no approximation for partnerships yet) |
+| 10 | **A sexual-network model** (`ss.SexualNet`) | `'auto'` runs it as agents; `solver='ode'` uses the partner-change model, with a note, and `approx=False` raises `CapabilityError` |
 | 11 | **Cholera**: one disease whose states include a water reservoir `W` | Counts in rates; `W` declared a count (`ss.State(people=False)`); inflow from and outflow to `ss.null`; `'auto'` gives an ODE; adding `n_agents=` makes people agents while the water stays a count; `beta * W` raises `ExposureToCount` |
 | 12 | **A vector-borne model** (Ross-Macdonald malaria): humans and mosquitoes as states of one disease | Two populations coupled by counts; a seasonal inflow; humans as agents with mosquitoes as three counts; mosquito states left out of `total_pop` and of an age stratification, and split by species with `states=` |
 | 13 | **Screening with follow-up treatment** | The within-step chain: a treatment triggered by the test's outcome (`who=screen.positive`), run after it in the same step; moving a module with `sim.loop.insert` |

@@ -80,16 +80,15 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 **`ss.by`** (one value per stratum), **`ss.timeseries`** (varies in time), **`ss.seasonal`** (a yearly cycle). The other forms a parameter can take (a number, a typed quantity, a distribution, a function) need no names of their own.
 
-### Mixing and space: 10
+### Mixing and space: 9
 
 Everything spatial is in the submodule `ss.geo`.
 
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
-| `ss.RandomNet` `ss.MFNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph) |
+| `ss.RandomNet` `ss.SexualNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph). `ss.SexualNet` is partnerships between men and women (`sides='mf'`), or between men (`sides='mm'`), with acts per unit time in each, as in Starsim 3 (people with no partner are paired), or with a target number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`). Partnerships between anyone (needle sharing), and EpiModel's targets (`match=`), are the library's `ssl.DegreeNet`; more structured sexual networks are STIsim's |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
-| **`ss.PartnerNet`** | Lasting partnerships that form and dissolve (not only sexual: needle sharing, sex work), described by the mean number of partners at a time (`n_contacts`), their duration, acts per unit time in each partnership (`acts=`), who takes part (`where=`), and partnerships between two groups only (`between=`, lasting or one-off). Targets for the number of partners (concurrency, a maximum, `match=`, as EpiModel's) are the library's `ssl.DegreeNet` (`ss.MFNet` takes `n_contacts`, `concurrency` and `max_contacts`) |
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
 | **`ss.geo.location`** | A geography: names, populations, centroids, distances; named (`ss.geo.location('Kenya', level=1)`) or given directly |
 | **`ss.geo.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
@@ -143,13 +142,13 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Time | 27 | 1 |
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
-| Mixing and space | 10 | 5 |
+| Mixing and space | 9 | 4 |
 | Interactions and interventions | 9 | 9 |
 | Running, comparing, saving | 7 | 2 |
 | Types you get back or subclass | 5 | 0 |
-| **`ss.` names** | **102** | **39** |
+| **`ss.` names** | **101** | **38** |
 | Methods and attributes | 43 | 28 |
-| **Total** | **145** | **67** |
+| **Total** | **144** | **66** |
 
 <!-- counts end -->
 
@@ -182,9 +181,8 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.outcome` | `delay` `duration` `likelihood` |
 | `ss.data` | `aliases` `ignore_extra` |
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
-| `ss.MFNet` | Starsim's `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` |
+| `ss.SexualNet` | `sides` (`'mf'` or `'mm'`) `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` |
 | `ss.geo.Mobility` | `matrix` `data` `kind` `away` |
-| `ss.PartnerNet` | `n_contacts` `dur` `acts` `sides` `between` `where` |
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
 | Networks | `sides` (and `net.directions`, which follow from them) |
 | `sim.calibrate` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
@@ -197,15 +195,15 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 
 | Slot | A bare number is | Appears on |
 |---|---|---|
-| `beta=` | a rate per unit time with no network; a probability per contact on a network without acts; a probability per act on a network with acts (`ss.MFNet`, `ss.PartnerNet(acts=...)`), as `ss.peract`. A dict gives one value per network; directions are named with `ss.peract(m2f=..., f2m=...)` (a pair is an error) | `ss.SIR`, `ss.SIS`, `ss.SEIR` and the library's diseases |
+| `beta=` | a rate per unit time with no network; a probability per contact on a network without acts; a probability per act on a network with acts (`ss.SexualNet`, `ssl.DegreeNet(acts=...)`), as `ss.peract`. A dict gives one value per network; directions are named with `ss.peract(m2f=..., f2m=...)` (a pair is an error) | `ss.SIR`, `ss.SIS`, `ss.SEIR` and the library's diseases |
 | `rate=`, and a bare number after `@` | a rate (hazard) per unit time | `ss.Transition` and every shorthand constructor |
 | `dur=` | a duration; a scalar means an exponential dwell time with that mean | `ss.Transition`, `ss.transfer`, networks |
 | `p=` | a branch probability | `ss.Transition`, `ss.transfer` |
 | `stages=` | a whole number of sub-stages | `ss.Transition` |
 | `init=` | below 1 a fraction, 1 or more a number of people (whether written `1` or `1.0`); on the disease, a dict of these by state name | `ss.State`, `ss.Disease` |
 | `init_prev=` | a fraction | `ss.Disease` |
-| `n_contacts=` | contacts per unit time; on a sexual network, the mean number of partners at a time | `ss.MixingPool`, `ss.RandomNet`, `ss.PartnerNet` |
-| `acts=` | on lasting partnerships, an error (it would be acts per step): give acts per unit time, e.g. `ss.freqperweek(2)`; on one-off contacts, acts per contact | `ss.MFNet`, `ss.PartnerNet` |
+| `n_contacts=` | contacts per unit time; on a sexual network, the mean number of partners at a time | `ss.MixingPool`, `ss.RandomNet`, `ss.SexualNet` |
+| `acts=` | on lasting partnerships, an error (it would be acts per step): give acts per unit time, e.g. `ss.freqperweek(2)` | `ss.SexualNet` |
 | `share=` | the share of acts (or contacts) a modifier acts on | `ss.modify` |
 | `coverage=` | a fraction of the eligible people | deliveries, `ss.transfer` |
 | `capacity=` | a number per round (or step), or a rate per unit time (required for routine delivery) | deliveries |
@@ -228,7 +226,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.radiation`/`ss.stouffer`/`ss.competing_destinations`, `msim.check_runs()` | Deferred from v1: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | A mobility matrix; `check_dt` |
 | `ss.process` | A penalty-box name for custom code | A plain function as a keyword, or `step()` |
 | `ss.Homogeneous` | Not needed | No network given, or `ss.MixingPool(n_contacts=10)` |
-| `ss.SexualNet`, `ss.Network(edges=)` | Starsim already has names | `ss.MFNet` and Starsim's other networks; `ssl.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |
+| `ss.Network(edges=)` | Starsim already has names | Starsim's networks; `ssl.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |
 | `ss.Par`, `ss.Outcome` | Capitalization rule | `ss.par`, `ss.outcome` |
 | `ss.cascade`, `observe()`, `Model.results()` | A separate observation step (`ss.cascade` came back as a group of steps, and was removed again on 2026-10-20: it ran as its steps would as a list) | Results declared as keywords with the model; the steps as a list |
 | `ss.visit`, `ss.Resource`, `ss.share` | Delivery extras, removed 2026-10-20 with stock targets (`target=`, `above=`), shared resources (`uses=`), and `count_events=` | `ss.Delivery(who=...)` with no product; `capacity=` or `deliver=` as a function of the sim; an analyzer |

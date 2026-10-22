@@ -100,14 +100,7 @@ def jax_loglik(sim, points, likelihood=None):
 
 # %% The likelihoods match the run (N1, N2)
 
-jax_cases = [
-    'outcomes',
-    'ts',
-    'season',
-    'both',
-    'detect',
-    'poisson_weekly',
-]
+jax_cases = ['outcomes', 'ts', 'season', 'both', 'detect', 'poisson_weekly']
 
 @pytest.mark.parametrize('key', jax_cases)
 def test_jax_loglik(key):
@@ -128,13 +121,7 @@ def test_jax_loglik(key):
     return
 
 
-pf_cases = [
-    'outcomes',
-    'ts',
-    'detect',
-    'season',
-    'both',
-]
+pf_cases = ['outcomes', 'ts', 'detect', 'season', 'both']
 
 @pytest.mark.parametrize('key', pf_cases)
 def test_particle_filter(key):
@@ -451,20 +438,11 @@ def test_sbc_slow(method):
 if __name__ == '__main__':
     T = sc.timer()
 
-    for key in ['outcomes', 'ts', 'season', 'both', 'detect', 'poisson_weekly']:
-        try:
-            test_jax_loglik(key)
-        except AssertionError as E:
-            print(f'Failed: {E}')
-    for key in ['outcomes', 'ts', 'detect', 'season', 'both']:
-        try:
-            test_particle_filter(key)
-        except AssertionError as E:
-            print(f'Failed: {E}')
-    for method in ['nelder-mead', 'l-bfgs-b', 'optuna', 'nuts', 'pmcmc']:
-        try:
-            test_sbc(method)
-        except AssertionError as E:
-            print(f'Failed: {E!r}')
+    for test,cases in [(test_jax_loglik, jax_cases), (test_particle_filter, pf_cases), (test_sbc, ['nelder-mead', 'l-bfgs-b', 'optuna', 'nuts', 'pmcmc', 'abc-smc', 'if2'])]:
+        for case in cases:
+            try:
+                test(case)
+            except AssertionError as E:
+                print(f'Failed: {E!r}')
 
     T.toc()

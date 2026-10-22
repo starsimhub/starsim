@@ -82,9 +82,9 @@ def test_scenarios():
     return sims
 
 
-def test_dimensions(tmp_path=None):
+def test_dimensions(tmp_path):
     sc.heading('Testing flepiMoP compartments with two dimensions')
-    folder = sc.path(tmp_path or tempfile.mkdtemp())
+    folder = sc.path(tmp_path)
     beta, gamma, nu, eff = 0.4, 0.1, 0.02, 0.6
     config = dict(
         name = 'sir_vax',
@@ -126,4 +126,5 @@ def test_dimensions(tmp_path=None):
 if __name__ == '__main__':
     sim1 = test_seir_2pop()
     sims = test_scenarios()
-    sim3 = test_dimensions()
+    with tempfile.TemporaryDirectory() as tmp:
+        sim3 = test_dimensions(tmp)

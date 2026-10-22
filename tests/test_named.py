@@ -15,14 +15,14 @@ def make_sir():
     return ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.001, name='sir')
 
 
-@sc.timer()
-
 def rebuild(code):
     """ The sim that code written by sim.to_code() builds """
     ns = {}
     exec(code, ns)
     return ns['sim']
 
+
+@sc.timer()
 def test_contacts():
     sc.heading('Testing contact matrices by name')
     home = ss.contacts('Kenya', layer='home')

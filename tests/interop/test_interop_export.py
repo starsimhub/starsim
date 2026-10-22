@@ -100,8 +100,9 @@ def test_odin(tmp_path):
 
 if __name__ == '__main__':
     T = sc.timer()
-    folder = sc.path(tempfile.mkdtemp())
-    test_mermaid(folder)
-    test_sbml(folder)
-    test_odin(folder)
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = sc.path(tmp)
+        test_mermaid(folder)
+        test_sbml(folder)
+        test_odin(folder)
     T.toc()

@@ -289,8 +289,8 @@ def test_mixed_timesteps():
     kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', verbose=0)
 
     print('Year-year')
-    sis1 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))
-    sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
+    sis1 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
+    sim1 = ss.Sim(dt=ss.years(1/365), diseases=sis1, label='year-year', **kw)
 
     print('Day-day')
     sis2 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
@@ -298,13 +298,13 @@ def test_mixed_timesteps():
 
     print('Day-year')
     sis3 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
-    sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
+    sim3 = ss.Sim(dt=ss.years(1/365), diseases=sis3, label='day-year', **kw)
 
     print('Year-day')
-    sis4 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))
+    sis4 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
     sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
-    msim = ss.parallel(sim1, sim2, sim3, sim4)
+    msim = ss.parallel(sim1, sim2, sim3, sim4, parallel=False) # Serially, since starting processes takes longer than these short runs
 
     # Check that all results are close
     threshold = 0.02
@@ -400,8 +400,8 @@ def test_coded_unit():
     assert sim.unit == 'day' and sim.t.dt == ss.days(1) and len(sim.t) == 31
     sim = ss.Sim(connectors=Step(), unit='week', stop=10, verbose=0).init()
     assert sim.t.dt == ss.weeks(1) and len(sim.t) == 11
-    sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing says otherwise: years from 2000, as in Starsim 3
-    assert sim.unit == 'year' and sim.t.start == 2000 and sim.t.dt == ss.years(1)
+    sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing has a unit: time is in timesteps
+    assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
     return sim
 
 

@@ -4,6 +4,7 @@ Test the Loop class
 
 # %% Imports and settings
 import gc
+import pytest
 import numpy as np
 import weakref
 import pandas as pd
@@ -44,6 +45,11 @@ def test_run_options():
 
     assert s1.summary == s2.summary, 'Sims do not match'
 
+    # A non-profiled run should still produce a usable plan DataFrame, just without cpu_time (test_loop_plotting() profiles one)
+    assert not len(s1.loop.cpu_time), 'Default run should not record CPU times'
+    df = s1.loop.to_df()
+    assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
+
     # One time index during a step: every module sees the step's start, so code written `if sim.ti == 0` runs on the first step
     seen = sc.objdict(rate=[], intv=[])
     def rate(sim):
@@ -68,12 +74,6 @@ def test_loop_plotting():
     sim.loop.plot()
     sim.loop.plot_cpu()
     sim.loop.plot_step_order()
-
-    # A non-profiled run should still produce a usable plan DataFrame, just without cpu_time
-    sim2 = ss.Sim(pars).run()
-    assert not len(sim2.loop.cpu_time), 'Default run should not record CPU times'
-    df = sim2.loop.to_df()
-    assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
     return sim.loop
 
 
@@ -142,12 +142,8 @@ def test_callable_cache_cleanup():
         raise RuntimeError('intentional loop failure')
 
     sim.loop.insert(fail_after_cache, label='sim.start_step')
-    try:
+    with pytest.raises(RuntimeError, match='intentional loop failure'):
         sim.run()
-    except RuntimeError as err:
-        assert 'intentional loop failure' in str(err)
-    else:
-        raise AssertionError('Expected loop failure was not raised')
 
     for dist in sim.dists.dists.values():
         assert getattr(dist, '_callable_args', None) is None
@@ -176,24 +172,13 @@ def test_loop_plan_views_and_insert():
     assert sim.loop.cpu_df is not None
 
     calls = []
-
-    def mark_label(sim):
-        calls.append(sim.ti)
-
-    sim.loop.insert(mark_label, label='sim.finish_step', before=True)
+    sim.loop.insert(lambda sim: calls.append(sim.ti), label='sim.finish_step', before=True)
     sim.run()
     assert len(calls) == sim.t.npts - 1, 'Label-based insertion did not run once per step' # Once, not twice (FP6)
 
     calls = []
     sim = ss.Sim(small_pars).init()
-
-    def mark_match(sim):
-        calls.append(sim.ti)
-
-    def match_fn(plan):
-        return plan.label == 'sim.finish_step'
-
-    sim.loop.insert(mark_match, match_fn=match_fn, before=True)
+    sim.loop.insert(lambda sim: calls.append(sim.ti), match_fn=lambda plan: plan.label == 'sim.finish_step', before=True)
     sim.run()
     assert len(calls), 'Function-based insertion did not run'
 

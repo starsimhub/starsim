@@ -174,11 +174,11 @@ The arrow in `ss.transfer()` and `move=` is between the levels of a dimension, w
 
 <!-- fragment -->
 ```python
-infection = S >> I @ dict(mf=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)) * I
-sim = ss.Sim(hiv, networks=[ss.MFNet(), needles])
+infection = S >> I @ dict(sexual=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)) * I
+sim = ss.Sim(hiv, networks=[ss.SexualNet(), needles])
 ```
 
-The keys are network names. On a network with acts the value is a probability per act (`ss.peract`, or a bare number), with a value for each of the network's directions where it has them, named from its sides (`m2f` and `f2m` on `ss.MFNet`; `net.directions` lists them). There are no positional pairs: what `[b1, b2]` meant depended on who the network put in `p1`, so a pair raises `RouteMismatch`, naming the `ss.peract` spelling. A single value applies to every network. How each network uses its value is in [06-routes.md](06-routes.md).
+The keys are network names. On a network with acts the value is a probability per act (`ss.peract`, or a bare number), with a value for each of the network's directions where it has them, named from its sides (`m2f` and `f2m` on `ss.SexualNet`; `net.directions` lists them). There are no positional pairs: what `[b1, b2]` meant depended on who the network put in `p1`, so a pair raises `RouteMismatch`, naming the `ss.peract` spelling. A single value applies to every network. How each network uses its value is in [06-routes.md](06-routes.md).
 
 ## The operators
 

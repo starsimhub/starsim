@@ -103,6 +103,7 @@ class Route(ss.Module):
     """
     A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
     """
+    sets_unit = False # Its typed defaults (e.g. how long partnerships last) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
         """ Compute transmission probabilities along this route (must be overridden by subclasses). """
         errormsg = 'compute_transmission() must be defined by Route subclasses'
@@ -114,7 +115,7 @@ class Network(Route):
     A class holding a single network of contact edges (connections) between people
     as well as methods for updating these. Networks mediate disease transmission
     between agents in `ss.People`; see `ss.Disease` for how transmission uses
-    network edges, and `ss.RandomNet`, `ss.MFNet`, `ss.PrenatalNet` for
+    network edges, and `ss.RandomNet`, `ss.SexualNet`, `ss.PrenatalNet` for
     built-in network types.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
@@ -210,7 +211,7 @@ class Network(Route):
     def directions(self):
         """
         The directions it can transmit in, `<side of the infectious partner>2<side of the susceptible one>`,
-        e.g. `['m2f', 'f2m']` on `ss.MFNet`; these are the keys of an `ss.peract` on it. A network with no
+        e.g. `['m2f', 'f2m']` on `ss.SexualNet`; these are the keys of an `ss.peract` on it. A network with no
         sides has none, and takes one value.
         """
         sides = list(self.sides or {})
@@ -520,7 +521,7 @@ class Network(Route):
         Examples:
             ```python
             import networkx as nx
-            sim = ss.Sim(n_agents=100, networks='mf').init()
+            sim = ss.Sim(n_agents=100, networks='sexual').init()
             G = sim.networks.randomnet.to_graph()
             nx.draw(G)
             ```
@@ -704,22 +705,6 @@ class DynamicNetwork(Network):
         return len(active)
 
 
-def mode_sides(between):
-    """ The sides of a network between two groups (`between=`): a label for each, and who is in it """
-    if isinstance(between, dict):
-        out = dict(between)
-    elif isinstance(between, (tuple, list)) and len(between) == 2:
-        label = lambda v, i: v if isinstance(v, str) else v.args[0] if isinstance(v, ss.conditions.Cond) and v.op == 'people' else 'ab'[i]
-        out = {label(v, i):v for i,v in enumerate(between)}
-    else:
-        errormsg = f'between= is two groups, e.g. ("fsw", "client") (levels of a stratification, or boolean properties of people), or a dict of a label to a condition over people, not {between}'
-        raise TypeError(errormsg)
-    if len(out) != 2:
-        errormsg = f'between= is two groups with different names, not {between}'
-        raise ValueError(errormsg)
-    return out
-
-
 def check_acts(net, acts):
     """
     `acts=` of lasting partnerships is acts per unit time: a rate, or a distribution of rates drawn once for each
@@ -739,47 +724,6 @@ def check_acts(net, acts):
             raise ValueError(f'acts= of "{name}" is {acts}, a whole number of acts in a step, drawn once for each partnership, which depends on the step (at weekly steps, a fifth of partnerships would never have sex). Give a rate, {example}')
         return
     raise TypeError(f'acts= of "{name}" is {acts} ({type(acts).__name__}); give a rate, {example}')
-
-
-class SexualNetwork(DynamicNetwork):
-    """
-    Base class for all sexual networks
-
-    Each edge has a number of acts per step (`acts`) and the share of them in which a condom is
-    used (`condoms`, 0 unless set, e.g. by partnership type in `add_pairs()`). Condoms protect through
-    a modifier of the transmission on the network, e.g.
-    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`.
-
-    Its partnerships are between men and women (`sides = dict(m='male', f='female')`), so a disease's
-    beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both. A subclass with other partnerships
-    declares its own sides, e.g. `sides = None` for one between men only (one beta, as `ssl.MSMNet`).
-    """
-    sides = dict(m='male', f='female') # People's sex, so its directions are m2f and f2m
-
-    def __init__(self, pars=None, edges=None, **kwargs):
-        super().__init__(pars=pars, edges=edges, **kwargs)
-        self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
-        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, route=)
-        self.edge_defaults['condoms'] = 0.0
-        self.debut = ss.FloatArr('debut', default=0)
-        return
-
-    def active(self, people):
-        """ Return boolean array of agents who are alive, participating, and past sexual debut. """
-        valid_age = people.age > self.debut
-        active = self.participant & valid_age & people.alive
-        return active
-
-    def available(self, people, sex):
-        """ Return UIDs of active agents of the given sex who are not currently partnered. """
-        # Could modify this to account for concurrency
-        # This property could also be overwritten by a NetworkConnector
-        # which could incorporate information about membership in other
-        # contact networks
-        available = people[sex] & self.active(people)
-        available[self.edges.p1] = False
-        available[self.edges.p2] = False
-        return available.uids
 
 
 # %% Specific instances of networks
@@ -997,7 +941,7 @@ class RandomNet(DynamicNetwork):
 
 class DegreeTargets:
     """
-    Targets for the number of partners people have at a time, for `ss.MFNet` and `ssl.DegreeNet`
+    Targets for the number of partners people have at a time, for `ss.SexualNet` and `ssl.DegreeNet`
 
     The target is a distribution of the number of partners (`degree_dist()`). Partnerships
     end at random, and people look for new ones with a probability that depends on how many
@@ -1138,322 +1082,75 @@ class DegreeTargets:
         return
 
 
-class PartnerNet(DynamicNetwork):
+class SexualNet(DegreeTargets, DynamicNetwork):
     """
-    Lasting partnerships that form and dissolve, between anyone, among some people, or between two groups
+    Sexual partnerships that form and dissolve, between men and women, or between men
 
-    Partnerships are not only sexual: people who share needles, or sex workers and their
-    regular clients, have partners too. People look for a new partner with the same chance
-    on every step, however many they have, and those looking are paired at random;
-    partnerships end at random. So `n_contacts` is the mean number of partners a person has
-    at a time, which in a closed population is Poisson; the network starts there. For a target
-    distribution of the number of partners (with concurrency or a maximum), partnerships within
-    a level (EpiModel's nodematch), or a number of partners for each level, use `ssl.DegreeNet`
-    (`import starsim.library as ssl`).
-
-    Args:
-        n_contacts (float/dict): the mean number of partners a person has at a time; with `between=`, a number for each group (e.g. `dict(fsw=3, client=0.5)`), or for one-off contacts the number per unit time of one group (see below)
-        dur (float/`ss.dur`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit
-        acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a rate such as `ss.freqperweek(2)`, or a distribution of rates drawn once for each partnership (e.g. `ss.lognorm_ex(ss.freqperyear(80), ss.freqperyear(30))`); a disease's beta is then per act (see `ss.peract`), so a partnership with `a` acts per unit time transmits over a step `dt` with probability 1 − (1 − beta)^(a·dt)
-        sides (str/dict): the kinds of people at the two ends of its partnerships, which name the directions of a beta on it (see `ss.peract`): `'sex'` for men (`m`) and women (`f`), with partnerships between anyone, so its directions are `m2f`, `f2m`, `m2m`, and `f2f`; or a dict of a label to a condition over people
-        between (tuple/dict): if given, the two groups each partnership is between (one person of each), which are its sides: names of levels of a stratification or of boolean properties of people (`('fsw', 'client')`), or a dict of a label to a condition over people
-        where (Cond/str/func): if given, who takes part: a condition over people (e.g. `ss.ppl.pwid`), as for `ss.modify()`; nobody else is in the network
-        beta (float): the default beta for each partnership
-
-    With `between=` and no `dur=`, contacts are one-off: each lasts a step, `n_contacts` is the
-    number per unit time for one of the groups (e.g. `dict(client=ss.permonth(1))`), and the other
-    group's follow, since each contact has one of each; `acts=` is then the acts in each contact
-    (default 1), a number or a distribution of counts.
-
-    Examples:
-        ```python
-        # Needle sharing among people who inject drugs (a boolean property of people), with 20 injections a month in each partnership
-        needles = ss.PartnerNet(name='needles', where=ss.ppl.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20))
-
-        # Regular partnerships between female sex workers and clients (levels of a stratification role=['none', 'fsw', 'client'])
-        regular = ss.PartnerNet(name='regular', between=('fsw', 'client'), n_contacts=dict(fsw=3, client=0.5), dur=ss.months(3))
-
-        # Sex work as one-off contacts: a client has one a month on average, with 3 acts each
-        sw = ss.PartnerNet(name='sw', between=('fsw', 'client'), n_contacts=dict(client=ss.permonth(1)), acts=3)
-        ```
-    """
-    def __init__(self, pars=None, n_contacts=_, dur=_, acts=_, sides=_, between=_, where=_, beta=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            n_contacts = 1.0,
-            dur = 10,
-            acts = None,
-            sides = None,
-            between = None,
-            where = None,
-            beta = 1.0,
-        )
-        self.update_pars(pars, **kwargs)
-        self.one_off = self.pars.between is not None and dur is None and 'dur' not in (pars or {}) # Contacts that last a step
-        self.set_sides()
-        if self.one_off:
-            self.dist_contacts = ss.poisson(lam=0) # The number of one-off contacts each person of one group has in a step: see init_one_off()
-            self.rng_partner = ss.random() # Who each contact is with
-        self.rng_degree = ss.random() # The number of partners each person starts with
-        self.rng_order  = ss.random() # The order in which people are paired
-        self.rng_seek   = ss.random() # Whether each person looks for a partner on this step
-        self.rng_end    = ss.random() # When each partnership ends, if it ends at a constant rate
-        self.rng_stubs  = ss.random() # For shuffling the partners people start with
-        self.waiting = None # Those who looked for a partner on the last step and were left over
-        return
-
-    def set_sides(self):
-        """ Its sides, from `between=` or `sides=`, and its acts """
-        p = self.pars
-        if p.between is not None: # The two groups are its sides
-            if p.sides is not None or p.get('match') is not None:
-                errormsg = f'between= of {type(self).__name__}() gives its two sides, and each partnership is between them, so it takes no sides= or match='
-                raise ValueError(errormsg)
-            self.sides = mode_sides(p.between)
-        elif p.sides == 'sex': # Partnerships between anyone, by sex
-            self.sides = dict(m='male', f='female')
-            self.same_side = True
-        elif p.sides is not None:
-            if not isinstance(p.sides, dict):
-                errormsg = f'sides= of {type(self).__name__}() is "sex", or a dict of a label to a condition over people, e.g. dict(a=ss.ppl.urban, b=~ss.ppl.urban), not {p.sides}'
-                raise TypeError(errormsg)
-            self.sides = p.sides
-            self.same_side = True
-        if p.acts is not None or self.one_off:
-            self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step (or in each one-off contact)
-            if 'acts' not in self.edges:
-                self.edges.acts = np.array([], dtype=ss_float)
-        return
-
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        p = self.pars
-        if self.one_off:
-            self.init_one_off(sim)
-            self.dist_contacts.set(lam=self.contact_rate*self.t.dt.to(sim.unit_base).value)
-            return
-        if isinstance(p.dur, ss.Dist):
-            self.mean_dur = None
-        else:
-            dur = ss.solvers.convert(p.dur, sim.unit_base) if isinstance(p.dur, ss.TimePar) else p.dur
-            self.mean_dur = dur/self.t.dt.to(sim.unit_base).value # In steps
-            if self.mean_dur < 1:
-                errormsg = f'Partnerships of "{self.name}" last {self.mean_dur:n} steps on average; they need to last at least one'
-                raise ValueError(errormsg)
-        self.init_seeking(self.mean_dur if self.mean_dur is not None else self.dwell_mean())
-        check_acts(self, p.acts)
-        if isinstance(p.acts, ss.TimePar):
-            self.acts_per_step = ss.solvers.convert(p.acts, sim.unit_base)*self.t.dt.to(sim.unit_base).value
-        return
-
-    def init_seeking(self, mean_dur):
-        """ The mean number of partners at a time (of each group, with `between=`), and the probability of looking for a partner on a step, given how many steps partnerships last on average """
-        p = self.pars
-        if p.between is not None:
-            given = p.n_contacts if isinstance(p.n_contacts, dict) else {k:p.n_contacts for k in self.sides}
-            if set(given) != set(self.sides):
-                errormsg = f'n_contacts= of "{self.name}" is a number for each of its groups ({sc.strjoin(self.sides)}), not {p.n_contacts}'
-                raise ValueError(errormsg)
-            n = [given[k] for k in self.sides]
-        else:
-            n = [p.n_contacts]
-        if not all(sc.isnumber(v) for v in n):
-            errormsg = f'n_contacts= of "{self.name}" is the mean number of partners at a time, a number, not {p.n_contacts}; for a distribution of them, or a number for each level, use ssl.DegreeNet'
-            raise ValueError(errormsg)
-        self.mean_contacts = np.array(n, dtype=float)
-        self.p_seek = np.minimum(self.mean_contacts/mean_dur, 1) # Each partnership ends at 1/mean_dur, so those with n partners on average lose n/mean_dur a step, and gain as many
-        return
-
-    def init_one_off(self, sim):
-        """ One-off contacts between two groups: the number per step for one of them, and the acts in each contact """
-        p = self.pars
-        nc = p.n_contacts
-        first = list(self.sides)[0]
-        if not (isinstance(nc, dict) and len(nc) == 1 and list(nc)[0] in self.sides and isinstance(list(nc.values())[0], ss.Rate)):
-            errormsg = f'n_contacts= of "{self.name}", whose contacts are one-off (it has no dur=), is the number of contacts per unit time of one of its groups, e.g. dict({first}=ss.permonth(1)); the other group\'s follow, since each contact has one of each. Give dur= for lasting partnerships'
-            raise ValueError(errormsg)
-        key, rate = list(nc.items())[0]
-        self.seeker = list(self.sides).index(key) # The group whose contacts are given
-        self.contact_rate = ss.solvers.convert(rate, sim.unit_base) # Per person of that group, per unit time
-        if isinstance(p.acts, ss.TimePar) or (isinstance(p.acts, ss.Dist) and any(isinstance(v, ss.TimePar) for v in p.acts.pars.values())):
-            errormsg = f'acts= of "{self.name}", whose contacts are one-off, is the number of acts in each contact (a number, or a distribution of counts), not {p.acts}'
-            raise ValueError(errormsg)
-        return
-
-    def acts_per_contact(self):
-        """ The mean number of acts in a one-off contact """
-        acts = self.pars.acts
-        if acts is None:
-            return 1.0
-        return float(np.mean(sc.dcp(acts).init(force=True).rvs(100_000))) if isinstance(acts, ss.Dist) else float(acts)
-
-    def add_one_off(self):
-        """ Each person of one group has a number of contacts on this step, each with someone of the other group at random """
-        uids = self.taking_part()
-        side = self.side_raw()[uids]
-        seekers, others = uids[side == self.seeker], uids[side == 1 - self.seeker]
-        if not len(seekers) or not len(others):
-            self.formed = 0
-            return
-        stubs = np.repeat(seekers, self.dist_contacts.rvs(seekers)).view(ss.uids)
-        u = self.rng_partner.rng.random(len(stubs)) # By position, since each person appears once for each contact
-        self.rng_partner.jump()
-        partners = others[np.minimum((u*len(others)).astype(int), len(others) - 1)]
-        p1, p2 = (stubs, partners) if self.seeker == 0 else (partners, stubs)
-        acts = self.pars.acts
-        n = len(p1)
-        acts = np.ones(n) if acts is None else acts.rvs(n).astype(ss_float) if isinstance(acts, ss.Dist) else np.full(n, float(acts))
-        self.append(p1=p1, p2=p2, beta=np.full(n, self.pars.beta, dtype=ss_float), dur=np.ones(n), acts=acts) # They last this step
-        self.formed = n
-        return
-
-    def taking_part(self):
-        """ The people who can have partners: alive, and with where= or between=, those it gives """
-        uids = self.sim.people.alive.uids
-        if self.pars.where is not None:
-            uids = uids[people_mask(self.sim, self.pars.where)[uids]]
-        if self.pars.between is not None:
-            uids = uids[self.side_raw()[uids] >= 0]
-        return uids
-
-    def dwell_mean(self):
-        """ The mean of a distribution of durations, in steps """
-        return float(np.mean(sc.dcp(self.pars.dur).init(force=True).rvs(100_000)))
-
-    def init_results(self):
-        super().init_results()
-        self.define_results(ss.Result('new_partnerships', label='Contacts' if self.one_off else 'Partnerships formed', auto_plot=False))
-        return
-
-    def seek_prob(self, uids):
-        """ The probability that each person looks for a partner on this step """
-        return self.p_seek[self.side_raw()[uids]] if self.pars.between is not None else np.full(len(uids), self.p_seek[0])
-
-    def match_pairs(self, people):
-        """ Pair people who are looking for partners, who are in a random order: in turn, or with `between=`, one of each group; returns the two lists of partners, and anyone left over """
-        if self.pars.between is not None: # One of each group
-            side = self.side_raw()[people]
-            a, b = people[side == 0], people[side == 1]
-            n = min(len(a), len(b))
-            return a[:n], b[:n], ss.uids.concatenate([a[n:], b[n:]])
-        n = len(people)//2
-        return people[:n], people[n:2*n], people[2*n:]
-
-    def end_times(self, p1):
-        """ How many steps each new partnership lasts """
-        if self.mean_dur is None:
-            return self.pars.dur.rvs(p1)
-        u = self.rng_end.rvs(p1)
-        return np.maximum(np.ceil(np.log1p(-u)/np.log1p(-1/self.mean_dur)), 1) # Geometric, so partnerships end at a constant rate
-
-    def pair(self, p1, p2):
-        """ Add partnerships between two lists of people, leaving out pairs who are already partners """
-        if len(self):
-            existing = set(zip(np.minimum(self.edges.p1, self.edges.p2).tolist(), np.maximum(self.edges.p1, self.edges.p2).tolist()))
-            new = zip(np.minimum(p1, p2).tolist(), np.maximum(p1, p2).tolist())
-            keep = np.array([pair not in existing for pair in new], dtype=bool)
-            p1, p2 = p1[keep], p2[keep]
-        keep = p1 != p2
-        p1, p2 = p1[keep], p2[keep]
-        acts = {} if self.pars.acts is None else dict(acts=self.pars.acts.rvs(p1).astype(ss_float) if isinstance(self.pars.acts, ss.Dist) else np.full(len(p1), self.acts_per_step, dtype=ss_float))
-        self.append(p1=p1, p2=p2, beta=np.full(len(p1), self.pars.beta, dtype=ss_float), dur=self.end_times(p1), **acts)
-        return
-
-    def init_post(self):
-        """ Start with a Poisson number of partners each (of the mean for their group), paired at random """
-        super().init_post(add_pairs=False)
-        if self.one_off:
-            return
-        uids = self.taking_part()
-        mean = self.mean_contacts[self.side_raw()[uids]] if self.pars.between is not None else self.mean_contacts[0]
-        degrees = np.maximum(sps.poisson.ppf(self.rng_degree.rvs(uids), mean), 0).astype(int)
-        stubs = np.repeat(uids, degrees)
-        fisher_yates_shuffle(stubs, self.rng_stubs.rng.random(len(stubs)))
-        self.rng_stubs.jump() # Reset the RNG manually, as in RandomNet.shuffle_edges()
-        p1, p2, left = self.match_pairs(stubs.view(ss.uids))
-        self.pair(p1, p2)
-        return
-
-    def add_pairs(self):
-        """ People look for partners, and those looking are paired at random """
-        if self.one_off:
-            return self.add_one_off()
-        uids = self.taking_part()
-        prob = self.seek_prob(uids)
-        seek = self.rng_seek.rvs(uids) < prob
-        if self.waiting is not None and len(self.waiting): # Those left over last step look again
-            seek |= np.isin(uids, self.waiting) & (prob > 0)
-        seekers = uids[seek]
-        seekers = seekers[np.argsort(self.rng_order.rvs(seekers), kind='stable')]
-        p1, p2, left = self.match_pairs(seekers)
-        self.waiting = left if self.pars.between is not None else left[-1:] # With between=, the surplus of one group waits, as in ss.MFNet
-        n = len(self)
-        if len(p1):
-            self.pair(p1, p2)
-        self.formed = len(self) - n
-        return
-
-    def update_results(self):
-        super().update_results()
-        self.results.new_partnerships[self.ti] = getattr(self, 'formed', 0)
-        return
-
-
-class MFNet(DegreeTargets, SexualNetwork):
-    """
-    This network is built by **randomly pairing** males and female with variable
-    relationship durations.
-
-    By default, people who have no partner are paired, so nobody has more than one at
-    a time. With `n_contacts`, the number of partners people have at a time is a target
-    instead, as for `ss.PartnerNet`: partnerships end when their duration is up, and
-    people look for new ones at a rate that depends on how many they have, so the
-    distribution of the number of partners (among people who take part, after their
-    debut) stays at the target. In an open population, where partners die and newcomers
-    start with none, people look more (or less) often by a factor that keeps the mean
-    number of partners at the target; with partnerships much longer than people's time
+    People take part after their debut (`debut`), if they do (`participation`, drawn at
+    their debut). By default, people who have no partner are paired on every step, so
+    nobody has more than one at a time, as in Starsim 3. With `n_contacts`, the number of
+    partners people have at a time is a target instead: partnerships end when their
+    duration is up, and people look for new ones at a rate that depends on how many they
+    have, so the distribution of the number of partners (among people who take part, after
+    their debut) stays at the target. In an open population, where partners die and
+    newcomers start with none, people look more (or less) often by a factor that keeps the
+    mean number of partners at the target; with partnerships much longer than people's time
     in the network, it takes a few decades to settle. The network then starts at the
     target, and its results and `net.check()` say how close it is.
 
+    Each partnership has a number of acts per step (`acts`), so a disease's beta on it is
+    a probability per act (see `ss.peract`), and the share of them in which a condom is used
+    (`condoms`, 0 unless set, e.g. by a subclass in `add_pairs()`), which a modifier of the
+    transmission on the network reads, e.g.
+    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='sexualnet')`.
+
+    For risk groups, sex work, or several types of partnership, see STIsim; for
+    partnerships that are not sexual (e.g. needle sharing), or mixing within a level,
+    `ssl.DegreeNet` (`import starsim.library as ssl`).
+
     Args:
-        dur (`ss.Dist`): the duration of each partnership; can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-        debut (`ss.Dist`): Age of debut can vary by using callable parameter values
-        acts (`ss.Rate`/`ss.Dist`): the number of acts per unit time in each partnership: a rate, or a distribution of rates drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30); a disease's beta on it is per act (see `ss.peract`)
-        participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-        rel_part_rates (float): Relative participation in the network, i.e. a multiplier (from 0 to 1) on the probability of participating
+        sides (str): who partnerships are between: `'mf'` (the default), a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; or `'mm'`, two men (men who have sex with men), with one beta
+        dur (`ss.Dist`): the duration of each partnership; can vary by age, year, and individual pair
+        debut (`ss.Dist`): the age of debut; can vary by using callable parameter values
+        acts (`ss.Rate`/`ss.Dist`): the number of acts per unit time in each partnership: a rate, or a distribution of rates drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
+        participation (`ss.Dist`): whether each person takes part, drawn at their debut; can vary by individual properties (age, sex, ...) using callable parameter values
         n_contacts (float/`ss.Dist`): if given, the number of partners people have at a time: a distribution over whole numbers, or a number, which is the mean of a Poisson
         concurrency (float): with `n_contacts`, the share of people with two or more partners at once
         max_contacts (int): with `n_contacts`, the most partners anyone has at once
 
     Examples:
         ```python
-        net = ss.MFNet(n_contacts=ss.poisson(0.7), dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)), concurrency=0.1)
+        net = ss.SexualNet() # Men and women, at most one partner at a time, as Starsim 3's ss.MFNet
+        msm = ss.SexualNet(name='msm', sides='mm', participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)))
+        net = ss.SexualNet(n_contacts=ss.poisson(0.7), dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)), concurrency=0.1)
         ```
     """
-    def __init__(self, pars=None, dur=_, debut=_, acts=_, participation=_, rel_part_rates=_, n_contacts=_, concurrency=_, max_contacts=_, **kwargs):
+    def __init__(self, pars=None, sides=_, dur=_, debut=_, acts=_, participation=_, n_contacts=_, concurrency=_, max_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
+            sides = 'mf',
             dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
             acts = ss.lognorm_ex(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            rel_part_rates = 1.0,
             n_contacts = None,
             concurrency = None,
             max_contacts = None,
         )
         self.update_pars(pars, **kwargs)
-
-        # Finish initialization
-        self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
-        self.rel_part = ss.bernoulli(p=1.0) # Set p later, in case rel_part_rates is modified
+        if self.pars.sides not in ['mf', 'mm']:
+            errormsg = f'sides= of ss.SexualNet() is "mf" (men and women) or "mm" (men who have sex with men), not {self.pars.sides!r}; for other partnerships, see ssl.DegreeNet, or STIsim'
+            raise ValueError(errormsg)
+        self.sides = dict(m='male', f='female') if self.pars.sides == 'mf' else None # People's sex, so its directions are m2f and f2m; between men, one beta
+        self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
+        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, route=)
+        self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut') # Drawn for each person on their first step in the sim, whether born, arrived, or there at the start
         self.decided = ss.BoolArr('decided') # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
-        if self.targeted: # Only then, so the random numbers of a network without targets are unchanged
-            self.rng_degree = ss.random() # The number of partners each person starts with
-            self.rng_seek   = ss.random() # Whether each person looks for a partner on this step
-            self.rng_order  = ss.random() # The order in which people are paired
-            self.waiting = ss.uids() # People of one sex who looked for a partner and were left over, who look again
+        self.rng_degree = ss.random() # The number of partners each person starts with, with n_contacts
+        self.rng_seek   = ss.random() # Whether each person looks for a partner on this step, with n_contacts
+        self.rng_order  = ss.random() # The order in which people are paired
+        self.waiting = ss.uids() # People who looked for a partner and were left over, who look again
         return
 
     def side_raw(self):
@@ -1486,21 +1183,32 @@ class MFNet(DegreeTargets, SexualNetwork):
             self.define_degree_results()
         return
 
+    def active(self, people):
+        """ Return boolean array of agents who are alive, participating, and past sexual debut (and with sides='mm', men) """
+        active = self.participant & (people.age > self.debut) & people.alive
+        return active & people.male if self.pars.sides == 'mm' else active
+
+    def available(self, people, sex):
+        """ Return UIDs of active agents of the given sex who are not currently partnered. """
+        available = people[sex] & self.active(people)
+        available[self.edges.p1] = False
+        available[self.edges.p2] = False
+        return available.uids
+
     def people_seeking(self, people):
         """ The people who take part, after their debut """
         return self.active(people).uids
 
-    def init_post(self):
+    def init_post(self, add_pairs=True):
         self.set_network_states()
-        if not self.targeted:
-            super().init_post()
+        if not self.targeted or not add_pairs:
+            super().init_post(add_pairs=add_pairs) # Pair everyone who takes part, as on each step (unless a subclass pairs its own)
             return
-        super().init_post(add_pairs=False) # Start at the target: give each person who takes part a number of partners, and pair men with women at random
-        people = self.sim.people
-        uids = self.people_seeking(people)
+        super().init_post(add_pairs=False) # Start at the target: give each person who takes part a number of partners, and pair them at random
+        uids = self.people_seeking(self.sim.people)
         stubs = np.repeat(uids, self.start_degrees(uids, self.rng_degree))
         rng = self.rng_order.rng # By position, since each person appears once for each partner
-        p1, p2 = self.pair_sexes(stubs, rng.random(len(stubs)))
+        p1, p2 = self.pair(stubs, rng.random(len(stubs)))
         n = len(p1)
         dur = self.pars.dur.rvs(3*n) # What is left of partnerships under way: one picked in proportion to how long it lasts, and a uniform share of it
         dur = dur[rng.choice(len(dur), size=n, p=dur/dur.sum())]*rng.random(n) if n else dur[:0]
@@ -1508,25 +1216,30 @@ class MFNet(DegreeTargets, SexualNetwork):
         self.add(p1, p2, dur)
         return
 
-    def pair_sexes(self, people, order):
-        """ Pair the men and the women among some people, in the order of a random number for each, leaving out pairs who are already partners; anyone left over waits """
+    def pair(self, people, order):
+        """ Pair people in the order of a random number for each, a man with a woman (or with sides='mm', two men), leaving out pairs who are already partners; anyone left over waits """
         people = people[np.argsort(order, kind='stable')]
-        female = self.sim.people.female.raw[people]
-        men, women = people[~female], people[female]
-        n = min(len(men), len(women))
-        p1, p2 = men[:n], women[:n]
-        self.waiting = ss.uids.concatenate([men[n:], women[n:]]).unique() # Otherwise the surplus of one sex would be lost on every step
-        if len(self) and n:
-            existing = set(zip(self.edges.p1.tolist(), self.edges.p2.tolist()))
-            keep = np.array([pair not in existing for pair in zip(p1.tolist(), p2.tolist())], dtype=bool)
-            p1, p2 = p1[keep], p2[keep]
-        return p1, p2
+        if self.pars.sides == 'mm':
+            n = len(people)//2
+            p1, p2, left = people[:n], people[n:2*n], people[2*n:]
+        else:
+            female = self.sim.people.female.raw[people]
+            men, women = people[~female], people[female]
+            n = min(len(men), len(women))
+            p1, p2, left = men[:n], women[:n], ss.uids.concatenate([men[n:], women[n:]])
+        self.waiting = left.unique() # Otherwise the surplus of one sex would be lost on every step
+        keep = p1 != p2
+        if len(self) and n and self.targeted: # Without targets, only people with no partner look
+            existing = set(zip(np.minimum(self.edges.p1, self.edges.p2).tolist(), np.maximum(self.edges.p1, self.edges.p2).tolist()))
+            keep &= np.array([pair not in existing for pair in zip(np.minimum(p1, p2).tolist(), np.maximum(p1, p2).tolist())], dtype=bool)
+        return p1[keep], p2[keep]
 
     def add(self, p1, p2, dur=None):
         """ Add partnerships, with their durations (drawn if not given) and acts """
         if len(p1):
-            dur = self.pars.dur.rvs(len(p1)) if dur is None else dur
-            self.append(p1=p1, p2=p2, beta=np.ones(len(p1)), dur=dur, acts=self.draw_acts(len(p1)))
+            by = p1 if len(np.unique(p1)) == len(p1) else len(p1) # Drawn for each person, unless someone forms two at once (they would get the same)
+            dur = self.pars.dur.rvs(by) if dur is None else dur
+            self.append(p1=p1, p2=p2, beta=np.ones(len(p1)), dur=dur, acts=self.draw_acts(by))
         return len(p1)
 
     def draw_acts(self, n):
@@ -1539,82 +1252,33 @@ class MFNet(DegreeTargets, SexualNetwork):
 
     def set_network_states(self):
         """ Draw the age of debut of anyone who has none (newborns, and people who arrive at any age), and whether each person takes part, when they reach their debut """
-        self.set_debut()
-        self.set_participation()
-        return
-
-    def set_participation(self):
-        """ Draw whether each person who has reached their debut and has not been decided takes part, so that a probability by age is read at the age of debut """
-        people = self.sim.people
-        uids = (people.alive & ~self.decided & (people.age >= self.debut)).uids
-        participant = self.pars.participation.rvs(uids)
-        if self.pars.rel_part_rates != 1: # Scale the probability of participating
-            self.rel_part.set(p=self.pars.rel_part_rates)
-            participant &= self.rel_part.rvs(uids)
-        self.participant[uids] = participant
-        self.decided[uids] = True
-        return
-
-
-    def set_debut(self):
-        """ Draw the age of debut of each person who has none """
         people = self.sim.people
         uids = (people.alive & self.debut.isnan).uids
         self.debut[uids] = self.pars.debut.rvs(uids)
+        uids = (people.alive & ~self.decided & (people.age >= self.debut)).uids
+        self.participant[uids] = self.pars.participation.rvs(uids)
+        self.decided[uids] = True
         return
 
     def add_pairs(self):
-        """ Form new sexual partnerships between available male and female agents """
-        people = self.sim.people
-        if self.targeted: # Those looking for a partner on this step, given how many they have
-            active = self.people_seeking(people)
+        """ Pair the people looking for a partner: everyone who takes part and has none, or with n_contacts, those who look on this step, given how many they have """
+        active = self.people_seeking(self.sim.people)
+        if not self.targeted:
+            seekers = active[self.degrees(active) == 0]
+        else:
             seekers = self.seeking(active, self.rng_seek)
             waiting = self.waiting[np.isin(self.waiting, active)]
             waiting = waiting[self.p_seek[np.minimum(self.degrees(waiting), len(self.p_seek) - 1)] > 0] # Unless they have as many partners as anyone can now
             seekers = ss.uids.concatenate([seekers, waiting]).unique()
-            p1, p2 = self.pair_sexes(seekers, self.rng_order.rvs(seekers))
-            n = self.add(p1, p2)
-            if len(active): # In an open population, partners leave and newcomers start with none, so people look more (or less) often, by as much as keeps the mean number of partners at the target (a factor adjusted by a fifth of the gap each step, on a log scale)
-                target = self.dist_degree @ np.arange(len(self.dist_degree))
-                mean = self.degrees(active).mean()
-                gap = target/max(mean, 1e-3*target)
-                self.boost = np.clip(self.boost*gap**0.5, 0.01, 1000.0)
-                self.init_seek(self.mean_steps/(self.boost*gap)) # The gap itself too, which damps the swings of the slow adjustment
-            return n
-        available_m = self.available(people, 'male')
-        available_f = self.available(people, 'female')
-
-        # random.choice is not common-random-number safe, and therefore we do
-        # not try to Stream-ify the following draws at this time.
-        if len(available_m) <= len(available_f):
-            self.dist.set(a=available_f)
-            p1 = available_m
-            p2 = self.dist.rvs(n=len(p1)) # TODO: not fully stream safe
-        else:
-            self.dist.set(a=available_m)
-            p2 = available_f
-            p1 = self.dist.rvs(n=len(p2))
-        self.dist.jump() # TODO: think if there's a better way
-
-        beta = np.ones_like(p1)
-
-        # Figure out durations and acts
-        if (len(p1) == len(np.unique(p1))):
-            # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur_vals = self.pars.dur.rvs(p1)
-            act_vals = self.draw_acts(p1)
-        else: # TODO: rethink explanation without multirng
-            # If multirng is enabled, we're here because some individuals in p1
-            # are starting multiple relationships on this timestep. If using
-            # slotted draws, as above, repeated relationships will get the same
-            # duration and act rates, which is scientifically undesirable.
-            # Instead, we fall back to a not-CRN safe approach:
-            dur_vals = self.pars.dur.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
-            act_vals = self.draw_acts(len(p1))
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
-
-        return len(p1)
+        p1, p2 = self.pair(seekers, self.rng_order.rvs(seekers))
+        n = self.add(p1, p2)
+        if self.targeted and len(active): # In an open population, partners leave and newcomers start with none, so people look more (or less) often, by as much as keeps the mean number of partners at the target (a factor adjusted by a fifth of the gap each step, on a log scale)
+            target = self.dist_degree @ np.arange(len(self.dist_degree))
+            mean = self.degrees(active).mean()
+            gap = target/max(mean, 1e-3*target)
+            self.boost = np.clip(self.boost*gap**0.5, 0.01, 1000.0)
+            self.init_seek(self.mean_steps/(self.boost*gap)) # The gap itself too, which damps the swings of the slow adjustment
+        return n
 
     def step(self):
         self.end_pairs()
@@ -1825,6 +1489,7 @@ class MixingPools(Route):
         self.validate_pars()
         self.pools = []
         self.constant = False # Whether a number of contacts is the same for everyone in a group (as from ss.contacts()), rather than Poisson
+        self.edges = None # The lower edges of the matrix's own age bands (from ss.contacts()), whose exposure agents work out by band: see band_exposure()
         return
 
     def __len__(self):
@@ -1902,6 +1567,9 @@ class MixingPools(Route):
             self.init_full(sim)
 
         self.pools = []
+        coded = any(isinstance(dis, ss.Infection) for dis in sim.pars.diseases.values()) # A disease written as code transmits through the pools themselves
+        if (self.name in sim.mixing.pool_terms or self.edges is not None) and not coded: # Declared diseases use the matrix from the counts in each group or band: see ss.solvers.Mixing.init_pools() and band_exposure()
+            return
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
                 n_contacts = p.n_contacts[i,j]
@@ -1919,6 +1587,25 @@ class MixingPools(Route):
         for mp in self.pools:
             mp.init_post()
         return
+
+    def band_exposure(self, weights):
+        """
+        As agents, for a matrix with its own age bands (`ss.contacts('Kenya')`), with no pool for each pair of bands: the
+        UIDs of the people alive, and the exposure of each, from the infectiousness-weighted share of each band (`weights`,
+        one for each agent) and the contacts between bands, as those pools would give, since everyone in a band has the
+        same contacts. People younger than the first band (e.g. not yet born) have none
+        """
+        ppl = self.sim.people
+        auids = ppl.auids
+        band = np.searchsorted(self.edges, ppl.age.raw[auids], side='right') - 1
+        ok = band >= 0
+        nb = len(self.edges)
+        n = np.bincount(band[ok], minlength=nb)
+        infectious = np.bincount(band[ok], weights=weights[auids][ok], minlength=nb)
+        prev = np.divide(infectious, n, out=np.zeros(nb), where=n > 0)
+        expo = np.zeros(len(auids))
+        expo[ok] = (self.pars.n_contacts.T @ prev)[band[ok]] # n_contacts is indexed [source, destination]
+        return auids, self.pars.beta*expo
 
     def compute_transmission(self, *args, **kwargs):
         new_cases = []
@@ -2237,4 +1924,5 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
     out.constant = True # Everyone in a group has the same number of contacts
     out.ref = ref # Where a named matrix came from, for the model spec
     out.bands = None if ref is not None else np.asarray(bands).tolist() # A matrix given with its own age bands, for the model spec (as given, since they name the groups)
+    out.edges = np.asarray(bands, dtype=float)
     return out

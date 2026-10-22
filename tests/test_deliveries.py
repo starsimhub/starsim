@@ -7,7 +7,6 @@ import os
 import tempfile
 import pytest
 import numpy as np
-import networkx as nx
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
@@ -49,6 +48,16 @@ def check_close(sims, func, rtol=0.1):
     vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
+
+
+def make_cascade(**kwargs):
+    """ A rapid test every week for those not tested in four weeks, a PCR to confirm (with a delay), and treatment with limited capacity """
+    rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
+    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
+    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7), name='screening') # Named, since a subclass of ss.Sim may make them
+    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9, name='confirm')
+    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50), name='treatment')
+    return [screening, confirm, treatment]
 
 
 def check_agents(make, **kwargs):
@@ -499,12 +508,7 @@ def test_triggered():
 
     # Steps given in any order run in the order of their triggers (as agents, since it reads rapid.since and pcr has a delay)
     def make(reverse=False, **kwargs):
-        rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
-        pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
-        screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
-        confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
-        treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
-        steps = [screening, confirm, treatment]
+        steps = make_cascade()
         return ss.Sim(make_sis(), interventions=steps[::-1] if reverse else steps, **kwargs)
     check_agents(make, stop=120, **kw)
     sim = make(solver='abm', stop=120, **kw).run()
@@ -519,12 +523,7 @@ def test_triggered():
     class SubSim(ss.Sim):
         def __init__(self, interventions=None, **kwargs):
             super().__init__(pars=dict(interventions=interventions), **kwargs)
-    rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
-    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
-    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7), name='screening') # Named, since ss.Sim() is called from SubSim, not here
-    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9, name='confirm')
-    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50), name='treatment')
-    sub = SubSim(interventions=[treatment, confirm, screening], diseases=make_sis(), solver='abm', stop=120, **kw).run()
+    sub = SubSim(interventions=make_cascade()[::-1], diseases=make_sis(), solver='abm', stop=120, **kw).run()
     assert np.array_equal(sub.results.sis.n_I, sim.results.sis.n_I)
 
     # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)
@@ -632,7 +631,7 @@ def test_deliver():
         sir = make_sir()
         campaign = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.6, at=[5])
         return ss.Sim(sir, interventions=campaign if vaccinate else None, solver='binomial', stop=100, **kw)
-    msim = ss.parallel(baseline=scenario(False), vaccine=scenario(True), n_runs=3)
+    msim = ss.parallel(baseline=scenario(False), vaccine=scenario(True), n_runs=3, parallel=False)
     diff = msim.diff('baseline').vaccine.sir.infection.cum
     assert diff.values.shape == (3, 101)
     assert np.all(diff.values[:, -1] < 0) # Fewer infections in every run
@@ -645,14 +644,14 @@ def test_coinfection():
     sc.heading('Testing two diseases that modify each other')
     def make(coinfect=True):
         S, I = ss.states('S I')
-        hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.002, f2m=0.001)) * I), init_prev=0.05)
+        hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexual=ss.peract(m2f=0.002, f2m=0.001)) * I), init_prev=0.05)
         S, I = ss.states('S I')
         syph = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), cure=ss.Transition(I, S, dur=ss.years(3)), init_prev=0.05)
         coinfection = [
             ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'), # Both diseases have a state called I, so each condition remembers its own
             ss.modify(syph.rel_sus, multiply=5.0, where=hiv.I, name='syph_sus'),
         ]
-        return ss.Sim(diseases=[hiv, syph], networks=ss.MFNet(), connectors=coinfection if coinfect else None, start=2000, stop=2020, verbose=0)
+        return ss.Sim(diseases=[hiv, syph], networks=ss.SexualNet(), connectors=coinfection if coinfect else None, start=2000, stop=2020, verbose=0)
     sim = make().run()
     base = make(coinfect=False).run()
     assert list(sim.diseases.keys()) == ['hiv', 'syph'] # Named from their variables
@@ -704,10 +703,11 @@ def test_coinfection_compartments():
         a, b = seir('a', 10), seir('b', 8)
         same = ss.modify(a.rel_sus, multiply=1.0, where=b.I, name='same') if crossed else None
         return ss.Sim(diseases=[a, b] if which is None else dict(a=a, b=b)[which], connectors=same, solver='binomial', unit='day', stop=120, total_pop=100_000, rand_seed=seed, verbose=0).run()
+    seeds = range(4)
+    crossed = [staged(seed=seed).results for seed in seeds]
     for key in ['a', 'b']:
-        crossed = np.mean([staged(seed=seed).results[key].n_I.max() for seed in range(4)])
-        alone = np.mean([staged(crossed=False, which=key, seed=seed).results[key].n_I.max() for seed in range(4)])
-        assert np.isclose(crossed, alone, rtol=0.02)
+        alone = np.mean([staged(crossed=False, which=key, seed=seed).results[key].n_I.max() for seed in seeds])
+        assert np.isclose(np.mean([res[key].n_I.max() for res in crossed]), alone, rtol=0.02)
 
     # A delivery of one disease's product to people in a state of the other
     sim = make(coinfect=False, interventions=True).run()
@@ -754,7 +754,7 @@ def test_loop_order():
 
 def test_newborns_and_events():
     sc.heading('Testing routine delivery to newborns, and deliveries on a transition that an intervention causes')
-    pars = dict(stop=6*365, n_agents=20_000, **kw)
+    pars = dict(stop=2*365, n_agents=10_000, **kw)
     ppl = ss.People(100)
 
     # Routine vaccination of children reaches those born or aging in, in a compartmental run too
@@ -772,7 +772,7 @@ def test_newborns_and_events():
         sir = make_sir()
         cure = ss.treat(ss.Treatment(cure=1.0, transition='recovery'), where=sir.I, coverage=0.2, interval=1, name='cure')
         after = ss.screen(ss.Diagnostic(sensitivity=1.0), who=sir.recovery, name='after')
-        sim = ss.Sim(sir, interventions=[after, cure], solver=solver, stop=150, n_agents=20_000, **kw).run() # The delivery that reads is first, so it sees them a step later
+        sim = ss.Sim(sir, interventions=[after, cure], solver=solver, stop=150, n_agents=10_000, **kw).run() # The delivery that reads is first, so it sees them a step later
         res = sim.results
         assert np.isclose(res.after.delivered.sum(), res.sir.recovery[:-1].sum(), rtol=0.01) # Everyone who recovered, but on the last step
     return sims
@@ -941,7 +941,7 @@ def test_trace():
     def run(ring):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.002, name='sir')
-        net = ssl.StaticNet(graph=nx.erdos_renyi_graph, p=8/5_000, seed=True, name='net')
+        net = ssl.StaticNet(n_contacts=8, seed=True, name='net') # A fast Erdős–Rényi graph
         vx = ss.Vaccine(efficacy=1.0)
         intvs = ss.vaccinate(vx, on=sir.infection, trace='net', name='ring') if ring else None
         return ss.Sim(sir, networks=net, interventions=intvs, **pars).run()
@@ -1136,7 +1136,6 @@ def test_delay():
 
 def test_coded_disease():
     sc.heading('Testing deliveries for a disease written as code (PL2): screen, treat, and vaccinate on ssl.AgentSIR')
-    import starsim.library as ssl
     def make(interventions, **kwargs):
         sir = ssl.AgentSIR(beta=ss.peryear(0.5), init_prev=0.1, dur_inf=ss.years(5), p_death=0.0, **kwargs)
         return ss.Sim(n_agents=5000, diseases=sir, networks='random', interventions=interventions, start=2000, stop=2010, verbose=0).run()
@@ -1156,18 +1155,12 @@ def test_coded_disease():
             clear_infection = property(lambda self: (_ for _ in ()).throw(AttributeError('clear_infection')))
         ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, interval=1), verbose=0).init()
     return res
+
+
 def test_save_load():
     """ Steps with memory and a delayed test, saved and loaded mid-run, end as if they had not been """
     sc.heading('Testing save and load of steps of care mid-run')
-    def make():
-        rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
-        pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
-        screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7))
-        confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9)
-        treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50))
-        return ss.Sim(make_sis(), interventions=[screening, confirm, treatment], solver='abm', stop=120, **kw)
-    sim = make()
-    sim.init()
+    sim = ss.Sim(make_sis(), interventions=make_cascade(), solver='abm', stop=120, **kw).init()
     sim.run(until=60)
     with tempfile.TemporaryDirectory() as folder:
         path = os.path.join(folder, 'care.sim')
@@ -1271,3 +1264,5 @@ if __name__ == '__main__':
     delay  = test_delay()
     coded  = test_coded_disease()
     agents = test_agents_only()
+    saved  = test_save_load()
+    copied = test_copied_steps()

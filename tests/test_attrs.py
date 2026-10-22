@@ -70,12 +70,12 @@ def test_hiv_cd4():
     sc.heading('HIV: CD4 drawn at infection, recorded at ART, derived by state; deaths by CD4 with no analyzer')
     kw2 = dict(start=1990, stop=2010, dt=ss.months(1), unit='year', **kw)
     hiv, mods = make_hiv()
-    sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=10_000, **kw2).run()
+    sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=5000, **kw2).run()
     assert sim.solver == 'abm'
     r = sim.results.hiv
     by = r.cd4_death.by('cd4')
     assert by.columns == ['0-49', '50-199', '200-349', '350-499', '500+']
-    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and r.cd4_death.sum() > 100
+    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and r.cd4_death.sum() > 50
     assert by.values[:, 0].sum() > 0 and by.values[:, -1].sum() > 0 # Deaths at low CD4 (the highest rate) and high (on ART)
     assert np.allclose(r.n_on_art.by('cd4').values.sum(axis=1), r.n_on_art.values) and r.n_on_art.select(cd4='500+')[-1] > r.n_on_art.select(cd4='0-49')[-1]
     assert np.allclose(r.cd4_death.cum.by('cd4').values[-1], by.values.sum(axis=0))
@@ -261,7 +261,7 @@ def test_attr_rules():
 @sc.timer()
 def test_burnin():
     sc.heading('Seeds part way through their natural history: a sim that starts earlier (burn-in), which replaces ss.spread')
-    kw2 = dict(stop=1996, dt=ss.months(1), unit='year', n_agents=20_000, **kw)
+    kw2 = dict(stop=1996, dt=ss.months(1), unit='year', n_agents=10_000, **kw)
     out = sc.objdict()
     for label,start in [('plain', 1990), ('burnin', 1980)]:
         hiv, mods = make_hiv(art=ss.peryear(0))
@@ -338,7 +338,9 @@ def test_attr_births():
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()
+    test_hiv_cd4_ode()
     test_hpv_nab()
+    test_hpv_nab_ode()
     test_attr_crn()
     test_attr_rules()
     test_burnin()

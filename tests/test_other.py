@@ -1,7 +1,6 @@
 """
 Test Starsim features not covered by other test files
 """
-import warnings
 import pytest
 import numpy as np
 import sciris as sc
@@ -14,7 +13,6 @@ sc.options.interactive = False # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
 
 small = 100
-medium = 1000
 
 # %% Define the tests
 
@@ -27,15 +25,9 @@ def test_microsim(do_plot=False):
     # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
     # Need to be careful to get the ordering right. The set-up here assumes that in the simple
     # sexual  network, p1 is male and p2 is female. In the prenatal network, p1=mothers, p2=babies.
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'prenatal': [0.2, 0]}
+    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'prenatal': [0.2, 0]}
 
-    sim = ss.Sim(
-        people=ss.People(small),
-        networks=[ss.MFNet(), ss.PrenatalNet()],
-        demographics=ss.Pregnancy(),
-        diseases=hiv,
-    )
-    sim.init()
+    sim = ss.Sim(n_agents=small, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(), diseases=hiv)
     sim.run()
 
     if do_plot:
@@ -51,14 +43,9 @@ def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=ss.RandomNet()), n_agents=small)
     s1.init()
-
     s2 = sc.dcp(s1)
-
     s1.run()
     s2.run()
-    s1.plot()
-    s2.plot()
-
     ss.debugtools.diff_sims(s1, s2, full=True)
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
@@ -70,16 +57,11 @@ def test_deepcopy_until():
     sc.heading('Testing deepcopy with until')
     s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small, start=2000)
     s1.init()
-
     s1.run(until=ss.date(2005))
-
     s2 = sc.dcp(s1)
-
     s1.run()
     s2.run()
-    s1.plot()
-    s2.plot()
-
+    s1.plot() # Plotting a sim that was copied part way through
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
@@ -88,7 +70,6 @@ def test_deepcopy_until():
 @sc.timer()
 def test_custom_imports():
     sc.heading('Testing custom imports')
-    o = sc.objdict()
 
     class MyDisease(ss.SIS):
         pass
@@ -96,11 +77,9 @@ def test_custom_imports():
     class MyNetwork(ss.RandomNet):
         pass
 
-    my_modules = [MyDisease, MyNetwork]
-
     # Make both library and custom modules searchable
-    ss.register_modules(ssl.diseases, my_modules)
-    sim = ss.Sim(n_agents=1000, diseases=['hiv', 'mydisease'], networks='mynetwork')
+    ss.register_modules(ssl.diseases, [MyDisease, MyNetwork])
+    sim = ss.Sim(n_agents=small, diseases=['hiv', 'mydisease'], networks='mynetwork')
     sim.run()
 
     # A method of a disease written as code, on a declared one, would never be called (before, it was silently ignored)
@@ -109,7 +88,7 @@ def test_custom_imports():
             def set_prognoses(self, uids, sources=None):
                 pass
 
-    return o
+    return sim
 
 
 @sc.timer()

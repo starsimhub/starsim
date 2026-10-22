@@ -43,8 +43,8 @@ Condoms and similar per-act protection are modifiers of each disease's transmiss
 <!-- fragment -->
 ```python
 use = ss.timeseries({2000: 0.05, 2020: 0.3})                                       # share of acts with a condom
-condoms = [ss.modify(ng.infection, efficacy=0.9, share=use, route='mfnet'),        # gonorrhea
-           ss.modify(ct.infection, efficacy=0.4, share=use, route='mfnet')]        # chlamydia
+condoms = [ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet'),    # gonorrhea
+           ss.modify(ct.infection, efficacy=0.4, share=use, route='sexualnet')]    # chlamydia
 nsp = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2005)   # needle and syringe programs
 ```
 
@@ -57,7 +57,7 @@ coinfection = [
     ss.modify(hiv.rel_sus,        multiply=2.7, where=syphilis.active),
     ss.modify(syphilis.rel_sus,   multiply=1.5, where=hiv.infected & ~hiv.on_art),
 ]
-sim = ss.Sim(diseases=[hiv, syphilis], networks=ss.MFNet(), connectors=coinfection)
+sim = ss.Sim(diseases=[hiv, syphilis], networks=ss.SexualNet(), connectors=coinfection)
 ```
 
 ### Targets

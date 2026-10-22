@@ -302,15 +302,15 @@ class People:
 
         Note: `age_data` can also be provided as a string (interpreted as a filename).
 
-        If no value is provided, uniform ages from 0-60 are created (to match the
-        global mean age of ~30 years).
+        If no value is provided, the ages are the world's (`ss.named.world`), as for a sim
+        with no named population.
 
         Returns:
             An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            dist = ss.uniform(low=0, high=60, name='Age distribution')
-        elif isinstance(age_data, ss.Dist): # A distribution of ages, used as is
+            age_data = ss.named.age_data(ss.named.world.ages, ss.named.world.counts)
+        if isinstance(age_data, ss.Dist): # A distribution of ages, used as is
             dist = age_data
         else:
             # Try loading from file

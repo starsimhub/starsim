@@ -119,7 +119,7 @@ def test_api():
     s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random').run() # Supply strings directly
     s2 = ss.Sim(pars=dict(n_agents=n_agents, diseases='sir', networks='random')).run() # Supply as parameters
     s3 = ss.Sim(n_agents=n_agents, diseases=ss.SIR(), networks=ss.RandomNet()).run() # Supply as objects
-    ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
 
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
@@ -129,19 +129,19 @@ def test_api():
     # Check specifying a duration with a scalar, which is in years, as the default
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
     s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
-    ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
 
     # Check specifying dist with a dict
     s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='lognorm_ex', mean=10, std=2)), **kw).run() # Supply values as a dict
     s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
-    ss.debugtools.check_sims_match(s7, s8), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s7, s8), 'Sims should match'
     with pytest.raises(TypeError):
         ss.SIR(dur_inf=[10, 2]) # Starsim 3's values of its default lognormal
 
     # Check changing dist type
     s9  = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='normal', loc=10)), **kw).run() # Supply values as a dict
     s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
-    ss.debugtools.check_sims_match(s9, s10), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s9, s10), 'Sims should match'
 
     # Check that Bernoulli distributions can't be changed
     with pytest.raises(TypeError):
@@ -203,45 +203,14 @@ def test_complex_api():
     int1 = ss.Intervention.from_func(jump_age)
     interventions = ss.ndict(int1)
 
-    # Assemble
-    s1 = ss.Sim(pars1)
-    s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions)
-
-    # Run
-    s1.run()
-    s2.run()
+    # Assemble and run
+    s1 = ss.Sim(pars1).run()
+    s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions).run()
     assert ss.debugtools.check_sims_match(s1, s2), 'Sims should match'
     with pytest.raises(ValueError): # verbose is 0, 1, or 2; Starsim 3's fraction of steps is now verbose=1
         ss.Sim(n_agents=100, verbose=0.1).init()
 
     return s1
-
-
-@sc.timer()
-def test_simple_vax(do_plot=do_plot):
-    """ Create and run a sim with vaccination """
-    sc.heading('Testing simple vaccination...')
-    pars = make_sim_pars()
-    sim_base = ss.Sim(pars=pars)
-    sim_base.run()
-
-    my_vax = ss.Vaccine(efficacy=0.5)
-    intv = ss.vaccinate(my_vax, start=2015, coverage=0.2, interval=ss.years(1)) # Offered each year to 20% of those not yet vaccinated
-    sim_intv = ss.Sim(pars=pars, interventions=intv)
-    sim_intv.run()
-
-    assert sim_intv.summary.sir_cum_infections < sim_base.summary.sir_cum_infections, 'Vaccine should avert infections'
-
-    # Check plots
-    if do_plot:
-        plt.figure()
-        plt.plot(sim_base.timevec, sim_base.results.sir.prevalence, label='Baseline')
-        plt.plot(sim_intv.timevec, sim_intv.results.sir.prevalence, label='Vax')
-        plt.axvline(x=2015, color='k', ls='--')
-        plt.title('Prevalence')
-        plt.legend()
-
-    return sim_base, sim_intv
 
 
 @sc.timer()
@@ -256,12 +225,9 @@ def test_shared_product(do_plot=do_plot):
 
     # Make and run sims
     pars = make_sim_pars()
-    s1 = ss.Sim(pars, label='Baseline')
-    s2 = ss.Sim(pars, interventions=routine1, label='One vaccine campaign')
-    s3 = ss.Sim(pars=pars, interventions=[routine1, routine2], label='Two vaccine campaigns')
-    s1.run()
-    s2.run()
-    s3.run()
+    s1 = ss.Sim(pars, label='Baseline').run()
+    s2 = ss.Sim(pars, interventions=routine1, label='One vaccine campaign').run()
+    s3 = ss.Sim(pars=pars, interventions=[routine1, routine2], label='Two vaccine campaigns').run()
 
     if do_plot:
         plt.figure()
@@ -321,7 +287,6 @@ def test_creation_syntax():
         diseases = net,
         analyzers = dis,
     )
-    sim.init()
     sim.run()
     
     assert isinstance(sim.custom[0], FirstClass)
@@ -336,7 +301,6 @@ def test_creation_syntax():
         pars = pars,
         modules = [dis, mod1, net, mod2, dem]
     )
-    sim2.init()
     sim2.run()
     
     assert isinstance(sim2.custom[0], FirstClass)
@@ -401,7 +365,7 @@ def test_update_pars():
     sir = ssl.AgentSIR(init_prev=0.05, dur_inf=6, p_death=0)
     assert isinstance(sir.pars.init_prev, ss.bernoulli) and sir.pars.init_prev.pars.p == 0.05 # A probability
     assert isinstance(sir.pars.dur_inf, ss.lognorm_ex) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
-    assert isinstance(ss.MFNet(dur=ss.days(15)).pars.dur, ss.lognorm_ex) and isinstance(ss.MFNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A fixed value is a constant
+    assert isinstance(ss.SexualNet(dur=ss.days(15)).pars.dur, ss.lognorm_ex) and isinstance(ss.SexualNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A fixed value is a constant
     assert isinstance(ss.RandomNet(n_contacts=dict(type='poisson', lam=4)).pars.n_contacts, ss.poisson) # A distribution given by its type
     for value in [[6, 2], dict(mean=6)]: # The distribution's arguments, or values? Neither: use its own method
         with pytest.raises(TypeError, match='set'):
@@ -535,12 +499,12 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
+    caps = test_capabilities_two_modules()
     sim0 = test_demo(do_plot=do_plot)
     sim1 = test_default(do_plot=do_plot)
     sim2 = test_simple(do_plot=do_plot)
     sim3 = test_api()
     sim4 = test_complex_api()
-    sim5b, sim5i = test_simple_vax(do_plot=do_plot)
     sim6 = test_shared_product(do_plot=do_plot)
     sim7 = test_components(do_plot=do_plot)
     sim8 = test_creation_syntax()

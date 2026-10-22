@@ -761,7 +761,6 @@ def test_describe():
     table = repr(sir.transitions)
     print(table)
     assert 'contact-mediated, source I' in table
-    print(sim.describe(output=True))
     spec = sim.to_spec()
     assert spec['modules'][0]['transitions'][0]['rate'] == 'beta * I'
 
@@ -1406,21 +1405,21 @@ def test_functions():
 
     # A sexual network, with a transmission probability per act for each direction
     S, I = ss.states('S I')
-    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.008, f2m=0.004)) * I), init_prev=0.05, name='hiv')
-    sim3 = ss.Sim(hiv, networks=ss.MFNet(), start=2000, stop=2020, **kw).run()
-    assert sim3.solver == 'abm' and 'MFNet' in sim3.solver_reason
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexual=ss.peract(m2f=0.008, f2m=0.004)) * I), init_prev=0.05, name='hiv')
+    sim3 = ss.Sim(hiv, networks=ss.SexualNet(), start=2000, stop=2020, **kw).run()
+    assert sim3.solver == 'abm' and 'SexualNet' in sim3.solver_reason
     assert sim3.unit == 'year'
     n_I = sim3.results.hiv.n_I
     assert n_I[-1] > 1.5*n_I[0]
     S, I = ss.states('S I')
-    monthly = ss.Disease(infection=ss.Transition(S, I, rate=dict(random=0.08, mf=0.008) * I), init_prev=0.05, name='hiv')
+    monthly = ss.Disease(infection=ss.Transition(S, I, rate=dict(random=0.08, sexual=0.008) * I), init_prev=0.05, name='hiv')
     with pytest.warns(RuntimeWarning, match='Starsim 3') as record: # Bare numbers in a beta dict were probabilities per step in Starsim 3, so a verbatim port is 12x too low at monthly steps
-        ss.Sim(monthly, networks=['random', ss.MFNet()], start=2000, stop=2002, dt=ss.years(1/12), **kw).init()
-    assert "'random'" in str(record[0].message) and "'mf'" not in str(record[0].message) # Not on a network with acts, where a bare number is per act, as in Starsim 3
+        ss.Sim(monthly, networks=['random', ss.SexualNet()], start=2000, stop=2002, dt=ss.years(1/12), **kw).init()
+    assert "'random'" in str(record[0].message) and "'sexual'" not in str(record[0].message) # Not on a network with acts, where a bare number is per act, as in Starsim 3
     with pytest.raises(ss.errors.RouteMismatch):
         S, I = ss.states('S I')
         other = ss.Disease(infection=ss.Transition(S, I, rate=dict(needles=0.1) * I), init_prev=0.05, name='hiv')
-        ss.Sim(other, networks=ss.MFNet(), start=2000, stop=2005, **kw).run()
+        ss.Sim(other, networks=ss.SexualNet(), start=2000, stop=2005, **kw).run()
 
     # An Erlang dwell time is exact in every solver
     S, I, R = ss.states('S I R')
@@ -1519,7 +1518,7 @@ def test_time_values():
     dated = ss.Sim(stop=ss.days(800), unit='day', start='2020-01-01', **kw).init()
     assert [yearly.at(year, dated) for year in [2020.1, 2020.6, 2021.1, 2021.6]] == [1, 2, 1, 2]
     curve = ss.timeseries({0: 1.0, 1: 0.0}, mode='cosine')
-    assert np.isclose(curve.at(0.5, ss.Sim(stop=2).init()), 0.5) and curve.at(0.1, ss.Sim(stop=2).init()) > 0.9
+    assert np.isclose(curve.at(0.5, ss.Sim(stop=2, unit='year').init()), 0.5) and curve.at(0.1, ss.Sim(stop=2, unit='year').init()) > 0.9
 
     # An ODE notes where chance would matter: a start with a few infected, and a dip below one infected person
     S, I, R = ss.states('S I R')
@@ -1553,7 +1552,6 @@ def test_time_values():
     assert txt.index('solver: ode') < txt.index('RandomNet approximated') # The solver line comes before the notes it leads to
     assert 'n_agents=1000 is used as the population' in txt # A compartmental run has no agents, so it is the population
     return sim
-
 
 
 def test_lifetable_and_seeding():
@@ -2049,7 +2047,6 @@ def test_cascade_binomial():
     return res
 
 
-
 @sc.timer()
 def test_change_in_function():
     sc.heading('Testing that a function that reads a parameter sees a change to it')
@@ -2107,8 +2104,8 @@ def test_messages_and_crashes():
 
     # ss.change on a beta for each route, with a pair of directions on one (HP27: crashed)
     S, I = ss.states('S I')
-    d = ss.Disease(infection=ss.Transition(S, I, rate=dict(random=ss.peryear(0.3), mfnet=ss.peract(m2f=0.1, f2m=0.2)) * I), init_prev=0.05, name='d')
-    ss.Sim(d, networks=['random', ss.MFNet()], interventions=ss.change('d.pars.beta', at=2001, by=0.5), **kw).run()
+    d = ss.Disease(infection=ss.Transition(S, I, rate=dict(random=ss.peryear(0.3), sexualnet=ss.peract(m2f=0.1, f2m=0.2)) * I), init_prev=0.05, name='d')
+    ss.Sim(d, networks=['random', ss.SexualNet()], interventions=ss.change('d.pars.beta', at=2001, by=0.5), **kw).run()
 
     # A module's array as a modifier's amount (HP17: crashed, saying a state was already added)
     class Coded(ss.Infection):
@@ -2355,7 +2352,7 @@ def test_source_weights():
         if form == 'dict':
             return ss.Disease(infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)), **stages, init=dict(P=0.05), name='syph')
         return ss.Disease(S, P, EL, infection=S >> P @ ss.par(beta, name='beta') * (P + 0.55*EL), **stages, init=dict(P=0.05), name='syph')
-    for beta, net, solver in [(ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'ode'), (ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'abm'), (dict(mfnet=ss.peract(m2f=0.05, f2m=0.03)), ss.MFNet(), 'abm')]: # A dict or ss.peract times a weighted sum (ST17: a TypeError before)
+    for beta, net, solver in [(ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'ode'), (ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'abm'), (dict(sexualnet=ss.peract(m2f=0.05, f2m=0.03)), ss.SexualNet(), 'abm')]: # A dict or ss.peract times a weighted sum (ST17: a TypeError before)
         res = [ss.Sim(make(form, beta), networks=net, n_agents=3000, total_pop=3000, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0).run().results.syph.n_P.values for form in ['dict', 'op']]
         assert np.array_equal(res[0], res[1]) and res[0][-1] > 0, f'{solver}: {res[0][-1]} against {res[1][-1]}'
     assert 'source P + 0.55 EL' in make('dict', 0.3).describe(output=True)
@@ -2384,7 +2381,7 @@ def test_cond_by_expr():
     pars = dict(start=2000, stop=2002, dt=ss.months(1), verbose=0)
     for form in forms:
         expected = 1 - np.exp(-2*np.array(rates[form])) # The share of each age group that moves in two years
-        for solver,size in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=20_000))]:
+        for solver,size in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=10_000))]:
             res = ss.Sim(make(form), solver=solver, **size, **pars).run().results.c
             moved = res.go.by('age').values.sum(axis=0)/res.n_A.by('age').values[0]
             assert np.allclose(moved, expected, rtol=0.02 if solver == 'ode' else 0.1), f'{form} ({solver}): {moved} moved, not {expected}'
@@ -2411,8 +2408,6 @@ def test_cond_by_expr():
     return
 
 
-
-
 @sc.timer()
 def test_split_null():
     sc.heading('Testing ss.null as one destination of a split: a share die when the transition is taken, as a death would')
@@ -2432,10 +2427,8 @@ def test_split_null():
         if solver == 'abm':
             assert sim.results.new_deaths.values.sum() == died # Counted as deaths, as a transition to ss.null is
         out[solver] = died/n0
-    assert np.isclose(out.abm, out.ode, rtol=0.15)
 
-    for solver in ['abm', 'ode', 'binomial']: # With a state: the deaths are res.<transition>.null
-        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        # With a state: the deaths are res.<transition>.null
         sim = ss.Sim(make(['R', ss.null], [0.9, 0.1]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
         r = sim.results.d
         n0 = r.n_I[0]
@@ -2444,6 +2437,7 @@ def test_split_null():
         assert np.isclose(r.n_S[-1] + r.n_I[-1] + r.n_R[-1] + r['death.null'].values.sum(), r.n_S[0] + n0), f'{solver}: everyone is in a state or dead'
         if solver == 'abm':
             assert sim.results.new_deaths.values.sum() == r['death.null'].values.sum()
+    assert np.isclose(out.abm, out.ode, rtol=0.15)
 
     # The messages for a source or destination that is not a state or a list of states
     S, I = ss.states('S I')
@@ -2453,6 +2447,7 @@ def test_split_null():
     with pytest.raises(TypeError, match=r'\[E, P, A\].*E \+ P \+ A'):
         ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
     return
+
 
 def test_state_as_result():
     sc.heading('Testing a state under another name as a result: the number in it, stratified like n_<state>, with the state keeping its name')
@@ -2546,9 +2541,14 @@ if __name__ == '__main__':
     ddist = test_modify_dist_dwell()
     inits = test_init_prev_forms()
     tlo   = test_tlo_review()
-
-
     weights = test_source_weights()
     condby = test_cond_by_expr()
     nulls = test_split_null()
     branch = test_branches()
+    bwhere = test_branch_where()
+    dexpr = test_dwell_expressions()
+    sched = test_schedule()
+    split = test_split_timing()
+    casc  = test_cascade()
+    cascb = test_cascade_binomial()
+    state = test_state_as_result()

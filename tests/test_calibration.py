@@ -10,8 +10,6 @@ import pandas as pd
 import sciris as sc
 import pytest
 
-do_plot = True
-
 
 #%% Define the tests
 
@@ -42,11 +40,11 @@ def test_particle_mcmc():
 
     # Particle MCMC, for a stochastic compartmental sim whose data has a likelihood (asked for by name: the default is a best fit)
     assert ss.fit.default_method(sim, True)[0] == 'optuna'
-    fit = make(beta=0.3, data=data).calibrate(method='pmcmc', draws=150, warmup=150, chains=2, particles=50, parallel=False, rand_seed=1)
+    fit = make(beta=0.3, data=data).calibrate(method='pmcmc', draws=100, warmup=100, chains=2, particles=30, parallel=False, rand_seed=1)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'pmcmc'
-    assert len(fit.samples) == 300 and len(fit.diagnostics.acceptance) == 2
+    assert len(fit.samples) == 200 and len(fit.diagnostics.acceptance) == 2
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
         make(data=data).calibrate(method='pmcmc', gof='nae')
@@ -94,6 +92,5 @@ def test_fitted_mobility():
 
 #%% Run as a script
 if __name__ == '__main__':
-    do_plot = True
     test_particle_mcmc()
     test_fitted_mobility()

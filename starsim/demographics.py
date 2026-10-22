@@ -71,6 +71,7 @@ class Demographics(ss.Module):
     the `ss.People` population and can interact with `ss.Network` objects
     (e.g. to add newborns to contact networks).
     """
+    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
     pass
 
 

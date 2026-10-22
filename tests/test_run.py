@@ -18,12 +18,12 @@ def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.objdict(
         n_agents = n_agents,
         start = 2000,
+        dur = 10,
         demographics = True,
         networks = 'random',
         diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
-        **kwargs,
     )
-    return pars
+    return sc.objdict(pars, **kwargs)
 
 
 class BySex(ss.Analyzer):
@@ -48,15 +48,7 @@ def test_parallel():
     msim = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
     msim.run(shrink=False)
     s1, s2 = msim.sims
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims don't match and should"
-
-    # Check that two non-identical sims don't match
-    pars2 = sc.dcp(pars)
-    pars2.diseases.beta *= 2
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-    sims.run(shrink=False)
-    s1, s2 = sims.sims
-    assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims don't match and should" # That non-identical sims don't is checked in test_other()
 
     # Workers started by forkserver, as they are once Numba's or JAX's threads have started here, give the same runs, with a lambda in the sim
     make = lambda: [ss.Sim(make_sim_pars(interventions=lambda sim: None), rand_seed=i) for i in range(2)]
@@ -125,7 +117,7 @@ def test_multisim_construction(do_plot=False):
     def make_sims(n=2):
         sims = sc.autolist()
         for beta in 0.1*np.random.rand(n):
-            pars = make_sim_pars(beta=beta, dur=20, rand_seed=np.random.randint(999))
+            pars = make_sim_pars(beta=beta, rand_seed=np.random.randint(999))
             sims += ss.Sim(pars=pars, label=f'{beta=}')
         return sims
     
@@ -137,7 +129,7 @@ def test_multisim_construction(do_plot=False):
     
     # Check that run works
     for msim in [m1, m2, m3, m4]:
-        msim.run()
+        msim.run(parallel=msim is m4) # Only one in parallel, to save starting workers
         if do_plot:
             msim.plot()
     
@@ -148,7 +140,7 @@ def test_multisim_construction(do_plot=False):
 def test_combine_merge():
     """ Test MultiSim combine(), compare(), merge() and split() """
     sc.heading('Testing MultiSim combine, compare, merge, and split')
-    msim = ss.MultiSim(ss.Sim(make_sim_pars(analyzers=BySex(), dur=10)), n_runs=3)
+    msim = ss.MultiSim(ss.Sim(make_sim_pars(analyzers=BySex())), n_runs=3)
     msim.run(parallel=False)
     sims = msim.sims
 

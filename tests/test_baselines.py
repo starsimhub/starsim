@@ -32,9 +32,9 @@ def make_sim(run=False, **kwargs):
     Define a default simulation for testing the baseline. If run directly (not
     via pytest), also plot the sim by default.
     """
-    diseases = [dict(type='sir', beta=dict(random=ss.peryear(0.1), mf=ss.peract(0.02), prenatal=ss.peryear(0.1))), # A probability per act on ss.MFNet, about the default rate's chance in a step of 0.2 years
-                dict(type='sis', beta=dict(random=ss.peryear(0.05), mf=ss.peract(0.01), prenatal=ss.peryear(0.05)))]
-    networks = ['random', 'mf', 'prenatal']
+    diseases = [dict(type='sir', beta=dict(random=ss.peryear(0.1), sexual=ss.peract(0.02), prenatal=ss.peryear(0.1))), # A probability per act on ss.SexualNet, about the default rate's chance in a step of 0.2 years
+                dict(type='sis', beta=dict(random=ss.peryear(0.05), sexual=ss.peract(0.01), prenatal=ss.peryear(0.05)))]
+    networks = ['random', 'sexual', 'prenatal']
     sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
 
     # Optionally run and plot
@@ -93,34 +93,19 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
     t_inits = []
     t_runs  = []
-    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
 
-    # Test CPU performance before the run
+    # Time initializing and running, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')
-
-    # Do the actual benchmarking
     for r in range(repeats):
-
-        print(f'Repeat {r}')
-
-        # Time initialization
         t0 = sc.tic()
         sim = make_sim()
         sim.init()
-        t_init = sc.toc(t0, output=True)
-
-        # Time running
+        t_inits.append(sc.toc(t0, output=True))
         t0 = sc.tic()
         sim.run()
-        t_run = sc.toc(t0, output=True)
-
-        # Store results
-        t_inits.append(t_init)
-        t_runs.append(t_run)
-
-    # Test CPU performance after the run
+        t_runs.append(sc.toc(t0, output=True))
     r2 = sc.benchmark(which='numpy')
-    ratio = (r1+r2)/2/ref
+    ratio = (r1+r2)/2/REF_MOPS
     t_init = ratio*min(t_inits)
     t_run  = ratio*min(t_runs)
 

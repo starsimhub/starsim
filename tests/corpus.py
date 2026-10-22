@@ -101,21 +101,21 @@ def vaccination(**kwargs):
 def coinfection(**kwargs):
     """ 9. HIV and syphilis, each modifying the other, over a sexual network """
     S, I = ss.states('S I')
-    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.002, f2m=0.001)) * I), init_prev=0.05, name='hiv')
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexual=ss.peract(m2f=0.002, f2m=0.001)) * I), init_prev=0.05, name='hiv')
     S, I = ss.states('S I')
     syph = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), cure=ss.Transition(I, S, dur=ss.years(3)), init_prev=0.05, name='syph')
     connectors = [
         ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'),
         ss.modify(syph.rel_sus, multiply=5.0, where=hiv.I, name='syph_sus'),
     ]
-    return make_sim([hiv, syph], kwargs, networks=ss.MFNet(), connectors=connectors, n_agents=2_000, start=2000, stop=2010)
+    return make_sim([hiv, syph], kwargs, networks=ss.SexualNet(), connectors=connectors, n_agents=2_000, start=2000, stop=2010)
 
 
 def network(**kwargs):
     """ 10. An SIS over a sexual network, which 'auto' runs as agents """
     S, I = ss.states('S I')
-    sis = ss.Disease(infection=ss.Transition(S, I, rate=dict(mf=ss.peract(m2f=0.08, f2m=0.05)) * I), recovery=ss.Transition(I, S, dur=ss.years(5)), init_prev=0.05, name='sis')
-    return make_sim(sis, kwargs, networks=ss.MFNet(), n_agents=2_000, start=2000, stop=2010)
+    sis = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexual=ss.peract(m2f=0.08, f2m=0.05)) * I), recovery=ss.Transition(I, S, dur=ss.years(5)), init_prev=0.05, name='sis')
+    return make_sim(sis, kwargs, networks=ss.SexualNet(), n_agents=2_000, start=2000, stop=2010)
 
 
 def cholera(**kwargs):

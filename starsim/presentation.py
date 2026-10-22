@@ -416,9 +416,7 @@ def route_lines(mod, tr, sim):
             sides = f" ({net.name}'s {net.sides_str()})" if dirs else ''
             lines.append(f'beta on {name}: per act, {values}{sides}')
             acts = net.pars.get('acts')
-            if getattr(net, 'one_off', False):
-                lines.append(f'    acts {value_str(acts) if acts is not None else 1} per contact; contacts are one-off')
-            elif isinstance(acts, ss.Rate):
+            if isinstance(acts, ss.Rate):
                 lines.append(f'    acts {quantity_str(acts, None, unit)} in each partnership')
             elif acts is not None:
                 lines.append(f'    acts per unit time in each partnership ~ {acts}, drawn once for each')
@@ -436,7 +434,7 @@ def route_lines(mod, tr, sim):
 
 
 def partnership_lines(mod, tr, sim, name):
-    """ For describe(), under the partnership approximation (see `ss.solvers.Mixing.partnerships()`): how often partnerships form, and the chance one transmits in each direction, from each source state """
+    """ For describe(), under the partner-change model (see `ss.solvers.Mixing.partnerships()`): how often partnerships form, and the chance one transmits in each direction, from each source state """
     engine = getattr(mod, 'engine', None)
     terms = [term for term in getattr(getattr(sim, 'mixing', None), 'terms', []) if term.name == name and 'partnership' in term]
     if not terms or not hasattr(engine, 'partnership_info'):
@@ -454,7 +452,7 @@ def partnership_lines(mod, tr, sim, name):
                 key = f'{sides[src]}2{sides[pt.group_side[g]]}' if sides else 'each'
                 chances[f'{key} from {state}' if len(tr.terms) > 1 else key] = out[g]
     chances = ', '.join(f'{k} {v:.2g}' for k,v in chances.items())
-    return [f'    partnership approximation (approx): partnerships formed at {pt.formed:.2g} a {sim.unit_name}; chance over a partnership {chances}']
+    return [f'    partner-change model (approx): partnerships formed at {pt.formed:.2g} a {sim.unit_name}; chance over a partnership {chances}']
 
 
 def seasonal_str(raw, mean):

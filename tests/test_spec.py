@@ -49,7 +49,7 @@ def write_data():
     pd.DataFrame({'Week ending': weeks, 'Reported Cases (weekly)': cases, 'District': 'Nairobi'}).to_csv('kenya_moh_2020.csv', index=False)
     pd.DataFrame(dict(year=[2020, 2021], beta=[0.05, 0.02])).to_csv('beta.csv', index=False)
     os.makedirs('params', exist_ok=True)
-    pd.DataFrame(dict(name=['beta'], value=[0.3])).to_csv('params/kenya_2024.csv', index=False)
+    sc.savejson('params/kenya_2024.json', dict(beta=0.3))
     survey = pd.date_range('2020-01-08', '2020-02-12', freq='W') # Weekly prevalence of an SIR with beta = 0.25 per day, 10 days infectious, and 1% infected at the start (13-inference.md)
     pd.DataFrame(dict(date=survey, prevalence=[0.0474, 0.1088, 0.1914, 0.2368, 0.2163])).to_csv('prevalence.csv', index=False)
     return
@@ -126,7 +126,7 @@ vocabulary = {
     'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
-    'Mixing and space': ('Network RandomNet MFNet MixingPool MixingPools PartnerNet contacts geo.location geo.Mobility geo.gravity', 'PartnerNet contacts geo.location geo.Mobility geo.gravity'),
+    'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.location geo.Mobility geo.gravity', 'contacts geo.location geo.Mobility geo.gravity'),
     'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
     'Running, comparing, saving': ('MultiSim parallel options diff load save compile', 'diff compile'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
@@ -137,7 +137,7 @@ code_names = """
 AgeGroup AlreadyRunError Arr Base BaseArr Births BoolArr
 BoolState BreastfeedingNet DateArray Deaths Delivery
 DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModifiableArr Pars Person PostnatalNet
-Pregnancy Lactation PregnancyPars PrenatalNet Product Results SEIR SIR SIS SexualNetwork SimPars beta_dist beta_mean
+Pregnancy Lactation PregnancyPars PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
 check_requires choose_n demo dtypes dynamics_by_age histogram infection_log
 multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
 show shrink state child mother attr on stay style to_code uids warn
@@ -167,15 +167,10 @@ def split_names(names, new):
 
 def vocabulary_counts():
     """ The counts of 17-vocabulary.md: the headings of the groups and the table of totals, made from the lists above """
-    headings = {group:len(names.split()) for group,(names,new) in vocabulary.items()}
-    rows = []
-    for group,(names,new) in vocabulary.items():
-        names, new = split_names(names, new)
-        rows.append((group, len(names), len(new)))
-    n_names = sum(r[1] for r in rows)
-    n_new = sum(r[2] for r in rows)
-    method_names = set()
-    method_new = set()
+    rows = [(group, *map(len, split_names(names, new))) for group,(names,new) in vocabulary.items()]
+    headings = {group:n for group,n,_ in rows}
+    n_names, n_new = sum(r[1] for r in rows), sum(r[2] for r in rows)
+    method_names, method_new = set(), set()
     for names,new in methods.values():
         names, new = split_names(names, new)
         method_names.update(names)
@@ -252,11 +247,10 @@ def test_vocabulary():
     return
 
 
-
 def test_namespace():
     """ Every name exported at ss. is in the vocabulary (17-vocabulary.md), the second tier (code_names), or an error class; the rest are in submodules """
     counted = set(' '.join(names for names,_ in vocabulary.values()).split())
-    errors = {name for name in ss.errors.__all__} if hasattr(ss.errors, '__all__') else {name for name,obj in vars(ss.errors).items() if isinstance(obj, type) and issubclass(obj, BaseException)}
+    errors = set(ss.errors.__all__) if hasattr(ss.errors, '__all__') else {name for name,obj in vars(ss.errors).items() if isinstance(obj, type) and issubclass(obj, BaseException)}
     exported = {name for name in dir(ss) if not name.startswith('_') and not isinstance(getattr(ss, name), types.ModuleType)}
     unplaced = exported - counted - set(code_names) - errors
     assert not unplaced, f'Exported at ss. but in no tier: {sorted(unplaced)}; add each to the vocabulary or code_names in test_spec.py, or move it to its submodule'

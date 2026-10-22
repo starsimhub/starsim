@@ -7,7 +7,7 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
     python -m starsim.interop.migrate mypackage/ tests/   # Rewrite in place
     python -m starsim.interop.migrate mymodel.py --check  # Only list what would change
 
-The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
+The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`, and `ss.MFNet` to `ss.SexualNet`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
 (`ss.SIS` to `ssl.AgentSIS`, and `ss.Disease` to `ss.Infection`, which is now the base of a disease written as code), a `beta` pair on
 `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
@@ -34,7 +34,10 @@ renames = [
     (r'\bss\.rate_prob\(',         'ss.peryear(',                    'ss.rate_prob is ss.peryear'),
     (r'\bss\.RandomExactNet\(\)',  "ss.RandomNet(method='exact')",   "ss.RandomExactNet is ss.RandomNet(method='exact')"),
     (r'\bss\.RandomExactNet\(',    "ss.RandomNet(method='exact', ", "ss.RandomExactNet is ss.RandomNet(method='exact')"),
-    (r'\bss\.(RandomSafeNet|ClusterNet|HybridNet|MSMNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
+    (r'\bss\.(RandomSafeNet|ClusterNet|HybridNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
+    (r'\bss\.MFNet\b',            'ss.SexualNet',                   "ss.MFNet is ss.SexualNet (sides='mf' is its default)"),
+    (r'\bss\.MSMNet\(\)',          "ss.SexualNet(sides='mm')",       "ss.MSMNet is ss.SexualNet(sides='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
+    (r'\bss\.MSMNet\(',            "ss.SexualNet(sides='mm', ",      "ss.MSMNet is ss.SexualNet(sides='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.NCD\b',              'ssl.NCD',                        'ss.NCD moved to the library (ssl.NCD)'),
     (r'\bss\.Route\b',             'ss.networks.Route',              'ss.Route is ss.networks.Route'),
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
@@ -83,12 +86,14 @@ flags = [
     (r'\bss\.rate\(', 'ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time)'),
     (r'^\s*[\w.]+\.(reduce|mean|median)\(\)\s*(#.*)?$', 'if this reduces a MultiSim in place: its results have a run axis first, e.g. res = msim.results.sis.prevalence; res.median(), res.mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]) (the flattened msim.results.sis_prevalence is gone)'),
     (r'\bss\.Sim\(.*\b(birth|death)_rate\s*=', 'demographics=[ss.Births(birth_rate=...), ss.Deaths(death_rate=...)] (per 1,000, as before), or ss.birth(rate=ss.peryear(...)) per person'),
-    (r'\bss\.MFNet\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
+    (r'\bss\.(MFNet|SexualNet)\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
+    (r'\brel_part_rates\s*=', 'participation= (rel_part_rates was removed: its multiplier goes in the probability, e.g. participation=0.45 for 0.9 times 0.5)'),
+    (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or route= keyed 'sexual' (or ss.SexualNet(name='mf'))"),
     (r'\bfloat\([^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
 ]
 
 agent_bases = {'SIR': 'ssl.AgentSIR', 'SIS': 'ssl.AgentSIS', 'SEIR': 'ssl.AgentSEIR'} # Starsim 3's diseases written as code, which are declared in Starsim 4
-mf_keys = {'mf', 'mfnet'} # ss.MFNet, which puts men in p1, so a pair [p1 to p2, p2 to p1] is [m2f, f2m]
+mf_keys = {'mf', 'mfnet'} # ss.MFNet (now ss.SexualNet), which puts men in p1, so a pair [p1 to p2, p2 to p1] is [m2f, f2m]
 one_way_keys = {'prenatal', 'prenatalnet', 'maternal', 'maternalnet', 'postnatal', 'postnatalnet', 'breastfeeding', 'breastfeedingnet'} # Mother to child only
 ti_names = {'ti'} # A bare name, or an attribute ending in .ti (self.ti, sim.ti, self.sim.ti, self.t.ti)
 
@@ -258,9 +263,9 @@ def migrate_ast(text, analyzers=None):
             a, b = [ast.unparse(e) for e in val.elts]
             key = str(key).lower()
             if key in mf_keys and re.search(r'\bss\.\w+\(', a + b): # A typed rate, which is not a probability per act
-                found.append((val.lineno, f'the beta pair {ast.unparse(val)} on "{key}" has typed values: a beta on ss.MFNet is a probability per act in each direction, ss.peract(m2f=..., f2m=...) (in Starsim 3, a rate was converted to a probability per step and then raised to the acts)'))
+                found.append((val.lineno, f'the beta pair {ast.unparse(val)} on "{key}" has typed values: a beta on ss.SexualNet is a probability per act in each direction, ss.peract(m2f=..., f2m=...) (in Starsim 3, a rate was converted to a probability per step and then raised to the acts)'))
             elif key in mf_keys:
-                edits.add(val, f'ss.peract(m2f={a}, f2m={b})', 'a beta pair on ss.MFNet ([p1 to p2, p2 to p1], with men in p1) is ss.peract(m2f=..., f2m=...), a probability per act in each direction')
+                edits.add(val, f'ss.peract(m2f={a}, f2m={b})', 'a beta pair on ss.MFNet (now ss.SexualNet; [p1 to p2, p2 to p1], with men in p1) is ss.peract(m2f=..., f2m=...), a probability per act in each direction')
             elif key in one_way_keys and b in ['0', '0.0']:
                 edits.add(val, a, 'a mother-to-child network transmits one way, so a beta pair [b, 0] on it is b')
             else:

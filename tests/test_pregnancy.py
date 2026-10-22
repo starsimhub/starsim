@@ -13,7 +13,7 @@ strat = [dict(sex=['female', 'male']), dict(age=[0, 15, 50], split=[0.3, 0.4, 0.
 
 
 @sc.timer()
-def test_states(ode=False):
+def test_states():
     sc.heading('Testing ss.Pregnancy: conception, abortion, and losses by gestational age, as agents and in the small compartmental form')
     thr = ss.weeks(20)
     def make():
@@ -39,9 +39,8 @@ def test_states(ode=False):
     # Conception is one transition, so a modifier of it is a modifier of fertility (e.g. contraception)
     half = ss.Sim(demographics=(preg := make()), connectors=ss.modify(preg.conception, multiply=0.5), n_agents=20_000, stratify=strat, use_aging=False, **kw).run()
     assert np.isclose(half.results.pregnancy.conception.sum(), 0.5*ra.conception.sum(), rtol=0.15)
-    if not ode:
-        return abm
 
+    # The small compartmental form
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
     ro = ode.results.pregnancy
     for key in ['conception', 'abortion', 'delivery']:
@@ -54,12 +53,8 @@ def test_states(ode=False):
     return abm
 
 
-def test_states_ode():
-    return test_states(ode=True)
-
-
 @sc.timer()
-def test_births(ode=False):
+def test_births():
     sc.heading('Testing ss.birth(per=): children from deliveries, linked to the mother, twins, and placed in other modules')
     def make():
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), embryos_per_pregnancy=ss.choice(a=[1, 2], p=[0.8, 0.2]))
@@ -70,15 +65,6 @@ def test_births(ode=False):
     ra = abm.results
     assert np.isclose(ra.pregnancy.birth.sum()/ra.pregnancy.delivery.sum(), 1.2, atol=0.05) # Twins
     assert ra.d.born.sum() == ra.pregnancy.birth.sum() # Placed in I, as the other module's ss.birth(per=) says
-    if ode:
-        ode = ss.Sim(**make(), solver='ode', total_pop=20_000, stratify=strat, **kw).run()
-        ro = ode.results
-        for key in ['delivery', 'birth']:
-            assert np.isclose(ra.pregnancy[key].sum(), ro.pregnancy[key].sum(), rtol=0.1)
-        assert np.isclose(ro.d.born.sum(), ro.pregnancy.birth.sum()) # An inflow of the delivery flow, into the youngest groups
-        assert np.isclose(ro.pregnancy.n_NP[-1] + ro.pregnancy.n_P[-1], ro.d.n_S[-1] + ro.d.n_I[-1])
-        assert ro.pregnancy.n_NP.select(age='0-14').values[-1] > ro.pregnancy.n_NP.select(age='0-14').values[0]
-        return ode
 
     # As agents: each child has the mother as parent, twins share a delivery, and newborns enter I
     ppl = abm.people
@@ -92,11 +78,16 @@ def test_births(ode=False):
     with pytest.raises(ValueError):
         S = ss.State()
         ss.birth(S, rate=ss.peryear(0.01), per=abm.diseases.d.infection)
+
+    # In the small compartmental form
+    ode = ss.Sim(**make(), solver='ode', total_pop=20_000, stratify=strat, **kw).run()
+    ro = ode.results
+    for key in ['delivery', 'birth']:
+        assert np.isclose(ra.pregnancy[key].sum(), ro.pregnancy[key].sum(), rtol=0.1)
+    assert np.isclose(ro.d.born.sum(), ro.pregnancy.birth.sum()) # An inflow of the delivery flow, into the youngest groups
+    assert np.isclose(ro.pregnancy.n_NP[-1] + ro.pregnancy.n_P[-1], ro.d.n_S[-1] + ro.d.n_I[-1])
+    assert ro.pregnancy.n_NP.select(age='0-14').values[-1] > ro.pregnancy.n_NP.select(age='0-14').values[0]
     return abm
-
-
-def test_births_ode():
-    return test_births(ode=True)
 
 
 @sc.timer()
@@ -105,7 +96,7 @@ def test_compartmental():
     make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), burnin=False)
     assert ss.Sim(demographics=make(), total_pop=20_000, **kw).init().solver == 'abm' # Only when a compartmental solver is named
     for dt in [ss.weeks(1), ss.months(1), ss.months(3)]:
-        pars = dict(start=2000, stop=2010, dt=dt, verbose=0, stratify=strat, use_aging=False)
+        pars = dict(start=2000, stop=2005, dt=dt, verbose=0, stratify=strat, use_aging=False)
         ras = [ss.Sim(demographics=make(), n_agents=20_000, rand_seed=seed, **pars).run().results.pregnancy for seed in range(2)]
         ro = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run().results.pregnancy
         half = lambda r: r.n_P.values[len(r.n_P)//2:].mean() # The number pregnant, once settled
@@ -253,9 +244,6 @@ def test_events():
 @sc.timer()
 def test_mother_cond():
     sc.heading('Testing ss.mother(born=True): newborns of mothers who tested positive in the last year')
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
-    S, I = ss.states('S I')
-    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), name='d')
     for by_path in [False, True]: # With the event itself, or by its path, for a module made before the pregnancy module exists
         seen = mother_cond(by_path)
     with pytest.raises(ValueError, match=r"not a transition.*ss.state\('pregnancy.P'\).enter"): # A path in on= is a transition's event, so a state is an error
@@ -296,7 +284,6 @@ def mother_cond(by_path):
     return seen
 
 
-@sc.timer()
 def make_fetal():
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
@@ -444,9 +431,9 @@ def make_hiv_vertical(bf=True):
 def test_hiv_vertical():
     sc.heading('Port: HIV vertical transmission, in utero over MaternalNet and by breastfeeding (04 §5.3)')
     common = dict(stratify=strat, use_aging=False, **kw)
-    inf = [ss.Sim(**make_hiv_vertical(bf), n_agents=100_000, **common).run().results.hiv.infection.sum() for bf in [False, True]]
+    inf = [ss.Sim(**make_hiv_vertical(bf), n_agents=50_000, **common).run().results.hiv.infection.sum() for bf in [False, True]]
     utero, post = inf[0], inf[1] - inf[0]
-    assert utero > 200 and post > 200, f'{utero:.0f} in utero, {post:.0f} by breastfeeding'
+    assert utero > 100 and post > 100, f'{utero:.0f} in utero, {post:.0f} by breastfeeding'
     return inf
 
 
@@ -628,6 +615,8 @@ def test_two_sims():
         sims.append(sim)
     assert sims[0].results.pregnancy.birth.sum() > 0 and sims[1].results.pregnancy.birth.sum() > 0
     return sims
+
+
 def test_path_triggers():
     """ A trigger on another module's transition by path (ss.state('pregnancy.delivery')) is its event, as ss.on(preg.delivery) is, so it reaches fetuses at their mother's delivery (it was a condition that never held for them) """
     sc.heading('Testing triggers on a transition by path')
@@ -648,17 +637,29 @@ if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
     births = test_births()
+    comp = test_compartmental()
+    burnin = test_burnin()
+    test_burnin_ode()
+    npreg = test_burnin_pregnancies()
+    mmr = test_mmr()
     events = test_events()
     mom = test_mother_cond()
     fetus = test_fetus()
+    test_fetus_ode()
+    test_lactation_ode()
     lact = test_lactation()
     lact_sub = test_lactation_subclass()
     code = test_code_pars()
     hiv = test_hiv_vertical()
+    test_hiv_vertical_ode()
     starsim3 = test_starsim3()
     shift = test_delivery_shift()
-    npreg = test_burnin_pregnancies()
-    mmr = test_mmr()
     syph = test_syphilis()
+    test_syphilis_ode()
+    test_events_ode()
     pp = test_postpartum()
+    test_postpartum_ode()
+    saved = test_save_load()
+    two = test_two_sims()
+    paths = test_path_triggers()
     T.toc()

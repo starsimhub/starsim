@@ -79,7 +79,7 @@ def test_export():
 
 @sc.timer()
 def test_2d_results():
-    sc.heading('Testing 2D results')
+    sc.heading('Testing 2D results and nested results')
 
     # Make an analyzer with a 2D result for infections by sex
     class BySex(ss.Analyzer):
@@ -92,7 +92,17 @@ def test_2d_results():
             female = self.sim.people.female
             self.results.n_infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
 
-    sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=BySex(), start=2000) # Calendar years, resampled by year below
+    # And one that stores a result inside a nested Results object
+    class Nested(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.results['nested'] = ss.Results(self)
+            self.results.nested += ss.Result('n_infected', shape=self.t.npts, timevec=self.t.timevec)
+
+        def step(self):
+            self.results.nested.n_infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
+
+    sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=[BySex(), Nested()], start=2000) # Calendar years, resampled by year below
     sim.run()
     res = sim.results.bysex.n_infected
     assert res.shape == (sim.t.npts, 2) # One column per sex
@@ -106,28 +116,7 @@ def test_2d_results():
     sim.plot()
     with pytest.raises(ValueError):
         ss.Result('n_infected', columns=['low', 'high']) # Column names can't clash with attributes
-
-    return sim
-
-
-@sc.timer()
-def test_nested_results():
-    sc.heading('Testing nested results')
-
-    # Make an analyzer that stores a result inside a nested Results object
-    class Nested(ss.Analyzer):
-        def init_results(self):
-            super().init_results()
-            self.results['nested'] = ss.Results(self)
-            self.results.nested += ss.Result('n_infected', shape=self.t.npts, timevec=self.t.timevec)
-
-        def step(self):
-            self.results.nested.n_infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
-
-    sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=Nested())
-    sim.run()
     assert np.array_equal(sim.results.nested.nested.n_infected, sim.results.sis.n_I) # Nested results are scaled too
-
     return sim
 
 
@@ -136,7 +125,7 @@ def test_declared_scale():
     sc.heading('Testing that results declared as sums of states are scaled, as agents')
     S, I, R = ss.states(3)
     sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), ever=I + R, share=I / (S + I + R), init=dict(I=0.01), name='sir')
-    sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=small*10, solver='abm', verbose=0).run()
+    sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=medium, solver='abm', verbose=0).run()
     res = sim.results.sir
     assert np.allclose(res.ever, res.n_I + res.n_R) # Numbers of people, not of agents
     assert np.allclose(res.share, res.n_I/(res.n_S + res.n_I + res.n_R)) # A ratio is the same either way
@@ -150,7 +139,7 @@ def test_flow_ratios():
     sir = ss.Disease(infection, I >> R @ ss.days(10), incidence=infection / S, init=dict(I=0.01), name='sir')
     for solver in ['ode', 'binomial', 'abm']:
         for strat in [False, True]:
-            sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=small*10, solver=solver, verbose=0)
+            sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=medium, solver=solver, verbose=0)
             if strat:
                 sim.stratify(age=[0, 50])
             res = sim.run().results.sir
@@ -167,7 +156,7 @@ def test_flow_ratios():
     for solver in ['ode', 'abm']:
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), share=R/R, init=dict(I=0.01), name='sir')
-        res = ss.Sim(sir, unit='day', stop=10, total_pop=10_000, n_agents=small*10, solver=solver, verbose=0).run().results.sir
+        res = ss.Sim(sir, unit='day', stop=10, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
         assert res.share[0] == 0 and res.share[-1] == 1
 
     return sim
@@ -177,7 +166,7 @@ def test_groups_kept(monkeypatch):
     sc.heading('Testing results kept by group: only those named, and every few steps if every step would take too much memory')
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), share=I / (S + I + R), init=dict(I=0.01), name='sir')
-    make = lambda solver, **kw: ss.Sim(sir, unit='day', stop=91, total_pop=10_000, n_agents=small*10, solver=solver, stratify=dict(age=[0, 50]), verbose=0, **kw)
+    make = lambda solver, **kw: ss.Sim(sir, unit='day', stop=91, total_pop=10_000, n_agents=medium, solver=solver, stratify=dict(age=[0, 50]), verbose=0, **kw)
     res = make('ode', results=['n_I', 'infection']).run().results.sir
     assert res.n_I.strata is not None and getattr(res.n_S, 'strata', None) is None and res.infection.cum.strata is not None # Only the named results by group (and the cumulative total of a flow kept by group)
     with pytest.raises(sc.KeyNotFoundError):
@@ -246,13 +235,11 @@ def test_standard_prevalence():
     return res
 
 
-# %% Run as a script
 def test_time_points():
     sc.heading('Testing results by time point: the start, then the end of each step')
     # Deaths requested during a step of a declared model are counted in it
     def kill(sim):
         sim.people.request_death(sim.people.auids[:2])
-    S, I = ss.states(2)
     S, I = ss.states('S I')
     dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init=dict(I=1), kill=kill, name='dis')
     res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
@@ -308,7 +295,6 @@ def test_destinations():
     return res
 
 
-
 @sc.timer()
 def test_compare_data():
     sc.heading('Testing lining up results with data')
@@ -326,6 +312,7 @@ def test_compare_data():
     return compared
 
 
+# %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -336,14 +323,13 @@ if __name__ == '__main__':
     # Run tests
     sim1 = test_export()
     sim2 = test_2d_results()
-    sim3 = test_nested_results()
     sim4 = test_declared_scale()
     sim4b = test_flow_ratios()
     sim5 = test_time_points()
     res6 = test_destinations()
-    res6 = test_result_exprs()
-    res7 = test_standard_prevalence()
-    res8 = test_compare_data()
+    res7 = test_result_exprs()
+    res8 = test_standard_prevalence()
+    res9 = test_compare_data()
 
     sc.toc(T)
     plt.show()

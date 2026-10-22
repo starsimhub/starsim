@@ -177,7 +177,8 @@ def test_crossing():
 
     # Restarted with other values, as a fresh sim
     restarted = make_coinfection().init().restart(pars={'hiv.beta':0.2}).run()
-    assert np.allclose(restarted.results.hiv.n_I, make_coinfection(beta=0.2).run().results.hiv.n_I, rtol=1e-12)
+    fresh = make_coinfection(beta=0.2).run().results
+    assert np.allclose(restarted.results.hiv.n_I, fresh.hiv.n_I, rtol=1e-12)
 
     # The gradient of each disease's results, through the other
     grad = make_coinfection().gradient(results=['n_I'], pars=['hiv.beta'])
@@ -198,8 +199,7 @@ def test_crossing():
 
     # NUTS, with the log-density in JAX
     if importlib.util.find_spec('blackjax') is not None:
-        truth = make_coinfection(beta=0.2).run().results
-        data = pd.DataFrame({'hiv.n_I':truth.hiv.n_I.values, 'syph.n_I':truth.syph.n_I.values}, index=truth.hiv.timevec)[::8]
+        data = pd.DataFrame({'hiv.n_I':fresh.hiv.n_I.values, 'syph.n_I':fresh.syph.n_I.values}, index=fresh.hiv.timevec)[::8]
         fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
         table = fit.table.set_index('par')
         assert fit.method == 'nuts'

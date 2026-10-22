@@ -13,7 +13,7 @@ ss.People                   the population: size, demography, per-agent attribut
 ss.Module                   lifecycle: init → step → finalize; owns states, transitions, parameters, results
  ├── ss.Disease             states that people are in, and the transitions between them (declared)
  ├── ss.Infection           a disease written as code, as in Starsim 3
- ├── ss.Network             who contacts whom: ss.RandomNet, ss.MFNet, ss.PartnerNet, ...
+ ├── ss.Network             who contacts whom: ss.RandomNet, ss.SexualNet, ...
  ├── ss.MixingPool          group-level mixing; also ss.MixingPools, which ss.contacts makes
  ├── ss.Demographics        births, deaths, pregnancy, migration
  ├── ss.Product             ss.Vaccine, ss.Diagnostic, ss.Treatment (08-interventions.md)

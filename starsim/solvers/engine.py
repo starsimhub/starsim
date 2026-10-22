@@ -135,7 +135,7 @@ class Engine:
         self._routes = None # For a transmission with a beta for each route, the beta of each term of the mixing: see Compartmental.route_betas()
         self._route = None # As agents, the route (its name and itself) a transmission's beta is being worked out for: see Agents.route_beta()
         self.routed = set() # In a compartmental run, the ids of the betas applied to the exposure through each route instead: see Compartmental.route_betas()
-        self.partnership_info = dict() # Under the partnership approximation, the chance a partnership transmits, by transmission, source state, network, and side of the partner: see Compartmental.partnership_chance()
+        self.partnership_info = dict() # Under the partner-change model, the chance a partnership transmits, by transmission, source state, network, and side of the partner: see Compartmental.partnership_chance()
         self.register = None # The movement register, as arrays for the kernels
         self.year = None # The year in the step that values that vary in time are taken at, for its stages (None for its start)
         self.immunity = None # Protection between strains, and the states whose people it applies to: see init_immunity()
@@ -612,7 +612,7 @@ class Engine:
 
     def clip(self, value, path):
         """ A modified rate, duration, or multiplier that has gone below 0 (e.g. by add=) is 0; the first time, a note says so, and sim.what_modifies() reports it """
-        if isinstance(value, dict): # A value for each route, e.g. beta=dict(random=..., mfnet=[...])
+        if isinstance(value, dict): # A value for each route, e.g. beta=dict(random=..., sexualnet=[...])
             return {k:[self.clip(x, path) for x in v] if isinstance(v, (list, tuple)) else self.clip(v, path) for k,v in value.items()}
         if np.any(np.asarray(value) < 0):
             if path not in self.sim.clipped:

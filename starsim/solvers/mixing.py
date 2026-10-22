@@ -18,7 +18,7 @@ class Mixing:
     exposure to a state is the fraction of the population in it. A mixing pool
     sets the contact rate; mixing pools between age groups give a contact matrix;
     an individual-level network is approximated by its mean number of contacts,
-    and lasting partnerships by the partnership approximation (see `partnerships()`).
+    and lasting partnerships by the partner-change model (see `partnerships()`).
 
     Args:
         sim (`ss.Sim`): the sim
@@ -135,11 +135,9 @@ class Mixing:
                 self.terms.append(self.age_matrix(net, beta))
             elif isinstance(net, ss.MixingPool): # A pool of some people (src= or dst=) is refused by its capability record: see ss.solvers.init_capabilities()
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name))
-            elif isinstance(net, ss.PartnerNet) and net.one_off: # Exact: a contact matrix between its two groups
-                self.terms.append(self.two_groups(net))
-            elif isinstance(net, (ss.PartnerNet, ss.MFNet)): # Lasting partnerships: the partnership approximation
+            elif isinstance(net, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): the partner-change model
                 terms = self.partnerships(net)
-                what = f'"{net.name}" ({type(net).__name__}) uses the partnership approximation: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim.unit_name}, each with the chance it transmits over its whole length, from people drawn from the population'
+                what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim.unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it has no concurrency, and for a curable infection whose partnerships last about as long as it does, it runs high)'
                 if approx is False:
                     raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: {what}. Run with solver="abm".')
                 ss.note(what, sim=sim, verbose=0 if approx else None)
@@ -170,7 +168,7 @@ class Mixing:
 
         A random network has its mean number of contacts, and a network made from a NetworkX graph (`ssl.StaticNet`) the mean degree of its graph. A network of
         partnerships has none: its contacts last, so their number per unit time is not its number of partners (it uses
-        the partnership approximation instead: see `partnerships()`).
+        the partner-change model instead: see `partnerships()`).
         """
         n_contacts = net.pars.get('n_contacts')
         if isinstance(net, ss.RandomNet) and n_contacts is not None:
@@ -183,42 +181,18 @@ class Mixing:
                 p = net.pars.get('p')
                 return (self.mean(n_contacts, self.sim.unit_base), 'its mean number of contacts') if p is None else (p*self.sim.pars.total_pop, 'its chance of each pair, times the population')
             return None, f' (it is made by {getattr(graph, "__name__", "a function")}, whose mean degree is not known before it runs)'
-        elif isinstance(net, ss.PartnerNet):
-            return None, ' (its partnerships last, so the number of partners is not a number of contacts per unit time)'
         return None, ''
-
-    def two_groups(self, net):
-        """
-        One-off contacts between two groups (`ss.PartnerNet(between=...)` with no `dur=`) as a contact matrix over the
-        stratification the two groups are levels of: one group's contacts per unit time with the other, and the other's
-        with it, so that each contact has one of each (from the split of the stratification)
-        """
-        sim = self.sim
-        sides = list(net.sides.items())
-        strat = next((s for s in sim.groups.strats if all(isinstance(c, str) and c in s.labels for k,c in sides)), None)
-        if strat is None:
-            raise ss.CapabilityError(f'"{net.name}" is between {sc.strjoin(k for k,c in sides)}, which with solver="{sim.solver}" must be levels of one stratification, e.g. sim.stratify(role=["none", "{sides[0][0]}", "{sides[1][0]}"]), and between=("{sides[0][0]}", "{sides[1][0]}"). Or run with solver="abm".')
-        d = [s.name for s in sim.groups.strats].index(strat.name)
-        self.check_ragged(d, net)
-        net.init_one_off(sim)
-        split = np.asarray(strat.split, dtype=float) if getattr(strat, 'split', None) is not None and np.ndim(strat.split) == 1 else np.full(strat.n, 1/strat.n)
-        a, b = [strat.labels.index(c) for k,c in sides]
-        seeker, other = (a, b) if net.seeker == 0 else (b, a)
-        matrix = np.zeros((strat.n, strat.n))
-        matrix[seeker, other] = net.contact_rate
-        matrix[other, seeker] = net.contact_rate*split[seeker]/split[other] if split[other] > 0 else 0.0
-        return sc.objdict(kind='matrix', dim=d, matrix=matrix, name=net.name, sides=(a, b))
 
     def partnerships(self, net):
         """
-        Lasting partnerships (`ss.MFNet`, `ss.PartnerNet` with `dur=`) under the partnership approximation: a matrix of the
+        Lasting partnerships (`ss.SexualNet`, `ssl.DegreeNet`) under the partner-change model: a matrix of the
         partnerships formed per unit time by one person in each cell (a side, by a level of a dimension) with people in each
         other, `φ_i·m_ij`, with `φ_i = n_i/D̄` (partners at a time over how long partnerships last), split by the side of the
         partner, since the chance a partnership transmits differs by direction (see `Compartmental.partnership_chance()`)
 
         The sides of the network and the property of people it matches or counts partners by must be dimensions of the
         model. Partners are drawn from the population at random, in proportion to the partners each person has, within
-        the other side for a network between two sides, and with `match=`, the share at the same level that it gives.
+        the other side for a network between men and women, and with `match=`, the share at the same level that it gives.
         """
         sim = self.sim
         p = net.pars
@@ -227,35 +201,27 @@ class Mixing:
         coords = sim.groups.group_coords
         unit = sim.unit_base
         fix = 'Run with solver="abm".'
-        if p.get('where') is not None or (isinstance(p.get('sides'), dict) and p.get('between') is None):
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": the partnership approximation takes partnerships between everyone, by sex (ss.MFNet, sides="sex"), or between two levels of a dimension (between=), not where= or sides= as conditions. {fix}')
+        if p.get('where') is not None:
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (where=). {fix}')
 
-        # The side of each group: by sex, or by the two levels of a dimension that between= names
-        two_sided = isinstance(net, ss.MFNet) or p.get('between') is not None # Each partnership has one person of each side
+        # The side of each group: by sex on a sexual network, whose partnerships are a man and a woman (sides='mf') or two men ('mm')
+        sexual = isinstance(net, ss.SexualNet)
+        two_sided = sexual and p.sides == 'mf' # Each partnership has one person of each side
         side = np.zeros(sim.groups.n_groups, dtype=int) # The position in net.sides of each group's side, -1 for neither
         n_sides = 1
-        if isinstance(net, ss.MFNet) or p.get('sides') == 'sex':
+        if sexual:
             d = next((d for d,s in enumerate(strats) if s.female is not None), None)
             if d is None:
-                raise ss.CapabilityError(f'"{net.name}" has sides by sex, which with solver="{sim.solver}" must be a dimension of the model: add sim.stratify(sex=["female", "male"]). Or {fix[0].lower() + fix[1:]}')
-            side = (coords[:, d] == strats[d].female).astype(int) # Its sides are m (0) and f (1)
-            n_sides = 2
-        elif p.get('between') is not None:
-            sides = list(net.sides.values())
-            strat = next((s for s in strats if all(isinstance(c, str) and c in s.labels for c in sides)), None)
-            if strat is None:
-                k = list(net.sides)
-                raise ss.CapabilityError(f'"{net.name}" is between {sc.strjoin(k)}, which with solver="{sim.solver}" must be levels of one stratification, e.g. sim.stratify(role=["none", "{k[0]}", "{k[1]}"]), and between=("{k[0]}", "{k[1]}"). Or {fix[0].lower() + fix[1:]}')
-            d = names.index(strat.name)
-            level = coords[:, d]
-            side = np.where(level == strat.labels.index(sides[0]), 0, np.where(level == strat.labels.index(sides[1]), 1, -1))
-            n_sides = 2
+                raise ss.CapabilityError(f'"{net.name}" has partnerships by sex, which with solver="{sim.solver}" must be a dimension of the model: add sim.stratify(sex=["female", "male"]). Or {fix[0].lower() + fix[1:]}')
+            female = coords[:, d] == strats[d].female
+            side = female.astype(int) if two_sided else np.where(female, -1, 0) # Its sides are m (0) and f (1); between men, women take no part
+            n_sides = 2 if two_sided else 1
 
         # The property of people partners are counted or matched by, which must be a dimension too
         by = p.n_contacts if isinstance(p.get('n_contacts'), ss.by) else None
         keys = ([by.dim] if by is not None else []) + (list(p.match) if p.get('match') else [])
         if len(set(keys)) > 1:
-            raise ss.CapabilityError(f'"{net.name}" counts partners by {keys[0]} and matches them by {keys[1]}, which the partnership approximation does not combine yet. {fix}')
+            raise ss.CapabilityError(f'"{net.name}" counts partners by {keys[0]} and matches them by {keys[1]}, which the partner-change model does not combine yet. {fix}')
         lev = np.zeros(sim.groups.n_groups, dtype=int)
         n_lev = 1
         if keys:
@@ -273,7 +239,7 @@ class Mixing:
         cell_side = np.repeat(np.arange(n_sides), n_lev)
         cell_lev = np.tile(np.arange(n_lev), n_sides)
         mean = lambda v: float(sc.dcp(v).init(force=True).rvs(100_000).mean()) if isinstance(v, ss.Dist) and not any(k in v.pars for k in ['lam', 'v', 'mean', 'loc']) else self.mean(v, unit)
-        if isinstance(net, ss.MFNet): # Among people who take part, after their debut: one partner each, or the target
+        if sexual: # Among people who take part, after their debut: one partner each, or the target
             part = p.participation.pars.get('p', 1.0) if isinstance(p.participation, ss.bernoulli) else 1.0
             debut = self.mean(p.debut, ss.years) # An age, in years
             pyramid = sim.pyramid()
@@ -283,10 +249,7 @@ class Mixing:
                 older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
             else: # Agents' ages with no age data: uniform from 0 to 60
                 older = np.clip(1 - debut/60, 0, 1)
-            k = np.full(size, float(part)*p.rel_part_rates*older*(1.0 if p.get('n_contacts') is None else mean(p.n_contacts)))
-        elif p.get('between') is not None:
-            given = p.n_contacts if isinstance(p.n_contacts, dict) else {key:p.n_contacts for key in net.sides}
-            k = np.array([mean(given[key]) for key in net.sides])[cell_side]
+            k = np.full(size, float(part)*older*(1.0 if p.get('n_contacts') is None else mean(p.n_contacts)))
         elif by is not None:
             k = np.array([mean(v) for v in sc.tolist(by.values)])[cell_lev]
         else:
@@ -506,24 +469,31 @@ class Mixing:
 
     def init_pools(self):
         """
-        As agents, in a model with places: make the contact matrices of mixing pools act within each place
+        As agents: the contact matrices of mixing pools from counts in each group, in a model with places (within each
+        place), and for a matrix over the model's own dimensions (`ss.contacts()`), which is then exact
 
         A mixing pool's hazard is worked out from the share of each group that is infectious,
         so the contact matrix is used as in a compartmental run, from the agents' counts in
-        each group (see `ss.solvers.Agents.infect()`), with any movement between places.
+        each group (see `ss.solvers.Agents.infect()`), with any movement between places. Over the
+        model's dimensions, everyone in a group has the same contacts, so this is what a pool for
+        each pair of groups would give, without making one.
         """
         sim = self.sim
         self.pool_terms = sc.objdict()
+        def by_dims(net): # A matrix from ss.contacts() over the model's dimensions
+            return isinstance(net, ss.MixingPools) and net.constant and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None)
+        nets = sim.pars.networks.values()
         if self.space is None:
-            return
-        pools = [net for net in sim.pars.networks.values() if isinstance(net, ss.MixingPools) or (isinstance(net, ss.MixingPool) and net.pars.src is None and net.pars.dst is None)]
+            pools = [net for net in nets if by_dims(net)]
+        else:
+            pools = [net for net in nets if isinstance(net, ss.MixingPools) or (isinstance(net, ss.MixingPool) and net.pars.src is None and net.pars.dst is None)]
         for net in pools:
             beta = net.pars.get('beta', 1.0)
             if isinstance(net, ss.MixingPool): # A pool of everyone: within each place
                 self.pool_terms[net.name] = sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name)
             else:
                 self.pool_terms[net.name] = self.dim_matrices(net, beta) if (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None) else self.age_matrix(net, beta)
-        if any(term.kind == 'matrix' for term in self.pool_terms.values()):
+        if self.space is not None and any(term.kind == 'matrix' for term in self.pool_terms.values()):
             self.init_space() # A contact matrix can add an age stratification, which changes the groups
             for term in self.pool_terms.values():
                 if term.kind == 'matrix':

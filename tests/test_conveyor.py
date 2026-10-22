@@ -95,7 +95,7 @@ def test_exit_split():
 
 @sc.timer()
 def test_syphilis_clock():
-    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time')
+    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time (run in test_clocks.py::test_syphilis_latent)')
     def make(**kwargs):
         S, E, EL, LL = ss.states('S E EL LL')
         syph = ss.Disease(S, E, EL, LL,
@@ -108,11 +108,8 @@ def test_syphilis_clock():
         return ss.Sim(syph, connectors=decay, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw, **kwargs)
     with pytest.raises(ss.CapabilityError, match='is a clock'):
         make(solver='ode', total_pop=20_000).init()
-    sim = make(total_pop=20_000).run()
+    sim = make(total_pop=20_000).init()
     assert sim.solver == 'abm'
-    s = sim.diseases.syph
-    eff = s.rel_trans.effective[s.LL.uids]
-    assert not np.isnan(eff).any() and eff.min() < 0.3 # Halving each year since latent onset (see test_clocks.py::test_syphilis_latent)
     return sim
 
 

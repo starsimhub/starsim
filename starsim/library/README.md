@@ -41,7 +41,7 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 | `ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
 | `NullNet` | `ss.Network` | Self-connections only, with zero transmission; useful as a placeholder or for debugging |
 | `StaticNet` | `ss.Network` | A fixed network from a NetworkX graph, or a function that makes one |
-| `DegreeNet` | `ss.PartnerNet` | Partnerships with a target number of partners at a time (concurrency, a maximum), mixing within a level (`match=`), and a number of partners by level, as EpiModel's networks fitted to target statistics; the EpiModel importer makes these (`ss.MFNet` takes `n_contacts`, `concurrency` and `max_contacts` too) |
+| `DegreeNet` | `ss.DynamicNetwork` | Partnerships between anyone (or among some people, `where=`) with a target number of partners at a time (concurrency, a maximum), mixing within a level (`match=`), and a number of partners by level, as EpiModel's networks fitted to target statistics; the EpiModel importer makes these (`ss.SexualNet` takes `n_contacts`, `concurrency` and `max_contacts` too) |
 
 ### MNCH (`mnch/`)
 

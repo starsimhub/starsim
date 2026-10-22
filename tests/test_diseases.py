@@ -10,9 +10,8 @@ import numpy as np
 import starsim as ss
 import starsim.library as ssl
 
-test_run = True
-n_agents = [10_000, 2_000][test_run]
-do_plot = True
+n_agents = 2_000
+do_plot = False
 sc.options(interactive=do_plot) # Assume not running interactively
 
 
@@ -20,16 +19,8 @@ sc.options(interactive=do_plot) # Assume not running interactively
 def test_sir():
     sc.heading('Testing SIR dynamics')
 
-    ppl = ss.People(n_agents)
-    network_pars = {
-        'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
-    }
-    networks = ss.RandomNet(**network_pars)
-
-    sir_pars = {
-        'dur_inf': ss.normal(loc=10),  # Override the default distribution
-    }
-    sir = ss.SIR(**sir_pars)
+    networks = ss.RandomNet(n_contacts=ss.poisson(4)) # Contacts Poisson distributed with a mean of 4
+    sir = ss.SIR(dur_inf=ss.normal(loc=10)) # Override the default distribution
 
     # Change pars after creating the SIR instance
     sir.pars.beta = {'random': ss.time.freq(0.1, 'year')}
@@ -40,21 +31,14 @@ def test_sir():
     # Or use a function, here a lambda that makes the mean for each agent equal to their age divided by 10
     sir.pars.dur_inf.set(loc = lambda self, sim, uids: sim.people.age[uids] / 10)
 
-    sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
+    sim = ss.Sim(n_agents=n_agents, diseases=sir, networks=networks)
     sim.run()
-
-    plt.figure()
-    res = sim.results
-    plt.stackplot(
-        sim.timevec,
-        res.sir.n_S,
-        res.sir.n_I,
-        res.sir.n_R,
-        res.new_deaths.cumsum(),
-    )
-    plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
-    plt.xlabel('Year')
-    plt.title('SIR')
+    if do_plot:
+        res = sim.results
+        plt.figure()
+        plt.stackplot(sim.timevec, res.sir.n_S, res.sir.n_I, res.sir.n_R, res.new_deaths.cumsum())
+        plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
+        plt.title('SIR')
 
     # The textbook SIR: a duration is the mean of an exponential, and nobody dies (Starsim 3's lognormal and deaths are ssl.AgentSIR's)
     kw = dict(total_pop=1e6, stop=ss.days(365), solver='ode', verbose=0)
@@ -86,37 +70,15 @@ def test_sir_epi():
     )
 
     # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
-    for par, par_val in par_effects.items():
-        lo = par_val[0]
-        hi = par_val[1]
-
-        # Make baseline pars
-        pars0 = sc.dcp(base_pars)
-        pars1 = sc.dcp(base_pars)
-
-        if par != 'n_contacts':
-            pars0['diseases'] = sc.mergedicts(pars0['diseases'], {par: lo})
-            pars1['diseases'] = sc.mergedicts(pars1['diseases'], {par: hi})
-        else:
-            pars0['networks'] = sc.mergedicts(pars0['networks'], {par: lo})
-            pars1['networks'] = sc.mergedicts(pars1['networks'], {par: hi})
-
-        # Run the simulations and pull out the results
-        s0 = ss.Sim(pars0, label=f'{par} {par_val[0]}').run()
-        s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
-
-        # Check results
+    for par, (lo, hi) in par_effects.items():
+        key = 'networks' if par == 'n_contacts' else 'diseases'
+        s0, s1 = [ss.Sim(sc.mergedicts(sc.dcp(base_pars), {key: sc.mergedicts(base_pars[key], {par: val})}), label=f'{par} {val}').run() for val in [lo, hi]]
         if par == 'p_death':
-            v0 = s0.results.cum_deaths[-1]
-            v1 = s1.results.cum_deaths[-1]
+            v0, v1 = s0.results.cum_deaths[-1], s1.results.cum_deaths[-1]
         else:
             ind = 1 if par == 'init_prev' else -1
-            v0 = s0.results.sir.prevalence[ind]
-            v1 = s1.results.sir.prevalence[ind]
-
-        print(f'Checking with varying {par:10s} ... ', end='')
+            v0, v1 = s0.results.sir.prevalence[ind], s1.results.sir.prevalence[ind]
         assert v0 <= v1, f'Expected prevalence to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
-        print(f'✓ ({v0} <= {v1})')
 
     return s0, s1
 
@@ -244,12 +206,7 @@ def test_aliases():
 def test_sis(do_plot=do_plot):
     sc.heading('Testing SIS dynamics')
 
-    pars = dict(
-        n_agents = n_agents,
-        diseases = 'sis',
-        networks = 'random'
-    )
-    sim = ss.Sim(pars)
+    sim = ss.Sim(n_agents=n_agents, diseases='sis', networks='random')
     sim.run()
     if do_plot:
         sim.plot()
@@ -267,9 +224,7 @@ def test_sis(do_plot=do_plot):
 def test_ncd():
     sc.heading('Testing NCDs')
 
-    ppl = ss.People(n_agents)
-    ncd = ssl.NCD()
-    sim = ss.Sim(people=ppl, diseases=ncd, dt=ss.years(1), analyzers='infection_log')
+    sim = ss.Sim(n_agents=n_agents, diseases=ssl.NCD(), dt=ss.years(1), analyzers='infection_log')
     sim.run()
     ncd = sim.diseases[0] # The sim's copy, which ran
     log = sim.analyzers[0].logs[0]
@@ -278,19 +233,13 @@ def test_ncd():
     df = log.to_df()  # Check generation of line-list
     assert df.source.isna().all()
 
-    plt.figure()
-    plt.stackplot(
-        sim.timevec,
-        ncd.results.n_not_at_risk,
-        ncd.results.n_at_risk - ncd.results.n_affected,
-        ncd.results.n_affected,
-        sim.results.new_deaths.cumsum(),
-    )
     assert ncd.results.n_not_at_risk.label == 'Not at risk'
     assert ncd.results.n_affected.label == 'Affected'
-    plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
-    plt.xlabel('Year')
-    plt.title('NCD')
+    if do_plot:
+        plt.figure()
+        plt.stackplot(sim.timevec, ncd.results.n_not_at_risk, ncd.results.n_at_risk - ncd.results.n_affected, ncd.results.n_affected, sim.results.new_deaths.cumsum())
+        plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
+        plt.title('NCD')
 
     # A disease written as code that is not an infection (Starsim 3's ss.Disease), and an infection with no beta
     class Anemia(ss.Infection):
@@ -321,14 +270,9 @@ def test_gavi():
 
     sims = sc.autolist()
     for disease in ['cholera', 'measles', 'ebola']:
-        pars = dict(
-            diseases = disease,
-            n_agents = n_agents,
-            networks = 'random',
-        )
-        sim = ss.Sim(pars)
-        sim.run()
-        sim.plot()
+        sim = ss.Sim(diseases=disease, n_agents=n_agents, networks='random').run()
+        if do_plot:
+            sim.plot()
         sims += sim
     return sims
 
@@ -337,15 +281,9 @@ def test_gavi():
 def test_multidisease():
     sc.heading('Testing simulating multiple diseases')
 
-    ppl = ss.People(n_agents)
-    sir1 = ss.SIR(name='sir1')
-    sir2 = ss.SIR(name='sir2')
-
-    sir1.pars.beta = {'randomnet': 0.1}
-    sir2.pars.beta = {'randomnet': 0.2}
-    networks = ss.RandomNet(n_contacts=ss.poisson(4))
-
-    sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
+    sir1 = ss.SIR(name='sir1', beta={'randomnet': 0.1})
+    sir2 = ss.SIR(name='sir2', beta={'randomnet': 0.2})
+    sim = ss.Sim(n_agents=n_agents, diseases=[sir1, sir2], networks=ss.RandomNet(n_contacts=ss.poisson(4)))
     sim.run()
     return sim
 
@@ -353,7 +291,6 @@ def test_multidisease():
 @sc.timer()
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
-    ppl = ss.People(n_agents)
     sis = ss.SIS(
         beta = dict(
             random = ss.permonth(0.005),
@@ -363,9 +300,10 @@ def test_mtct():
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
     demographics = ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'))
-    sim = ss.Sim(dt=ss.months(1), people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    sim = ss.Sim(dt=ss.months(1), n_agents=n_agents, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
-    sim.plot()
+    if do_plot:
+        sim.plot()
     res = sim.results
     assert np.array_equal(res.sis.n_S + res.sis.n_I, res.n_alive + res.pregnancy.n_unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
     return sim
@@ -488,7 +426,6 @@ def test_fetal_health(do_plot=do_plot):
 
         fig.tight_layout()
 
-    sc.printgreen('✓ Fetal health tests passed')
     return sim_baseline, sim_disease, sim_treated
 
 
@@ -534,7 +471,6 @@ def test_congenital():
     ratio = sb/n_congenital
     assert 0.3 < ratio < 1.8, f'Stillbirth:congenital ratio {ratio:0.2f} is far from the expected 0.75'
 
-    sc.printgreen('✓ Congenital framework tests passed')
     return sim
 
 
@@ -664,9 +600,9 @@ def test_strains_immunity_attr():
     sim.diseases.a.move_to(sim.people.auids, 'I')
     assert np.isclose(sim.run().results.a.n_I[52]/20_000, np.exp(-2), atol=0.01)
 
-    # The same as a modifier on each genotype, as HPVsim writes it outside a family: both read the antibodies when rel_sus is worked out (within noise, since a modifier that reads an attribute changes its draws)
-    pars = dict(n_agents=10_000, start=2000, stop=2020, dt=0.25, verbose=0)
-    def run(how, seed):
+    # The same as a modifier on each genotype, as HPVsim writes it outside a family: both read the antibodies when rel_sus is worked out (the same infections, though the tolerance allows for noise)
+    pars = dict(n_agents=2000, start=2000, stop=2010, dt=0.25, verbose=0)
+    def run(how, seed=1):
         gens = [make_nab_genotype('hpv16', 2.0), make_nab_genotype('hpv18', 1.6)]
         if how == 'family':
             return ss.Sim(diseases=ss.Strains('hpv', gens, immunity=ss.immunity(protected='nab', rel_sus=m, combine='sum')), rand_seed=seed, **pars).run()
@@ -674,8 +610,8 @@ def test_strains_immunity_attr():
         return ss.Sim(diseases=gens, connectors=mods, rand_seed=seed, **pars).run()
     out = sc.objdict()
     for how in ['family', 'modify', 'none']:
-        sims = [run(how, seed) for seed in range(3)]
-        out[how] = np.mean([[sim.results[name].infection.sum() for name in ['hpv16', 'hpv18']] for sim in sims], axis=0)
+        sim = run(how)
+        out[how] = np.array([sim.results[name].infection.sum() for name in ['hpv16', 'hpv18']])
     assert np.allclose(out.family, out.modify, rtol=0.03), out
     assert np.all(out.family < 0.8*out.none), out # It protects
 

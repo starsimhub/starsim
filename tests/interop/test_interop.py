@@ -4,6 +4,7 @@ Test importing models from other frameworks (ss.interop.load()), writing a sim a
 
 # %% Imports and settings
 import runpy
+import tempfile
 import pytest
 import numpy as np
 import sciris as sc
@@ -296,19 +297,19 @@ def test_no_disease():
     S = ss.State(init=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
     sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
     assert np.ptp(sim.results.d.n_S.values) == 0
-    sim = ss.Sim(networks=ss.PartnerNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
+    sim = ss.Sim(networks=ss.SexualNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
     assert "unit='week'" in sim.to_code()
     return sim
 
 
 if __name__ == '__main__':
     T = sc.timer()
-    folder = sc.path(sc.thisdir()) / 'temp'
-    folder.mkdir(exist_ok=True)
-    test_rates()
-    test_emulsion(folder)
-    test_to_code(folder)
-    test_round_trip(folder)
-    test_diff(folder)
-    test_no_disease()
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = sc.path(tmp)
+        test_rates()
+        test_emulsion(folder)
+        test_to_code(folder)
+        test_round_trip(folder)
+        test_diff(folder)
+        test_no_disease()
     T.toc()
