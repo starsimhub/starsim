@@ -43,16 +43,16 @@ def make_tb(ages=True, data=None):
     tb = ss.Disease(infection=S >> E @ beta*I, reinfection_L=L >> E @ beta*0.21*I, reinfection_R=R >> E @ beta*0.21*I,
                     stabilisation=E >> L @ 2.0, early_activation=E >> I @ 0.2, late_activation=L >> I @ 0.002, self_recovery=I >> R @ 0.2,
                     detection=I >> T @ detect_max*scaleup, treatment_end=T >> R @ 2.0, tb_death=ss.death(I, rate=0.2),
-                    death=ss.death(rate=1/70), birth=ss.birth(S, rate=0.02), init=dict(I=1000), name='tb')
+                    death=ss.death(rate=1/70), birth=ss.birth(S, rate=0.02), init_n=dict(I=1000), name='tb')
     if ages:
         tb.stratify(age=[0, 5, 15, 35, 50, 70], split=[1/6]*6, adjust={'early_activation': [3, 1.5, 1, 1, 1, 1], 'rel_trans': [0.1, 0.2, 1, 1, 1, 1]})
     return ss.Sim(tb, networks=ss.contacts(age=mixing) if ages else None, total_pop=1e6, start=1950, stop=2025, unit='year', data=data, verbose=0)
 
 
 def notifications():
-    """ Notifications from 2000 to 2024, as whole numbers, from a run at the true values """
+    """ Notifications from 2000 to 2024, as whole numbers, from a run at the true values (those in a year are at the time point that ends it, as data by calendar year is read) """
     res = make_tb(ages=False).run().results.tb.detection
-    return pd.DataFrame(dict(year=range(2000, 2025), detection=np.round(np.asarray(res.values)[50:75])))
+    return pd.DataFrame(dict(year=range(2000, 2025), detection=np.round(np.asarray(res.values)[51:76])))
 
 
 def jax_logdensity(sim, x):

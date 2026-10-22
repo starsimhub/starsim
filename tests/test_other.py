@@ -111,18 +111,16 @@ class Counter(ss.Module):
         self.results.seen[self.ti] = self.results.new_events[self.ti]
 '''
     new, changes, todo = migrate_text(old)
-    assert 'new_events[self.ti + 1]' in new # A result written in step() goes at the end of the step
-
-    # Run both: the Starsim 3 code silently sees nothing; the migrated code sees every event
-    for text, seen in [(old, 0), (new, 50)]:
-        scope = {}
-        exec(text, scope)
-        sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
-        assert sim.results.counter.seen.sum() == seen
+    assert new == old # The time index is Starsim 3's in every phase of a step: nothing to rewrite
+    scope = {}
+    exec(new, scope)
+    sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
+    assert sim.results.counter.seen.sum() == 50 and sim.results.counter.new_events[0] == 0 # Every step's events seen, and none at the start
+    assert 'ti == 1' in migrate_text('class X(ss.Module):\n    def step(self):\n        if self.ti == 0:\n            pass')[2][0][1]
 
     # Renames, a fractional verbose, and Starsim 3's diseases written as code
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
-    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Infection): pass"
+    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass" # ss.Disease and ss.Infection keep their meaning
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
     assert 'sim.calibrate()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead

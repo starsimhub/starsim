@@ -214,7 +214,7 @@ def write(text, ext):
 def hand_sir(**kwargs):
     """ The same SIR, written by hand """
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init=dict(I=kwargs.pop('I', 1)), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init_n=dict(I=kwargs.pop('I', 1)), name='sir')
     return ss.Sim(sir, unit='day', stop=ss.days(100), verbose=0, **kwargs).run().results.sir
 
 
@@ -260,7 +260,7 @@ def test_odin_discrete():
     sim = load_odin(write(odin_age, '.R'), stop=200, pars=age_pars, **kw)
     assert not sim.imported.incomplete
     S, I, R = ss.states(3)
-    sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=ss.perday(0.02), amplitude=0.3) * I, recovery=I >> R @ ss.perday(0.1), init=dict(I=ss.by(age=[10, 0, 0])), name='sir')
+    sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=ss.perday(0.02), amplitude=0.3) * I, recovery=I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0])), name='sir')
     sir.stratify(age=['1', '2', '3'], split=[0.3, 0.5, 0.2])
     hand = ss.Sim(sir, networks=ss.contacts(age=age_pars['m']), total_pop=1e5, unit='day', dt=0.25, stop=ss.days(200), solver='ode', verbose=0).run()
     imported = sim.new(solver='ode').run()
@@ -311,7 +311,7 @@ def test_odin_examples():
     sim = load_odin(ex / 'original' / 'seir_array_odin.R', stop=365, **kw)
     assert sim.to_spec()['modules'][0]['stratifications'][0]['levels'] == [0, 1, 5, 15, 30]
     assert [name for name,why in sim.imported.incomplete] == ['lag_inf (history)']
-    code = sim.to_code().replace('    init ', f'    history = ss.null >> I @ ss.timeseries({{0: ss.perday({np.exp(-14/(365*50))}), 14: 0}}),\n    init ', 1)
+    code = sim.to_code().replace('    init', f'    history = ss.null >> I @ ss.timeseries({{0: ss.perday({np.exp(-14/(365*50))}), 14: 0}}),\n    init', 1)
     ns = {}
     exec(code, ns) # With the workaround that the import lists
     res = ns['sim'].run().results[ns['sim'].diseases[0].name]

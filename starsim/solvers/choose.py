@@ -2,21 +2,48 @@
 Choosing the solver: which engine runs a declared model, and why (`choose_solver()`)
 """
 import inspect
+import importlib
+import importlib.util
 import numpy as np
 import sciris as sc
 import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents
+from .engine import convert
 
-__all__ = ['solver_names', 'integrators', 'make_engine', 'choose_solver', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons']
+__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons']
 
 
 solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for
 integrators = ['rk4', 'euler'] # The schemes of the ODE
 
 
+class Undeclared:
+    """ The engine of a disease that declares no states or transitions: there is nothing for it to run, so the disease's own code is all of it (see `ss.Disease`) """
+    def __init__(self, module, sim):
+        self.mod = module
+        self.sim = sim
+        return
+
+    def nothing(self):
+        """ Nothing to run: each step of the lifecycle is the disease's own code """
+        return
+    define = init_pre = init_post = start_step = step_state = step = step_funcs = finalize_results = shrink = nothing
+
+    def update_results(self):
+        """ The count of each `ss.BoolState`, as for any module """
+        ss.Module.update_results(self.mod)
+        return
+
+    def value(self, p):
+        """ A parameter given as `ss.par` (e.g. with bounds, to be fitted) is its value, which the disease's code reads """
+        return p.raw
+
+
 def make_engine(module, sim):
-    """ Create the engine that runs a module's graph under the sim's solver """
+    """ Create the engine that runs a module's graph under the sim's solver; for a disease that declares nothing, one that runs nothing """
+    if module.graph is None:
+        return Undeclared(module, sim)
     if sim.solver == 'abm':
         return Agents(module, sim)
     return Compartmental(module, sim)
@@ -50,7 +77,9 @@ def choose_solver(sim):
     Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
 
     A sim with no declared states and transitions is run as agents, as in earlier
-    versions of Starsim, and none of this applies to it.
+    versions of Starsim, and none of this applies to it. Which engine then takes a whole
+    stochastic compartmental run, JAX or the kernels, is chosen when the sim is run, by
+    `choose_engine()`.
     """
     pars = sim.pars
     solvers = ss.solvers
@@ -184,6 +213,88 @@ def choose_solver(sim):
     if sim.unit_source:
         ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.errors.UnitInferred, sim=sim)
     return
+
+
+jax_after = 0.5 # The seconds above which a run taken by the kernels is taken by JAX instead, if sim.jax is None: see choose_engine()
+
+
+def kernel_seconds(sim):
+    """
+    About how long the kernels would take for a whole run of the sim. For the chain binomial and tau-leaping: 0.15 µs
+    for each group, flow (and two for each stage of a dwell time), and step (each substep, or for tau-leaping each
+    leap, which is short enough that the fastest of the rates that do not depend on the compartments changes them by
+    3%), which fits declared SIRs over 50 places, Ghana measles over 260 districts, and two SEIRs with stages tracked
+    jointly to within a factor of 2. For the ODE: 1/400 of what it would take as plain Python (see
+    `ss.kernels.plain_seconds()`, which counts the mixing between groups too), which fits the same SIRs and Ghana
+    measles to within a factor of 2. A run of one group takes about 2 ms, mostly the sim's own work.
+    """
+    seconds = 0.0
+    for mod in sim.declared:
+        engine = mod.engine
+        cross = engine.cross
+        if cross is not None and cross.lead != mod.name: # Diseases tracked jointly run as one program, counted once
+            continue
+        for e in cross.engines if cross is not None else [engine]:
+            if e.program is None:
+                e.init_program()
+        if cross is not None and (cross.program is None or cross.built != [id(e.program) for e in cross.engines]):
+            cross.build([e.program for e in cross.engines])
+        p = cross.program if cross is not None else engine.program
+        groups = cross.n_cols if cross is not None else engine.n_groups
+        leaps = 1
+        if sim.solver in ['tau', 'ode']:
+            rates = np.concatenate([np.ravel(e.flow_base(flow)*e.flow_mult(flow)) for e in (cross.engines if cross is not None else [engine]) for flow in e.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] + [p.mov_rate])
+        if sim.solver == 'ode':
+            solver = ss.kernels.solvers[sim.integrator]
+            n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
+            seconds += ss.kernels.plain_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)/400
+            continue
+        elif sim.solver == 'tau':
+            leaps = max(np.max(rates, initial=0)*engine.dt/0.03, 1)
+        seconds += 1.5e-7*mod.t.npts*groups*(len(p.src) + p.n_movers + 2*np.sum(p.src_chain))*leaps*max(engine.substeps(), 1)
+    return seconds
+
+
+def choose_engine(sim):
+    """
+    Whether JAX takes the sim's whole compartmental run (the ODE as `ss.gradients` runs it, the chain binomial and
+    tau-leaping as `ss.perflib._chain` does), rather than the kernels, and why
+
+    By `sim.jax`: True for JAX, False for the kernels, or None (the default) to choose: JAX if the run would take the
+    kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.27 to 0.45 times as long
+    as the kernels for the chain binomial, and 0.1 to 0.3 times for the ODE over many groups, but starting it takes
+    about half a second in a session (0.3 s to import it, and 0.1 to 0.25 s to trace a model; compiled code is kept
+    on disk), which a short run would notice. The choice depends on the model only, not on what has run before, so a
+    sim with a seed gives the same results whenever it is run (an ODE run in JAX agrees with the kernels to about
+    1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.perflib._chain.reason()`) is taken by the
+    kernels, with a note if JAX was asked for.
+
+    Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
+    """
+    use, why = False, None
+    if sim.jax is False:
+        why = 'kernels, as asked (sim.jax = False)'
+    elif sim.solver not in ['ode', 'binomial', 'tau']:
+        why = f'kernels: JAX does not run solver="{sim.solver}"'
+        if sim.jax:
+            ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
+    elif sim.jax is None and importlib.util.find_spec('jax') is None:
+        why = 'kernels: JAX is not installed'
+    else:
+        seconds = kernel_seconds(sim) if sim.jax is None else None
+        if seconds is not None and seconds < jax_after:
+            why = f'kernels: a short run (about {seconds:.2g} s), shorter than JAX takes to start (about {jax_after} s a session)'
+        else:
+            no = ss.gradients.reason(sim) if sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib._chain').reason(sim) # Imported only when used
+            if no is not None:
+                why = f'kernels: JAX cannot run this sim, since {no}'
+                if sim.jax:
+                    ss.note(f'JAX cannot run this sim, since {no}, so it is run by the kernels', sim=sim)
+            else:
+                use = True
+                why = 'JAX, as asked (sim.jax = True)' if sim.jax else f'JAX: a long run (about {seconds:.2g} s by the kernels), which it takes in a fraction of the time'
+    sim.engine_reason = why
+    return use, why
 
 
 def init_where(sim):
@@ -338,7 +449,7 @@ def crossing_groups(sim):
             links[name] = group
             why[name] = reasons
         return
-    families = [{m.name for m in fam.members} for fam in sim.pars.diseases.values() if isinstance(fam, ss.Strains)] # The members of a family have people who die of one die in the others already (see ss.Strains.step_shares())
+    families = [{m.name for m in fam.members} for fam in sim.pars.diseases.values() if isinstance(fam, ss.strains.Family)] # Strains with courses of their own have people who die of one die in the others already (see ss.strains.Family.step_shares())
     for mod in sim.declared: # People born or dying, once in every disease
         flows, deaths = sim.flows_of(mod), leaves(mod)
         if deaths and not flows and set(names) <= next((f for f in families if mod.name in f), {mod.name}):
@@ -467,7 +578,19 @@ def observer(mod):
     """ Whether a module written as code, which does not say whether it works on groups, runs beside the compartments: an analyzer, a plain `ss.Module`, or a function given as a module """
     if callable(getattr(mod, 'func', None)) and not isinstance(mod, ss.Demographics): # e.g. interventions=func
         return True
-    return isinstance(mod, ss.Analyzer) or not isinstance(mod, (ss.diseases.DiseaseBase, ss.Network, ss.Demographics, ss.Intervention, ss.Connector))
+    return isinstance(mod, ss.Analyzer) or not isinstance(mod, (ss.Disease, ss.Network, ss.Demographics, ss.Intervention, ss.Connector))
+
+
+max_cv = 3 # A dwell time whose coefficient of variation is above this runs as agents under solver='auto': Erlang stages have one of at most 1, so one exponential stage keeps only its mean (FP53)
+
+
+def dwell_cv(raw, sim):
+    """ The coefficient of variation of a dwell time's distribution (NaN if it has no single value, as for parameters that are functions or by group) """
+    try:
+        mean, std = ss.transitions.dwell_stats(raw, lambda val: convert(val, sim.unit_base))
+    except ValueError: # A parameter by group
+        return np.nan
+    return std/mean if mean > 0 else np.nan
 
 
 def init_capabilities(sim, modules):
@@ -518,16 +641,18 @@ def init_capabilities(sim, modules):
             add(f'module: {mod.name}', 'no', f'{clock} is a clock', auto=f'{clock} is a clock, which only agents keep', fatal=True)
         if graph is not None and graph.attrs: # Agents only (see ss.attr)
             add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(graph.attrs.keys())}) are kept per agent', fatal=True)
-        if isinstance(mod, ss.Strains): # Its members side by side; what ties them together from their shares (see ss.Strains.shares())
+        if isinstance(mod, ss.strains.Family): # Its members side by side; what ties them together from their shares (see ss.strains.Family.shares())
             if mod.coupled:
-                add(f'family: {mod.name}', 'no', 'members that affect each other', auto=f'the members of "{mod.name}" protect each other or have one course at a time, which only agents follow (or track the members jointly: ss.modify(..., where=) between them)', fatal=True)
+                add(f'strains: {mod.name}', 'no', 'courses of their own that affect each other', auto=f'the strains of "{mod.name}" protect each other or share a state, which only agents follow (or track them jointly: ss.modify(..., where=) between them)', fatal=True)
             elif mod.init_prev is not None:
-                add(f'family: {mod.name}', 'approx', 'members side by side, each seeded with its share')
+                add(f'strains: {mod.name}', 'approx', 'courses side by side, each seeded with its share')
             else:
-                add(f'family: {mod.name}', 'yes', 'members side by side')
+                add(f'strains: {mod.name}', 'yes', 'courses side by side')
             continue
         if graph is None:
-            if isinstance(mod, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): approximate, so 'auto' keeps agents (R4)
+            if isinstance(mod, ss.SexualNet) and (mod.forms_own or not set(mod.groups) <= {'male', 'female'}): # Partnerships of its own, or between groups other than the sexes
+                add(f'network: {mod.name}', 'no', 'no compartmental form', auto=f'"{mod.name}" ({type(mod).__name__}) has partnerships {"of its own" if mod.forms_own else "between groups other than the sexes"}, which only agents follow', fatal=True)
+            elif isinstance(mod, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): approximate, so 'auto' keeps agents (R4)
                 add(f'network: {mod.name}', 'approx', 'the partner-change model', auto=f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
             elif isinstance(mod, ss.Network):
                 contacts = sim.mixing.net_contacts(mod)[0]
@@ -556,6 +681,9 @@ def init_capabilities(sim, modules):
             add(f'module: {mod.name}', 'no', 'compartmental = False', auto=f'"{mod.name}" ({type(mod).__name__}) has compartmental = False, so runs only as agents', fatal=True)
         elif own and flag is None:
             add(f'code: {mod.name}.{own[0]}()', 'yes', 'runs in Python each step (compartmental = False if it needs agents)')
+        arrays = [state.name for state in mod.state_list] # Per-agent arrays of its own beside the declared states (made by its engine later)
+        if arrays and flag is None and not hasattr(mod, 'compartmental_form'):
+            add(f'arrays: {mod.name}', 'no', 'per-agent arrays', auto=f'"{mod.name}" has per-agent arrays of its own ({sc.strjoin(arrays[:3])}), which only agents have', fatal=True)
         if hasattr(mod, 'compartmental_form'): # A small form of its own, only when a compartmental solver is named
             add(f'module: {mod.name}', 'approx', 'its own small compartmental form (see its compartmental_form())', auto=f'"{mod.name}" has only a small approximate compartmental form, used when a compartmental solver is named')
         for name,tr in graph.transitions.items(): # Each person's mother: agents only
@@ -580,7 +708,7 @@ def init_capabilities(sim, modules):
                 add('function: init_prev', 'no', 'takes uids', auto=f'init_prev of "{mod.name}" is a function of the agents')
             else:
                 add('function: init_prev', 'yes', 'a function of the sim, evaluated on groups')
-        inits = [init_prev] + [state.init.raw if isinstance(state.init, ss.par) else state.init for state in graph.states.values()]
+        inits = [init_prev] + [init.raw if isinstance(init, ss.par) else init for state in graph.states.values() for init in [state.init, state.init_n]]
         for by in [val for val in inits if isinstance(val, ss.by)]: # A share by a property of each person that is not a dimension (as for a value in a rate, below)
             for prop in [prop for prop in by.dims if prop not in [strat.name for strat in sim.groups.strats] + ['female']*any(strat.female is not None for strat in sim.groups.strats)]:
                 ingredient = f'property: people.{"female" if prop == "sex" else prop}'
@@ -612,7 +740,13 @@ def init_capabilities(sim, modules):
             if isinstance(raw, ss.Dist) and type(raw).__name__ != 'expon':
                 shape = raw.pars.get('a')
                 exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
-                auto = f'"{name}" has a {type(raw).__name__} dwell time, and approx=False' if approx is False and not exact else None
+                cv = np.nan if exact else dwell_cv(raw, sim)
+                if approx is False and not exact:
+                    auto = f'"{name}" has a {type(raw).__name__} dwell time, and approx=False'
+                elif cv > max_cv:
+                    auto = f'"{name}" has a {type(raw).__name__} dwell time whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow'
+                else:
+                    auto = None
                 add(f'dwell time: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'a conveyor of whole steps' if fixed else 'Erlang stages', auto=auto)
             changers = [m for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()) if isinstance(m, ss.modify) and getattr(m.target_module, 'name', m.target_module) == mod.name
                         and m.target_kind in ['par', None] and m.target_name == getattr(tr.dur, 'name', None)] if isinstance(ss.transitions.by_dist(raw), ss.Dist) else []
@@ -660,11 +794,10 @@ def init_capabilities(sim, modules):
                     add(f'transfer: {name} ({type(raw).__name__})', 'no', 'no compartmental form yet', auto=f'the transfer "{name}" has a {type(raw).__name__} dur= with parameters by group or person, drawn for each person', fatal=True)
                 else:
                     add(f'transfer: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'Erlang stages', auto=f'the transfer "{name}" has a {type(raw).__name__} dur=, and approx=False' if approx is False and not exact else None)
-        for strat in list(graph.strats) + list(sim.groups.strats):
-            immunity = getattr(strat, 'immunity', None)
-            if immunity is not None and not np.all(immunity == 1): # A compartmental run keeps only the last strain each person has had (KI15): see ss.solvers.Engine.init_immunity()
-                add(f'immunity: {strat.name}', 'no', 'would keep only the last strain', auto=f'the immunity between the strains of "{strat.name}" is partial, and only agents keep every strain each person has had')
-                break
+        for strat in graph.strats:
+            reason = None if strat.strains is None else strat.strains.needs_agents(graph) # E.g. a compartment keeps only the strain people carry now (KI15): see ss.solvers.Engine.init_immunity()
+            if reason:
+                add(f'strains: {strat.name}', 'no', 'kept per agent', auto=f'the strains of "{mod.name}": {reason}', fatal=True)
     sim.capabilities = caps
     return caps
 

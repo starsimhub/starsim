@@ -23,6 +23,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .distributions import _GOLDEN, _MIX1, _MIX2, _U30, _U27, _U31, _U11, _U40, _INV53, _INV24
+from .perflib import _draws as draws, _cache
 
 __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
@@ -130,6 +131,10 @@ shift_fields = [
 Shifts = collections.namedtuple('Shifts', shift_fields)
 
 plain = __name__ == 'starsim.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
+if plain:
+    draws = draws.plain_copy() # The draws as plain Python too
+else:
+    _cache.depends(__file__, draws.__file__) # So the cached kernels are compiled again when the draws change
 
 def kernel(error_model='numpy', **kwargs):
     """ Compile a kernel with Numba (cached on disk), or leave it as plain Python in the copy that `uncompiled()` gives """
@@ -139,10 +144,16 @@ jit = kernel()
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
 golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a random stream: see uniform()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
+row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups, see v4_design/oct22/jax/draws.md
 
 
-compile_after = 20 # The seconds that runs would take as plain Python, in a session, above which the kernels are compiled (by default: see choose())
+compile_seconds = 60 # About how long compiling the kernels takes, once per install: runs that would take longer than this as plain Python are compiled first (by default: see choose())
+speedup = 50 # About how many times faster the compiled kernels are than plain Python (40 to 150 times for stiff ODEs)
+note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
+noted = False # Whether choose() has said that a run is taken as plain Python, in this session
+chosen = False # Whether choose() has chosen to compile the kernels, in this session
+compiling = False # Whether ss.compile() is compiling the kernels
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
 on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
@@ -151,7 +162,8 @@ entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_e
 def uncompiled():
     """
     The kernels as plain Python: this module's code, run without compiling it, which gives the same results with the
-    same random numbers (Numba follows NumPy's algorithms for its draws). Much slower for a large model, but there is
+    same random numbers (the draws are the same code, `ss.perflib.draws`, run as plain Python too, and Numba follows NumPy's
+    algorithms for the uniforms). Much slower for a large model, but there is
     nothing to wait for. Its entry points ignore the overflow of the random streams' integer arithmetic, as compiled
     code does.
     """
@@ -182,49 +194,71 @@ def is_compiled():
     return on_disk or bool(step.signatures)
 
 
-def plain_seconds(p, y, npts, solver):
+def plain_seconds(p, y, npts, solver, n_sub=1):
     """
     About how long a run would take as plain Python, in seconds: about 20 µs a step (or, for the exact solver, an
     event), and 0.4 µs for each group times each flow, operation, and compartment, and each pair of levels or places
-    that mix; RK4 and tau-leaping take about four times as many steps, and the exact solver about one event for
-    each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within about 2×, which is enough to
-    choose whether to compile.
+    that mix; RK4 and tau-leaping take about four times as many steps, each substep counts as a step, and the exact
+    solver takes about one event for each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within
+    about 2×, which is enough to choose whether to compile.
+
+    Args:
+        n_sub (int): the substeps in each step (see `substeps()`)
     """
     nc, ng = y.shape
     size = ng*(len(p.src) + len(p.ops) + nc) + len(p.exp_set)*(3*len(p.sh_val) + (p.sizes**2).sum())
     if solver == solvers['gillespie']:
         return y.sum()*len(p.src)*(1e-5 + 3e-7*size)
     stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
-    return npts*stages*(2e-5 + 4e-7*size)
+    return npts*stages*max(n_sub, 1)*(2e-5 + 4e-7*size)
 
 
-def choose(seconds=0.0, verbose=True):
+def substeps(rates, dt, n_sub, solver):
+    """ About how many substeps a solver takes in each step, for `plain_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
+    if n_sub > 0 or solver >= 2: # The stochastic solvers that take steps of their own length count them in their own way
+        return max(n_sub, 1)
+    rates = np.ravel(rates)
+    fastest = np.max(rates[np.isfinite(rates)], initial=0.0)
+    return max(int(np.ceil(fastest*dt/0.25)), 1)
+
+
+def choose(seconds=0.0):
     """
     The kernels to take a run with: these, compiled by Numba, or the same code as plain Python (see `uncompiled()`)
 
-    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`), so by default
-    (`ss.options.compile = 'auto'`) a run is taken as plain Python, unless the kernels are compiled already, or the
-    runs taken that way in this session, with this one, would take longer than `compile_after` seconds (as a
-    calibration's many small runs would).
+    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`). By default
+    (`ss.options.compile = 'auto'`) they are compiled first if the runs taken as plain Python in this session, with
+    this one, would take longer than that (as a long run, or a calibration's many small runs, would), with a note
+    saying so; and otherwise the run is taken as plain Python, with a note (once a session, for a run of more than
+    `note_after` seconds) of how long it would take each way. A note is printed whatever the sim's `verbose`, since
+    a minute of silence looks like a hang.
 
     Args:
         seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
-        verbose (bool): whether to say when the kernels are compiled for a run
     """
+    global plain_total, noted, chosen
     mode = ss.options.compile
     if mode not in ['auto', 'always', 'never']:
         raise ValueError(f'ss.options.compile must be "auto", "always", or "never", not {mode!r}')
     if mode == 'never':
         return uncompiled()
-    if mode == 'always' or is_compiled():
+    if chosen or is_compiled():
         return sys.modules[__name__]
-    global plain_total
-    if plain_total + seconds < compile_after:
-        plain_total += seconds
+    if mode == 'always':
+        chosen = True
+        if not compiling: # ss.compile() says so itself
+            print('Note: compiling the solver (about a minute, once per install)')
+        return sys.modules[__name__]
+    total = plain_total + seconds
+    if total < compile_seconds:
+        plain_total = total
+        if seconds >= note_after and not noted:
+            noted = True
+            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; about {seconds/speedup:.2g} s compiled, after compiling once per install for about a minute: ss.compile())')
         return uncompiled()
-    if verbose:
-        which = f'this run would take about {seconds:.0f} s' if seconds >= compile_after else f'the runs so far would take more than {compile_after} s'
-        print(f'Compiling the solver kernels, since {which} uncompiled (about a minute, once per install; ss.compile() does it ahead of time)')
+    chosen = True
+    which = 'this run' if seconds >= compile_seconds else 'the runs in this session'
+    print(f'Note: compiling the solver (about a minute, once per install), since {which} would take about {total:.0f} s as plain Python and {total/speedup:.2g} s compiled')
     return sys.modules[__name__]
 
 
@@ -240,9 +274,11 @@ def compile(verbose=True):
 
         ss.compile()
     """
+    global compiling
     T = sc.timer()
     if verbose:
         print('Compiling the solver kernels (about a minute)...')
+    compiling = True
     def make(solver='binomial'):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
@@ -262,6 +298,7 @@ def compile(verbose=True):
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
         settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
     make('abm').run() # The passes over the agents, which are kept in the same cache (so they are compiled again whenever this file changes)
+    compiling = False
     if verbose:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
@@ -283,17 +320,66 @@ def workspace(y, p):
     yt        = np.empty((nc, ng))
     chain     = np.empty((p.src_chain.max() if len(p.src_chain) else 0) + 2) # Where people at a stage of a dwell time end up: see chain_probs()
     credits   = np.empty((2, (np.diff(p.crd_starts).max() if len(p.crd_starts) > 1 else 0) + 1, ng)) # For credit(): the count of each credit of a flow not yet shared among those nested in it, and their weight left
-    return rates, exposures, stack, groups, cells, dy, df, yt, chain, credits
+    rows      = np.empty((11, ng))              # For binomials() and poissons(): the uniforms, the chances or means, and scratch for the draws
+    return rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows
 
 
 @jit
 def binomial(rng, n, prob):
-    """ The number of n people that something with a probability happens to """
+    """ The number of n people that something with a probability happens to, from one uniform (see `ss.perflib.draws.binomial()`) """
     if n <= 0 or prob <= 0:
         return 0.0
     elif prob >= 1:
         return float(n)
-    return float(rng.binomial(int(n), prob))
+    return draws.binomial(n, prob, rng.random())
+
+
+@jit
+def poisson(rng, lam):
+    """ A Poisson count with mean lam, from one uniform (see `ss.perflib.draws.poisson()`) """
+    return draws.poisson(lam, rng.random()) if lam > 0 else 0.0
+
+
+@kernel(inline='always') # A call with arrays costs more than the draws of a small model
+def binomials(rng, n, prob, out, rows):
+    """
+    A binomial draw for every group (of n people, each with a chance prob), into out: one at a time for fewer than
+    `row_groups` groups, and otherwise as a vectorized row, from counter-based uniforms (one key a call: see
+    `ss.perflib.draws`). rows is scratch (see `workspace()`)
+    """
+    ng = len(n)
+    if ng < row_groups:
+        for g in range(ng):
+            out[g] = binomial(rng, n[g], prob[g])
+    else:
+        draws.binomials(n, prob, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
+    return
+
+
+@kernel(inline='always') # A call with arrays costs more than the draws of a small model
+def poissons(rng, lam, out, rows):
+    """ A Poisson draw for every group, with mean lam, into out: as `binomials()` """
+    ng = len(lam)
+    if ng < row_groups:
+        for g in range(ng):
+            out[g] = poisson(rng, lam[g])
+    else:
+        draws.poissons(lam, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
+    return
+
+
+@kernel(inline='always')
+def some_binomials(rng, n, prob, out, rows):
+    """ As `binomials()`, but as a row only if `row_groups` groups or more have anyone to draw for (a split of one event of the exact solver has one) """
+    k = 0
+    for g in range(len(n)):
+        k += n[g] > 0
+    if k < row_groups:
+        for g in range(len(n)):
+            out[g] = binomial(rng, n[g], prob[g])
+    else:
+        draws.binomials(n, prob, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
+    return
 
 
 @jit
@@ -340,10 +426,10 @@ def land(rng, n, m, maps, out):
 
 
 @jit
-def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, counted):
-    """ Share n whole events between the targets of a flow (or the transitions it is also counted as), at random; a target's share is also counted in the flow to its destination (rec, in counted), if it has one """
+def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, counted, rows):
+    """ Share n whole events between the targets of a flow (or the transitions it is also counted as), at random; a target's share is also counted in the flow to its destination (rec, in counted), if it has one. rows is scratch for the draws (see `workspace()`) """
     ng = len(n)
-    total, left, drawn = scratch[0], scratch[1], scratch[2]
+    total, left, drawn, prob = scratch[0], scratch[1], scratch[2], rows[1]
     if b - a == 1 and weights[a].min() >= 1 - 1e-12:
         land(rng, n, -1 if credit else which[a], maps, out[comps[a]])
         if not credit and rec[a] >= 0:
@@ -361,7 +447,9 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
                 total[g] = 1.0
         for k in range(a, b): # One multinomial draw, as a chain of conditional binomials
             for g in range(ng):
-                drawn[g] = binomial(rng, left[g], weights[k, g]/total[g]) if total[g] > 0 else 0.0
+                prob[g] = weights[k, g]/total[g] if total[g] > 0 else 0.0
+            some_binomials(rng, left, prob, drawn, rows)
+            for g in range(ng):
                 left[g] -= drawn[g]
                 total[g] -= weights[k, g]
             land(rng, drawn, -1 if credit else which[k], maps, out[comps[k]])
@@ -377,34 +465,36 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
 
 
 @jit
-def credit(rng, n, a, b, p, scratch, flows):
+def credit(rng, n, a, b, p, scratch, flows, rows):
     """
     Count the events of a flow (n, by group) also in the transitions they pass through with no wait (see
     `ss.solvers.Compartmental.entry`). The credits nested in the same one (or in none) are exclusive, so they are one
-    multinomial draw from its count, as a chain of conditional binomials; a credit that overlaps the others is drawn on its own
+    multinomial draw from its count, as a chain of conditional binomials; a credit that overlaps the others is drawn on
+    its own. rows is scratch for the draws (see `workspace()`)
     """
     if b == a:
         return
     ng = len(n)
-    left, mass = scratch[0], scratch[1]
+    left, mass, prob = scratch[0], scratch[1], rows[1]
     for g in range(ng):
         left[0, g] = n[g]
         mass[0, g] = 1.0
     for k in range(a, b):
         q = p.crd_parent[k]
         i = k - a + 1
+        j = 0 if q < 0 else q - a + 1
+        if q == -2:
+            some_binomials(rng, n, p.crd_w[k], left[i], rows)
+        else:
+            for g in range(ng):
+                prob[g] = p.crd_w[k, g]/mass[j, g] if mass[j, g] > 0 else 0.0
+            some_binomials(rng, left[j], prob, left[i], rows)
         for g in range(ng):
-            w = p.crd_w[k, g]
-            if q == -2:
-                c = binomial(rng, n[g], w)
-            else:
-                j = 0 if q < 0 else q - a + 1
-                c = binomial(rng, left[j, g], w/mass[j, g]) if mass[j, g] > 0 else 0.0
-                left[j, g] -= c
-                mass[j, g] -= w
-            left[i, g] = c
-            mass[i, g] = w
-            flows[p.crd_index[k], g] += c
+            if q != -2:
+                left[j, g] -= left[i, g]
+                mass[j, g] -= p.crd_w[k, g]
+            mass[i, g] = p.crd_w[k, g]
+            flows[p.crd_index[k], g] += left[i, g]
     return
 
 
@@ -513,13 +603,13 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
             left[g] -= n[g]
         if p.named[f]:
             land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
     f = p.src_last[s] # The last stage
     if p.named[f]:
         land(rng, ends, p.record[f], p.maps, flows[p.index[f]])
-    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
     return
 
 
@@ -533,8 +623,8 @@ def draw(rng, y, p, w, dt, flows, tau):
     which flow each leaves by. Called by `step()`, which has worked out the rates.
     """
     ng = y.shape[1]
-    rates, groups, new = w[0], w[3], w[7]
-    total, left, n = groups[3], groups[4], groups[5]
+    rates, groups, new, rows = w[0], w[3], w[7], w[10]
+    total, left, n, prob = groups[3], groups[4], groups[5], rows[1]
     new[:] = y
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
@@ -552,22 +642,29 @@ def draw(rng, y, p, w, dt, flows, tau):
                 total[g] = 0
                 for k in range(a, b):
                     total[g] += max(rates[p.src_flows[k], g], 0.0)
-                if tau:
-                    left[g] = min(float(rng.poisson(total[g]*y[src, g]*dt)), y[src, g]) # Everyone who leaves, clipped once, so the order of the flows does not matter
-                else:
-                    left[g] = binomial(rng, y[src, g], -np.expm1(-total[g]*dt))
+                prob[g] = total[g]*y[src, g]*dt if tau else -np.expm1(-total[g]*dt)
+            if tau:
+                poissons(rng, prob, left, rows)
+            else:
+                binomials(rng, y[src], prob, left, rows)
+            for g in range(ng):
+                left[g] = min(left[g], y[src, g]) # For tau-leaping, everyone who leaves, clipped once, so the order of the flows does not matter
                 new[src, g] -= left[g]
         for k in range(a, b):
             f = p.src_flows[k]
             if p.det[f]:
                 continue
-            for g in range(ng):
-                if src < 0: # An inflow
-                    n[g] = rng.poisson(max(rates[f, g]*p.inflow[f, g]*dt, 0.0))
-                else:
+            if src < 0: # An inflow
+                for g in range(ng):
+                    prob[g] = max(rates[f, g]*p.inflow[f, g]*dt, 0.0)
+                poissons(rng, prob, n, rows)
+            else: # Which flow they leave by: one multinomial draw, as a chain of conditional binomials
+                for g in range(ng):
                     hazard = max(rates[f, g], 0.0)
-                    n[g] = binomial(rng, left[g], hazard/total[g]) if total[g] > 0 else 0.0
+                    prob[g] = hazard/total[g] if total[g] > 0 else 0.0
                     total[g] -= hazard
+                binomials(rng, left, prob, n, rows)
+                for g in range(ng):
                     left[g] -= n[g]
             if p.named[f] and p.record[f] < 0: # Counted in the group it happens in: as land() does, but written out (as is the one target below), since the calls cost more than the draws of a small model
                 for g in range(ng):
@@ -579,8 +676,8 @@ def draw(rng, y, p, w, dt, flows, tau):
                 for g in range(ng):
                     new[p.tgt_comp[t], g] += n[g]
             else:
-                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
     for m in range(p.n_movers): # Movement between groups: as move() does, but written out, since a call here (once a leap) slows tau-leaping by a few percent
         for e in range(p.mov_starts[1, m], p.mov_starts[1, m+1]):
             if p.mov_rate[e] != 0:
@@ -1178,8 +1275,25 @@ def settle(y, p, rates, dt, flows):
 
     A count is a real number, not a number of people, so it is never drawn. Its flows are
     integrated over dt by RK4, at the current rates and with the people as they are, so a count
-    that is filled at a steady rate and decays settles where it would in continuous time.
+    that is filled at a steady rate and decays settles where it would in continuous time. As
+    in the ODE, the step is split into enough substeps that no count turns over by more than
+    a quarter in one: in one step, RK4 is unstable once a count turns over by more than 2.8,
+    and mosquitoes that live 10 days died out at a 30-day step (MA6).
     """
+    fastest = 0.0
+    for f in range(len(p.src)):
+        if p.det[f] and p.src[f] >= 0:
+            for g in range(y.shape[1]):
+                fastest = max(fastest, rates[f, g])
+    n_sub = max(1, int(np.ceil(fastest*dt/0.25)))
+    for sub in range(n_sub):
+        settle_step(y, p, rates, dt/n_sub, flows)
+    return
+
+
+@jit
+def settle_step(y, p, rates, dt, flows):
+    """ For `settle()`: one RK4 step of the counts over a time dt """
     nc, ng = y.shape
     nf = len(p.src)
     nflows = flows.shape[0]
@@ -1297,8 +1411,8 @@ def event(rng, y, p, w, dt, flows):
         y[p.src[which], where] -= 1
     if p.named[which]:
         land(rng, n, p.record[which], p.maps, flows[p.index[which]])
-    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p, w[9], flows)
+    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p, w[9], flows, w[10])
     return wait
 
 
@@ -1397,8 +1511,8 @@ def convey(rng, y, p, w, flows, release):
                     idle[p.places[g]] = 0
             if p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows) # Not the last target, which is the slot they leave
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10]) # Not the last target, which is the slot they leave
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
         else:
             for g in range(ng):
                 for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, by rounding, in the ODE)
@@ -1442,19 +1556,35 @@ def release_rates(y, p, rates, dt):
     those arriving in the first slot over a step, of whom a share (1 - exp(-h·dt))/(h·dt) are left at
     its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a share
     exp(-h·K·dt), where leaving the last slot by itself kept exp(-h·(K - 1/2)·dt).
+
+    A flow from a last slot to last slots only (in a crossing, another disease's move, which
+    keeps the slot) is not an exit: the people it moves are due to leave as well, and those
+    in all the last slots together leave over the step, so none are left when the slots move.
     """
     nf = len(p.src)
     ng = y.shape[1]
+    is_last = np.zeros(y.shape[0], dtype=np.bool_)
+    for i in range(len(p.starts) - nf - 1):
+        a, b = p.starts[nf+i], p.starts[nf+i+1]
+        if p.ops[a] == CONVEY:
+            is_last[p.args[b-1]] = True
     for i in range(len(p.starts) - nf - 1):
         a, b = p.starts[nf+i], p.starts[nf+i+1]
         if p.ops[a] != CONVEY:
             continue
         last = p.args[b-1]
         f_out = p.args[a]
+        exits = np.zeros(nf, dtype=np.bool_)
+        for f in range(nf):
+            if p.src[f] == last:
+                exits[f] = p.tgt_starts[f+1] == p.tgt_starts[f] # A flow out of the model (a death) is an exit
+                for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                    if not is_last[p.tgt_comp[t]]:
+                        exits[f] = True
         for g in range(ng):
             x = 0.0
             for f in range(nf):
-                if p.src[f] == last:
+                if exits[f]:
                     x += max(rates[f, g], 0.0)*dt
             if x > 1e-12:
                 p.inflow[f_out, g] *= x/np.expm1(x)
@@ -1490,7 +1620,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
         tables (tuple): the fixed, mult, consts, and rel_trans tables (see `run()`), with three rows per step
         row (int): the row of the start of this step, or -1 if the program holds for the whole step
     """
-    rates, exposures, stack, groups, cells, dy, df, yt, chain, credits = w
+    rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows = w
     n, local_n, vals, infectious = groups[0], groups[1], groups[2], groups[3]
     num, den, num2, den2, prev = cells[0], cells[1], cells[2], cells[3], cells[4]
     nc, ng = y.shape
@@ -1943,8 +2073,8 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
         fixed, mult, consts, rel_trans (arrays): the values of these parts of the program at each step, or a single
             entry if they are the same throughout
         reg (Register): the events of a movement register, applied at the end of the step they are dated in (those of the start are already in y)
-        sh (Shifts): the deliveries, applied at the start of the step from the time point they happen at
-        tally (array): filled in with the number each delivery reached and found eligible, by group (time points by deliveries by 2 by groups)
+        sh (Shifts): the deliveries, applied at the start of each step they happen in; `due` is by the time point the step starts from
+        tally (array): filled in with the number each delivery reached and found eligible, by group, at the time point of the step it happened in, its end (time points by deliveries by 2 by groups)
         per_step (int): 3 if the tables have the values at the start, middle, and end of each step (for the ODE), and otherwise 1
         start (int): the time point that y is at; the run is taken from there to time point npts-1, so it can be taken a part at a time
             (the tables then start at the step from `start`, unless they have a single entry)
@@ -1965,7 +2095,7 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     for ti in range(start + 1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
         k = ti - start
         if len(sh.to):
-            apply_shifts(rng, y, sh, ti-1, whole, tally[k-1])
+            apply_shifts(rng, y, sh, ti-1, whole, tally[k])
             if sh.due[:, ti-1].any():
                 wake(w)
         set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
@@ -2021,11 +2151,11 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
                         wake(w)
                     for d in range(len(sh.to)):
                         for g in range(ng):
-                            tally[r, ti-1, d, 0, 0] += now_sh[d, 0, g]
-                            tally[r, ti-1, d, 1, 0] += now_sh[d, 1, g]
+                            tally[r, ti, d, 0, 0] += now_sh[d, 0, g]
+                            tally[r, ti, d, 1, 0] += now_sh[d, 1, g]
                             if n_rows:
-                                tally_g[r, rows[ti-1], d, 0, g] += now_sh[d, 0, g]
-                                tally_g[r, rows[ti-1], d, 1, g] += now_sh[d, 1, g]
+                                tally_g[r, rows[ti], d, 0, g] += now_sh[d, 0, g]
+                                tally_g[r, rows[ti], d, 1, g] += now_sh[d, 1, g]
                 set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
                 step(rng, y, p, w, dt, n_sub, solver, now, tables, (k-1)*per_step if per_step == 3 else -1)
                 if len(reg.src):

@@ -902,3 +902,8 @@ def return_fig(fig, **kwargs):
         if do_show:
             plt.show()
         return fig
+
+
+def __getattr__(name):
+    hint = ': for a flat dict of results, use sim.results.flatten()' if name == 'match_result_keys' else ''
+    raise AttributeError(f'module "starsim.utils" has no attribute "{name}"{hint}')

@@ -92,7 +92,7 @@ def strat_kwargs(strat):
         split = joint_split(split)
     levels = strat['levels']
     if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
-        levels = ss.geo.location(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
+        levels = ss.geo.geography(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
     if strat['kind'] == 'clock' and strat.get('unit'): # Durations
         levels = Code(f"ss.{strat['unit']}s({levels})")
     out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
@@ -273,16 +273,24 @@ def disease_code(spec, lines, left):
         extra.update({k:s[k] for k in ['rel_sus', 'rel_trans'] if s[k] != 1.0})
         if s['label'] is not None:
             extra['label'] = s['label']
-        if isinstance(s['init'], str):
-            extra['init'] = s['init'] # An expression of the parameters: written as Python below
+        for key in ['init', 'init_n']:
+            if isinstance(s.get(key), str):
+                extra[key] = s[key] # An expression of the parameters: written as Python below
         if extra:
             flush()
-            args = ', '.join(f'{k}={code_expr(v) if k == "init" else repr(v)}' for k,v in extra.items())
+            args = ', '.join(f'{k}={code_expr(v) if k in ["init", "init_n"] else repr(v)}' for k,v in extra.items())
             add(f"{s['name']} = ss.State('{s['name']}', {args})")
         else:
             plain.append(s['name'])
     flush()
     add('')
+
+    # Strains, which the transitions can refer to (move=DS >> RIF)
+    strained = [strat['strains'] for strat in spec['stratifications'] if strat.get('strains')] + ([spec['own_strains']] if spec.get('own_strains') else []) # Shared, or courses of their own from this natural history
+    for st in strained:
+        add('# Strains')
+        lines += strains_lines(st, 'strains', left)
+        add('')
 
     # Transitions
     def endpoint(names):
@@ -304,7 +312,7 @@ def disease_code(spec, lines, left):
                 dur = held[0]['name'] if held else code_value(d)
         src, dst = endpoint(t['src']), endpoint(t['dst'])
         untyped = dur in pars and unitless_dur(pars[dur]['value']) # Written as a number, which @ would read as a rate
-        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None and t.get('acquisition') is None and not t.get('move') and not t.get('increment')
+        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None and t.get('acquisition') is None and not t.get('move') and not t.get('increment') and not t.get('per')
         if simple:
             members.append((t['name'], f'{src} >> {dst} @ {operand(rate if rate is not None else dur)}'))
         else:
@@ -313,7 +321,9 @@ def disease_code(spec, lines, left):
                 args.append(f'rate={rate}')
             if dur is not None:
                 args.append(f'dur={dur}')
-            if t['p'] is not None:
+            if t.get('per'): # An outcome for each strain carried
+                args += ["per='strain'"] + (['alone=True'] if t['per'].get('alone') else [f"p={t['per']['p']!r}"])
+            elif t['p'] is not None:
                 args.append('p=[' + ', '.join('None' if p is None else code_expr(p) for p in t['p']) + ']')
             for k in ['stages', 'label']:
                 if t[k] is not None:
@@ -324,7 +334,7 @@ def disease_code(spec, lines, left):
             if t.get('acquisition') is not None:
                 args.append(f'acquisition={t["acquisition"]}')
             if t.get('move'):
-                args.append('move=dict(' + kwargs_code(t['move']) + ')')
+                args.append(move_code(t['move']))
             if t.get('increment'):
                 args.append(f'increment={increment_code(t["increment"])}')
             members.append((t['name'], f'ss.Transition({", ".join(args)})'))
@@ -347,9 +357,10 @@ def disease_code(spec, lines, left):
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
 
     # Initial values
-    inits = {s['name']:s['init'] for s in spec['states'] if s['init'] is not None and not isinstance(s['init'], str)}
-    if inits:
-        kwargs.append(('init', 'dict(' + ', '.join(f'{k}={code_value(v)}' for k,v in inits.items()) + ')'))
+    for key in ['init', 'init_n']:
+        inits = {s['name']:s[key] for s in spec['states'] if s.get(key) is not None and not isinstance(s[key], str)}
+        if inits:
+            kwargs.append((key, 'dict(' + ', '.join(f'{k}={code_value(v)}' for k,v in inits.items()) + ')'))
     if spec['init_prev'] and 'init_prev' in pars: # A parameter, e.g. of ss.SIR
         kwargs.append(('init_prev', 'init_prev'))
     elif spec['init_prev']:
@@ -357,6 +368,8 @@ def disease_code(spec, lines, left):
     if spec.get('first') and any(s['people'] for s in spec['states']): # Written, so that the model does not depend on the rule that finds it
         kwargs.append(('first', repr(spec['first'])))
     kwargs.append(('name', repr(name)))
+    if strained:
+        kwargs.append(('strains', 'strains'))
 
     var = name if name.isidentifier() else 'disease'
     members = ordered(members)
@@ -377,10 +390,11 @@ def disease_code(spec, lines, left):
         add(f'    {k:{width}s} = {v},')
     add(')')
     transfers = spec.get('transfers') or []
-    dims = [strat['name'] for strat in spec['stratifications']]
+    dims = [strat['name'] for strat in spec['stratifications'] if not strat.get('strains')]
     for strat in spec['stratifications']: # Each with the transfers along it
-        own = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] == strat['name']}
-        add(f'{var}.stratify({kwargs_code({**movable(strat, left), **own})})')
+        if strat['name'] in dims:
+            own = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] == strat['name']}
+            add(f'{var}.stratify({kwargs_code({**movable(strat, left), **own})})')
     rest = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] not in dims}
     if rest: # Along a dimension of the sim
         add(f'{var}.stratify({kwargs_code(rest)})')
@@ -388,18 +402,46 @@ def disease_code(spec, lines, left):
     return var
 
 
-def strains_code(spec, names, lines):
-    """ The Python for a family of diseases (`ss.Strains`), whose members are written before it; returns the names of the sim's diseases, with the family in place of its members """
+def strains_lines(spec, var, left, members=None):
+    """ The Python that makes an `ss.Strains` from its model spec, as the variable `var` (with `members`, the variables of the diseases that are its strains) """
+    values = spec.get('values') or {}
+    first = '[' + ', '.join(members) + ']' if members is not None else repr(spec['strains'])
+    kwargs = dict(shared=None if spec['shared'] is (members is None) else spec['shared'], max_strains=None if spec['max_strains'] == 1 else spec['max_strains'],
+                  transmit=None if spec['transmit'] == 'one' else spec['transmit'], split=spec['split'], name=None if spec['name'] == 'strain' else spec['name'])
+    kwargs.update(values)
+    args = kwargs_code(kwargs)
+    out = [f"{var} = ss.Strains({first}{', ' + args if args else ''})"]
     immunity = []
     for imm in spec['immunity']:
-        kwargs = {k:v for k,v in imm.items() if k != 'combine'}
-        kwargs['combine'] = imm['combine'] if imm['combine'] != 'max' else None
-        immunity.append(f'ss.immunity({kwargs_code(kwargs)})')
-    kwargs = dict(immunity=Code('[' + ', '.join(immunity) + ']') if immunity else None, init_prev=spec['init_prev'], split=spec['split'], exclusive=spec['exclusive'])
+        due = imm['due_to']
+        due = Code(f'{var}.{due.rpartition(".")[2]}') if isinstance(due, str) else Code(due[0]) if members is None and len(due) == 1 else due[0] if len(due) == 1 else due # The memory, or the state (a variable of the disease), or a name of each strain's state
+        imm_kwargs = dict(due_to=due, scale=imm.get('scale'), rel_sus=imm.get('rel_sus'), rel_trans=imm.get('rel_trans'), dur=imm.get('dur'), p=imm.get('p'), combine=None if imm['combine'] == 'max' else imm['combine'])
+        if imm.get('curve') is not None:
+            left.append(f'the curve of an ss.immunity of the strains "{spec["name"]}" ({imm["curve"]})')
+        immunity.append(f'ss.immunity({kwargs_code(imm_kwargs)})')
+    if immunity:
+        out.append(f"{var}.immunity = [{', '.join(immunity)}]")
+    return out
+
+
+def strains_code(spec, names, lines, left):
+    """ The Python for a disease whose strains have courses of their own (`ss.strains.Family`), whose strains are written before it as diseases; returns the names of the sim's diseases, with the disease in place of its strains """
     members = spec['members']
-    args = kwargs_code(kwargs)
-    lines += ['# Family', f"{spec['name']} = ss.Strains({spec['name']!r}, [{', '.join(members)}]{', ' + args if args else ''})", '']
-    return list(dict.fromkeys(spec['name'] if name in members else name for name in names)) # In the place of its first member
+    lines += ['# Strains with courses of their own'] + strains_lines(spec['strains'], f"{spec['name']}_strains", left, members=members)
+    init_prev = f', init_prev={code_value(spec["init_prev"])}' if spec['init_prev'] is not None else ''
+    lines += [f"{spec['name']} = ss.Disease(name={spec['name']!r}{init_prev}, strains={spec['name']}_strains)", '']
+    return list(dict.fromkeys(spec['name'] if name in members else name for name in names)) # In the place of its first strain
+
+
+def move_code(move, strains='strains'):
+    """ The Python for move= in the model spec: levels by dimension, pairs of levels (from, to), or a change of strains (`DS >> RIF`, with `strains` the code for the disease's ss.Strains) """
+    out = {}
+    for dim,level in move.items():
+        if isinstance(level, dict) and 'strains' in level: # A change of strains: the only move
+            strain = lambda names: f"{strains}[{names[0]!r}]" if len(names) == 1 else '(' + ', '.join(f"{strains}[{n!r}]" for n in names) + ')'
+            return f"move={strain(level['strains']['src'])} >> {strain(level['strains']['dst'])}"
+        out[dim] = Code(repr((level['src'][0] if len(level['src']) == 1 else level['src'], level['dst']))) if isinstance(level, dict) and 'src' in level else level
+    return 'move=dict(' + kwargs_code(out) + ')'
 
 
 def increment_code(inc):
@@ -411,7 +453,7 @@ def increment_code(inc):
 
 def transfer_code(tf):
     """ The Python for a transfer in the model spec """
-    target = tf['dst'] if tf['src'] is None else f"{tf['src']} -> {' | '.join(map(str, sc.tolist(tf['dst'])))}"
+    target = tf['dst'] if tf['src'] is None else (tf['src'], tf['dst'])
     first = [f'increment={increment_code({tf["dim"]:tf["increment"]})}'] if tf.get('increment') is not None else [f"{tf['dim']}={target!r}"]
     args = first + [f'{k}={code_expr(tf[k])}' for k in ['rate', 'dur'] if tf[k] is not None]
     args += [f"p=[{', '.join('None' if v is None else code_expr(v) for v in tf['p'])}]"] if tf.get('p') is not None else []
@@ -429,6 +471,8 @@ def contacts_code(net):
         args = [f'{mats["matrix"]!r}, bands={mats["bands"]!r}'] if 'bands' in mats else [f'{mats["matrix"]!r}, dims={mats["dims"]!r}'] if 'dims' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
         if net.get('name') != 'contacts':
             args.append(f'name={net["name"]!r}')
+        if net.get('contacts_unit') is not None:
+            args.append(f'unit={net["contacts_unit"]!r}')
         return f"ss.contacts({', '.join(args)})"
     ref = net.get('data')
     if not ref or ref.get('layer') is None:
@@ -450,7 +494,7 @@ def movable(strat, left):
     out = strat_kwargs({**plain, 'mobility':None})
     if strat.get('geo'): # A named geography as the call that looks it up, with its own split
         ref = strat['geo']
-        out[strat['name']] = Code(f"ss.geo.location({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
+        out[strat['name']] = Code(f"ss.geo.geography({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
         out.pop('split')
     if strat.get('split_from'):
         out.pop('split', None)
@@ -551,8 +595,13 @@ def delivery_code(iv, mods):
     prod = iv.get('product_spec')
     if prod is not None:
         args.append(mods[prod['name']][0])
-    if iv.get('move') is not None:
-        args.append(f'move={iv["move"]!r}')
+    if isinstance(iv.get('move'), str): # Between states, written with the disease's states
+        dis = mods.get(iv.get('disease'), [None])[0]
+        src, dst = iv['move'].split(' >> ')
+        state = lambda name: f'{dis}.{name}' if dis else f'ss.State({name!r})'
+        args.append(f"move={' + '.join(state(name) for name in src.split(' + '))} >> {state(dst)}")
+    elif iv.get('move') is not None:
+        args.append(move_code(iv['move'], f"{mods.get(iv.get('disease'), ['disease'])[0]}.strains"))
     if iv.get('increment'):
         args.append(f'increment={increment_code(iv["increment"])}')
     args += [f'{k}={value(k, iv[k])}' for k in delivery_keys if iv.get(k) is not None]
@@ -656,13 +705,19 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     if funcs:
         lines += ['# Functions'] + [line for block in funcs for line in block.splitlines() + ['']]
     names = []
-    for mod in [mod for mod in spec['modules'] if mod['type'] != 'Strains']:
-        if mod['type'] == 'Disease':
+    families = [mod for mod in spec['modules'] if mod['type'] == 'Family']
+    copies = {fam['members'][0]:fam for fam in families if fam['strains']['members'] is None} # Strains with courses of their own, copied from one natural history: written as it, once
+    skip = {name for fam in copies.values() for name in fam['members'][1:]}
+    for mod in [mod for mod in spec['modules'] if mod['type'] != 'Family' and mod['name'] not in skip]:
+        if mod['name'] in copies:
+            fam = copies[mod['name']]
+            names.append(disease_code(dict(mod, name=fam['name'], init_prev=fam['init_prev'], own_strains=fam['strains']), lines, left))
+        elif mod['type'] == 'Disease':
             names.append(disease_code(mod, lines, left))
         else: # Written as code (or declared, but not a disease): by the class that makes it, with its parameters, which the user can add
             left.append(f'module "{mod["name"]}" ({mod.get("factory") or mod["type"]}): make it and add it to ss.Sim(...)')
-    for fam in [mod for mod in spec['modules'] if mod['type'] == 'Strains']: # A family after its members, in their place among the sim's diseases
-        names = strains_code(fam, names, lines)
+    for fam in [fam for fam in families if fam['members'][0] not in copies]: # Strains with courses of their own after their strains, in their place among the sim's diseases
+        names = strains_code(fam, names, lines, left)
     if prelude:
         lines += ['# Interventions'] + prelude + ['']
     cfg = spec['config']
@@ -805,16 +860,16 @@ def diff(a, b, output=False):
         model += [f"module '{k}' removed" for k in ma if k not in mb] + [f"module '{k}' added" for k in mb if k not in ma]
     for x,y in pairs:
         prefix = f"{x['name']}: " if len(pairs) > 1 else ''
-        if 'Strains' in (x['type'], y['type']): # A family: its members and its options
-            for key in ['members', 'exclusive', 'immunity', 'init_prev', 'split']:
-                vx, vy = x.get(key), y.get(key)
+        if 'Family' in (x['type'], y['type']): # Strains with courses of their own: their strains and options
+            for key in ['members', 'shared', 'immunity', 'init_prev', 'split', 'values']:
+                vx, vy = (x if key in ['members', 'init_prev'] else x.get('strains', {})).get(key), (y if key in ['members', 'init_prev'] else y.get('strains', {})).get(key)
                 if key == 'immunity' and vx and vy and len(vx) == len(vy): # Each, by what it protects with and what it lowers (the structure), then by its values
                     for i,(ix,iy) in enumerate(zip(vx, vy)):
                         for k in sorted(set(ix) | set(iy)):
                             if ix.get(k) != iy.get(k):
-                                (pars if k in ['rel_sus', 'rel_trans', 'dur'] and k in ix and k in iy else model).append(f'{prefix}immunity[{i}].{k} {shown(ix.get(k))} -> {shown(iy.get(k))}')
+                                (pars if k in ['rel_sus', 'rel_trans', 'dur', 'p'] and k in ix and k in iy else model).append(f'{prefix}immunity[{i}].{k} {shown(ix.get(k))} -> {shown(iy.get(k))}')
                 elif vx != vy:
-                    (pars if key in ['init_prev', 'split'] and None not in (vx, vy) else model).append(f'{prefix}{key} {shown(vx, unit)} -> {shown(vy, unit)}')
+                    (pars if key in ['init_prev', 'split', 'values'] and None not in (vx, vy) else model).append(f'{prefix}{key} {shown(vx, unit)} -> {shown(vy, unit)}')
             continue
         as_dict = lambda pars: dict(pars) if isinstance(pars, dict) else {p['name']:p['value'] for p in pars} # A module written as code keeps its parameters by name
         px, py = as_dict(x.get('pars') or []), as_dict(y.get('pars') or [])
@@ -827,10 +882,10 @@ def diff(a, b, output=False):
             model.append(f"{prefix}first {x['first']} -> {y['first']}")
         for s in [s for s in x.get('states', []) if s['name'] in sy]:
             t = next(o for o in y['states'] if o['name'] == s['name'])
-            for key in ['people', 'rel_sus', 'rel_trans', 'init']:
-                rest = key == 'init' and s['name'] == first and None in (s[key], t[key]) # The first state starts with the rest, whether or not it is written
-                if s[key] != t[key] and not rest:
-                    (model if key == 'people' else pars).append(f"{prefix}{s['name']}.{key} {shown(s[key])} -> {shown(t[key])}")
+            for key in ['people', 'rel_sus', 'rel_trans', 'init', 'init_n']:
+                rest = key in ['init', 'init_n'] and s['name'] == first and None in (s.get(key), t.get(key)) # The first state starts with the rest, whether or not it is written
+                if s.get(key) != t.get(key) and not rest:
+                    (model if key == 'people' else pars).append(f"{prefix}{s['name']}.{key} {shown(s.get(key))} -> {shown(t.get(key))}")
 
         # Transitions: by name, then by endpoints
         tx = {t['name']:t for t in x.get('transitions', [])}

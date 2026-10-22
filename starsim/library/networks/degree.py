@@ -4,7 +4,7 @@ Partnerships with a target number of partners at a time, as in EpiModel's networ
 `DegreeNet` has lasting partnerships between anyone, with a target distribution of the number of
 partners people have at a time (a mean, a share with two or more, a maximum), partnerships within a
 level of a property of people (EpiModel's nodematch), and a number of partners for each level (nodefactor)
-(`ss.SexualNet` takes the first of these). `ss.interop.load(..., format='epimodel')`
+(`ss.SexualNet` takes the first two, matching on one property). `ss.interop.load(..., format='epimodel')`
 makes a `DegreeNet` from a network fitted by EpiModel's `netest()`.
 """
 import itertools
@@ -158,15 +158,6 @@ class DegreeNet(ss.networks.DegreeTargets, ss.DynamicNetwork):
         for key,name in self.match_results.items():
             self.define_results(ss.Result(name, label=f'Share of partnerships at the same level{"" if name == "match" else f" of {key}"}', auto_plot=False))
         return
-
-    def levels(self, name=None):
-        """ The level of every person in a property of people (by default, the one match= names), as an array indexed by UID """
-        sim = self.sim
-        name = list(self.pars.match.keys())[0] if name is None else name
-        names = [strat.name for strat in sim.groups.strats]
-        if name in names: # A stratification
-            return sim.groups.level_raw(names.index(name))
-        return np.asarray(sim.people[name].raw)
 
     def match_pairs(self, people, rvs=None):
         """

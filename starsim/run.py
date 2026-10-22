@@ -368,7 +368,7 @@ class MultiSim:
                 quantiles = {q:q for q in quantiles}
 
         summary = sc.objdict()
-        for key,res in self.results.flatten(sep='_', keep_case=True, columns=True).items():
+        for key,res in self.results.flatten(sep='_', columns=True).items():
             func = how.get(key, how.get(''))
             if func is None:
                 arr = np.asarray(res.summarize()) # One value per run
@@ -418,7 +418,7 @@ class MultiSim:
             labels.append(f'{label} ({i})' if label in labels or scenarios.count(scenarios[i]) > 1 else label) # Avoid duplicates
         year = ss.date(t).years if (t is not None and not sc.isnumber(t)) else None
         resdict = {label:{} for label in labels}
-        for key,res in self.results.flatten(sep='_', keep_case=True, columns=True).items():
+        for key,res in self.results.flatten(sep='_', columns=True).items():
             if t is None:
                 vals = np.asarray(res.summarize())
             else:

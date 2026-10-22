@@ -215,7 +215,7 @@ class FetalHealth(ss.Module):
 
         # Results
         n  = len(newborn_uids)
-        ti = self.ti + 1 # At the end of the step (self.ti is its start)
+        ti = self.ti
         self.results['n_births'][ti]          += n
         self.results['n_lbw'][ti]             += lbw.sum()
         self.results['n_vlbw'][ti]            += vlbw.sum()
@@ -527,9 +527,9 @@ class fetal_infection(ss.Connector):
         if not preg.P.any():
             return
 
-        # Find pregnant women infected on the previous timestep (since transmission happens after connectors; dated at its end, see ss.Disease.ti_entry), excluding new pregnancies (handled at conception)
+        # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception; dated at the start of the step, see ss.solvers.Engine.ti)
         pregnant_uids  = preg.P.uids
-        newly_infected = (sim.diseases.sir.ti_infected == self.ti) & (preg.ti_P < self.ti)
+        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_P < preg.engine.ti)
         affected = pregnant_uids[newly_infected[pregnant_uids]]
         if len(affected):
             self.fh.n_exposures[affected] += 1

@@ -1,7 +1,15 @@
 """
-Named data: places and contact matrices looked up by name
+Data by place: ages, populations, birth and death rates, contact matrices, and administrative units
 
-`ss.people('Kenya')`, `ss.geo.location('Kenya', level=1)`, and `ss.contacts('Kenya')` read their data from
+    ss.data.age('Kenya')                    # The age_data of ss.People: counts by 5-year age group ('world' needs no download)
+    ss.data.population('Kenya', year=2020)  # By age and sex
+    ss.data.rates('Kenya', 'deaths')        # Birth or death rates, by year
+    ss.data.contacts('Kenya', layer='home') # A contact matrix by age
+    ss.data.geography('Kenya', level=1)     # Administrative units, with populations and positions
+
+These are tables. The model objects that take a place by name read them from here:
+`ss.people('Kenya')`, `ss.geo.geography('Kenya', level=1)`, `ss.contacts('Kenya')`,
+and `ss.Births(birth_rate='Kenya')`. The data comes from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
 record of where it came from (`ref`), which is written into the model spec, so the
@@ -11,7 +19,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['provider', 'geography', 'population', 'contact_matrix', 'world', 'age_data', 'age_split']
+__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'provider']
 
 layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the contact matrices
 
@@ -26,9 +34,31 @@ world = sc.objdict(
 )
 
 
-def age_data(ages, counts):
-    """ The `age_data` of `ss.People` for counts by 5-year age group (the last is 100 and over, taken to end at 105) """
+def to_age_data(ages, counts):
+    """ The `age_data` of `ss.People` for counts by 5-year age group (the last is 100 and over, taken to end at 105); not for the user """
     return np.column_stack([np.append(ages, ages[-1] + 5), np.append(counts, 0)])
+
+
+def age(place='world', year=None):
+    """
+    The ages of a place's people, as the `age_data` of `ss.People`: counts by 5-year age group
+
+    Args:
+        place (str): a country, by name or code, or 'world' (the world's population in 2024, which needs no download)
+        year (int): the year (default: the year of the data); not for 'world'
+
+    Examples:
+        ```python
+        ppl = ss.People(10_000, age_data=ss.data.age('Kenya', year=2020))
+        ```
+    """
+    if place == 'world':
+        if year is not None:
+            errormsg = f"year={year} is not available for the world's ages, which are those of 2024; give a country for another year"
+            raise ValueError(errormsg)
+        return to_age_data(world.ages, world.counts)
+    ages, female, male, _ = population(place, year=year)
+    return to_age_data(ages, female + male)
 
 
 def age_split(edges, ages, counts):
@@ -47,11 +77,11 @@ def age_split(edges, ages, counts):
 
 
 def provider():
-    """ The data provider, `starsim_data`, imported when named data is first used """
+    """ The data provider, `starsim_data`, imported when it is first used """
     try:
         import starsim_data as ssd
     except ImportError as E:
-        errormsg = 'Named data (ss.geo.location("Kenya"), ss.contacts("Kenya")) comes from the starsim_data package: pip install starsim_data'
+        errormsg = 'Data by place (ss.data, ss.people("Kenya"), ss.contacts("Kenya")) comes from the starsim_data package: pip install starsim_data'
         raise ImportError(errormsg) from E
     return ssd
 
@@ -96,7 +126,7 @@ def nodes(ssd, place, level, year):
 
 def geography(place, level=1, year=None, places=None):
     """
-    The places of a named geography, for `ss.geo.location('Kenya', level=1)`
+    The administrative units of a place, for `ss.geo.geography('Kenya', level=1)`
 
     Args:
         place (str/list): a country, by name or code ('Kenya', 'KE', 'KEN'), or several
@@ -195,7 +225,7 @@ def population(place, year=None, revision=None):
     return ages, counts['Female'], counts['Male'], info
 
 
-def contact_matrix(place, source='prem2021', layer='all'):
+def contacts(place, source='prem2021', layer='all'):
     """
     A contact matrix by age for a named place, for `ss.contacts('Kenya')`
 

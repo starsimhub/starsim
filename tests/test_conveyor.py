@@ -79,7 +79,7 @@ def test_exit_split():
     def make():
         P, C, R = ss.states('P C R')
         p_cin = logf2(P.time/ss.years(1), k)
-        return ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[p_cin, None], dur=ss.lognorm_ex(ss.years(3), ss.years(2))), name='hpv')
+        return ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[p_cin, None], dur=ss.lognorm_ex(ss.years(3), ss.years(2))), first='P', name='hpv')
     kw2 = dict(start=2000, stop=2030, dt=0.25, unit='year', **kw)
     sigma2 = np.log(1 + (2/3)**2) # The lognormal of mean 3 and sd 2, in whole steps as agents leave at the one nearest their dwell
     dwell = np.random.default_rng(0).lognormal(np.log(3) - sigma2/2, np.sqrt(sigma2), 1_000_000)
@@ -118,7 +118,7 @@ def test_bv_clock():
     sc.heading('The time in a state in a rate, as agents only: BV recurrence by P.time')
     def cohort(): # A cohort that starts in P leaves at the hazard of its time in P: as agents, the hazard at the start of each step
         P, R = ss.states('P R')
-        return ss.Disease(P, R, recur=P >> R @ ss.permonth(0.06)*np.exp(-P.time/ss.months(3)), name='bv')
+        return ss.Disease(P, R, recur=P >> R @ ss.permonth(0.06)*np.exp(-P.time/ss.months(3)), first='P', name='bv')
     kw2 = dict(start=2000, stop=2003, dt=ss.months(1), unit='year', **kw)
     abm = ss.Sim(cohort(), n_agents=10_000, **kw2).run().results.bv
     h = 0.06*np.exp(-np.arange(len(abm.n_P))/3) # Per month, at the start of each month in P

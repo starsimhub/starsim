@@ -51,7 +51,7 @@ notes = [
     'Methods are listed under the class that defines them (e.g. `ss.Result.select()` under `ss.Result`), not under each subclass that inherits them.',
     'Any model that is not in the library (an SIRS, an SEIRS, a model with more states) is written as a declared disease: `S, I, R = ss.states(3)`, then `ss.Disease(S >> I @ beta * I, I >> R @ ss.days(7), R >> S @ ss.days(90))`. There a duration alone (`ss.days(7)`) is the mean of an exponential.',
     'The library `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models: a duration is the mean of an exponential, and nobody dies of the infection unless `p_death` is given. Starsim 3\'s versions (lognormal `dur_inf`, `p_death=0.01`) are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.',
-    '`init_prev=` seeds the state a new infection enters (`E` in an SEIR, so nobody starts infectious); `init=dict(I=10)` starts people in a named state.',
+    '`init_prev=` seeds the state a new infection enters (`E` in an SEIR, so nobody starts infectious); `init_n=dict(I=10)` starts people in a named state.',
     'The population of a sim is `total_pop=`, under every solver. `n_agents=` is the number of agents: giving it makes `solver="auto"` run as agents, and a compartmental run uses it as `total_pop` if that is not given.',
     'Many runs (`sim.run(n_runs=10)` or `ss.parallel(sim, n_runs=10)`) give an `ss.MultiSim`, whose results have a run axis first: `msim.results.sir.infection.values` has one row per run, and `.median()` and `.quantiles()` summarize over the runs. `msim.sims` has the sim of each run.',
 ]

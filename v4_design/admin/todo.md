@@ -33,8 +33,7 @@
 
 - [ ] Figure out why sc.asd() doesn't work better for ODE models
 - [ ] Settle NUM_THREADS pros/cons across platforms
-- [ ] Use `sc.obj`
-- [ ] Replace Bunch with sc.obj()
+- [ ] Use `sc.obj` / replace Bunch with sc.obj()
 - [ ] Atomica example, fix `foi  = (1 - (1 - prev * transpercontact)**contacts) * (1 - 0.008)`
 - [ ] Dan: too confusing to have beta * I vs beta * I.n, hidden and not the obvious thing
 
@@ -47,6 +46,7 @@
 - [ ] Consider GPU support
 - [ ] Consider differentiable ABM
 - [ ] Think about vectors
+- [ ] Think about variance minimization and other old moonshot issues
 
 ## AI 0/4
 

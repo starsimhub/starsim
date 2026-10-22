@@ -9,13 +9,10 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
 
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`, and `ss.MFNet` to `ss.SexualNet`), a fractional `verbose` (now `verbose=1`), `res.annualize()`
 (now `res.resample('year')`), subclasses of Starsim 3's SIR, SIS, and SEIR written as code
-(`ss.SIS` to `ssl.AgentSIS`, and `ss.Disease` to `ss.Infection`, which is now the base of a disease written as code), a `beta` pair on
+(e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` and `ss.Infection` keep their meaning), a `beta` pair on
 `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those
-networks transmit one way), and the time index: in
-`update_results()` and in analyzers, `self.ti` is the end of the step, so an event dated
-during the step is at `self.ti - 1`; and a result written in `step()` goes at `self.ti + 1`; and, from Starsim 4's
-prereleases, a test's follow-ups nested in it (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of
+networks transmit one way); and, from Starsim 4's prereleases, a test's follow-ups nested in it (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of
 their own (to add to the interventions), and `ss.Test`, now `ss.Diagnostic`.
 Read the diff afterwards: each change is listed with its line.
 """
@@ -35,9 +32,9 @@ renames = [
     (r'\bss\.RandomExactNet\(\)',  "ss.RandomNet(method='exact')",   "ss.RandomExactNet is ss.RandomNet(method='exact')"),
     (r'\bss\.RandomExactNet\(',    "ss.RandomNet(method='exact', ", "ss.RandomExactNet is ss.RandomNet(method='exact')"),
     (r'\bss\.(RandomSafeNet|ClusterNet|HybridNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
-    (r'\bss\.MFNet\b',            'ss.SexualNet',                   "ss.MFNet is ss.SexualNet (sides='mf' is its default)"),
-    (r'\bss\.MSMNet\(\)',          "ss.SexualNet(sides='mm')",       "ss.MSMNet is ss.SexualNet(sides='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
-    (r'\bss\.MSMNet\(',            "ss.SexualNet(sides='mm', ",      "ss.MSMNet is ss.SexualNet(sides='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
+    (r'\bss\.MFNet\b',            'ss.SexualNet',                   "ss.MFNet is ss.SexualNet (between='mf' is its default)"),
+    (r'\bss\.MSMNet\(\)',          "ss.SexualNet(between='mm')",       "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
+    (r'\bss\.MSMNet\(',            "ss.SexualNet(between='mm', ",      "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.NCD\b',              'ssl.NCD',                        'ss.NCD moved to the library (ssl.NCD)'),
     (r'\bss\.Route\b',             'ss.networks.Route',              'ss.Route is ss.networks.Route'),
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
@@ -45,10 +42,14 @@ renames = [
     (r'''(\bverbose['"]?\s*[=:]\s*)(1\s*/\s*\d+(\.\d*)?|0?\.\d+)\b''', r'\g<1>1', 'a fractional verbose (print every n steps) is verbose=1, which prints the progress about ten times a run'),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
     (r'\bss\.Test\b',             'ss.Diagnostic',                  'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic, the same class, so a subclass of it needs only the rename'),
-    (r'\bss\.(demographics\.Pregnancy|LegacyPregnancy)\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments, attributes, results, and callbacks)"),
+    (r'\bss\.(demographics\.Pregnancy|LegacyPregnancy)\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments and callbacks; its states and results have v4's names)"),
+    (r'\b(\w*preg\w*)\.pregnant\b',  r'\1.P',                        "ss.Pregnancy's pregnant is its state P"),
+    (r'\b(\w*preg\w*)\.ti_pregnant\b', r'\1.ti_P',                   "ss.Pregnancy's ti_pregnant is ti_P, the step P was entered"),
+    (r'\b(\w*preg\w*)\.(stillbirth|miscarriage|birth)s\b', r'\1.\2', "ss.Pregnancy's results are its flows: stillbirth, miscarriage, birth"),
+    (r'\b(\w*preg\w*)\.pregnancies\b', r'\1.conception',            "ss.Pregnancy's pregnancies result is its flow conception"),
     (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
     (r'\beligible=',              'where=',                         'eligible= of a delivery (a Starsim 4 prerelease) is where='),
-    (r'\bss\.geo\(',              'ss.geo.location(',               'ss.geo (a Starsim 4 prerelease) is ss.geo.location'),
+    (r'\bss\.geo\(',              'ss.geo.geography(',              'ss.geo (a Starsim 4 prerelease) is ss.geo.geography'),
     (r'\bss\.(gravity|Mobility)\b', r'ss.geo.\1',                     'ss.gravity and ss.Mobility (a Starsim 4 prerelease) are in ss.geo'),
 ]
 
@@ -73,7 +74,10 @@ flags = [
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
     (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
-    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's attributes, results and callbacks), and Starsim 3's pregnancy written as code was removed: instead of overriding its methods, add transitions (ss.on(preg.conception), ss.on(preg.delivery)), or use its callbacks (add_conception_callback(), add_delivery_callback())"),
+    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments and callbacks), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and ss.Lactation for postpartum, ss.on(preg.birth) or add_delivery_callback() at a delivery"),
+    (r'\b\w*preg\w*\.ti_delivery\b', "ss.Pregnancy's scheduled delivery is ti_exit_P (fractional: np.ceil(preg.ti_exit_P[uids]) is Starsim 3's step); a loss can end the pregnancy first"),
+    (r'\b\w*preg\w*\.tri[123]_uids\b', "ss.Pregnancy has no trimesters: the gestational age is the time in P, e.g. weeks = (sim.ti - preg.ti_P[uids])*sim.t.dt_year*52 for the pregnant (preg.P.uids), or preg.P.time in a declared condition"),
+    (r'\b\w*preg\w*\.(breastfeeding|gestation|n_miscarriages|n_stillbirths|carrying_multiple)\b', "removed from ss.Pregnancy: breastfeeding is the state L of ss.Lactation; the gestational age is the time in P (preg.P.time); losses per woman are ss.attr(1, on=preg.miscarriage, combine='sum')"),
     (r'\.(make_embryos|make_pregnancies|make_p_conceive|select_conceivers|process_delivery|process_newborns|process_maternal_deaths|process_neonatal_deaths|process_prenatal_deaths|progress_pregnancies|update_breastfeeding|update_maternal_deaths|set_breastfeeding|set_rel_sus|draw_dur_pregnancy|updates_pre)\(', "a method of Starsim 3's pregnancy written as code, which was removed; ss.Pregnancy does this with its transitions and events (preg.conception, preg.delivery, preg.birth), or add_conception_callback()/add_delivery_callback()"),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
@@ -194,7 +198,7 @@ def find_analyzers(texts):
 
 
 def migrate_ast(text, analyzers=None):
-    """ The changes that need the structure of the code: the bases of diseases written as code, and the time index """
+    """ The changes that need the structure of the code: the bases of diseases written as code; and what to check about the time index, which is Starsim 3's in every phase of a step, except that the first step is `ti == 1` """
     tree = ast.parse(text)
     edits = Edits(text)
     found = [] # (line, message) for a person
@@ -202,29 +206,19 @@ def migrate_ast(text, analyzers=None):
     analyzer_steps = [] # The lines of analyzers' step(), which also run at the first time point
 
     def visit_func(func, analyzer):
-        """ The time index in update_results() (and an analyzer's step()), and results written in step() """
+        """ An analyzer's step(), which also runs at the start; the first step, which is ti == 1; and results written in finish_step() """
         if analyzer and func.name == 'step':
             analyzer_steps.append(func.lineno)
-        if func.name == 'update_results' or (analyzer and func.name == 'step'):
-            for node in ast.walk(func):
-                if isinstance(node, ast.Compare):
-                    operands = [node.left] + node.comparators
-                    if sum(map(is_ti, operands)) == 1: # Leave e.g. ti == self.ti alone
-                        for op in operands:
-                            if is_ti(op):
-                                src = ast.unparse(op)
-                                edits.add(op, f'({src} - 1)', f'in {func.name}(), {src} is the end of the step: an event during it is at {src} - 1')
-        elif func.name == 'step' and not analyzer:
-            for node in ast.walk(func):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AugAssign) else []
-                for target in targets:
-                    if isinstance(target, ast.Subscript) and is_ti(target.slice) and 'results' in ast.unparse(target.value):
-                        src = ast.unparse(target.slice)
-                        edits.add(target.slice, f'{src} + 1', f'a result written in step() goes at {src} + 1, the end of the step')
+        elif func.name in ['step', 'step_state']:
+            for node in [n for n in ast.walk(func) if isinstance(n, ast.Compare)]:
+                operands = [node.left] + node.comparators
+                zero = any(isinstance(op, ast.Constant) and op.value == 0 for op in operands)
+                if zero and any(map(is_ti, operands)):
+                    found.append((node.lineno, f'in {func.name}(), the first step is ti == 1 (ti == 0 is the start of the run, before any step); for something to do once at the start, use init_post()'))
         elif func.name == 'finish_step':
             for node in ast.walk(func):
                 if isinstance(node, (ast.Assign, ast.AugAssign)) and 'results' in ast.unparse(node):
-                    found.append((node.lineno, 'a result written in finish_step() comes after update_results() has run for the step: count it in step() instead, at self.ti + 1'))
+                    found.append((node.lineno, 'a result written in finish_step() comes after update_results() has run for the step: count it in step() instead, at self.ti'))
                     break
 
     for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
@@ -235,8 +229,6 @@ def migrate_ast(text, analyzers=None):
                 new = agent_bases[name]
                 uses_ssl = True
                 edits.add(b, new, f'Starsim 3\'s ss.{name}, written as code, is {new} (ss.{name} is now declared)')
-            elif name == 'Disease' and not is_declared(cls):
-                edits.add(b, 'ss.Infection', 'a disease written as code subclasses ss.Infection (ss.Disease is now declared)')
         for stmt in cls.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit_func(stmt, analyzer)

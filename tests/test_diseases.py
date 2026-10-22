@@ -45,8 +45,8 @@ def test_sir():
     def closed(sir):
         cl = ss.modify(sir.pars.beta, multiply=0.6, start=ss.days(30), stop=ss.days(90))
         return ss.Sim(sir, interventions=cl, **kw).run().results.sir
-    a = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.days(7), init=dict(I=100)))
-    b = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.expon(scale=ss.days(7)), init=dict(I=100)))
+    a = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.days(7), init_n=dict(I=100)))
+    b = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.expon(scale=ss.days(7)), init_n=dict(I=100)))
     assert abs(a.infection.sum() - b.infection.sum())/b.infection.sum() < 0.01 # 714,770 each; 785,847 with Starsim 3's lognormal
     assert a.death.sum() == 0
     agent = ssl.AgentSIR()
@@ -76,8 +76,8 @@ def test_sir_epi():
         if par == 'p_death':
             v0, v1 = s0.results.cum_deaths[-1], s1.results.cum_deaths[-1]
         else:
-            ind = 1 if par == 'init_prev' else -1
-            v0, v1 = s0.results.sir.prevalence[ind], s1.results.sir.prevalence[ind]
+            prev = [s.results.sir.prevalence for s in [s0, s1]]
+            v0, v1 = [p[1] if par == 'init_prev' else p.max() if par in ['beta', 'n_contacts'] else p[-1] for p in prev] # The peak for what speeds the epidemic up, which may have burned out by the end
         assert v0 <= v1, f'Expected prevalence to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
 
     return s0, s1
@@ -241,8 +241,8 @@ def test_ncd():
         plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
         plt.title('NCD')
 
-    # A disease written as code that is not an infection (Starsim 3's ss.Disease), and an infection with no beta
-    class Anemia(ss.Infection):
+    # A disease written as code that is not an infection (as Starsim 3's ss.Disease), and an infection with no beta
+    class Anemia(ss.Disease):
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.bernoulli(0.1))
@@ -256,10 +256,11 @@ def test_ncd():
         pass
 
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
+    anemia = sim2.diseases.anemia
     assert sim2.results.anemia.n_anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
-    with pytest.raises(ss.CapabilityError, match='ss.Infection'): # ss.Disease is declared, so one that declares nothing points to ss.Infection
-        type('Empty', (ss.Disease,), {})()
+    assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.Infection) and isinstance(sim2.diseases.background, ss.Disease)
+    assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe(output=True) # No states of an infection forced on it
     return sim
 
 
@@ -474,8 +475,13 @@ def test_congenital():
     return sim
 
 
+def family(members, name='hpv', init_prev=None, **kwargs):
+    """ A disease whose strains are diseases of their own (ss.Strains of diseases), each with its own course """
+    return ss.Disease(name=name, init_prev=init_prev, strains=ss.Strains(members, **kwargs))
+
+
 def make_genotype(name, beta=3.0, **kwargs):
-    """ One genotype of a toy HPV: infection, clearance with immunity that wanes, and cancer (for ss.Strains) """
+    """ One genotype of a toy HPV: infection, clearance with immunity that wanes, and cancer (for strains with courses of their own) """
     S, I, R, Ca = ss.states('S I R Ca')
     return ss.Disease(
         infection   = S >> I @ ss.peryear(beta)*I,
@@ -495,10 +501,10 @@ def make_genotype(name, beta=3.0, **kwargs):
 def test_strains_results():
     sc.heading('Testing a family of diseases: union results and conditions, and one cancer per person')
     names = ['hpv16', 'hpv18', 'hpv31']
-    hpv = ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18', 2.5), make_genotype('hpv31', 2.0)],
-        immunity  = ss.immunity(protected='R', rel_sus=[[0.9, 0.3, 0.2], [0.3, 0.9, 0.2], [0.1, 0.1, 0.5]], combine='sum'),
+    hpv = family([make_genotype('hpv16'), make_genotype('hpv18', 2.5), make_genotype('hpv31', 2.0)],
+        immunity  = ss.immunity(due_to='R', rel_sus=[[0.9, 0.3, 0.2], [0.3, 0.9, 0.2], [0.1, 0.1, 0.5]], combine='sum'),
         init_prev = 0.1,
-        exclusive = 'Ca',
+        shared    = 'Ca',
     )
     counts = []
     def count(sim): # The union and the co-infected, by hand, at every time point
@@ -511,9 +517,9 @@ def test_strains_results():
     assert sim.solver == 'abm' and list(sim.diseases.keys()) == names + ['hpv']
     assert np.array_equal(res.hpv.infected, union) and coinfected.max() > 0 # A union, not a sum: the co-infected are counted once
     assert np.array_equal(res.hpv.cancer, sum(res[name].cancer for name in names)) # A flow is a sum
-    assert np.array_equal(res.hpv.infected.by('hpv')[:, 1], res.hpv18.infected) # Each member's own
+    assert np.array_equal(res.hpv.infected.by('strain')[:, 1], res.hpv18.infected) # Each member's own
     assert two_cancers.max() == 0 and res.hpv.n_X[-1] > 0 # One cancer per person: the others move to X
-    assert 'Family hpv: 3 members' in sim.describe(output=True)
+    assert 'Strains of hpv: 3 with courses of their own' in sim.describe(output=True)
 
     # A union is a condition, with a count of members
     sim = ss.Sim(diseases=hpv, n_agents=500, start=2000, stop=2001, verbose=0).init()
@@ -535,7 +541,7 @@ def test_strains_immunity():
     matrix = [[0.2, 0.5], [0.1, 0.4]] # Rows from, columns against
     def rel_sus(combine):
         """ rel_sus of hpv16 for someone who has had both, someone who has had hpv16 only, and someone who has had neither; all with a vaccine of efficacy 0.5 """
-        hpv = ss.Strains('hpv', [hpv16, hpv18], immunity=ss.immunity(protected='R', rel_sus=matrix, combine=combine))
+        hpv = family([hpv16, hpv18], immunity=ss.immunity(due_to='R', rel_sus=matrix, combine=combine))
         vaccine = ss.modify(hpv16.rel_sus, multiply=0.5, where=ss.ppl.age >= 0)
         sim = ss.Sim(diseases=hpv, connectors=vaccine, n_agents=100, verbose=0).init()
         sim.diseases.hpv16.move_to(ss.uids([0, 1]), 'R')
@@ -552,7 +558,7 @@ def test_strains_immunity():
     left = []
     for dur in [0.0, 0.5]:
         a, b = make('a', 0.0), make('b', 0.0)
-        hpv = ss.Strains('hpv', [a, b], immunity=ss.immunity(protected='R', dur=dict(I=[[0, 0], [dur, 0]])))
+        hpv = family([a, b], immunity=ss.immunity(due_to='R', dur=dict(I=[[0, 0], [dur, 0]])))
         sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
         sim.diseases.b.move_to(sim.people.auids, 'R')
         sim.diseases.a.move_to(sim.people.auids, 'I')
@@ -577,7 +583,7 @@ def test_strains_immunity_attr():
     # Antibodies fixed at known values: rel_sus and rel_trans of each genotype, by the rule
     def mults(combine, nab_init=0):
         a, b = make_nab_genotype('a', init_prev=0, nab_init=nab_init), make_nab_genotype('b', init_prev=0, nab_init=nab_init)
-        hpv = ss.Strains('hpv', [a, b], immunity=ss.immunity(protected='nab', rel_sus=m, rel_trans=m, combine=combine))
+        hpv = family([a, b], immunity=ss.immunity(due_to='nab', rel_sus=m, rel_trans=m, combine=combine))
         sim = ss.Sim(diseases=hpv, n_agents=100, verbose=0).init()
         a, b = sim.diseases.a, sim.diseases.b
         a.nab.raw[:3] = [0.6, 0.6, 0.0] if nab_init == 0 else [0.6, 0.6, np.nan] # The third has none
@@ -594,7 +600,7 @@ def test_strains_immunity_attr():
 
     # Time in a state: antibodies of 0.625 to b with a protection of 0.8 halve the stay in a's I, so after a year exp(-2) are left
     a, b = make_nab_genotype('a', beta=0, init_prev=0), make_nab_genotype('b', beta=0, init_prev=0)
-    hpv = ss.Strains('hpv', [a, b], immunity=ss.immunity(protected='nab', dur=dict(I=[[0, 0], [0.8, 0]])))
+    hpv = family([a, b], immunity=ss.immunity(due_to='nab', dur=dict(I=[[0, 0], [0.8, 0]])))
     sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
     sim.diseases.b.nab.raw[:] = 0.625
     sim.diseases.a.move_to(sim.people.auids, 'I')
@@ -605,7 +611,7 @@ def test_strains_immunity_attr():
     def run(how, seed=1):
         gens = [make_nab_genotype('hpv16', 2.0), make_nab_genotype('hpv18', 1.6)]
         if how == 'family':
-            return ss.Sim(diseases=ss.Strains('hpv', gens, immunity=ss.immunity(protected='nab', rel_sus=m, combine='sum')), rand_seed=seed, **pars).run()
+            return ss.Sim(diseases=family(gens, immunity=ss.immunity(due_to='nab', rel_sus=m, combine='sum')), rand_seed=seed, **pars).run()
         mods = [ss.modify(h.rel_sus, multiply=1 - np.clip(sum(m[k, g]*gens[k].nab for k in range(2)), 0, 1), name=f'nab_{h.name}') for g,h in enumerate(gens)] if how == 'modify' else []
         return ss.Sim(diseases=gens, connectors=mods, rand_seed=seed, **pars).run()
     out = sc.objdict()
@@ -616,17 +622,17 @@ def test_strains_immunity_attr():
     assert np.all(out.family < 0.8*out.none), out # It protects
 
     # As compartments: attributes have none yet, so auto runs agents, and a compartmental solver refuses
-    family = lambda: ss.Strains('hpv', [make_nab_genotype('a'), make_nab_genotype('b')], immunity=ss.immunity(protected='nab', rel_sus=m, combine='sum'))
-    assert ss.Sim(diseases=family(), approx=True, stop=2001, verbose=0).init().solver == 'abm'
+    make_family = lambda: family([make_nab_genotype('a'), make_nab_genotype('b')], immunity=ss.immunity(due_to='nab', rel_sus=m, combine='sum'))
+    assert ss.Sim(diseases=make_family(), approx=True, stop=2001, verbose=0).init().solver == 'abm'
     for solver in ['ode', 'binomial']:
         with pytest.raises(ss.CapabilityError):
-            ss.Sim(diseases=family(), solver=solver, approx=True, stop=2001, verbose=0).init()
+            ss.Sim(diseases=make_family(), solver=solver, approx=True, stop=2001, verbose=0).init()
 
     # A name that is a state in one member and an attribute in another
     S, I = ss.states('S I')
     other = ss.Disease(S, I, infection=S >> I @ ss.peryear(1)*I, clearance=I >> S @ ss.years(1), nab=ss.State(people=True), name='b')
     with pytest.raises(ValueError, match='attribute'):
-        ss.Sim(diseases=ss.Strains('hpv', [make_nab_genotype('a'), other], immunity=ss.immunity(protected='nab', rel_sus=0.5)), n_agents=100, stop=2001, verbose=0).init()
+        ss.Sim(diseases=family([make_nab_genotype('a'), other], immunity=ss.immunity(due_to='nab', rel_sus=0.5)), n_agents=100, stop=2001, verbose=0).init()
     return out
 
 
@@ -635,7 +641,7 @@ def test_strains_seeding():
     sc.heading('Testing joint seeding: one member for each person seeded, in the shares given')
     names = ['hpv16', 'hpv18', 'hpv31']
     def make(seed):
-        hpv = ss.Strains('hpv', [make_genotype(name) for name in names], init_prev=0.2, split=[0.5, 0.3, 0.2])
+        hpv = family([make_genotype(name) for name in names], init_prev=0.2, split=[0.5, 0.3, 0.2])
         return ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2005, rand_seed=seed, verbose=0).init()
     held = lambda sim: np.array([sim.diseases[name].I.raw for name in names])
     seeded = held(make(1))
@@ -656,36 +662,37 @@ def test_strains_compartmental():
 
     # With nothing between them, the members run as they would alone, and the union is from their shares
     alone = ss.Sim(diseases=[make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)], solver='ode', total_pop=10_000, **pars).run()
-    sim = ss.Sim(diseases=ss.Strains('hpv', [make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)]), total_pop=10_000, **pars).run()
+    sim = ss.Sim(diseases=family([make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)]), total_pop=10_000, **pars).run()
     res = sim.results
     assert sim.solver == 'ode' and np.array_equal(res.a.n_I, alone.results.a.n_I) and np.array_equal(res.b.n_I, alone.results.b.n_I) # Bit for bit
     assert np.allclose(res.hpv.n_I, 10_000*(1 - (1 - res.a.n_I/10_000)*(1 - res.b.n_I/10_000)))
 
-    # Members that affect each other (immunity=, exclusive=) need agents: auto runs them as agents, and a compartmental solver refuses, whatever approx=
-    families = [lambda: ss.Strains('hpv', [make('a', 3), make('b', 2.5)], immunity=ss.immunity(protected='R', rel_sus=0.3), init_prev=0.1),
-                lambda: ss.Strains('hpv', [make('a', 3), make('b', 2.5)], init_prev=0.1, exclusive='Ca')]
-    for family in families:
-        sim = ss.Sim(diseases=family(), total_pop=10_000, approx=True, **pars).init()
+    # Strains that affect each other (immunity=, shared states) need agents: auto runs them as agents, and a compartmental solver refuses, whatever approx=
+    families = [lambda: family([make('a', 3), make('b', 2.5)], immunity=ss.immunity(due_to='R', rel_sus=0.3), init_prev=0.1),
+                lambda: family([make('a', 3), make('b', 2.5)], init_prev=0.1, shared='Ca')]
+    for make_family in families:
+        sim = ss.Sim(diseases=make_family(), total_pop=10_000, approx=True, **pars).init()
         assert sim.solver == 'abm' and 'compartmental solvers: none' in sim.describe(output=True)
         for solver in ['ode', 'binomial']:
             with pytest.raises(ss.CapabilityError, match='only agents follow'):
-                ss.Sim(diseases=family(), solver=solver, total_pop=10_000, approx=True, **pars).init()
+                ss.Sim(diseases=make_family(), solver=solver, total_pop=10_000, approx=True, **pars).init()
     return res
 
 
 @sc.timer()
 def test_strains_spec():
     sc.heading('Testing a family in the model spec: to_code() round trip, ss.diff(), and the hash')
-    def family(m=0.3, exclusive='Ca'):
-        return ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18', 2.5)], immunity=ss.immunity(protected='R', rel_sus=[[0.9, m], [m, 0.9]], combine='sum'), init_prev=0.1, split=[0.6, 0.4], exclusive=exclusive)
-    sim = ss.Sim(diseases=family(), stop=2010, verbose=0)
+    def make(m=0.3, shared='Ca'):
+        return family([make_genotype('hpv16'), make_genotype('hpv18', 2.5)], immunity=ss.immunity(due_to='R', rel_sus=[[0.9, m], [m, 0.9]], combine='sum'), init_prev=0.1, split=[0.6, 0.4], shared=shared)
+    sim = ss.Sim(diseases=make(), stop=2010, verbose=0)
     spec = sim.to_spec()['modules'][-1]
-    assert spec['type'] == 'Strains' and spec['members'] == ['hpv16', 'hpv18'] and spec['split'] == [0.6, 0.4] and spec['immunity'][0]['combine'] == 'sum'
+    strains = spec['strains']
+    assert spec['type'] == 'Family' and spec['members'] == ['hpv16', 'hpv18'] and strains['split'] == [0.6, 0.4] and strains['immunity'][0]['combine'] == 'sum'
     ns = {}
     exec(sim.to_code().replace("if __name__ == '__main__':", 'if False:'), ns) # Each member, then the family
     assert ns['sim'].hash() == sim.hash()
-    assert 'immunity[0].rel_sus' in ss.diff(sim, ss.Sim(diseases=family(m=0.4), stop=2010, verbose=0), output=True)
-    other = [ss.Sim(diseases=f, stop=2010, verbose=0).hash() for f in [family(m=0.4), family(exclusive=None)]]
+    assert 'immunity[0].rel_sus' in ss.diff(sim, ss.Sim(diseases=make(m=0.4), stop=2010, verbose=0), output=True)
+    other = [ss.Sim(diseases=f, stop=2010, verbose=0).hash() for f in [make(m=0.4), make(shared=False)]]
     assert other[0].model == sim.hash().model and other[0].pars != sim.hash().pars # A value
     assert other[1].model != sim.hash().model # The structure
     return spec
@@ -702,7 +709,7 @@ def test_strains_branch_flows():
     pars = dict(start=2000, stop=2015, dt=0.25, total_pop=10_000, verbose=0)
     out = sc.objdict()
     for solver in ['abm', 'ode']:
-        sim = ss.Sim(diseases=ss.Strains('hpv', [make('a', 3.0), make('b', 2.5)]), solver=solver, n_agents=10_000, rand_seed=1, **pars).run()
+        sim = ss.Sim(diseases=family([make('a', 3.0), make('b', 2.5)]), solver=solver, n_agents=10_000, rand_seed=1, **pars).run()
         res = sim.results
         assert res.a.cin.CA.sum() > 0 and np.allclose(res.a.cancers, res.a.cin.CA) and np.allclose(res.b.cancers, res.b.cin.CA) # The outcome is the flow to CA
         assert np.allclose(res.hpv.cin.CA, res.a.cin.CA + res.b.cin.CA) and np.allclose(res.hpv.cin.S, res.a.cin.S + res.b.cin.S) # Summed across members
@@ -720,31 +727,34 @@ def test_strains_branch_flows():
 
 @sc.timer()
 def test_strains_errors():
-    sc.heading('Testing what a family refuses')
-    pair = lambda **kwargs: ss.Strains('hpv', [make_genotype('hpv16'), make_genotype('hpv18')], **kwargs)
+    sc.heading('Testing what strains with courses of their own refuse')
+    pair = lambda **kwargs: family([make_genotype('hpv16'), make_genotype('hpv18')], **kwargs)
     build = lambda hpv, **kwargs: ss.Sim(diseases=hpv, n_agents=100, stop=2001, verbose=0, **kwargs).init()
-    with pytest.raises(ss.CapabilityError): # A member written as code, whose states the family cannot see
-        ss.Strains('hpv', [make_genotype('hpv16'), ssl.AgentSIS()])
+    with pytest.raises(ss.CapabilityError): # A strain written as code, whose states the others cannot see
+        family([make_genotype('hpv16'), ssl.AgentSIS()])
     with pytest.raises(ss.errors.UnknownState): # A state the members do not have
-        build(pair(immunity=ss.immunity(protected='nab', rel_sus=0.5)))
+        build(pair(immunity=ss.immunity(due_to='nab', rel_sus=0.5)))
     with pytest.raises(ss.CapabilityError): # A combine= function under sim.gradient()
-        ss.Sim(diseases=pair(immunity=ss.immunity(protected='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
-    with pytest.raises(ValueError): # A family named like a dimension
-        build(ss.Strains('risk', [make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')]))
-    with pytest.raises(ValueError): # A member with its own initial values in a family that seeds
-        ss.Strains('hpv', [make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
+        ss.Sim(diseases=pair(immunity=ss.immunity(due_to='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
+    with pytest.raises(ValueError): # Strains named like a dimension
+        build(ss.Disease(name='hpv', strains=ss.Strains([make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')], name='risk')))
+    with pytest.raises(ValueError): # A strain with its own initial values in a disease that seeds
+        family([make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
     with pytest.raises(ss.errors.OutOfBounds): # A protection of 1 on a time spent
-        build(pair(immunity=ss.immunity(protected='R', dur=dict(I=0.6), combine='sum')))
-    with pytest.raises(ss.errors.UnknownState): # exclusive= with no state to move to
+        build(pair(immunity=ss.immunity(due_to='R', dur=dict(I=0.6), combine='sum')))
+    with pytest.raises(ss.errors.UnknownState): # A shared state with no state to move to
         def sis(name):
             S, I = ss.states('S I')
             return ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, S, dur=10), name=name)
-        build(ss.Strains('flu', [sis('a'), sis('b')], exclusive='I'))
+        build(family([sis('a'), sis('b')], name='flu', shared='I'))
     with pytest.raises(TypeError): # The protection is the value of what it lowers, not a positional matrix
-        ss.immunity(np.eye(2), protected='R')
+        ss.immunity(np.eye(2), due_to='R')
     with pytest.raises(ss.errors.ShapeError):
-        build(pair(immunity=ss.immunity(protected='R', rel_sus=np.eye(3))))
-    assert ss.Strains('hpv', members=[make_genotype('hpv16'), make_genotype('hpv18')]).member_names == ['hpv16', 'hpv18']
+        build(pair(immunity=ss.immunity(due_to='R', rel_sus=np.eye(3))))
+    with pytest.raises(ValueError): # The disease's own states as well as strains with natural histories of their own
+        S, I = ss.states('S I')
+        ss.Disease(infection=S >> I @ ss.peryear(1)*I, strains=ss.Strains([make_genotype('hpv16'), make_genotype('hpv18')]))
+    assert family([make_genotype('hpv16'), make_genotype('hpv18')]).member_names == ['hpv16', 'hpv18']
     return
 
 
@@ -774,6 +784,47 @@ def test_current_state():
     return cs
 
 
+@sc.timer()
+def test_infect():
+    sc.heading('Testing disease.infect(): infections from code are dated and logged as infections')
+    class Import(ss.Intervention):
+        def step(self):
+            if self.ti == 3:
+                self.infected = self.sim.diseases.sir.infect(self.sim.people.auids[:50])
+    sim = ss.Sim(n_agents=1000, diseases=ss.SIR(beta=0, init_prev=0), interventions=Import(), analyzers=ss.infection_log(), start=2000, stop=2008, verbose=0).run()
+    infected = sim.interventions[0].infected
+    log = sim.analyzers[0].to_df()
+    assert len(infected) == 50 and (sim.diseases.sir.ti_I[infected] == 3).all() and sim.results.sir.infection[3] == 50
+    assert len(log) == 50 and (log.source == -1).all()
+    return sim
+
+
+@sc.timer()
+def test_mixed_disease():
+    sc.heading('Testing a disease with declared and coded parts')
+    class Mixed(ss.Disease):
+        S, I, R   = ss.states('S I R')
+        infection = S >> I @ ss.peryear(4) * I
+        recovery  = I >> R @ ss.years(0.5)
+
+        def __init__(self, **kwargs):
+            super().__init__(init_prev=0.05, **kwargs)
+            self.define_states(ss.FloatArr('years_infected', default=0.0)) # A coded per-agent array beside the declared states
+
+        def step(self):
+            super().step() # The declared transitions
+            self.years_infected[self.I.uids] += self.t.dt_year
+
+    sim = ss.Sim(diseases=Mixed(), n_agents=500, dt=ss.days(7), stop=2003, verbose=0).run()
+    mixed = sim.diseases.mixed
+    assert sim.solver == 'abm' # The coded array needs agents
+    assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
+    assert np.isclose(mixed.years_infected.sum(), mixed.results.n_I[1:].sum()*sim.t.dt_year) # One step for each step spent infected
+    with pytest.raises(ss.CapabilityError, match='never calls'): # A declared transition never calls set_prognoses()
+        type('Bad', (ss.SIS,), dict(set_prognoses=lambda self, uids, sources=None: None))
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -788,6 +839,8 @@ if __name__ == '__main__':
     mtct  = test_mtct()
     fetal = test_fetal_health(do_plot=do_plot)
     current = test_current_state()
+    infect  = test_infect()
+    mixed = test_mixed_disease()
     cong  = test_congenital()
     strains = test_strains_results()
     immune = test_strains_immunity()

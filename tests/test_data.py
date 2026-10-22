@@ -1,5 +1,5 @@
 """
-Test named data: places and contact matrices looked up by name, from starsim_data
+Test data by place (ss.data): ages, populations, contact matrices, and administrative units, from starsim_data
 """
 import pytest
 import numpy as np
@@ -55,7 +55,7 @@ def test_contacts():
 @sc.timer()
 def test_geo():
     sc.heading('Testing geographies by name')
-    kenya = ss.geo.location('Kenya', level=1)
+    kenya = ss.geo.geography('Kenya', level=1)
     nodes = ssd.load_nodes('Kenya', level=1)
     assert len(kenya) == 47 and kenya.names == list(nodes.name)
     assert np.all(kenya.pop > 0) and abs(kenya.pop.sum()/nodes.population.sum() - 1) < 1e-9
@@ -65,12 +65,12 @@ def test_geo():
     assert not kenya.adjacency[i, kenya.names.index('Mombasa')]
 
     # A subset, and several countries
-    two = ss.geo.location('Kenya', level=1, places=['Nairobi', 'Kiambu'])
+    two = ss.geo.geography('Kenya', level=1, places=['Nairobi', 'Kiambu'])
     assert two.names == ['Kiambu', 'Nairobi'] and two.adjacency[0, 1]
-    both = ss.geo.location(['Kenya', 'Uganda'], level=1)
+    both = ss.geo.geography(['Kenya', 'Uganda'], level=1)
     assert len(both) == 47 + len(ssd.load_nodes('Uganda', level=1)) and both.names[0].startswith('Kenya:')
     with pytest.raises(ss.errors.UnknownLocation):
-        ss.geo.location('Kenya', places=['Atlantis'])
+        ss.geo.geography('Kenya', places=['Atlantis'])
 
     # As the places of a model, with travel between them
     sir = make_sir()
@@ -98,9 +98,9 @@ def test_geo():
     strat = spec['modules'][0]['stratifications'][0]
     assert strat['geo']['place'] == 'Kenya' and strat['geo']['level'] == 1
     sir = make_sir()
-    sir.stratify(patch=ss.geo.location('Kenya', level=1))
+    sir.stratify(patch=ss.geo.geography('Kenya', level=1))
     code = ss.Sim(sir, unit='day', stop=60, **kw).to_code()
-    assert "patch=ss.geo.location('Kenya', level=1)" in code
+    assert "patch=ss.geo.geography('Kenya', level=1)" in code
     return sim
 
 
@@ -108,9 +108,10 @@ def test_geo():
 def test_people():
     sc.heading('Testing populations by name')
     ppl = ss.people('Kenya', year=2025)
-    ages, female, male, _ = ss.named.population('Kenya', year=2020)
-    later = ss.named.population('Kenya', year=2030)
+    ages, female, male, _ = ss.data.population('Kenya', year=2020)
+    later = ss.data.population('Kenya', year=2030)
     assert np.isclose(ppl.named.total, 0.5*(female + male).sum() + 0.5*(later[1] + later[2]).sum()) # Between the decadal values, interpolated
+    assert np.array_equal(ss.data.age('Kenya', year=2020)[:-1], np.column_stack([ages, female + male])) # The age_data of ss.People, ending with 0 people at 105
 
     # The size and the age split of a compartmental model, with no agents
     stratify = dict(age=[0, 5, 18, 65])
@@ -119,7 +120,7 @@ def test_people():
     assert ode.solver == 'ode' and ode.pars.total_pop == total
     n = ode.results.sir
     initial = n.n_S.strata[:, 0] + n.n_I.strata[:, 0] + n.n_R.strata[:, 0]
-    _, female, male, _ = ss.named.population('Kenya', year=2024)
+    _, female, male, _ = ss.data.population('Kenya', year=2024)
     assert np.isclose(initial[0], (female + male)[0]) # The 0-4 group, which is one WPP age group
 
     # As agents, the same ages and the share who are female

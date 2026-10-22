@@ -84,9 +84,9 @@ def ages(**kwargs):
 
 def patches(mobility=True, **kwargs):
     """ 7. An SIR on three patches, with gravity mobility or with none """
-    towns = ss.geo.location(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+    towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
     sir.stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4) if mobility else None)
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=100_000)
 
@@ -149,6 +149,7 @@ def malaria(**kwargs):
         incubation = Ev >> Iv @ ss.days(10),
         mortality  = Sv + Ev + Iv >> ss.null @ ss.days(10),
         init       = dict(Ih=0.01, Sv=50_000),
+        first = 'Sh',
         name = 'malaria',
     )
     return make_sim(malaria, kwargs, unit='day', stop=200, total_pop=10_000)
@@ -213,15 +214,10 @@ def tb(**kwargs):
         cure       = on_treatment >> susceptible @ ss.months(6),
         failure    = on_treatment >> active @ ss.peryear(0.2),
         init       = dict(active=0.01),
-        name = 'tb',
+        name       = 'tb',
+        strains    = ss.Strains(['DS', 'MDR'], name='resistance', split=[1.0, 0.0], infection=[1.0, 0.7], cure=[1.0, 0.3]),
     )
-    tb.stratify(
-        resistance = ['DS', 'MDR'],
-        kind       = 'strain',
-        split      = [1.0, 0.0],
-        adjust     = {'infection': [1.0, 0.7], 'cure': [1.0, 0.3]},
-        acquired   = ss.transfer(resistance='DS -> MDR', rate=ss.peryear(0.02), states=['on_treatment']),
-    )
+    tb.stratify(acquired=ss.transfer(resistance=('DS', 'MDR'), rate=ss.peryear(0.02), states=['on_treatment']))
     return make_sim(tb, kwargs, stop=30, total_pop=100_000)
 
 
@@ -241,7 +237,7 @@ def make_seasonal(b=0.5, dates=None):
     b = ss.par(b, bounds=[0.1, 1])
     season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
     S, I, R = ss.states('S I R')
-    return ss.Disease(infection=ss.Transition(S, I, rate=b*season*r * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    return ss.Disease(infection=ss.Transition(S, I, rate=b*season*r * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=100), name='sir')
 
 def seasonal(b=0.5, data=None, **kwargs):
     """ The epydemix and summer2 pattern: beta as a fitted value times `ss.seasonal` times `ss.timeseries` """
@@ -261,7 +257,7 @@ def age_vaccine(**kwargs):
 def patch_matrix(dim='patch', **kwargs):
     """ The camdl and flepiMoP pattern: two places with an explicit contact matrix over the places, by a dimension called `patch` """
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(**{dim:[10, 0]})), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(**{dim:[10, 0]})), name='sir')
     sir.stratify(**{dim:['a', 'b']}, split=[0.5, 0.5])
     contacts = ss.contacts(**{dim:np.array([[4.0, 1.0], [1.0, 4.0]])})
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=20_000, networks=contacts)

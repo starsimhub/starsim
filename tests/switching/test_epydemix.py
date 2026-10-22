@@ -23,7 +23,7 @@ kenya = dict(start='2019-12-01', stop='2020-04-02', use_aging=False, verbose=0)
 def make_kenya(beta=0.04):
     """ The epydemix tutorial's SIR, by age, from v4's bundled data """
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=0.1), init=dict(I=10), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=0.1), init_n=dict(I=10), name='sir')
     sir.stratify(age=[0, 5, 20, 50, 65])
     return sir
 
@@ -35,16 +35,16 @@ def make_seasonal(data=None):
     b = ss.par(true_b, bounds=[0.1, 1])
     season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=b*season*mobility * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=b*season*mobility * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=100), name='sir')
     return ss.Sim(sir, total_pop=1e6, unit='day', start='2020-02-23', stop='2020-05-31', solver='binomial', data=data, verbose=0)
 
 
 def weekly_data():
     """ Weekly new infections from one run at the true value """
     dates = pd.date_range('2020-03-01', periods=13, freq='W')
-    truth = make_seasonal(data=ss.data(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
+    truth = make_seasonal(data=ss.simdata(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
     weekly = ss.results.compare(truth)['new_infections'][1]
-    return ss.data(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
+    return ss.simdata(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
 
 
 def test_epydemix_kenya():

@@ -127,7 +127,7 @@ class People:
         in `ss.Arr`), so they take no memory unless something (e.g. `ss.Pregnancy`, with fetuses as agents) sets them.
         """
         uids = ss.uids(np.arange(int(self.n_agents_init)))
-        self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as 32-bit integers
+        self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as ss.dtypes.uid (64-bit, which index arrays fastest)
         self.uid    = ss.arrays.UIDArr('uid')  # This variable tracks all UIDs; it takes no memory, since a UID is the agent's index
         self.slot   = ss.IndexArr('slot', shared=self.uid) # A slot is a special state managed internally to generate random numbers
         self.parent = ss.IndexArr('parent', label='UID of parent', shared=True)  # UID of parent, if any (used with pregnancy)
@@ -218,7 +218,7 @@ class People:
     @property
     def n_alive(self):
         """
-        The number of living agents, which is what `results.n_alive` records
+        The number of living agents, which is what `results.n_alive` records (with each agent counted by its weight if agents' weights differ: see `people.scale`)
 
         This is not the same as `len(people)`: agents who died on the current timestep are
         not removed from `auids` until `finish_step()`, so that analyzers can still inspect
@@ -302,14 +302,14 @@ class People:
 
         Note: `age_data` can also be provided as a string (interpreted as a filename).
 
-        If no value is provided, the ages are the world's (`ss.named.world`), as for a sim
+        If no value is provided, the ages are the world's (`ss.data.age('world')`), as for a sim
         with no named population.
 
         Returns:
             An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            age_data = ss.named.age_data(ss.named.world.ages, ss.named.world.counts)
+            age_data = ss.data.age('world')
         if isinstance(age_data, ss.Dist): # A distribution of ages, used as is
             dist = age_data
         else:
@@ -531,6 +531,10 @@ class People:
             sim.groups.set_sex(new_uids)
             if not placed and getattr(sim.groups, 'vals_set', False) and sim.groups.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
                 sim.groups.place_new(new_uids)
+            if not placed: # Their traits (ss.attr(dist)), as states get their defaults; people placed by a declared module get them there (see ss.solvers.Agents.add_people())
+                for mod in sim.declared:
+                    if getattr(mod.engine, '_started', False):
+                        mod.engine.draw_traits(new_uids)
         return new_uids
 
     def add_active(self, new_uids):
@@ -678,7 +682,7 @@ class People:
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.diseases.DiseaseBase)]
+        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.Disease)]
         diseases += [mod for mod in getattr(self.sim, 'declared', []) if all(mod is not disease for disease in diseases)] # A declared disease given as another kind of module: its agents leave its states as well
         for disease in diseases:
             disease.step_die(death_uids)
@@ -973,9 +977,9 @@ def people(place, year=None, n_agents=None, revision=None):
         sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
         ss.people('NG').named.total # The population of Nigeria in 2024
     """
-    ages, female, male, ref = ss.named.population(place, year=year, revision=revision)
+    ages, female, male, ref = ss.data.population(place, year=year, revision=revision)
     total = female + male
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.named.age_data(ages, total), p_female=female.sum()/total.sum())
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=female.sum()/total.sum())
     ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
     return ppl
 

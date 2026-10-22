@@ -36,9 +36,9 @@ class Timeline(ss.utils.NoDists):
 
     The `Timeline` object also has the following attributes/methods:
 
-    - `ti` (int): the current timestep
+    - `ti` (int): the current step, which is also the time point where its results go: step `ti` runs from time point `ti-1` to `ti` (0 before the first step)
     - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
-    - `now()` (`ss.date`/float/str): the current time, based on tvec by default or a different vector if specified
+    - `now()` (`ss.date`/float/str): the current time, the start of the step (time point `ti-1`; the start of the run before the first step), based on tvec by default or a different vector if specified
 
     Note: the time vectors include *both* the start and stop endpoints, so `npts`
     (the number of time points) is one more than the number of steps taken. For
@@ -233,7 +233,9 @@ class Timeline(ss.utils.NoDists):
 
     def now(self, key=None):
         """
-        Get the current simulation time
+        Get the current simulation time: the start of the current step, which runs from time point `ti-1` to `ti`
+        (the start of the run before the first step), since that is when the step happens and what it reads its
+        inputs at; its results go at `ti`, its end (see `ss.Loop`)
 
         Args:
             key (str): which type of time to get: "tvec" (default), "time", "year", "date", or "str"
@@ -241,7 +243,7 @@ class Timeline(ss.utils.NoDists):
         Examples:
             ```python
             t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt='week')
-            t.ti = 25
+            t.ti = 26 # The step from time point 25 to 26
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
@@ -266,10 +268,11 @@ class Timeline(ss.utils.NoDists):
             errormsg = f'Invalid key "{key}": must be one of {sc.strjoin(self._time_vecs)}'
             raise ValueError(errormsg)
 
-        if 0 <= self.ti < len(vec): # Normal use case, we're in the middle of a sim
-            now = vec[self.ti]
+        ti = self.ti - 1 if self.ti > 0 else self.ti # The start of the step (a negative ti is a step before the start: see ss.solvers.Agents.backfill())
+        if 0 <= ti < len(vec): # Normal use case, we're in the middle of a sim
+            now = vec[ti]
         else: # Special case, we are before or after the sim period
-            now = self.tvec[0] + self.dt*self.ti
+            now = self.tvec[0] + self.dt*ti
             if key == 'yearvec':
                 now = now.years # Not float(), which for a dur gives the magnitude without the unit, e.g. float(ss.days(500)) = 500
 

@@ -824,6 +824,13 @@ def linear(expr):
     return expr, {} # A parameter or a count
 
 
+def divide(a, b, xp=np):
+    """ Division in an expression: nothing divided by anything is nothing, e.g. the infectious share of an empty group; the inner where keeps a gradient finite """
+    if np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape'):
+        return 0.0 if a == 0 else a / b
+    return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
+
+
 def evaluate(expr, ctx):
     """
     Evaluate an expression
@@ -839,11 +846,7 @@ def evaluate(expr, ctx):
         if   op == '+': return a + b
         elif op == '-': return a - b
         elif op == '*': return a * b
-        elif op == '/': # Nothing divided by anything is nothing, e.g. the infectious share of an empty group; the inner where keeps a gradient finite
-            if np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape'):
-                return 0.0 if a == 0 else a / b
-            xp = getattr(ctx, 'xp', np)
-            return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
+        elif op == '/': return divide(a, b, getattr(ctx, 'xp', np))
         else:           return a ** b
     elif isinstance(expr, Func):
         xp = getattr(ctx, 'xp', np) # A context can give another NumPy, e.g. jax.numpy

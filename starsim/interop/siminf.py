@@ -713,7 +713,8 @@ def build(src, u0, verbose=None, **kwargs):
         for c in u0.columns[1:]:
             if u0[c].any():
                 vals = u0[c].values
-                dis.graph.states[c].init = ss.by(node=vals.astype(int) if np.all(vals == np.round(vals)) else vals.astype(float))
+                dis.graph.states[c].init = None
+                dis.graph.states[c].init_n = ss.by(node=vals.astype(int) if np.all(vals == np.round(vals)) else vals.astype(float))
     if verbose:
         print(f'Imported "{src.name}" from {src.format}: {len(src.states)} states, {len(src.flows)} transitions, {len(src.pars)} parameters')
         for line in lines:

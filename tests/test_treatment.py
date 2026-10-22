@@ -143,7 +143,7 @@ def test_sti_failure():
         ng = make_sti().stratify(amr=['sens', 'res'], split=[1, 0])
         drug = ss.Treatment(moves={ng.cure: 0.8})
         clinic = ss.treat(drug, where=ng.C, interval=ss.days(30))
-        clinic_fail = ss.Delivery(move=dict(amr='sens -> res'), who=clinic.failed, coverage=0.5)
+        clinic_fail = ss.Delivery(move=dict(amr=('sens', 'res')), who=clinic.failed, coverage=0.5)
         return ss.Sim(ng, interventions=[clinic, clinic_fail], **kwargs)
     sims = run_both(make_amr)
     for solver,sim in sims.items():
@@ -281,7 +281,7 @@ def test_bv():
             tx       = (CST4a + CST4p + CST4s) >> P, # Moved only by treatment
             recur    = ss.Transition(P, [CST4p, CST4a], rate=ss.permonth(0.1), p=0.7),
             settle   = P >> CST1 @ ss.months(6),
-            init=dict(CST3=0.3, CST4a=0.1), name='bv',
+            init=dict(CST3=0.3, CST4a=0.1), first='CST1', name='bv',
         )
     def make(**kwargs):
         bv = make_bv()

@@ -11,6 +11,14 @@ import matplotlib.pyplot as plt
 
 
 
+def same_value(a, b):
+    """ Whether two settings have the same value (e.g. 10000 and 10000.0); False if they cannot be compared to one True or False """
+    try:
+        return bool(a == b)
+    except Exception:
+        return False
+
+
 class Sim(ss.Base):
     """
     The Sim object
@@ -86,7 +94,7 @@ class Sim(ss.Base):
         self._name_modules(ss.utils.caller_names(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
+        self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.perflib._chain); None to choose (see ss.solvers.choose_engine())
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in mod.pars.keys()}
@@ -274,7 +282,10 @@ class Sim(ss.Base):
             self.timer.start()
 
         # Validation and initialization -- this is "pre"
-        self.set_after() # Before the settings are converted
+        made = self.__dict__.get('_made') or {}
+        for key,val in self.set_after().items(): # Before the settings are converted
+            if val is not None and key not in self.given and not same_value(val, made.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
+                self.given.append(key)
         self._made = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
@@ -285,6 +296,7 @@ class Sim(ss.Base):
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self._init_modules_pre()
         ss.interventions.check_undriven(self)
+        ss.connectors.check_applied(self) # Nothing accepted, then ignored
 
         # Final initializations -- this is "post"
         if self.pars.rescale:
@@ -347,6 +359,14 @@ class Sim(ss.Base):
                 if p.module is None or not any(p.module is m for m in self.declared):
                     p.module = mod
         coded = [mod for key in ss.modules.module_types() + ['custom'] for mod in self.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None]
+        for mod in coded: # A setting of a module written as code kept as an attribute rather than a parameter, given as ss.par (e.g. test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))): its code uses the value, and it is fitted and set by name as a parameter is
+            if type(mod).__module__.partition('.')[0] == 'starsim': # Starsim's own modules (e.g. ss.modify(multiply=ss.par(...))) use the parameter itself
+                continue
+            for key,val in list(vars(mod).items()):
+                if isinstance(val, ss.par) and key not in mod.pars:
+                    val.name = val.name or key
+                    object.__setattr__(mod.pars, '_bounded', (mod.pars._bounded or {}) | {key:val})
+                    mod.setattribute(key, val.value)
         values = {}
         levels = sc.ddict(dict)
         for key,val in (self.par_values or {}).items():
@@ -369,7 +389,10 @@ class Sim(ss.Base):
                 options = [f'{mod.name}.{k}' for mod in self.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
                 raise ss.errors.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
                                           f'Parameters are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
-            mods[0].pars.update({name:val})
+            if name in mods[0].pars:
+                mods[0].pars.update({name:val})
+            else: # A setting kept as an attribute (see above)
+                mods[0].setattribute(name, val)
         return
 
     def by_levels(self, key, given, whole=None):
@@ -475,6 +498,7 @@ class Sim(ss.Base):
             if key not in kwargs:
                 sim.pars[key] = sc.dcp(val)
         sim.par_values = sc.mergedicts(self.par_values, pars)
+        sim.jax = self.jax
         if hasattr(self, 'imported'): # The same import, with what it did not translate
             sim.imported = self.imported
         return sim
@@ -494,11 +518,11 @@ class Sim(ss.Base):
             likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
-            scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy), each NUTS chain from one of the best that are apart, and particle MCMC from the best
+            scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
             n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance; `fit.mismatch` is the score at the best fit over the first seeds
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
             verbose (bool): whether to print progress
-            kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna, `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
+            kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna (and `n_workers=4` to run trials in 4 processes at once, and `storage='fit.log'` to keep the trials in a file, so that calling it again resumes the fit; see `ss.fit.fit_optuna()`), `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
 
         Returns:
             An `ss.fit.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`
@@ -524,6 +548,9 @@ class Sim(ss.Base):
                 raise ValueError(errormsg)
         problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, n_runs=n_runs, rand_seed=rand_seed, verbose=verbose)
         method = problem.choose(method)
+        if method != 'optuna' and ('n_workers' in kwargs or 'storage' in kwargs):
+            errormsg = f'n_workers= and storage= are for method="optuna", not method="{method}"'
+            raise ValueError(errormsg)
         problem.start()
         out = fit.methods[method](problem, **kwargs)
         return problem.result(method, out)
@@ -690,8 +717,8 @@ class Sim(ss.Base):
             return named.ages, named.counts
         elif getattr(self, 'given_pyramid', None) is not None:
             return self.given_pyramid
-        elif strat is None or strat.guessed.get('split') == ss.named.world.guess:
-            return ss.named.world.ages, ss.named.world.counts
+        elif strat is None or strat.guessed.get('split') == ss.data.world.guess:
+            return ss.data.world.ages, ss.data.world.counts
         return None
 
     def get_declared(self, name):
@@ -715,7 +742,7 @@ class Sim(ss.Base):
         if isinstance(pars.people, ss.People) and named is None and self.declared and pars.solver not in ['abm', 'auto']: # Their ages and number, not their agents
             dist = sc.dcp(pars.people.age.default)
             dist.init(force=True)
-            edges = ss.named.world.ages
+            edges = ss.data.world.ages
             counts = np.histogram(np.asarray(dist.rvs(100_000)), bins=np.append(edges, np.inf))[0]
             self.given_pyramid = (edges, counts)
             if 'total_pop' not in self.given:
@@ -778,7 +805,7 @@ class Sim(ss.Base):
             ss.note(f"start={pars.start} is {pars.start} {pars.unit.removesuffix('s')}s, since unit='{pars.unit}'; for a calendar year, give a date, e.g. start='{int(pars.start)}-01-01'", sim=self)
         durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
         mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
-        setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in self.declared or isinstance(mod, ss.diseases.DiseaseBase))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
+        setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in self.declared or isinstance(mod, ss.Disease))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
         def mod_units(mod):
             vals = mod.graph.unit_values() if mod in self.declared else ss.graph.unit_values(mod.pars.values())
             return [u.removesuffix('s') for u in vals] + ([base(mod.t.dt)] if is_dur(mod.t.dt) else [])
@@ -908,7 +935,7 @@ class Sim(ss.Base):
                 for text in crossing.describe():
                     add('', text)
         for mod in mods:
-            if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Strains)): # A family after its members
+            if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.strains.Family)): # Strains with courses of their own after their members
                 lines += ['', mod.describe(output=True)]
         if self.declared:
             lines.append('')
@@ -1034,7 +1061,7 @@ class Sim(ss.Base):
             if isinstance(mod.get('transitions'), list): # The order of the transitions is not part of the model
                 mod['transitions'] = sorted(mod['transitions'], key=lambda t: t['name'])
             dis = self.diseases.get(mod.get('name')) if mod.get('init_prev') else None
-            if isinstance(dis, ss.Disease) and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
+            if getattr(dis, 'graph', None) is not None and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
                 state = next(s for s in mod['states'] if s['name'] == dis.graph.transmissions[0].dst[0].name)
                 if state.get('init') is None:
                     state['init'], mod['init_prev'] = mod['init_prev'], None
@@ -1173,7 +1200,7 @@ class Sim(ss.Base):
         for mod in modules:
             self.dists.copy_to_module(mod)
             mod.init_post()
-            mod.t.ti = np.searchsorted(mod.t.yearvec, self.t.now('year')) # Start the module at the current time
+            mod.t.ti = np.searchsorted(mod.t.yearvec, self.t.yearvec[self.ti]) # Start the module at the current time point
 
         # Add the module to the loop, and resume from the same place
         loop = self.loop
@@ -1306,7 +1333,7 @@ class Sim(ss.Base):
                     elif strat.female is not None and 'p_female' not in kwargs: # A sex dimension is people.female, so its split is the share of women
                         kwargs['p_female'] = strat.split[strat.female]
             if 'age_data' not in kwargs: # Otherwise the ages are a named population's, or the world's, as a guess (as is the split of age groups that are not given one)
-                kwargs['age_data'] = ss.named.age_data(*self.pyramid())
+                kwargs['age_data'] = ss.data.to_age_data(*self.pyramid())
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
         elif self.solver == 'abm':
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
@@ -1479,7 +1506,7 @@ class Sim(ss.Base):
         return rows, ends
 
     @property
-    def _current_scale(self):
+    def current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
         if not self.pars.rescale:
             return self.pars.pop_scale
@@ -1505,8 +1532,8 @@ class Sim(ss.Base):
     def _init_rescale(self):
         """ Check that the diseases support dynamic rescaling, and create the distribution for it """
         for disease in self.diseases():
-            if isinstance(disease, ss.Infection) and not hasattr(disease, 'ti_infected'):
-                errormsg = f'Dynamic rescaling (rescale=True) requires each disease written as code to have a ti_infected state, but "{disease.name}" does not'
+            if disease.graph is None and (type(disease).not_naive is ss.Disease.not_naive or (isinstance(disease, ss.Infection) and not hasattr(disease, 'ti_infected'))):
+                errormsg = f'Dynamic rescaling (rescale=True) requires each disease written as code to define not_naive() and make_naive(), or to be an ss.Infection with a ti_infected state, but "{disease.name}" does not'
                 raise ValueError(errormsg)
         self.rng_rescale = ss.choose_n(name='rng_rescale') # Choose who to make naive when rescaling
         return
@@ -1523,7 +1550,7 @@ class Sim(ss.Base):
         """
         pars = self.pars
         ti = self.ti
-        self.rng_rescale.jump_dt(ti=ti+1) # Like other distributions, advance the random numbers for this timestep
+        self.rng_rescale.jump_dt(ti=ti) # Like other distributions, advance the random numbers for this timestep
         scale = self.results.pop_scale
         if scale[ti] < pars.pop_scale: # We have room to rescale
             not_naive = ss.uids.concatenate([disease.not_naive() for disease in self.diseases()]).unique()
@@ -1542,12 +1569,14 @@ class Sim(ss.Base):
     def init_data(self, data=None):
         """ Initialize or add data to the sim """
         data = data if data is not None else self.data
-        if isinstance(data, ss.data):
+        if isinstance(data, ss.simdata):
             data = data.load(self)
         elif isinstance(data, (str, os.PathLike)):
-            data = ss.data(data).load(self)
+            data = ss.simdata(data).load(self)
         self.data = ss.results.validate_sim_data(data)
-        if self.data is not None and self.groups.strats:
+        if self.data is not None and ss.results.by_year(self.data):
+            ss.note('the data has whole years (an integer year column), so each row is compared with the year it names: a flow summed over the year, a stock or ratio averaged over it', sim=self)
+        if self.data is not None:
             self.data = ss.results.widen_data(self, self.data)
         if self.data is not None and getattr(self, 'declared', None):
             ss.results.check_data(self, self.data)
@@ -1609,15 +1638,15 @@ class Sim(ss.Base):
             self.elapsed = self.timer.toc(output=True)
             t = self.t
             simlabel = f'"{self.label}": ' if self.label else ''
-            string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
+            string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts-1}) ({self.elapsed:0.2f} s) '
             if self.verbose >= 2:
                 sc.heading(string)
-            elif not (t.ti % max(1, t.npts//10)): # About ten lines in all
-                sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
+            elif not (t.ti % max(1, round(t.npts*self.verbose) if self.verbose < 1 else t.npts//10)): # About ten lines in all, or with a fraction, every that share of the run
+                sc.progressbar(t.ti, t.npts - 1, label=string, length=20, newline=True)
         return
 
     def advance(self):
-        """ Move the time to the end of the step, where its results are recorded: for the sim, and the modules on its timeline (see `ss.Loop`) """
+        """ Move the time to the step about to be taken, its time point being the end of it, where whatever it does is dated and recorded: for the sim, and the modules on its timeline (see `ss.Loop`) """
         self.t.ti += 1
         for t in self.loop.shared_timelines:
             t.ti += 1
@@ -1641,7 +1670,7 @@ class Sim(ss.Base):
         """
         if not self.initialized: self.init() # Automatically initialize if not initialized
         t = self.t
-        self.loop.run(t.tvec[min(t.ti + 1, t.npts - 1)], verbose) # Up to the end of the next step
+        self.loop.run(t.tvec[min(t.ti, t.npts - 2)], verbose) # Up to the next step, which starts at time point ti
         return self
 
     def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, profile=False, solver=None, n_runs=None):
@@ -1649,7 +1678,7 @@ class Sim(ss.Base):
         Run the model -- the main method for running a simulation.
 
         Args:
-            until (date/str/float): the date to run the sim until
+            until (date/str/float): run the steps up to and including the one that starts at this time
             verbose (int): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
             shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
@@ -1689,12 +1718,9 @@ class Sim(ss.Base):
             kernels = until is None and not profile and reason is None
             if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time
                 sc.printv(f'Run step by step, since {reason}', 1, self.verbose)
-            use_jax = False
-            if self.jax:
-                why = ss.gradients.reason(self)
-                use_jax = why is None
-                if why:
-                    ss.note(f'JAX cannot run this sim, since {why}, so it is run by the kernels', sim=self)
+            if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
+                use_jax, why = ss.solvers.choose_engine(self)
+                sc.printv(f'engine: {why}', 2, self.verbose)
             if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
                     mod.engine.run_all(use_jax=use_jax)
@@ -1914,7 +1940,7 @@ class Sim(ss.Base):
             how = {} if how is None else {'':how} # '' matches every key
 
         summary = sc.objdict()
-        flat = self.results.flatten(sep='_', only_results=False, keep_case=True, columns=True) # Summarize each column of 2D results separately
+        flat = self.results.flatten(sep='_', only_results=False, columns=True) # Summarize each column of 2D results separately
         for key, res in flat.items():
             if 'timevec' in key: # Skip module-specific time vectors
                 continue

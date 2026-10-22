@@ -32,7 +32,20 @@ def people_scale(sim):
     As agents, the results of declared modules and deliveries are scaled when written, so they are
     people when read during a run, and capacities and counts given to deliveries are people.
     """
-    return sim._current_scale if sim.solver == 'abm' else 1.0
+    return sim.current_scale if sim.solver == 'abm' else 1.0
+
+
+def agent_weights(sim):
+    """ Each agent's weight (`people.scale`), by UID, if agents' weights differ; else None. A module written as code counts each agent by its weight when they differ, as `n_alive` does """
+    scale = getattr(sim.people, 'scale', None) # Not in a mock sim
+    return scale.raw if getattr(scale, 'weighted', False) else None
+
+
+def as_float(res):
+    """ Make a count result hold floats (a sum of agents' weights need not be whole), keeping its values; returns it """
+    if res.values.dtype.kind in 'iu':
+        res.init_values(dtype=float, force=True)
+    return res
 
 
 def in_people(*results):
@@ -40,8 +53,8 @@ def in_people(*results):
     for res in results:
         if res.scale:
             res.in_people = True
-            if res.values is not None and res.values.dtype.kind in 'iu': # A count times a scale that need not be whole
-                res.init_values(dtype=float, force=True)
+            if res.values is not None: # A count times a scale that need not be whole
+                as_float(res)
     return
 
 
@@ -426,7 +439,8 @@ class Result(ss.utils.NoDists, ss.BaseArr):
             dim (str): the dimension, e.g. 'age'; or, for the results of a treatment of several diseases or transitions, 'disease' or 'edge'
 
         For a result across runs, returns a dict of results across runs instead, one per level.
-        For a result of a family of diseases (`ss.Strains`), the family's name gives each member's own result.
+        For strains carried together (`ss.Strains(max_strains=2)`), the columns are the strains, and a person who carries several is in each.
+        For a result of strains with courses of their own (`ss.Strains(shared=...)`), the name of the strains gives each strain's own result.
         """
         family = self.__dict__.get('family')
         if family is not None and dim == family[0]: # Each member's own
@@ -458,6 +472,9 @@ class Result(ss.utils.NoDists, ss.BaseArr):
                 den = np.tile(denom.sum(axis=1)[:, None], (1, strat.n))
             values = np.divide(values, den, out=np.zeros(values.shape), where=den!=0)
         columns = [str(label) for label in strat.labels]
+        if getattr(strat, 'carries', None) is not None and denom is None: # Strains carried together: each strain's own, counting a person who carries several in each (a set is select(strain='A+B'))
+            values = values @ strat.carries[:, strat.base].astype(float)
+            columns = [columns[j] for j in strat.base]
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
             columns = [f'{dim}_{col}' for col in columns]
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
@@ -561,8 +578,8 @@ class Result(ss.utils.NoDists, ss.BaseArr):
             numbers = [x for x in inputs if np.ndim(x) == 0]
             same = all(x.strata.shape == stratified[0].strata.shape for x in stratified)
             linear = (ufunc in [np.add, np.subtract] and len(stratified) == len(inputs)) or (ufunc in [np.multiply, np.divide, np.true_divide, np.negative] and len(stratified) == 1 and len(numbers) == len(inputs) - 1 and (ufunc is not np.divide and ufunc is not np.true_divide or inputs[0] is stratified[0]))
-            strata = [x.strata if isinstance(x, Result) else x for x in inputs]
-            out.strata = getattr(ufunc, method)(*strata) if method == '__call__' and not kwargs and same and linear else None # Otherwise (e.g. a ratio of two results) the value of the whole is not the sum of the values by group
+            keep = method == '__call__' and not kwargs and same and linear # Otherwise (e.g. a ratio of two results) the value of the whole is not the sum of the values by group
+            out.strata = getattr(ufunc, method)(*[x.strata if isinstance(x, Result) else x for x in inputs]) if keep else None
             denoms = [x.denom for x in stratified if getattr(x, 'denom', None) is not None]
             if denoms: # A ratio keeps its denominator only when scaled by a number
                 scaled = ufunc in [np.multiply, np.negative] or (ufunc in [np.divide, np.true_divide] and inputs[0] is stratified[0])
@@ -1141,9 +1158,9 @@ class Results(ss.utils.NoDists, ss.ndict):
         lengths = [len(res) for res in self.flatten().values()]
         return len(set(lengths)) == 1
 
-    def flatten(self, sep='_', only_results=True, only_auto=False, keep_case=False, columns=False, **kwargs):
+    def flatten(self, sep='_', only_results=True, only_auto=False, columns=False, **kwargs):
         """
-        Turn from a nested dictionary into a flat dictionary, keeping only results by default
+        Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_n_I`)
 
         If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_new_infections_alpha`.
         """
@@ -1156,8 +1173,6 @@ class Results(ss.utils.NoDists, ss.ndict):
                 else:
                     split[k] = v
             out = split
-        if not keep_case:
-            out = sc.objdict({k.lower():v for k,v in out.items()})
         if 'resample' in kwargs and kwargs['resample'] is not None:
             resample = kwargs.pop('resample')
             for k,v in out.items():
@@ -1196,7 +1211,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             set_date_index (bool): if True, use the times as the index rather than as the column `timevec`
             kwargs (dict): passed to `ss.Result.resample()`, e.g. `resample='year'`
         """
-        flat = self.flatten(sep=sep, keep_case=True, columns=True, **kwargs)
+        flat = self.flatten(sep=sep, columns=True, **kwargs)
         if not flat:
             return None
         if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
@@ -1298,12 +1313,13 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
                 flat.pop(k)
 
     if key is not None:
+        lower = {k.lower():k for k in flat} # Keys match whatever their case
         if isinstance(key, str):
-            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
-                flat = {normkey(key):flat[normkey(key)]}
+            if normkey(key) in lower: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
+                flat = {lower[normkey(key)]:flat[lower[normkey(key)]]}
             else:
-                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
-                named = {k:v for k,v in flat.items() if k.endswith('_' + normkey(key))} # A result's own name, e.g. 'cpr' for 'contraception_cpr' rather than 'contraception_acpr'
+                flat = {k:v for k,v in flat.items() if (normkey(key) in k.lower())} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+                named = {k:v for k,v in flat.items() if k.lower().endswith('_' + normkey(key))} # A result's own name, e.g. 'cpr' for 'contraception_cpr' rather than 'contraception_acpr'
                 if len(flat) > 1 and len(named) == 1:
                     flat = named
             if len(flat) != 1:
@@ -1311,8 +1327,8 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
                 raise sc.KeyNotFoundError(errormsg)
         else:
             try:
-                flat = {k.lower():flat[normkey(k)] for k in key}
-            except sc.KeyNotFoundError as e:
+                flat = {k.lower():flat[lower[normkey(k)]] for k in key}
+            except KeyError as e:
                 errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
                 raise sc.KeyNotFoundError(errormsg) from e
 
@@ -1360,18 +1376,18 @@ def format_axes(ax, res, n_ticks=None, show_module=None):
 
 #%% Data, and how the results are lined up with it
 
-class data:
+class simdata:
     """
     Data to compare with a sim's results, matched by name: each column is named like the result it corresponds to
 
     Args:
-        source (str/df): a file name or a dataframe, with a time column (`date`, `year`, `t`, or `time`) and one column per data series
+        source (str/df): a file name or a dataframe, with a time column (`date`, `year`, `t`, or `time`) and one column per data series; an integer `year` column is calendar years, each row compared with the whole year it names
         aliases (dict): for headers that do not match: the result (or time-column) name, and the column that holds it
-        ignore_extra (bool): if True, drop columns that match no result instead of raising an error
+        ignore_extra (bool): if True, drop columns that match no result (otherwise they are noted, and an error when a fit compares them with the results)
 
     Examples:
         ```python
-        data = ss.data('kenya_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
+        data = ss.simdata('kenya_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
         sim = ss.Sim(sir, data=data, start='2020-01-01', stop='2020-12-31')
         ```
     """
@@ -1384,7 +1400,7 @@ class data:
     def __repr__(self):
         source = repr(self.source) if isinstance(self.source, (str, os.PathLike)) else f'a {type(self.source).__name__} of {len(self.source)} rows'
         aliases = f', aliases={self.aliases}' if self.aliases else ''
-        return f'ss.data({source}{aliases}); data.load() gives the dataframe'
+        return f'ss.simdata({source}{aliases}); data.load() gives the dataframe'
 
     def load(self, sim=None):
         """ Load the data and rename the columns """
@@ -1398,7 +1414,7 @@ class data:
                 raise KeyError(errormsg)
             df = df.rename(columns={col:name})
         if sim is not None and self.ignore_extra:
-            dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] # Columns that say which stratum a row is for
+            dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] + [mod.dim for mod in sim.modules if isinstance(mod, ss.strains.Family)] # Columns that say which stratum or strain a row is for
             keep = [col for col in df.columns if col in self.time_cols or col in dims or match_column(sim, col) is not None]
             df = df[keep]
         return df
@@ -1420,7 +1436,7 @@ def validate_sim_data(data=None, die=None):
         # Try loading the data
         try:
             data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ss.data.time_cols # If a time column is supplied, use it as the index
+            timecols = ss.simdata.time_cols # If a time column is supplied, use it as the index
             found = False
             for timecol in timecols:
                 if timecol in data.cols:
@@ -1453,16 +1469,37 @@ def widen_data(sim, df):
     """
     Data in long form, with columns that say which stratum each row is for (named after dimensions of the sim, e.g. `age`), as one column for each result and stratum, e.g. `cases[age=0-15]`
 
-    A level is given by its label (or its position).
+    A level is given by its label (or its position). For a disease whose strains have courses of their own (`ss.Strains([hpv16, hpv18])`),
+    a column named after its strains (`strain`, or the name given to `ss.Strains`) gives each strain's own result: `cancer` in a row
+    for `strain=hpv16` is `hpv16.cancer`.
     """
     dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', []) if strat.name in df.columns]
-    if not dims:
+    fams = list(dict.fromkeys(mod.dim for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim in df.columns and mod.dim not in dims))
+    if not dims and not fams:
         return df
     parts = []
-    for key,group in df.groupby(dims, sort=False):
-        tag = ', '.join(f'{dim}={level}' for dim,level in zip(dims, key if isinstance(key, tuple) else [key]))
-        parts.append(group.drop(columns=dims).rename(columns=lambda col: f'{col}[{tag}]'))
+    for key,group in df.groupby(dims + fams, sort=False):
+        levels = dict(zip(dims + fams, key if isinstance(key, tuple) else [key]))
+        tag = ', '.join(f'{dim}={levels[dim]}' for dim in dims)
+        names = {col:member_column(sim, col, {dim:levels[dim] for dim in fams}) for col in group.columns if col not in levels}
+        parts.append(group.drop(columns=dims + fams).rename(columns=lambda col: f'{names[col]}[{tag}]' if tag else names[col]))
     return sc.dataframe(pd.concat(parts, axis=1))
+
+
+def member_column(sim, col, levels):
+    """ The column of a strain's own result, for a column of a disease whose strains have courses of their own: "cancer" for strain=hpv16 is "hpv16.cancer" (see `widen_data()`) """
+    modname, _, name = col.rpartition('.') # The name alone matches each strain's own result too, so it is looked up in the disease's
+    for dim,level in levels.items():
+        fams = [mod for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim == dim]
+        fam = next((mod for mod in fams if modname in ['', mod.name] and isinstance(mod.results.get(name), ss.Result)), None)
+        if fam is None:
+            raise ss.errors.UnknownDataColumn(f'the data for {col} is by {dim}, but {col} is not a result of {sc.strjoin([mod.name for mod in fams])}, whose strains are the levels of "{dim}".')
+        members = fam.member_names
+        member = str(level) if str(level) in members else members[int(level)] if str(level).isdigit() and int(level) < len(members) else None
+        if member is None:
+            raise ss.errors.UnknownDataColumn(f'the data for {col} has {dim}={level}, which is not a strain of {fam.name}; its strains are {sc.strjoin(members)}.')
+        col = f'{member}.{name}'
+    return col
 
 
 def parse_column(col):
@@ -1518,14 +1555,22 @@ def match_name(sim, col):
     return matches[0] if len(matches) == 1 else None
 
 
-def check_data(sim, df):
-    """ Check that every data column matches a result, and that the data overlaps the simulated period """
+def check_data(sim, df, die=False):
+    """
+    Check that every data column matches a result, and that the data overlaps the simulated period
+
+    A column that matches no result is noted (data on a sim can be just for plotting, or read by a fit's own `gof=`); with
+    `die=True`, as when a fit compares every column with its result, it is an error.
+    """
     options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
     for col in df.columns:
         name, dims = parse_column(col)
         base = match_name(sim, name)
         if dims and base is not None:
             for dim,level in dims.items():
+                fam = next((mod for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim == dim and dim not in [strat.name for strat in sim.groups.strats]), None)
+                if fam is not None:
+                    raise ss.errors.UnknownDataColumn(f'the data column "{col}" is by {dim}, the strains of {fam.name}, which have courses of their own: name each strain\'s own result, e.g. "{fam.member_names[0]}.{name.rpartition(".")[2]}", or give the data in long form, with a "{dim}" column.')
                 strat = sim.groups.strats[sim.groups.dim_index(dim)]
                 if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
                     raise ss.errors.UnknownDataColumn(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
@@ -1537,9 +1582,13 @@ def check_data(sim, df):
         if match_column(sim, col) is None:
             several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
             if len(several) > 1: # The name of a result of more than one module
-                raise ss.errors.UnknownDataColumn(f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.data(..., aliases=dict(...)).')
-            raise ss.errors.UnknownDataColumn(f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
-                                       f"     Rename it with ss.data(..., aliases=dict(result='{col}')), or drop it with ss.data(..., ignore_extra=True).")
+                msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.simdata(..., aliases=dict(...)).'
+            else:
+                msg = (f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
+                       f"     Rename it with ss.simdata(..., aliases=dict(result='{col}')), or drop it with ss.simdata(..., ignore_extra=True).")
+            if die:
+                raise ss.errors.UnknownDataColumn(msg)
+            ss.note(f'{msg[0].upper()}{msg[1:]} It is not compared with the results.', sim=sim)
     sim_t, data_t = data_times(sim, df)
     if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared (ss.errors.DataMisaligned); partly outside, the rest is left out of the comparison
         eps = np.median(np.diff(sim_t))/2
@@ -1555,26 +1604,63 @@ def date_years(dates):
     return np.array([ss.date(t).years for t in dates])
 
 
-def data_times(sim, df):
-    """ The times of the data, on the sim's own time axis (the result timevec as numbers) """
+def by_year(df):
+    """ Whether the data is by calendar year: an integer `year` column, so each row is the year it names, not 1 January of it """
+    return df.index.name == 'year' and pd.api.types.is_integer_dtype(df.index)
+
+
+def data_times(sim, df, res=None):
+    """ The times of the data, on the sim's own time axis (the result timevec as numbers), or on the timeline of a result whose module has a timestep of its own """
     timevec = sim.t.timevec
     index = df.index
     dated = isinstance(index, pd.DatetimeIndex) or (len(index) and isinstance(index[0], ss.date))
-    if sim.t.is_absolute or (dated and len(timevec) and isinstance(timevec[0], ss.date)): # A sim that starts in a year has dates, although its time is not absolute
-        sim_t = np.asarray(sim.t.yearvec, dtype=float)
-        data_t = date_years(tuple(index)).copy()
-    else:
-        sim_t = np.asarray(timevec, dtype=float)
-        data_t = np.asarray(index, dtype=float)
+    years = sim.t.is_absolute or (dated and len(timevec) and isinstance(timevec[0], ss.date)) # A sim that starts in a year has dates, although its time is not absolute
+    sim_t = np.asarray(sim.t.yearvec if years else timevec, dtype=float)
+    if res is not None and res.timevec is not None and len(res.timevec) != len(sim_t): # A module with a timestep of its own
+        own = res.timevec
+        sim_t = np.asarray(own.years if hasattr(own, 'years') else own, dtype=float)
+    data_t = date_years(tuple(index)).copy() if years else np.asarray(index, dtype=float)
     return sim_t, data_t
+
+
+def time_weights(sim_t, data_t, flow, annual=False):
+    """
+    The weights of the steps for each data time (see `lineup()`), and which data times are inside the simulated period
+
+    A value of a flow at a step is what happened over the step that ends there. Data at a time is compared with: for a flow, the sum
+    over the interval since the data time before; for a stock or ratio, the value interpolated at that time. Data by calendar
+    year (`annual`; see `by_year()`) is compared with the year it names: a flow summed over it, and a stock or ratio averaged over it.
+    """
+    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    if annual:
+        lo, hi = data_t, data_t + 1
+        inside = (lo >= sim_t.min() - eps) & (hi <= sim_t.max() + eps) # Only whole years
+    else:
+        spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
+        lo, hi = np.append(data_t[0] - spacing, data_t[:-1]) if len(data_t) else data_t, data_t
+        inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
+    if flow: # The steps that end in (lo, hi]
+        W = ((sim_t[None,:] > lo[:,None] + eps) & (sim_t[None,:] <= hi[:,None] + eps)).astype(float)
+    elif annual: # The mean of the time points in [lo, hi)
+        W = ((sim_t[None,:] >= lo[:,None] - eps) & (sim_t[None,:] < hi[:,None] - eps)).astype(float)
+        W /= np.maximum(W.sum(axis=1, keepdims=True), 1)
+    else: # As np.interp(): the first or last value outside the steps
+        W = np.zeros((len(data_t), len(sim_t)))
+        j = np.clip(np.searchsorted(sim_t, data_t, side='right') - 1, 0, max(len(sim_t) - 2, 0))
+        f = np.clip((data_t - sim_t[j])/(sim_t[j+1] - sim_t[j]), 0, 1) if len(sim_t) > 1 else np.zeros(len(data_t))
+        W[np.arange(len(data_t)), j] = 1 - f
+        W[np.arange(len(data_t)), np.minimum(j+1, len(sim_t)-1)] += f
+    return W, inside
 
 
 def compare(sim, df=None):
     """
     Line up a sim's results with its data
 
-    A flow (new infections, reported cases) is summed over the interval ending at
-    each data time; a stock or ratio (a count, a prevalence) is interpolated at the data's time.
+    A flow (new infections, reported cases) is summed over the interval ending at each data time; a stock or ratio (a count,
+    a prevalence) is interpolated at the data's time. Data by calendar year (an integer `year` column) is compared with the
+    year each row names: a flow summed over the year, a stock or ratio averaged over it. A column that matches no result is
+    left out (see `check_data()`).
 
     Returns a dict of `{column: (data values, model values)}`.
     """
@@ -1594,29 +1680,27 @@ def lineup(sim, df=None):
     The matrix that lines up each result that has data with its data, which `compare()` uses
 
     For a flow, it sums the steps of the interval that ends at each data time; for a stock or ratio,
-    it interpolates linearly between the steps either side of each data time.
+    it interpolates linearly between the steps either side of each data time (see `time_weights()`).
+    A result of a module with a timestep of its own is lined up on that module's timeline.
 
     Returns a dict of `{column: (W, data values, rows)}`, where the model's values at the data
     (those that are inside the simulated period and not missing, which are at these rows of the
-    data) are W @ the result.
+    data) are W @ the result. A column that matches no result is left out.
     """
     df = sim.data if df is None else df
-    sim_t, data_t = data_times(sim, df)
-    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
-    inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
-    spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
-    starts = np.append(data_t[0] - spacing, data_t[:-1]) if len(data_t) else []
-    flow = np.array([(sim_t > lo + eps) & (sim_t <= hi + eps) for lo,hi in zip(starts, data_t)], dtype=float).reshape(len(data_t), len(sim_t))
-    stock = np.zeros((len(data_t), len(sim_t))) # As np.interp(): the first or last value outside the steps
-    j = np.clip(np.searchsorted(sim_t, data_t, side='right') - 1, 0, max(len(sim_t) - 2, 0))
-    f = np.clip((data_t - sim_t[j])/(sim_t[j+1] - sim_t[j]), 0, 1) if len(sim_t) > 1 else np.zeros(len(data_t))
-    stock[np.arange(len(data_t)), j] = 1 - f
-    stock[np.arange(len(data_t)), np.minimum(j+1, len(sim_t)-1)] += f
+    annual = by_year(df)
+    weights = {} # By timeline and kind, since most results share them
     out = sc.objdict()
     for col in df.columns:
         res = match_column(sim, col)
+        if res is None:
+            continue
+        sim_t, data_t = data_times(sim, df, res)
+        key = (len(sim_t), res.kind == 'flow')
+        if key not in weights:
+            weights[key] = time_weights(sim_t, data_t, res.kind == 'flow', annual)
+        W, inside = weights[key]
         expected = np.asarray(df[col], dtype=float)
         ok = inside & np.isfinite(expected)
-        W = flow if res.kind == 'flow' else stock
         out[col] = (W[ok], expected[ok], np.flatnonzero(ok))
     return out

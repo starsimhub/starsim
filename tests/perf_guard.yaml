@@ -4,5 +4,13 @@ times:
   bare_run: 0.2466
   bare_run_no_people: 0.1524
   births_run: 0.0433
+  by_age_init: 0.0957
+  by_age_run: 1.2779
+  coded_init: 0.02
+  coded_run: 0.8247
+  counts_init: 0.0461
+  counts_run: 0.6486
   crn_false_run: 0.0926
+  fseis10_init: 0.0301
+  fseis10_run: 0.8009
   het_init: 0.0555

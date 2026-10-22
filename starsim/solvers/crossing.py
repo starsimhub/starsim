@@ -1,6 +1,7 @@
 """
 Diseases whose states are tracked jointly in a compartmental run
 """
+import importlib
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -592,7 +593,8 @@ class Crossing:
         out = {}
         for key in keys:
             if key in ['fixed', 'mult', 'consts', 'rel_trans']: # Tables, with a row for each step (or one for all of them)
-                vals = [xp.repeat(X[key], r, axis=0) if r > 1 and len(X[key]) > 1 else X[key] for X,r in zip(Xs, reps)]
+                vals = [xp.broadcast_to(X[key], X[key].shape[:2] + (engine.n_groups,)) for X,engine in zip(Xs, self.engines)] # By group, if kept once for all of them (see ss.gradients.capture())
+                vals = [xp.repeat(v, r, axis=0) if r > 1 and len(v) > 1 else v for v,r in zip(vals, reps)]
                 T = max(len(v) for v in vals)
                 parts = [v[:, I[:, None], C] for v,(I,C) in zip(vals, self.pieces[dict(fixed='flows', mult='flows').get(key, key)])]
                 out[key] = cat([xp.broadcast_to(part, (T,) + part.shape[1:]) for part in parts], axis=1)
@@ -687,9 +689,11 @@ class Crossing:
             return ss.kernels if self.compiled else ss.kernels.uncompiled()
         sim = self.sim
         if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
-            return ss.kernels.choose(verbose=False)
+            return ss.kernels.choose()
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
-        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, self.engines[0].mod.t.npts, solver), verbose=sim.pars.get('verbose', 0))
+        first = self.engines[0]
+        n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), first.dt, first.substeps(), solver) # The rates of the step last refreshed
+        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub))
         if runs == 1:
             self.compiled = kn is ss.kernels
         return kn
@@ -705,7 +709,10 @@ class Crossing:
     def whole_run(self, engine, use_jax=False):
         """ The output of a whole run for one engine: the first engine to ask takes the run for all of them """
         if not self.outs:
-            outs = ss.gradients.run_crossing(self) if use_jax else self.run()
+            if use_jax:
+                outs = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib._chain').run_crossing(self)
+            else:
+                outs = self.run()
             self.outs = dict(zip(self.names, outs))
         return self.outs.pop(engine.mod.name)
 
@@ -752,7 +759,7 @@ class Crossing:
         kn = self.kernels()
         self.y, flows = kn.one_step(self.rng, self.y, p, first.dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step
-            sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti + 1, first.integer))
+            sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti, first.integer))
         if solver == 'gillespie' and p.local and p.has_det: # By place, the counts are settled after the events, as in SimInf
             kn.settle_places(self.y, p, first.dt, flows)
         recorded = []
@@ -789,14 +796,18 @@ class Crossing:
         ys = np.repeat(y0[None], n_runs, axis=0)
         length = max(int(50e6//((len(program.fixed) + len(program.mult) + len(program.consts) + len(program.rel_trans))*per_step*R*8)), 1) # Steps per part, as in ss.solvers.Compartmental.run_many()
         start = 0
-        kn = self.kernels(runs=n_runs)
-        while True:
-            end = min(start + length, npts - 1)
-            kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
-                                tally, tally_g, np.arange(nc), np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
-            if end >= npts - 1:
-                break
-            start = end
+        if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
+            kept = (range(nc), range(nflows)) if grouped else ([], [])
+            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.perflib._chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
+        else:
+            kn = self.kernels(runs=n_runs)
+            while True: # A part at a time
+                end = min(start + length, npts - 1)
+                kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
+                                    tally, tally_g, np.arange(nc), np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
+                if end >= npts - 1:
+                    break
+                start = end
         outs = []
         for k,engine in enumerate(engines):
             states = range(len(engine.graph.states))

@@ -42,17 +42,17 @@ class Loop:
     Each type of module is called at a different time. Within each module type,
     they are called in the order listed. The default loop order is:
 
-        1. sim:               start_step()     # Initialize the sim, including plotting progress
-        2. all modules:       start_step()     # Initialize the modules, including the random number distribution
-        3. sim.custom:        step()           # Run any custom modules
-        4. sim.demographics:  step()           # Update the demographics, including adding new agents
-        5. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
-        6. sim.connectors:    step()           # Run the connectors
-        7. sim.networks:      step()           # Run the networks, including adding/removing edges
-        8. sim.interventions: step()           # Run the interventions
-        9. sim.diseases:      step()           # Run the diseases, including transmission
-        10. people:           step_die()       # Figure out who died on this timestep
-        11. sim:              advance()        # Move the time to the end of the step
+        1. sim:               advance()        # Move the time to this step's time point
+        2. sim:               start_step()     # Initialize the sim, including plotting progress
+        3. all modules:       start_step()     # Initialize the modules, including the random number distribution
+        4. sim.custom:        step()           # Run any custom modules
+        5. sim.demographics:  step()           # Update the demographics, including adding new agents
+        6. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
+        7. sim.connectors:    step()           # Run the connectors
+        8. sim.networks:      step()           # Run the networks, including adding/removing edges
+        9. sim.interventions: step()           # Run the interventions
+        10. sim.diseases:     step()           # Run the diseases, including transmission
+        11. people:           step_die()       # Figure out who died on this timestep
         12. people:           update_results() # Update basic state results
         13. all modules:      update_results() # Update any results
         14. sim.analyzers:    step()           # Run the analyzers
@@ -60,11 +60,14 @@ class Loop:
         16. people:           finish_step()    # Clean up dead agents
         17. sim:              finish_step()    # Finish the step
 
-    One time convention holds for every module: during the step from time point k-1 to k,
-    `sim.ti == k-1` and `sim.now` is the start of the step (so the first step has `ti == 0`);
-    `advance()` then moves the time to k, where `update_results()` and the analyzers record
-    the results. At the first time point there is no step: only the results (of the start) are
-    recorded and the analyzers run (`at_start`).
+    One time index holds for every function of a step, in every module: the step from time
+    point k-1 to k is step k, and throughout it `sim.ti == k`, where its results go (so the
+    first step has `ti == 1`): `self.results.x[self.ti]` is this step's value, in `step()` as
+    in `update_results()`, and a time recorded as `self.ti` in one is `self.ti` in the other.
+    `sim.now` is when the step starts, time point k-1, which it reads time-varying inputs and
+    dates at. At the first time point (`ti == 0`, `now` the start) there is no step: only the
+    results of the start are recorded (people's and every module's but the interventions',
+    which have done nothing yet), and the analyzers run (`at_start`).
 
     A loop also runs ordinary functions with no sim. Each step is called as `step(t, dt)` for
     each step, where `t` is the time at its start; each record function is called as `record(t)`
@@ -237,8 +240,16 @@ class Loop:
         self.funcs = [] # Reset, just in case
         sim = self.sim
 
+        # Move the time to the step about to be taken, so that it is the same in every function of the step: the sim's time,
+        # with that of the modules on its timeline; a module with a timeline of its own moves its own
+        self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
+        self += sim.advance # Note special __iadd__() method above, which appends these to the funcs list
+        for mod in sim.modules:
+            if not self._on_sim_time(mod):
+                self += mod.advance
+
         # Collect the start_steps
-        self += sim.start_step # Note special __iadd__() method above, which appends these to the funcs list
+        self += sim.start_step
         for mod in sim.modules:
             self += mod.start_step
 
@@ -257,7 +268,7 @@ class Loop:
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in sim.diseases():
-            if isinstance(disease, ss.diseases.DiseaseBase):
+            if isinstance(disease, ss.Disease):
                 self += disease.step_state
 
         # Update connectors
@@ -281,14 +292,7 @@ class Loop:
         # Update people who died -- calls disease.step_die() internally
         self += sim.people.step_die
 
-        # Move the time to the end of the step, where its results are recorded: the sim's time, with that of
-        # the modules on its timeline; a module with a timeline of its own moves its own
-        self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
-        self += sim.advance
-        for mod in sim.modules:
-            if not self._on_sim_time(mod):
-                self += mod.advance
-        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start
+        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start (except the interventions')
 
         # Update results. A module's update_results is skipped only when it is the inherited
         # base method (not overridden anywhere in the MRO) and the module has no auto-generated
@@ -303,7 +307,8 @@ class Loop:
         # Apply analyzers
         for ana in sim.analyzers():
             self += ana.step
-        self.at_start = set(range(first, len(self.funcs)))
+        intvs = {intv.name for intv in sim.interventions()} # Which have done nothing before the first step, so record nothing at the start
+        self.at_start = {i for i in range(first, len(self.funcs)) if self.funcs[i]['module'] not in intvs}
 
         # Clean up dead agents, and perform other housekeeping tasks
         for mod in sim.modules:
@@ -499,7 +504,7 @@ class Loop:
         `NaN`. The plan metadata (via `to_df()`) is always available on demand regardless.
 
         Args:
-            until (str/date): if supplied, stop after this date (used by sim.run_one_step)
+            until (str/date): if supplied, stop after the step that starts at this time (used by sim.run_one_step)
             verbose (bool): if True, print each function call as it runs
             profile (bool): if True, record per-entry CPU timing (default: keep the current setting)
         """
@@ -515,7 +520,7 @@ class Loop:
         plan = self.plan
         while self.index < len(plan):
             entry = plan[self.index]
-            if until is not None and entry.label == 'sim.start_step' and entry.time > until: # Stop before a step that ends after the time asked for
+            if until is not None and entry.label == 'sim.advance' and self.sim.t.tvec[entry.ti - 1] > until: # Stop before a step that starts after the time asked for
                 break
             if verbose:
                 now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting

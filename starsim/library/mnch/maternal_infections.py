@@ -160,7 +160,7 @@ class CongenitalDisease(AgentSIR):
 
         # Schedule events at delivery time
         preg = self.sim.demographics.pregnancy
-        dt_delivery = np.ceil(preg.ti_exit_P.raw) - self.ti  # The step each pregnancy is due to end in delivery; full array, indexed by UID below
+        dt_delivery = np.ceil(preg.ti_exit_P.raw) - preg.engine.ti  # The steps until each pregnancy is due to end in delivery (dated by its engine: see ss.solvers.Engine.ti); full array, indexed by UID below
         for oi, key in enumerate(self.pars.birth_outcome_keys):
             o_uids = target_uids[assigned == oi]
             s_uids = source_uids[assigned == oi]

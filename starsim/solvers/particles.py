@@ -77,7 +77,8 @@ class Particles:
         tables = self.tables if tables is None else tables
         shares = self.shares if shares is None else shares
         rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, self.per_step, row0)
-        kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver))
+        n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
+        kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver, n_sub))
         if self.n_threads > 1:
             kn.advance_threads(self.rngs, self.progs, self.ys, self.dt, self.done, end, *rest)
         else:

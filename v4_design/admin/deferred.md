@@ -83,6 +83,41 @@ Set aside on 2026-10-21 when the simplification plan ([oct21/plan.md](../oct21/p
 - **Names from S3.5** (Cliff, 2026-10-21: "don't love delivery.compartments or ss.solvers.CompartmentalDelivery, but we can revisit later"): `delivery.compartments`, `ss.solvers.CompartmentalDelivery`, `Product.administer()`, `delivery.reached()`.
 - **Reviews**: the canon gallery, the naive review's xfails, real models at full complexity, D-T1's rest, D-T2, D-T3, P7/D45/X30, and the downstream CI gate.
 
+## From the October 22 plan
+
+Set aside while building [oct22/plan.md](../oct22/plan.md), each with what it would take. The worklogs in [oct22/worklogs/](../oct22/worklogs/) have the details.
+
+**Performance**
+- FP58: declared rate exits under a changing modifier are redrawn (C17's correctness fix), so the declared method × pregnancy toy as agents is 2.1× slower (3.09 vs 1.44 s). Fix: redraw only the exits whose rate changed, or per-step hazards for rate exits under modifiers. M.
+- Counts through the compartmental kernels under every solver (MA28): after D1, RK4 on counts in agent runs is still 4 Python derivative calls a step (about 0.15 ms each). Fix: a program for the count states with people counts as per-step inputs, run by `ss.kernels.one_step()`. M+.
+- CV11's remaining 1.4×: `ss.by.lookup()` works over every agent, per table, per step; working out only the agents being scheduled would close most of it. S.
+- `sim.current_scale` lookups and `distributions.jump` show in agent profiles. S.
+
+**Accuracy**
+- A pair-formation ODE (Kretzschmar and Dietz: singles plus pairs by state, by sex) for `ss.SexualNet` under compartmental solvers, so a curable STI with fast transmission within partnerships runs right (question 17 of the oct22 plan, option b). M.
+- Date a declared progression at the step's index rather than its start (`ti - 1`), so every `ti_X` compares with `sim.ti` the same way (A2). Needs per-person knowledge of how a state was entered, or changes every declared dwell by a step. M.
+- Compartmental conveyors for a fixed delay that is not a whole number of steps: split the inflow between floor and ceiling slots so the mean matches agents' stochastic rounding (FP55). S.
+- FP53's guard for transfers and dwells by group (`dwell_cv()` on `graph.transfers` and each group's stats). S.
+- An automatic hyperexponential fit for a dwell with a CV above 1 (FP53's alternative); users can write the mixture as states today (A3). M.
+- ST29: exact rescaling of exits beyond 32-bit steps (adjust ≤ 1e-9) would need the drawn dwell stored as a float. Not worth it now.
+- `ssl.NCD` prevalence divides by the unweighted `people.n_alive`: one line if weighted NCD runs matter.
+- Fetuses as agents are put in each module's first state at conception without firing anything, so a `dur=0` split out of it would happen during gestation. Worth a look with `fetus=True` models.
+- Optuna's convergence rule compares raw trial scores, so one lucky late draw makes a fit "not converged"; a smoothed criterion would be better. M, needs a small study.
+
+**Features**
+- FP52, implemented rather than refused: `ss.change`/`ss.modify` on a value over `to` in a `p=` table (FPsim's method switching). M.
+- Sugar for a product whose holding is a user-declared state module (`ss.Vaccine(waning=prot)`), about 40–60 lines; wait until a downstream package asks (A3).
+- `.since` (and `.ever`, `.count`) on transitions (TB §4.2): declared diseases would record the transitions conditions read, as `EventSource` does for deliveries. About 40 lines.
+- A module given to a sim and never run raises on `.results`, pointing to `sim.analyzers.<name>` (TB §4.4): small, but touches every module's attribute access.
+- `ss.SexualNet`: `n_contacts=ss.by(risk=...)`, several `match=` properties (as `ssl.DegreeNet` has), and one-off contacts between two groups.
+- ST49 under the compartmental solvers (one beta per route per source state). S.
+- A family's result with strata (HP50's second half). S.
+- `0.275*ss.peract(...)` (a number times a per-act value directly) is a `TypeError`; it could scale the per-act hazard. S.
+- ST42's `preg.redraw(uids)` and a modifier of the preterm chance, for BV's preterm link: needs a design for modifying `preterm_risk()`.
+- Strains: a declared form for introducing a strain on a date (today `dis.infect(uids, strain=)`), about 30 lines with a compartmental form; waning cross-immunity and Covasim's antibody kinetics (need CV13); enhancement (protection above 1, dengue); an exact compartmental form for interacting own courses (KI15) and for `strains.last`/`.ever` under the ODE; within-host abundance and several lineages of one type; correlated transmission of several strains in one contact; `per='strain'` on a rate without `p=`; own-course members whose structure differs, as a supported form; HP43 (a trait shared across own courses) and HP56 (`cap=` for summed severity protection); `ss.Strains` for diseases written as code.
+- A helper for "the steps so far" (`res.x[:sim.ti]`) remains open (spec 19).
+- ST44's closest-name hint includes non-result keys such as `restart`. S.
+
 ## Won't do
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.

@@ -89,7 +89,7 @@ class AgentSIR(ss.Infection):
     def set_infection(self, uids):
         """ Make the agents infectious, immediately (`AgentSEIR` overrides this to add a latent period) """
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
+        self.ti_infected[uids] = self.ti
         return
 
     def clear_infection(self, uids):
@@ -183,7 +183,7 @@ class AgentSEIR(AgentSIR):
     def set_infection(self, uids):
         """ Agents are exposed first, and become infectious after the latent period """
         self.exposed[uids] = True
-        self.ti_exposed[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
+        self.ti_exposed[uids] = self.ti
         self.ti_infectious[uids] = self.ti_exposed[uids] + self.pars.dur_exp.rvs(uids)
         return
 
@@ -281,7 +281,7 @@ class AgentSIS(ss.Infection):
         """ Set prognoses """
         super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
+        self.ti_infected[uids] = self.ti
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection

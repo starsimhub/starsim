@@ -419,22 +419,31 @@ def disease(source, total=None):
             lines.append(f'  {name:16s} a result: {text}')
 
     # Initial numbers
-    init = {}
+    init, init_n = {}, {} # Shares of people (and the amounts of states that are not people), and numbers of people
     for name,s in source.states.items():
         val = s.init
-        if not sc.isnumber(val) and val is not None: # e.g. ss.by(place=[...])
-            init[name] = val
+        if not sc.isnumber(val) and val is not None: # e.g. ss.by(place=[...]): numbers of people, or shares if some were below one person (see atomica.py)
+            (init_n if s.people and (val.is_count() or np.any(np.asarray(val.values) > 1)) else init)[name] = val
         elif val:
             near = round(float(val))
-            if near and np.isclose(val, near, rtol=0, atol=1e-9): # A count with rounding error (10*(1 - 0.9)) is still a count
-                init[name] = int(near)
-            elif val < 1 and total: # A count below one person is written as the fraction of everyone it is, since a number below 1 is read as a fraction
+            if not s.people:
+                init[name] = val
+            elif near and np.isclose(val, near, rtol=0, atol=1e-9): # A count with rounding error (10*(1 - 0.9)) is still a count
+                init_n[name] = int(near)
+            elif val < 1 and total: # A count below one person is written as the fraction of everyone it is
                 init[name] = val/total
             else:
-                init[name] = val
-    dis = ss.Disease(*states.values(), **named, init=init or None, name=source.name)
+                init_n[name] = val
+    first = next((k for k,s in source.states.items() if s.people), None) # Where the rest of the people start, as in the formats read
+    strains = None
+    for kwargs in [kw for kw in source.strats if kw.get('kind') == 'strain']: # Strains are part of the disease (their states are those of infection)
+        dim = next(k for k in kwargs if k not in ss.dimensions.strat_options)
+        split = kwargs.get('split')
+        strains = ss.Strains(list(kwargs[dim]), name=dim, split=None if isinstance(split, ss.by) else split, **(kwargs.get('adjust') or {}))
+    dis = ss.Disease(*states.values(), **named, init=init or None, init_n=init_n or None, first=first, name=source.name, strains=strains)
     for kwargs in source.strats:
-        dis.stratify(**kwargs)
+        if kwargs.get('kind') != 'strain':
+            dis.stratify(**kwargs)
     return dis, lines
 
 

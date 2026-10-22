@@ -1,14 +1,13 @@
 """
 Dimensions: how a model is divided into groups by the properties of people (age, sex, place, ...)
 """
-import re
 import numpy as np
 import sciris as sc
 import starsim as ss
 from .expressions import as_expr, did_you_mean
 from .parameters import by
-from .geo import location, gravity, Mobility
-from .transitions import parse_arrow, parse_increment
+from .geo import geography, gravity, Mobility
+from .transitions import level_pair, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
 
@@ -27,23 +26,25 @@ class Strat:
     Args:
         name (str): the dimension, e.g. 'age'
         levels (list): bin edges (for a continuous property such as age) or labels
-        split (list): the share of the population in each level (if not given: from an `ss.geo.location`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
+        split (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-        kind (str): 'age', 'space', 'strain', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.location` or with `mobility=`, 'strain' with `immunity=`, 'age' for a dimension called age, and otherwise 'plain'
+        kind (str): 'age', 'space', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
+            (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
         mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
-        immunity (array/immunity): for a strain, the protection that past infection with each strain (rows) gives against each strain (columns), 1 being complete; or `ss.immunity(rel_sus=matrix, combine=...)`, to say how the protection from several strains adds up (the strongest, by default)
 
     A dimension of kind 'clock' holds the time since an event, which advances with time as age does: its levels are
     the lower edges of bins of time (e.g. `ss.months([0, 1, 2, 3, 6, 12, 24])`), and a last level `none` holds the
     people who have not had the event (whose value is NaN). An event sets it with `move=` (e.g. `move=dict(since_birth=0)`).
     Each person's value is the time since it was set, so a clock is kept by agents only.
     """
-    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None, immunity=None):
+    strains = None # For a strain dimension: the ss.Strains it is made from
+
+    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None):
         self.name = name
-        self.geo = levels if isinstance(levels, location) else None
-        self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'strain' if immunity is not None else 'age' if name == 'age' else 'plain')
+        self.geo = levels if isinstance(levels, geography) else None
+        self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'age' if name == 'age' else 'plain')
         self.guessed = sc.objdict()
         self.states = states
         if where is not None and not isinstance(where, dict):
@@ -91,8 +92,6 @@ class Strat:
                 raise ValueError(errormsg)
             self.female = women[0]
         self.carries = None # For a strain with levels for people who carry several strains at once ('A+B'): see init_carriage()
-        if self.kind == 'strain' and any('+' in str(label) for label in self.labels):
-            self.init_carriage()
         if self.kind == 'age' and self.edges is None and kind is None: # Age groups given as labels have no ages, so nobody ages between them
             self.kind = 'plain'
             self.guessed['kind'] = 'plain, since the age groups are labels and not ages'
@@ -104,24 +103,6 @@ class Strat:
             if np.any(vals < 0):
                 raise ss.errors.InvalidAdjustment(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
-        self.immunity = None
-        self.combine = 'max' # How the protection from several strains a person has had adds up: see ss.immunity
-        if isinstance(immunity, ss.immunity):
-            if immunity.protected is not None or list(immunity.values.keys()) != ['rel_sus']:
-                given = ['protected='] if immunity.protected is not None else []
-                given += [f'{key.split(".")[0]}=' for key in immunity.values if key != 'rel_sus']
-                errormsg = f'immunity= of the strain dimension "{name}" is protection against being infected again, so it takes ss.immunity(rel_sus=..., combine=...), without {sc.strjoin(given)} (a person is protected by every strain they have had)'
-                raise ValueError(errormsg)
-            self.combine = immunity.combine
-            immunity = immunity.matrix('rel_sus', self.n) if self.kind == 'strain' else immunity.values['rel_sus']
-        if immunity is not None:
-            immunity = np.array(immunity, dtype=float)
-            if self.kind != 'strain':
-                errormsg = f'immunity= is for a strain dimension, but "{name}" is of kind "{self.kind}"; pass kind="strain" if it is one'
-                raise ValueError(errormsg)
-            if immunity.shape != (self.n, self.n):
-                raise ss.errors.ShapeError(f'immunity= has shape {immunity.shape}, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}), so it needs to be {self.n}×{self.n}.')
-            self.immunity = immunity
         self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
         self.cond = None # For a dimension of some states only, a split given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
         if isinstance(split, by):
@@ -139,8 +120,8 @@ class Strat:
             split = self.at_none()
             self.guessed['split'] = 'everyone at none, since nobody has had the event yet'
         elif self.kind == 'age' and self.edges is not None: # As the people of a declared model, unless the sim has a named population
-            world = ss.named.world
-            split = ss.named.age_split(self.edges, world.ages, world.counts)
+            world = ss.data.world
+            split = ss.data.age_split(self.edges, world.ages, world.counts)
             self.guessed['split'] = world.guess
         elif all(isinstance(v, (bool, np.bool_)) for v in self.labels): # e.g. vaccinated=[False, True]
             split = self.first()
@@ -183,32 +164,20 @@ class Strat:
         """ For a clock: a split with everyone at none, the last level """
         return self.first()[::-1].copy()
 
-    def init_carriage(self):
+    def init_carriage(self, strains):
         """
-        For a strain with a level such as 'A+B', for people who carry strains A and B at once: which strains each level carries, and where carrying one more leads
+        For a strain dimension whose levels are sets of strains carried at once ('A+B', from `ss.Strains(max_strains=)`): which strains each level carries, and where carrying one more leads
 
-        Each strain carried needs a level of its own ('A' and 'B'). Someone who carries several
-        strains passes on one of them, in proportion to their infectiousness (`adjust=dict(rel_trans=...)`),
-        and someone infected with a strain they do not carry moves to the level that adds it, if there is one
-        (otherwise they keep the strains they have).
+        The first levels are the strains alone. Someone who carries several strains passes on one of them
+        (see `ss.Strains(transmit=)`), and someone infected with a strain they do not carry moves to the
+        level that adds it (once full, the level that replaces the oldest: see `ss.Strains.adds()`).
         """
-        sets = [frozenset(part.strip() for part in str(label).split('+')) for label in self.labels]
-        names = {next(iter(s)):i for i,s in enumerate(sets) if len(s) == 1}
-        for label,s in zip(self.labels, sets):
-            missing = s - set(names)
-            if missing:
-                raise ss.errors.ShapeError(f'the level "{label}" of "{self.name}" carries {sc.strjoin(sorted(missing))}, which has no level of its own; each strain carried needs one.')
-        if len(set(sets)) != len(sets):
-            raise ss.errors.ShapeError(f'"{self.name}" has two levels that carry the same strains ({sc.strjoin(self.labels)}).')
-        lookup = {s:i for i,s in enumerate(sets)}
-        self.base = np.array(sorted(names.values())) # The levels of a single strain
+        n = len(strains.names)
+        self.base = np.arange(n) # The levels of a single strain
         self.carries = np.zeros((self.n, self.n), dtype=bool) # carries[l, j]: people at level l carry strain j
-        self.adds = np.zeros((self.n, self.n), dtype=int) # adds[l, j]: the level of people at level l once infected with strain j as well (l itself if they carry it already, or there is no level for carrying it as well)
-        for l,s in enumerate(sets):
-            for name in s:
-                self.carries[l, names[name]] = True
-            for name,j in names.items():
-                self.adds[l, j] = lookup.get(s | {name}, l)
+        for l,s in enumerate(strains.sets):
+            self.carries[l, list(s)] = True
+        self.adds = strains.adds() # adds[l, j]: the level of people at level l once infected with strain j as well (l itself if they carry it already)
         return
 
     def __repr__(self):
@@ -250,9 +219,11 @@ class Strat:
         return np.where(np.isinf(out), np.nan, out) if self.kind == 'clock' else out
 
     def moved(self, vals, level):
-        """ As agents: the values of people moved along this dimension: to a level (its position), up a counter (`('+', k)`), or to a time on a clock (`('=', t)`) """
+        """ As agents: the values of people moved along this dimension: to a level (its position), up a counter (`('+', k)`), to a time on a clock (`('=', t)`), or from each level to another (`('map', levels)`, a change of strains) """
         if isinstance(level, tuple):
             op, x = level
+            if op == 'map':
+                return self.target(level)[np.asarray(vals, dtype=int)]
             return self.add(vals, x) if op == '+' else np.full(len(vals), x, dtype=float)
         return self.value(level)
 
@@ -260,6 +231,8 @@ class Strat:
         """ Where people at each level go when moved along this dimension: as `moved()`, a level for each level """
         if isinstance(level, tuple):
             op, x = level
+            if op == 'map': # Those at a level it does not apply to stay
+                return np.where(np.asarray(x) >= 0, x, np.arange(self.n))
             return self.shifted(x) if op == '+' else np.full(self.n, self.clock_level(x))
         return np.full(self.n, level)
 
@@ -297,8 +270,11 @@ class Strat:
                 mobility['matrix'] = mob.matrix(self).tolist()
             else: # A register of movements, by its size and a hash of its contents
                 mobility['register'] = dict(events=len(mob.data), hash=sc.sha(mob.data.astype(str).to_csv()).hexdigest())
-        return dict(geo=self.geo.ref if self.geo is not None else None, split_from=getattr(self, 'split_from', None) or None, unit=unit, # Where a named geography or split came from
-                    name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where, mobility=mobility)
+        out = dict(geo=self.geo.ref if self.geo is not None else None, split_from=getattr(self, 'split_from', None) or None, unit=unit, # Where a named geography or split came from
+                   name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where, mobility=mobility)
+        if self.strains is not None: # As ss.Strains takes it
+            out['strains'] = self.strains.spec
+        return out
 
     @property
     def mids(self):
@@ -364,7 +340,7 @@ class Transfer:
     def __init__(self, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
         increment = parse_increment(increment, 'ss.transfer()')
         if len(kwargs) + len(increment or {}) != 1:
-            errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(risk="low -> high", rate=0.1) or ss.transfer(increment="doses", rate=0.1), not {list(kwargs.keys()) + list(increment or {})}'
+            errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(risk=("low", "high"), rate=0.1) or ss.transfer(increment="doses", rate=0.1), not {list(kwargs.keys()) + list(increment or {})}'
             raise ValueError(errormsg)
         if (rate is None) == (dur is None):
             errormsg = 'ss.transfer() takes exactly one of rate= or dur='
@@ -375,14 +351,14 @@ class Transfer:
             target = None
         else:
             self.dim, target = list(kwargs.items())[0]
-        if isinstance(target, str) and re.search(r'->|>>', target):
-            src, dst = parse_arrow(target)
-            self.src, self.dst = src, (dst[0] if len(dst) == 1 else dst)
-        else:
-            self.src, self.dst = None, target # From every other level
+        src, self.dst = level_pair(target, 'ss.transfer()') # From a level, or from every other level
+        if src is not None and len(src) != 1:
+            errormsg = f'ss.transfer() moves people from one level (or from every other level, if only the level they move to is given), not from {src}; give one transfer for each'
+            raise ValueError(errormsg)
+        self.src = None if src is None else src[0]
         self.dsts = self.dst if isinstance(self.dst, list) else [self.dst] # The levels it moves people to
         if len(self.dsts) > 1 and self.src is None:
-            errormsg = f'A transfer to one of several levels names the level people move from, with an arrow, e.g. ss.transfer({self.dim}="a -> b | c", p=[0.6, 0.4], dur=...), not {self.dim}={target!r}'
+            errormsg = f'A transfer to one of several levels names the level people move from, as a pair, e.g. ss.transfer({self.dim}=("a", ["b", "c"]), p=[0.6, 0.4], dur=...), not {self.dim}={target!r}'
             raise ValueError(errormsg)
         self.p = None # With several, the probability of each, as people move
         if len(self.dsts) > 1 or p is not None:
@@ -390,7 +366,7 @@ class Transfer:
             p = p + [None] if len(p) == len(self.dsts) - 1 else p # With two levels, one value is the first one's probability
             if len(self.dsts) == 1 or len(p) != len(self.dsts) or sum(v is None for v in p) > 1:
                 what = f'{len(self.dsts)} levels to move to' if len(self.dsts) > 1 else 'one level to move to'
-                errormsg = (f'p= of ss.transfer() gives the probability of each level it moves people to, one each (or None for the rest), as people move, e.g. ss.transfer(method="none -> pill | iud", p=[0.6, 0.4], dur=...); '
+                errormsg = (f'p= of ss.transfer() gives the probability of each level it moves people to, one each (or None for the rest), as people move, e.g. ss.transfer(method=("none", ["pill", "iud"]), p=[0.6, 0.4], dur=...); '
                             f'it has {what} and p={p}. For only some people to move, give a rate (rate=), or where= on the stratification')
                 raise ss.errors.BadBranchSplit(errormsg)
             self.p = [None if v is None else as_expr(v) for v in p]
@@ -423,19 +399,19 @@ def transfer(rate=None, dur=None, p=None, states=None, name=None, label=None, in
     Args:
         rate (any): the per-person hazard
         dur (any): the time before moving (instead of `rate`): a scalar is the mean of an exponential, and a distribution is drawn for each person when they reach a level it moves them from
-        p (list): with several levels to move to (`method='none -> pill | iud'`), the probability of each, decided as people move; one may be None, for the rest
+        p (list): with several levels to move to (`method=('none', ['pill', 'iud'])`), the probability of each, decided as people move; one may be None, for the rest
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
-        kwargs (dict): the dimension, and an arrow between two of its levels (e.g. `risk='low -> high'`),
-            or the level people move to (e.g. `vaccinated=True`)
+        kwargs (dict): the dimension, and a pair of its levels, from and to (e.g. `risk=('low', 'high')`),
+            or the level people move to, from every other level (e.g. `vaccinated=True`)
 
     Examples:
         ```python
-        ss.transfer(risk='low -> high', rate=ss.peryear(0.1))
+        ss.transfer(risk=('low', 'high'), rate=ss.peryear(0.1))
         ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
         ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # A counter, down a level at a time
-        ss.transfer(method='none -> pill | iud', p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
+        ss.transfer(method=('none', ['pill', 'iud']), p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
         ```
     """
     opts = [key for key in kwargs if key in ss.interventions.delivery_keys + ['disease']]
@@ -473,7 +449,7 @@ def transfer_stages(sim, mod, tf, strat):
     return out
 
 
-strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility', 'immunity']
+strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility']
 
 
 def parse_stratify(kwargs, graphs, sim=False):
@@ -492,9 +468,9 @@ def parse_stratify(kwargs, graphs, sim=False):
     """
     kwargs = dict(kwargs)
     opts = {key:kwargs.pop(key, None) for key in strat_options}
-    if opts['immunity'] is not None and np.ndim(opts['immunity']) == 1 and not any(isinstance(v, (list, tuple, np.ndarray, location)) for v in kwargs.values()): # Levels, not the protection between strains: a dimension called immunity
-        kwargs['immunity'] = opts.pop('immunity')
-        opts['immunity'] = None
+    if opts['kind'] == 'strain':
+        errormsg = 'strains are part of the disease, not a stratification: ss.Disease(..., strains=ss.Strains(["A", "B"], ...)), which takes the split, the values of each strain, and the protection between them (immunity=)'
+        raise ValueError(errormsg)
     misplaced = [key for key in kwargs if key in ['inplace', 'frame']]
     if misplaced:
         errormsg = f'{sc.strjoin(misplaced)} is not an option of {"sim.stratify() or ss.Sim(stratify=...)" if sim else "stratify() here"}, and cannot be the name of a dimension'
@@ -503,7 +479,7 @@ def parse_stratify(kwargs, graphs, sim=False):
     transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
     given = [key for key,val in opts.items() if val is not None]
     if not dims and not transfers:
-        errormsg = f'stratify() needs a dimension and its levels, e.g. stratify(age=[0, 15, 65]); it was given only {sc.strjoin(given) or "nothing"}' + (' (immunity= is the protection between the levels of a strain dimension given in the same call)' if 'immunity' in given else '')
+        errormsg = f'stratify() needs a dimension and its levels, e.g. stratify(age=[0, 15, 65]); it was given only {sc.strjoin(given) or "nothing"}'
         raise ValueError(errormsg)
     if transfers and sim:
         errormsg = f'A transfer ({sc.strjoin(transfers)}) belongs to a disease: pass it to that disease\'s stratify()'
@@ -533,10 +509,10 @@ def parse_stratify(kwargs, graphs, sim=False):
     strats = []
     for name,levels in dims.items():
         strat = Strat(name, levels, **opts)
-        if strat.kind == 'strain' and states is None and graphs: # A strain belongs to an infection, so the states people can be in without ever being infected have none
-            uninfected = sorted({s for g in graphs for s in g.uninfected})
-            strat.states = [s.name for g in graphs for s in g.people_states if s.name not in g.uninfected]
-            strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(uninfected)})'
+        sets = [str(label).split('+') for label in strat.labels]
+        if any(len(parts) > 1 and all(part.strip() in strat.labels for part in parts) for parts in sets): # A level that is other levels carried together
+            errormsg = f'"{name}" has a level that joins others with "+" ({sc.strjoin(strat.labels)}): sets of strains carried together are made by ss.Strains, e.g. ss.Disease(..., strains=ss.Strains({[label for label,parts in zip(strat.labels, sets) if len(parts) == 1]}, max_strains=2))'
+            raise ValueError(errormsg)
         strats.append(strat)
     return strats, transfers
 
@@ -576,9 +552,13 @@ class Groups:
         for strat in strats.values(): # An age group nobody is in: the edges are lower edges, so [0, 15, 120] has a group 120+
             if strat.kind == 'age' and strat.edges is not None and strat.edges[-1] >= 100:
                 ss.note(f'the age group {strat.labels[-1]} of "{strat.name}" is empty, since ages run to 100; the edges are the lower edges of each group, so the last is open-ended', sim=sim)
-        if self.sim_strats and not sim.declared: # Only modules written as code, which keep their own results
-            names = sc.strjoin(strat.name for strat in self.sim_strats)
-            ss.note(f'the sim is stratified by {names}, but none of its modules is declared, so no results are by group; modules written as code can read the levels as people.{self.sim_strats[0].attr}', sim=sim)
+        if self.sim_strats and not sim.declared: # Only modules written as code, which keep their own results: used only if a module's values are by it
+            mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module)]
+            byvals = [val for mod in mods for val in [*mod.pars.values(), *vars(mod).values()] if isinstance(val, ss.by)] # Its parameters, and options such as a delivery's coverage
+            unused = [strat.name for strat in self.sim_strats if not any(strat.name in val.dims for val in byvals)]
+            if unused:
+                raise ss.errors.Unapplied(f'the sim is stratified by {sc.strjoin(unused)}, but none of its modules is declared and none has values by it, so nothing would use it: modules written as code keep their own results, not by group. '
+                                          f'Declare a disease (ss.Disease) to have results by group, or leave the stratification out.')
         for mod in sim.declared:
             for strat in mod.graph.strats:
                 if strat.name in strats:
@@ -635,9 +615,9 @@ class Groups:
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
-            if (named is not None or given is not None) and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('split') == ss.named.world.guess:
+            if (named is not None or given is not None) and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('split') == ss.data.world.guess:
                 ages, counts = (named.ages, named.counts) if named is not None else given
-                strat.split = ss.named.age_split(strat.edges, ages, counts)
+                strat.split = ss.data.age_split(strat.edges, ages, counts)
                 strat.split_from = 'people'
                 strat.guessed.pop('split')
         pops = [strat for strat in self.strats if strat.geo is not None and strat.geo.pop is not None]

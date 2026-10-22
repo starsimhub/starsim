@@ -56,7 +56,7 @@ def test_people():
     sims = run_both(make, stop=60)
     for solver,sim in sims.items():
         res = sim.results
-        assert np.allclose(res.stock.delivered[10:59], 500, rtol=0.02), f'{solver}: {res.stock.delivered[10:20]}'
+        assert np.allclose(res.stock.delivered[11:60], 500, rtol=0.02), f'{solver}: {res.stock.delivered[11:21]}' # From the step that starts at 10
         assert seen[solver].n_I == res.sir.n_I[29] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
     assert sims.abm.pars.pop_scale == 5
     check_close(sims, lambda sim: seen[sim.solver].n_I, rtol=0.15)
@@ -73,14 +73,14 @@ def test_priority():
     sims = run_both(make, stop=40, priority=lambda sir: [sir.risk == 'high']) # All of the high-risk first (10,000 people, 20 days)
     for solver,sim in sims.items():
         by = sim.results.stock.delivered.by('risk').values
-        assert np.allclose(by[:19, 1], 500) and np.allclose(by[:19, 0], 0), f'{solver}: {by[:21]}'
-        assert by[21:39, 0].sum() > 0.95*500*18
+        assert np.allclose(by[1:20, 1], 500) and np.allclose(by[1:20, 0], 0), f'{solver}: {by[:22]}'
+        assert by[22:40, 0].sum() > 0.95*500*18
     sims = run_both(make, stop=40, priority=lambda sir: ss.ppl.age) # Oldest first
     for solver,sim in sims.items():
         by = sim.results.stock.delivered.by('age').values
         n_old = sim.results.sir.n_S.by('age').values[0, 2] + sim.results.sir.n_I.by('age').values[0, 2]
         first = int(n_old//500) - 1
-        assert np.allclose(by[:first, 2], 500) and by[:first, :2].sum() == 0, f'{solver}: {by[:first+2]}'
+        assert np.allclose(by[1:first+1, 2], 500) and by[1:first+1, :2].sum() == 0, f'{solver}: {by[:first+3]}'
     check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
 
     # A score per agent: under an explicit compartmental solver it is ignored with a note; with approx=False it is an error; left to choose, the model runs as agents
@@ -117,12 +117,12 @@ def test_queue():
         for solver,sim in sims.items():
             r = sim.results.clinic
             n = sc.objdict({k:r[k].sum() for k in ['eligible', 'delivered', 'lost_capacity'] + (['left'] if queue is not None else [])})
-            print(f'{queue} {solver}: {n}, waiting at the end {r.waiting[-2] if queue is not None else 0:.0f}')
+            print(f'{queue} {solver}: {n}, waiting at the end {r.waiting[-1] if queue is not None else 0:.0f}')
             assert np.all(r.delivered <= 20*1.0001) and r.delivered.max() > 19.9
             if queue is None:
                 assert np.isclose(n.eligible, n.delivered + n.lost_capacity)
             else:
-                assert np.isclose(n.eligible, n.delivered + n.lost_capacity + n.left + r.waiting[-2], rtol=1e-6) # Everyone who arrived is accounted for
+                assert np.isclose(n.eligible, n.delivered + n.lost_capacity + n.left + r.waiting[-1], rtol=1e-6) # Everyone who arrived is accounted for
                 assert n.left > 0 and r.waiting.max() > 0
                 assert r.waited.max() <= (5 if queue is not True else 150)
                 if label == 'days':
@@ -162,9 +162,9 @@ def test_memory():
     sim = run_abm(rescreen, stop=120).abm
     r = sim.results.screening
     p = 1 - np.exp(-4/365) # Each day, of those not screened in the last 30 days
-    assert np.isclose(r.coverage[1:31].mean(), p, rtol=0.07) and np.isclose(r.eligible[1], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
-    assert np.isclose(r.eligible[60], 50_000 - r.delivered[31:60].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
-    assert sim.results.recent.delivered[1] > 0 and sim.results.recent.eligible[50] < 6*r.delivered[45:50].sum()
+    assert np.isclose(r.coverage[1:31].mean(), p, rtol=0.07) and np.isclose(r.eligible[2], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
+    assert np.isclose(r.eligible[61], 50_000 - r.delivered[32:61].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
+    assert sim.results.recent.delivered[1] > 0 and sim.results.recent.eligible[51] < 6*r.delivered[46:51].sum()
     screened = sim.interventions.screening.last_event.raw
     assert np.nanmin(sim.ti - screened) >= 0
 
@@ -191,11 +191,11 @@ def test_memory():
     for since,sims in [(True, run_abm(doses, stop=80)), (False, run_both(doses, stop=80, since=False))]:
         for solver,sim in sims.items():
             res = sim.results
-            assert np.isclose(res.first.delivered[5], 30_000, rtol=0.02)
+            assert np.isclose(res.first.delivered[6], 30_000, rtol=0.02)
             d2 = res.second.delivered
-            assert d2[:35].sum() == 0 and np.isclose(d2[35], 15_000, rtol=0.03) # Half of those who had the first
+            assert d2[:36].sum() == 0 and np.isclose(d2[36], 15_000, rtol=0.03) # Half of those who had the first
             assert not since or np.isclose(d2.sum(), res.first.delivered.sum(), rtol=0.01) # Everyone who had the first, in the end
-            assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
+            assert np.isclose(res.held.delivered[61], 30_000, rtol=0.02) # Everyone who had a dose
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # Agents are about 10% below the ODE at a step of a day (as in test_transfer), and one run varies too
     assert [s.labels for s in sims.ode.groups.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
     return sims
@@ -213,7 +213,7 @@ def test_same_visit():
     sims = run_both(make, stop=60, pop=200_000, n_agents=200_000)
     for solver,sim in sims.items():
         res = sim.results
-        assert np.isclose(res.visit_then1.delivered[0], res.visit.delivered[0]) # Everyone treated, none of whom hold it yet
+        assert np.isclose(res.visit_then1.delivered[1], res.visit.delivered[1]) # Everyone treated, none of whom hold it yet
         assert 0 < res.visit_then1.delivered.sum() <= res.visit.delivered.sum()
         assert np.isclose(res.visit_then2.delivered.sum(), 0.5*res.visit.delivered.sum(), rtol=0.05)
         assert np.isclose(res.visit_then2.positive.sum(), 0.1*res.visit_then2.delivered.sum(), rtol=0.15) # Tested at the same visit, after the drug (which cures 90%)
@@ -245,7 +245,7 @@ def test_hiv_art():
     sims, base = both(True), both(False)
     for solver,sim in sims.items():
         r, res, res0 = sim.results.art_prog, sim.results.hiv, base[solver].results.hiv
-        assert np.allclose(r.delivered[:-1], 100, atol=5.1), f'{solver}: {r.delivered[:-1].min():.1f}' # 100 a month, within an agent
+        assert np.allclose(r.delivered[1:], 100, atol=5.1), f'{solver}: {r.delivered[1:].min():.1f}' # 100 a month, within an agent
         k = 30 # The lowest CD4 is treated first: fewer left in it than at random, and more in the highest
         assert res.n_cd4_lo[k] < 0.8*res0.n_cd4_lo[k] and res.n_cd4_hi[k] > res0.n_cd4_hi[k], f'{solver}: {res.n_cd4_lo[k]:.0f} vs {res0.n_cd4_lo[k]:.0f}'
     check_close(sims, lambda sim: sim.results.hiv.aids_death.sum(), rtol=0.15)
@@ -278,16 +278,16 @@ def test_hpv_algorithm():
     res = sim.results
     q = res.tx_visit
     n = sc.objdict({k:q[k].sum() for k in ['eligible', 'delivered', 'never_ran', 'left']})
-    print(f'{n}, waiting at the end {q.waiting[-2]:.0f}')
+    print(f'{n}, waiting at the end {q.waiting[-1]:.0f}')
     cap = 10*365.25/4/7 # 10 a week, about 13 weeks a quarter
-    full = q.waiting[25:-1] > 1 # Steps with people queueing, when the capacity is all used
-    assert np.all(q.delivered <= cap + 5.1) and full.sum() > 5 and np.isclose(q.delivered[25:-1][full].mean(), cap, rtol=0.02) # Within an agent, as agents
+    full = q.waiting[26:] > 1 # Steps with people queueing, when the capacity is all used
+    assert np.all(q.delivered <= cap + 5.1) and full.sum() > 5 and np.isclose(q.delivered[26:][full].mean(), cap, rtol=0.02) # Within an agent, as agents
     assert q.waiting.max() > 0 and n.never_ran > 0 and q.waited.max() <= 6 + 1e-6, q.waited.max() # In the sim's unit, months
-    assert np.isclose(0.8*n.eligible, n.delivered + n.never_ran + n.left + q.waiting[-2], rtol=0.05) # Of those who come (coverage 0.8; as agents, a few % low, the known coverage bias)
+    assert np.isclose(0.8*n.eligible, n.delivered + n.never_ran + n.left + q.waiting[-1], rtol=0.05) # Of those who come (coverage 0.8; as agents, a few % low, the known coverage bias)
     assert np.isclose(res.ablate.delivered.sum() + res.excise.delivered.sum(), n.delivered, rtol=0.01)
     assert res.ablate.unneeded.sum() > 0 and res.ablate.cured.sum() > 0
-    women = res.primary.eligible[20] # Women 30-49, none screened yet at the start of 2020
-    assert res.primary.delivered[:-1].sum() < 2*women # Nobody is screened twice in 5 years, so at most twice in 2020-2030
+    women = res.primary.eligible[21] # Women 30-49, none screened yet at the start of 2020 (the step that starts then)
+    assert res.primary.delivered.sum() < 2*women # Nobody is screened twice in 5 years, so at most twice in 2020-2030
     return sim
 
 
@@ -311,8 +311,8 @@ def test_clinic():
     def make(**kwargs):
         ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
         discharge = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})
-        syndromic = ss.treat(discharge, where=ng.C | ct.C, capacity=ss.perweek(250), queue=ss.days(28))
-        left = lambda sim: 250 - sim.interventions.syndromic.results.delivered[sim.ti] # What symptomatic care leaves of the clinic's week (it runs first)
+        syndromic = ss.treat(discharge, where=ng.C | ct.C, capacity=ss.perweek(200), queue=ss.days(28))
+        left = lambda sim: 200 - sim.interventions.syndromic.results.delivered[sim.ti] # What symptomatic care leaves of the clinic's week (it runs first)
         screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), capacity=left)
         treatment = ss.treat(discharge, who=screening.positive)
         return ss.Sim([ng, ct], interventions=[syndromic, screening, treatment], dt=7, **kwargs)
@@ -320,8 +320,8 @@ def test_clinic():
     sim = run_abm(make, stop=364, pop=20_000, n_agents=20_000).abm
     res = sim.results
     used = res.syndromic.delivered + res.screening.delivered
-    assert np.all(used <= 250.01)
-    full = res.syndromic.delivered > 249.99
+    assert np.all(used <= 200.01)
+    full = res.syndromic.delivered > 199.99
     assert full.any() and np.all(res.screening.delivered[full] < 1e-9) # Screening only gets what symptomatic care leaves
     assert res.screening.delivered.sum() > 0
     r = res.syndromic
@@ -342,8 +342,8 @@ def test_rescreen():
         make(solver='ode', total_pop=10_000, verbose=0).init()
     sim = make(total_pop=10_000, n_agents=10_000, verbose=0).run()
     d, e = sim.results.primary.delivered, sim.results.primary.eligible
-    assert np.isclose(d[0], 10_000*(1 - 0.7**0.25), rtol=0.05)
-    assert np.isclose(e[19], 10_000 - d[:19].sum()) and np.isclose(e[20], 10_000 - d[1:20].sum()) # Those screened first are due again after exactly 5 years
+    assert np.isclose(d[1], 10_000*(1 - 0.7**0.25), rtol=0.05)
+    assert np.isclose(e[20], 10_000 - d[1:20].sum()) and np.isclose(e[21], 10_000 - d[2:21].sum()) # Those screened first are due again after exactly 5 years
     return sim
 
 
@@ -364,7 +364,7 @@ def test_two_doses():
     d1, d2 = res.first.delivered, res.second.delivered
     start = int(np.flatnonzero(d1)[0])
     assert d2[:start + 6].sum() == 0 and d2[start + 6] > 0 # No second dose within 6 months of the first
-    assert np.isclose(d2[start + 6:].sum(), 0.9*d1[:-7].sum(), rtol=0.05)
+    assert np.isclose(d2[start + 6:].sum(), 0.9*d1[:-6].sum(), rtol=0.05)
     assert np.isclose(res.first.delivered.by('age').values[:, [0, 2]].sum(), 0)
     return sim
 

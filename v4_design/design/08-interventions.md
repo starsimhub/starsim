@@ -60,9 +60,26 @@ Products are nouns for things (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`); t
 
 **Efficacy.** A scalar `efficacy` on a vaccine means protection against acquisition, and is required. A dict gives efficacy against several things at once. Its keys are `acquisition` (scales `rel_sus`, which acts on every acquisition, including one by a bite rate or an EIR: [03-states-and-transitions.md](03-states-and-transitions.md#what-counts-as-acquisition)), `transmission` (scales `rel_trans`), `mortality` (scales the disease's death transitions), the name of any transition in the disease (`severity` in a model whose transition to severe disease has that name), or one destination of a transition with several (`'progression.C'`, which scales the chance of going to `C`, not the rate of leaving); an unknown key raises `UnknownEffect`, listing the valid ones. Each entry multiplies its quantity by `1 − efficacy` for the people who hold the product. On a transition chosen with `p=` (one of several branches), it scales that branch's probability, and the other branches share the rest. With `leaky=False` the vaccine is all or nothing: a share `efficacy` of those who receive it are fully protected and the rest not at all.
 
-**Holding a product.** Whether someone holds a product is a property of people named `has_<product>` (`has_bcg`); the product's own name is taken by the product module. A delivery never gives a product to someone who already holds it.
+**Holding a product.** Whether someone holds a product is a property of people named `has_<product>` (`has_bcg`); the product's own name is taken by the product module. A delivery never gives a product to someone who already holds it, except one that fades by a function of time: a new dose restarts it (malariasim's rule, one dose at a time and a new one overwrites; MA15, decided 2026-10-22).
 
 **Waning.** `efficacy` is the effect at full strength and `waning` is how it fades. A duration means the product is lost at an exponentially distributed time with that mean, under every solver, after which the person can receive it again. A function of the time since delivery, returning the fraction of protection that remains, fades the efficacy while the person still holds the product; this is agents only (`'auto'` runs the model as agents, and a compartmental solver raises `CapabilityError`), since it is each person's own time since delivery.
+
+**Other shapes of waning are written as states (decided 2026-10-22, A3).** Starsim does not build in every shape of waning. A shape that can be drawn as a few boxes and arrows (full protection for a while and then a decay, decay at one rate and then another, a mixture of fast and slow) is written in the user's own code as a declared module of its own, whose states are the stages of protection, and runs under every solver, since its transitions are ordinary ones (a fixed delay is a conveyor; rates are exits). A delivery moves people into it, and `ss.modify(..., where=)` on its states is the efficacy; giving it again restarts it (`move=U + P1 + P2 >> P1`, from any of several states, written with the states as a transition's sources are):
+
+```python
+def box_then_decay(box, decay, name='prot'): # Written in malariasim, not Starsim
+    U, B, W = ss.states('U B W')
+    return ss.Disease(box=B >> W @ ss.constant(box), wane=W >> U @ decay, first='U', name=name)
+
+S, I = ss.states('S I')
+mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(150), name='mal')
+prot = box_then_decay(ss.days(180), ss.days(365))
+rounds = ss.Delivery(move=prot.U + prot.B + prot.W >> prot.B, coverage=0.8, at=['2025', '2028']) # Its module is found from the states
+eff = ss.modify(mal.infection, multiply=0.2, where=prot.B | prot.W)
+ss.Sim(diseases=[mal, prot], interventions=rounds, connectors=eff, start='2024', stop='2030', solver='ode', total_pop=1e4, verbose=0).run()
+```
+
+Protection that is lost from one stage to the next at random times gives the same mean protection over time as a fraction that fades for everyone (a box then `exp(-t/τ)`), but held by some rather than spread over all, so infections differ (malariasim's vaccine: prevalence about 5% lower after the box than with the fading function, as agents and as the ODE alike). A fade for everyone is written the same way, as stages of decreasing efficacy (`W1`, `W2`, ... each with its own `ss.modify`). The ODE tracks the protection module jointly with the disease it modifies ([12-backends.md](12-backends.md)). This is the public extension point for compartmental forms written outside Starsim; `compartmental_form(sim)` (as `ss.Pregnancy`'s) is a module's own approximation of itself, not a way to add forms.
 
 **A product is realized as modifiers** on the people who hold it, so it follows the combination rules in [07-effects.md](07-effects.md): two vaccines against acquisition multiply, a vaccine and a stratification adjustment multiply, and all of them are listed by `sim.what_modifies()`.
 
@@ -110,10 +127,10 @@ With an event in it, delivery is triggered; otherwise it is routine or in rounds
 | `delay=` | for a step with an event in `who=`, the time from the trigger to delivery (HP26): a duration, or a distribution of durations, drawn per person. The people triggered receive it then if they still meet `who=`'s condition, and `coverage=` applies then; someone waiting is not triggered again. Agents only, since who is waiting, and since when, is each person's own (decided 2026-10-20). On `ss.screen` it is the step's delay; the time from a test to its result is the test's (`ss.Diagnostic(delay=)`) |
 | `when=` | a [trigger](#triggers): deliver only on steps where a function of the sim returns `True` |
 | `at_age=` | routine delivery to people as they reach an age, e.g. `at_age=ss.months(9)` (a bare number is in years) |
-| `move=` | instead of a product, a move between two states for the people reached, e.g. `move='S -> V'` (a one-off campaign); with `capacity=`, it seeds a number of people on a schedule |
+| `move=` | instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + B + W >> B`, which restarts the time in `B` of those already there); a level of a stratification (`move=dict(vaccinated=True)`, or a pair, `move=dict(risk=('low', 'high'))`); or a change of strains (`move=DS >> RIF`, [05](05-dimensions.md#strains)); the module is the one that has the states; with `capacity=`, it seeds a number of people on a schedule |
 | `trace=` | deliver to the contacts, in this network (or these), of the people that the event in `who=` selects, instead of to them (contact tracing, partner notification). Agents only |
 | `deliver=` | a function of the sim returning who receives it this step ([below](#the-deliver-function)) |
-| `disease=` | the disease the product acts on (default: the only one; for a step with no product, the disease of its trigger, or the first). A list or an `ss.Strains` (HP7) delivers it for each: a vaccine's efficacy against each disease, a test detecting each one's infected (or each one's state of a name, `results=dict(high=dict(cin=0.9))`), the worst result over them per person, and a cure of each one's infected; as if its values were keyed by disease, which they then are. A list is agents only (decided 2026-10-20); a product keyed by the diseases itself (`ss.Vaccine(efficacy=dict(hpv16=0.9, hpv18=0.9))`, `ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})`, or a test's `sensitivity=` by their states, whose diseases are then tracked jointly) has a compartmental form. A disease written as code (PL2) is a `disease=` too, as agents: a test detects its `infected`, a cure calls its `clear_infection(uids)`, and a vaccine scales its `rel_sus` and `rel_trans`; a missing part raises naming it |
+| `disease=` | the disease the product acts on (default: the only one; for a step with no product, the disease of its trigger, or the first). A list, or a disease whose strains have courses of their own (HP7), delivers it for each: a vaccine's efficacy against each disease, a test detecting each one's infected (or each one's state of a name, `results=dict(high=dict(cin=0.9))`), the worst result over them per person, and a cure of each one's infected; as if its values were keyed by disease, which they then are. A list is agents only (decided 2026-10-20); a product keyed by the diseases itself (`ss.Vaccine(efficacy=dict(hpv16=0.9, hpv18=0.9))`, `ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})`, or a test's `sensitivity=` by their states, whose diseases are then tracked jointly) has a compartmental form. A disease written as code (PL2) is a `disease=` too, as agents: a test detects its `infected`, a cure calls its `clear_infection(uids)`, and a vaccine scales its `rel_sus` and `rel_trans`; a missing part raises naming it |
 
 <!-- fragment -->
 ```python
@@ -264,14 +281,14 @@ home, school = ss.RandomNet(n_contacts=3, name='home'), ss.RandomNet(n_contacts=
 
 def many_cases(sim):
     new = sim.results.sir.infection
-    return new[max(0, sim.ti - 6):sim.ti + 1].sum() > 100  # the last seven completed steps
+    return new[max(0, sim.ti - 7):sim.ti].sum() > 100  # the last seven completed steps
 
 closures = ss.modify('school.pars.n_contacts', multiply=0.2, when=many_cases)
 sim = ss.Sim(sir, networks=[home, school], interventions=closures, n_agents=2000, stop=ss.days(100)).run()
 ```
 
-- The function is called each step, at the intervention's place in the loop, and can read anything in the sim, including results up to the previous step. Results are read as in Starsim: storage is preallocated for the whole run, and during a step `sim.ti` is the time point at its start, the last one with results, so the results so far are `[:sim.ti + 1]` ([10-execution.md](10-execution.md)). A shorter spelling for "the steps so far" would be a convenience and is not specified ([19-open-questions.md](19-open-questions.md)).
-- It can read any result, including an outcome ([09-results.md](09-results.md)): `when=lambda sim: sim.results.sir.n_hosp[sim.ti] > 500` acts on hospital occupancy without hospitalization being a state.
+- The function is called each step, at the intervention's place in the loop, and can read anything in the sim, including results up to the previous step. Results are read as in Starsim: storage is preallocated for the whole run, and during a step `sim.ti` is the step's own index, where its results will go, so the results so far are `[:sim.ti]` ([10-execution.md](10-execution.md)). A shorter spelling for "the steps so far" would be a convenience and is not specified ([19-open-questions.md](19-open-questions.md)).
+- It can read any result, including an outcome ([09-results.md](09-results.md)): `when=lambda sim: sim.results.sir.n_hosp[sim.ti - 1] > 500` acts on hospital occupancy without hospitalization being a state.
 - There is no built-in vocabulary for calendar conditions. "No school contacts on Fridays" is `ss.modify('school.pars.n_contacts', multiply=lambda sim: 0.0 if sim.now.weekday() == 4 else 1.0)`, in a sim with dates.
 
 **`when=` and `where=` have no memory, except a hold.** The intervention is active on exactly the steps where the function returns `True`. A bare threshold therefore switches on and off as the quantity crosses it, which is rarely the policy meant. The one memory a modifier has is `hold=`: once its condition holds for someone, it stays on for them for at least that long (`hold=ss.days(14)`), which with a condition on a transition's incidence by place is MEmilio's dynamic NPIs, each place on its own (`where=secir.symptoms.incidence(over=ss.days(7), by='patch') > 200e-5`). Any other rule that remembers what it did (reopen only after two weeks below the threshold, close at most three times) is a module with a `step()`, where the memory is an ordinary attribute and can be read, printed, and tested:
@@ -287,7 +304,7 @@ class SchoolClosure(ss.Intervention):
     def step(self):
         sim = self.sim
         new = sim.results.sir.infection
-        many = new[max(0, sim.ti - 6):sim.ti + 1].sum() > self.pars.threshold
+        many = new[max(0, sim.ti - 7):sim.ti].sum() > self.pars.threshold
         if many and not self.closed:
             self.closed, self.date_closed = True, sim.now
         elif self.closed and not many and sim.now - self.date_closed >= self.pars.hold:

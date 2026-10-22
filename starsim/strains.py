@@ -1,6 +1,8 @@
 """
-Strains carried together: a family of declared diseases (`ss.Strains`), and protection between strains (`ss.immunity`)
+Strains of a disease (`ss.Strains`), and protection between them (`ss.immunity`)
 """
+import copy
+import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -8,6 +10,7 @@ import starsim as ss
 __all__ = ['immunity', 'Strains']
 
 rules = ['max', 'sum', 'multiply'] # The named rules for combining protection from several sources
+transmit_rules = ['one', 'fittest', 'each'] # Which strain a carrier of several passes on: see ss.Strains
 
 
 def combine_protection(p, rule):
@@ -33,6 +36,17 @@ def combine_protection(p, rule):
     return 1 - np.prod(1 - p, axis=0)
 
 
+class Memory:
+    """ What a person remembers of the strains of a disease: the last strain they had (`strains.last`), or every strain they have had (`strains.ever`), for `ss.immunity(due_to=)` """
+    def __init__(self, strains, kind):
+        self.strains = strains
+        self.kind = kind
+        return
+
+    def __repr__(self):
+        return f'{self.strains.name}.{self.kind}'
+
+
 class immunity:
     """
     Protection between strains: what having (or having had) one strain does against each strain
@@ -45,19 +59,27 @@ class immunity:
     `1/(1 − protection)`. Several `ss.immunity` objects, and any modifier or product on the same
     quantity, multiply.
 
-    In a family of diseases (`ss.Strains`), the strains are its members, and `protected=` names the
-    states (or a named sum of states) of each member whose holders are protected, or an attribute of
-    each member (`ss.attr`, e.g. an antibody level between 0 and 1): then the protection from member k
-    against g is `m[k, g]` times the person's value of k's attribute (0 where it is NaN), read when the
-    quantity is, as a modifier reads it. Attributes need agents for now. In a strain
-    dimension (`stratify(strain=..., immunity=ss.immunity(rel_sus=...))`), the strains are the levels
-    and a person holds every strain they have had, so there is no `protected=`.
+    `due_to=` says what protects:
+
+    - a state (`due_to=R`): the people in it, by the strains they hold there. A state shared by the
+      strains (the default) protects against every strain completely unless an `ss.immunity` says
+      otherwise; partial protection in a state people are infected in (`due_to=L`) lets them carry
+      another strain as well (superinfection), up to `max_strains`. In strains with courses of their
+      own (`shared=False`), the state of each strain protects, by its row.
+    - an attribute (`due_to='nab'`, an `ss.attr` of each strain's course, e.g. an antibody level between
+      0 and 1): its value scales each strain's row.
+    - the last strain a person had (`due_to=dis.strains.last`) or every strain they have had
+      (`due_to=dis.strains.ever`), wherever they are now; `scale=` names an attribute that scales the
+      row (e.g. antibodies recorded at recovery). As agents.
 
     Args:
-        protected (str/list): in a family, the states of each member whose holders are protected, e.g. `'R'` (a state, a named sum of states, or a list of them), or the name of an attribute of each member that scales the protection, e.g. `'nab'`
+        due_to (State/str/Memory): what protects, as above
+        scale (str): with `due_to=strains.last` or `.ever`, an attribute between 0 and 1 that scales the protection
+        curve (func): a function from the level of protection (after the matrix, `scale=` and `combine=`) to the protection, e.g. Covasim's logistic curve of antibody levels
         rel_sus (array/float): the protection against being infected
         rel_trans (array/float): the protection against infecting others (how much less infectious)
         dur (dict): the protection against time spent in states, by the state's name, e.g. `dict(In=m_sev, Ic=m_sev)` (shorter stays: severity immunity)
+        p (dict): the protection against taking a branch, by the transition's name, e.g. `dict(to_symp=m_symp, to_severe=m_sev)` (its probability is lowered; the other branches take the rest)
         combine (str/func): how protection from several strains adds up: 'max' (the strongest, the default), 'sum' (added, at most 1),
             'multiply' (independent sources: `1 − Π(1 − p)`), or a function of one array of protections, with the strains held on the first axis
             (0 for those not held), that returns the protection, e.g. `lambda p: np.minimum(1, p.max(0) + 0.5*(p.sum(0) - p.max(0)))`;
@@ -65,29 +87,36 @@ class immunity:
 
     Examples:
         ```python
-        hpv = ss.Strains('hpv', [hpv16, hpv18], immunity=[
-            ss.immunity(protected='R', rel_sus=m_sus, combine='sum'), # rel_sus of each genotype × (1 − min(1, Σ_k m_sus[k, g]·[in k's R]))
-            ss.immunity(protected='cleared', dur=dict(In=m_sev, Ic=m_sev), combine='sum'), # Shorter stays in In and Ic: severity immunity
-        ])
-        # Antibodies drawn at clearance, an attribute of each genotype: nab = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
-        hpv = ss.Strains('hpv', [hpv16, hpv18], immunity=ss.immunity(protected='nab', rel_sus=m_sus, combine='sum')) # rel_sus × (1 − min(1, Σ_k m_sus[k, g]·nab_k))
-        flu.stratify(strain=['A', 'B'], immunity=ss.immunity(rel_sus=[[1, 0.5], [0.5, 1]], combine='multiply'))
+        strains = ss.Strains(['DS', 'RIF'], max_strains=2, immunity=ss.immunity(due_to=L, rel_sus=0.79)) # Latent infection protects in part against another strain
+        hpv = ss.Strains([hpv16, hpv18], shared=['Ca'], immunity=ss.immunity(due_to='nab', rel_sus=m_sus, combine='sum')) # rel_sus × (1 − min(1, Σ_k m_sus[k, g]·nab_k))
+        variants.immunity = ss.immunity(due_to=variants.last, scale='nab', rel_sus=M, p=dict(to_symp=M)) # Covasim's protection, by the last variant
         ```
     """
-    def __init__(self, *args, protected=None, rel_sus=None, rel_trans=None, dur=None, combine='max'):
+    def __init__(self, *args, due_to=None, scale=None, curve=None, rel_sus=None, rel_trans=None, dur=None, p=None, combine='max'):
         if args:
-            errormsg = 'ss.immunity() takes the quantity the protection lowers as the keyword, with the protection as its value, e.g. ss.immunity(rel_sus=matrix, protected="nab"); it takes no positional arguments'
+            errormsg = 'ss.immunity() takes the quantity the protection lowers as the keyword, with the protection as its value, e.g. ss.immunity(due_to=R, rel_sus=matrix); it takes no positional arguments'
             raise TypeError(errormsg)
         if not (callable(combine) or combine in rules):
             errormsg = f'combine= is {sc.strjoin(rules)}, or a function of the protections from each source; not {combine!r}'
             raise ValueError(errormsg)
-        if dur is not None and not (isinstance(dur, dict) and all(isinstance(key, str) for key in dur)):
-            errormsg = f'dur= takes the states whose time spent is shortened, as a dict of state names and protections, e.g. dur=dict(In=matrix); not {type(dur).__name__}'
+        for key,val in dict(dur=dur, p=p).items():
+            if val is not None and not (isinstance(val, dict) and all(isinstance(k, str) for k in val)):
+                what = 'states whose time spent is shortened' if key == 'dur' else 'branches whose probability is lowered'
+                errormsg = f'{key}= takes the {what}, as a dict of names and protections, e.g. {key}=dict(I=matrix); not {type(val).__name__}'
+                raise TypeError(errormsg)
+        if scale is not None and not isinstance(due_to, Memory):
+            errormsg = f'scale= is an attribute that scales the protection of the last strain a person had, or of every strain they have had (due_to=strains.last or strains.ever); due_to= is {due_to!r}'
+            raise ValueError(errormsg)
+        if curve is not None and not callable(curve):
+            errormsg = f'curve= is a function from the level of protection to the protection, not {type(curve).__name__}'
             raise TypeError(errormsg)
-        self.protected = protected
+        self.due_to = due_to
+        self.scale = scale
+        self.curve = curve
         self.combine = combine
-        self.values = sc.objdict() # The protection on each quantity: 'rel_sus', 'rel_trans', or 'dur.<state>'
-        for key,val in [('rel_sus', rel_sus), ('rel_trans', rel_trans)] + [(f'dur.{state}', val) for state,val in (dur or {}).items()]:
+        self.values = sc.objdict() # The protection on each quantity: 'rel_sus', 'rel_trans', 'dur.<state>', or 'p.<transition>'
+        items = [('rel_sus', rel_sus), ('rel_trans', rel_trans)] + [(f'dur.{k}', v) for k,v in (dur or {}).items()] + [(f'p.{k}', v) for k,v in (p or {}).items()]
+        for key,val in items:
             if val is not None:
                 val = np.array(val, dtype=float)
                 if val.ndim not in [0, 2] or (val.ndim == 2 and val.shape[0] != val.shape[1]):
@@ -96,14 +125,28 @@ class immunity:
                     raise ss.errors.OutOfBounds(f'the protection on {key} is {val.min():n} to {val.max():n}; a protection is between 0 (none) and 1 (complete)')
                 self.values[key] = val
         if not self.values:
-            errormsg = 'ss.immunity() needs the quantity it lowers, with the protection, e.g. rel_sus=matrix, rel_trans=0.5, or dur=dict(In=matrix)'
+            errormsg = 'ss.immunity() needs the quantity it lowers, with the protection, e.g. rel_sus=matrix, rel_trans=0.5, dur=dict(In=matrix), or p=dict(to_symp=matrix)'
             raise ValueError(errormsg)
         return
 
     def __repr__(self):
         rule = getattr(self.combine, '__name__', 'function') if callable(self.combine) else repr(self.combine)
-        protected = f'protected={self.protected!r}, ' if self.protected is not None else ''
-        return f'immunity({protected}{", ".join(self.values.keys())}, combine={rule})'
+        return f'immunity(due_to={self.source}, {", ".join(self.values.keys())}, combine={rule})'
+
+    @property
+    def source(self):
+        """ What protects, in words: the names of the states, the attribute, or the memory """
+        due = self.due_to
+        if isinstance(due, Memory):
+            return repr(due) + (f' × {self.scale}' if self.scale else '')
+        return sc.strjoin(self.names) if due is not None else 'nothing'
+
+    @property
+    def names(self):
+        """ The names of the states (or the attribute) that protect, from what due_to= was given: states, their names, or a list of them """
+        if self.due_to is None or isinstance(self.due_to, Memory):
+            return []
+        return [getattr(x, 'name', x) for x in sc.tolist(self.due_to)]
 
     def matrix(self, key, n):
         """ The protection on a quantity as an n×n matrix """
@@ -118,11 +161,568 @@ class immunity:
         """ The largest protection against each strain that the matrix can give, with every strain held """
         return combine_protection(self.matrix(key, n), self.combine)
 
+    def protect(self, p):
+        """ The protection, from the combined level of protection (`curve=`, if given), between 0 and 1 """
+        if self.curve is None:
+            return p
+        return np.clip(np.asarray(self.curve(p), dtype=float), 0, 1)
+
     def rule(self):
         """ The combination rule, in words """
         if callable(self.combine):
             return f'{getattr(self.combine, "__name__", "a function")} (a function)'
         return dict(max='the largest', sum='the sum, at most 1', multiply='1 − Π(1 − p)')[self.combine]
+
+
+class Strain:
+    """
+    One strain of an `ss.Strains`: unpacked from it (`DS, RIF = strains`)
+
+    A strain is a condition, the people who carry it (`where=RIF`; `where=A & B` for both), and `>>` changes
+    the strains people carry, on the transition that causes it: `move=DS >> RIF` (replacement) or
+    `move=DS >> (DS, RIF)` (emergence: DS acquires resistance). A tuple is a set of strains carried
+    together (`move=(A, B) >> A`: of someone carrying both, only A progresses).
+    """
+    def __init__(self, name, index, strains):
+        self.name = name
+        self.index = index
+        self.strains = strains
+        return
+
+    def __repr__(self):
+        return self.name
+
+    def __rshift__(self, other):  return StrainMove(self, other)
+    def __rrshift__(self, other): return StrainMove(other, self)
+
+    @property
+    def cond(self):
+        """ The people who carry the strain (by the level of the disease's strain dimension they are at) """
+        st = self.strains
+        return ss.conditions.Cond('dim', st.name).isin([label for label,s in zip(st.labels, st.sets) if self.index in s])
+
+    def __and__(self, other):  return self.cond & as_cond(other)
+    def __rand__(self, other): return as_cond(other) & self.cond
+    def __or__(self, other):   return self.cond | as_cond(other)
+    def __ror__(self, other):  return as_cond(other) | self.cond
+    def __invert__(self):      return ~self.cond
+
+
+def as_cond(x):
+    """ A strain as a condition (the people who carry it), and anything else as it is """
+    return x.cond if isinstance(x, Strain) else x
+
+
+class StrainMove:
+    """
+    A change of the strains people carry, written `src >> dst` with strains (`DS >> RIF`, `DS >> (DS, RIF)`, `(A, B) >> A`): see `ss.strains.Strain`
+
+    It applies to everyone who carries all of `src`, whose strains `src` are replaced by `dst`; it is
+    neither a transmission nor an infection, and leaves what people remember of their strains as it was.
+    """
+    def __init__(self, src, dst):
+        self.src = self.strain_set(src, 'from')
+        self.dst = self.strain_set(dst, 'to')
+        strains = {id(s.strains):s.strains for s in self.src + self.dst}
+        if len(strains) > 1:
+            errormsg = f'{self} changes between the strains of more than one ss.Strains'
+            raise ValueError(errormsg)
+        self.strains = list(strains.values())[0]
+        return
+
+    @staticmethod
+    def strain_set(x, what):
+        out = list(x) if isinstance(x, (tuple, list)) else [x]
+        if not out or not all(isinstance(s, Strain) for s in out):
+            errormsg = f'>> changes strains, from a strain (or a tuple of them) to a strain (or a tuple of them), e.g. DS >> RIF or DS >> (DS, RIF); "{what}" is {x!r}'
+            raise TypeError(errormsg)
+        return out
+
+    def __repr__(self):
+        show = lambda ss_: ss_[0].name if len(ss_) == 1 else '(' + ', '.join(s.name for s in ss_) + ')'
+        return f'{show(self.src)} >> {show(self.dst)}'
+
+    def mapping(self):
+        """ For each level of the strain dimension, the level its people go to (-1 for the levels it does not apply to) """
+        st = self.strains
+        src = {s.index for s in self.src}
+        dst = [s.index for s in self.dst]
+        out = np.full(len(st.sets), -1)
+        for l,s in enumerate(st.sets):
+            if src <= set(s):
+                kept = [j for j in s if j not in src]
+                new = kept + [j for j in dst if j not in kept]
+                out[l] = st.level_of(new, what=f'{self} for people carrying {st.labels[l]}')
+        return out
+
+    @property
+    def spec(self):
+        """ As data, for the model spec """
+        return dict(strains=dict(src=[s.name for s in self.src], dst=[s.name for s in self.dst]))
+
+
+class Strains:
+    """
+    The strains of a disease: `ss.Disease(..., strains=ss.Strains(...))`, which is then `dis.strains`
+
+    Every state of a disease with strains has an owner. A state is **shared** (the default): the person is
+    in it once, carrying their strains, with one course; or each strain has its **own** copy of it, with
+    a course and a clock of its own (`shared=False`, or a list of the states that are shared, e.g.
+    `shared=['Ca']`, one cancer per person, whose course ends the others). The engine chooses how to run
+    what is declared (one strain at a time, sets of strains carried together, or courses side by side),
+    and `describe()` says which.
+
+    With every state shared and no `immunity=`, a person carries one strain at a time, being infected (or
+    recovered) protects against every strain, and a new infection takes its source's strain.
+    `ss.immunity(due_to=...)` changes that: protection from a state, an attribute, the last strain
+    had, or every strain had. With `max_strains` above 1, people carry sets of strains (the levels of
+    the strain dimension, e.g. 'DS+RIF'), and a set takes the largest of its strains' values for a
+    transition; once full, a new strain replaces the oldest (counted in the flow that brought it).
+
+    Values for each strain are multipliers on the disease's transitions (by name: their rate, a
+    duration divided, or a branch's probability) and on `rel_trans`. They can be given three ways,
+    which are the same thing: by strain, as a dict of dicts; by parameter, as lists, one entry per
+    strain; or in Covasim's layout (its variant parameters, and `cross_immunity=`). Several strains
+    with long definitions can also be written as diseases of their own that share one natural
+    history, and given as the strains (each then has its own course).
+
+    Args:
+        strains (list/dict): the strains: their names; a dict of the values of each, by name; or declared diseases, one per strain
+        shared (bool/list): the states that are shared (True, the default, for names; False for diseases given as strains); others are each strain's own
+        immunity (immunity/list): protection between strains, one `ss.immunity` or a list of them; the matrices have rows and columns in the order of the strains
+        max_strains (int): the most strains anyone carries at once, with shared states (default 1)
+        transmit (str): what a carrier of several strains passes on: 'one' (the default: one strain per transmission, chosen in proportion to the strains' rel_trans, at the infectiousness of the most infectious), 'fittest' (the most infectious only), or 'each' (each strain at its own rate)
+        split (list): the share of each strain among the people infected at the start (default: equal)
+        cross_immunity (dict/array): Covasim's cross-immunity, `M[challenge][source]` (a dict of dicts by name, as `covasim.parameters.get_cross_immunity()`, or a matrix): protection against infection by the last strain had
+        name (str): the name of the strain dimension, for results (`res.n_I.by('strain')`) and conditions (default 'strain')
+        values (dict): values for each strain by parameter, e.g. `rel_trans=[1, 0.575], cure=[1, 1/3]`
+
+    Examples:
+        ```python
+        # TB: one course for the person, several strains in it
+        strains = ss.Strains(dict(DS=dict(rel_trans=1, cure=1), RIF=dict(rel_trans=0.575, cure=1/3)), max_strains=2, split=[0.9, 0.1],
+                             immunity=ss.immunity(due_to=L, rel_sus=0.79)) # Latent infection protects in part against a new strain
+        DS, RIF = strains
+        failure = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and DS acquires resistance
+        tb = ss.Disease(..., failure, strains=strains)
+
+        # HPV: each genotype its own course; one cancer per person
+        hpv = ss.Disease(name='hpv', init_prev=0.1, strains=ss.Strains([hpv16, hpv18], shared=['Ca'], immunity=ss.immunity(due_to='nab', rel_sus=m, combine='sum')))
+
+        # COVID: Covasim's variants (its parameter names given as the transitions they scale)
+        covid = ss.Disease(..., strains=ss.Strains(variant_pars, cross_immunity=cv.get_cross_immunity()))
+        ```
+    """
+    def __init__(self, strains, shared=None, immunity=None, max_strains=None, transmit='one', split=None, cross_immunity=None, name='strain', label=None, **values):
+        self.name = name
+        self.label = label or name
+        self.members = None # Diseases given as the strains, each with its own course
+        if isinstance(strains, (dict, ss.ndict)) and all(isinstance(v, ss.Disease) for v in strains.values()):
+            strains = list(strains.values())
+        if isinstance(strains, dict): # By strain: the values of each
+            if not all(isinstance(v, dict) for v in strains.values()):
+                errormsg = f'ss.Strains() takes a dict of the values of each strain, by name, e.g. dict(DS=dict(rel_trans=1), RIF=dict(rel_trans=0.575)); for values by parameter, give the names and lists, e.g. ss.Strains(["DS", "RIF"], rel_trans=[1, 0.575])'
+                raise TypeError(errormsg)
+            names = [str(k) for k in strains]
+            keys = list(dict.fromkeys(k for v in strains.values() for k in v))
+            for key in keys:
+                if key in values:
+                    errormsg = f'the values of "{key}" are given both by strain and by parameter; give them once'
+                    raise ValueError(errormsg)
+                values[key] = [v.get(key, 1.0) for v in strains.values()]
+        elif isinstance(strains, (list, tuple)) and len(strains) and all(isinstance(v, ss.Disease) for v in strains):
+            self.members = list(strains)
+            names = [mod.name for mod in strains]
+            if values:
+                errormsg = f'the strains of ss.Strains() are diseases with values of their own, so it takes no values by parameter ({sc.strjoin(values)})'
+                raise ValueError(errormsg)
+        elif isinstance(strains, (list, tuple)) and len(strains) and all(isinstance(v, str) for v in strains):
+            names = list(strains)
+        else:
+            errormsg = f'ss.Strains() takes the strains: their names (e.g. ["DS", "RIF"]), a dict of the values of each by name, or declared diseases, one per strain; not {strains!r}'
+            raise TypeError(errormsg)
+        bad = [n for n in names if '+' in n]
+        if bad or len(set(names)) < len(names):
+            errormsg = f'the strains of "{name}" need names of their own, without "+" (sets of strains carried together are made from max_strains=); they are {sc.strjoin(names)}'
+            raise ValueError(errormsg)
+        self.names = names
+        self.strains = [Strain(n, i, self) for i,n in enumerate(names)]
+        n = len(names)
+        self.values = sc.objdict()
+        for key,vals in values.items():
+            vals = np.array(vals, dtype=float)
+            if vals.shape != (n,):
+                raise ss.errors.ShapeError(f'the values of "{key}" for the strains of "{name}" are {vals.tolist()}; give one for each strain ({sc.strjoin(names)})')
+            if np.any(vals < 0):
+                raise ss.errors.InvalidAdjustment(f'the values of "{key}" for the strains of "{name}" are multipliers, so cannot be negative ({vals.tolist()})')
+            self.values[key] = vals
+        if shared is None:
+            shared = self.members is None
+        if self.members is not None and shared is True:
+            errormsg = f'the strains of "{name}" are diseases, each with its own course; give shared= the states that are the person\'s (e.g. shared=["Ca"]), or leave it out'
+            raise ValueError(errormsg)
+        self.shared = shared if isinstance(shared, bool) else [getattr(s, 'name', s) for s in sc.tolist(shared)]
+        if transmit not in transmit_rules:
+            errormsg = f'transmit= is {sc.strjoin(transmit_rules)}, not {transmit!r}'
+            raise ValueError(errormsg)
+        self.transmit = transmit
+        if max_strains is not None and (not sc.isnumber(max_strains) or max_strains != int(max_strains) or not 1 <= max_strains):
+            errormsg = f'max_strains= is the most strains anyone carries at once, a whole number of at least 1, not {max_strains!r}'
+            raise ValueError(errormsg)
+        self.max_strains = min(n, int(max_strains)) if max_strains is not None else 1
+        if self.max_strains > 1 and self.shared is not True:
+            errormsg = f'max_strains= is for strains that share their course (shared=True); with courses of their own, a person carries any of the strains at once'
+            raise ValueError(errormsg)
+        self.split = None if split is None else np.array(split, dtype=float)
+        if self.split is not None and self.split.shape != (n,):
+            raise ss.errors.BadSplit(f'split= of "{name}" has {len(self.split)} entries, but there are {n} strains ({sc.strjoin(names)})')
+        self.immunity = immunity
+        if cross_immunity is not None:
+            self.immunity = self.immunity + [immunity_class(due_to=self.last, rel_sus=self.covasim_matrix(cross_immunity))]
+        self.init_sets()
+        return
+
+    @property
+    def immunity(self):
+        """ The protection between the strains, a list of `ss.immunity`; it can be set after the strains are made, e.g. to refer to `strains.last` """
+        return self._immunity
+
+    @immunity.setter
+    def immunity(self, value):
+        value = sc.tolist(value)
+        for imm in value:
+            if not isinstance(imm, immunity_class):
+                errormsg = f'immunity= of "{self.name}" takes ss.immunity() objects, e.g. ss.immunity(due_to=R, rel_sus=matrix); not {type(imm).__name__}'
+                raise TypeError(errormsg)
+        self._immunity = value
+        return
+
+    def covasim_matrix(self, M):
+        """ Covasim's cross-immunity, M[challenge][source], as ss.immunity's matrix (rows from the strain held, columns against) """
+        n = len(self.names)
+        if isinstance(M, dict):
+            out = np.ones((n, n))
+            for t,target in enumerate(self.names):
+                for s,source in enumerate(self.names):
+                    out[s, t] = M.get(target, {}).get(source, 1.0)
+            return out
+        M = np.array(M, dtype=float)
+        if M.shape != (n, n):
+            raise ss.errors.ShapeError(f'cross_immunity= has shape {M.shape}, but there are {n} strains ({sc.strjoin(self.names)})')
+        return M.T
+
+    def init_sets(self):
+        """ The sets of strains people can carry, which are the levels of the strain dimension: each strain alone, then the sets of up to max_strains; ordered by when each strain was acquired if a full set can take another (so the oldest is known) """
+        n, m = len(self.names), self.max_strains
+        self.ordered = m < n and m > 1
+        combos = itertools.permutations if self.ordered else itertools.combinations
+        self.sets = [c for k in range(1, m + 1) for c in combos(range(n), k)]
+        self.labels = ['+'.join(self.names[j] for j in s) for s in self.sets]
+        self.index = {s:i for i,s in enumerate(self.sets)}
+        return
+
+    def level_of(self, strains, what=None):
+        """ The level of a set of strains (as indices), in the order given if the levels are ordered """
+        strains = list(strains)[-self.max_strains:] # Full: the oldest go
+        key = tuple(strains) if self.ordered else tuple(sorted(strains))
+        if key not in self.index:
+            names = '+'.join(self.names[j] for j in key) or 'none'
+            errormsg = f'{what or "this"} would carry {names}, which is not a set people can carry with max_strains={self.max_strains}' + (' (a person with shared states carries at least one strain)' if not key else '')
+            raise ValueError(errormsg)
+        return self.index[key]
+
+    def adds(self):
+        """ For each level and strain, the level of people at it once infected with the strain as well: the same level if they carry it already; with a full set, the oldest replaced """
+        out = np.zeros((len(self.sets), len(self.sets)), dtype=int)
+        for l,s in enumerate(self.sets):
+            for j in range(len(self.names)):
+                out[l, j] = l if j in s else self.level_of(list(s) + [j])
+        return out
+
+    def __iter__(self):
+        return iter(self.strains)
+
+    def __len__(self):
+        return len(self.strains)
+
+    def __getitem__(self, key):
+        return self.strains[self.names.index(key) if isinstance(key, str) else key]
+
+    def __repr__(self):
+        return f'Strains({self.name}: {sc.strjoin(self.names)})'
+
+    @property
+    def last(self):
+        """ The last strain each person had, for `ss.immunity(due_to=strains.last)` """
+        return Memory(self, 'last')
+
+    @property
+    def ever(self):
+        """ Every strain each person has had, for `ss.immunity(due_to=strains.ever)` """
+        return Memory(self, 'ever')
+
+    def level_values(self, key):
+        """ A value for each level of the strain dimension: a strain's own, and for a set, the largest of its strains' (the worst strain sets the course) """
+        vals = self.values[key]
+        return np.array([vals[list(s)].max() for s in self.sets])
+
+    def level_protection(self, imm):
+        """ For protection due to a shared state: the protection of the people at each level of the strain dimension (rows) against each strain (columns), from the strains they carry """
+        n = len(self.names)
+        M = imm.matrix('rel_sus', n)
+        held = np.zeros((n, len(self.sets))) # Whether people at each level carry each strain, with the strains on the first axis
+        for l,s in enumerate(self.sets):
+            held[list(s), l] = 1
+        return imm.protect(np.array([combine_protection(M[:, g][:, None]*held, imm.combine) for g in range(n)]).T)
+
+    def trivial(self, imm, graph):
+        """ Whether protection due to memory is the default: complete, for people who never lose their strain (so are never infected again anyway) """
+        n = len(self.names)
+        if any(not np.all(imm.matrix(key, n) == 1) for key in imm.values) or imm.scale is not None or imm.curve is not None:
+            return False
+        strained = {s.name for s in graph.people_states if s.name not in graph.uninfected}
+        return not any(tr.people and not tr.outflow and any(s.name in strained for s in tr.src) and any(s.name not in strained for s in tr.dst) for tr in graph.transitions.values())
+
+    def needs_agents(self, graph):
+        """ Why the protection between the strains can run only as agents, or None """
+        for imm in self.immunity:
+            if callable(imm.combine):
+                return f'its protection is combined with a function ({getattr(imm.combine, "__name__", "function")}), which has no compartmental form or gradient'
+            if isinstance(imm.due_to, Memory) and not self.trivial(imm, graph):
+                return f'its protection is due to {imm.due_to!r}, which each agent keeps (a compartment keeps only the strain people carry now)'
+        return None
+
+    def strat(self):
+        """ The strain dimension that runs strains with shared states (see `ss.dimensions.Strat`) """
+        n = len(self.sets)
+        split = np.zeros(n)
+        split[:len(self.names)] = self.split if self.split is not None else 1/len(self.names)
+        adjust = {key:self.level_values(key) for key in self.values}
+        if 'rel_trans' in adjust and self.transmit == 'each': # Each strain at its own rate: a set is as infectious as all of its strains
+            adjust['rel_trans'] = np.array([self.values.rel_trans[list(s)].sum() for s in self.sets])
+        strat = ss.dimensions.Strat(self.name, list(self.labels), split=split, adjust=adjust, kind='strain')
+        if self.split is None:
+            strat.guessed['split'] = 'equal between the strains'
+        strat.strains = self
+        return strat
+
+    def describe(self, graph):
+        """ The strains of a disease with shared states, as lines of its description: how they are run, their values, and the protection between them """
+        sets = f'sets of up to {self.max_strains} carried at once ({sc.strjoin(self.labels)}), a new strain replacing the oldest once full' if self.max_strains > 1 else 'one carried at a time'
+        lines = [f'{"strains":12s} {sc.strjoin(self.names)} ("{self.name}"): states shared, one course; {sets}']
+        per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}
+        chances = {p['p']:name for name,p in per.items() if isinstance(p.get('p'), str)}
+        for key,vals in self.values.items():
+            how = f' (each strain\'s chance in {chances[key]})' if key in chances else ' (the sum of a set\'s, each strain alone)' if per.get(key, {}).get('alone') else ' (a set takes the largest)' if self.max_strains > 1 and key != 'rel_trans' else ''
+            lines.append(f'{"":12s} {key}: {sc.strjoin(f"{v:.4g}" for v in vals)}{how}')
+        how = dict(one='one strain per transmission, chosen in proportion to rel_trans, at the infectiousness of the most infectious', fittest='the most infectious strain only', each='each strain at its own rate')
+        lines.append(f'{"":12s} transmit: {how[self.transmit]}' + (' (from a set)' if self.max_strains > 1 else ''))
+        for imm in self.immunity:
+            what = sc.strjoin(f'time in {k[4:]}' if k.startswith('dur.') else f'p of {k[2:]}' if k.startswith('p.') else k for k in imm.values)
+            extra = '; the rest is superinfection' if not isinstance(imm.due_to, Memory) and any(n in {s.name for s in graph.infected} for n in imm.names) else ''
+            lines.append(f'{"":12s} immunity: {what} × (1 − protection), due to {imm.source}, {imm.rule()} over the strains{" through a curve" if imm.curve is not None else ""}{extra}')
+        reason = self.needs_agents(graph)
+        lines.append(f'{"":12s} solvers: ' + (f'agents only ({reason})' if reason else 'all'))
+        return lines
+
+    @property
+    def spec(self):
+        """ As data, for the model spec """
+        immunity = []
+        for imm in self.immunity:
+            entry = sc.objdict(due_to=repr(imm.due_to) if isinstance(imm.due_to, Memory) else imm.names, scale=imm.scale)
+            for key,val in imm.values.items():
+                kind, _, sub = key.partition('.')
+                if sub:
+                    entry.setdefault(kind, {})[sub] = val.tolist()
+                else:
+                    entry[key] = val.tolist()
+            entry.combine = ss.transitions.quantity_json(imm.combine, None, None) if callable(imm.combine) else imm.combine
+            entry.curve = None if imm.curve is None else ss.transitions.quantity_json(imm.curve, None, None)
+            immunity.append(entry)
+        return sc.objdict(name=self.name, strains=list(self.names), members=None if self.members is None else list(self.names), shared=self.shared,
+                          max_strains=self.max_strains, transmit=self.transmit, split=None if self.split is None else self.split.tolist(),
+                          values={k:v.tolist() for k,v in self.values.items()}, immunity=immunity)
+
+
+immunity_class = immunity
+
+
+def attach(dis, strains):
+    """ Give a declared disease its strains (`ss.Disease(..., strains=...)`): a strain dimension for shared states, or one disease per strain for courses of their own """
+    if not isinstance(strains, Strains):
+        errormsg = f'strains= of "{dis.name}" takes an ss.Strains, e.g. strains=ss.Strains(["A", "B"]); not {type(strains).__name__}'
+        raise TypeError(errormsg)
+    graph = dis.graph
+    if graph is None:
+        raise ss.CapabilityError(f'"{dis.name}" is written as code, so its strains cannot be added to its states; declare its states and transitions, or give the strains as diseases of their own (ss.Strains([...]))')
+    chances = {tr.per_given['p'] for tr in graph.transitions.values() if isinstance(getattr(tr, 'per_given', {}).get('p'), str)} # Values named by p= of a transition with an outcome for each strain
+    unknown = [key for key in strains.values if key != 'rel_trans' and key not in graph.transitions and key not in chances]
+    if unknown:
+        raise ss.errors.UnknownTransition(f'the values of the strains of "{dis.name}" are for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its transitions ({sc.strjoin(graph.transitions.keys())}); a value of a strain multiplies a transition (its rate, a duration divided, or a branch\'s probability), or rel_trans')
+    if strains.shared is True:
+        attach_shared(dis, strains)
+    else:
+        attach_own(dis, strains)
+    dis.strains = strains
+    return
+
+
+def prepare(strains, trs):
+    """
+    Before a disease with strains in shared states is built: its transitions with an outcome for each strain carried (`per='strain'`), as a branch
+    probability and a change of strains for each level of the strain dimension (see `ss.Transition`)
+
+    With `p=`, each strain k carried takes the first destination with probability c_k (cured, say), independently: everyone takes it with
+    probability Π c_k, and the others take the second, carrying the strains left. With `alone=True`, each strain has its own rate, and the
+    first to happen moves on alone: the rate of a set is the sum, and the strain is chosen in proportion to its rate.
+    """
+    n, L = len(strains.names), len(strains.sets)
+    for name,tr in trs: # By the name it will have (a keyword, before the disease names it)
+        if not getattr(tr, 'per_strain', False):
+            continue
+        name = tr.name or name
+        vals = strains.values.get(name, np.ones(n))
+        Q = np.zeros((L, L)) # Where the people at each level go (rows sum to 1)
+        if tr.alone:
+            if tr.p is not None or tr.rate is None:
+                errormsg = f'"{name}" has per="strain" and alone=True, so each strain carried has its own rate, given as rate=; not dur= or p='
+                raise ValueError(errormsg)
+            tr.strain_adjust = np.array([vals[list(s)].sum() for s in strains.sets]) # The rate of a set: the sum of its strains'
+            for l,s in enumerate(strains.sets):
+                for k in s:
+                    Q[l, strains.level_of([k])] += vals[k]/tr.strain_adjust[l]
+            tr.per_given = dict(alone=True)
+        else:
+            if tr.p is None or len(tr.dst or []) != 2:
+                errormsg = f'"{name}" has per="strain", so each strain carried has its own outcome: give p=, the chance of each strain taking the first destination (e.g. cured), and two destinations, the first for those with none left and the second for the rest, e.g. ss.Transition(Tx, [R, I], p=0.9, per="strain")'
+                raise ValueError(errormsg)
+            given = tr.p[0] if len(tr.p) == 1 else tr.p
+            given = getattr(given, 'raw', given)
+            if isinstance(given, str):
+                if given not in strains.values:
+                    errormsg = f'p="{given}" of "{name}" names values of the strains, but they have none of that name; their values are {sc.strjoin(strains.values.keys()) or "none"}'
+                    raise ValueError(errormsg)
+                c = strains.values[given]
+            elif sc.isnumber(given):
+                c = float(given)*vals
+            else:
+                errormsg = f'p= of "{name}" with per="strain" is the chance of each strain taking the first destination: a number, or the name of values of the strains; not {given!r}'
+                raise TypeError(errormsg)
+            if np.any(c < 0) or np.any(c > 1):
+                raise ss.errors.OutOfBounds(f'the chance of each strain taking the first destination of "{name}" is {np.round(c, 4).tolist()}; each is between 0 and 1')
+            none = np.zeros(L)
+            for l,s in enumerate(strains.sets):
+                none[l] = np.prod(c[list(s)])
+                for k in range(1, len(s) + 1): # The strains left, if any
+                    for left in itertools.combinations(s, k):
+                        Q[l, strains.level_of(left)] += np.prod([1 - c[j] if j in left else c[j] for j in s])
+                Q[l] = Q[l]/Q[l].sum() if Q[l].sum() > 0 else np.eye(L)[l]
+            tr.per_given = dict(p=given)
+            tr.p = [ss.by(**{strains.name:none.tolist()}), None]
+            named = isinstance(given, str) and name in strains.values # Values by the transition's name multiply its rate when the chances are named values; with a number, they multiply the chances instead
+            tr.strain_adjust = strains.level_values(name) if named else np.ones(L)
+        tr.move = sc.objdict({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
+    return
+
+
+def attach_shared(dis, strains):
+    """ Strains with shared states: a strain dimension, with the transmissions that let people carry another strain as well where an `ss.immunity` protects only in part in a state they are infected in (superinfection) """
+    graph = dis.graph
+    if any(strat.kind == 'strain' for strat in graph.strats):
+        raise ss.errors.DuplicateStructuralDimension(f'"{dis.name}" has strains already')
+    strat = strains.strat()
+    strat.states = [s.name for s in graph.people_states if s.name not in graph.uninfected] # A strain belongs to an infection, so the states people can be in without ever being infected have none
+    strat.guessed['states'] = f'every state reached only through infection (not {sc.strjoin(graph.uninfected)})'
+    infected = {s.name for s in graph.infected}
+    primary = [tr for tr in graph.transmissions if all(s.name in graph.uninfected for s in tr.src)] # The transmissions to people who carry no strain
+    super_states = []
+    for imm in strains.immunity:
+        if isinstance(imm.due_to, Memory):
+            continue
+        elif imm.due_to is None:
+            errormsg = f'an ss.immunity of the strains of "{dis.name}" needs due_to=: a state (e.g. due_to=R), the last strain had (due_to=strains.last), or every strain had (due_to=strains.ever)'
+            raise ValueError(errormsg)
+        for name in imm.names:
+            if name in graph.attrs:
+                errormsg = f'an ss.immunity of the strains of "{dis.name}" is due to the attribute "{name}", but the strains share their states, so it would scale no one strain\'s protection; write due_to=strains.last (or .ever), scale="{name}"'
+                raise ValueError(errormsg)
+            if name not in graph.states or not graph.states[name].people:
+                raise ss.errors.UnknownState(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", which is not a state of people of it; its states are {sc.strjoin(s.name for s in graph.people_states)}')
+            if name not in strat.states:
+                raise ss.errors.InvalidAdjustment(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", in which people carry no strain (they have never been infected), so it protects against none')
+            other = [key for key in imm.values if key != 'rel_sus']
+            if other:
+                raise ss.CapabilityError(f'an ss.immunity of the strains of "{dis.name}" due to "{name}" lowers {sc.strjoin(other)}; the people in a shared state carry its strains, so it lowers only rel_sus (their protection against another strain); protection on the course of an infection is due_to=strains.last (or .ever)')
+            if name in infected and name not in super_states:
+                super_states.append(name)
+    for tr in graph.transitions.values(): # With an outcome for each strain carried (see prepare())
+        if getattr(tr, 'strain_adjust', None) is not None:
+            strat.adjust[tr.name] = tr.strain_adjust
+        if isinstance(getattr(tr, 'per_given', {}).get('p'), str): # Chances, not multipliers
+            strat.adjust.pop(tr.per_given['p'], None)
+    for name in super_states: # Superinfection: people infected with some strains can be infected with another as well, staying where they are
+        for tr in primary:
+            add_superinfection(dis, strat, tr, graph.states[name])
+    if strains.max_strains > 1 or super_states:
+        strat.init_carriage(strains)
+    graph.strats.append(strat)
+    if not hasattr(dis, strains.name): # So the strains can be used in a condition, e.g. where=tb.strain == 'RIF'
+        dis.setattribute(strains.name, ss.conditions.Cond('dim', strains.name))
+    return
+
+
+def add_superinfection(dis, strat, tr, state):
+    """ A transmission to people in a state they carry strains in, who stay in it carrying the new strain as well (or, with a full set, instead of the oldest): see `ss.Strains` """
+    graph = dis.graph
+    name = f'super{tr.name}_{state.name}'
+    new = ss.Transition(state, state, rate=tr.rate, name=name, label=f'Superinfection in {state.name}')
+    new.const, new.terms = tr.const, tr.terms
+    new.contact = True
+    new.acquisition = True
+    new.people = True
+    new.generated = True # Made from the strains, so the model spec leaves it out (see ss.Disease.to_spec())
+    new.module = dis
+    graph.add(graph.transitions, name, new)
+    dis.setattribute(name, new)
+    if tr.name in strat.adjust: # A strain's transmissibility, for the new transmission too
+        strat.adjust[name] = strat.adjust[tr.name]
+    graph.resolve_exits()
+    return new
+
+
+def attach_own(dis, strains):
+    """ Strains with courses of their own: one disease per strain, copied from the natural history, with each strain's values, run together (see `Family`) """
+    graph = dis.graph
+    shared = [] if strains.shared is False else strains.shared
+    missing = [name for name in shared if name not in graph.states]
+    if missing:
+        raise ss.errors.UnknownState(f'shared= of the strains of "{dis.name}" names {sc.strjoin(missing)}, which {"is" if len(missing) == 1 else "are"} not a state of it; its states are {sc.strjoin(graph.states.keys())}')
+    init_prev = graph.init_prev
+    members = []
+    for k,name in enumerate(strains.names):
+        mod = dis.copy()
+        mod.set_metadata(name=name, label=name)
+        mod.graph.scale = {key:float(vals[k]) for key,vals in strains.values.items()} # The strain's own values: see ss.solvers.Engine.init_adjust()
+        if init_prev is not None: # The disease seeds its strains, one each
+            mod.graph.init_prev = None
+        members.append(mod)
+    dis.family = Family(dis.name, members, strains, init_prev=init_prev, label=dis.label)
+    return
+
+
+def attach_members(dis, strains, args, pars, kwargs):
+    """ A disease whose strains are diseases of their own (`ss.Strains([hpv16, hpv18])`), each with its own course: the module that runs them together (see `Family`) """
+    meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
+    init_prev = kwargs.pop('init_prev', None)
+    if args or pars or kwargs:
+        given = sc.strjoin(list(kwargs) + (['pars'] if pars else []) + ([f'{len(args)} positional'] if args else []))
+        errormsg = f'the strains of "{meta.get("name", "the disease")}" are diseases with natural histories of their own, so it takes no states, transitions, or parameters ({given}); give it name=, label=, and init_prev= (seeding one strain each), if any'
+        raise ValueError(errormsg)
+    dis.set_metadata(**meta)
+    dis.strains = strains
+    dis.family = Family(dis.name, strains.members, strains, init_prev=init_prev, label=dis.label)
+    return
 
 
 class Union(ss.conditions.Cond):
@@ -145,7 +745,7 @@ class Union(ss.conditions.Cond):
 
 
 class Protection:
-    """ The effect of an `ss.immunity` on one quantity of one member of a family, as agents: a multiplier, like a modifier (see `ss.connectors.combine()`) """
+    """ The effect of an `ss.immunity` on one quantity of one strain with its own course, as agents: a multiplier, like a modifier (see `ss.connectors.combine()`) """
     op = 'multiply'
     active = True
     tabulated = False
@@ -162,18 +762,7 @@ class Protection:
         return
 
     def apply(self, value, engine):
-        p = self.family.protection(self.index, self.key, self.member)
-        if not isinstance(engine, ss.solvers.Agents): # By state (rows) and group, from the members' shares: see Strains.start_step()
-            if np.ndim(p) == 0: # Before the first step
-                return value
-            elif self.state is None:
-                return value*(1 - p)
-            row = engine.selector.states.index(self.state)
-            if np.any(p[row] >= 1):
-                raise ss.errors.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
-            out = np.ones(np.shape(p))
-            out[row] = 1/(1 - p[row])
-            return value*out
+        p = self.family.protection(self.index, self.key, self.member) # As agents: a family whose members affect each other runs as agents only (see ss.solvers.init_capabilities())
         n = len(engine.mod.rel_sus.raw) # Agents born this step have no protection yet
         if len(p) < n:
             p = np.concatenate([p, np.zeros(n - len(p))])
@@ -187,7 +776,70 @@ class Protection:
     def describe(self):
         imm = self.family.immunity[self.index]
         what = f'time in {self.state}' if self.state is not None else self.key
-        return f'{self.name:<16s} multiply={"1/" if self.state is not None else ""}(1 − protection)   ({what}; {imm.rule()} from {self.family.name}.{sc.strjoin(sc.tolist(imm.protected)) if imm.protected is not None else "its members"})'
+        return f'{self.name:<16s} multiply={"1/" if self.state is not None else ""}(1 − protection)   ({what}; {imm.rule()} from {self.family.name}.{imm.source})'
+
+
+class MemoryProtection:
+    """
+    The effect of an `ss.immunity` due to what people remember of the strains of a disease with shared states (`due_to=strains.last` or `.ever`) on
+    the course of their infection: `rel_trans`, the time in a state (`dur=`), or a branch (`p=`); against the strain they carry (for several, the
+    least protection), from the strains they remember from before. As agents: a multiplier, like a modifier (see `ss.connectors.combine()`).
+    """
+    op = 'multiply'
+    active = True
+    tabulated = False
+    constant = False
+    where = None
+
+    def __init__(self, imm, key, state=None):
+        self.imm = imm
+        self.key = key
+        self.state = state # For a time spent: the state whose exits it speeds up
+        self.name = f'{imm.due_to.strains.name}.immunity'
+        return
+
+    @classmethod
+    def add(cls, engine, imm, key):
+        """ Add the protection on one quantity to the modifiers of the engine's disease """
+        name = engine.mod.name
+        kind, _, sub = key.partition('.')
+        graph = engine.graph
+        if kind == 'rel_trans':
+            engine.sim.modifiers[(name, 'rel_trans', None)].append(cls(imm, key))
+        elif kind == 'p':
+            if sub not in graph.transitions or graph.modifier_kind(sub) != 'branch':
+                raise ss.errors.UnknownTransition(f'an ss.immunity of the strains of "{name}" lowers the probability of "{sub}", which is not a branch of it (a transition with p=); its transitions are {sc.strjoin(graph.transitions.keys())}')
+            engine.sim.modifiers[(name, 'branch', sub)].append(cls(imm, key))
+        else:
+            if sub not in graph.states or not engine.applies[sub][engine.strain]:
+                raise ss.errors.UnknownState(f'an ss.immunity of the strains of "{name}" shortens the time in "{sub}", which is not a state of it in which people carry a strain')
+            exits = graph.exits[sub]
+            for tr in exits.branches + sc.tolist(exits.remainder) + exits.timed + exits.hazards:
+                engine.sim.modifiers[(name, 'transition', tr.name)].append(cls(imm, key, state=sub))
+        return
+
+    def apply(self, value, engine):
+        strains = engine.sim.groups.strats[engine.strain].strains
+        inside = np.zeros(len(engine.mod.rel_sus.raw), dtype=bool) # Only for the people infected (in the state, for a time spent), whose protection is worked out
+        for state in engine.graph.people_states:
+            if engine.applies[state.name][engine.strain] and (self.state is None or state.name == self.state):
+                inside |= engine.mod[state.name].raw
+        p = np.zeros(len(inside))
+        uids = ss.uids(np.flatnonzero(inside))
+        if len(uids):
+            levels = engine.strain_raw()[uids]
+            prot = np.array([engine.remembered(self.imm, self.key, uids, j) for j in range(len(strains.names))]) # Against each strain (rows)
+            carries = np.array([[j in s for s in strains.sets] for j in range(len(strains.names))])[:, levels]
+            p[uids] = np.where(carries, prot, np.inf).min(axis=0)
+        if self.state is None:
+            return value*(1 - p)
+        if np.any(p >= 1):
+            raise ss.errors.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; scale the matrix so it stays below 1')
+        return value/(1 - p)
+
+    def describe(self):
+        what = f'time in {self.state}' if self.state is not None else self.key
+        return f'{self.name:<16s} multiply={"1/" if self.state is not None else ""}(1 − protection)   ({what}; due to {self.imm.source})'
 
 
 def stock_sum(expr):
@@ -200,105 +852,74 @@ def stock_sum(expr):
     return None
 
 
-class Strains(ss.Module):
+class Family(ss.Module):
     """
-    A family of diseases that a person can have several of at once, each with its own natural history (e.g. HPV genotypes)
+    The strains of a disease that have courses of their own (`ss.Strains(shared=False)`, or a list of the shared states): one declared disease per strain, run together
 
-    The members are ordinary declared diseases, stepped as before, in their order. The family adds
-    what ties them together: protection between them (`ss.immunity`), results and conditions over
-    all of them (`sim.results.hpv.infected` is the number infected with any member, and
-    `where=hpv.infected` the people who are), seeding in which each person seeded gets one member,
-    and one course at a time in a state (`exclusive=`). References between members are by name, so
-    no member needs another to exist when it is written.
-
-    For one disease whose strains share a natural history and of which a person has one at a time
-    (dengue serotypes, influenza strains, drug resistance), use a strain dimension instead:
-    `stratify(strain=[...], immunity=...)`, which takes the same `ss.immunity`.
+    Made by `ss.Disease(strains=...)`, which the sim takes as the members (as diseases of their own, named
+    after the strains) followed by the family (named after the disease). The members are stepped as before,
+    in their order. The family adds what ties them together: protection between them (`ss.immunity`),
+    results and conditions over all of them (`sim.results.hpv.infected` is the number infected with any
+    strain, and `where=hpv.infected` the people who are), seeding in which each person seeded gets one strain,
+    and the shared states (`shared=['Ca']`): entering one in one strain ends the others' courses.
 
     As agents, all of this is exact. Under the compartmental solvers, members that do not affect each other
     run side by side (with the sum of their compartments, not the product), and the union results and the
     seeding are worked out from each member's share of each group. Members that affect each other
-    (`immunity=`, `exclusive=`) need agents: `auto` runs them as agents, and a compartmental solver raises
-    a `CapabilityError`. As compartments, write the couplings as `ss.modify(..., where=)` between the
-    members instead, which tracks their states jointly (exactly, with the product of their compartments).
-
-    Args:
-        name (str): the name of the family, e.g. 'hpv'
-        members (list): the members, declared diseases (or an `ss.ndict` of them), each with a name of its own
-        immunity (immunity/list): protection between the members: one `ss.immunity` or a list of them; the matrices have rows and columns in the order of the members
-        init_prev (float/by/func): the share of people who start infected with any member (a number, an `ss.by`, a function of the sim, or of the sim and the agents); each of them gets one member
-        split (list): the share of each member among those seeded (default: equal)
-        exclusive (str): a state that a person can be in for one member only (e.g. 'Ca', one cancer per person): entering it in one member moves them, in the others, to the state with no way out (other than death) that they cannot be infected in (e.g. 'X'), in the same step
-        label (str): a longer name
+    (`immunity=`, shared states) need agents: `auto` runs them as agents, and a compartmental solver raises
+    a `CapabilityError`.
 
     Results: for each state or named sum of states that every member has (a stock), the number in it in
     any member (`n_I`, `infected`); for each transition every member has (a flow), the sum (`cancer`).
-    `res.by('<family>')` gives each member's own.
-
-    Example:
-        ```python
-        def genotype(name, beta):
-            S, I, R, Ca = ss.states('S I R Ca')
-            return ss.Disease(infection=S >> I @ beta*I, clearance=I >> R @ ss.years(2), cancer=I >> Ca @ ss.years(20), X=ss.State(people=True), name=name)
-        hpv = ss.Strains('hpv', [genotype('hpv16', 0.5), genotype('hpv18', 0.4)],
-            immunity  = ss.immunity(protected='R', rel_sus=[[0.9, 0.3], [0.3, 0.9]], combine='sum'),
-            init_prev = 0.1,
-            split     = [0.6, 0.4],
-            exclusive = 'Ca',
-        )
-        sim = ss.Sim(diseases=hpv).run()
-        sim.results.hpv.n_I # Infected with either
-        ```
+    `res.by('<strain dimension>')` gives each member's own.
     """
     compartmental = False
     graph = None # It has no states of its own; its members have
     infection_log = None
 
-    def __init__(self, name, members=None, immunity=None, init_prev=None, split=None, exclusive=None, label=None):
+    def __init__(self, name, members, strains, init_prev=None, label=None):
         super().__init__(name=name, label=label)
-        if not isinstance(name, str):
-            errormsg = f'ss.Strains() takes the name of the family first, e.g. ss.Strains("hpv", [hpv16, hpv18]), not {type(name).__name__}'
-            raise TypeError(errormsg)
-        if members is None or isinstance(members, ss.Disease) or not len(members):
-            errormsg = f'ss.Strains("{name}", members) takes its members as one list of declared diseases (or an ss.ndict of them), e.g. ss.Strains("{name}", [hpv16, hpv18])'
-            raise TypeError(errormsg)
-        members = list(members.values()) if isinstance(members, dict) else list(members)
         for mod in members:
-            if not isinstance(mod, ss.Disease):
-                raise ss.CapabilityError(f'the member {getattr(mod, "name", mod)!r} of "{name}" is not a declared disease ({type(mod).__name__}), so its states are not visible to the family; declare it with ss.Disease(...)')
+            if getattr(mod, 'graph', None) is None:
+                raise ss.CapabilityError(f'the strain {getattr(mod, "name", mod)!r} of "{name}" is not a declared disease ({type(mod).__name__}), so its states are not visible to the others; declare it with ss.Disease(...)')
             mod._default_name = False # The family refers to it by name, which the sim does not change
         names = [mod.name for mod in members]
         if len(set(names)) < len(names) or name in names:
-            errormsg = f'the members of "{name}" need names of their own, different from each other and from the family; they are {sc.strjoin(names)}'
+            errormsg = f'the strains of "{name}" need names of their own, different from each other and from the disease; they are {sc.strjoin(names)}'
             raise ValueError(errormsg)
+        self.dim = strains.name # The name that gives each member's own results, res.by(...)
+        self.strains_spec = strains.spec # As data, not the strains themselves, which refer to the members (and would name their random numbers: see ss.Dist)
         self.member_names = names
         self._members = members # Until the sim takes them: see expand()
-        self.immunity = [imm for imm in sc.tolist(immunity)]
-        for imm in self.immunity:
-            if not isinstance(imm, ss.immunity):
-                errormsg = f'immunity= of "{name}" takes ss.immunity() objects, e.g. ss.immunity(protected="nab", rel_sus=matrix); not {type(imm).__name__}'
-                raise TypeError(errormsg)
-            if imm.protected is None:
-                errormsg = f'an ss.immunity of "{name}" needs protected=, the states of each member whose holders are protected (e.g. protected="R"), or an attribute of each member that scales the protection (e.g. protected="nab")'
+        self.immunity = []
+        for imm in strains.immunity:
+            if isinstance(imm.due_to, Memory):
+                raise ss.CapabilityError(f'an ss.immunity of "{name}" is due to {imm.due_to!r}, but its strains have courses of their own, so each has its own memory: give due_to= the state of each strain that protects (e.g. due_to=R), or an attribute of each (e.g. due_to="nab")')
+            if imm.due_to is None:
+                errormsg = f'an ss.immunity of "{name}" needs due_to=, the state of each strain whose people are protected (e.g. due_to=R), or an attribute of each strain that scales the protection (e.g. due_to="nab")'
                 raise ValueError(errormsg)
+            other = [key for key in imm.values if key.startswith('p.')]
+            if other:
+                raise ss.CapabilityError(f'an ss.immunity of "{name}" lowers a branch probability ({sc.strjoin(k[2:] for k in other)}), which strains with courses of their own do not have yet; use dur= (shorter stays) instead')
+            imm = copy.copy(imm)
+            imm.due_to = imm.names # By name, since each strain has its own states
+            self.immunity.append(imm)
         self.init_prev = init_prev
-        self.split = None if split is None else np.array(split, dtype=float)
+        self.split = None if strains.split is None else strains.split.copy()
         self.guessed = sc.objdict()
         if self.split is not None:
-            if len(self.split) != len(names):
-                raise ss.errors.BadSplit(f'split= of "{name}" has {len(self.split)} entries, but there are {len(names)} members ({sc.strjoin(names)})')
             if not np.isclose(self.split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {self.split.sum():n}'
                 self.split = self.split/self.split.sum()
         elif init_prev is not None:
             self.split = np.ones(len(names))/len(names)
-            self.guessed['split'] = 'equal between the members'
-        self.exclusive = exclusive
+            self.guessed['split'] = 'equal between the strains'
+        self.exclusive = [] if strains.shared is False else list(strains.shared) # The states shared by the strains
         if init_prev is not None:
             for mod in members:
-                own = [key for key,given in dict(init_prev=mod.graph.init_prev is not None, init=bool(mod.graph.init) or any(s.init is not None for s in mod.graph.states.values())).items() if given]
+                own = [key for key,given in dict(init_prev=mod.graph.init_prev is not None, init=any(s.given_init for s in mod.graph.states.values())).items() if given]
                 if own:
-                    errormsg = f'"{name}" seeds its members (init_prev=), but its member "{mod.name}" has {sc.strjoin(own)} of its own as well; give one or the other'
+                    errormsg = f'"{name}" seeds its strains (init_prev=), but its strain "{mod.name}" has {sc.strjoin(own)} of its own as well; give one or the other'
                     raise ValueError(errormsg)
                 mod.graph.seeded_by = name # Seeded by the family (see ss.solvers.Engine.init_fractions())
         self.stocks = sc.objdict() # The results that are unions: for each name, the states of each member that make it up
@@ -343,12 +964,12 @@ class Strains(ss.Module):
         return out
 
     @staticmethod
-    def attr_of(mod, name):
-        """ The attribute of a member that a name refers to, or None if it is not the name of one """
-        if isinstance(name, str):
-            return mod.graph.attrs.get(name)
-        if any(isinstance(n, str) and n in mod.graph.attrs for n in sc.tolist(name)):
-            errormsg = f'protected={name!r} mixes an attribute of "{mod.name}" with other names; an attribute is given alone, e.g. protected="nab"'
+    def attr_of(mod, names):
+        """ The attribute of a member that names (from `ss.immunity.names`) refer to, or None if they are not the name of one """
+        if len(names) == 1:
+            return mod.graph.attrs.get(names[0])
+        if any(n in mod.graph.attrs for n in names):
+            errormsg = f'due_to={names!r} mixes an attribute of "{mod.name}" with other names; an attribute is given alone, e.g. due_to="nab"'
             raise ValueError(errormsg)
         return None
 
@@ -380,8 +1001,8 @@ class Strains(ss.Module):
 
     def init_pre(self, sim):
         """ Check the family against the sim, resolve its references by name, and add its protection to the modifiers of its members """
-        if self.name in [strat.name for strat in sim.groups.strats]: # Checked first, since the people would refuse the name too
-            errormsg = f'the family "{self.name}" has the name of a dimension ({self.name}=...); a family is the dimension of its members, so give one of them another name'
+        if self.dim in [strat.name for strat in sim.groups.strats]: # Checked first, since the people would refuse the name too
+            errormsg = f'the strains of "{self.name}" are called "{self.dim}", which is also the name of a dimension; give the strains another name (ss.Strains(..., name=...))'
             raise ValueError(errormsg)
         super().init_pre(sim)
         self._members = None # The sim's own copies are used from now on
@@ -389,7 +1010,7 @@ class Strains(ss.Module):
         names = self.member_names
         dts = {str(mod.t.dt) for mod in members}
         if len(dts) > 1:
-            errormsg = f'the members of "{self.name}" have different timesteps ({sc.strjoin(f"{mod.name}: {mod.t.dt}" for mod in members)}); they are stepped together, so give them one'
+            errormsg = f'the strains of "{self.name}" have different timesteps ({sc.strjoin(f"{mod.name}: {mod.t.dt}" for mod in members)}); they are stepped together, so give them one'
             raise ValueError(errormsg)
 
         # Protection: one multiplier for each quantity of each member that it lowers
@@ -397,25 +1018,25 @@ class Strains(ss.Module):
         self.sources = [] # For each ss.immunity, the states of each member whose holders are protected, or the attribute that scales the protection (None for a member that protects against nothing)
         for i,imm in enumerate(self.immunity):
             sources = []
-            attrs = [self.attr_of(mod, imm.protected) for mod in members]
+            attrs = [self.attr_of(mod, imm.names) for mod in members]
             if any(a is not None for a in attrs):
                 if not all(a is not None for a in attrs):
                     which = lambda has: sc.strjoin([mod.name for mod,a in zip(members, attrs) if (a is not None) == has])
-                    errormsg = f'an ss.immunity of "{self.name}" is protected by "{imm.protected}", which is an attribute of {which(True)} but not of {which(False)}; it needs to be an attribute of every member, or states of every member, not both'
+                    errormsg = f'an ss.immunity of "{self.name}" is due to "{imm.source}", which is an attribute of {which(True)} but not of {which(False)}; it needs to be an attribute of every strain, or states of every strain, not both'
                     raise ValueError(errormsg)
                 if sim.solver != 'abm': # Attributes are kept per agent for now (see ss.attr), so choose_solver() refuses first; this is a safeguard
-                    raise ss.CapabilityError(f'an ss.immunity of "{self.name}" is scaled by the attribute "{imm.protected}", which has no compartmental form yet; run with solver="abm"')
+                    raise ss.CapabilityError(f'an ss.immunity of "{self.name}" is scaled by the attribute "{imm.source}", which has no compartmental form yet; run with solver="abm"')
                 for k,a in enumerate(attrs):
                     gives = any(np.any(imm.matrix(key, n)[k] > 0) for key in imm.values)
                     sources.append(a if gives else None)
             for k,mod in enumerate(members):
                 if attrs[k] is not None:
                     continue
-                states = self.states_of(mod, imm.protected)
+                states = self.states_of(mod, imm.names)
                 gives = any(np.any(imm.matrix(key, n)[k] > 0) for key in imm.values)
                 if states is None and gives:
-                    lacking = [m.name for m in members if self.states_of(m, imm.protected) is None]
-                    raise ss.errors.UnknownState(f'an ss.immunity of "{self.name}" is protected by "{sc.strjoin(sc.tolist(imm.protected))}", which {sc.strjoin(lacking)} {"has" if len(lacking) == 1 else "have"} no state or named sum of states for; add it, or give that member a row of zeros')
+                    lacking = [m.name for m in members if self.states_of(m, imm.names) is None]
+                    raise ss.errors.UnknownState(f'an ss.immunity of "{self.name}" is due to "{imm.source}", which {sc.strjoin(lacking)} {"has" if len(lacking) == 1 else "have"} no state or named sum of states for; add it, or give that strain a row of zeros')
                 sources.append(states if gives else None)
             self.sources.append(sources)
             for key in imm.values:
@@ -436,19 +1057,20 @@ class Strains(ss.Module):
                     else:
                         sim.modifiers[(mod.name, key, None)].append(Protection(self, i, key, g))
 
-        # One course at a time: the state each member's people move to when they are in the exclusive state of another
+        # The shared states: the state each member's people move to when they are in a shared state of another
         self.blocked = None
-        if self.exclusive is not None:
-            lacking = [mod.name for mod in members if self.exclusive not in mod.graph.states]
-            if lacking:
-                raise ss.errors.UnknownState(f'exclusive="{self.exclusive}" of "{self.name}" is not a state of {sc.strjoin(lacking)}')
+        if self.exclusive:
+            for state in self.exclusive:
+                lacking = [mod.name for mod in members if state not in mod.graph.states]
+                if lacking:
+                    raise ss.errors.UnknownState(f'shared=["{state}"] of "{self.name}" is not a state of {sc.strjoin(lacking)}')
             self.blocked = []
             for mod in members:
                 graph = mod.graph
                 exits = lambda state: [tr for key in ['branches', 'timed', 'hazards', 'contact'] for tr in graph.exits[state][key]] + sc.tolist(graph.exits[state].remainder)
-                ends = [s.name for s in graph.people_states if s.name != self.exclusive and all(tr.outflow for tr in exits(s.name))] # No way out but leaving the population (deaths)
+                ends = [s.name for s in graph.people_states if s.name not in self.exclusive and all(tr.outflow for tr in exits(s.name))] # No way out but leaving the population (deaths)
                 if not ends:
-                    raise ss.errors.UnknownState(f'"{mod.name}" has no state with no exits for people with {self.exclusive} in another member of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
+                    raise ss.errors.UnknownState(f'"{mod.name}" has no state with no exits for people with {sc.strjoin(self.exclusive)} in another strain of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
                 self.blocked.append(ends[-1])
 
         # Under the compartmental solvers: the members side by side, seeded from their shares (members that affect each other need agents: see ss.solvers.init_capabilities())
@@ -460,7 +1082,7 @@ class Strains(ss.Module):
     @property
     def coupled(self):
         """ Whether the members affect each other (protection, or one course at a time), which only agents follow """
-        return bool(self.immunity) or self.exclusive is not None
+        return bool(self.immunity) or bool(self.exclusive)
 
     def shares(self, states, k, g):
         """
@@ -584,15 +1206,15 @@ class Strains(ss.Module):
         return out
 
     def step(self):
-        """ After the members' steps: someone who entered the exclusive state of one member leaves the others """
+        """ After the members' steps: someone who entered a shared state in one member leaves the others """
         if self.sim.solver != 'abm':
             return self.step_shares()
-        if self.exclusive is None:
+        if not self.exclusive:
             return
         members = self.members
-        taken = np.zeros(len(members[0].rel_sus.raw), dtype=bool) # Whose course in the exclusive state is with an earlier member
+        taken = np.zeros(len(members[0].rel_sus.raw), dtype=bool) # Whose course in a shared state is with an earlier member
         for k,mod in enumerate(members):
-            inside = mod[self.exclusive].raw & ~taken
+            inside = np.logical_or.reduce([mod[state].raw for state in self.exclusive]) & ~taken
             for j,other in enumerate(members):
                 if j != k:
                     uids = ss.uids(np.flatnonzero(inside & ~other[self.blocked[j]].raw))
@@ -648,11 +1270,11 @@ class Strains(ss.Module):
         return
 
     def finalize_results(self):
-        """ Scale the results, and keep each member's own for `res.by('<family>')` """
+        """ Scale the results, and keep each member's own for `res.by('<strain dimension>')` """
         super().finalize_results()
         for key,res in self.results.items():
             if isinstance(res, ss.Result) and (key in self.stocks or key in self.flows):
-                res.family = (self.name, list(self.member_names), np.column_stack([np.asarray(self.member_result(mod, key), dtype=float) for mod in self.members]))
+                res.family = (self.dim, list(self.member_names), np.column_stack([np.asarray(self.member_result(mod, key), dtype=float) for mod in self.members]))
         return
 
     def member_result(self, mod, key):
@@ -668,22 +1290,10 @@ class Strains(ss.Module):
         return
 
     def to_spec(self, filename=None, **kwargs):
-        """ The model spec of the family: its members by name (each has its own node, before it), and its options as data (as `sim.to_spec()` holds it, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`) """
+        """ The model spec of the strains: the members by name (each has its own node, before it), and the strains' options as data (as `sim.to_spec()` holds it, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`) """
         unit = self.sim.unit if self.sim is not None else None
-        value = lambda val: ss.transitions.quantity_json(val, None, unit)
-        immunity = []
-        for imm in self.immunity:
-            entry = sc.objdict(protected=imm.protected)
-            for key,val in imm.values.items():
-                if key.startswith('dur.'):
-                    entry.setdefault('dur', {})[key[4:]] = val.tolist()
-                else:
-                    entry[key] = val.tolist()
-            entry.combine = value(imm.combine) if callable(imm.combine) else imm.combine
-            immunity.append(entry)
-        split = None if self.split is None or self.guessed.get('split') == 'equal between the members' else self.split.tolist()
-        out = sc.objdict(type='Strains', name=self.name, label=self.label, members=list(self.member_names), immunity=immunity,
-                         init_prev=None if self.init_prev is None else value(self.init_prev), split=split, exclusive=self.exclusive)
+        out = sc.objdict(type='Family', name=self.name, label=self.label, members=list(self.member_names), init_prev=None if self.init_prev is None else ss.transitions.quantity_json(self.init_prev, None, unit),
+                         strains=self.strains_spec)
         if filename is not None:
             return sc.savejson(filename, out, **kwargs)
         return out
@@ -691,28 +1301,29 @@ class Strains(ss.Module):
     def describe(self, output=False):
         """ The family: its members, protection, seeding, and results """
         members = self.member_names
-        lines = [f'Family {self.name}: {len(members)} members ({sc.strjoin(members)}), stepped in this order']
+        shared = f'; shared: {sc.strjoin(self.exclusive)}' if self.exclusive else ''
+        lines = [f'Strains of {self.name}: {len(members)} with courses of their own ({sc.strjoin(members)}), stepped in this order{shared}']
         n = len(members)
         for imm in self.immunity:
             for key in imm.values:
                 what = f'time in {key.split(".", 1)[1]}' if key.startswith('dur.') else key
                 largest = imm.largest(key, n).max() if not callable(imm.combine) else None
                 shape = f'{n}×{n} matrix' if imm.values[key].ndim else f'{float(imm.values[key]):n} from any member against each'
-                attr = self.attr_of(self.members[0], imm.protected) is not None
-                over = f'm[k, g]·{imm.protected}_k over the members k' if attr else f'm[k, g] over the members k whose {sc.strjoin(sc.tolist(imm.protected))} they are in'
+                attr = self.attr_of(self.members[0], imm.names) is not None
+                over = f'm[k, g]·{imm.source}_k over the strains k' if attr else f'm[k, g] over the strains k whose {imm.source} they are in'
                 lines.append(f'  immunity: {what} of each member × (1 − protection), the protection being {imm.rule()} of {over} ({shape}' +
                              (f', largest protection {largest:.3g})' if largest is not None else ')'))
         if self.init_prev is not None:
             prev = getattr(self.init_prev, '__name__', None) if callable(self.init_prev) and not isinstance(self.init_prev, (ss.Dist, ss.by)) else None
             prev = f'{prev} (a function)' if prev else self.init_prev
             guess = f'   [guessed: {self.guessed.split}]' if 'split' in self.guessed else ''
-            lines.append(f'  seeding: infected with any member {prev}, one member each, in shares {sc.strjoin(f"{s:.3g}" for s in self.split)}{guess}')
-        if self.exclusive is not None:
+            lines.append(f'  seeding: infected with any strain {prev}, one strain each, in shares {sc.strjoin(f"{s:.3g}" for s in self.split)}{guess}')
+        if self.exclusive:
             to = sc.strjoin(sorted(set(self.blocked))) if self.blocked is not None else 'the state with no exits'
-            lines.append(f'  exclusive: entering {self.exclusive} of one member moves the person to {to} in the others')
+            lines.append(f'  shared: entering {sc.strjoin(self.exclusive)} in one strain moves the person to {to} in the others')
         stocks = [f'{key} (union of the members\' {key})' for key in self.stocks if not key.startswith('n_')]
-        lines.append(f'  results: {", ".join(stocks + [f"n_{key[2:]}" for key in self.stocks if key.startswith("n_")])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.name}") for each member')
-        if any(self.attr_of(self.members[0], imm.protected) is not None for imm in self.immunity):
+        lines.append(f'  results: {", ".join(stocks + [f"n_{key[2:]}" for key in self.stocks if key.startswith("n_")])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.dim}") for each strain')
+        if any(self.attr_of(self.members[0], imm.names) is not None for imm in self.immunity):
             lines.append('  compartmental solvers: none (protection from an attribute is kept per agent)')
         else:
             lines.append('  compartmental solvers: ' + ('none (members that affect each other need agents)' if self.coupled else 'members side by side; unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)'))

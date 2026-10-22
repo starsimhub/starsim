@@ -73,7 +73,7 @@ def test_clocks():
     def check(sim):
         d = sim.diseases.d
         st = d.graph.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept
-        ti, dt = d.ti, d.t.dt.to('day').value
+        ti, dt = d.ti - 1, d.t.dt.to('day').value # The start of the step, which clocks are worked out at
         u = d.B.uids
         assert np.allclose(d.engine.eval_for(st.B.time, u), (ti - d.ti_B[u])*dt)
         both = d.engine.eval_for(seen.ab, u)
@@ -142,7 +142,7 @@ def test_syphilis_latent():
         if form == 'old': # The workaround: relies on ti_EL being kept after people leave EL for LL, and is NaN for seeds in LL
             def latent_decay(sim):
                 s = sim.diseases.syph
-                return np.exp(-np.log(2)/hl*(sim.ti - s.ti_EL.floats().raw)*sim.t.dt.years) # Step numbers as floats, NaN if never in EL
+                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.floats().raw)*sim.t.dt.years) # Step numbers as floats, NaN if never in EL; from the start of the step
             amount = latent_decay
         else:
             amount = 0.5**((EL | LL).time/ss.years(hl))
@@ -158,7 +158,7 @@ def test_syphilis_latent():
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.graph.states.EL | s.graph.states.LL
-    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - s.ti_EL[late])/12) # From latent onset, as the workaround meant
+    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL[late])/12) # From latent onset to the start of the last step, as the workaround meant
     with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
@@ -166,6 +166,7 @@ def test_syphilis_latent():
 
 class BV(ss.Disease):
     CST1, CST4, P = ss.states('CST1 CST4 P')
+    first = 'CST1'
     recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
     onset  = CST1 >> CST4 @ ss.permonth(0.05)
     tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average: a dwell time, which ends in the state-change row
@@ -178,7 +179,7 @@ def test_bv_recurrence():
     sc.heading('Port: BV recurrence hazard decays with time since treatment, P.time')
     def recur_rate(sim, uids): # The workaround (bv_gud_connectors/port.py)
         bv = sim.diseases.bv
-        months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months
+        months = (sim.ti - 1 - bv.ti_P[uids]) * sim.t.dt.months # From the start of the step
         return ss.permonth(0.06 * np.exp(-months / 3))
     class Old(BV):
         recur = ss.Transition(BV.P, BV.CST4, rate=recur_rate)

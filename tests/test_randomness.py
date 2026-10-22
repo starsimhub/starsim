@@ -229,7 +229,7 @@ def test_independence(do_plot=False, thresh=0.1):
     arrs.age = st.age.values
     arrs.sex = st.female.values
     for key,disease in sim.diseases.items():
-        arrs[f'{key}_init'] = (disease.I if isinstance(disease, ss.Disease) else disease.infected).values # Declared, or written as code
+        arrs[f'{key}_init'] = (disease.infected if isinstance(disease, ss.Infection) else disease.I).values # Written as code, or declared
     for key,network in sim.networks.items():
         data = np.zeros(len(sim.people))
         for p in ['p1', 'p2']:

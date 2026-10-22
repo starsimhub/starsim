@@ -125,7 +125,7 @@ def test_seir():
         infection = Susceptible >> Exposed @ contacts*ss.by([0.05, 0.08], dims=['age'])*Infected,
         onset     = Exposed >> Infected @ ss.by([1/3, 1/4], dims=['age']),
         recovery  = Infected >> Recovered @ 1/6,
-        init      = dict(Exposed=ss.by([10, 0], dims=['age']), Infected=ss.by([5, 10], dims=['age'])),
+        init_n    = dict(Exposed=ss.by([10, 0], dims=['age']), Infected=ss.by([5, 10], dims=['age'])),
         name      = 'oseir',
     )
     seir.stratify(age=['0', '1'], split=[0.6, 0.4])
@@ -189,7 +189,7 @@ def test_graph_json():
         infection = Susceptible >> Exposed @ contacts*ss.by([0.05, 0.08], dims=['age'])*Infected,
         onset     = Exposed >> Infected @ ss.by([1/3, 1/4], dims=['age']),
         recovery  = Infected >> Recovered @ 1/6,
-        init      = dict(Exposed=ss.by([[10, 0], [0, 0]], dims=['age', 'patch']), Infected=ss.by([[5, 0], [10, 0]], dims=['age', 'patch'])),
+        init_n    = dict(Exposed=ss.by([[10, 0], [0, 0]], dims=['age', 'patch']), Infected=ss.by([[5, 0], [10, 0]], dims=['age', 'patch'])),
         name      = 'oseir',
     )
     totals = np.array([[6000, 2000], [4000, 1000]])

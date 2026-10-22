@@ -46,7 +46,7 @@ def test_bv_debut():
             debut = ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
-            name='bv')
+            first='U', name='bv')
     checked = sc.objdict(n=0)
     def check(sim): # After every module has stepped, nobody who qualifies is still waiting
         bv, ppl = sim.diseases.bv, sim.people
@@ -175,7 +175,7 @@ def test_syphilis_stay():
             tertiary = ss.Transition(LL, T, p=0.35, dur=dur)
         else:
             tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
-        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
+        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
     out = sc.objdict()
     with pytest.raises(ss.errors.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
@@ -194,7 +194,7 @@ def test_syphilis_stay():
     # The remainder of branches whose p= is not a constant
     def branches(p):
         I, H, R = ss.states('I H R')
-        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), name='d') # Everyone starts in I
+        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), first='I', name='d') # Everyone starts in I
     for solver in ['abm', 'ode']:
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.n_H[-1] for p in [0.3, lambda sim: 0.3]]
@@ -222,7 +222,7 @@ def test_ct_by_sex():
             onset   = P >> Y @ onset,
             clear_a = A >> S @ ss.months(6),
             clear_y = Y >> S @ ss.months(3),
-            name='ct') # Everyone starts in E
+            first='E', name='ct') # Everyone starts in E
     kw2 = dict(start=2000, stop=2002, dt=ss.months(0.25), unit='year', **kw)
     sims = sc.objdict()
     for key,form,strat in [('nostrat', 'pars', None), ('pars', 'pars', dict(sex=['female', 'male'])), ('dists', 'dists', dict(sex=['female', 'male']))]:
@@ -249,7 +249,7 @@ def test_ct_by_sex():
     # A Dist with a function as a parameter (FPsim: duration of use by age), and typed rates inside ss.by
     def callable_dist(solver):
         A, B = ss.states('A B')
-        d = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.lognorm_ex(mean=lambda self, sim, uids: np.full(len(uids), 0.5), std=0.1)), name='d') # Everyone starts in A
+        d = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.lognorm_ex(mean=lambda self, sim, uids: np.full(len(uids), 0.5), std=0.1)), first='A', name='d') # Everyone starts in A
         size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
         return ss.Sim(d, solver=solver, **size, start=2000, stop=2002, dt=ss.months(1), unit='year', verbose=0).run()
     assert callable_dist('abm').results.d.ab.sum() == 1000
@@ -267,7 +267,7 @@ def test_with_conveyor():
     size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
     for solver in ['abm', 'ode']: # Those who stay at the end of a fixed dwell are not in the flow
         LL, T, Sp = ss.states('LL T Sp')
-        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, init=dict(LL=10_000), name='syph') # Everyone (1 or more is people)
+        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone (1 or more is people)
         res = ss.Sim(d, solver=solver, start=2000, stop=2004, unit='year', **size(solver), **kw).run().results.syph
         assert res.n_T[1] == 0 and np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T}'
         assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.n_T[-1]} in T'
@@ -277,7 +277,7 @@ def test_with_conveyor():
         a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), name='a')
         E, I, Z = ss.states('E I Z')
         latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
-        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), init=dict(E=10_000), name='b')] # The trigger tracks a and b jointly
+        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), first='E', name='b')] # The trigger tracks a and b jointly
     out = [ss.Sim(make(False), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
     for key in ['n_I', 'n_Z']:
         assert np.allclose(out[0][key], out[1][key], atol=300), f'{key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
@@ -291,14 +291,14 @@ def test_after_event():
     sc.heading('Testing an exact dwell until an event of another module, and a time after it (ST18)')
     A, B = ss.states('A B')
     def make(**kw):
-        a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
+        a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), first='A', name='a')
         X, Y = ss.states('X Y')
-        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, on=a.go, **kw), name='b')]
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, on=a.go, **kw), first='X', name='b')]
     for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
         res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
         assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
     with pytest.warns(RuntimeWarning, match='ss.constant'): # A function as dur= is the mean of an exponential
-        ss.Sim(ss.Disease(A, B, go=ss.Transition(A, B, dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
+        ss.Sim(ss.Disease(A, B, go=ss.Transition(A, B, dur=lambda sim: 10.0), first='A', name='a'), n_agents=100, verbose=0).init()
     return
 
 

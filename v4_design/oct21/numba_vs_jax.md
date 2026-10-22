@@ -7,9 +7,9 @@ A feasibility study, 2026-10-21. The question: the first use of a compartmental 
 - **Why it takes a minute.** `ss.kernels.run()` → `step()` is one function for every solver, and the solver is a number passed at run time. So the first run of anything, even a three-state ODE, compiles the ODE, chain-binomial, tau-leaping, and both exact solvers, with every helper inlined. Measured cold: 51–56 s for every compartmental workload (ODE, Euler, binomial, Gillespie, 50 places). After that the on-disk cache loads it in 0.1–0.4 s. Agent-based runs compile about 6 s of their own kernels.
 - **Numba can be cut, but not to "fast".** In a copy of the kernels, compiling only the path a solver uses took 18 s for the ODE and 27 s for the chain binomial, against 42 s for the whole (quiet machine, same conditions). Turning off `inline='always'` made no difference once the other solvers were gone. So splitting by solver saves half to two-thirds, and what remains is the generic `step()` interpreter itself.
 - **JAX is a good replacement for the ODE only.** The JAX ODE run v4 already has (`ss.gradients.Run`) compiles in 0.2–0.5 s, or 0.05–0.1 s from JAX's persistent cache. It runs a small model faster than Numba (0.45 ms against 0.7 ms) and 100 runs batched at 0.05 ms each. It is slower on big models: 2–3× slower at 50 places and at Ghana's 260 districts, mostly because the time share between places is a scatter-add, which is slow on XLA's CPU backend (fixable; see below).
-- **JAX is not a replacement for the stochastic solvers on a CPU.** A chain-binomial run built the same way was 6–13× slower than Numba on every model, and batching did not help. The cause is the draws: with JAX 0.11.2 on a CPU, `jax.random.binomial` costs 0.28–0.73 µs a draw, 5.5–6.7× NumPy. Upgrading to JAX 0.12 alone brings that to 2.7×, and a loop-free binomial (now a pull request to JAX) to 1.2–2.5×, so with JAX 0.12 the draws alone could not account for a 6–13× gap (the whole run was not remeasured); see below. JAX can't run NumPy's per-draw algorithms itself (on a CPU its draws stay at about 2–3× NumPy), but a native kernel called from JAX can: a Numba-compiled binomial registered with `jax.ffi` (no C++ build) is as fast as NumPy and Numba inside a jitted run. The exact solver is one event at a time, which is the worst case for JAX (a `while_loop` of tiny steps). Agents would need a new whole-run engine with preallocated arrays, as [gpu_gradabm_feasibility.md](../oct20/gpu_gradabm_feasibility.md) found; that is a separate project, not a swap.
+- **JAX can beat Numba for the stochastic solvers on a CPU, but only with native draws.** A chain-binomial run built the same way, as one `lax.scan`, is 3.3–5.1× slower than the kernels with JAX's own samplers in JAX 0.11.2 (6–13× in the first measurement, under load), and 0.6–3.1× in JAX 0.12 (faster for one group, 3.1× for Ghana; the loop-free samplers don't improve on that on a CPU), and the draws are almost all of that: with each draw replaced by its mean, the same JAX run is 6–14× *faster* than the kernels. With `jax.random.binomial` at 5.5–6.7× NumPy a draw (2.7× in JAX 0.12, 1.2–2.5× with a loop-free binomial, now a pull request to JAX), JAX can't run NumPy's per-draw algorithms itself, but a native kernel called from JAX can: Numba-compiled binomial and Poisson draws registered with `jax.ffi` (no C++ build) make the whole JAX run 1.2–2.4× faster than the kernels in either version (Ghana: 0.88 s against 1.55 s), and drawing each count from one uniform made in bulk, with a cheap test for zeros, makes it 1.5–2.9× faster (Ghana: 0.66 s), all exact, with the same results in distribution. Part of that lead may be that the JAX run is traced per model while the kernels interpret a general program and keep more (the register, tallies, results by group); a Numba kernel generated per model was not tried. On the GPU (an RTX 3050 laptop card) single runs are slow, about 10 ms of step overhead even without draws and 15–80× the kernels with JAX's draws, but batches are where it pays: with the draws as means, 100 runs of the small models take 0.1 ms each and 8 Ghana runs 56 ms each, 30× faster than the kernels. The exact solver is one event at a time, which is the worst case for JAX (a `while_loop` of tiny steps). Agents would need a new whole-run engine with preallocated arrays, as [gpu_gradabm_feasibility.md](../oct20/gpu_gradabm_feasibility.md) found; that is a separate project, not a swap.
 - **NumPy works, with no compile at all, and is close at scale.** The same program run with whole-array NumPy operations (the JAX ODE code with NumPy swapped in, plus a 40-line chain-binomial draw) matches the kernels' ODE to 1e-16. It is 1.7–1.8× slower than Numba at 260 districts, 3–5× at 50 places, and 15–75× for one group. In absolute terms, though, a small model takes 20–90 ms, against a first Numba run of 55 s. The hand-written Ghana model is faster than both because it is specialized: no generic stack of operations, no tables interpolated every step. A NumPy step built per model, rather than interpreted, would close part of that gap (not measured).
-- **Recommendation** (for Cliff to decide): (1) split the kernels so that each solver compiles only its own path, which roughly halves or thirds the wait for everyone at little cost. (2) Run the ODE from the array-form code that `ss.gradients.Run` already is: in NumPy by default (no compile), and in JAX for batches and gradients. That removes the ODE, and its half of the compile, from Numba. (3) Keep Numba for the chain binomial, tau-leaping, the exact solvers, and agents, where nothing else is as fast on a CPU. Add an explicit `ss.compile()` (Cliff's idea) that compiles them ahead of time, e.g. in a Docker image, in CI, or after install. (4) Optionally, use NumPy for a stochastic run while Numba compiles in a background process, so that no one waits; this needs the NumPy draw to cover everything `draw()` does. Details and costs are below.
+- **Recommendation** (for Cliff to decide): (1) split the kernels so that each solver compiles only its own path, which roughly halves or thirds the wait for everyone at little cost. (2) Run the ODE from the array-form code that `ss.gradients.Run` already is: in NumPy by default (no compile), and in JAX for batches and gradients. That removes the ODE, and its half of the compile, from Numba. (3) Keep Numba for the chain binomial, tau-leaping, the exact solvers, and agents for now; JAX with native draws (option 5) is now measured as faster for the chain binomial, so moving the stochastic solvers to it is a real alternative, for Cliff to weigh. Add an explicit `ss.compile()` (Cliff's idea) that compiles them ahead of time, e.g. in a Docker image, in CI, or after install. (4) Optionally, use NumPy for a stochastic run while Numba compiles in a background process, so that no one waits; this needs the NumPy draw to cover everything `draw()` does. Details and costs are below.
 
 ## Measurements
 
@@ -61,7 +61,51 @@ Update (2026-10-21, S1.6): with a dense time share taken as a matrix, made once 
 
 ### JAX: the chain binomial
 
-[jax_binomial.py](numba_vs_jax/jax_binomial.py) builds the whole run as one `lax.scan`, with the rates from `ss.gradients.Run.rates()` and the draws from `jax.random.binomial` and `poisson`. Everything is preallocated (fixed shapes), and the time share is a dense matrix.
+[jax_binomial.py](numba_vs_jax/jax_binomial.py) builds the whole run as one `lax.scan`, with the rates from `ss.gradients.Run.rates()` and the draws from `jax.random.binomial` and `poisson`. Everything is preallocated (fixed shapes), and the time share is a dense matrix. `DRAWS=native` takes the draws from the Numba FFI kernels below instead (binomial and Poisson, Philox streams), and `DRAWS=mean` puts each draw's mean in its place, to time everything else. Remeasured on 2026-10-21 (JAX 0.11.2, one core, load ~5, ms a run; batched is per run, ×100, or ×8 for Ghana):
+
+| Model | Kernels | JAX's draws | Native draws | Native, batched | Means | Means, batched |
+|---|---|---|---|---|---|---|
+| sir | 1.5–1.8 | 5.0 | 1.4 | 0.4 | 0.1 | 0.01 |
+| sir_age | 2.1–2.6 | 9.8 | 2.0 | 1.2 | 0.4 | 0.1 |
+| spatial | 7.4–9.3 | 27.7 | 4.1 | 3.8 | 0.9 | 0.2 |
+| ghana | 1,610–1,960 | 8,240 | 1,097 | 1,134 | 277 | 76 |
+
+A repeat on another core gave the same ratios to the kernels (native draws 0.45–0.91).
+
+The same with JAX 0.12 (the `jax` env: a build of `main` with the binomial pull request; run with Starsim, Numba, and Sciris taken from the `v4` env), interleaved with JAX 0.11.2 on the same core, load ~1.4, ms a run (ratio to the kernels in brackets; the kernels took 1.3, 1.9, 7.2, and 1,550 ms). `approx` is `method='approximate'` for both the binomial and the Poisson:
+
+| Model | 0.11.2, JAX's draws | 0.12, JAX's draws | 0.12, approx | 0.12, native | 0.11.2, native | 0.12, means |
+|---|---|---|---|---|---|---|
+| sir | 4.6 (3.3) | 0.8 (0.57) | 0.9 (0.69) | 0.5 (0.42) | 1.0 (0.79) | 0.1 (0.07) |
+| sir_age | 8.9 (4.6) | 3.6 (1.8) | 5.8 (3.1) | 1.6 (0.81) | 1.5 (0.81) | 0.3 (0.14) |
+| spatial | 28.1 (3.7) | 13.1 (1.8) | 19.9 (2.8) | 3.2 (0.44) | 3.2 (0.44) | 0.6 (0.08) |
+| ghana | 7,974 (4.9) | 4,750 (3.1) | 4,589 (2.9) | 879 (0.57) | 889 (0.58) | 222 (0.14) |
+
+JAX 0.12 alone takes JAX's own samplers from 3.3–4.9× the kernels to 0.6–3.1×, and beats them for one group. The loop-free samplers don't help further on a CPU: they are slower than 0.12's exact ones except for Ghana (3% faster), since they compute both branches for every lane. With native draws, 0.11.2 and 0.12 are the same (the rest of the run doesn't depend on the version), at 0.42–0.81× the kernels. Batched (×100, or ×8 for Ghana), 0.12 with native draws takes 0.3, 0.9, 2.9, and 901 ms a run. Compiles take 0.4–1.5 s with native draws (plus about 3 s, once, for the Numba kernels themselves), against 1.4–4.5 s with JAX's samplers. Batching doesn't help the native draws, since `vmap` calls them once per run. Over five seeds, Ghana's final susceptibles are 2.306M (sd 0.022M) from the kernels and 2.321M (sd 0.049M) from JAX with native draws.
+
+On the GPU (RTX 3050 laptop, 4 GB, JAX 0.11.2 with CUDA; native draws are CPU-only, so not included):
+
+| Model | Kernels (CPU) | JAX's draws | JAX's draws, batched | Means | Means, batched |
+|---|---|---|---|---|---|
+| sir | 1.5 | 128 | 2.6 | 9.7 | 0.1 |
+| sir_age | 2.3 | 182 | 3.3 | 9.8 | 0.1 |
+| spatial | 8.9 | 242 | 7.4 | 10.3 | 0.1 |
+| ghana | 1,900 | 28,800 | 13,300 (×2; ×8 ran out of memory) | 476 | 56 |
+
+With JAX 0.12 (the `jax` env, with the CUDA 13 plugin), ms a run:
+
+| Model | Kernels (CPU) | Exact | Exact, batched | Approximate | Approximate, batched | Means | Means, batched |
+|---|---|---|---|---|---|---|---|
+| sir | 1.3 | 129 | 2.4 | 61 | 1.3 | 8.9 | 0.1 |
+| sir_age | 1.8 | 181 | 3.2 | 59 | 1.2 | 11.8 | 0.1 |
+| spatial | 7.1 | 235 | 7.3 | 68 | 3.0 | 13.7 | 0.1 |
+| ghana | 1,600 | 37,774 | 18,949 (×2) | 6,479 | 3,567 (×2) | 416 | 54 (×8) |
+
+On the GPU the loop-free samplers do help: 2–5× faster than the exact ones, batched, against no gain on a CPU. Batched, the small models then run in 1.2–3 ms each, near the kernels, but Ghana is still 2.3× slower than the kernels, against 54 ms a run with the draws as means; and only 2 Ghana runs fit in the card's 4 GB at once with real draws.
+
+A single run on the GPU pays about 25 µs a step in launches, so it loses to the CPU for anything small. The GPU's case is batches, and there the draws are again what matters: JAX's exact samplers are rejection loops, worst on a GPU, which is what the loop-free samplers (and the binomial pull request) are for (measured above with JAX 0.12).
+
+The first measurement (2026-10-21, before the remeasure, JAX's draws, load ~5) was:
 
 | Model | Compile (s) | JAX (ms) | Numba (ms) | Ratio | Batched, a run (ms) |
 |---|---|---|---|---|---|
@@ -70,7 +114,7 @@ Update (2026-10-21, S1.6): with a dense time share taken as a matrix, made once 
 | spatial | 0.7 | 40.0 | 6.7 | 6.0 | 52.1 (×100) |
 | ghana | 2.1 | 13,745 | 1,915 | 7.2 | 27,170 (×8) |
 
-(Measured at load ~5; a second run during the other agent's tests gave ratios of 6–13.) The results agree in distribution: final sizes and peaks differ only by seed. The draws are much of the reason. [dists.py](numba_vs_jax/dists.py) times a draw from each distribution Starsim uses (260 a step, parameters changing every step, interleaved, best of 5, load ~2), in ns, with the ratio to NumPy:
+(A second run during the other agent's tests gave ratios of 6–13.) The results agree in distribution: final sizes and peaks differ only by seed. The draws are nearly all of the gap (see the means above). [dists.py](numba_vs_jax/dists.py) times a draw from each distribution Starsim uses (260 a step, parameters changing every step, interleaved, best of 5, load ~2), in ns, with the ratio to NumPy:
 
 | Distribution | NumPy | JAX 0.11.2 | JAX 0.12 | JAX 0.12, loop-free |
 |---|---|---|---|---|
@@ -85,7 +129,7 @@ Update (2026-10-21, S1.6): with a dense time share taken as a matrix, made once 
 
 The transform-based draws (uniform, normal, lognormal, exponential, Weibull, Bernoulli) are within 2× of NumPy in 0.11.2 and at or below it in 0.12, so the slow ones are those built on rejection loops: binomial, multinomial (a scan of binomials), Poisson, gamma, beta, and the negative binomial. JAX's exact samplers run every lane's loop until the slowest of the 260 lanes is done, and the binomial runs both of its algorithms (inversion and BTRS rejection) on every lane. JAX already has loop-free `method='approximate'` versions of Poisson, gamma, and beta (since July 2026). The binomial was the gap, listed in JAX's umbrella issue ([jax-ml/jax#39314](https://github.com/jax-ml/jax/issues/39314)): the branch `binomial-approximate` (for a pull request to jax-ml/jax) adds it, and `multinomial` uses it. Its total variation distance from the exact distribution is below 1e-4 (computed exactly, not sampled). It helps most for small means (2.4× faster than exact), and only 5–10% for large ones on a CPU; on a GPU, where a rejection loop's lanes wait for each other, the gain should be larger (not measured: no GPU was usable here, see the oct20 GPU study).
 
-An earlier version of this table (from [draws.py](numba_vs_jax/draws.py)) was measured under load and with fixed parameters, which XLA folds into the sampler; both made it misleading. Whether the faster draws close the whole-run gap above was not measured: the experiment scripts need updating to the current `ss.kernels.run()` and `ss.geo` first.
+An earlier version of this table (from [draws.py](numba_vs_jax/draws.py)) was measured under load and with fixed parameters, which XLA folds into the sampler; both made it misleading. The whole run with JAX 0.12 and the loop-free binomial was not measured (that JAX build is in an env without Starsim); the native draws above settle the question on a CPU anyway.
 
 ### JAX: why its draws are slower than NumPy's, and a native kernel
 
@@ -109,7 +153,96 @@ A native kernel registered as an XLA custom call (`jax.ffi`) does get NumPy's sp
 | 2,600, p ~ 0.01 | 57 | 58 | 290 | 50 | 55 | 68 |
 | 26, p ~ 0.01 | 239 | 49 | 446 | 72 | 74 | 82 |
 
-So from 260 draws a step the kernels match NumPy and Numba and are 5–6× faster than `jax.random.binomial`; at 26 a step, the call costs about 20–30 ns a draw more than Numba. Philox costs 5–15 ns a draw more than splitmix64. The Numba kernel compiles in about 2 s (not cached here; it could be, like the other kernels). What it doesn't do: GPUs (where JAX's loop-free samplers are the right tool), a batch of keys in one call (`vmap` runs one key at a time), or gradients (a binomial draw has none anyway). The byte offsets follow the FFI C API's versioned structs (API 0.4 here), so a test should guard them. Poisson, gamma, beta, and the negative binomial would follow the same pattern, porting NumPy's algorithm for each, at about 50–150 lines apiece.
+So from 260 draws a step the kernels match NumPy and Numba and are 5–6× faster than `jax.random.binomial`; at 26 a step, the call costs about 20–30 ns a draw more than Numba. Philox costs 5–15 ns a draw more than splitmix64. The Numba kernel compiles in about 2 s (not cached here; it could be, like the other kernels). What it doesn't do: GPUs (where JAX's loop-free samplers are the right tool), a batch of keys in one call (`vmap` runs one key at a time), or gradients (a binomial draw has none anyway). The byte offsets follow the FFI C API's versioned structs (API 0.4 here), so a test should guard them. The Poisson now follows the same pattern (NumPy's multiplication method below a mean of 10 and PTRS above, about 40 lines; it matches the exact distribution within sampling noise from a mean of 0.3 to 10^6). Gamma, beta, and the negative binomial would too, at about 50–150 lines apiece.
+
+### Making the draws cheaper
+
+With native draws, Ghana takes 0.87 s, of which 0.22 s is everything but the draws. It makes 21.3 million draws a run: 18.2 million binomial and 3.0 million Poisson, 14 calls a step over 260 districts. Recorded from a run and timed outside JAX (`native` is the native Philox kernel as above):
+
+| Binomial draws | Share of draws | Share of the draw time | ns a draw |
+|---|---|---|---|
+| n = 0 | 45.5% | 11.8% | 6 |
+| mean below 0.01 | 8.7% | 9.6% | 26 |
+| mean 0.01–1 | 15.3% | 22.1% | 34 |
+| mean 1–5 | 23.1% | 38.9% | 39 |
+| mean 5–10 | 4.5% | 9.6% | 49 |
+| mean 10–30 | 2.6% | 7.4% | 67 |
+| mean 30 and above | 0.3% | 0.6% | 54 |
+
+Another 30.8% of the binomial draws have p = 1: the last flow out of a compartment, whose count is everyone left (the Numba kernels already skip these; the prototype's native draws didn't). So the time goes to millions of small, routine draws, each paying for a random number, an `exp`, a `log1p`, and a call; not to large ones. Lower precision, or normal and other approximations for large means, would speed up the 0.3%.
+
+Two exact changes, in [ffi/draws_ffi.py](numba_vs_jax/ffi/draws_ffi.py) (Numba FFI kernels, about 250 lines with their tests), selected in [jax_binomial.py](numba_vs_jax/jax_binomial.py) by `DRAWS=onepass` and `DRAWS=clock`:
+
+- **One uniform per draw (`onepass`).** JAX makes all the uniforms for a step in one call, and each count is the inverse cdf at its uniform: BINV for a binomial, the pmf recurrence for a Poisson (NumPy's method below a mean of 10 takes λ + 1 uniforms a draw; inversion takes one). A test before any `exp` or `log` settles most small draws: since (1 − p)^n ≥ 1 − np and e^−λ ≥ 1 − λ, a uniform below 1 − mean is a 0. Draws already determined (n = 0, p = 0 or 1) cost nothing. Means above 30 fall back to BTPE or PTRS, from a Philox stream keyed by the uniform's bits. Counts are monotone in their uniforms, which suits common random numbers: a small change in p moves a count by at most one.
+- **Clocks for rare flows (`clock`).** For the number leaving each compartment, and each arrival flow, every lane keeps R ~ Exp(1), the hazard left until its next event. A step whose expected count is Λ has an event if R ≤ Λ, which has probability 1 − e^−Λ = P(count ≥ 1). If not, R −= Λ (still Exp(1), by memorylessness), and the count is 0 with no random number, `exp`, or `log`. If so, the count is drawn from the distribution truncated to ≥ 1, and R is drawn afresh. Lanes with Λ ≥ 0.5 draw directly from the step's uniforms and leave R alone. Also exact.
+
+Both match the exact distributions within sampling noise in every regime tested (binomial means 0.005–20,000 and p up to 1; Poisson 0.001–100), with no correlation between steps for the clocks (lag-1 correlation under 0.004), and the clock's mean is unbiased over 40 million draws (8 seeds, average z of +0.09 and +0.45). Over five seeds, Ghana's final susceptibles are 2.306M (sd 0.022M) from the kernels, 2.297M (0.031M) with `onepass`, and 2.320M (0.012M) with `clock`.
+
+Outside JAX, on the recorded draws, the binomials take 394 ms as native draws, 323 ms skipping the determined ones, and 228 ms with one uniform per draw (185 ms of it once the uniforms are made); the Poissons 147 ms, and 79 ms by inversion. In the whole run (JAX 0.12, one core, load ~1, two interleaved rounds, ms a run; ratio to the kernels in brackets):
+
+| Model | Kernels | Native | One uniform per draw | Clocks | Means |
+|---|---|---|---|---|---|
+| sir | 1.3 | 0.5 (0.42) | 0.4 (0.34) | 0.6 (0.43) | 0.1 (0.07) |
+| sir_age | 1.8 | 1.6 (0.85) | 1.3 (0.69) | 1.5 (0.82) | 0.3 (0.14) |
+| spatial | 7.1 | 3.1 (0.44) | 2.7 (0.37) | 3.1 (0.43) | 0.6 (0.08) |
+| ghana | 1,540 | 873 (0.57) | 658–666 (0.43) | 704–726 (0.46) | 221–224 (0.14) |
+
+So one uniform per draw takes a third off the draws (Ghana's 650 ms of draws to 440 ms) and makes the whole run 2.3× faster than the kernels. The clocks are slower than that here: the draws they cover (who leaves a compartment, and the arrivals) mostly have means of 0.3–1.6 in Ghana, so a clock would fire on most steps, and the rare flows (importations, deaths among the few in E and I, means of 0.0003–0.004) are splits of those who leave, which the zero test already makes cheap. The clocks' extra state (a clock and a key for each lane, and a second output) then costs more than they save. They would pay where many lanes have small but nonzero expected counts at every step, e.g. with shorter steps, more places with few people, or agents; that was not measured.
+
+What's left of the draws is mostly the `exp` and `log1p` of draws with means of 0.01–10, the walk up the pmf, and 14 FFI calls and key splits a step. Next steps, not tried: one FFI call for all of a step's draws; `exp` and `log1p` vectorized in float32 for the first pass; and caching `log1p(-p)` where p is the same for every group (deaths). The same draw functions would serve the Numba kernels, which make the same draws with NumPy's `Generator` (they already skip the determined ones). On the GPU, a one-uniform design would be the same idea in pure JAX: bulk uniforms and an unrolled inversion, which is what the approximate binomial's small-mean branch is.
+
+### One call a step, and float32
+
+[ffi/step_ffi.py](numba_vs_jax/ffi/step_ffi.py) makes all of a step's draws in one FFI call (`DRAWS=step`): who leaves each compartment, how they split, and the arrivals, given the step's hazards and the structure of the program. For those who leave, the chance of none is exp(−n·h) with h the step's total hazard, so it needs no `log1p` or `expm1`, and u ≤ 1 − n·h is a 0 with nothing computed. Two options: uniforms made inside the call from a counter-based hash (splitmix64 of the key and the draw's index) instead of by JAX (`_nu`), and a float32 first pass (`_f32`) that computes each row's chance of 0 for all groups with hand-written `exp` and `log1p` that LLVM vectorizes (relative errors 2e-7 and 1.5e-7). There is no SVML here, so Numba can't vectorize `math.exp`. SVML (`icc_rt`) runs on any x86-64 CPU but not on Apple Silicon, and the hand-written functions are plain arithmetic, so they should vectorize with NEON as well (not measured). All four variants match the exact distributions within noise, and with JAX's uniforms the draws are identical to `onepass`. Over 100 seeds, Ghana's final compartments with `step_nu` and with the NumPy-algorithm native draws agree within 0.8 standard errors.
+
+JAX 0.12, one core, load ~1, two interleaved rounds, ms a run (ratio to the kernels):
+
+| Model | One uniform per draw | One call a step | + uniforms made in the call | + float32 first pass | float32, JAX's uniforms |
+|---|---|---|---|---|---|
+| sir | 0.4–0.5 (0.35) | 0.4 (0.30) | 0.3–0.4 (0.27) | 0.4 (0.31) | 0.5 (0.35) |
+| sir_age | 1.3–1.4 (0.70) | 1.1 (0.56) | 0.9 (0.48) | 1.0 (0.54) | 1.2–1.3 (0.64) |
+| spatial | 2.6–2.8 (0.37) | 2.5 (0.35) | 2.2–2.3 (0.32) | 2.3 (0.33) | 2.6–2.7 (0.37) |
+| ghana | 665–667 (0.43) | 592–596 (0.39) | 549–573 (0.36) | 543–566 (0.36) | 609–611 (0.39) |
+
+So one call a step takes Ghana from 666 ms to about 560 ms, 2.8× faster than the kernels. The float32 pass makes no difference: it is 4× faster a lane than scalar float64 (2.2 ns against 9.3 ns), but it runs over all 260 groups, while the scalar code only computes `exp` and `log` for the lanes the zero test doesn't settle, a minority; all the `exp` and `log` together are at most about 40 ms of Ghana's run. What's left of the draws (about 330 ms) is the walk up the pmf for means of 1–10 and the branching around it.
+
+One open discrepancy, not from the draws: over 20 seeds, the kernels end with I at 1,631 (se 78) and every JAX draw mode at 1,786–1,881 (se 38–42 over 100 seeds), z about 2; S agrees. If real, it is in the JAX run (e.g. it evaluates the tables at the middle of the step), not in the draws.
+
+### The hand-written Ghana model
+
+The hand-written model (`ghana-measles/gm-port/ghana_measles/model.py`, 0.82 s here) is not dominated by its draws: with the one-uniform draws swapped in for `rng.binomial` and `rng.poisson` it takes 0.72 s. Its loop makes about 50 NumPy calls a day on arrays of 260, at a microsecond or more each, so most of its 140 µs a day is the cost of each call. Its daily loop, line for line, compiled with Numba (with the one-uniform draws, and uniforms from a hash; the setup in NumPy as before) takes 0.34 s after a 2.7 s compile, with the same results within noise over 20 seeds:
+
+| Ghana, 16 years in days, one core | s a run |
+|---|---|
+| v4 kernels (generic, chain binomial) | 1.55 |
+| Hand-written NumPy | 0.82 |
+| Hand-written NumPy, one-uniform draws | 0.72 |
+| v4's program in JAX, one call a step for the draws | 0.55 |
+| Hand-written loop compiled with Numba | 0.34 |
+| v4's program in JAX, draws replaced by their means | 0.22 |
+
+The hand-written model does less than v4's program: 10 draws a district a day against v4's 14 (of which 4 are already determined), because it takes deaths after the other transitions rather than as a competing risk; one seasonal factor, computed once for the run, where v4 reads a table of its rate constants each step (but that costs little: see below); and it keeps only national totals and infections by district. v4's table: the four rate constants of Ghana's program (importation, seasonal transmission, death, and birth rates) are stored as one table over 17,532 points (three a day: the start, middle, and end of each step, which the ODE's RK4 stages need) for each of the 260 districts, 146 MB, and each step reads its row. Only transmission varies in time, and none of the four varies by district. The table is the general case: any rate can vary in time (`ss.seasonal`, `ss.timeseries`, a function) and by group (`ss.by`), and evaluating them all in Python before the run means the kernels never call back into Python. But it costs little: building it takes 39 ms a run, and in the JAX run a compact table (one value a point, broadcast over the districts) saves 7–10 ms (3%), with identical results. Storing only what varies (by time, by group, or neither), and one point a step for the stochastic solvers, would cut the 146 MB to under 1 MB, which matters for memory more than speed.
+
+The same hand-written loop in JAX (`lax.scan`, with the one-uniform native draws, one FFI call per draw) takes 0.378 s after a 0.9 s compile, against 0.357 s for Numba on the same core after 2.8 s, with the same results within noise over 20 seeds. With the draws replaced by their means it takes 28 ms. So written the same way, JAX and Numba are equally fast here, and JAX compiles faster: the gap between v4's JAX run (0.55 s) and the compiled loop is v4's generic program, not JAX. With its draws as means, v4's program takes 222 ms against the loop's 28 ms. Keeping only totals instead of every compartment and flow by district saves about 30 ms of that. One step of v4's program has 474 operations, including 13 products of a 260×260 matrix with a vector, where the hand-written loop has one (`mix @ (I/N)`). Only one of the 13 is the time share between districts. The other 12 sum people by place and spread the sums back (`self.place.T @ (self.place @ n)` in `ss.gradients.Run.rates()` and `evaluate()`, 10 of them), or pick each stratification's levels (`cells @ infectious` and `cells @ n`, 2). Those are one-hot matrices, here the 260×260 identity, since each group is its own place. Applying the place matrix as the identity saves 63–71 ms (253 → 190 ms with the draws as means, 542 → 471 ms with `step_nu`), with identical results. In general a one-hot product is a segment sum or an index, O(groups) rather than O(groups²), so this is a general fix to `ss.gradients.Run`, not one per model. What's left (about 190 ms against the loop's 28) is spread over the other 460 operations: selects, scatter-adds, broadcasts, and a key split for each of the 14 draws.
+
+### Vectorized draws, and a leaner JAX run
+
+The one-uniform draws above are still scalar code: each walks up its pmf with branches and a division, about 10–16 ns a draw, while the rest of a step runs with SIMD across the groups. [ffi/vdraws.py](numba_vs_jax/ffi/vdraws.py) makes a row of draws (one per group) together instead: every lane walks up its pmf in lockstep, each step a multiply, an add, and a compare across the lanes with a reciprocal shared by all of them, until no lane is left; the chance of 0 each walk starts from comes from hand-written float64 `exp`, `expm1`, and `log1p` (relative errors 2e-14, and 3e-16 for the log), and a row that the zero test settles entirely costs only that test. Means above 30 fall back to the scalar draws. Two things kept LLVM from vectorizing at first: Numba's check for division by zero (`error_model='numpy'` removes it), and gathering the unsettled lanes first (every lane now walks; settled ones are done at the start). The draws are identical to the scalar one-uniform draws for the same uniforms (4.8 million test draws, no difference), so exact.
+
+On rows of 260 like Ghana's: 7–9 ns a binomial draw against 11–17 ns scalar, 10 ns against 14 ns for a Poisson with mean ~10 (a lockstep walk lasts as long as its slowest lane), and 1.4 ns for a row of importations that are all 0. In the hand-written loop compiled with Numba, Ghana goes from 0.364 s to 0.23 s with bit-for-bit the same results over 20 seeds; with means in place of draws that loop takes 79 ms, so the draws are now about 65% of it.
+
+In v4's JAX run, `DRAWS=step_vec` makes all of a step's draws in one call with the vectorized draws (identical to `step_nu` for the same uniforms), and `LEAN=1` replaces `Run.place` with sums and indexing (here the identity). JAX 0.12, one core, two interleaved rounds that agreed within 2%, ms a run:
+
+| Model | Kernels | Scalar step (`step_nu`) | + lean | Vectorized step | + lean | Means | Means, lean |
+|---|---|---|---|---|---|---|---|
+| sir | 1.3 | 0.4 | 0.3–0.4 | 0.6 | 0.6–0.7 | 0.1 | 0.1 |
+| sir_age | 1.9 | 0.9 | 0.9 | 1.2 | 1.2–1.3 | 0.3 | 0.3 |
+| spatial | 7.1 | 2.2–2.3 | 2.2 | 2.4–2.5 | 2.5 | 0.6 | 0.6 |
+| ghana | 1,540 | 545 | 486–489 | 434–435 | 378–379 | 225 | 155–157 |
+
+So for Ghana the two together take the run from 545 ms to 378 ms, 4.1× faster than the kernels, and the draws from 320 ms to 222 ms, 59% of the run (from 85%). For the small models (1–50 groups) the vectorized draws are slower than the scalar ones: their fixed cost a row doesn't pay with so few lanes, so an engine would choose by the number of groups. The lean place matrix only matters where it's large (Ghana: 70 ms). Two more one-hot products a step (`cells`, for the levels of each stratification) and the key splits remain, and were not changed here.
+
+The compiled loop sets a ceiling for a step built per model: about 0.34 s with scalar draws and 0.23 s with vectorized ones (4.5× and 6.7× faster than the kernels), compiled in 3–5 s, against the kernels' 42–56 s cold compile. v4's lean JAX run with vectorized draws (0.38 s) is within 1.7× of it, while doing more (14 draws a district a day against 10, every result by district).
 
 ### NumPy
 
@@ -128,7 +261,7 @@ So from 260 draws a step the kernels match NumPy and Numba and are 5–6× faste
 
 The sim's own `init()` is 12–20 ms (70 ms for Ghana), so for a small model the user would see about 15 ms with Numba and 35–90 ms with NumPy. The one-group ODE is the worst case: RK4 with automatic substeps is about 4 stages × 2 substeps × 30 NumPy calls a day.
 
-On "compiling to NumPy": the hand-written Ghana model (0.84 s, from [deferred.md](../admin/deferred.md) on 2026-10-16) beats both this generic NumPy run (2.6 s) and the kernels (1.5 s here). It does about 15 whole-array calls a day, with the rates written out. The generic run instead goes through the stack of operations, interpolates four tables, and records every flow by group. A step built per model, as Python source or closures written from the graph, would get close to the hand-written loop for large models. It would not help the one-group case, where the per-call cost of NumPy (about 1 µs) is the floor. That was estimated, not measured.
+On "compiling to NumPy": the hand-written Ghana model (0.84 s, from [deferred.md](../admin/deferred.md) on 2026-10-16) beats both this generic NumPy run (2.6 s) and the kernels (1.5 s here). It does about 15 whole-array calls a day, with the rates written out. The generic run instead goes through the stack of operations, interpolates its table of rate constants (which turned out to cost only about 3%: see "The hand-written Ghana model" above), and records every flow by group. A step built per model, as Python source or closures written from the graph, would get close to the hand-written loop for large models. It would not help the one-group case, where the per-call cost of NumPy (about 1 µs) is the floor. That was estimated, not measured.
 
 ## What each option would take
 
@@ -136,12 +269,12 @@ On "compiling to NumPy": the hand-written Ghana model (0.84 s, from [deferred.md
 2. **The ODE from array code, without Numba (S1.6).** Make `ss.gradients.Run` work on either NumPy or JAX (the `jax()` → `xp` change, plus `share()` and `derivs()` without `.at[]`: dense or sparse products, which also speed up the JAX run), and make it the ODE engine. Then the Numba ODE path in `step()` can go: that is the RK4/Euler stages, the substep choice, and `release_rates()`, a few hundred lines. JAX is used when installed for batches (`ss.parallel()` already switches at 300 runs), gradients, and NUTS; NumPy otherwise. The cost is that a single small ODE run goes from about 1 ms to 50 ms, and with JAX to 0.5 ms plus a 0.2–0.5 s compile per model and session (0.1 s from the persistent cache). Before deciding, measure what happens to calibrations that run one ODE at a time (Optuna), which would feel the 50 ms.
 3. **`ss.compile()`.** An explicit call that compiles every kernel into the cache, e.g. in a Docker build, a CI step, or a notebook's first cell. It is about 20 lines. If the kernels are split, it could compile the solver families in parallel processes, since Numba's cache is one file per function, so the wall time is that of the largest family. Also check that the cache works on a read-only install (S5.11 already lists it): Numba writes the cache beside the package, and if it can't, every process compiles again. Setting `NUMBA_CACHE_DIR`, or a cache folder Starsim chooses, would handle that.
 4. **NumPy while Numba compiles (optional).** On a cold cache, run a stochastic model in NumPy and start a background process that compiles the kernels, so the next run uses them. No one waits a minute, and the first run is 1.7–15× slower, but tens of milliseconds for small models. The cost is a NumPy chain-binomial draw that covers everything `draw()` does (stages, reservoirs, credits, conveyors, maps between groups, registers, deliveries): perhaps 200–300 lines, kept in agreement with the kernels by cross-backend tests. Its results would differ from Numba's for the same seed, unless the draws were taken from the same generator in the same order. That would be possible, since both use NumPy's `Generator` algorithms, but it would constrain both.
-5. **Native draws for JAX (if JAX is to run the stochastic solvers).** Numba FFI kernels, as in the prototype, for each distribution `draw()` uses, with Philox streams from the JAX key, a batch of keys in one call, cached compiles, and a test of the struct offsets: perhaps 500–800 lines in all. Then remeasure the whole-run chain binomial ([jax_binomial.py](numba_vs_jax/jax_binomial.py), after updating it and [models.py](numba_vs_jax/models.py) to the current `ss.kernels.run()` and `ss.geo`) to see how much of the 6–13× gap was the draws.
-6. **Not recommended:** JAX for the stochastic and exact solvers on CPU with JAX's own samplers (6–13× slower with JAX 0.11.2, much of it the draws, which stay at 2–3× NumPy even in JAX 0.12 with loop-free samplers), and JAX for agents as a swap (it needs a new engine; see the oct20 GPU study).
+5. **Native draws for JAX (if JAX is to run the stochastic solvers).** Numba FFI kernels, as in the prototype, for each distribution `draw()` uses, with Philox streams from the JAX key, a batch of keys in one call, cached compiles, and a test of the struct offsets: perhaps 500–800 lines in all. With the binomial and Poisson alone, the whole-run chain binomial is already 1.2–2.4× faster than the kernels on these models ([jax_binomial.py](numba_vs_jax/jax_binomial.py), `DRAWS=native`), and 1.5–2.9× with one uniform per draw (`DRAWS=onepass`). Those one-uniform draws ([ffi/draws_ffi.py](numba_vs_jax/ffi/draws_ffi.py)) would also suit the Numba kernels, whichever engine runs the stochastic solvers; clocks for rare flows didn't pay on these models. Beyond the draws, a JAX stochastic engine would need everything `draw()` does (stages, reservoirs, credits, conveyors, registers, deliveries), which this prototype skips, and a decision on the GPU, where the native draws don't run.
+6. **Not recommended:** JAX for the stochastic and exact solvers on CPU with JAX's own samplers (3–13× slower with JAX 0.11.2, nearly all of it the draws, which stay at 2–3× NumPy even in JAX 0.12 with loop-free samplers), and JAX for agents as a swap (it needs a new engine; see the oct20 GPU study).
 
 ## Open questions for Cliff
 
 - Is about 18–27 s on first use, once per install, acceptable if `ss.compile()` exists and the docs say so? If not, option 4 is the only one measured here that removes the wait for stochastic runs.
 - Should the ODE move to NumPy/JAX (option 2)? That means accepting 50 ms for a single small ODE run without JAX, or making JAX a base dependency. jaxlib is 353 MB installed, against 206 MB for Numba with llvmlite.
-- Is a JAX engine for the stochastic solvers worth pursuing (option 5)? The draws can be made as fast as Numba's, but the rest of the whole-run gap is unmeasured.
+- Is a JAX engine for the stochastic solvers worth pursuing (option 5)? With native draws it is 1.1–2.2× faster than the kernels on a CPU and compiles in seconds, but it is a second engine to keep in agreement with the kernels, unless it replaces them for the chain binomial; and how much of its lead is per-model tracing (which a generated Numba kernel could also get) is unmeasured.
 - The agent kernels' 6 s (the `*_serial` and threaded variants of `census`, `count_alive`, `infect`, ...) is a separate, smaller issue: the same split applies (compile the threaded variants only when threads are used).

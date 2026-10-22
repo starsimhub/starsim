@@ -591,6 +591,24 @@ def test_shape_scale():
     return vals
 
 
+def test_engine_copy():
+    """ Test that the copy of a distribution a declared model draws from (in the sim's unit) draws what the distribution does """
+    sc.heading('Testing that the engine draws what each distribution draws')
+    year = ss.debugtools.mock_module(dt=ss.years(1)) # Typed values are drawn in steps of a year, the unit the copy is in
+    dists = [ss.random(), ss.uniform(1, 3), ss.normal(5, 1), ss.truncnorm(5, 2, a=0, b=10), ss.lognorm_im(1, 0.5), ss.lognorm_ex(5, 2),
+             ss.expon(4), ss.poisson(3), ss.beta_dist(2, 3), ss.beta_mean(0.3, 0.01), ss.nbinom(3, 0.5), ss.binom(10, 0.3), ss.randint(0, 10),
+             ss.weibull(2, 3), ss.gamma(2, 3), ss.constant(7), ss.bernoulli(0.3), ss.choice([1, 5, 9], p=[0.2, 0.3, 0.5]),
+             ss.histogram(values=[0.6, 0.3, 0.1], bins=[0, 6, 12, 18]), ss.lognorm_ex(ss.days(50), ss.days(20)), ss.normal(5, 1, unit='month'),
+             ss.choice([30, 40], unit='week'), ss.histogram(values=[0.6, 0.4], bins=[0, 6, 12], unit='month')]
+    for dist in dists:
+        copy = ss.transitions.numeric_dist(dist, lambda v: ss.solvers.convert(v, 'year'))
+        dist.init(seed=1, module=year, force=True)
+        copy.init(seed=1, module=year, force=True)
+        a, b = np.asarray(dist.rvs(m), dtype=float), np.asarray(copy.rvs(m), dtype=float)
+        assert np.allclose(a, b), f'{dist}: the engine draws {b}, the distribution {a}'
+    return copy
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -617,5 +635,6 @@ if __name__ == '__main__':
     o16 = test_choose_n()
     o17 = test_round()
     o18 = test_shape_scale()
+    o19 = test_engine_copy()
 
     T.toc()

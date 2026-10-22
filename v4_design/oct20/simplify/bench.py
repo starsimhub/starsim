@@ -57,8 +57,8 @@ def spatial():
     x, y = rng.uniform(0, 100, n), rng.uniform(0, 100, n)
     def make():
         S, I, R = ss.states(3)
-        sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), init=dict(I=ss.by(patch=[100] + [0]*(n-1))), name='sir')
-        sir.stratify(patch=ss.geo(names=names, pop=pop, x=x, y=y), mobility=ss.Mobility(ss.gravity(), away=0.05))
+        sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), init_n=dict(I=ss.by(patch=[100] + [0]*(n-1))), name='sir')
+        sir.stratify(patch=ss.geo.location(names=names, pop=pop, x=x, y=y), mobility=ss.geo.Mobility(ss.geo.gravity(), away=0.05))
         return ss.Sim(sir, unit='day', start=0, stop=365, solver='binomial', total_pop=int(pop.sum()), verbose=0, rand_seed=1)
     return make
 
@@ -94,6 +94,39 @@ def calib():
         def run(self):
             sim(beta=0.3, data=data).calibrate(method='optuna', trials=20, rand_seed=1)
     return Fit
+
+
+def tests_model(name, crn=True):
+    """ A model from tests/benchmark_models.py (B0 of the October 22 plan: kinds of model the ones above miss) """
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'tests'))
+    import starsim as ss
+    import benchmark_models
+    ss.options(crn=crn)
+    return getattr(benchmark_models, f'make_{name}')
+
+
+@workload
+def fseis10():
+    """ malariasim's fseis10, ported: coded SEIS humans as agents and coded ODE mosquitoes, 10k, 2 years in days, crn=False """
+    return tests_model('fseis', crn=False)
+
+
+@workload
+def counts():
+    """ A declared malaria model with mosquitoes as counts, humans as 10k agents, a year in days """
+    return tests_model('counts')
+
+
+@workload
+def coded():
+    """ A disease written as code (ssl.AgentSIS) on a random network with demographics, 20k agents, 20 years in months """
+    return tests_model('coded')
+
+
+@workload
+def by_age():
+    """ A declared Covasim-style model with ss.by age tables, and deaths by age and sex, 20k agents, 120 days """
+    return tests_model('by_age')
 
 
 def run_one(name):

@@ -60,7 +60,7 @@ def make_secir(d, beta=None, damping=True):
         critical  = ss.Transition(ISev, [ICr, R], dur=D(P['tISev']), p=[A(P['mu_ICr']), A(1 - np.array(P['mu_ICr']))]),
         recovery  = ss.Transition(ICr, R, dur=D(P['tICr']), p=A(1 - np.array(P['mu_D']))),
         death     = ss.Transition(ICr, ss.null, dur=D(P['tICr']), p=A(P['mu_D'])),
-        init      = dict(E=ss.by(np.outer(np.full(6, 50), d.seeds), dims=['age', 'patch'])),
+        init_n    = dict(E=ss.by(np.outer(np.full(6, 50), d.seeds), dims=['age', 'patch'])),
         name      = 'secir',
     )
     return secir
@@ -69,7 +69,7 @@ def make_secir(d, beta=None, damping=True):
 def stratify(target, d):
     """ Ages, and counties with MEmilio's commuters away half the day """
     target.stratify(age=ages, split=split)
-    target.stratify(patch=ss.geo.location(names=d.names, pop=d.popsize, x=d.x, y=d.y), mobility=ss.geo.Mobility(matrix=0.5*d.M, kind='commute'))
+    target.stratify(patch=ss.geo.geography(names=d.names, pop=d.popsize, x=d.x, y=d.y), mobility=ss.geo.Mobility(matrix=0.5*d.M, kind='commute'))
     return target
 
 

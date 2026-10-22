@@ -38,14 +38,14 @@ class Presentation:
         infected = [s.name for s in self.infected if s.people]
         if infected and not self.transmissions: # With a transmission, they are its destination and its source, as above
             add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
-        inits = {s.name:s.init for s in self.states.values() if s.init is not None}
+        inits = {s.name:s.init for s in self.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in self.states.values() if s.init_n is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
         guesses = [self.guessed[key] for key in ['init', 'first', 'rest'] if key in self.guessed]
         if inits:
             rest = f'; the rest in {self.rest.name}' if self.rest is not None else ''
             add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'guessed: {"; ".join(guesses)}' if guesses else None)
-        else:
+        elif self.first is not None:
             add('', f'init: {self.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
         lines.append('')
 
@@ -125,6 +125,9 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
+        if self.transmissions: # The timing contract of spec 02, where modelers look (CV5, ST4)
+            add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
+            add('', 'a state\'s count (n_X) includes the step people enter it; they stay for their whole dwell')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle
             midpoint = getattr(p, 'midpoint', None)
             if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
@@ -273,8 +276,8 @@ class Presentation:
         out.type = 'Disease' if isinstance(mod, ss.Disease) else type(mod).__name__
         out.dt = None if (mod.t.dt is None or sim is None or mod.t.dt == sim.t.dt) else float(mod.t.dt.to(sim.unit_base).value)
         out.init_prev = self.init_prev.raw if isinstance(self.init_prev, par) else self.init_prev
-        out.first = self.first.name if self.people_states else None # The state that people not put elsewhere start in
-        out.states = [dict(name=s.name, people=bool(s.people), init=s.init if s.init is None or sc.isnumber(s.init) else quantity_json(s.init, None, unit), infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
+        out.first = self.first.name if self.first is not None else None # The state that people not put elsewhere start in
+        out.states = [dict(name=s.name, people=bool(s.people), init=s.init if s.init is None or sc.isnumber(s.init) else quantity_json(s.init, None, unit), init_n=s.init_n if s.init_n is None or sc.isnumber(s.init_n) else quantity_json(s.init_n, None, unit), infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
 
         def par_json(p, kind):
             prior = None if p.prior is None else str(p.prior)
@@ -284,6 +287,8 @@ class Presentation:
 
         transitions = []
         for name,tr in self.transitions.items(): # In the order given (sim.hash() sorts them)
+            if getattr(tr, 'generated', False): # Made from the strains (superinfection), which the spec holds
+                continue
             entry = sc.objdict(name=name, kind='contact-mediated' if tr.contact else 'spontaneous')
             entry.src = [s.name for s in tr.src] or None
             entry.dst = [s.name for s in tr.dst] or None
@@ -309,8 +314,12 @@ class Presentation:
                 entry[key] = quantity_json(getattr(tr, key, None), 'dur', unit)
             acquisition = getattr(tr, 'acquisition_given', None)
             entry.acquisition = None if acquisition is None else bool(acquisition)
-            entry.move = {k:quantity_json(v, None, unit) for k,v in (getattr(tr, 'move_given', None) or {}).items()} or None
+            entry.move = {k:move_json(v, unit) for k,v in (getattr(tr, 'move_given', None) or {}).items()} or None
             entry.increment = dict(getattr(tr, 'increment', None) or {}) or None
+            per = getattr(tr, 'per_given', None) # An outcome for each strain carried, as given (see ss.strains.prepare())
+            if per is not None:
+                entry.per = dict(per)
+                entry.p = [per['p']] if 'p' in per else None
             transitions.append(entry)
         out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
         per_act = [] # Betas read as probabilities per act, which the spec says were guessed
@@ -458,6 +467,15 @@ def partnership_lines(mod, tr, sim, name):
 def seasonal_str(raw, mean):
     """ An `ss.seasonal` as the textbooks write it, e.g. "1.3 per day × (1 + 0.1 cos(2π(t − 0.25)))", given its mean as text """
     return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g})))'
+
+
+def move_json(level, unit=None):
+    """ A move along a dimension as it is written in the model spec: a level, a pair of levels (from, to), or a change of strains (`DS >> RIF`) """
+    if isinstance(level, ss.strains.StrainMove):
+        return level.spec
+    elif isinstance(level, tuple):
+        return dict(src=sc.tolist(level[0]), dst=level[1])
+    return quantity_json(level, None, unit)
 
 
 def quantity_json(raw, kind, unit):

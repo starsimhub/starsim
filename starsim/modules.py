@@ -39,7 +39,7 @@ def module_map(key=None):
     module_map = sc.objdict(
         demographics  = ss.Demographics,
         networks      = ss.networks.Route, # NB, not ss.Network!
-        diseases      = ss.diseases.DiseaseBase,
+        diseases      = ss.Disease,
         connectors    = ss.Connector,
         interventions = ss.Intervention,
         analyzers     = ss.Analyzer,
@@ -543,9 +543,11 @@ class Module(Base):
         # Merge pars and kwargs
         pars = sc.mergedicts(pars, kwargs)
 
-        # Inspect the parent frame and pull out any arguments
-        frame = ss.utils.getframe(1)  # Go back 1 frame (to __init__, most likely)
-        if frame is not None and frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this
+        # Pull out the named arguments of this module's nearest __init__ (found by identity, so a wrapper or an overriding update_pars() doesn't hide it)
+        frame = ss.utils.getframe(1)
+        while frame is not None and not (frame.f_code.co_name == '__init__' and frame.f_locals.get('self') is self):
+            frame = frame.f_back
+        if frame is not None: # If it's not being called from init, don't do this
             _, _, _, kw = inspect.getargvalues(frame) # Get the values provided
             for k,v in kw.items():
                 if k in self.pars and v is not None:
@@ -798,6 +800,11 @@ class Module(Base):
         for state in self.state_list:
             if not state.initialized:
                 state.init_vals()
+        if getattr(self, 'graph', None) is None: # The parameters as they are now, for the model spec, since code can change them as it runs (FP56)
+            try:
+                self._spec_pars = {k:par_spec(v) for k,v in self.pars.items()}
+            except Exception: # A value the spec cannot write (e.g. a calendar duration): to_spec() raises about it, if it is asked for
+                pass
         self.initialized = True
         return
 
@@ -894,7 +901,7 @@ class Module(Base):
         return
 
     def advance(self):
-        """ For a module with a timeline of its own: move its time to the end of its step, where its results are recorded (the sim moves the time of the modules on its own timeline: see `ss.Sim.advance()`) """
+        """ For a module with a timeline of its own: move its time to the step about to be taken (the sim moves the time of the modules on its own timeline: see `ss.Sim.advance()`) """
         self.t.ti += 1
         return
 
@@ -906,10 +913,13 @@ class Module(Base):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        for state in self.auto_state_list:
-            self.results[f'n_{state.name}'][self.ti] = state.sum()
-        for name in self.derived_state_names:
-            self.results[f'n_{name}'][self.ti] = self[name].sum()
+        weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in n_alive
+        for name in [state.name for state in self.auto_state_list] + self.derived_state_names:
+            res = self.results[f'n_{name}']
+            if weights is None:
+                res[self.ti] = self[name].sum()
+            else:
+                ss.results.as_float(res)[self.ti] = weights[self[name].uids].sum()
         return
 
     @required()
@@ -924,7 +934,7 @@ class Module(Base):
         """ Finalize results """
         # Scale results, including any nested ones
         scale = self.sim.result_scale(self)
-        for res in self.results.flatten(keep_case=True).values():
+        for res in self.results.flatten().values():
             if res.scale:
                 res.apply_scale(scale)
         return
@@ -938,11 +948,12 @@ class Module(Base):
         (e.g. a grid set in its `__init__()`) is not seen, and neither is a change to its
         methods. Give such a value with `define_pars()`, and give the class a `version`
         (e.g. `version = '2'`) to change when its code does, so that `sim.hash()` tells the
-        two apart. Declared modules (`ss.Disease`), interventions, and modifiers write more.
+        two apart. Its parameters are taken as they were at `init()`, so that a module that
+        changes them as it runs has the same spec (and hash) before and after the run. Declared modules (`ss.Disease`), interventions, and modifiers write more.
         """
         cls = type(self)
         out = sc.objdict(type=cls.__name__, name=self.name, label=self.label, factory=f'{cls.__module__}.{cls.__qualname__}', version=getattr(self, 'version', None))
-        out.pars = {k:par_spec(v) for k,v in self.pars.items()}
+        out.pars = self.__dict__.get('_spec_pars') or {k:par_spec(v) for k,v in self.pars.items()} # As they were at init, not as the code has changed them since
         return out
 
     def to_json(self):

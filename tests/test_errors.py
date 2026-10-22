@@ -125,6 +125,9 @@ def _(): ss.Sim(sir(beta=ss.peract(0.01)), networks='random', n_agents=100, **kw
 @trigger(ss.errors.UnmodifiableTarget)
 def _(): ode(sir(), connectors=ss.modify('sir.nothing', multiply=2)).init()
 
+@trigger(ss.errors.Unapplied)
+def _(): ode(ss.Disease(recovery=ss.Transition(*ss.states('I R'), dur=10), init=dict(I=1.0), first='I', name='d'), connectors=ss.modify('d.rel_trans', multiply=0.5)).init()
+
 @trigger(ss.errors.UnknownEffect)
 def _(): ode(sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5)))).init()
 
@@ -160,7 +163,7 @@ def _():
 def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[500], n_I=[10])), stop=100).calibrate()
 
 @trigger(ss.errors.UnknownDataColumn)
-def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], n_Q=[10])), stop=100).init()
+def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[50], n_Q=[10])), stop=100).calibrate()
 
 @trigger(ss.errors.OverlappingSources)
 def _():
@@ -192,7 +195,7 @@ def _():
 @trigger(ss.errors.InitWhereNobodyIs)
 def _():
     A, B = ss.states('A B')
-    d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), name='d').stratify(ever=[False, True], split=[1, 0])
+    d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), first='A', name='d').stratify(ever=[False, True], split=[1, 0])
     ode(d, stratify=dict(age=[0, 30]), stop=1).init()
 
 @trigger(ss.CapabilityError)
@@ -291,6 +294,14 @@ def _():
     model = lambda data=None: ode(ss.Disease(S >> I @ beta*c*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir'), unit='day', stop=60, data=data)
     truth = model().run().results.sir.n_I
     return model(pd.DataFrame(dict(n_I=truth.values[::10]), index=truth.timevec[::10])).calibrate(pars=['beta', 'c']).sim
+
+@trigger(ss.errors.NotCompiled, note='runs as Python')
+def _():
+    class Coded(ssl.AgentSIR):
+        @ss.jit
+        def step_state(self):
+            self.sim.people.request_death((self.ti_dead <= self.ti).uids, cause=self) # Compiled code can't call into the sim
+    return ss.Sim(n_agents=100, diseases=Coded(), networks='random', stop=2002, **kw).run()
 
 
 # %% Define the tests

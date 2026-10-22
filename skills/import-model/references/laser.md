@@ -8,7 +8,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 
 | LASER | Starsim v4 | Fit |
 |---|---|---|
-| Places (`GeoDataFrame` with populations and coordinates) | `ss.geo.location(names=..., pop=..., lat=..., lon=...)` or `x=`/`y=` in km, or `distances=` | Exact |
+| Places (`GeoDataFrame` with populations and coordinates) | `ss.geo.geography(names=..., pop=..., lat=..., lon=...)` or `x=`/`y=` in km, or `distances=` | Exact |
 | `SEIR.Transmission` with `beta` | `S >> E @ ss.perday(beta) * I` | Exact |
 | `SEIR.Exposed`/`Infectious` with `normal(loc, scale)` | `E >> I @ ss.normal(7, 1, unit='days')` | Exact as agents; Erlang stages as an ODE |
 | `gamma(shape=40, scale=0.25)` | `ss.erlang(k=40, mean=ss.days(10))` | Exact |
@@ -47,7 +47,7 @@ names  = ['Central City'] + [f'Town {i+1}' for i in range(5)] + [f'Interim {i+1}
 pop    = [1_000_000] + [100_000]*5 + [25_000]*10
 dist   = [0] + [150]*5 + [50, 100]*5 # Distance from the city, in km
 angle  = [0] + list(angles) + list(np.repeat(angles, 2))
-places = ss.geo.location(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
+places = ss.geo.geography(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
 
 S, E, I, R = ss.states('S E I R')
 seir = ss.Disease(
