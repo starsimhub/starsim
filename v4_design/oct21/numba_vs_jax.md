@@ -225,7 +225,24 @@ The hand-written model does less than v4's program: 10 draws a district a day ag
 
 The same hand-written loop in JAX (`lax.scan`, with the one-uniform native draws, one FFI call per draw) takes 0.378 s after a 0.9 s compile, against 0.357 s for Numba on the same core after 2.8 s, with the same results within noise over 20 seeds. With the draws replaced by their means it takes 28 ms. So written the same way, JAX and Numba are equally fast here, and JAX compiles faster: the gap between v4's JAX run (0.55 s) and the compiled loop is v4's generic program, not JAX. With its draws as means, v4's program takes 222 ms against the loop's 28 ms. Keeping only totals instead of every compartment and flow by district saves about 30 ms of that. One step of v4's program has 474 operations, including 13 products of a 260×260 matrix with a vector, where the hand-written loop has one (`mix @ (I/N)`). Only one of the 13 is the time share between districts. The other 12 sum people by place and spread the sums back (`self.place.T @ (self.place @ n)` in `ss.gradients.Run.rates()` and `evaluate()`, 10 of them), or pick each stratification's levels (`cells @ infectious` and `cells @ n`, 2). Those are one-hot matrices, here the 260×260 identity, since each group is its own place. Applying the place matrix as the identity saves 63–71 ms (253 → 190 ms with the draws as means, 542 → 471 ms with `step_nu`), with identical results. In general a one-hot product is a segment sum or an index, O(groups) rather than O(groups²), so this is a general fix to `ss.gradients.Run`, not one per model. What's left (about 190 ms against the loop's 28) is spread over the other 460 operations: selects, scatter-adds, broadcasts, and a key split for each of the 14 draws.
 
-The compiled loop sets a ceiling for a step built per model: about 0.34 s, 4.5× faster than the kernels, and compiled in under 3 s, against the kernels' 42–56 s cold compile.
+### Vectorized draws, and a leaner JAX run
+
+The one-uniform draws above are still scalar code: each walks up its pmf with branches and a division, about 10–16 ns a draw, while the rest of a step runs with SIMD across the groups. [ffi/vdraws.py](numba_vs_jax/ffi/vdraws.py) makes a row of draws (one per group) together instead: every lane walks up its pmf in lockstep, each step a multiply, an add, and a compare across the lanes with a reciprocal shared by all of them, until no lane is left; the chance of 0 each walk starts from comes from hand-written float64 `exp`, `expm1`, and `log1p` (relative errors 2e-14, and 3e-16 for the log), and a row that the zero test settles entirely costs only that test. Means above 30 fall back to the scalar draws. Two things kept LLVM from vectorizing at first: Numba's check for division by zero (`error_model='numpy'` removes it), and gathering the unsettled lanes first (every lane now walks; settled ones are done at the start). The draws are identical to the scalar one-uniform draws for the same uniforms (4.8 million test draws, no difference), so exact.
+
+On rows of 260 like Ghana's: 7–9 ns a binomial draw against 11–17 ns scalar, 10 ns against 14 ns for a Poisson with mean ~10 (a lockstep walk lasts as long as its slowest lane), and 1.4 ns for a row of importations that are all 0. In the hand-written loop compiled with Numba, Ghana goes from 0.364 s to 0.23 s with bit-for-bit the same results over 20 seeds; with means in place of draws that loop takes 79 ms, so the draws are now about 65% of it.
+
+In v4's JAX run, `DRAWS=step_vec` makes all of a step's draws in one call with the vectorized draws (identical to `step_nu` for the same uniforms), and `LEAN=1` replaces `Run.place` with sums and indexing (here the identity). JAX 0.12, one core, two interleaved rounds that agreed within 2%, ms a run:
+
+| Model | Kernels | Scalar step (`step_nu`) | + lean | Vectorized step | + lean | Means | Means, lean |
+|---|---|---|---|---|---|---|---|
+| sir | 1.3 | 0.4 | 0.3–0.4 | 0.6 | 0.6–0.7 | 0.1 | 0.1 |
+| sir_age | 1.9 | 0.9 | 0.9 | 1.2 | 1.2–1.3 | 0.3 | 0.3 |
+| spatial | 7.1 | 2.2–2.3 | 2.2 | 2.4–2.5 | 2.5 | 0.6 | 0.6 |
+| ghana | 1,540 | 545 | 486–489 | 434–435 | 378–379 | 225 | 155–157 |
+
+So for Ghana the two together take the run from 545 ms to 378 ms, 4.1× faster than the kernels, and the draws from 320 ms to 222 ms, 59% of the run (from 85%). For the small models (1–50 groups) the vectorized draws are slower than the scalar ones: their fixed cost a row doesn't pay with so few lanes, so an engine would choose by the number of groups. The lean place matrix only matters where it's large (Ghana: 70 ms). Two more one-hot products a step (`cells`, for the levels of each stratification) and the key splits remain, and were not changed here.
+
+The compiled loop sets a ceiling for a step built per model: about 0.34 s with scalar draws and 0.23 s with vectorized ones (4.5× and 6.7× faster than the kernels), compiled in 3–5 s, against the kernels' 42–56 s cold compile. v4's lean JAX run with vectorized draws (0.38 s) is within 1.7× of it, while doing more (14 draws a district a day against 10, every result by district).
 
 ### NumPy
 
