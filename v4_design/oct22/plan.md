@@ -16,7 +16,7 @@ This plan is done when all of these hold, and not before or beyond:
 2. **B1–B8 are done**: the silent wrong answers and crashes from the reviews.
 3. **C (strains) is done** to its own checklist, including the three test builds.
 4. **D (speed, compiling, calibration) and E (networks, downstream-facing) are done.**
-5. **Every open question below is answered by Cliff or moved to [admin/deferred.md](../admin/deferred.md).**
+5. **Every open question below is answered by Cliff or moved to [admin/deferred.md](../admin/deferred.md)** (the first six are answered; see Decisions).
 6. **F1 and F2 are done**: measured against S0.3 with the new benchmarks, and the records updated.
 7. **Checks pass**: the full suite, `tests/switching` apart from known timing flakes, and the perf guard, with no benchmark slower than its baseline. [CK: i mean, a little bit of flexibility here is ok, we can optimize performance later; and something going from 1.2 s to 1.5 s is more of an issue than something going from 1.2 ms to 1.5 ms]
 
@@ -60,7 +60,7 @@ Cliff on tests: "can probably skip the regression tests; the test suite should n
   - **FP57/CV11**: `ss.by.lookup()` rebuilds its table from pandas rows on every call, which makes declared models 3–107× slower. Build the grid once and index it. Cliff: "do NOT use pandas in any hot path!" Grep the other step-time paths for pandas while there.
   - **Benchmarks**: add malariasim's `fseis10`, a declared model with counts, a coded model, and one with an `ss.by` age table to S0.3's set.
 - [ ] **B1. Nothing accepted then ignored (S, plus S per case)** (theme 1). At `init()`, check every modifier, change and product, and raise unless something reads it. Then implement the cases (CV1 in `infect_route()`, ST30, MA36) or refuse them (FP52 until built, FP54, HP6, FP41, HP46, D23, ST37).
-- [ ] **B2. `init=` (S)** (theme 2; MA34, HP48, FP69, ST31). Up to 1 is a share and above 1 is a count, as with `init_prev=`. Cliff: an int is still read as a share (`init=[1, 0, 0]` means everyone), with a warning to write a float. Functions are accepted as with `init_prev=`. Change the note to "the other 9,999 people". For exactly one person, see Q1.
+- [ ] **B2. `init=` (S)** (theme 2; MA34, HP48, FP69, ST31). Up to 1 is a share and above 1 is a count, as with `init_prev=`. Cliff: an int is still read as a share (`init=[1, 0, 0]` means everyone), with a warning to write a float. Functions are accepted as with `init_prev=`. Change the note to "the other 9,999 people". For exactly one person, `init_n=` (decision 1).
 - [ ] **B3. Solvers agree and conserve (S each)** (theme 6). Two contract tests: people are conserved in every crossing (FP51), and agents match the ODE on the spec's own models, with the analytic `R0()` (MA37). FP53: under `auto`, run agents when a dwell's CV is above about 3, and warn under an explicit ODE. Also ST32 (`ss.constant(0)` waits a step under compartmental solvers) and MA6 (chain-binomial mosquitoes die out at a 30-day step).
 - [ ] **B4. Births and newborns (S each, one batch)** (theme 8): FP43–FP50, HP37, ST34. Add one contract test that the engine's draws match `dist.rvs()` (FP48). For FP50, don't backfill a history for people placed by `move_to()`. FP46 (2.5% of births lost, cause unknown) needs a diagnosis first.
 - [ ] **B5. Units and step boundaries (S)** (theme 15).
@@ -68,7 +68,7 @@ Cliff on tests: "can probably skip the regression tests; the test suite should n
   - Fix HP47 and FP68's message.
   - **S7.8's bug** (SWA, carried over): a bare `ss.contacts()` matrix is read in the sim's unit, so with monthly steps, acts per year are read as acts per month.
   - Add a "timing contract" section to spec 02, with `describe()` lines for CV5 and ST4.
-  - FP55: Cliff isn't sure why a dwell would need a minimum of one step. See Q2. Go ahead with the proposal there unless he objects.
+  - FP55: drawn dwells round stochastically to whole steps; an explicit 0 stays instant (decision 2).
 - [ ] **B6. Expression algebra (S–M)** (theme 13): make `ss.by` an expression node (FP60). Add one table-driven test: each node type × each operator × each solver, on a tiny model. That covers HP47, HP49–HP51, FP61–FP63, ST46, ST47 and ST49.
 - [ ] **B7. The remaining SWAs from the reviews (S each)**: CV3 (a delayed result released at the start of a step doesn't block a retest in the same step), CV4, HP38–HP42, HP44, MA35, ST29, and any others in the synthesis's list that A1–B6 don't cover. Check each still reproduces, then fix it or point it at the item that did.
 - [ ] **B8. Leftovers from the October 21 plan (S each)**:
@@ -94,7 +94,7 @@ Cliff on tests: "can probably skip the regression tests; the test suite should n
 - **Full carriage (D4)**: at `max_strains`, a new strain replaces the oldest, and the new strain's clock starts fresh. This is counted as a flow. It is Cliff's rule, replacing "not established".
 - **D6** (a set takes its worst strain's value) and **D7** (try both spellings in the tbsim build) are accepted. D8 (`curve=`) is accepted.
 
-**Open (see Q3–Q5)**: transmission from a mixed carrier (D5), the spelling of emergence (no `Tx → Tx`), and a clearer cure example.
+**Settled since (decisions 3–5)**: transmission from a mixed carrier (D5), emergence on the transition that causes it, and the cure example.
 
 **Answer to Cliff's 2^k question** (table row 3): own courses with no coupling are independent, so each strain gets its own copy of the states. That is k copies side by side, which the ODE handles. 2^k appears only when courses interact, because then the combination a person carries matters. So row 3 is fine, and row 4 (coupled) is agents only.
 
@@ -120,7 +120,7 @@ Cliff on tests: "can probably skip the regression tests; the test suite should n
 - [ ] **E1. `ss.SexualNet`, all four items (S–M)** (theme 14; Cliff: "do all four"):
   - HP45: don't pair on behalf of subclasses that pair their own.
   - ST45: the error suggests `sides='mm'`.
-  - ST22/ST52: two-group partnerships (sex workers and clients) and risk matching come back, with the spelling in Q6.
+  - ST22/ST52: two-group partnerships (sex workers and clients) and risk matching come back, with `between=` (decision 6).
   - `test_parameter_docs_coverage`: accept or fix base parameters that subclasses don't use.
 - [ ] **E2. Small fixes downstream code hits (S each)**:
   - `sim.current_scale` becomes a public property again (CV7).
@@ -148,13 +148,17 @@ Cliff on tests: "can probably skip the regression tests; the test suite should n
   - The downstream fixes in other repos (oct21 plan, "Where things stand") are written up.
 - **F4. Docs**: once the implementation is final.
 
+## Decisions (Cliff's answers, 2026-10-22)
+
+Cliff answered the first six questions in the plan. Each is now settled and the items above follow it.
+
+1. **Exactly one person in `init=` (B2)**: no new top-level name for a corner case. `init=` takes shares (an int too, with a warning to write a float), and `init_n=` takes counts. `init_prev=` keeps its current rule.
+2. **Short drawn dwells (B5, FP55)**: an explicit `dur=0` stays instant. A drawn dwell rounds stochastically to whole steps (0.2 steps is 0 steps 80% of the time and 1 step 20% of the time), which keeps the mean. The `TriggerLoop` message is fixed too.
+3. **Transmission from a carrier of two strains (D5)**: three options. The default `'one'` picks one strain per transmission, in proportion to relative transmissibility; `'fittest'` is tbsim's `transmission_independent=False`; `'each'` stays for co-carriage models.
+4. **Emergence (C)**: mechanistic, on the transition that causes it, not a `where=`. For example, treatment failure carries the strain change: `ss.Transition(Tx, I, prob=p_fail, move=DS >> (DS, RIF))`. Cliff's sketch was `treatment(p_fail=0.3, on_fail=DS >> (DS, RIF))`, as an example rather than an API.
+5. **The cure example (C)**: rewrite it as in the recommendation (cure is treatment ending; per-strain success from `adjust=dict(cure=...)`).
+6. **`between=` only (E1)**: a pair of groups, with `'mf'` (the default) and `'mm'` as shorthands, per-group `n_contacts`, and `match=` for risk matching.
+
 ## Open questions for Cliff
 
-Each has a recommendation, which I'll follow if Cliff doesn't object.
-
-1. **Exactly one person in `init=` (B2).** `ss.count` doesn't exist yet. Recommendation: add `ss.count(1)`. It has other uses (introducing a strain with `n_imports`, seeding by number), so it isn't single-purpose. A separate `init_n=` keyword would be the alternative. `np.int64(1)` is too clunky, as Cliff said. [CK: gosh i mean ... introducing a new top-level name for the tiniest of corner cases violates the constitutional principle of understandability. maybe `init` and `init_n` is the way to go, after all.]
-2. **A minimum of one step for dwells (B5, FP55).** Cliff asked why zero-time dwells shouldn't be allowed. They should be, when written: `dur=0` stays instant. The problem is a *drawn* dwell that is short but positive (a mean of 0.2 steps). It rounds to zero, so a self-loop re-decides in the same step: 749 of 774 women left `never` at once, or a `TriggerLoop` raises with a wrong hint. Recommendation: an explicit 0 stays instant, and a drawn positive dwell lasts at least one step (as in v3 and FPsim). The message is fixed too. [CK: ok ... i'd think it should stochastically round, e.g. 0.2 rounds to 0 80% of the time, and 1 20% of the time. is that feasible?]
-3. **Transmission from a carrier of two strains (C, D5).** Cliff: "does this mean someone with DS+RIF would pass BOTH along? surely not?" Under `'each'`, yes: each strain has its own chance at each contact, so both can pass. Recommendation: three options. The default `'one'` picks one strain per transmission, in proportion to each strain's relative transmissibility. `'fittest'` is tbsim's `transmission_independent=False`. `'each'` is kept only because co-carriage models use it today. [CK: ok]
-4. **Emergence without `Tx → Tx` (C).** Recommendation: a strain change is its own declaration, not a state transition. For example, `tb.strains.change(DS >> (DS, RIF), rate=0.05, where=Tx)`, where `where=` limits it to people on treatment. The tbsim build tries it against `move=` on the treatment-failure transition (ST30) and keeps the simpler. [CK: i don't love 'where', i feel needs to be more mechanistic than that, e.g. `treatment(p_fail=0.3, on_fail=DS>>(DS, RIF))`, or something. that's just an example, not an API you have to implement.]
-5. **The cure example (C).** Cliff found `ss.Transition(Tx, R, prob=0.9, per='strain')` unclear. Recommendation: rewrite the examples so cure is treatment ending (a duration on `Tx`). The per-strain chance of success then comes from `adjust=dict(cure=...)`, and `per='strain'` means each strain carried succeeds or fails on its own. Spontaneous clearance is a separate transition. [CK: ummm ... ok]
-6. **`sides=` vs `between=` (E1).** `sides=` says which sexes pair (`'mf'`, `'mm'`). `between=(a, b)` says that each partnership has one person from each of two named groups (e.g. `('fsw', 'client')`). Man–woman is just `between=('male', 'female')`, so one keyword covers both. Recommendation, following Cliff's preference: keep only `between=`. It takes a pair of groups, with `'mf'` (the default) and `'mm'` as shorthands, and per-group `n_contacts`. Risk matching is a `match=` on top of it. [CK: i like it]
+New questions from the build go here, each with the guess that the build follows meanwhile.
