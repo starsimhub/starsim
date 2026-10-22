@@ -227,7 +227,9 @@ def kernel_seconds(sim):
     for each group, flow (and two for each stage of a dwell time), and step (each substep, or for tau-leaping each
     leap, which is short enough that the fastest of the rates that do not depend on the compartments changes them by
     3%), which fits declared SIRs over 50 places, Ghana measles over 260 districts, and two SEIRs with stages tracked
-    jointly to within a factor of 2. For the ODE: 1/400 of what it would take as plain Python (see
+    jointly to within a factor of 2. For the ODE: one step taken by the compiled kernels, times the steps, if they are compiled
+    (see `ss.kernels.timed_seconds()`), which grows with the places as the kernels do; it leaves out values that vary in
+    time (MEmilio's dampings: 0.02 s against 0.07 s), so it errs toward the kernels, which start at once; otherwise 1/400 of what it would take as plain Python (see
     `ss.kernels.plain_seconds()`, which counts the mixing between groups too), which fits the same SIRs and Ghana
     measles to within a factor of 2. A run of one group takes about 2 ms, mostly the sim's own work.
     """
@@ -249,8 +251,12 @@ def kernel_seconds(sim):
             rates = np.concatenate([np.ravel(e.flow_base(flow)*e.flow_mult(flow)) for e in (cross.engines if cross is not None else [engine]) for flow in e.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] + [p.mov_rate])
         if sim.solver == 'ode':
             solver = ss.kernels.solvers[sim.integrator]
-            n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
-            seconds += ss.kernels.plain_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)/400
+            y = cross.y if cross is not None else engine.y
+            if ss.kernels.is_compiled() and y is not None: # One step taken by the compiled kernels: the estimate from the program's size counts every pair of places that mix, which the kernels take sparsely (MEmilio's counties: 0.82 s estimated against 0.15 s, so JAX was chosen and spent 0.7 s starting)
+                seconds += ss.kernels.timed_seconds(p, y, mod.t.npts, engine.dt, solver, engine.substeps(), kn=ss.kernels)
+            else:
+                n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
+                seconds += ss.kernels.plain_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)/400
             continue
         elif sim.solver == 'tau':
             leaps = max(np.max(rates, initial=0)*engine.dt/0.03, 1)

@@ -220,7 +220,7 @@ def deciding():
     return ss.options.compile == 'auto' and not chosen and not is_compiled()
 
 
-def timed_seconds(p, y, npts, dt, solver, n_sub):
+def timed_seconds(p, y, npts, dt, solver, n_sub, kn=None):
     """
     About how long a run would take as plain Python, in seconds: one step taken as plain Python (on copies, with
     its own random numbers), times the number of steps. Timing a step counts what an estimate from the size of the
@@ -236,8 +236,10 @@ def timed_seconds(p, y, npts, dt, solver, n_sub):
         dt (float): the timestep
         solver (int): which of `solvers` to use
         n_sub (int): the substeps given (0 to let the solver choose, as it does in the run)
+        kn (module): the kernels to time (default: as plain Python); the compiled ones (`ss.kernels`) are timed at least twice, since their first call in a session loads them
     """
-    kn = uncompiled()
+    plain = kn is None
+    kn = uncompiled() if plain else kn
     rng = np.random.default_rng(0)
     best, spent = np.inf, 0.0
     for i in range(3):
@@ -245,7 +247,7 @@ def timed_seconds(p, y, npts, dt, solver, n_sub):
         kn.one_step(rng, y, p, dt, solver, n_sub, no_tables, -1)
         took = time.perf_counter() - start
         best, spent = min(best, took), spent + took
-        if spent > 0.1:
+        if spent > 0.1 and (plain or i > 0):
             break
     return (npts - 1)*best
 

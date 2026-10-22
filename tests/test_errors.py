@@ -92,6 +92,12 @@ def _():
     states = ss.states(2)
     ss.Disease(states[0] >> states[1] @ 0.1)
 
+@trigger(ss.errors.StrainsByCount)
+def _():
+    S, I, R = ss.states('S I R')
+    d = ss.Disease(S, I, R, inf=S >> I @ ss.perday(0.3)*I.frac, rec=I >> R @ ss.days(10), strains=ss.Strains(['a', 'b']), init_prev=0.01, name='d')
+    ss.Sim(d, n_agents=100, unit='day', stop=5, **kw).init()
+
 @trigger(ss.errors.ExposureToCount)
 def _():
     S, I = ss.states('S I')

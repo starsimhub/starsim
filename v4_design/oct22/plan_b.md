@@ -39,7 +39,7 @@ This plan is done when all of these hold, and not before or beyond:
 
 Not part of it: changes in tbsim, Covasim, FPsim, HPVsim or STIsim themselves (written up instead, per the October 22 [stale_other_repos.md](stale_other_repos.md)); the docs (plan.md F4); each model's own bugs; and anything in deferred.md that isn't named below. A new idea goes to deferred.md. If one is added here instead (only for an SWA, or because it blocks an item), the estimate goes down and the update says why.
 
-**Estimate**: about 90% done (2026-10-22, 19:30: A2 and A4 done; up from 86%; total about 97). Left: I1 (rerun the six reviews), the final records and LFD sync, and Cliff's answers. Weights: S 1, M 3. Total about 95 units. Update this line with every edit. It should only go up.
+**Estimate**: about 95% done (2026-10-22, 17:45: A2, A4, the strains-by-count refusal and two `tests/switching` failures done; up from 90%; total about 97). Left: I1 (rerun the six reviews, for Cliff to launch one per session with `/v4.review`), and Cliff's answers to the questions below. Weights: S 1, M 3. Total about 95 units. Update this line with every edit. It should only go up.
 
 ## Order
 
@@ -192,12 +192,15 @@ Each has the guess the build follows meanwhile.
 19. **Traits of people grown by code without `age=` (FP91)** are drawn at the next declared step, so code reading them in the same step sees the default. The alternative: draw at `grow()` and have the migration script flag `grow()` without `age=`.
 20. **Strain memory (C7)** is a dimension in compartmental runs only (agents keep per-person arrays); `last` over a set of strains remembers the newest; a trait under `auto` still runs agents.
 21. **Stamps (A2)**: someone placed at the start reads `ti_X == 0` (keeps `ti_I > 0` as "infected during the run"); `self.ti - ti_X` equals the clock for a move at a step's start, and is one more for a contact infection or anyone placed at the start, so the clocks stay the way to write it; `ti_exit_X` and `set_delivery()` are one more than before (the step the exit is taken in). Cost: one int8 per agent per stamped state.
+22. **A rate on counts with strains (`beta*I.frac`, `beta*I.n`)** is refused (`ss.errors.StrainsByCount`, naming `beta*I`), since new cases took their strain from the split rather than from who infected them (silently 50/50 where `beta*I` gives 11/89; [worklogs_b/frac_strains_by_count.md](worklogs_b/frac_strains_by_count.md)). The alternative is to make the rate form pass strains on, which `beta*I` already does.
+23. **`sim.new(solver=...)` resets `substeps=`** to the new solver's default unless it is given too (an importer's whole steps for the binomial had become one 7-day RK4 step for the ODE; [worklogs_b/switching.md](worklogs_b/switching.md)). The alternative: keep it, with a `LargeStep` note.
+24. **JAX or the kernels (`auto`)** is decided by timing one compiled kernel step, which errs toward the kernels (up to 10× low for models with time-varying values), rather than a size estimate that grew with the square of the places (MEmilio at 100 counties: 0.15 s, not 0.8 s).
 
 ## Stale
 
 Out of date after this plan's changes, and left for the docs pass. Add to it rather than fixing each on the way.
 
-- The migrate-starsim3 skill's and `docs/migration/v3_v4.md`'s timing rows, until A is built (A4 corrects them after).
+- `docs/migration/v3_v4.md`'s timing text, notably line 50 ("a declared disease dates a move between states at the start of the step (`ti - 1`) ... one step long"); the skill's rows are corrected (A4).
 - `oct21/strain_plan.md:125` and plan.md decision 3 on `'fittest'` (B4).
 - tbsim's resistance workarounds, FPsim's six port workarounds, and STIsim's `ti_P == ti - 1` hand fixes, once A, B1 and D are built (in `stale_other_repos.md`).
 - Docs and skills outside the repo that mention `transmit='fittest'` (none found in `docs/`).
@@ -207,3 +210,7 @@ Out of date after this plan's changes, and left for the docs pass. Add to it rat
 - Skills and docs that say a coded module's `n_<state>` isn't counted in a declared module, or that apply `np.abs` where a value is read (HPV's W3); `docs/` pages on `priority=` (lists of conditions only) (D1).
 - `plan.md` E2 and its `.since` item: done here (D3).
 - `docs/migration/v3_v4.md`: the new script rewrites and flags, the `make_run()` route for packages with their own run code, and the behavior rows (ages when none are given, reductions by scenario, sparse rates by year) (G, ST58).
+- The user guide pages on `ti_X` and stamps (`modules_diseases.qmd`, `advanced_indexing.qmd`), and `skills/import-model/references/starsim3.md` if it mentions `ti - 1` for declared stamps (A2).
+- Skills and docs that say memory immunity of strains is agents only, or that a strain is introduced with `dis.infect()` (C7).
+- `oct20/simplify/support_matrix.md` and `oct21/stisim_port.md` (ST24: "competing exits agents only") are historical records, left as they are (ST61).
+- Docs and skills that write a rate on counts (`beta*I.frac`) in a disease with strains (now refused).

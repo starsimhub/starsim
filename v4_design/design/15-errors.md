@@ -44,7 +44,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-61 names: 44 errors, 7 warnings, and 10 notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+62 names: 45 errors, 7 warnings, and 10 notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
@@ -58,6 +58,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `UndrivenTransition` | error | A transition reaches build time with no rate, no duration, and no `p=` |
 | `UnnamedState` | error | A state made by `ss.states(3)` or `ss.State()` cannot be matched to a variable name when the module is built (two names for one object, a state built inline). Suggests `ss.states('S I R')` or `ss.State('S')` |
 | `ExposureToCount` | error | A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` |
+| `StrainsByCount` | error | In a disease with strains, an acquisition's rate counts its own states (`beta*I.frac`), which carry no strain. Suggests the transmission `beta*I` |
 | `UnknownTransition` | error (also a `KeyError`) | `adjust=` names a transition that does not exist. Lists the ones that do |
 | `BadSplit` | error | `split=` has the wrong number of entries. (A split that does not sum to 1 is normalized, and `describe()` says so) |
 | `DuplicateStructuralDimension` | error | A model or sim is stratified by a dimension it already has, in another way. `stratify` works in place, so a notebook cell that is run twice stratifies it in the same way again, which does nothing (with a note) and is not this error. (Stratifying a disease by a people property the sim already has, with the same levels, only adds the adjustments and is not an error) |

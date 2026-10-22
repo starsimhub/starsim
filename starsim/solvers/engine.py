@@ -779,9 +779,31 @@ class Engine:
             self.cache[key] = by.per_group(self.sim, self.convert, year=None if ss.solvers.Compartmental.held(by) else self.year) # A step function at the start of the step, as in call()
         return self.cache[key]
 
+    def check_counted_strains(self):
+        """
+        With strains, an acquisition whose rate counts the disease's own states (`beta*I.frac`, `beta*I.n`) would give each new
+        case a strain from the strain set's split, not from who infected them, since a count carries no strain: refused, with
+        the transmission that says the same (`beta*I` is the same force under homogeneous mixing, weighted by infectiousness)
+        """
+        if self.strain is None:
+            return
+        for tr in self.graph.acquisitions:
+            if tr.contact or not isinstance(tr.rate, ss.transitions.Expr):
+                continue
+            for leaf in tr.rate.leaves:
+                states = getattr(leaf, 'states', None) if isinstance(leaf, ss.expressions.Count) else None
+                own = [s for s in (states or []) if isinstance(s, ss.transitions.State) and self.graph.states.get(s.name) is s]
+                if own:
+                    names = sc.strjoin(s.name for s in own)
+                    errormsg = (f'the rate of "{tr.name}" counts {names} of "{self.mod.name}" ({leaf}), which has strains: a count carries no strain, so each new case would take a strain from the split rather than from who infected them.\n'
+                                f'     Write it as a transmission, which has the same force under homogeneous mixing and passes on the strain: beta*I for beta*I.frac (and for beta*I.n, beta times the population size, times I).')
+                    raise ss.errors.StrainsByCount(errormsg)
+        return
+
     def init_adjust(self):
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
         sim = self.sim
+        self.check_counted_strains()
         self.adjust = sc.objdict({name:None for name in self.graph.transitions})
         self.branch_adjust = dict() # For a branch chosen with p=: a multiplier on its probability, as for a modifier on it (TL16: the dwell time was divided instead)
         self.adjust_dims = sc.objdict({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by

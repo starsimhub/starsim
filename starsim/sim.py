@@ -519,11 +519,13 @@ class Sim(ss.Base):
 
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
-            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`
+            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE)
         """
         if not hasattr(self, 'inputs'):
             errormsg = 'sim.new() needs the inputs the sim was built from, which this sim (e.g. one saved by an earlier version) does not have'
             raise ValueError(errormsg)
+        if kwargs.get('solver') is not None and kwargs['solver'] != self.pars.solver and 'substeps' not in kwargs:
+            kwargs['substeps'] = None
         data = kwargs.pop('data', self.data) # Data is not a sim parameter, so it is passed on separately
         if type(self) is Sim:
             inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)

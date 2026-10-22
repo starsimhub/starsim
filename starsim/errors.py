@@ -105,6 +105,9 @@ class UnnamedState(CodedError):
 class ExposureToCount(CodedError):
     """ A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` """
 
+class StrainsByCount(CodedError):
+    """ In a disease with strains, an acquisition's rate counts its own states (`beta*I.frac`), which carry no strain. Suggests the transmission `beta*I` """
+
 class UnknownTransition(CodedError, KeyError):
     """ `adjust=` names a transition that does not exist. Lists the ones that do """
 
