@@ -47,6 +47,7 @@
 - [ ] Consider GPU support
 - [ ] Consider differentiable ABM
 - [ ] Think about vectors
+- [ ] Think about variance minimization and other old moonshot issues
 
 ## AI 0/4
 
