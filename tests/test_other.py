@@ -118,9 +118,10 @@ class Counter(ss.Module):
     assert sim.results.counter.seen.sum() == 50 and sim.results.counter.new_events[0] == 0 # Every step's events seen, and none at the start
     assert 'ti == 1' in migrate_text('class X(ss.Module):\n    def step(self):\n        if self.ti == 0:\n            pass')[2][0][1]
 
-    # Renames, a fractional verbose, and Starsim 3's diseases written as code
-    text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
-    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass" # ss.Disease and ss.Infection keep their meaning
+    # Renames, verbose, and Starsim 3's diseases written as code
+    text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=-1)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
+    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=0)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass" # ss.Disease and ss.Infection keep their meaning
+    assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
     assert 'sim.calibrate()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
@@ -131,6 +132,10 @@ class Counter(ss.Module):
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
     assert migrate_text('d = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.people.age < 1))')[0] == 'd = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.ppl.age < 1))' # Starsim 4 prerelease names
     assert migrate_text('tx = ss.treat(ss.Treatment(), eligible=sis.I)')[0] == 'tx = ss.treat(ss.Treatment(), where=sis.I)'
+    assert migrate_text('def care(tb, eligible=None):\n    return care2(eligible=eligible)')[0] == 'def care(tb, eligible=None):\n    return care2(eligible=eligible)' # Only in calls to Starsim's deliveries (TB §2)
+    assert migrate_text("net = ss.SexualNetwork(sides='mm'); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(between='mm'); sim = ss.Sim(net)"
+    assert migrate_text("d = ss.Disease(S, I, init=dict(I=10)); t = ss.transfer(risk='low -> high', rate=r)")[0] == "d = ss.Disease(S, I, init_n=dict(I=10)); t = ss.transfer(risk=('low', 'high'), rate=r)"
+    assert migrate_text("d = ss.Disease(S, I, init=dict(I=0.01))")[0] == "d = ss.Disease(S, I, init=dict(I=0.01))" # A share stays
     assert migrate_text('ppl = ss.people.People(10)')[0] == 'ppl = ss.people.People(10)' # Starsim 3's module, left alone
     assert migrate_text('class Pap(ss.Test):\n    pass\nok = isinstance(t, ss.Test)')[0] == 'class Pap(ss.Diagnostic):\n    pass\nok = isinstance(t, ss.Diagnostic)' # ss.Test as a name, e.g. a base class
     assert migrate_text('ss.Tests(); ss.Testing')[0] == 'ss.Tests(); ss.Testing'
@@ -139,10 +144,13 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names (N7, HP3)
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
-    # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, flagged to add to the interventions
-    text, changes, todo = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))")
-    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)']
-    assert any('screening_positive' in msg for line,msg in todo)
+    # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, after it in the interventions
+    text, changes, todo = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))\nsim = ss.Sim(interventions=[screening])")
+    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, screening_positive])']
+    text, changes, todo = migrate_text("tx = ss.treat(ss.Treatment())\nscreening = ss.screen(ss.Diagnostic(), on_positive=tx)\nsim = ss.Sim(interventions=screening)") # A follow-up by name (TB §2)
+    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic())', 'tx = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, tx])']
+    old = "screening = ss.screen(ss.Diagnostic(), on_positive=tx)" # Not in a list of interventions: left in place, to fail with Starsim 4's own error
+    assert migrate_text(old)[0] == old and any('left in place' in msg for line,msg in migrate_text(old)[2])
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

@@ -8,7 +8,7 @@ import scipy.spatial as spsp
 
 __all__ = ['EmbeddingNet']
 
-class EmbeddingNet(ss.MFNet):
+class EmbeddingNet(ss.SexualNet):
     """
     Heterosexual age-assortative network based on a one-dimensional embedding.
 
@@ -25,7 +25,7 @@ class EmbeddingNet(ss.MFNet):
         """
         super().__init__()
         self.define_pars(
-            inherit = True, # The MFNet already comes with pars, we want to keep those
+            inherit = True, # ss.SexualNet already comes with pars, we want to keep those
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
         )

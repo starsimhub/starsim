@@ -11,7 +11,7 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 | `deriv(X)` equations | Flows: each equation multiplied out into signed terms, and a term negative in one state and positive in another paired into a flow (a total, then classified) | yes |
 | `update(X)` with `n <- rbinom(X, 1 - exp(-R * dt))` | A rate `R` under `solver='binomial'` (another `p` becomes `-log(1 - p)` per step) | yes |
 | `rpois(lambda)` | A total per step | yes |
-| `user(x, default)` | A parameter (override with `ss.load(..., pars=dict(x=...))`) | yes |
+| `user(x, default)` | A parameter (override with `ss.interop.load(..., pars=dict(x=...))`) | yes |
 | Arrays of alike, independent copies (replicates) | One model, run `n_runs=` times | yes |
 | Arrays with flows from each level to the next (aging) | An age stratification, with bands from `1/rate` | yes |
 | `sum(I)` | `I.n` (the total over every group) | yes |
@@ -39,7 +39,7 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 
 ## Worked example
 
-`lingua_franca_design/vignettes/odin/seir_array/model.py` (SEIR in 5 age groups with births, deaths, aging, waning, and a 14-day `delay()`), and `vignettes/odin/stochastic_sir_arrays/model.py` (replicates as `n_runs`). `ss.load('seir_array_odin.R', stop=...)` gives the aging as a stratification and the delay as a fixed dwell; the one line it lists, the delay's history, is:
+`lingua_franca_design/vignettes/odin/seir_array/model.py` (SEIR in 5 age groups with births, deaths, aging, waning, and a 14-day `delay()`), and `vignettes/odin/stochastic_sir_arrays/model.py` (replicates as `n_runs`). `ss.interop.load('seir_array_odin.R', stop=...)` gives the aging as a stratification and the delay as a fixed dwell; the one line it lists, the delay's history, is:
 
 ```python
 history = ss.null >> E @ ss.timeseries({0: ss.perday(surv), tau: 0}) # The first tau of the delayed flow, which odin takes as the value at time 0

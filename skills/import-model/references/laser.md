@@ -15,7 +15,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 | Gravity coupling of the force of infection | `dis.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(c=2.5), kind='force', away=3/32))` | Exact (`kind='force'` is LASER's form) |
 | Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.geo.Mobility(matrix=gravity, kind='force')` | Exact |
 | Ghana's mixing (residents make a share of contacts elsewhere) | `ss.geo.Mobility(ss.geo.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
-| Initial infections in one place | `init=dict(I=ss.by(patch=[0, 100] + [0]*14))` | Exact |
+| Initial infections in one place | `init_n=dict(I=ss.by(patch=[0, 100] + [0]*14))` | Exact |
 | Births at a crude rate | `ss.birth(S, rate=ss.peryear(cbr/1000))`; vaccinated births as a second `ss.birth(R, ...)` | Exact |
 | Deaths at a constant rate | `ss.death(rate=ss.peryear(0.007))` | Exact |
 | Deaths from a life table (an age at death drawn once) | A function that writes `sim.people.ti_dead` (workaround) | Exact, but not declared |
@@ -54,7 +54,7 @@ seir = ss.Disease(
     infection = ss.Transition(S, E, rate=ss.perday(2/14) * I),
     onset     = ss.Transition(E, I, dur=ss.normal(7, 1, unit='days')),
     recovery  = ss.Transition(I, R, dur=ss.normal(14, 2, unit='days')),
-    init      = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
+    init_n    = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
 )
 seir.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(c=2.5), kind='force', away=3/32))
 sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))

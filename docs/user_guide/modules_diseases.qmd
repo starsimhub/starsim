@@ -11,13 +11,13 @@ For a learning-oriented introduction, see [Tutorial 4 - Diseases](../tutorials/t
 
 | | Declared | Written as code |
 |---|---|---|
-| Base class | `ss.Disease` | `ss.Infection` (e.g. `ssl.NCD`) |
+| Base class | `ss.Disease` | `ss.Disease` (e.g. `ssl.NCD`), or `ss.Infection` if it is transmitted (e.g. `ssl.HIV`) |
 | What you write | states and the transitions between them | per-agent arrays (`define_states()`) and the methods that update them (`set_prognoses()`, `step_state()`) |
 | Solvers | any: `'ode'`, `'binomial'`, `'gillespie'`, `'abm'` (`'auto'` picks one) | agents |
 | Inspection | `describe()`, `equations()`, `diagram()`, `R0()` | `describe()` in brief |
 | Library examples | `ss.SIR`, `ss.SIS`, `ss.SEIR` | `ssl.HIV`, `ssl.Ebola`, `ssl.Cholera`, and Starsim 3's SIR, SEIR, and SIS as `ssl.AgentSIR`, `ssl.AgentSEIR`, `ssl.AgentSIS` |
 
-Both are first-class, and both kinds can be in the same sim. Declare a disease when it can be said as states and transitions; write it as code when it needs per-agent quantities that change continuously (a CD4 count, a level of immunity that wanes, a viral load). Whether a disease is declared is decided by its class: `ss.Disease` is only for declared diseases, and a disease written as code subclasses `ss.Infection`.
+Both are first-class, and both kinds can be in the same sim. Declare a disease when it can be said as states and transitions; write it as code when it needs per-agent quantities that change continuously (a CD4 count, a level of immunity that wanes, a viral load). Whether a disease is declared is a question about each part of it, not its class: `ss.Disease` is the base of both (and one class can declare some parts and write others as code), and `ss.Infection` adds transmission written as code.
 
 ## Declared diseases
 
@@ -29,7 +29,7 @@ A declared disease is a set of states and the transitions between them. There is
 import starsim as ss
 ss.options(jupyter=True)
 
-# 1. Arrow strings: the states are read from the strings
+# 1. Keywords: each transition is named by its keyword
 S, I, R = ss.states('S I R')
 sir1 = ss.Disease(
     infection = ss.Transition(S, I, rate=0.3 * I),
@@ -57,7 +57,7 @@ for sir in [sir1, sir2, sir3]:
     print(f'Peak infected: {sim.results.sir.n_I.max():,.0f}')
 ```
 
-The first spelling is the short form for SIR-shaped models, the second is the one to use for everything else, and the third is for building models programmatically. States, transitions, and the disease take their names from the variables they are assigned to (or from the keyword they are passed under); give `name=` when a disease is built inline.
+The first spelling names each transition by its keyword, the second is the one to use for everything else, and the third is for building models programmatically. States, transitions, and the disease take their names from the variables they are assigned to (or from the keyword they are passed under); give `name=` when a disease is built inline.
 
 A bare state inside a rate (`0.3 * I`) means contact with people in that state: with no network that is `I.n / N`, the share of the population who are infectious, so `S >> I @ beta * I` is the textbook `beta * S * I / N`. With a network or a contact matrix, the same expression is worked out from whom each person actually meets, and `beta` is per contact. `I.n` is the number of people in `I`, used exactly as written.
 
@@ -91,13 +91,13 @@ print(sim.results.sir.keys())
 sim.results.sir.plot()
 ```
 
-Their states are `S`, `I`, `R` (and `E` for SEIR), with the Starsim 3 names `susceptible`, `infected`, and `recovered` as aliases. Starsim 3's versions of these diseases, written as code, are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` (below): they keep Starsim 3's defaults (a lognormal `dur_inf` and `p_death=0.01`).
+Their states are `S`, `I`, `R` (and `E` for SEIR), which replace the Starsim 3 names `susceptible`, `infected`, and `recovered`. Starsim 3's versions of these diseases, written as code, are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` (below): they keep Starsim 3's defaults (a lognormal `dur_inf` and `p_death=0.01`).
 
 They are the textbook models, as a disease you declare yourself is:
 
 - A duration (`dur_inf=ss.days(7)`, or a number, in years) is the mean of an exponential. For another shape, give the distribution: `dur_inf=ss.lognorm_ex(mean=ss.days(7), std=ss.days(2))`.
 - Nobody dies of the infection unless `p_death` is given (e.g. `p_death=0.01`).
-- `init_prev=` seeds the state a new infection enters: `I`, but `E` in an SEIR, so an SEIR seeded that way starts with nobody infectious. To start people infectious, give `init=dict(I=100)` instead.
+- `init_prev=` seeds the state a new infection enters: `I`, but `E` in an SEIR, so an SEIR seeded that way starts with nobody infectious. To start people infectious, give `init=dict(I=0.01)` (a share) or `init_n=dict(I=100)` (a number of people) instead.
 
 ### Dwell times
 
@@ -120,13 +120,13 @@ As agents, each person draws their own time in the state. In a compartmental run
 
 ### Branching
 
-Transitions out of one state that carry `p=` split on entry, and each branch can have its own time in the state. Transitions out of one state that carry only rates compete as hazards. In the operator form, a weight on the destination is the branch probability:
+Transitions out of one state that carry `p=` split on entry, and each branch can have its own time in the state. Transitions out of one state that carry only rates compete as hazards. A branch is written with `ss.Transition(..., p=)`:
 
 ```{python}
 S, I, H, R = ss.states(4)
 infection = S >> I @ ss.perday(0.3) * I
-severe    = I >> 0.1 * H @ ss.days(5)  # 10% go to hospital after 5 days on average
-mild      = I >> 0.9 * R @ ss.days(10) # the rest recover after 10
+severe    = ss.Transition(I, H, dur=ss.days(5), p=0.1)  # 10% go to hospital after 5 days on average
+mild      = ss.Transition(I, R, dur=ss.days(10), p=0.9) # the rest recover after 10
 discharge = H >> R @ ss.days(14)
 covid = ss.Disease(infection, severe, mild, discharge, init_prev=0.001)
 
@@ -144,14 +144,14 @@ Births and deaths of everyone are declared for the population, in `ss.Sim(demogr
 ```{python}
 S, I, R = ss.states(3)
 sirs = ss.Disease(
-    infection = S >> I @ ss.peryear(20) * I,
+    infection = S >> I @ ss.peryear(50) * I,
     recovery  = I >> R @ ss.weeks(2),
     waning    = R >> S @ ss.years(5),
     births    = ss.birth(S, rate=ss.peryear(0.03)),
     deaths    = ss.death(rate=ss.peryear(0.02)),
     init_prev = 0.001,
 )
-sim = ss.Sim(sirs, start='2000', stop='2050', verbose=0).run()
+sim = ss.Sim(sirs, start='2000', stop='2050', dt=ss.weeks(1), verbose=0).run()
 sim.results.sirs.plot()
 ```
 
@@ -159,14 +159,15 @@ This works under every solver. For realistic demographics (fertility and mortali
 
 ### States that are not people
 
-Some of what a disease model tracks is not people: bacteria in water, a mosquito population. These are ordinary states in the same disease. A state that transitions fill or empty, but that no transition connects to the disease's first state, is a count, not people (a state that no transition touches at all is people, like the first): it is never represented as agents, is not part of the population size, and is used in rates as a count (`W.n`). Here is Codeço's cholera model, with bacteria shed into the water by infectious people:
+Some of what a disease model tracks is not people: bacteria in water, a mosquito population. These are ordinary states in the same disease, declared as counts with `people=False` (every other state is people). A count is never represented as agents, is not part of the population size, and is used in rates as a count (`W.n`). Here is Codeço's cholera model, with bacteria shed into the water by infectious people:
 
 ```{python}
 beta = 0.5 # Infection hazard per day at saturating exposure
 K    = 1e5 # Concentration (cells/mL) giving half the maximum hazard
 xi   = 10  # Cells/mL shed per infectious person per day
 
-S, I, R, W = ss.states(4) # W is bacteria in the water
+S, I, R = ss.states(3)
+W = ss.State(people=False) # Bacteria in the water: a count, not people
 cholera = ss.Disease(
     infection = S >> I @ beta * W.n / (W.n + K),
     recovery  = I >> R @ ss.days(5),
@@ -253,6 +254,7 @@ malaria = ss.Disease(
     incubation = Ev >> Iv @ ss.days(10),
     mortality  = Sv + Ev + Iv >> ss.null @ ss.days(10),
     init       = dict(Ih=0.01, Sv=50_000),
+    first      = 'Sh', # The state people start in and are born into
     name       = 'malaria',
 )
 bednet = ss.modify('malaria.rel_sus', multiply=0.1)
@@ -264,7 +266,7 @@ for intv in [None, bednet]:
 `describe()` marks a spontaneous transition that it took as an acquisition, and lists the infected states. To say it outright, give `acquisition=` to the transition: `ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True)` for an importation alongside transmission, which `rel_sus` and vaccines should then reduce, or `ss.Transition(Sh, Vh, rate=ss.perday(0.01), acquisition=False)` for a vaccination in a model with no transmission.
 
 :::{.callout-note}
-`beta` can be given per network and per direction. For sexually transmitted infections, for example, `beta={'mf': [0.25, 0.15]}` sets different male→female and female→male values on the `mf` network. See the [Networks](modules_networks.qmd) page for more.
+`beta` can be given per network and per direction. For sexually transmitted infections, for example, `beta={'sexualnet': ss.peract(m2f=0.25, f2m=0.15)}` sets different male→female and female→male values on the `sexualnet` network. See the [Networks](modules_networks.qmd) page for more.
 :::
 
 :::{.callout-warning}
@@ -298,12 +300,12 @@ Every `ss.Infection` shares a common set of per-agent states and parameters:
 | `infectious` | alias | Agents that can currently transmit (by default, an alias of `infected`) |
 | `rel_sus` | `FloatArr` | Per-agent relative susceptibility (default `1.0`) |
 | `rel_trans` | `FloatArr` | Per-agent relative transmissibility (default `1.0`) |
-| `ti_infected` | `FloatArr` | Time point at which each agent acquired the infection: the end of the step it happened in (`self.ti_entry`), as for a declared disease |
+| `ti_infected` | `FloatArr` | Time point at which each agent acquired the infection: the end of the step it happened in (`self.ti`), as for a declared disease |
 | `beta` | parameter | Transmission rate per contact (per network) |
 | `init_prev` | parameter | Initial fraction of the population infected |
 
 :::{.callout-note}
-In a module written as code, `self.ti` inside `step_state()` and `set_prognoses()` is the time point at the *start* of the step, as in Starsim 3. Results are recorded at the end of the step: in `update_results()`, `self.ti` is the step's end, so an event dated during the step has a time of `self.ti - 1`. Infections are the exception: set `ti_infected` (and schedule what follows) from `self.ti_entry`, the end of the step, since the infection has happened by then; a declared disease dates `ti_I` the same way, so in `update_results()` this step's infections are `ti_infected == self.ti`. (Starsim 3 dated them at the start, so an infection with a duration of one step was never infectious.) See [Analyzers](modules_analyzers.qmd).
+In a module written as code, `self.ti` is the same in every phase of a step: the time point at the step's *end*, where its results are recorded (`self.now` is the date the step starts from). So an event dated with `self.ti` in `step_state()` or `set_prognoses()` has a time of `self.ti` in `update_results()` too. Set `ti_infected` (and schedule what follows) from `self.ti`; a declared disease dates `ti_I` the same way, so in `update_results()` this step's infections are `ti_infected == self.ti`. (As in Starsim 3, an infection with a duration of one step is never infectious.) See [Analyzers](modules_analyzers.qmd).
 :::
 
 ### Infected vs. infectious
@@ -331,7 +333,7 @@ self.define_states(
 )
 ```
 
-A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. Unlike a string alias, it generates an automatic result, so `n_infected` still exists and counts E plus I. See [Aliases](modules_adding.qmd#aliases) for more. (The declared `ss.SEIR` follows the same convention: its `infected` is `E | I`, and only `I` is a source of infection.)
+A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. Unlike a string alias, it generates an automatic result, so `n_infected` still exists and counts E plus I. See [Aliases](modules_adding.qmd#aliases) for more. (The declared `ss.SEIR` follows the same convention: its infected states are `E` and `I`, and only `I` is a source of infection.)
 
 Incidence is a separate concept from any compartment. `ss.Infection.set_prognoses()` records each infection as it happens, so `new_infections` doesn't depend on what a model does with the `ti_` states or how many stages it has. Seed infections from `init_prev` are prevalent cases, and are excluded from incidence.
 

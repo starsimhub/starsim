@@ -133,8 +133,8 @@ A condition can be read on someone's mother. `ss.child(event)` is the event on a
 
 ```{python}
 preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
-anc = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.98), where=preg.P, coverage=0.5, name='anc')
-newborn = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.98), who=preg.birth & ss.mother(anc.positive.since <= ss.years(1), born=True), name='newborn')
+anc = ss.screen(test, where=preg.P, coverage=0.5, name='anc')
+newborn = ss.screen(test, who=preg.birth & ss.mother(anc.positive.since <= ss.years(1), born=True), name='newborn')
 sim = ss.Sim(**pars, demographics=preg, interventions=[anc, newborn])
 sim.run()
 print(f'Newborns tested: {sim.results.newborn.delivered.sum():n}')
@@ -161,7 +161,7 @@ import numpy as np
 
 def oldest_infected(sim):
     """ The 200 oldest people who are infected """
-    infected = sim.diseases.sis.infected.uids
+    infected = sim.diseases.sis.I.uids
     order = np.argsort(sim.people.age[infected])
     return infected[order[-200:]]
 
@@ -173,11 +173,11 @@ sim.plot('sis')
 
 ### Triggers
 
-Anything more complex than a schedule is a function of the sim returning `True` or `False`, passed as `when=` to a delivery or to `ss.modify()`. It is called each step, and can read any result up to the step's start (`[:sim.ti + 1]`):
+Anything more complex than a schedule is a function of the sim returning `True` or `False`, passed as `when=` to a delivery or to `ss.modify()`. It is called each step, and can read any result up to the step's start (`[:sim.ti]`, since this step's results are not written yet):
 
 ```{python}
 def high_prevalence(sim):
-    return sim.results.sis.prevalence[sim.ti] > 0.5
+    return sim.results.sis.prevalence[sim.ti - 1] > 0.5
 
 reactive = ss.modify(sis.pars.beta, multiply=0.3, when=high_prevalence)
 sim = ss.Sim(**pars | dict(diseases=sis), interventions=reactive)
@@ -198,7 +198,7 @@ adults = lambda sim: sim.people.age >= 18
 # More complex eligibility, combining several conditions
 def high_risk(sim):
     adults = sim.people.age >= 18
-    sexually_active = sim.networks.mfnet.participant
+    sexually_active = sim.networks.sexualnet.participant
     return adults & sexually_active
 
 # A condition written with the arrays themselves: evaluated during the run
@@ -249,7 +249,7 @@ class Lockdown(ss.Intervention):
 
     def step(self):
         sim = self.sim
-        prev = sim.results.sis.prevalence[sim.ti]
+        prev = sim.results.sis.prevalence[sim.ti - 1]
         if not self.active and prev > self.pars.threshold:
             self.active = True
             self.until = sim.now + self.pars.hold

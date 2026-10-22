@@ -18,9 +18,9 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `escape: cond`, `cond: is_X` | `where=` on the transition, against the other machine's state | no |
 | `when: calendar_period` | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate | no |
 | `StrictLessThan(total_Q, K)` and the like | A comparison of counts: `(Q.n < K)` | yes |
-| `on_cross`, `produce_offspring`, `set_var` | Custom code on the transition's events (agents) | no |
+| `on_cross`, `produce_offspring`, `set_var` | Offspring into one state: a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)`; anything else, custom code on the transition's events (agents) | no |
 | `statevars` (age, counters) | A stratification, a property of people, or a state array in a subclass | no |
-| `prototypes`, `initial_conditions` | `init=dict(...)` counts on each disease | yes |
+| `prototypes`, `initial_conditions` | `init_n=dict(...)` counts on each disease | yes |
 | `outputs.extra_vars` | Results on the disease, where they are expressions of counts | yes |
 | `aggregation_type` | `solver='binomial'` for `compartment`, `'abm'` for `IBM` and `hybrid` | yes |
 | `productions: {from: A, to: J, rate: b}` (births) | An inflow, `ss.null >> J @ b*A.n`; with several machines, cross them into one disease first, so the newborns enter each machine's state together | no |
@@ -38,7 +38,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 
 ## Worked example
 
-`lingua_franca_design/vignettes/emulsion/quickstart/model.py`: three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.load('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the vignette writes by hand:
+`lingua_franca_design/vignettes/emulsion/quickstart/model.py`: three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.interop.load('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the vignette writes by hand:
 
 ```python
 dates = {'2021-01-01': 0, '2021-04-01': 1, '2021-09-02': 0, '2022-04-01': 1, '2022-09-02': 0}

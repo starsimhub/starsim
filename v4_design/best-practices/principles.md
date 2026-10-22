@@ -1,6 +1,6 @@
 # Principles
 
-The principles the rest of this folder applies. Read this first; every other document assumes it.
+The principles the rest of this folder applies. Read this first; every other document assumes it. The [constitution](../constitution.md) outranks this page: where they differ, the constitution wins.
 
 ## The test
 
@@ -21,8 +21,8 @@ The second statement is a measurement, not a reason to add a feature. When the t
 4. **One vocabulary, several lengths.** The two-line form, the operator form, and the class form are the same words written at different lengths. Never delete the short form to enable a feature that only the long form needs; support both.
 5. **Complexity belongs in the library.** What the user writes may be tiny and what the library does with it may be large.
 6. **Plain Python is always available, and it is not second class.** Real models have parts that are easiest to say as a function or a `step()` method. Those parts work everywhere they can, and the library says where they cannot.
-7. **Expressions are Python, not strings.** A string may name a state or draw an arrow (`'S -> I'`). A formula in a string (Atomica's, or a Polars-style expression) is not ruled out forever, but it gives up checking, completion, and error messages that point at the mistake, so it would need a strong reason and none has come up yet.
-8. **Approximate rather than refuse, and say what was approximated, within the supported subset.** A coarser model that runs is more useful than a refusal, as long as the user is told. This applies to the small declared subset that has a compartmental form (spec 12); outside it, `'auto'` runs the model as agents and an explicitly requested compartmental solver refuses before the run, rather than the library emulating individual histories, parent–child links, queues or remembered selection in compartments (decided 2026-10-20, [oct20/simplify_plan.md](../oct20/simplify_plan.md)). Each approximation is a second way of running a feature, to be built and tested, so one is offered only where it is the standard one ([12-backends.md](../design/12-backends.md#approximations)); where there is none yet (`ss.MFNet` under `solver='ode'`), the run stops with a `CapabilityError` naming a solver that works. There is no size budget yet: a stratification runs however many groups it makes. A limit past which `'auto'` picks agents and `approx=False` refuses is open ([19](../design/19-open-questions.md#b3-solverauto-and-near-compartmental-models)).
+7. **Expressions are Python, not strings.** A string may name a state (`first='S'`), but not draw an arrow: a transition is `S >> I`, and arrow strings were removed (October 21). A formula in a string (Atomica's, or a Polars-style expression) is not ruled out forever, but it gives up checking, completion, and error messages that point at the mistake, so it would need a strong reason and none has come up yet.
+8. **Approximate rather than refuse, and say what was approximated, within the supported subset.** A coarser model that runs is more useful than a refusal, as long as the user is told. This applies to the small declared subset that has a compartmental form (spec 12); outside it, `'auto'` runs the model as agents and an explicitly requested compartmental solver refuses before the run, rather than the library emulating individual histories, parent–child links, queues or remembered selection in compartments (decided 2026-10-20, [oct20/simplify_plan.md](../oct20/simplify_plan.md)). Each approximation is a second way of running a feature, to be built and tested, so one is offered only where it is the standard one ([12-backends.md](../design/12-backends.md#approximations)); where there is none yet, the run stops with a `CapabilityError` naming a solver that works. There is no size budget yet: a stratification runs however many groups it makes. A limit past which `'auto'` picks agents and `approx=False` refuses is open ([19](../design/19-open-questions.md#b3-solverauto-and-near-compartmental-models)).
 9. **A feature that only pays off in one framework's use case does not go in.** This wins over the second statement of the test when they conflict (see above). Most models will be written by an AI, which can hold any vocabulary. The person who has to read the model and decide whether it is right cannot, and it is the reader that the size of the vocabulary has to fit.
 10. **Every core feature earns its place in the library's complexity, not just in the model text.** Principle 5 puts complexity in the library, but the library's size is a cost too: each feature written for every solver is written four to six times, and their combinations are where bugs and slow development come from. A new core feature needs repeated use across independent models, a clear alternative, a statement of which solvers support it, and an explanation of which existing concept it replaces or why it is essential. A few extra lines of ordinary model code (a `step()`, a callback, an explicit state) are fine when they remove a special-purpose framework feature (decided 2026-10-20).
 
@@ -55,12 +55,8 @@ The rule that follows:
 The same model, three ways:
 
 ```python
-# 1. Two lines: arrow strings, states inferred
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
-    init_prev = 0.01,
-)
+# 1. One line: a model from the library, with its parameters
+sir = ss.SIR(beta=0.3, dur_inf=ss.days(10), init_prev=0.01)
 
 # 2. Operators: declare the states, then write the transitions the way they are said aloud
 beta = 0.3
@@ -69,7 +65,7 @@ dur  = ss.days(10)
 S, I, R   = ss.states(3)
 infection = S >> I @ beta * I
 recovery  = I >> R @ dur
-sir = ss.Disease(infection, recovery, init_prev=0.01)
+sir = ss.Disease(infection, recovery, init=dict(I=0.01))
 
 # 3. A class, when there is behavior that is not a transition
 class SIR(ss.Disease):
@@ -82,7 +78,7 @@ class SIR(ss.Disease):
         self.log_something_bespoke()
 ```
 
-All three build the same `ss.Transition` objects, and [model-structure.md](model-structure.md) gives the rules. Form 1 is the fastest way to a running model. Form 2 is the one to teach: it lists the ingredients before the method, it reads like the equations, and it makes the source of infection explicit. Form 3 uses form 2's vocabulary verbatim.
+All three build the same `ss.Transition` objects, and [model-structure.md](model-structure.md) gives the rules. Form 1 is the fastest way to a running model. Form 2 is the one to teach: it lists the ingredients before the method, it reads like the equations, and it makes the source of infection explicit. Form 3 uses form 2's vocabulary verbatim. (Form 1 was once a two-line declaration with arrow strings, `ss.transmission('S -> I', beta=0.3)`, from which the states and the source of infection were guessed; it was removed on October 21, since form 2 is barely longer and guesses nothing.)
 
 ## Guessing defaults
 
@@ -92,9 +88,7 @@ Guess, and print it:
 
 | Situation | Guess | Evidence |
 |---|---|---|
-| The state list, in the two-line form | The states named in the arrows | Nobody writes `'S -> I'` and then wants to be told `I` was not declared. (When states *are* declared, an undeclared name is a typo and is reported.) |
-| Which state is infectious, when not written | States flagged `infectious`, else the destination of the transmission, unless the destination leads on as in an SEIR (then `source=` is required) | Right for SIR, SIS, and SIRS. It cannot be checked, so it is printed; the operator form `beta * I` makes it explicit |
-| Initial conditions | Everyone in the anchor state (the source of the transmission); `init_prev` or `init=` seeds the rest (below 1 a share, 1 or more a number of people); with none given and a transmission, 1% start infected | [odin](../approaches/odin.md) infers the state set from `initial()`; nobody should have to write both 0.99 and 0.01, and a model with nobody infected has no epidemic to show |
+| Initial conditions | Everyone in the first state (`first=`, else the state named `S` or `susceptible`); `init=` seeds the rest as shares of people and `init_n=` as numbers | [odin](../approaches/odin.md) infers the state set from `initial()`; nobody should have to write both 0.99 and 0.01 |
 | Dwell-time distribution | Exponential, when a scalar duration or a rate is given | It is what every ODE means, and what [EMULSION](../approaches/emulsion.md) already assumes; the difference is that we *print* it |
 | Units of a bare number | The model's unit: `unit=`, else the model's typed values (the smallest, if they differ and the model has no bare numbers), else days for a dated sim, else a typed `dt`, `start`, or `stop`, else years for year-like `start` and `stop` (`stop=2020`); if nothing has a unit, time is in timesteps. A step of a week never makes a typed rate per day into one per week | Starsim and [Epydemix](../approaches/epydemix.md) apply the sim's unit today; most frameworks surveyed count in steps. See [time-and-units.md](time-and-units.md) |
 | Mixing, when no network is given | Homogeneous, so `beta` is the textbook transmission rate | It is what an unadorned SIR means |
@@ -102,16 +96,17 @@ Guess, and print it:
 | How modifiers combine | Multiplicatively | See [composition-and-effects.md](composition-and-effects.md) |
 | Results | A count for every state, a flow for every named transition | Starsim's automatic `n_<state>` results; [camdl](../approaches/camdl.md)'s `incidence(transition)` |
 | Goodness of fit | Normalized absolute error against any data supplied | See [calibration.md](calibration.md); nobody should need a likelihood to fit a model |
-| Which states are people | Every state connected to the first one by transitions; a state connected to none of them (a reservoir, a vector population) holds a count | See [03-states-and-transitions.md](../design/03-states-and-transitions.md#states-that-are-not-people) |
+
+Some guesses were taken out on October 21 and 22, because each was right most of the time and wrong silently the rest: the states are declared, never taken from arrow strings; a transmission names its source (`beta * I`); a plain `ss.Disease` seeds nobody (`ss.SIR`, `ss.SIS` and `ss.SEIR` keep `init_prev=0.01`); a disease whose first state is neither named `S` or `susceptible` nor given by `first=` is an error; and every state holds people unless it says `people=False` (a reservoir, a vector population), rather than this being worked out from which states the transitions connect ([03-states-and-transitions.md](../design/03-states-and-transitions.md#states-that-are-not-people)).
 
 Stop, because a guess would be wrong quietly:
 
 - A rate expression whose dimensions do not check ([camdl](../approaches/camdl.md)'s missing-`/N` error).
 - A stratified coverage that would deliver `1 − (1 − f)^P` instead of `f` (camdl E239).
 - A mixing matrix on a partial stratification ([summer2](../approaches/summer2.md) enforces this and is right to).
-- A misspelled state or parameter name, when names were declared; and, when states are inferred from arrows, a state that nothing enters and that starts empty (a typo makes one).
+- A misspelled state or parameter name.
+- A disease with no first state: none named `S` or `susceptible`, and no `first=`.
 - Typed values with different units in a model that also has bare numbers (which unit the bare numbers are in cannot be guessed).
-- The source of a string-form transmission whose destination leads on, as in an SEIR.
 - A keyword number on a disease that names no parameter.
 
 Note what is *not* on that list: asking for a solver the model does not exactly fit. That gets the standard approximation and a one-line note, not an error; see principle 8 and [paradigm-conversion.md](paradigm-conversion.md).
@@ -122,13 +117,13 @@ And in every case, **describe the resolved model**. `sim.describe()` shows the s
 
 The first draft of this folder treated arbitrary Python as an escape hatch to be discouraged. That was wrong for two reasons. Real transitions are often complicated (a probability of death that depends on age, sex, comorbidity, and time since treatment), and real interactions between modules are often more complicated still ("find people who are HIV positive, filter by an age- and sex-dependent probability, and schedule an HIV test at their next antenatal visit"). No closed vocabulary covers these, and pretending otherwise produces a language that handles SIR and nothing a working modeler needs.
 
-So every place a number can go, a function can go, and any module can have a `step()` method that does whatever it needs. What the declared forms buy is that the library can do more with them (draw the diagram, write the equations, run them as an ODE, stratify them). What a function costs is only whatever it actually prevents: a function that works on group totals runs in a compartmental model; one that reaches for individual agents needs agents. The library finds out by trying it, and says so plainly when it does not work.
+So every place a number can go, a function can go, and any module can have a `step()` method that does whatever it needs. What the declared forms buy is that the library can do more with them (draw the diagram, write the equations, run them as an ODE, stratify them). What a function costs is only whatever it actually prevents: a function that works on group totals runs in a compartmental model; one that reaches for individual agents needs agents. The library checks this from the model's structure when the sim is built (it no longer tries a throwaway run), and says so plainly when it does not work.
 
 ## Error messages are part of the language
 
 camdl's E237/E238/E239 encode hard-won knowledge about stratified coverage and deliver it exactly when the mistake is made. This matters more for us than for camdl, because a substantial fraction of lingua franca models will be written by an AI that will otherwise produce the wrong answer with complete confidence.
 
-The requirement: **every error names the thing that is wrong in the user's own terms, says what exists where that helps (the declared states, the parameters), and states the fix.** Not `ValueError: shape mismatch`. Each error is a class (`ss.UnknownState`), so it can be caught by name; the list is [15-errors.md](../design/15-errors.md).
+The requirement: **every error names the thing that is wrong in the user's own terms, says what exists where that helps (the declared states, the parameters), and states the fix.** Not `ValueError: shape mismatch`. Each error is a class (`ss.errors.UnknownState`), so it can be caught by name; the list is [15-errors.md](../design/15-errors.md).
 
 ## AI-native means four concrete things
 

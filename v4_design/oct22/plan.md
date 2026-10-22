@@ -152,7 +152,7 @@ Cliff on tests: "can probably skip the regression tests; the test suite should n
 
 ## Stale
 
-Out of date after this plan's changes, and left for F3–F4 (constitution, development principle 1). Carried over from the [October 21 list](../oct21/plan.md#stale), plus what this plan added. Add to it rather than fixing each on the way. The worklogs list file and line references.
+*Updated 2026-10-22, in [stale_update.md](stale_update.md): everything below in this repo is done, and what is in other repos is written up in [stale_other_repos.md](stale_other_repos.md).* Out of date after this plan's changes, and left for F3–F4 (constitution, development principle 1). Carried over from the [October 21 list](../oct21/plan.md#stale), plus what this plan added. Add to it rather than fixing each on the way. The worklogs list file and line references.
 
 From October 21, still true:
 - [best-practices/principles.md](../best-practices/principles.md): arrow strings, `ss.transmission`/`ss.progression`, and `init_prev` with a 1% default.

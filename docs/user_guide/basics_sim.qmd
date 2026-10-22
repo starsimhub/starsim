@@ -33,7 +33,7 @@ A declared disease can be run in several ways, chosen with the `solver` argument
 | `'tau'` | Tau-leaping: close to the exact algorithm, and much faster for a run of many events |
 | `'abm'` | Agents |
 
-A sim runs as agents if it contains something that needs individual agents: a contact network (such as `networks='random'`), `n_agents=`, or a module written as code. `sim.describe()` shows which solvers can run the model, and why, before anything runs:
+A sim runs as agents if it contains something that needs individual agents: a contact network (such as `networks='random'`), `n_agents=`, or a module written as code (other than an analyzer). `sim.describe()` shows which solvers can run the model, and why, before anything runs:
 
 ```{python}
 import starsim as ss
@@ -84,7 +84,7 @@ An important function of the `Sim` class is that it controls the order in which 
 10. Any `Analyzer` modules have their `step` method called
 11. Calls are made to `finish_step` for the `Modules`, the `People`, and the `Sim`.
 
-If you want to see more details, have a look at `sim.loop.to_df()` (after calling `sim.init()`) and it will show a dataframe of every step in the simulation. You can also use `sim.loop.plot()` to visualize each step. During a step, `sim.ti` is the index of the time point at the start of the step; the results of the step are recorded at the end of it, at `sim.ti + 1`.
+If you want to see more details, have a look at `sim.loop.to_df()` (after calling `sim.init()`) and it will show a dataframe of every step in the simulation. You can also use `sim.loop.plot()` to visualize each step. During a step, `sim.ti` is the index of the time point at the end of the step, the same in every phase of it, so the results of the step are recorded at `sim.ti`; `sim.now` is the time at the start of the step.
 
 Note that there are two separate update calls for diseases, `step_state` and then `step`. The `step_state` method happens _before_ transmission, and the `step` method typically handles transmission. For a declared disease, Starsim does both from the model's transitions. In a disease written as code, `step_state` typically handles disease progression, as in this (simplified) example from Starsim 3's SIR model, which is available as `ssl.AgentSIR`:
 

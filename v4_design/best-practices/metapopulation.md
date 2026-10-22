@@ -4,10 +4,10 @@
 
 1. **Space is a stratification dimension like any other**, not a separate kind of model. Movement between patches is optional: space is useful with it (commuting, migration) and without it (wastewater catchments, malaria driven by local environment).
 2. **Separate the disease process from the movement process from the geography.** epymorph's three-way factoring is the cleanest separation in the review.
-3. **Mobility is specifiable by its generating model**, named and parameterized, not just a matrix. Gravity is built (`ss.gravity()`); radiation, Stouffer, and competing destinations are deferred from v1, and a matrix covers them.
+3. **Mobility is specifiable by its generating model**, named and parameterized, not just a matrix. Gravity is built (`ss.geo.gravity()`); radiation, Stouffer, and competing destinations are deferred from v1, and a matrix covers them.
 4. **Real movement data is a first-class input**, not a fallback. Where a register exists, use it.
 5. **Distinguish commuting from migration.** People who return are not people who move.
-6. **Geography resolves from a named source with provenance** (`ss.geo('Kenya', level=1)`, from `starsim_data`), or is given directly (names, populations, and positions or distances).
+6. **Geography resolves from a named source with provenance** (`ss.geo.geography('Kenya', level=1)`, from `starsim_data`), or is given directly (names, populations, and positions or distances).
 
 ## Why
 
@@ -39,12 +39,12 @@ Not every spatial model is about people moving. Wastewater surveillance needs in
 
 ## The specification
 
-Space as a dimension (`sim.stratify(patch=ss.geo(...))`, with or without `mobility=`), `ss.geo`, `ss.gravity`, and `ss.Mobility` (commuting, visiting, migration, a movement register, and LASER's moving force of infection, `kind='force'`) are specified in [06-routes.md](../design/06-routes.md) and [05-dimensions.md](../design/05-dimensions.md). Values by patch are `ss.by(patch=...)` ([04-parameters.md](../design/04-parameters.md)); a quantity that lives in each patch and is not people (wastewater, mosquitoes) is a state that holds a count ([03-states-and-transitions.md](../design/03-states-and-transitions.md#states-that-are-not-people)), split by place and not by properties of people.
+Space as a dimension (`sim.stratify(patch=ss.geo.geography(...))`, with or without `mobility=`), `ss.geo.geography`, `ss.geo.gravity`, and `ss.geo.Mobility` (commuting, visiting, migration, a movement register, and LASER's moving force of infection, `kind='force'`) are specified in [06-routes.md](../design/06-routes.md) and [05-dimensions.md](../design/05-dimensions.md). Values by patch are `ss.by(patch=...)` ([04-parameters.md](../design/04-parameters.md)); a quantity that lives in each patch and is not people (wastewater, mosquitoes) is a state that holds a count ([03-states-and-transitions.md](../design/03-states-and-transitions.md#states-that-are-not-people)), split by place and not by properties of people.
 
 ## Trade-offs
 
 - **Patch counts multiply compartments.** 47 counties × 16 age groups × 3 states is 2,256 compartments before anything interesting happens. Report the count; note that an agent-based run does not have this problem.
-- **A mobility model needs distances, and distances need geography.** So `ss.gravity()` without a geo is an error (`ss.NoGeography`). This is one of the few places where a guess is not available, because a gravity model over unknown distances is nothing.
+- **A mobility model needs distances, and distances need geography.** So `ss.geo.gravity()` without a geo is an error (`ss.errors.NoGeography`). This is one of the few places where a guess is not available, because a gravity model over unknown distances is nothing.
 - **Time-share commuting ignores the time of day.** It cannot say that commuters mix with workplace contacts by day and household contacts by night. A model that needs that uses a sub-daily `dt` and separate daytime and nighttime mixing.
 - **Travelers in transit are out of scope for now.** People on the train are in neither their home patch nor their destination, and neither `commute` nor `migrate` represents them. MEmilio has a paper on it. It is too complex for v1; a model that needs it can add a transit patch by hand.
 - **Making mobility optional removes a safety check.** A user who meant to couple the patches and forgot `mobility=` gets independent epidemics and no warning. `describe()` lists the mobility (or "none"), which is where to look.

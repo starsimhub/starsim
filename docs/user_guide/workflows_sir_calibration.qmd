@@ -80,7 +80,7 @@ Data is attached to results by name: the column `prevalence` is compared with th
 
 `sim.calibrate()` fits every parameter that has bounds to every result that has data. Without a likelihood, it minimizes the normalized absolute error between the model and the data. Here we give it a likelihood instead: each survey is a binomial draw from the 500 people surveyed, with the model's prevalence as the probability of testing positive. With `ss.binom(n=...)` as the likelihood, the data are the numbers who tested positive, as above.
 
-Since the model runs as agents, the fit uses Optuna, scoring each set of values by the mean of several runs with the same random seeds. The model starts from `beta=0.1` and `gamma=0.05`, away from the true values.
+Since the model runs as agents, the fit uses Optuna, scoring each set of values by one run, with a fresh random seed at each point. The model starts from `beta=0.1` and `gamma=0.05`, away from the true values.
 
 ```{python}
 sim = make_sim(data=data)

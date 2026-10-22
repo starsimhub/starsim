@@ -80,7 +80,7 @@ import starsim as ss
 import starsim.interop
 ss.options(jupyter=True)
 
-beta     = ss.seasonal(mean=0.05, amplitude=0.2, peak=-60/365) # Highest on 1 Jan; day 0 is 2 Mar
+beta     = ss.seasonal(mean=0.05, amplitude=0.2, peak=ss.days(-60)) # Highest on 1 Jan; day 0 is 2 Mar
 contacts = ss.timeseries({0: 1.0, 29: 1.0, 30: 0.3}, mode='cosine') # Cut by 70% over day 29, as MEmilio's damping
 S, E, INS, ISy, ISev, ICr, R = ss.states(7)
 excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1) # People becoming symptomatic each day, beyond the 35 that can be traced (to 5 times that)
@@ -94,7 +94,7 @@ secir = ss.Disease(
     critical  = ss.Transition(ISev, [ICr, R], dur=ss.days(9.5), p=[0.25, 0.75]),
     recovery  = ss.Transition(ICr, R, dur=ss.days(7.1), p=0.7),
     death     = ss.Transition(ICr, ss.null, dur=ss.days(7.1), p=0.3),
-    init      = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
+    init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2']) # Three groups of equal size, each with a third of every state
 mixing = ss.contacts(age=np.full((3, 3), 10/3)) # 10 contacts a day, spread evenly over the groups
@@ -132,14 +132,14 @@ These are from Starsim's switching demo for MEmilio users (`tests/switching/test
 
 | Task | Today |
 |---|---|
-| Counties by age with commuting (`ss.Mobility(matrix=..., kind='commute')`) | **Works**: national peak within 0.2% of MEmilio's at 50 counties |
+| Counties by age with commuting (`ss.geo.Mobility(matrix=..., kind='commute')`) | **Works**: national peak within 0.2% of MEmilio's at 50 counties |
 | Speed at 400 counties × 6 ages | **Works**: 0.7 s against MEmilio's 1.54 s, with the time growing about in proportion to the number of counties |
 | Dynamic NPIs by county: a county whose 7-day incidence passes 200 per 100,000 gets its own damping for at least 14 days | **Works**: `incidence = secir.symptoms.incidence(over=ss.days(7), by='patch')` and `ss.modify(beta, multiply=0.6, where=incidence > 200e-5, hold=ss.days(14))`; the peak falls to 20% of the peak without NPIs, as with a rule written by hand. This is run from Python each step, not in the compiled kernels |
 | A parameter study: each run draws its parameters from their distributions, with percentiles by county | **Works**: `ss.par(1.0, prior=ss.uniform(0.75, 1.25))`, `ss.parallel(sim, n_runs=10, priors=True)`, and `msim.results.secir.n_ISy.select(patch='c005').quantiles([0.05, 0.25, 0.5, 0.75, 0.95])` |
 | Import a graph (`MobilityGraph`) or a `GraphParameterStudy` | **Works** (see below) |
 | Import an `osecirvvs` model | **Not yet** |
-| Commuters with symptoms commuting less, as MEmilio has them | **Not yet**: `ss.Mobility` cannot say it, and this is most of the county-by-county difference above |
-| German counties by name, with Destatis populations and the commuter matrix (`ss.geo('Germany', level=2)`) | **Not yet**: Starsim's data have no German level-2 populations or commuting |
+| Commuters with symptoms commuting less, as MEmilio has them | **Not yet**: `ss.geo.Mobility` cannot say it, and this is most of the county-by-county difference above |
+| German counties by name, with Destatis populations and the commuter matrix (`ss.geo.geography('Germany', level=2)`) | **Not yet**: Starsim's data have no German level-2 populations or commuting |
 | A posterior: NUTS on the ODE with gradients, or particle MCMC on a stochastic model | **Works**, with `sim.calibrate(method='nuts')` or `method='pmcmc'`; MEmilio has no fitting of its own |
 
 ## Bringing your model in

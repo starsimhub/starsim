@@ -54,7 +54,7 @@ These are from Starsim's switching demo for Starsim 3 users (`tests/switching/te
 | Use Starsim 4 verbs on a disease written as code: `ss.modify(hiv.rel_trans, multiply=0.5, start=2005)`, conditions on its arrays (`where=hiv.cd4 < 200`), scenarios with `ss.parallel()` and `msim.diff('baseline')` | **Works**, on the library HIV written as code alongside a declared SIS |
 | Fit with `sim.calibrate()`, with bounds given on a parameter (`ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))`) | **Works**, for the declared `ss.SIS` and for `ssl.AgentSIS` |
 | Port a disease with its `beta` dict copied verbatim | **Warns**: the result is about 12 times too low at monthly steps, and Starsim 4 says why |
-| Port one disease at a time | **Works**: a sim can mix diseases written as code and declared ones, and one declared disease brings `ss.parallel()` sweeps and `diff()` to the whole sim |
+| Port one disease at a time | **Works**: a sim can mix diseases written as code and declared ones, and `ss.parallel()` sweeps and `diff()` work on the whole sim |
 | Speed of a model written as code | **Faster**: an unchanged Starsim 3 model with HIV, an SIS, an SIRS, two networks, demographics, and interventions ran about twice as fast under Starsim 4 (2.2 s against 4.9 s at 3,000 agents) |
 | Speed of a declared disease run as agents | **Slower**: 1.4 to 1.6 times slower than the same model written as code, at 3,000 to 30,000 agents; making them equal is planned |
 | Per-agent quantities that change continuously (a CD4 count, a level of immunity, time since an event) | **No declared form**: keep them as code, which is a supported choice |

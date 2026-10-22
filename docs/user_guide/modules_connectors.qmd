@@ -17,7 +17,7 @@ There are two ways to write an interaction, and both are first-class:
 ss.modify(target, multiply=None, add=None, set=None, where=None, start=None, stop=None, when=None)
 ```
 
-`ss.modify(hiv.rel_trans, multiply=2.7, where=sis.infected)` reads as "for people infected with SIS, multiply HIV transmissibility by 2.7". A modifier is passed to the sim in `connectors=` (interactions that are part of the biology) or `interventions=` (policy); the two lists differ only in where the modifier runs in the loop.
+`ss.modify(hiv.rel_trans, multiply=2.7, where=sis.I)` reads as "for people infected with SIS, multiply HIV transmissibility by 2.7". A modifier is passed to the sim in `connectors=` (interactions that are part of the biology) or `interventions=` (policy); the two lists differ only in where the modifier runs in the loop.
 
 | Argument | Meaning |
 |---|---|
@@ -31,7 +31,7 @@ On a per-person quantity (`rel_sus`, `rel_trans`) only `multiply=` is accepted; 
 
 ### Conditions
 
-A condition says who a modifier applies to. It can be written directly against the modules' arrays, before the sim exists: `hiv.cd4 < 200`, `sis.infected`, `(sim.people.age > 65) & ~sir.vaccinated`. These are *lazy* conditions: they are evaluated each time they are needed during the run, against the sim they are running in, so the same condition works in every copy of a sim. Combine them with `&`, `|`, and `~` (not `and`, `or`, `not`). Anything else can be written as a function of the sim returning a boolean array, e.g. `where=lambda sim: sim.people.age < 15`.
+A condition says who a modifier applies to. It can be written directly against the modules' arrays, before the sim exists: `hiv.cd4 < 200`, `sis.I`, `(sim.people.age > 65) & ~sir.vaccinated`. These are *lazy* conditions: they are evaluated each time they are needed during the run, against the sim they are running in, so the same condition works in every copy of a sim. Combine them with `&`, `|`, and `~` (not `and`, `or`, `not`). Anything else can be written as a function of the sim returning a boolean array, e.g. `where=lambda sim: sim.people.age < 15`.
 
 ### An example: HIV and SIS
 
@@ -46,8 +46,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Create disease models
-hiv = ssl.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
-sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.0008, f2m=0.0004)}, init_prev=0.2)
+sis = ss.SIS(beta={'sexualnet': ss.peract(m2f=0.1, f2m=0.05)}, init_prev=0.05)
 
 # The interactions
 hiv_sis = [
@@ -55,12 +55,12 @@ hiv_sis = [
     ss.modify(sis.rel_sus,   multiply=2.5, where=hiv.cd4 < 200), # ... and 5x (2 x 2.5) with AIDS
     ss.modify(sis.rel_trans, multiply=1.5, where=hiv.cd4 < 500), # People with HIV are 1.5x more likely to transmit SIS
     ss.modify(sis.rel_trans, multiply=2,   where=hiv.cd4 < 200), # ... and 3x with AIDS
-    ss.modify(hiv.rel_sus,   multiply=2.7, where=sis.infected),  # People with SIS are 2.7x more likely to acquire HIV
-    ss.modify(hiv.rel_trans, multiply=2.7, where=sis.infected),  # ... and to transmit it
+    ss.modify(hiv.rel_sus,   multiply=2.7, where=sis.I),  # People with SIS are 2.7x more likely to acquire HIV
+    ss.modify(hiv.rel_trans, multiply=2.7, where=sis.I),  # ... and to transmit it
 ]
 
 # Create simulations with and without the interactions
-kw = dict(diseases=[hiv, sis], networks=ss.MFNet(), n_agents=2000, verbose=0)
+kw = dict(diseases=[hiv, sis], networks=ss.SexualNet(), n_agents=2000, verbose=0)
 s1 = ss.Sim(label='Without connector', **kw)
 s2 = ss.Sim(label='With connector', connectors=hiv_sis, **kw)
 
@@ -171,8 +171,8 @@ class SIS_HIV(ss.Connector):
         # Get disease modules
         hiv = self.sim.diseases.hiv
         sis = self.sim.diseases.sis
-        sis_pos = (sis.infected).uids
-        sis_neg = (sis.susceptible).uids
+        sis_pos = (sis.I).uids
+        sis_neg = (sis.S).uids
 
         # Modify HIV relative susceptibility based on SIS infection status
         hiv.rel_sus[sis_neg] = 1.0  # Reset to baseline
@@ -221,14 +221,14 @@ class check_connector(ss.Analyzer):
         return fig
 
 # Create disease models
-hiv = ssl.HIV(beta=dict(mf=0.1, random=0), init_prev=0.001)
-sis = ss.SIS(beta=dict(mf=0.0, random=0.05))
-mf = ss.MFNet(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(5)))
+hiv = ssl.HIV(beta=dict(sexualnet=0.1, random=0), init_prev=0.001)
+sis = ss.SIS(beta=dict(sexualnet=0.0, random=0.05))
+sexual = ss.SexualNet(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(5)))
 
 # Configure simulation parameters
 pars = dict(
     diseases = [hiv, sis],
-    networks = [mf, 'random'],
+    networks = [sexual, 'random'],
     analyzers = check_connector(),
     verbose = 0,
 )
@@ -249,7 +249,7 @@ for sim in msim.sims:
 In this example, the connector modifies HIV susceptibility based on SIS infection status. You can see that when the connector is active, HIV transmission is significantly reduced because SIS-infected individuals cannot acquire HIV.
 
 :::{.callout-warning}
-A connector that *sets* an array (`hiv.rel_sus[sis_neg] = 1.0`) also erases whatever any other module set, such as a vaccine's protection or another connector's effect. Prefer a modifier, which multiplies a base it never overwrites: the connector above is `ss.modify(hiv.rel_sus, multiply=0, where=sis.infected)`. If code needs to decide who is affected (with memory, or several steps of logic), let `step()` set a boolean state and have a modifier read it.
+A connector that *sets* an array (`hiv.rel_sus[sis_neg] = 1.0`) also erases whatever any other module set, such as a vaccine's protection or another connector's effect. Prefer a modifier, which multiplies a base it never overwrites: the connector above is `ss.modify(hiv.rel_sus, multiply=0, where=sis.I)`. If code needs to decide who is affected (with memory, or several steps of logic), let `step()` set a boolean state and have a modifier read it.
 :::
 
 Connectors can define parameters with `define_pars()`, like any other module, to control the strength and nature of the interactions:
@@ -292,13 +292,13 @@ class HIV_SIS(ss.Connector):
         sis.rel_trans[cd4 < 200] = self.pars.rel_trans_sis_aids
 
         # People with SIS are more likely to acquire and transmit HIV
-        hiv.rel_sus[sis.infected] = self.pars.rel_sus_hiv_sis
-        hiv.rel_trans[sis.infected] = self.pars.rel_trans_hiv_sis
+        hiv.rel_sus[sis.I] = self.pars.rel_sus_hiv_sis
+        hiv.rel_trans[sis.I] = self.pars.rel_trans_hiv_sis
         return
 
 kw = dict(
-    diseases = [ssl.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2), ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)],
-    networks = ss.MFNet(),
+    diseases = [ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.0008, f2m=0.0004)}, init_prev=0.2), ss.SIS(beta={'sexualnet': ss.peract(m2f=0.1, f2m=0.05)}, init_prev=0.05)],
+    networks = ss.SexualNet(),
     n_agents = 2000,
     verbose = 0,
 )
@@ -317,18 +317,18 @@ Note that it resets every array to 1 on each step, which erases anything else th
 
 ## Combining interactions with interventions
 
-Modifiers keep working when an intervention changes who they apply to. Here SIS is treated from 2020 on with `ss.treat()`. Because the effect of SIS on HIV is a modifier with the condition `sis.infected`, it stops applying to each person as soon as they are cured, with nothing to reset by hand:
+Modifiers keep working when an intervention changes who they apply to. Here SIS is treated from 2020 on with `ss.treat()`. Because the effect of SIS on HIV is a modifier with the condition `sis.I`, it stops applying to each person as soon as they are cured, with nothing to reset by hand:
 
 ```{python}
 def make_sim(label, connectors=None, interventions=None):
-    hiv = ssl.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
-    sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+    hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.0008, f2m=0.0004)}, init_prev=0.2)
+    sis = ss.SIS(beta={'sexualnet': ss.peract(m2f=0.1, f2m=0.05)}, init_prev=0.05)
     if connectors:
         connectors = [
-            ss.modify(hiv.rel_sus,   multiply=2.7, where=sis.infected),
-            ss.modify(hiv.rel_trans, multiply=2.7, where=sis.infected),
+            ss.modify(hiv.rel_sus,   multiply=2.7, where=sis.I),
+            ss.modify(hiv.rel_trans, multiply=2.7, where=sis.I),
         ]
-    return ss.Sim(label=label, diseases=[hiv, sis], networks=ss.MFNet(), connectors=connectors,
+    return ss.Sim(label=label, diseases=[hiv, sis], networks=ss.SexualNet(), connectors=connectors,
                   interventions=interventions, n_agents=2000, start='2000', stop='2040', verbose=0)
 
 treat_sis = ss.treat(ss.Treatment(cure=0.9), disease='sis', coverage=0.8, interval=ss.years(1), start='2020')

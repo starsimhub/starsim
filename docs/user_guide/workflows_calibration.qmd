@@ -62,7 +62,7 @@ sim.plot()
 
 ## The data
 
-Data is attached to results by name. The data has a time column (`date`, `year`, `t`, or `time`) and one column per data series, named like the result it corresponds to: here `prevalence`, the result declared above. With several modules, a column that is ambiguous is named with its module, e.g. `sir.prevalence`.
+Data is attached to results by name. The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column per data series, named like the result it corresponds to: here `prevalence`, the result declared above. With several modules, a column that is ambiguous is named with its module, e.g. `sir.prevalence`.
 
 ```{python}
 data = pd.DataFrame(dict(
@@ -72,13 +72,13 @@ data = pd.DataFrame(dict(
 data
 ```
 
-The data need not be on the model's time step, and nothing says how to align the two: each result knows whether it is a stock or a flow. A stock or a ratio, like prevalence, is compared with the model's value at the data's time; a flow, like weekly reported cases, is compared with the model's flow summed over each interval of the data. A column that matches no result is an error that lists the closest result names, so a typo in a header is caught.
+The data need not be on the model's time step, and nothing says how to align the two: each result knows whether it is a stock or a flow. A stock or a ratio, like prevalence, is compared with the model's value at the data's time; a flow, like weekly reported cases, is compared with the model's flow summed over each interval of the data. Data by calendar year is compared over the year it names: a flow summed over it, and a stock or a ratio averaged over it. A column that matches no result gets a note that lists the closest result names when the sim is initialized, and is an error when a fit compares the data with the results, so a typo in a header is caught.
 
 Real files rarely arrive with matching headers, so `ss.simdata()` renames columns on the way in, e.g. `ss.simdata('moh_2020.csv', aliases=dict(prevalence='Prevalence (survey)', date='Survey date'), ignore_extra=True)`.
 
 ## Calibrating
 
-Now we attach the data to the sim, and calibrate. Since the model runs as agents, the fit uses Optuna, scoring each set of values by one run (`n_runs=` gives the mean of several) with a fresh random seed at each point: Optuna's search learns from the points near each one, so this averages out chance, where the same seed everywhere would fit that one seed's realization. For the same reason, the best values are those whose neighbors score lowest, not the single luckiest trial.
+Now we attach the data to the sim, and calibrate. Since the model runs as agents, the fit uses Optuna, scoring each set of values by one run (`n_runs=` gives the mean of several) with a fresh random seed at each point: Optuna's search learns from the points near each one, so this averages out chance, where the same seed everywhere would fit that one seed's realization. For the same reason, the best values are those whose neighbors score lowest, not the single luckiest trial. For a longer fit, `n_workers=4` runs the trials in 4 processes at once, and `storage='fit.log'` keeps them in a file, so that calling `calibrate()` again with the same file resumes the fit.
 
 ```{python}
 sim = make_sim(data=data)

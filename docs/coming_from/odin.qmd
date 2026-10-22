@@ -67,7 +67,7 @@ ages = [0, 5, 18, 65]
 
 S, E, I, R = ss.states(4)
 infection = S >> E @ ss.seasonal(mean=ss.perday(0.012), amplitude=0.3, peak=0) * I
-seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init=dict(I=ss.by(age=[10, 0, 0, 0])))
+seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0, 0])))
 seir.stratify(age=ages, split=pop/pop.sum())
 sim = ss.Sim(seir, networks=ss.contacts(m, bands=ages), total_pop=pop.sum(), unit='day', dt=0.25, stop=365,
              solver='binomial', use_aging=False, verbose=0)
@@ -122,7 +122,7 @@ These are from Starsim's switching demo for odin users (`tests/switching/test_od
 | A fitted parameter inside `ss.seasonal(mean=)` | **Works** |
 | A fixed delay (`delay()`) | **Works**: `ss.constant(ss.days(14))` is a conveyor of whole steps under every solver, exact at each step, and the ODE's release within a step is exact to second order (above) |
 | Any difference equation (a running maximum, a state that is not a flow) | **Partly**: Python in a `step()` of a module written as code; a value it keeps can be read by a function in a rate, which runs as agents |
-| The same model as agents, `sim.new(solver='abm', n_agents=20_000)` | **Fails**: 10 initial infections among a million people are 0.2 of an agent at this scale, which rounds to none with no note, so there is no epidemic |
+| The same model as agents, `sim.new(solver='abm', n_agents=20_000)` | **Fails**: 10 initial infections among a million people are 0.2 of an agent at this scale, which rounds to none (with a note), so there is no epidemic |
 | Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
 
 ## Bringing your model in

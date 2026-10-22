@@ -71,10 +71,10 @@ beta = ss.lognorm_ex(mean=0.05, std=0.01)         # a distribution: varies betwe
 beta = ss.timeseries({'2020-01-01': 0.05, '2021-01-01': 0.02}) # varies in time
 beta = ss.seasonal(mean=0.05, amplitude=0.3, peak='January')   # a yearly cycle
 beta = ss.by(age=[0.08, 0.05, 0.03])              # one value per stratum (here, per age group)
-beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03 # a function of the sim
+beta = lambda sim: ss.perday(0.05 if sim.now < ss.date('2020-03-15') else 0.03) # a function of the sim
 ```
 
-Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a source. For example, here transmission falls on a date, given as a time series and as a function of the sim, which give the same answer:
+A function returns a typed value: when the sim's unit is only inferred from the typed values in the model, a bare number returned by a function is refused, since its unit is not known (give the sim `unit=` to use bare numbers). Any of these can be wrapped in `ss.par(...)` to give it a name, bounds, or a source. For example, here transmission falls on a date, given as a time series and as a function of the sim, which give the same answer:
 
 ```{python}
 def make_sir(beta):
@@ -89,7 +89,7 @@ def make_sir(beta):
 betas = dict(
     constant   = 0.3,
     timeseries = ss.timeseries({'2020-01-01': 0.3, '2020-01-20': 0.1}),
-    function   = lambda sim: 0.3 if sim.now < ss.date('2020-01-20') else 0.1,
+    function   = lambda sim: ss.perday(0.3 if sim.now < ss.date('2020-01-20') else 0.1),
 )
 for label, beta in betas.items():
     sim = ss.Sim(make_sir(beta), start='2020-01-01', stop='2020-07-01', verbose=0).run()
@@ -100,7 +100,7 @@ A distribution means two different things depending on where it is put. As a val
 
 ## Parameters that depend on the agent
 
-A function given to a slot can also take the agents it is asked about, `fn(sim, uids)`, and return one value per agent. For example, in reality the duration of infection of a disease might vary by age. We could model this as follows, with the duration in years equal to a tenth of the person's age:
+A function given to a slot can also take the agents it is asked about, `fn(sim, uids)`, and return one value per agent. For example, in reality the duration of infection of a disease might vary by age. We could model this as follows, with the duration in years equal to a tenth of the person's age (a function given as `dur=` on its own is the mean of an exponential dwell time; `ss.constant()` makes it exactly the value it gives):
 
 ```{python}
 import sciris as sc
@@ -109,7 +109,7 @@ import matplotlib.pyplot as plt
 S, I, R = ss.states('S I R')
 sir = ss.Disease(
     infection = ss.Transition(S, I, rate=ss.peryear(0.5) * I),
-    recovery  = ss.Transition(I, R, dur=lambda sim, uids: ss.years(sim.people.age[uids] / 10)),
+    recovery  = ss.Transition(I, R, dur=ss.constant(lambda sim, uids: ss.years(sim.people.age[uids] / 10))),
     init_prev = 0.05,
 )
 sim = ss.Sim(n_agents=20e3, start='2000', stop='2010', diseases=sir, networks='random')
@@ -142,7 +142,7 @@ A function that uses `uids` or a per-agent attribute such as age needs agents, s
 
 ## Parameters of modules written as code
 
-When you write a module as code (for example a disease that subclasses `ss.Infection`), you define the default format of its parameters with `self.define_pars()`:
+When you write a module as code (for example a disease that subclasses `ss.Disease`, or `ss.Infection` for one that transmits, as here), you define the default format of its parameters with `self.define_pars()`:
 
 ```{python}
 class MySIR(ss.Infection):

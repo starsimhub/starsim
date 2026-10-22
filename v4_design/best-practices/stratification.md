@@ -26,7 +26,7 @@ From the [summer2 review](../approaches/summer2.md):
 
 > **A closed vocabulary of named flow kinds.** … An open "rate expression" cannot be stratified automatically; a named flow kind can.
 
-This is the connection between this document and [model-structure.md](model-structure.md). The library can split a transition correctly only if it knows what the transition is: where it starts, where it ends, and whether its rate involves an infectious state. An `ss.Transition` carries exactly that, whichever way it was written (`ss.transmission('S -> I', ...)`, `S >> I @ beta * I`, or in full). Custom code in a function or a `step()` method is not split automatically: in a stratified compartmental run it is called on the groups, and works if it only uses things that groups have.
+This is the connection between this document and [model-structure.md](model-structure.md). The library can split a transition correctly only if it knows what the transition is: where it starts, where it ends, and whether its rate involves an infectious state. An `ss.Transition` carries exactly that, whichever way it was written (`S >> I @ beta * I`, or in full as `ss.Transition(S, I, rate=beta * I)`). Custom code in a function or a `step()` method is not split automatically: in a stratified compartmental run it is called on the groups, and works if it only uses things that groups have.
 
 ### Agent properties and compartment axes are the same declaration
 

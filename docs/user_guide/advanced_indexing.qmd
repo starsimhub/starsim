@@ -152,7 +152,7 @@ print((imm.mutant > 0.5).uids) # Convert a single column to UIDs
 3. **Use `.uids` property of boolean arrays** to get UIDs of agents matching criteria
 4. **Use `.true()` and `.false()` methods** for cleaner boolean array handling
 5. **Remember that integer indexing works on active agents**, not UIDs
-6. **Use `ti_*` arrays for "who just changed state"** - e.g. in a module's `step()`, agents who entered `I` on the previous step are `(sir.ti_I == self.ti).uids`, since an infection is dated at the end of the step in which it happened (in a disease written as code from the library, likewise `(sir.ti_infected == self.ti).uids`), rather than tracking the previous set by hand
+6. **Use `ti_*` arrays for "who just changed state"** - e.g. in an intervention's `step()`, agents infected during the previous step are `(sir.ti_I == self.ti - 1).uids`, since an infection is dated at the end of the step in which it happened and `self.ti` is the end of the current step (in an analyzer, which runs after the diseases, those infected during this step are `(sir.ti_I == self.ti).uids`; in a disease written as code from the library, likewise with `ti_infected`), rather than tracking the previous set by hand
 
 ### Don't:
 

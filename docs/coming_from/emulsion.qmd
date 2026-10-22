@@ -111,7 +111,7 @@ S, I, R = ss.states('S I R')
 sir = ss.Disease(
     infection = ss.Transition(S, I, rate=ss.perday(0.5) * I),
     recovery  = ss.Transition(I, R, rate=ss.perday(0.1)),
-    init      = dict(I=1),
+    init_n    = dict(I=1),
 )
 compartment = ss.Sim(sir, total_pop=100, stop=ss.days(100), solver='binomial', verbose=0)
 ibm         = ss.Sim(sir, total_pop=100, stop=ss.days(100), solver='abm', verbose=0)
@@ -156,7 +156,7 @@ These are from Starsim's switching demo for EMULSION users (`tests/switching/tes
 | A newborn at each farrowing | **Works as agents** for one state: `ss.birth(NB, per=farrowing, n=10)` in the same disease |
 | Newborns by prototype across several state machines, with probabilities from the mother's state (`produce_offspring`) | **Fails**: not yet; the quickstart written by hand with it does not run |
 | Births from one stratum into another (`productions: {from: A, to: J}`) as compartments | **Fails**: a birth rate by level raises an error that says this cannot be declared yet; crossing the machines by hand into six states works and agrees (above) |
-| Herds linked by a trade register, with selective sales by state (`states='S,R'`) | **Works**: `ss.Mobility(data=register)`; 2,000 herds with 26,486 sales in 1.15 s a run as compartments, and the same within noise as agents |
+| Herds linked by a trade register, with selective sales by state (`states='S,R'`) | **Works**: `ss.geo.Mobility(data=register)`; 2,000 herds with 26,486 sales in 1.15 s a run as compartments, and the same within noise as agents |
 | The same file as compartments or individuals | **Works** for models without offspring or conditions across machines (above); hybrid groups are not needed at these speeds |
 | A posterior, from surveillance data | **Works**: `ss.par(..., bounds=)`, `data=`, and `sim.calibrate(method='pmcmc')` (or `'abc-smc'` for agents); EMULSION has no fitting |
 

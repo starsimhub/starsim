@@ -14,7 +14,7 @@ python dump_summer2.py my_model.py model.json               # a module that make
 python dump_summer2.py my_model.py:build_model model.json params.json   # with the values of its named Parameters (summer2 needs them to work out the initial population)
 ```
 
-Then, in Starsim, `sim = ss.load('model.json')`. If the source builds several models (summer2's notebooks build one per cell), write a short script that builds one with every derived output wanted, and dump that.
+Then, in Starsim, `sim = ss.interop.load('model.json')`. If the source builds several models (summer2's notebooks build one per cell), write a short script that builds one with every derived output wanted, and dump that.
 
 ## Mapping
 
@@ -30,7 +30,7 @@ Then, in Starsim, `sim = ss.load('model.json')`. If the source builds several mo
 | Mixing matrices (`Data(...)` or a plain array) | `networks=ss.contacts(age=..., location=...)` (multiplied together, as summer2's Kronecker product) | yes |
 | A flow into a stratified compartment with adjustments | The shares as the split (an `ss.by` over an earlier dimension with `source_strata`), and the flow multiplied by their sum | yes |
 | Derived outputs | `ss.interop.summer2.outputs(sim)`, which works them out from the results | yes |
-| A named `Parameter` | A parameter of that name, with the value given in `params.json` (or `ss.load(model, pars=...)` for a live model) | yes |
+| A named `Parameter` | A parameter of that name, with the value given in `params.json` (or `ss.interop.load(model, pars=...)` for a live model) | yes |
 | `get_linear_interpolation_function(x, y)`, `get_sigmoidal_interpolation_function(x, y)`, and products of them with named Parameters | `ss.timeseries(..., mode='linear')` (at the points, or the sigmoid sampled every tenth of a step; the reviewer's TB model by age agrees with summer2 to 7e-6 of the population in every compartment) | yes |
 | Another parameter that is a function of time | `ss.timeseries(..., mode='linear')` or `ss.seasonal(...)` | no |
 | An adjustment on several earlier dimensions | Rates by hand: `rate=base * ss.by([[...], [...]], dims=['age', 'clinical'])` | no |
@@ -41,7 +41,7 @@ Then, in Starsim, `sim = ss.load('model.json')`. If the source builds several mo
 ## What needs care
 
 - summer2 splits the initial population by the population split, but Starsim's split of a partial stratification is its split on entry; the import starts such a compartment from `ss.by(<counts>, dims=[...])`.
-- Strain stratifications are imported with `kind='strain'`; check the infection flows, since summer2 gives each strain its own force of infection.
+- Strain stratifications are imported as the disease's strains (`ss.Disease(..., strains=ss.Strains(...))`, then `dis.strains`), with the flow adjustments as values by strain; check the infection flows, since summer2 gives each strain its own force of infection.
 - summer2's flow outputs are rates: divide Starsim's transition results by `dt`. Its cumulative outputs add up those rates without multiplying by the step.
 - summer2's flow output at time `t` is the mean of the instantaneous rates at `t - dt` and `t` (the trapezoid rule), not the number that moved over the step, which is what Starsim's transition result is. They differ where a flow curves sharply within a step: in the TB model with a yearly step, notifications differ by 5% in 1955, early in the epidemic and the scale-up, and by 0.2% or less from 1980, while every compartment agrees. Compare compartments to validate an import; to reproduce summer2's numbers exactly, take the mean of `rate × n_<state>` at the two ends of each step.
 

@@ -9,7 +9,7 @@ Each Starsim module can have its own results, which get added to the full list o
 
 ## When analyzers run
 
-An analyzer runs once when the sim is initialized, and then at the end of each step, after the step's results have been recorded. So in an analyzer (and in a module's `update_results()`), `self.ti` (and `sim.ti`) is the time point at the *end* of the step, where its results go: the results so far are `res[:self.ti + 1]`. Infections are dated at the step's *end*, by a declared disease (`ti_I`) and by the library's diseases written as code (`ti_infected`, set to `self.ti_entry`) alike, since they have happened by then: this step's new infections are `sir.ti_I == self.ti`. Other events that a module written as code dates with `self.ti` during a step are at the step's *start*, `self.ti - 1`, since during a step `self.ti` is the time point it starts from; an analyzer that looks for them by comparing with `self.ti` finds none.
+An analyzer runs once when the sim is initialized, and then at the end of each step, after the step's results have been recorded. So in an analyzer (and in a module's `update_results()`), `self.ti` (and `sim.ti`) is the time point at the *end* of the step, where its results go: the results so far are `res[:self.ti + 1]`. `self.ti` is the same in every phase of a step, so events that a module written as code dates with `self.ti` during the step are found by comparing with `self.ti` here. Infections are dated at the step's *end* too, by a declared disease (`ti_I`) and by the library's diseases written as code (`ti_infected`) alike, since they have happened by then: this step's new infections are `sir.ti_I == self.ti`. (A declared disease dates its other moves at the step's *start*, `self.ti - 1`, which is when it takes them.)
 
 ## Simple usage
 
@@ -35,7 +35,7 @@ def count_edges(sim):
 # Create the sim
 pars = dict(
     diseases = 'sis',
-    networks = 'mf',
+    networks = 'sexual',
     analyzers = count_edges,
     demographics = True,
 )
@@ -83,8 +83,8 @@ class HIV_preg(ss.Analyzer):
         return
 
 pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv('test_data/nigeria_asfr.csv'))
-hiv = ssl.HIV(beta={'mfnet':[0.5,0.25]})
-sim = ss.Sim(diseases=hiv, networks='mfnet', demographics=pregnancy, analyzers=HIV_preg(), start='2000', stop='2050')
+hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.5, f2m=0.25)})
+sim = ss.Sim(diseases=hiv, networks='sexualnet', demographics=pregnancy, analyzers=HIV_preg(), start='2000', stop='2050')
 sim.run()
 print(f'Total infections among pregnant women: {sim.results.hiv_preg.new_infections_pregnancy.sum()}')
 ```

@@ -21,7 +21,7 @@ The user-facing version of this mapping, with the traps that change results, is 
 | `p_death` drawn at infection, death at the end of the same duration | Two transitions from `I` with the same `dur` and `p=`: `ss.Transition(I, R, dur=dur, p=0.99)`, `ss.Transition(I, ss.null, dur=dur, p=0.01)` | Exact in distribution (a branch to `ss.null` inside a list of destinations is not supported) |
 | `self.transition(uids, to={A: rate_a, B: rate_b})` (competing exits) | One transition per exit: `X >> A @ rate_a`, `X >> B @ rate_b` | Exact (competing hazards) |
 | A rate scaled per agent (`rr_activation[uids]`) | A dimension with `adjust=`, or `ss.modify(tr, multiply=..., where=...)` | Exact |
-| A rate that depends on time since entering a state (`exp(-k * tau)`) | Split the state into recent and remote (tbsim's `infection` and `infection_remote`, at rate `k_latent`), or a `fn(sim, uids)` reading `ti_<state>` (agents only) | Approximate, or agents only |
+| A rate that depends on time since entering a state (`exp(-k * tau)`) | Split the state into recent and remote (tbsim's `infection` and `infection_remote`, at rate `k_latent`), or a rate that reads the time in the state, `ss.peryear(r)*np.exp(-k*L.time)` (agents only; `L.time` is the clock, which is right where a time worked out by hand from `ti_L` during a step is one step long) | Approximate, or agents only |
 | Per-agent relative risk after recovery | Separate states (tbsim's `cleared`, `recovered`, `treated`) with their own reinfection rates | Exact |
 | `define_pars(...)` | `ss.par(value, bounds=[lo, hi], doc=...)`, with typed values (`ss.peryear(...)`, `ss.years(...)`) | Exact |
 | `init_prev=ss.bernoulli(0.01)` | `init_prev=0.01`, or `init=dict(I=0.01)` | Exact |
@@ -41,9 +41,9 @@ The user-facing version of this mapping, with the traps that change results, is 
 - **Order within a step.** A declared model takes all of its transitions in `step()`, after the interventions, under every solver, so a delivery sees the people at the start of the step. In Starsim 3's code, progressions (`step_state()`) came before the interventions, so a delivery on an event of a progression happens one step later in the port.
 - **Agents and the ODE differ by order `dt`.** A declared model run as agents and as an ODE differs by about `rate × dt` (5% to 10% for TB at a weekly step, more near R = 1). Compare agents with the v3 agents, and the ODE with the agents at a fine step; don't chase the rest.
 - **v3 `step()` code that branches on per-agent history** (time since infection, counts of past episodes) has no declared form unless it can become states or a dimension. Prefer new states (as tbsim did for reinfection risk and front-loaded progression) over keeping a function, since a function makes the model agents-only.
-- **Drug resistance and other combinatorial attributes** are a dimension (a strain dimension, in tbsim: `drugs=`, with `immunity=` between strains), not hand-built states.
+- **Drug resistance and other strains** are part of the disease, not hand-built states: `ss.Disease(..., strains=ss.Strains(['DS', 'RIF'], max_strains=2, immunity=ss.immunity(due_to=L, rel_sus=0.79)))`, with resistance emerging on the transition that causes it (`ss.Transition(Tx, I, rate=..., move=DS >> (DS, RIF))`). Other combinatorial attributes are a dimension (`stratify()`).
 - **Name collisions.** A transition named like a module parameter (`start`, `stop`, `dt`) used to break the sim; check that the names are free, and rename (tbsim used `stop_art`).
-- **Change the source as needed.** When porting a real model, change its own API as much as needed to fit v4, and where a feature doesn't fit, change v4 rather than writing a model-specific workaround (in tbsim, drug resistance became a v4 strain dimension).
+- **Change the source as needed.** When porting a real model, change its own API as much as needed to fit v4, and where a feature doesn't fit, change v4 rather than writing a model-specific workaround (in tbsim, drug resistance became the disease's strains, `ss.Strains`).
 
 ## Worked example
 

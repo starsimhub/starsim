@@ -31,7 +31,7 @@ sim.run().plot()
 Notice how we modified several key parameters:
 - `dur_inf=10`: How long people stay infectious (10 years on average, since the sim's unit is a year, exponentially distributed, as any duration in a declared disease is)
 - `beta=0.2`: Transmission rate per contact
-- `init_prev=0.4`: Starting with 40% of the population infected (in the state a new infection enters: `I` here, but `E` in an SEIR; `init=dict(I=800)` starts people in a state by name)
+- `init_prev=0.4`: Starting with 40% of the population infected (in the state a new infection enters: `I` here, but `E` in an SEIR; `init_n=dict(I=800)` starts a number of people in a state by name)
 - `p_death=0.2`: 20% of infected people die
 
 We already saw that this model creates results that are stored in `sim.results.sir`: a count for each state (`n_S`, `n_I`, `n_R`), and a flow for each transition (`infection`, `recovery`, and `death`). The sim works on its own copy of the disease, so the disease that ran is `sim.diseases.sir` (not the `sir` we made), and its results can also be accessed via `sim.diseases.sir.results`:
@@ -53,13 +53,13 @@ import starsim.library as ssl
 
 # Make HIV
 hiv = ssl.HIV(
-    beta = {'mf': [0.0008, 0.0004]},  # Specify transmissibility over the MF network
+    beta = {'sexualnet': ss.peract(m2f=0.0008, f2m=0.0004)},  # Specify transmissibility per act over the sexual network, from men to women and from women to men
     init_prev = 0.05,
 )
 
 # Make SIS
 sis = ss.SIS(
-    beta = {'mf': [0.05, 0.025]},  # Specify transmissibility over the MF network
+    beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025)},  # Specify transmissibility per act over the sexual network
     init_prev = 0.025,
 )
 
@@ -73,7 +73,7 @@ hiv_sis = [
 
 # Make the sim, including the connectors between HIV and SIS:
 n_agents = 5_000
-sim = ss.Sim(n_agents=n_agents, networks='mf', diseases=[hiv, sis], connectors=hiv_sis)
+sim = ss.Sim(n_agents=n_agents, networks='sexual', diseases=[hiv, sis], connectors=hiv_sis)
 sim.run()
 sim.plot('hiv')
 sim.plot('sis')
@@ -140,7 +140,7 @@ sim.diseases.seir.plot()
 
 Writing a disease from states and transitions has another advantage: the same disease can run as agents (as here, on a network) or, without a network, as an ODE or a stochastic compartmental model (see [T2](t2_model.qmd)).
 
-Some diseases need more than states and transitions: for example a per-agent quantity that changes continuously, like a CD4 count or a level of immunity. These are written as code, as a subclass of `ss.Infection` with its own methods, as Starsim's HIV model is. See [Diseases](../user_guide/modules_diseases.qmd) in the user guide for how.
+Some diseases need more than states and transitions: for example a per-agent quantity that changes continuously, like a CD4 count or a level of immunity. These are written as code, as a subclass of `ss.Disease` with its own methods (or of `ss.Infection`, which adds transmission, as Starsim's HIV model is). See [Diseases](../user_guide/modules_diseases.qmd) in the user guide for how.
 
 ## Exercises
 1. **Parameter exploration**: Try different values of `dur_imm` in the SIRS model - how does it affect the epidemic curve?

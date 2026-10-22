@@ -11,7 +11,7 @@ Finding 4 of the [landscape review](../approaches/README.md#cross-cutting-findin
 5. **Make the denominator convention visible**, because frequency- and density-dependent transmission are different models and the difference is invisible in most frameworks. A bare state is frequency-dependent (`beta * I`); density dependence is written with the count (`beta * I.n`), and `describe()` says which a rate is.
 6. **Let structure be specified by its generating model, not only its realization.** "Mean degree 0.7, partnerships lasting 50 days" is what modelers have; an edge list is not.
 7. **Keep partnership and act distinct.** Duration of relationship and acts per unit time have different data sources.
-8. **A network model can be run as a compartmental model when the user asks for it**, using the standard approximation and saying so: a random network as homogeneous mixing with its mean number of contacts, a static network by its mean degree. A network of lasting partnerships (`ss.MFNet`, `ss.PartnerNet`) has no compartmental approximation yet, and runs as agents.
+8. **A network model can be run as a compartmental model when the user asks for it**, using the standard approximation and saying so: a random network as homogeneous mixing with its mean number of contacts, a static network by its mean degree. A network of lasting partnerships (`ss.SexualNet`, `ssl.DegreeNet`) uses the partner-change model, which leaves out concurrency and reinfection within a partnership; under `auto` it runs as agents.
 
 ## Why: three independent arrivals at route abstraction
 
@@ -38,7 +38,7 @@ This is finding 11 of the [landscape review](../approaches/README.md#cross-cutti
 
 ## The specification
 
-[06-routes.md](../design/06-routes.md) specifies the force of infection, `networks=` (networks and mixing pools), the bare state and `.n` in a rate, a `beta` per network and direction, counts used literally (environmental and vector-borne transmission), `ss.PartnerNet` and `ss.MFNet` described by targets (`n_contacts`, `concurrency`, `max_contacts`, `match=`, duration, `acts=`) with `net.check()`, contact matrices (`ss.contacts`), and layers. States that are not people are in [03-states-and-transitions.md](../design/03-states-and-transitions.md), and the compartmental forms of networks, with the notes they print, in [12-backends.md](../design/12-backends.md).
+[06-routes.md](../design/06-routes.md) specifies the force of infection, `networks=` (networks and mixing pools), the bare state and `.n` in a rate, a `beta` per network and direction, counts used literally (environmental and vector-borne transmission), `ss.SexualNet` and `ssl.DegreeNet` described by targets (`n_contacts`, `concurrency`, `max_contacts`, `match=`, duration, `acts=`) with `net.check()`, contact matrices (`ss.contacts`), and layers. States that are not people are in [03-states-and-transitions.md](../design/03-states-and-transitions.md), and the compartmental forms of networks, with the notes they print, in [12-backends.md](../design/12-backends.md).
 
 ## Trade-offs
 
