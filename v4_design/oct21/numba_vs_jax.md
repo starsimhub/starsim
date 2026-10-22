@@ -191,6 +191,42 @@ So one uniform per draw takes a third off the draws (Ghana's 650 ms of draws to 
 
 What's left of the draws is mostly the `exp` and `log1p` of draws with means of 0.01–10, the walk up the pmf, and 14 FFI calls and key splits a step. Next steps, not tried: one FFI call for all of a step's draws; `exp` and `log1p` vectorized in float32 for the first pass; and caching `log1p(-p)` where p is the same for every group (deaths). The same draw functions would serve the Numba kernels, which make the same draws with NumPy's `Generator` (they already skip the determined ones). On the GPU, a one-uniform design would be the same idea in pure JAX: bulk uniforms and an unrolled inversion, which is what the approximate binomial's small-mean branch is.
 
+### One call a step, and float32
+
+[ffi/step_ffi.py](numba_vs_jax/ffi/step_ffi.py) makes all of a step's draws in one FFI call (`DRAWS=step`): who leaves each compartment, how they split, and the arrivals, given the step's hazards and the structure of the program. For those who leave, the chance of none is exp(−n·h) with h the step's total hazard, so it needs no `log1p` or `expm1`, and u ≤ 1 − n·h is a 0 with nothing computed. Two options: uniforms made inside the call from a counter-based hash (splitmix64 of the key and the draw's index) instead of by JAX (`_nu`), and a float32 first pass (`_f32`) that computes each row's chance of 0 for all groups with hand-written `exp` and `log1p` that LLVM vectorizes (relative errors 2e-7 and 1.5e-7). There is no SVML here, so Numba can't vectorize `math.exp`. SVML (`icc_rt`) runs on any x86-64 CPU but not on Apple Silicon, and the hand-written functions are plain arithmetic, so they should vectorize with NEON as well (not measured). All four variants match the exact distributions within noise, and with JAX's uniforms the draws are identical to `onepass`. Over 100 seeds, Ghana's final compartments with `step_nu` and with the NumPy-algorithm native draws agree within 0.8 standard errors.
+
+JAX 0.12, one core, load ~1, two interleaved rounds, ms a run (ratio to the kernels):
+
+| Model | One uniform per draw | One call a step | + uniforms made in the call | + float32 first pass | float32, JAX's uniforms |
+|---|---|---|---|---|---|
+| sir | 0.4–0.5 (0.35) | 0.4 (0.30) | 0.3–0.4 (0.27) | 0.4 (0.31) | 0.5 (0.35) |
+| sir_age | 1.3–1.4 (0.70) | 1.1 (0.56) | 0.9 (0.48) | 1.0 (0.54) | 1.2–1.3 (0.64) |
+| spatial | 2.6–2.8 (0.37) | 2.5 (0.35) | 2.2–2.3 (0.32) | 2.3 (0.33) | 2.6–2.7 (0.37) |
+| ghana | 665–667 (0.43) | 592–596 (0.39) | 549–573 (0.36) | 543–566 (0.36) | 609–611 (0.39) |
+
+So one call a step takes Ghana from 666 ms to about 560 ms, 2.8× faster than the kernels. The float32 pass makes no difference: it is 4× faster a lane than scalar float64 (2.2 ns against 9.3 ns), but it runs over all 260 groups, while the scalar code only computes `exp` and `log` for the lanes the zero test doesn't settle, a minority; all the `exp` and `log` together are at most about 40 ms of Ghana's run. What's left of the draws (about 330 ms) is the walk up the pmf for means of 1–10 and the branching around it.
+
+One open discrepancy, not from the draws: over 20 seeds, the kernels end with I at 1,631 (se 78) and every JAX draw mode at 1,786–1,881 (se 38–42 over 100 seeds), z about 2; S agrees. If real, it is in the JAX run (e.g. it evaluates the tables at the middle of the step), not in the draws.
+
+### The hand-written Ghana model
+
+The hand-written model (`ghana-measles/gm-port/ghana_measles/model.py`, 0.82 s here) is not dominated by its draws: with the one-uniform draws swapped in for `rng.binomial` and `rng.poisson` it takes 0.72 s. Its loop makes about 50 NumPy calls a day on arrays of 260, at a microsecond or more each, so most of its 140 µs a day is the cost of each call. Its daily loop, line for line, compiled with Numba (with the one-uniform draws, and uniforms from a hash; the setup in NumPy as before) takes 0.34 s after a 2.7 s compile, with the same results within noise over 20 seeds:
+
+| Ghana, 16 years in days, one core | s a run |
+|---|---|
+| v4 kernels (generic, chain binomial) | 1.55 |
+| Hand-written NumPy | 0.82 |
+| Hand-written NumPy, one-uniform draws | 0.72 |
+| v4's program in JAX, one call a step for the draws | 0.55 |
+| Hand-written loop compiled with Numba | 0.34 |
+| v4's program in JAX, draws replaced by their means | 0.22 |
+
+The hand-written model does less than v4's program: 10 draws a district a day against v4's 14 (of which 4 are already determined), because it takes deaths after the other transitions rather than as a competing risk; one seasonal factor, computed once for the run, where v4 reads a table of its rate constants each step (but that costs little: see below); and it keeps only national totals and infections by district. v4's table: the four rate constants of Ghana's program (importation, seasonal transmission, death, and birth rates) are stored as one table over 17,532 points (three a day: the start, middle, and end of each step, which the ODE's RK4 stages need) for each of the 260 districts, 146 MB, and each step reads its row. Only transmission varies in time, and none of the four varies by district. The table is the general case: any rate can vary in time (`ss.seasonal`, `ss.timeseries`, a function) and by group (`ss.by`), and evaluating them all in Python before the run means the kernels never call back into Python. But it costs little: building it takes 39 ms a run, and in the JAX run a compact table (one value a point, broadcast over the districts) saves 7–10 ms (3%), with identical results. Storing only what varies (by time, by group, or neither), and one point a step for the stochastic solvers, would cut the 146 MB to under 1 MB, which matters for memory more than speed.
+
+The same hand-written loop in JAX (`lax.scan`, with the one-uniform native draws, one FFI call per draw) takes 0.378 s after a 0.9 s compile, against 0.357 s for Numba on the same core after 2.8 s, with the same results within noise over 20 seeds. With the draws replaced by their means it takes 28 ms. So written the same way, JAX and Numba are equally fast here, and JAX compiles faster: the gap between v4's JAX run (0.55 s) and the compiled loop is v4's generic program, not JAX. With its draws as means, v4's program takes 222 ms against the loop's 28 ms. Keeping only totals instead of every compartment and flow by district saves about 30 ms of that. One step of v4's program has 474 operations, including 13 products of a 260×260 matrix with a vector, where the hand-written loop has one (`mix @ (I/N)`). Only one of the 13 is the time share between districts. The other 12 sum people by place and spread the sums back (`self.place.T @ (self.place @ n)` in `ss.gradients.Run.rates()` and `evaluate()`, 10 of them), or pick each stratification's levels (`cells @ infectious` and `cells @ n`, 2). Those are one-hot matrices, here the 260×260 identity, since each group is its own place. Applying the place matrix as the identity saves 63–71 ms (253 → 190 ms with the draws as means, 542 → 471 ms with `step_nu`), with identical results. In general a one-hot product is a segment sum or an index, O(groups) rather than O(groups²), so this is a general fix to `ss.gradients.Run`, not one per model. What's left (about 190 ms against the loop's 28) is spread over the other 460 operations: selects, scatter-adds, broadcasts, and a key split for each of the 14 draws.
+
+The compiled loop sets a ceiling for a step built per model: about 0.34 s, 4.5× faster than the kernels, and compiled in under 3 s, against the kernels' 42–56 s cold compile.
+
 ### NumPy
 
 [numpy_run.py](numba_vs_jax/numpy_run.py) runs the same `Program` with NumPy. It reuses `ss.gradients.Run`'s `rates()` and `evaluate()` unchanged, by handing them NumPy in place of `jax.numpy`. It rewrites `share()` and `derivs()` (which use JAX's `.at[]`) and adds a chain-binomial draw vectorized over groups. That draw follows `ss.kernels.draw()` for what these models use: no stages, reservoirs, credits, deliveries, conveyors, or maps between groups. The steps are a Python loop. Measured at load ~2:
@@ -208,7 +244,7 @@ What's left of the draws is mostly the `exp` and `log1p` of draws with means of 
 
 The sim's own `init()` is 12–20 ms (70 ms for Ghana), so for a small model the user would see about 15 ms with Numba and 35–90 ms with NumPy. The one-group ODE is the worst case: RK4 with automatic substeps is about 4 stages × 2 substeps × 30 NumPy calls a day.
 
-On "compiling to NumPy": the hand-written Ghana model (0.84 s, from [deferred.md](../admin/deferred.md) on 2026-10-16) beats both this generic NumPy run (2.6 s) and the kernels (1.5 s here). It does about 15 whole-array calls a day, with the rates written out. The generic run instead goes through the stack of operations, interpolates four tables, and records every flow by group. A step built per model, as Python source or closures written from the graph, would get close to the hand-written loop for large models. It would not help the one-group case, where the per-call cost of NumPy (about 1 µs) is the floor. That was estimated, not measured.
+On "compiling to NumPy": the hand-written Ghana model (0.84 s, from [deferred.md](../admin/deferred.md) on 2026-10-16) beats both this generic NumPy run (2.6 s) and the kernels (1.5 s here). It does about 15 whole-array calls a day, with the rates written out. The generic run instead goes through the stack of operations, interpolates its table of rate constants (which turned out to cost only about 3%: see "The hand-written Ghana model" above), and records every flow by group. A step built per model, as Python source or closures written from the graph, would get close to the hand-written loop for large models. It would not help the one-group case, where the per-call cost of NumPy (about 1 µs) is the floor. That was estimated, not measured.
 
 ## What each option would take
 
