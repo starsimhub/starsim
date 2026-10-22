@@ -47,6 +47,26 @@ class AgentScale(ss.FloatArr):
         return
 
 
+class MadeOnUse:
+    """
+    One of the four fundamental arrays of `ss.People`, made on first use (see `People.make_uids()`)
+
+    A descriptor rather than a branch of `People.__getattr__()`, so that a subclass with a `__getattr__()` of its
+    own can't hide it. It defines only `__get__()`, so once the arrays are made, the attribute in the instance's
+    `__dict__` is found first and this costs nothing.
+    """
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        if 'n_agents_init' not in obj.__dict__ or 'uid' in obj.__dict__: # Not yet built (e.g. while unpickling), or made and since removed
+            raise AttributeError(f'People object has no attribute "{self.name}"')
+        obj.make_uids()
+        return obj.__dict__[self.name]
+
+
 class People:
     """
     A class to perform all the operations on the people
@@ -71,6 +91,11 @@ class People:
         kids = ss.ppl.age < 15 # A lazy condition, for a sim run as agents or as compartments (see ss.ppl)
         ```
     """
+    auids  = MadeOnUse() # The four fundamental arrays, made on first use: see make_uids()
+    uid    = MadeOnUse()
+    slot   = MadeOnUse()
+    parent = MadeOnUse()
+
     def __init__(self, n_agents, age_data=None, extra_states=None, p_female=0.5, mock=False):
         """ Initialize """
 
@@ -81,6 +106,7 @@ class People:
         # a selection of the states e.g., module states could be added in there, while intervention states might not.
         self._states = {}
         self.version = ss.__version__  # Store version info
+        self.untraited = [] # Ranges of UIDs made by code that sets their properties afterwards (grow() without age=), whose traits are drawn at the next step: see grow()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
         self.n_agents_init = n_agents
@@ -161,10 +187,7 @@ class People:
         return
 
     def __getattr__(self, attr):
-        """ Called only if the attribute isn't found: the fundamental arrays, on first use (see make_uids()); in a compartmental run, per-agent attributes that are not stratifications do not exist """
-        if attr in ['auids', 'uid', 'slot', 'parent'] and 'n_agents_init' in self.__dict__ and 'uid' not in self.__dict__:
-            self.make_uids()
-            return self.__dict__[attr]
+        """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
         missing = self.__dict__.get('_no_groups', [])
         if attr in missing:
             raise ss.CapabilityError(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
@@ -531,7 +554,9 @@ class People:
             sim.groups.set_sex(new_uids)
             if not placed and getattr(sim.groups, 'vals_set', False) and sim.groups.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
                 sim.groups.place_new(new_uids)
-            if not placed: # Their traits (ss.attr(dist)), as states get their defaults; people placed by a declared module get them there (see ss.solvers.Agents.add_people())
+            if not placed and age is None: # Made by code that sets their age (and the rest) itself afterwards, as Starsim 3's pregnancy did: their traits are drawn at the next step, from what it set (FP91: a fetus's trait by age was drawn from a default adult age)
+                self.untraited.append((start_uid, stop_uid))
+            elif not placed: # Their traits (ss.attr(dist)), as states get their defaults; people placed by a declared module get them there (see ss.solvers.Agents.add_people())
                 for mod in sim.declared:
                     if getattr(mod.engine, '_started', False):
                         mod.engine.draw_traits(new_uids)

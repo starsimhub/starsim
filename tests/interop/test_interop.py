@@ -150,7 +150,7 @@ def test_emulsion(tmp_path):
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
     assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
-    left = weekly.new(solver='ode').run().results.weekly.n_I[1]/1000
+    left = weekly.new(solver='ode', substeps=None).run().results.weekly.n_I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
     assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
 
     # The originals: EMULSION's SIR as compartments, individuals, and hybrid groups, against 200 EMULSION runs
@@ -281,7 +281,7 @@ def test_diff(tmp_path):
             init_n     = dict(I=10),
             name       = 'seirq',
         )
-        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver='binomial', **kw)
+        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver='binomial', substeps=1, **kw)
     text = ss.diff(sim, hand(), output=True)
     lines = dict(line.split(':', 1) for line in text.splitlines())
     assert "'force_of_infection' (called 'infection'): the same" in lines['model']

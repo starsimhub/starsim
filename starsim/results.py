@@ -1564,6 +1564,8 @@ def check_data(sim, df, die=False):
     """
     options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
     for col in df.columns:
+        if col in ss.simdata.time_cols and match_column(sim, col) is None: # A time column kept beside the index (e.g. Covasim's "date"), not a result
+            continue
         name, dims = parse_column(col)
         base = match_name(sim, name)
         if dims and base is not None:
@@ -1653,6 +1655,18 @@ def time_weights(sim_t, data_t, flow, annual=False):
     return W, inside
 
 
+def given_data(sim, df=None):
+    """ The sim's data, or data given to compare with it, with its time column (e.g. `year`) as the index, as the sim's own data has """
+    if df is None:
+        return sim.data
+    if not any(col in ss.simdata.time_cols for col in df.columns):
+        return df
+    df = validate_sim_data(df)
+    if by_year(df):
+        ss.note('the data has whole years (an integer year column), so each row is compared with the year it names: a flow summed over the year, a stock or ratio averaged over it', sim=sim)
+    return df
+
+
 def compare(sim, df=None):
     """
     Line up a sim's results with its data
@@ -1664,7 +1678,7 @@ def compare(sim, df=None):
 
     Returns a dict of `{column: (data values, model values)}`.
     """
-    df = sim.data if df is None else df
+    df = given_data(sim, df)
     sim_t, data_t = data_times(sim, df)
     if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
         raise ss.errors.DataMisaligned(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
@@ -1687,7 +1701,7 @@ def lineup(sim, df=None):
     (those that are inside the simulated period and not missing, which are at these rows of the
     data) are W @ the result. A column that matches no result is left out.
     """
-    df = sim.data if df is None else df
+    df = given_data(sim, df)
     annual = by_year(df)
     weights = {} # By timeline and kind, since most results share them
     out = sc.objdict()

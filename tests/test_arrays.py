@@ -409,15 +409,6 @@ def test_uids_concatenate():
         assert isinstance(result, ss.uids), f'{label} must return a uids'
         np.testing.assert_array_equal(result, want)
 
-    # Deprecated concat() and cat() delegate correctly and warn
-    with pytest.warns(DeprecationWarning, match='uids.concat'):
-        result = x.concat(y)
-    np.testing.assert_array_equal(result, expected)
-
-    with pytest.warns(DeprecationWarning, match='uids.cat'):
-        result = ss.uids.cat(x, y)
-    np.testing.assert_array_equal(result, expected)
-
     return result
 
 

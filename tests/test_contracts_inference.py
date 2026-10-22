@@ -173,8 +173,8 @@ def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, **kw), **kw)
         return sim.calibrate(method=method, likelihood=dict(cases=ss.poisson()), particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2, rand_seed=seed, verbose=verbose)
     elif method == 'pmcmc':
-        # A stochastic compartmental sim, made quick: a small population, two-day steps, and data on infections
-        kw = dict(solver='binomial', total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
+        # A stochastic compartmental sim, made quick: a small population, two-day steps taken whole, and data on infections
+        kw = dict(solver='binomial', substeps=1, total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
         n, particles = (100, 20) if quick else (300, 50)
         return sim.calibrate(method=method, likelihood=dict(infection=ss.poisson()), draws=n, warmup=n, chains=2, particles=particles, parallel=False, rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock

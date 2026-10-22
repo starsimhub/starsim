@@ -151,6 +151,14 @@ class Counter(ss.Module):
     assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic())', 'tx = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, tx])']
     old = "screening = ss.screen(ss.Diagnostic(), on_positive=tx)" # Not in a list of interventions: left in place, to fail with Starsim 4's own error
     assert migrate_text(old)[0] == old and any('left in place' in msg for line,msg in migrate_text(old)[2])
+    assert any('assign the test' in msg for line,msg in migrate_text('def care(test, tx):\n    return ss.screen(test, on_positive=tx)')[2]) # Not assigned: flagged
+
+    # More of Starsim 3 (and the prereleases), and the error for a removed name
+    old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nS = ss.State('S', infectious=False); net = ss.RandomNet(n_contacts=10, uniform_targets=True)"
+    assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactation.L\nS = ss.State('S'); net = ss.RandomNet(n_contacts=10, method='uniform')"
+    with pytest.raises(AttributeError, match=r'sim\.calibrate\(\)') as info:
+        ss.Calibration
+    assert info.value.obj is None # So that Python suggests no closest name ("emigration")
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

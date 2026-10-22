@@ -11,6 +11,8 @@ from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_l
 
 __all__ = ['Compartmental', 'synced_event']
 
+max_raced = 400 # The most compartments for the race between non-exponential dwell times out of one state for the same people (the product of their Erlang stages, per group): see Compartmental.build_layout()
+
 
 def synced_event(tr, sim, home):
     """
@@ -43,6 +45,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     transitions into a flat list of flows, each with a source compartment, a rate,
     and the compartments it feeds. Every solver steps the same list of flows.
     """
+    max_binomial = 100 # The most substeps the chain-binomial solver chooses in a step (see substeps())
     max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.Sim.group_rows())
 
     def __init__(self, module, sim):
@@ -55,6 +58,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.cross = next((c for c in sim.crossings if module.name in c.names), None)
+        self._n_sub = None # The chain binomial's substeps, once chosen: see substeps()
+        self.refreshed = False # Whether the program has been set for a step (see refresh_program())
         return
 
     def define(self):
@@ -280,6 +285,34 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     add_flow(other, ind, 'contact')
             return
 
+        def add_raced(state, j, track, exits, competing, stays):
+            """
+            Several non-exponential dwell times out of a state for the same people (e.g. clearance against seeking care, ST61): each
+            is a clock of Erlang stages, and they run at once, so a compartment for each combination of their stages (k1 × k2 for
+            two). A stage of one clock moves people along its own axis, and its last stage is its exit, whatever stage the others
+            are in; this is the exact form of the race between the Erlang dwells that agents draw
+            """
+            raced = track.raced
+            ks = [self.dwells[tr.name].k for tr in raced]
+            if np.prod(ks) > max_raced:
+                raise ss.CapabilityError(f'"{raced[0].name}" and "{raced[1].name}" are non-exponential dwell times out of "{state.name}" for the same people: their race takes a compartment for each combination of their Erlang stages ({" × ".join(str(k) for k in ks)} = {np.prod(ks)}), more than {max_raced}.\n'
+                                         f'     Give fewer stages (e.g. ss.Transition(..., stages=4)), or run with solver="abm".')
+            combos = list(np.ndindex(*ks))
+            inds = {combo:add_comp(state, j, None) for combo in combos}
+            for combo in combos:
+                ind = inds[combo]
+                for e,(tr,k) in enumerate(zip(raced, ks)):
+                    last = combo[e] == k - 1
+                    to = None if last else inds[combo[:e] + (combo[e] + 1,) + combo[e+1:]]
+                    add_flow(tr, ind, 'stage', named=last, to=to, stages=k)
+                    self.flows[-1].raced = True # Not a chain of stages for the chain binomial (see self.chains)
+                add_exits(ind, state, exits, competing, stays)
+            kgs = [getattr(self.dwells[tr.name], 'kg', None) for tr in raced]
+            if any(kg is not None for kg in kgs): # Ragged: a group with fewer stages of a clock enters further along its axis, so it passes through its own number
+                start = np.ravel_multi_index([k - (np.full(self.n_groups, k) if kg is None else kg) for k,kg in zip(ks, kgs)], ks)
+                track.starts = ([inds[combo] for combo in combos], start)
+            return inds[combos[0]]
+
         self.conveyors = [] # The slots of each fixed delay and minimum stay, and the flow out of its last: see ss.kernels.convey()
         for name,state in graph.states.items():
             exits = graph.exits[name]
@@ -297,9 +330,12 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     tracks.append(Bunch(tr=tr, p=p, immediate=tr.rate is None and (tr.dur is None or tr.immediate))) # With neither (or dur=0), nobody waits in the branch
             else:
                 apart = len(staged) > 1 # Several, each for other people (where=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_shares())
-                if apart and (stays or any(tr.where is None or self.dwells[tr.name].fixed for tr in staged)):
-                    self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" (unless each is for other people, by where=)')
-                tracks += [Bunch(tr=tr, p=None, immediate=False, apart=apart) for tr in (staged or [None])]
+                if apart and (stays or any(self.dwells[tr.name].fixed for tr in staged)):
+                    self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" when one is a fixed delay or the state has after= or before=')
+                if apart and any(tr.where is None for tr in staged): # For the same people: they race, as one track of stages by each (see add_raced())
+                    tracks.append(Bunch(tr=None, p=None, immediate=False, raced=staged))
+                else:
+                    tracks += [Bunch(tr=tr, p=None, immediate=False, apart=apart) for tr in (staged or [None])]
             if exits.held: # People who took ss.stay, with no exit of their own (p=0, entered only from the split)
                 tracks.append(Bunch(tr=None, p=ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
             for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
@@ -313,6 +349,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 tr = track.tr
                 track.first = None
                 if track.immediate:
+                    continue
+                if getattr(track, 'raced', None):
+                    track.first = add_raced(state, j, track, exits, competing, stays)
                     continue
                 dwell = self.dwells.get(tr.name) if tr is not None else None # None for a branch whose rate changes with time: a hazard out of its own compartment
                 fixed = dwell is not None and dwell.fixed # A fixed delay: a conveyor, out of which people leave by it
@@ -360,7 +399,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         for flow in self.flows:
             if flow.kind != 'conveyor':
                 self.by_src[flow.src].append(flow)
-        stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None}
+        stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None and not getattr(flow, 'raced', False)}
         self.chains = dict() # For the chain-binomial solver: for each compartment of a dwell time in stages, the number of stages left, its flow to the next, and the flow out of the last (see ss.kernels.draw_chain())
         for c,flow in stage_flows.items():
             d = flow.stages - self.comps[c].stage
@@ -405,6 +444,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
             dw.exact = False
             ss.note(f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
+            cv = np.max(np.divide(dw.std, dw.mean, out=np.zeros(len(dw.mean)), where=np.asarray(dw.mean) > 0))
+            if cv > ss.solvers.choose.max_cv: # solver='auto' runs it as agents (FP53, FP83)
+                ss.warn(f'{name} has a {dw.family} dwell time whose coefficient of variation is up to {cv:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         dw.k = int(dw.kg.max())
         if np.all(dw.kg == dw.k):
             dw.kg = None # Not ragged
@@ -1241,6 +1283,18 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """ Whether a transition is a branch out of each of its sources whose where= is on states and strata, so closes it at entry (see `branch_mult()`) rather than changing its rate """
         return tr.where is not None and ss.conditions.is_static(tr.where, self.sim) and all(tr in self.graph.exits[s.name].branches + sc.tolist(self.graph.exits[s.name].remainder) for s in tr.src if s.people)
 
+    @staticmethod
+    def trait_mean(mod, a, sim):
+        """ Whether an attribute (`ss.attr`) has a compartmental form: a trait drawn from a distribution, with no modifier, which a compartmental run takes at its mean (see `attr()`) """
+        return a.kind == 'trait' and isinstance(a.value, ss.Dist) and not sim.modifiers.get((mod.name, 'attr', a.name))
+
+    def attr(self, a):
+        """ An attribute in a compartmental run: a trait is the mean of its distribution, as a parameter that is a distribution is (see `trait_mean()`) """
+        mod = a.module if isinstance(a.module, ss.Module) else self.mod
+        if not self.trait_mean(mod, a, self.sim):
+            raise ss.CapabilityError(f'the attribute "{a.name}" is kept per agent, so cannot run with solver="{self.sim.solver}"; run with solver="abm"')
+        return ss.transitions.dwell_stats(a.value, self.convert)[0]
+
     def flow_mult(self, flow):
         """ The multipliers on a flow's rate, which hold for the whole step """
         tr = flow.tr
@@ -1257,6 +1311,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 mult = mult*self.strain_adjust[tr.name][flow.strain]
             if flow.state.name in self.protect: # Protected in part by the strains they carry
                 mult = mult*self.protection(flow.state, self.sim.groups.group_coords[:, self.strain], flow.strain)
+            if self.memory and flow.strain is not None: # And by those they remember
+                mult = mult*self.memory_mult(flow.state, flow.strain)
             if flow.strain is not None and self.sim.modifiers.get((self.mod.name, 'strain_sus', None)): # By a product against acquiring the strain
                 mult = mult*self.strain_effect(flow.strain, state=flow.state)
             if flow.strain is not None and self.carriage is not None and self.applies[flow.state.name][self.strain] and self.superinfects(tr, flow.state): # Infected with another strain while staying in the same state: only if they do not carry it already
@@ -1335,6 +1391,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 if key not in self.foreign_pars:
                     self.foreign_pars[key] = ss.par(self.prop(expr.cond), name=str(expr.cond), literal=True)
                 return flatten(self.foreign_pars[key], strain, routes, rtr)
+            elif isinstance(expr, ss.expressions.attr): # A trait, at the mean of its distribution (see attr())
+                if id(expr) not in self.foreign_pars:
+                    self.foreign_pars[id(expr)] = ss.par(self.attr(expr), name=f'{expr.name} (its mean)', literal=True)
+                return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
             elif isinstance(expr, ss.State):
                 routes = routes[expr.name] if isinstance(routes, dict) else routes # Under the partner-change model, for each source state
                 ops.append(kn.EXPOSURE)
@@ -1556,6 +1616,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def refresh_program(self):
         """ Set the numbers in the program that hold for this step: the rates that do not depend on the compartments, and the values the others use """
+        self.refreshed = True # See plain_seconds()
         if self.func_exprs and any(self.expr_key(self.call(par.raw, par)) != key for par,out,key in self.func_exprs.values()): # A function now gives another expression
             rng = self.kernel_rng
             self.init_program()
@@ -1885,24 +1946,38 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables() if tables else None
 
-    def kernels(self, runs=1):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
+    def kernels(self, runs=1, tables=None):
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run (from the tables of a whole run, if given): see `ss.kernels.choose()` """
         if runs == 1 and self.compiled is not None:
             return ss.kernels if self.compiled else ss.kernels.uncompiled()
         if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
             return ss.kernels.choose()
-        kn = ss.kernels.choose(runs*self.plain_seconds())
+        kn = ss.kernels.choose(runs*self.plain_seconds(tables) if ss.kernels.deciding() else 0.0)
         if runs == 1:
             self.compiled = kn is ss.kernels
         return kn
 
-    def plain_seconds(self):
-        """ About how long the run would take as plain Python: see `ss.kernels.plain_seconds()` """
+    def plain_seconds(self, tables=None):
+        """
+        About how long the run would take as plain Python: from its first step taken so (see `ss.kernels.timed_seconds()`),
+        with the program as the step left it, or at the first row of the tables of a whole run; or, before either (the
+        events of a register at the start), estimated from the size of the program (see `ss.kernels.plain_seconds()`)
+        """
         sim = self.sim
+        p = self.program
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
-        rates = [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] # The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for
-        n_sub = ss.kernels.substeps(np.concatenate(rates + [self.program.mov_rate]), self.dt, self.substeps(), solver)
-        return ss.kernels.plain_seconds(self.program, self.y, self.mod.t.npts, solver, n_sub)
+        if tables is None and not self.refreshed:
+            rates = [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] # The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for
+            n_sub = ss.kernels.substeps(np.concatenate(rates + [p.mov_rate]), self.dt, self.substeps(), solver)
+            return ss.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
+        parts = (p.fixed, p.mult, p.consts, p.rel_trans)
+        kept = [part.copy() for part in parts]
+        if tables is not None:
+            ss.kernels.set_step(parts, 0, tables)
+        seconds = ss.kernels.timed_seconds(p, self.y, self.mod.t.npts, self.dt, solver, self.substeps())
+        for part,old in zip(parts, kept): # As the step left them
+            part[:] = old
+        return seconds
 
     def init_shifts(self):
         """ The deliveries that the kernels take in a whole run (see `ss.Delivery.tabulated`), as arrays: see `ss.kernels.Shifts` """
@@ -1943,7 +2018,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             args, tables = self.run_args()
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
-            out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
+            out = self.kernels(tables=tables).run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
@@ -2024,7 +2099,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         length = max(int(part_bytes//per_point)//every, 1)*every # Steps per part: whole rows, so each part ends at the end of one
         short = 0.0
         start = 0
-        kn = self.kernels()
+        kn = self.kernels(tables=self.tables(0, 1))
         while start < npts - 1:
             end = min(start + length, npts - 1)
             tally = np.zeros((end + 1 - start, len(self.shifts.to), 2, self.n_groups))
@@ -2176,7 +2251,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
             stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.perflib._chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
         else:
-            kn = self.kernels(runs=n_runs)
+            kn = self.kernels(runs=n_runs, tables=self.tables(start, start + 1))
             while True: # A part at a time
                 end = min(start + length, npts - 1)
                 kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
@@ -2348,14 +2423,35 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """
         The number of substeps to take in each timestep (0 to let the solver choose)
 
-        The chain-binomial solver takes whole steps, as most chain-binomial models do: it
-        moves people through as many stages of a dwell time as they pass in a step (see
-        `ss.kernels.draw_chain()`).
+        The chain-binomial solver takes enough substeps that no more than about a tenth
+        of the people in a compartment leave it in one, as far as the rates are known at
+        the start (at most `max_binomial`): each substep is off the ODE by an amount of
+        order rate × dt (ST55: an acute stage of 1.7 months at monthly steps took everyone
+        infected from 9% to 51%). It moves people through as many stages of a dwell time as
+        they pass in a substep (see `ss.kernels.draw_chain()`), so it is the dwell's mean
+        that counts, not its stages; a fixed delay is a conveyor of whole steps. `substeps=1`
+        takes whole steps, as most chain-binomial models (and frameworks' discrete-time
+        models) do.
         """
         n_sub = self.sim.pars.substeps
         if n_sub is None and self.sim.solver == 'binomial':
-            n_sub = 1
+            if self._n_sub is None:
+                self._n_sub = self.binomial_substeps()
+            n_sub = self._n_sub
         return n_sub or 0
+
+    def binomial_substeps(self):
+        """ The substeps the chain-binomial solver takes in each step, from the fastest rate out of a compartment of people at the start: see `substeps()` """
+        rates = [np.ravel(self.flow_base(flow)*self.flow_mult(flow))/(flow.stages if flow.kind == 'stage' else 1) for flow in self.flows # A dwell in stages, by its mean
+                 if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor' and flow.state.people]
+        rates = np.concatenate(rates) if rates else np.zeros(0)
+        fastest = np.max(rates[np.isfinite(rates)], initial=0.0)
+        n_sub = max(int(np.ceil(fastest*self.dt/0.1 - 1e-9)), 1)
+        if n_sub > self.max_binomial:
+            n_sub = self.max_binomial
+            unit = self.sim.unit_name
+            ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state, so the chain-binomial solver would take {int(np.ceil(fastest*self.dt/0.1))} substeps a step to follow it; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', ss.errors.LargeStep, sim=self.sim)
+        return n_sub
 
     def step_state(self):
         return

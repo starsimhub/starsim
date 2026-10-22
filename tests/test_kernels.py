@@ -353,7 +353,7 @@ def test_plain_estimate():
     for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
         sim.pars.substeps = n_sub
         seconds.append(engine.plain_seconds())
-    assert seconds[1] > 100*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one
+    assert seconds[1] > 20*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one (a timed step, so less than 122 times: a step has work of its own)
     return seconds
 
 

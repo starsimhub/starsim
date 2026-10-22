@@ -1,6 +1,7 @@
 """
 Expressions: the parameters (`ss.par`), counts, and arithmetic that rates, results, and conditions are made of, and how they are evaluated and printed
 """
+import operator
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -63,6 +64,42 @@ def states_or(cond):
     return cond.op in '+-*/' and any(isinstance(arg, ss.conditions.Cond) and states_or(arg) for arg in cond.args)
 
 
+arith = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv, '**':operator.pow} # For the values of expressions of parameters (see run_value())
+
+
+def run_value(x):
+    """ The number an expression of parameters is while a sim runs (e.g. 1 - dis.pars.eff_condom); None if it is not one: it reads a state, or a parameter that is not a number """
+    if isinstance(x, par):
+        return float(x) if sc.isnumber(x.raw) else None
+    elif isinstance(x, BinOp):
+        a, b = run_value(x.a), run_value(x.b)
+        return None if a is None or b is None else arith[x.op](a, b)
+    elif isinstance(x, Expr):
+        return None
+    return x
+
+
+def run_values(inputs):
+    """
+    For arithmetic between an expression of parameters and an array during a run: the values to do it with, as code means it
+    (a module written as code reading a declared parameter, e.g. `acts*(1 - disease.pars.eff_condom)`); None to build an expression
+    """
+    if not any(isinstance(x, np.ndarray) and x.ndim for x in inputs):
+        return None
+    exprs = [x for x in inputs if isinstance(x, Expr)]
+    named = [leaf for x in exprs for leaf in x.leaves if isinstance(leaf, par) and not leaf.literal]
+    if not named or not all(getattr(getattr(getattr(leaf, 'module', None), 'sim', None), 'initialized', False) for leaf in named): # Only once the sim is initialized: before then, an array in a rate is part of the model
+        return None
+    vals = [run_value(x) for x in inputs]
+    return None if any(v is None for v in vals) else vals
+
+
+def binop(op, a, b):
+    """ Arithmetic on an expression: another expression, or numbers for code during a run (see run_values()) """
+    vals = run_values([a, b])
+    return BinOp(op, a, b) if vals is None else arith[op](*vals)
+
+
 class Expr:
     """
     Base class for anything that can appear in a rate or a result: states,
@@ -75,6 +112,9 @@ class Expr:
         name = ufunc.__name__
         if method != '__call__' or kwargs:
             return NotImplemented
+        vals = run_values(inputs)
+        if vals is not None: # Arithmetic on arrays by code during a run, e.g. a coded network's acts*(1 - disease.pars.eff_condom)
+            return ufunc(*vals)
         elif name in binops:
             return BinOp(binops[name], *inputs)
         elif name == 'negative':
@@ -90,16 +130,16 @@ class Expr:
         out = self if min is None else Func('maximum', self, min)
         return out if max is None else Func('minimum', out, max)
 
-    def __add__(self, other):      return BinOp('+', self, other)
-    def __radd__(self, other):     return BinOp('+', other, self)
-    def __sub__(self, other):      return BinOp('-', self, other)
-    def __rsub__(self, other):     return BinOp('-', other, self)
-    def __mul__(self, other):      return NotImplemented if isinstance(other, (ss.transitions.Transition, ss.transitions.outcome, ss.transitions.FlowSum)) else BinOp('*', self, other) # A parameter times a flow is a share of the flow, e.g. rho * infection
-    def __rmul__(self, other):     return BinOp('*', other, self)
-    def __truediv__(self, other):  return BinOp('/', self, other)
-    def __rtruediv__(self, other): return BinOp('/', other, self)
-    def __pow__(self, other):      return BinOp('**', self, other)
-    def __rpow__(self, other):     return BinOp('**', other, self)
+    def __add__(self, other):      return binop('+', self, other)
+    def __radd__(self, other):     return binop('+', other, self)
+    def __sub__(self, other):      return binop('-', self, other)
+    def __rsub__(self, other):     return binop('-', other, self)
+    def __mul__(self, other):      return NotImplemented if isinstance(other, (ss.transitions.Transition, ss.transitions.outcome, ss.transitions.FlowSum)) else binop('*', self, other) # A parameter times a flow is a share of the flow, e.g. rho * infection
+    def __rmul__(self, other):     return binop('*', other, self)
+    def __truediv__(self, other):  return binop('/', self, other)
+    def __rtruediv__(self, other): return binop('/', other, self)
+    def __pow__(self, other):      return binop('**', self, other)
+    def __rpow__(self, other):     return binop('**', other, self)
     def __neg__(self):             return BinOp('*', -1, self)
     def __and__(self, other):      return ss.conditions.Cond('&', self, other) # As a condition, e.g. hiv.on_art & (hiv.on_art.time >= ss.months(6))
     def __rand__(self, other):     return ss.conditions.Cond('&', other, self)
@@ -424,13 +464,19 @@ class Share(Expr):
         return out + (self.row.scalar.leaves if self.row.scalar is not None else [])
 
     def evaluate(self, ctx):
-        parts = self.row.parts()
-        num = evaluate(parts[self.label], ctx)
-        den = sum(evaluate(part, ctx) for part in parts.values())
-        if np.any(np.asarray(den) <= 0):
-            raise ss.errors.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
-        out = num/den
-        return out if self.row.scalar is None else evaluate(self.row.scalar, ctx)*out
+        memo = getattr(ctx, 'memo', None) # A context can keep the row's values for its other destinations, evaluated for the same people (see Agents.branch_probs_for())
+        if memo is not None and id(self.row) in memo:
+            vals, den, scalar = memo[id(self.row)]
+        else:
+            vals = {label:evaluate(part, ctx) for label,part in self.row.parts().items()}
+            den = sum(vals.values())
+            if np.any(np.asarray(den) <= 0):
+                raise ss.errors.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
+            scalar = None if self.row.scalar is None else evaluate(self.row.scalar, ctx)
+            if memo is not None:
+                memo[id(self.row)] = (vals, den, scalar)
+        out = vals[self.label]/den
+        return out if scalar is None else scalar*out
 
 
 def to_pars(expr):
@@ -637,7 +683,7 @@ class attr(Expr):
         if not (callable(combine) or combine in combines):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
-        self.value = value
+        self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
         self.on = on
         self.combine = combine
         self.init = init

@@ -2243,7 +2243,7 @@ def _jit_setxor(a, b):
 
 @nb.jit(nopython=True, cache=True)
 def _jit_concat(a, b):
-    """ a.concat(b), or a + b for UIDs """
+    """ a.concatenate(b), or a + b for UIDs """
     return np.concatenate((a.astype(np.int64), np.asarray(b).astype(np.int64)))
 
 

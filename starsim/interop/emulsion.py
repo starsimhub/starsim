@@ -348,6 +348,8 @@ def load_emulsion(filename, machines=None, verbose=None):
 
     # Build: one disease for each state machine
     cfg = dict(solver=solver, dt=dt)
+    if solver == 'binomial': # EMULSION's compartments take whole steps
+        cfg['substeps'] = 1
     if unit:
         cfg['unit'] = unit
     if stop is not None:

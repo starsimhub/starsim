@@ -4,6 +4,7 @@ Choosing the solver: which engine runs a declared model, and why (`choose_solver
 import inspect
 import importlib
 import importlib.util
+import math
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -65,9 +66,10 @@ class MixedNetworks(ss.ndict):
 
 
 def clocks_of(mod):
-    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, amounts, or conditions read """
+    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, attributes, amounts, or conditions read """
     graph = getattr(mod, 'graph', None)
     objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
+    objs += [a if a.kind == 'derived' else a.value for a in getattr(graph, 'attrs', {}).values()] # A derived attribute, through what it is worked out from; one set at an event, through its value
     objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
     return ss.expressions.clocks_in(objs)
 
@@ -178,10 +180,11 @@ def choose_solver(sim):
                 raise ss.CapabilityError(f'cannot run with solver="{solver}": {cap.auto}.\n'
                                          f'     Run with solver="abm", or leave the solver as "auto".')
         for mod in sim.declared: # Variation between people is lost without agents
-            for p in mod.graph.spread_pars():
-                msg = f'"{p.name}" of "{mod.name}" is a distribution across people ({type(p.raw).__name__}), so a compartmental run uses its mean'
+            spread = [(p.name, p.raw) for p in mod.graph.spread_pars()] + [(name, a.value) for name,a in mod.graph.attrs.items()] # Parameters, and traits (ss.attr), that are distributions
+            for name,raw in spread:
+                msg = f'"{name}" of "{mod.name}" is a distribution across people ({type(raw).__name__}), so a compartmental run uses its mean'
                 if pars.approx is False:
-                    raise ss.CapabilityError(f'{msg}, which approx=False does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({p.name}=[...]).')
+                    raise ss.CapabilityError(f'{msg}, which approx=False does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({name}=[...]).')
                 else:
                     ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approx else None)
         if 'n_agents' in sim.given:
@@ -193,7 +196,7 @@ def choose_solver(sim):
         pars.pop_scale = 1.0
         pars.people_results = False
         staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
-        if staged or any(solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)): # Levels that the deliveries and transfers need now the solver is known: see ss.Delivery.dims()
+        if staged or any(solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) or any(ss.strains.memory_strat(mod) is not None for mod in sim.declared): # Levels that the deliveries, transfers and strains' memory need now the solver is known: see ss.Delivery.dims()
             sim.groups.init()
             sim.mixing = solvers.Mixing(sim)
 
@@ -585,11 +588,17 @@ max_cv = 3 # A dwell time whose coefficient of variation is above this runs as a
 
 
 def dwell_cv(raw, sim):
-    """ The coefficient of variation of a dwell time's distribution (NaN if it has no single value, as for parameters that are functions or by group) """
+    """ The coefficient of variation of a dwell time's distribution (NaN if it has no single value, as for parameters that are functions, or by group other than a Weibull's or gamma's scale) """
     try:
         mean, std = ss.transitions.dwell_stats(raw, lambda val: convert(val, sim.unit_base))
-    except ValueError: # A parameter by group
-        return np.nan
+    except ValueError: # A parameter by group: a Weibull's or a gamma's coefficient of variation depends only on its shape (FP83: FPsim's method durations, a Weibull scaled by age)
+        name = type(raw).__name__
+        shape = raw.pars.get(dict(weibull='c', gamma='a').get(name))
+        if not sc.isnumber(shape) or shape <= 0:
+            return np.nan
+        elif name == 'gamma':
+            return 1/np.sqrt(shape)
+        return np.sqrt(np.exp(math.lgamma(1 + 2/shape) - 2*math.lgamma(1 + 1/shape)) - 1) # Γ(1 + 2/c)/Γ(1 + 1/c)² - 1, in logs, since it is huge for a small shape
     return std/mean if mean > 0 else np.nan
 
 
@@ -637,10 +646,14 @@ def init_capabilities(sim, modules):
         for cond in [getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and graph is not None)]: # The conditions of a delivery or a modifier
             for reason in ss.conditions.group_reasons(cond, sim)[:1]:
                 add(f'condition: {mod.name}', 'no', reason, auto=reason, fatal=True)
+        if graph is not None and graph.attrs: # Agents only (see ss.attr), apart from traits, which a compartmental run takes at their mean
+            kept = [name for name,a in graph.attrs.items() if not ss.solvers.Compartmental.trait_mean(mod, a, sim)]
+            if kept:
+                add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(kept)}) are kept per agent', fatal=True)
+            for name in [name for name in graph.attrs if name not in kept]:
+                add(f'attribute: {name}', 'approx', 'its mean', auto=f'the attribute "{name}" of "{mod.name}" is a distribution across people')
         for clock in clocks_of(mod)[:1]: # The time in a state or since an event, kept per agent (see ss.expressions.Clock)
             add(f'module: {mod.name}', 'no', f'{clock} is a clock', auto=f'{clock} is a clock, which only agents keep', fatal=True)
-        if graph is not None and graph.attrs: # Agents only (see ss.attr)
-            add(f'attributes: {mod.name}', 'no', 'kept per agent', auto=f'the attributes of "{mod.name}" ({sc.strjoin(graph.attrs.keys())}) are kept per agent', fatal=True)
         if isinstance(mod, ss.strains.Family): # Its members side by side; what ties them together from their shares (see ss.strains.Family.shares())
             if mod.coupled:
                 add(f'strains: {mod.name}', 'no', 'courses of their own that affect each other', auto=f'the strains of "{mod.name}" protect each other or share a state, which only agents follow (or track them jointly: ss.modify(..., where=) between them)', fatal=True)
@@ -776,12 +789,17 @@ def init_capabilities(sim, modules):
                 add(f'transition: {name}', 'yes', f'n children for each person through "{tr.per.name}", added at the end of each step')
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
-        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state have a compartmental form if each is for other people (see ss.solvers.Compartmental.apart_shares()), which the engine checks
+        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state: a track for each if each is for other people (see ss.solvers.Compartmental.apart_shares(), which the engine checks), or racing as a compartment for each combination of their stages if not
             dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
             if len(dwells) > 1 and not exits.branches:
                 wheres = [repr(getattr(tr, 'where', None)) for tr in dwells]
-                if any(getattr(tr, 'where', None) is None for tr in dwells) or len(set(wheres)) < len(wheres): # Each needs a where= of its own; that they are for other people is checked when the engine is built
-                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'no', 'for the same people', auto=f'"{dwells[0].name}" and "{dwells[1].name}" are non-exponential dwell times out of "{name}" for the same people', fatal=True)
+                fixed = [tr for tr in dwells if isinstance(tr.dur.raw, ss.constant) and tr.stages is None]
+                if fixed:
+                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'no', 'one a fixed delay', auto=f'"{fixed[0].name}" is a fixed delay out of "{name}" alongside another non-exponential dwell time', fatal=True)
+                elif any(getattr(tr, 'where', None) is None for tr in dwells):
+                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'yes', 'for the same people: they race, as a compartment for each combination of their Erlang stages')
+                elif len(set(wheres)) < len(wheres): # The same where= for both: the same people
+                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'no', 'for the same people, each with a where=', auto=f'"{dwells[0].name}" and "{dwells[1].name}" are non-exponential dwell times out of "{name}" for the same people, each with a where=', fatal=True)
                 else:
                     add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'yes', 'a track for each, as each is for other people (where=)')
         for name,tf in graph.transfers.items(): # A time drawn for each person, as Erlang stages (see ss.dimensions.transfer_stages())
@@ -793,7 +811,14 @@ def init_capabilities(sim, modules):
                 if varying:
                     add(f'transfer: {name} ({type(raw).__name__})', 'no', 'no compartmental form yet', auto=f'the transfer "{name}" has a {type(raw).__name__} dur= with parameters by group or person, drawn for each person', fatal=True)
                 else:
-                    add(f'transfer: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'Erlang stages', auto=f'the transfer "{name}" has a {type(raw).__name__} dur=, and approx=False' if approx is False and not exact else None)
+                    cv = np.nan if exact else dwell_cv(raw, sim)
+                    if approx is False and not exact:
+                        auto = f'the transfer "{name}" has a {type(raw).__name__} dur=, and approx=False'
+                    elif cv > max_cv: # As for a dwell time (FP53)
+                        auto = f'the transfer "{name}" has a {type(raw).__name__} dur= whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow'
+                    else:
+                        auto = None
+                    add(f'transfer: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'Erlang stages', auto=auto)
         for strat in graph.strats:
             reason = None if strat.strains is None else strat.strains.needs_agents(graph) # E.g. a compartment keeps only the strain people carry now (KI15): see ss.solvers.Engine.init_immunity()
             if reason:

@@ -52,6 +52,7 @@ class Crossing:
         self.pending = dict() # The tables of each engine that has worked out its rates for the current step: see step()
         self.outs = None # The output of a whole run, for each engine that has not taken it yet: see whole_run()
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see kernels()
+        self.stepped = False # Whether the program has been set for a step (see step())
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self._lead = None
         return
@@ -683,8 +684,8 @@ class Crossing:
         J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines], reps=reps)
         return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
 
-    def kernels(self, runs=1):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
+    def kernels(self, runs=1, tables=None):
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run (from the tables of a whole run, if given): see `ss.kernels.choose()` and `ss.solvers.Compartmental.plain_seconds()` """
         if runs == 1 and self.compiled is not None:
             return ss.kernels if self.compiled else ss.kernels.uncompiled()
         sim = self.sim
@@ -692,8 +693,21 @@ class Crossing:
             return ss.kernels.choose()
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
         first = self.engines[0]
-        n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), first.dt, first.substeps(), solver) # The rates of the step last refreshed
-        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub))
+        p = self.program
+        if not ss.kernels.deciding():
+            seconds = 0.0
+        elif tables is None and not self.stepped: # Before a step or a whole run: from the size of the program, with the rates of the step last refreshed
+            n_sub = ss.kernels.substeps(np.append(p.fixed[p.src >= 0], p.mov_rate), first.dt, first.substeps(), solver)
+            seconds = ss.kernels.plain_seconds(p, self.y, first.mod.t.npts, solver, n_sub)
+        else: # A step taken as plain Python, at the first row of the tables, or as the step left the program
+            parts = (p.fixed, p.mult, p.consts, p.rel_trans)
+            kept = [part.copy() for part in parts]
+            if tables is not None:
+                ss.kernels.set_step(parts, 0, tables)
+            seconds = ss.kernels.timed_seconds(p, self.y, first.mod.t.npts, first.dt, solver, first.substeps())
+            for part,old in zip(parts, kept):
+                part[:] = old
+        kn = ss.kernels.choose(runs*seconds)
         if runs == 1:
             self.compiled = kn is ss.kernels
         return kn
@@ -702,7 +716,7 @@ class Crossing:
         """ A whole run of the diseases together, in one call to the kernels: returns, for each engine, what `ss.kernels.run()` does """
         args, tables, per_step = self.run_args()
         tally = np.zeros((args[3], 0, 2, self.n_cols))
-        y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, per_step, 0)
+        y, stocks, flows, short = self.kernels(tables=tables).run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, per_step, 0)
         self.y = y
         return [self.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(self.engines))]
 
@@ -756,7 +770,8 @@ class Crossing:
         else:
             tables = tuple(np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans'])
         first = self.engines[0]
-        kn = self.kernels()
+        self.stepped = True
+        kn = self.kernels(tables=tables if row >= 0 else None)
         self.y, flows = kn.one_step(self.rng, self.y, p, first.dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step
             sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti, first.integer))
@@ -800,7 +815,7 @@ class Crossing:
             kept = (range(nc), range(nflows)) if grouped else ([], [])
             stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.perflib._chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
         else:
-            kn = self.kernels(runs=n_runs)
+            kn = self.kernels(runs=n_runs, tables=self.tables(start, start + 1))
             while True: # A part at a time
                 end = min(start + length, npts - 1)
                 kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,

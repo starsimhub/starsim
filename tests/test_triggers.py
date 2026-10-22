@@ -231,7 +231,7 @@ def test_ct_by_sex():
     for f,(mean,_) in zip([True, False], ms):
         went = ppl.auids[~np.isnan(ct.ti_Y[ppl.auids])] # Everyone who went through P to Y
         u = went[ppl.female[went] == f]
-        dwell = (ct.ti_Y[u] - ct.ti_P[u])*0.25
+        dwell = (ct.ti_Y[u] - ct.ti_P[u] - 1)*0.25 # P was entered at the start (index 0), and Y in the step the dwell ended before, at its start
         assert np.isclose(dwell.mean(), mean, rtol=0.15), f'female={f}: mean dwell {dwell.mean():.2f} months, not {mean}'
     n_P = sims.nostrat.results.ct.n_P[0]
     assert np.isclose(n_P, 10_000*(0.5*0.2 + 0.5*0.54), rtol=0.05)

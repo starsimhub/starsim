@@ -278,6 +278,14 @@ class StrainEffect(Effect):
         return f'{self.name:<16s} multiply=1 − efficacy of each strain {self.efficacy.tolist()}   where={self.product.dim} (acquisition, by strain)'
 
 
+class held_cond:
+    """ The condition `vx.held` (whether each person holds this product), which on a class is whether they hold any product of that kind (`where=ss.Vaccine.held`), for a model built before its products """
+    def __get__(self, obj, cls):
+        if obj is None:
+            return ss.conditions.Cond('kind', cls)
+        return ss.conditions.Cond('dim', obj) > 0
+
+
 class Held(Product):
     """
     Base class for products that change rates for the people who hold them
@@ -315,10 +323,7 @@ class Held(Product):
         """ The name of the property of people that says whether they hold the product """
         return f'has_{self.name}'
 
-    @property
-    def held(self):
-        """ Whether each person holds it now, as a condition: `ss.modify(..., where=vx.held)` """
-        return ss.conditions.Cond('dim', self) > 0
+    held = held_cond() # Whether each person holds it now, as a condition: `ss.modify(..., where=vx.held)`; or any product of a kind: `where=ss.Vaccine.held`
 
     @property
     def effects(self):
@@ -720,12 +725,14 @@ class Treatment(Held):
         else:
             dsts = {id(t.dst[0]):t.dst[0] for t in options.values()}
             if len(dsts) != 1:
-                example = next((d for d in dsts.values() if d is graph.first), graph.first)
+                reached = [d for t in graph.transitions.values() if t.people and any(s in infected for s in t.src or []) for d in t.dst or [] if d.people and d not in infected] # Where infected people go, by any transition
+                ends = [d for d in reached if d is not graph.first and not any(t.people and any(s is d for s in t.src or []) for t in graph.transitions.values())] # Where they stay, e.g. R
+                example = next((d for d in dsts.values() if d is graph.first), None) or next(iter(ends + reached), graph.first)
                 raise ss.errors.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
                                        f'     Give it with to= (e.g. to="{example.name}"), or give efficacy as a dict for a treatment that changes rates without curing.')
             dst = list(dsts.values())[0]
-        if tr is None: # The flow that counts the cured: the one recovery into that state, if there is one
-            into = [t for t in options.values() if t.dst[0] is dst]
+        if tr is None: # The flow that counts the cured: the one recovery into that state, if there is one, and if it is for everyone (not, say, only men)
+            into = [t for t in options.values() if t.dst[0] is dst and getattr(t, 'where', None) is None]
             tr = into[0] if len(into) == 1 else None
 
         # The states cured people leave: the infected ones, and those that people reach from them on the way to the state they are cured to
@@ -737,13 +744,15 @@ class Treatment(Held):
         srcs = [s for s in srcs if s is not dst]
         if self.transition is not None and not any(s is i for s in tr.src for i in infected): # A transition out of states that are not infected, e.g. S -> P: a move along it
             srcs = list(tr.src)
-        if isinstance(self.cure, dict): # The states named are cured too, if they are not already
+        if isinstance(self.cure, dict): # By state: exactly the states named are cured
+            named = []
             for name in self.cure:
                 state = graph.states.get(name)
                 if state is None or not state.people:
                     raise ss.errors.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
-                if state is not dst and not any(s is state for s in srcs):
-                    srcs.append(state)
+                if state is not dst:
+                    named.append(state)
+            srcs = named
         self.cures = f'from {sc.strjoin(s.name for s in srcs)} to {dst.name}' + (f' (counted in {tr.name})' if tr is not None else '')
         return tr, dst, srcs
 
@@ -939,6 +948,7 @@ class Diagnostic(Product):
         """
         sim = selector.sim
         groups, rest = self.layout(sim, home)
+        groups = self.by_family(sim, groups)
         worst = self.combine == 'worst'
         none = 1.0
         combined = [1.0 if worst else 0.0]*len(rest)
@@ -946,7 +956,9 @@ class Diagnostic(Product):
             inside = 0.0
             tail = [0.0]*len(rest)
             for state,vals in rows:
-                if name != 'detects':
+                if isinstance(name, tuple): # The strains of a family: the people in the state in any of them, unless in a more severe one (see by_family())
+                    sel = np.maximum.reduce([selector.select(ss.conditions.Cond('state', m, state))*1.0 for m in name])*(1 - inside)
+                elif name != 'detects':
                     sel = selector.select(ss.conditions.Cond('state', name, state))
                 elif self.detects is not None:
                     sel = selector.select(self.detects)
@@ -961,6 +973,30 @@ class Diagnostic(Product):
             combined = [c*(1 - t) if worst else np.maximum(c, t) for c,t in zip(combined, tail)]
         rest = [1 - selector.per_person(self.specificity) if v is self.specificity else selector.per_person(v) for v in rest]
         return [(1 - c if worst else c) + none*sum(rest[k:]) for k,c in enumerate(combined)]
+
+    @staticmethod
+    def by_family(sim, groups):
+        """
+        The strains of a family (`ss.Strains([hpv16, hpv18])`) given the same values by state (a test keyed by a state's name, e.g. `{'CIN': 0.9}`)
+        are one group, keyed by the names of the strains: a person is tested once, in the state that gives the most severe results (a woman
+        with CIN of one genotype and susceptible to the others is tested as with CIN), rather than once for each strain
+        """
+        out = dict(groups)
+        for fam in sim.diseases():
+            if not isinstance(fam, ss.strains.Family):
+                continue
+            names = [n for n in fam.member_names if n in out]
+            if len(names) < 2:
+                continue
+            rows = [[(state, [repr(v) for v in vals]) for state,vals in out[n]] for n in names]
+            if any(r != rows[0] for r in rows[1:]): # Values of their own for some strains: each is tested on its own
+                continue
+            score = lambda row: (sum(sum(v for v in row[1][k:] if sc.isnumber(v)) for k in range(len(row[1]))), sim.get_declared(names[0]).graph.states[row[0]].order)
+            merged = sorted(out[names[0]], key=score, reverse=True) # The most severe first
+            for n in names:
+                del out[n]
+            out[tuple(names)] = merged
+        return out
 
     def delays(self):
         """ The delay of each result, from the least severe to the most (None for none) """

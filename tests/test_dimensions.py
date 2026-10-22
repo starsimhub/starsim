@@ -244,9 +244,8 @@ def test_strains():
     assert np.isclose(total(np.ones((2, 2))), once)
     twice = total(np.eye(2), kwargs=dict(n_agents=10_000))
     assert 1.5*once < twice < 2.2*once
-    with pytest.raises(ss.CapabilityError): # A compartmental run would keep only the strain people carry now, so people could go from A to B and back (KI15) ...
-        total(np.eye(2), kwargs=dict(solver='ode'))
-    assert np.isclose(total(np.eye(2)), twice, rtol=0.1) # ... so protection by every strain had runs as agents
+    assert np.isclose(total(np.eye(2), kwargs=dict(solver='ode', total_pop=10_000)), twice, rtol=0.1) # A compartmental run keeps every strain had as a dimension of its people, so nobody goes from A to B and back
+    assert np.isclose(total(np.eye(2)), twice, rtol=0.1) # And auto runs agents
     for combine in ['sum', 'multiply', lambda p: p.max(0)]: # With protection from one strain only, the rules agree
         assert total(np.eye(2), combine=combine, kwargs=dict(n_agents=10_000)) == twice
     with pytest.raises(ss.CapabilityError): # A function has no compartmental form (nor a gradient)
@@ -383,6 +382,90 @@ def test_strain_memory():
     total = {key:ss.Sim(make(m), unit='day', stop=150, n_agents=5000, **kw).run().results.flu.infection.sum() for key,m in dict(none=None, partial=0.5*np.eye(2), full=np.eye(2)).items()}
     assert total['full'] <= 5000 < total['partial'] < total['none'] # Complete protection against A, back in S: nobody has A twice
     return total
+
+
+@sc.timer()
+def test_strain_memory_compartmental():
+    sc.heading('Testing memory under the ODE: Keeling and Rohani\'s two strains with partial cross-immunity (program 4.1) by every strain had, protection on the course by what came before, and a strain imported on a date')
+    b1, b2, g, sig = 3/7, 3.5/7, 1/7, 0.5
+    def f41(t, y): # S, I1, I2, R1, R2, J1 (had 2, has 1), J2, R12
+        S, I1, I2, R1, R2, J1, J2, R12 = y
+        l1, l2 = b1*(I1 + J1), b2*(I2 + J2)
+        return [-(l1 + l2)*S, l1*S - g*I1, l2*S - g*I2, g*I1 - (1-sig)*l2*R1, g*I2 - (1-sig)*l1*R2, (1-sig)*l1*R2 - g*J1, (1-sig)*l2*R1 - g*J2, g*(J1 + J2)]
+    ref = sp_integrate.solve_ivp(f41, [0, 200], [0.98, 0.01, 0.01, 0, 0, 0, 0, 0], t_eval=np.arange(201.), rtol=1e-8, atol=1e-10).y
+    S, I, R = ss.states('S I R')
+    strains = ss.Strains(dict(s1=dict(rel_trans=1.0), s2=dict(rel_trans=b2/b1)))
+    strains.immunity = ss.immunity(due_to=strains.ever, rel_sus=[[1, sig], [sig, 1]])
+    dis = ss.Disease(infection=S >> I @ ss.perday(b1)*I, recovery=I >> R @ ss.perday(g), init=dict(I=0.02), strains=strains, name='two')
+    res = ss.Sim(dis, unit='day', stop=200, solver='ode', total_pop=1.0, **kw).run().results.two
+    assert np.allclose(res.n_I.by('strain')['s1'], ref[1] + ref[5], atol=1e-5) and np.allclose(res.n_I.by('strain')['s2'], ref[2] + ref[6], atol=1e-5)
+
+    # Protection on the course comes from the strains had before this infection: a first infection is symptomatic at its own rate
+    for due in ['last', 'ever']:
+        for solver in ['ode', 'abm']:
+            S, E, A, Y, R = ss.states('S E A Y R')
+            strains = ss.Strains(['w', 'v'])
+            strains.immunity = ss.immunity(due_to=getattr(strains, due), rel_sus=0.999*np.eye(2), p=dict(to_sym=0.9*np.eye(2)))
+            dis = ss.Disease(infection=S >> E @ ss.perday(0.3)*(A + Y), to_sym=ss.Transition(E, Y, dur=ss.days(4), p=0.6), to_asym=ss.Transition(E, A, dur=ss.days(4)),
+                             recovery=A + Y >> R @ ss.perday(1/7), init=dict(E=0.002), strains=strains, name='cov')
+            res = ss.Sim(dis, unit='day', stop=150, solver=solver, n_agents=20_000, total_pop=20_000, **kw).run().results.cov
+            share = res.to_sym.sum()/(res.to_sym.sum() + res.to_asym.sum())
+            assert np.isclose(share, 0.6, atol=0.02), f'{due}, {solver}: {share:.3f} symptomatic' # Agents with ever gave 0.06
+
+    # A strain imported on a date, as a delivery
+    for solver in ['ode', 'abm']:
+        S, E, I, R = ss.states('S E I R')
+        strains = ss.Strains(['w', 'v'], split=[1, 0])
+        dis = ss.Disease(infection=S >> E @ ss.perday(0.25)*I, latent=E >> I @ ss.perday(1/3), recovery=I >> R @ ss.perday(1/7), init=dict(I=0.001), strains=strains, name='cov')
+        imp = ss.Delivery(move=S >> E, strain='v', at=[50], capacity=20, name='import_v')
+        res = ss.Sim(dis, interventions=imp, unit='day', stop=60, solver=solver, n_agents=20_000, total_pop=20_000, **kw).run().results.cov
+        assert res.n_E.by('strain')['v'][50] == 0 and 10 < res.n_E.by('strain')['v'][51] <= 20, solver
+    return
+
+
+@sc.timer()
+def test_strain_carriers():
+    sc.heading('Testing where strains are carried (an infection, and what leads back to one), sets at the start, and how a set transmits and progresses')
+    S, L, N, I, R = ss.states('S L N I R')
+    foi = ss.peryear(8)*I
+    def cleared(**kwargs): # R leads back to disease only by a new infection, so carries no strain
+        return ss.Disease(S, L, I, R, infection=S >> L @ foi, reinfection=R >> L @ foi, activation=L >> I @ ss.peryear(1), clearance=L >> R @ ss.peryear(1),
+                          recovery=I >> R @ ss.peryear(1), init=dict(I=0.01), name='d', strains=ss.Strains(['A', 'B'], max_strains=2, **kwargs))
+    def staged(imm=None): # N is neither infectious nor entered by infection, but leads to I, so carries its strains
+        return ss.Disease(S, L, N, I, R, infection=S >> L @ foi, progress=L >> N @ ss.peryear(1), worsen=N >> I @ ss.peryear(0.5), recovery=I >> R @ ss.peryear(1),
+                          init=dict(I=0.01), name='d', strains=ss.Strains(['A', 'B'], max_strains=2, immunity=imm))
+    for solver in ['ode', 'abm']:
+        res = run(cleared(), solver, start=2000, stop=2010, total_pop=20_000).results.d
+        assert res.n_L.select(strain='A+B')[-1] == 0 and res.n_L[-1] > 0, solver # Reinfected from R with one strain, not added to one cleared
+        res = run(cleared(split={'A': 0.5, 'A+B': 0.5}), solver, start=2000, stop=2001, total_pop=20_000).results.d
+        assert np.isclose(res.n_I.select(strain='A')[0], res.n_I.select(strain='A+B')[0], rtol=0.15) and res.n_I.select(strain='B')[0] == 0, solver
+    plain = run(staged(), 'ode', start=2000, stop=2010, total_pop=1e5).results.d
+    superinfected = run(staged(ss.immunity(due_to=N, rel_sus=0.5)), 'ode', start=2000, stop=2010, total_pop=1e5).results.d
+    assert np.isclose(superinfected.n_N[-1], plain.n_N[-1]) and superinfected.n_N.select(strain='A+B')[-1] > 0 # People in N carry another strain as well, and stay in N
+    with pytest.raises(ss.errors.BadSplit): # A share by strain would be of people at a level of the strains, where nobody is before they are infected
+        run(ss.Disease(S, I, infection=S >> I @ ss.peryear(1)*I, init=dict(I=ss.by(strain=[0.1, 0, 0.1])), name='d', strains=ss.Strains(['A', 'B'], max_strains=2)), 'ode', stop=2001)
+
+    # A carrier of A and B: passes on one at a time (the default), or each at its own rate; progresses with one at a time, each at its own rate (alone=True)
+    def together(init, transmit='one', **values):
+        S, L, I = ss.states('S L I')
+        return ss.Disease(S, L, I, infection=S >> I @ ss.peryear(1)*I, activation=ss.Transition(L, I, rate=ss.peryear(1), per='strain', alone=True), init=init,
+                          name='d', strains=ss.Strains(['A', 'B'], max_strains=2, split={'A+B': 1}, transmit=transmit, **values))
+    first = lambda transmit: run(together(dict(I=0.001), transmit), 'ode', stop=2001, dt=0.01, total_pop=1e6).results.d.infection[1]
+    assert np.isclose(first('each'), 2*first('one'), rtol=0.02)
+    res = run(together(dict(L=0.5), activation=[1, 3]), 'ode', stop=2001, dt=0.01, total_pop=1e6).results.d
+    assert np.isclose(res.activation[1], 0.5e6*4*0.01, rtol=0.05) # The rate of a set is the sum of its strains'
+    assert np.isclose(res.n_I.select(strain='B')[1] - res.n_I.select(strain='B')[0], 3*res.n_I.select(strain='A')[1] - 3*res.n_I.select(strain='A')[0], rtol=0.05) # ... and the strain moving on is chosen in proportion
+
+    # Covasim's cross-immunity, M[challenge][source], is the protection of the last strain had, with the matrix transposed
+    def flu(**kwargs):
+        S, I = ss.states('S I')
+        strains = ss.Strains(['A', 'B'], split=[1, 0], **{k:v for k,v in kwargs.items() if k == 'cross_immunity'})
+        if 'rel_sus' in kwargs:
+            strains.immunity = ss.immunity(due_to=strains.last, rel_sus=kwargs['rel_sus'])
+        return ss.Disease(infection=S >> I @ ss.perday(0.5)*I, recovery=I >> S @ ss.days(7), init=dict(I=0.01), name='flu', strains=strains)
+    covasim = run(flu(cross_immunity=dict(A=dict(A=0.9, B=0.3), B=dict(A=0.6, B=0.9))), 'abm', unit='day', stop=100).results.flu.infection
+    assert np.array_equal(covasim, run(flu(rel_sus=[[0.9, 0.6], [0.3, 0.9]]), 'abm', unit='day', stop=100).results.flu.infection)
+    return res
 
 
 @sc.timer()
@@ -1009,6 +1092,17 @@ def test_by_properties():
     assert sim.solver == 'abm'
     with pytest.raises(ss.CapabilityError, match='same people'):
         ss.Sim(clearance(where_m=ss.ppl.female), stop=10, solver='ode', verbose=0).init()
+
+    # For the same people (ST61): the two clocks race, as a compartment for each pair of their Erlang stages, so the share leaving by each is exact
+    def race(k=3):
+        S, A, B, C = ss.states('S A B C')
+        return ss.Disease(S, A, B, C, to_b=ss.Transition(A, B, dur=ss.gamma(k, scale=ss.months(10/k))), to_c=ss.Transition(A, C, dur=ss.gamma(2, scale=ss.months(7))), init=dict(A=1.0), first='S', name='d')
+    exact = sp_integrate.quad(lambda t: stats.gamma.pdf(t, 3, scale=10/3)*stats.gamma.sf(t, 2, scale=7), 0, np.inf)[0] # P(the first clock ends first)
+    for solver,pop in [('ode', dict(total_pop=1e6)), ('binomial', dict(total_pop=1e6)), ('abm', dict(n_agents=20_000))]:
+        r = ss.Sim(race(), unit='month', dt=0.25, stop=100, solver=solver, verbose=0, **pop).run().results.d
+        assert np.isclose(r.n_B[-1]/(r.n_B[-1] + r.n_C[-1]), exact, atol=1e-4 if solver == 'ode' else 0.01), f'{solver}: {r.n_B[-1]/(r.n_B[-1] + r.n_C[-1]):.4f} against {exact:.4f}'
+    with pytest.raises(ss.CapabilityError, match='combination of their Erlang stages'):
+        ss.Sim(race(k=300), unit='month', stop=10, solver='ode', verbose=0).init()
     return sim
 
 
@@ -1173,7 +1267,7 @@ def test_rows():
     use = 0.4*expit(-0.5) + 0.6*expit(0.5)
     expected = 20_000*np.array([1 - use] + list(use*(young*np.array([0.6, 0.6, 0.1])/1.3 + (1 - young)*np.array([0.2, 1.0, 0.3])/1.5)))
     assert np.allclose(n(ode), expected, rtol=0.01) and np.allclose(n(abm), expected, rtol=0.05)
-    assert np.allclose(n(make('abm', fn=True, n_agents=10_000).run()), 10_000*np.array([0.5, 0.2, 0.2, 0.1]), rtol=0.06)
+    assert np.allclose(n(make('abm', fn=True, n_agents=20_000).run()), 20_000*np.array([0.5, 0.2, 0.2, 0.1]), rtol=0.06)
     tr = abm.diseases.contra.graph.transitions.from_none
     assert len(tr.p) == 4 and len(tr.p_given) == 2
     assert 'mix * w normalized over pill, iud, inj' in '\n'.join(abm.diseases.contra.graph.describe(abm))
@@ -1266,6 +1360,7 @@ if __name__ == '__main__':
     cure    = test_strain_cure()
     emerge  = test_strain_emergence()
     memory  = test_strain_memory()
+    memory_c = test_strain_memory_compartmental()
     counts  = test_strain_counts()
     ssolvers = test_strain_solvers()
     space   = test_space()

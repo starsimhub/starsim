@@ -366,9 +366,8 @@ def test_time():
     assert sir.ti_I.raw.dtype == np.int16 and sir.exit_I.raw.dtype == np.int8 # 2 bytes and 1, not 4 and 4
     infected = sir.ti_I.notnan.uids
     assert np.isnan(sir.ti_I[sir.S.uids]).all() and (sir.ti_I[infected] <= sir.ti).all() # Never infected is NaN, not a large negative number
-    later = infected[sir.ti_I.raw[infected] >= 0] # Those infected at the start are dated a step before it, as if infected in the step before, as infections are dated by their step
-    assert np.allclose(sir.ti_I.years[later], sir.t.yearvec[sir.ti_I.raw[later]])
-    assert (sir.ti_I[infected] >= -1).all() and (sir.ti_I[infected] == -1).sum() == sir.results.n_I[0]
+    assert np.allclose(sir.ti_I.years[infected], sir.t.yearvec[sir.ti_I[infected].astype(int)]) # The year at the end of the step of infection
+    assert (sir.ti_I[infected] >= 0).all() and (sir.ti_I[infected] == 0).sum() == sir.results.n_I[0] # Those infectious at the start (by contact) are dated as if infected at the end of the step before the first, index 0, as infections by contact are dated at the end of their step (HP62)
     with pytest.raises(ss.errors.TimeNotKept): # The engine does not need ti_R, so it was not kept
         sir.ti_R.notnan
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, which needs it kept
@@ -1542,13 +1541,13 @@ def test_time_values():
     # A fast transition is noted when the solver takes whole steps, and check_dt() says how much the step matters
     S, I, R = ss.states('S I R')
     fast = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='fast')
-    stepped = ss.Sim(fast, solver='binomial', unit='day', stop=60, total_pop=1e6, **kw)
+    stepped = ss.Sim(fast, solver='binomial', substeps=1, unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
     df = stepped.check_dt(output=True)
     assert any('rate × dt = 0.25' in note for note in stepped.new().init().notes)
     assert 0.05 < df.change[df.result == 'n_I'].iloc[0] < 0.2
     S, I, R = ss.states('S I R')
     slow = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='slow', dt=ss.days(2))
-    own = ss.Sim(slow, solver='binomial', unit='day', dt=1, stop=60, total_pop=1e6, **kw).check_dt(output=True)
+    own = ss.Sim(slow, solver='binomial', substeps=1, unit='day', dt=1, stop=60, total_pop=1e6, **kw).check_dt(output=True)
     assert own.change[own.result == 'n_I'].iloc[0] > 0.05 # A module with its own timestep takes a smaller one too
     smooth = ss.Sim(fast, solver='ode', unit='day', stop=60, total_pop=1e6, **kw)
     assert smooth.check_dt(output=True).change.max() < 1e-3 # An ODE does not depend on the timestep
@@ -1753,6 +1752,13 @@ def test_seeded_stay():
         rf = ss.Disease(infection=S >> I @ ss.perday(0.001)*I.n, recovery=I >> R @ ss.constant(ss.days(1)), init_n=dict(I=100), name='rf')
         res = ss.Sim(rf, unit='day', stop=2, total_pop=10_000, n_agents=10_000, solver=solver, verbose=0).run().results.rf
         assert res.n_I[1] == res.infection[1] # Only the new cases are left after the first step
+    # On a network too, a seed with a one-step stay infects in the first step only, as the people it infects do in theirs (HP62: never; by a rate, the loop above)
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.1)*I, recovery=I >> R @ ss.constant(ss.days(1)), init_n=dict(I=100), name='sir')
+    sim = ss.Sim(sir, networks=ss.RandomNet(), unit='day', stop=4, n_agents=10_000, analyzers=ss.infection_log(), verbose=0).run()
+    log = sim.analyzers[0].to_df()
+    by_seeds = log[log.source.isin(log.target[log.source == -1])]
+    assert len(by_seeds) and (by_seeds.t == ss.days(1)).all(), f'seeds infected on days {sorted(set(by_seeds.t))}'
     return
 
 
@@ -2566,7 +2572,7 @@ def test_algebra():
     for nname,node in nodes.items():
         for oname,op in ops.items():
             for solver in solvers:
-                check(f'{nname} {oname}', solver, node_model(node, op), fails=nname == 'attr' and agents_only(solver)) # An attribute is kept per agent
+                check(f'{nname} {oname}', solver, node_model(node, op)) # A trait (an attribute drawn once) at its mean under a compartmental solver
 
     # Each slot that takes an expression, with the forms the reviews found
     def sis(rate=None, recovery=None, **kwargs):
@@ -2618,7 +2624,7 @@ def test_algebra():
         d = ss.Disease(infection=S >> A @ rate, prog=A >> B @ ss.years(1), rec=B >> S @ ss.years(1), init=dict(A=0.1), name='d')
         return run(solver, d, networks=[ss.RandomNet(), ss.RandomNet(name='home')])
     slots = [factor_peract, result_ratio, family_ratio, person_amount, other_states, attr_on_exit, dwell_births, peract_dict, by_contacts, route_sources]
-    agents = [other_states, attr_on_exit, dwell_births, route_sources] # Which only agents can run
+    agents = [attr_on_exit, dwell_births, route_sources] # Which only agents can run (other_states runs as compartments too, with the two diseases tracked jointly: FP89)
     for func in slots:
         for solver in solvers:
             check(func.__name__, solver, func, fails=func in agents and agents_only(solver))

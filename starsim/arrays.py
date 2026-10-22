@@ -988,6 +988,11 @@ class StepArr(Arr):
     `.years` converts them to years; `.raw` has the stored integers, where `.nan`
     means not set and `.never` means after the end of the run.
 
+    A declared state's time of entering (`ti_X`) reads as the index of the step the
+    move happened in, whatever kind of move it was (a progression at the step's start,
+    an infection by contact at its end), so `ti_X == sim.ti` is "entered this step".
+    The engine keeps its own time of the move, which `.raw` and `internal()` give.
+
     With `late=True` (as for `people.ti_dead`), "not set" is stored as the largest
     integer, the same as after the end of the run, so `raw <= ti` is whether the time
     has come, with no special case; both read as NaN. With `wide=True`, they are always
@@ -1009,6 +1014,7 @@ class StepArr(Arr):
         self.lowest, self.never = self.sentinels(dtype)[1:]
         self.nan_eq = False # Read as floats, so NaN is found with np.isnan()
         self.t = None # The module's timeline, for .years; set by the engine
+        self.shift = None # Steps added when read, from the engine's time to the step's index (see `internal()`): by agent (an Arr) for a declared state's time of entering, 1 for a scheduled exit
         return
 
     def sentinels(self, dtype):
@@ -1050,9 +1056,31 @@ class StepArr(Arr):
         out[np.isnan(out)] = self.nan
         return out.astype(self.dtype)
 
+    def internal(self, key):
+        """
+        The stored step numbers as floats, without the shift that reading them adds: the engine's own time (for a
+        declared state's time of entering, the start of the step for a move made then, `ti - 1`, and its end for an
+        infection by contact, `ti`; for a scheduled exit, the start of the step it is taken in), from which its clocks
+        and dwell times are worked out
+        """
+        return self.to_float(super().__getitem__(key))
+
+    def set_internal(self, key, value):
+        """ Set the stored step numbers to the engine's own time (see `internal()`) """
+        super().__setitem__(key, self.from_float(value))
+        return
+
+    def shifted(self, vals, key=None):
+        """ Add the shift to some values read, by agent (all of them, or those of `key`) """
+        if self.shift is None:
+            return vals
+        elif isinstance(self.shift, int):
+            return vals + self.shift
+        return vals + (self.shift.raw if key is None else self.shift.values if key is Ellipsis else self.shift[key])
+
     def floats(self):
         """ The values as a `FloatArr` of step numbers, for arithmetic and comparisons """
-        new = self.asnew(self.to_float(self.raw), cls=FloatArr)
+        new = self.asnew(self.shifted(self.to_float(self.raw)), cls=FloatArr)
         new.dtype, new.nan, new.nan_eq = ss_float, np.nan, False
         return new
 
@@ -1063,15 +1091,19 @@ class StepArr(Arr):
         return self.t.yearvec[0] + steps*self.t.dt_year
 
     def __getitem__(self, key):
-        return self.to_float(super().__getitem__(key))
+        return self.shifted(self.to_float(super().__getitem__(key)), key)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value): # A step number as read (e.g. sim.ti)
+        if isinstance(self.shift, int):
+            value = np.asarray(value, dtype=float) - self.shift if not isinstance(value, numbers.Integral) else value - self.shift
         super().__setitem__(key, self.from_float(value))
+        if isinstance(self.shift, Arr):
+            self.shift[key] = 0
         return
 
     @property
     def values(self):
-        return self.to_float(super().values)
+        return self.shifted(self.to_float(super().values), Ellipsis)
 
     def set(self, uids, new_vals=None):
         new_vals = self.nan if new_vals is None and self.default is None else self.from_float(new_vals if new_vals is not None else self.default)
@@ -1303,11 +1335,21 @@ class BoolState(BoolArr):
 
     @property
     def time(self):
-        """ For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, in the sim's unit, by UID, as `P.time` is in `p=`; e.g. `hpv.P.time[uids]` in a function """
+        """
+        For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, by
+        UID, as `P.time` is in `p=`; e.g. `hpv.P.time[uids]` in a function. A duration in the sim's unit, so
+        `preg.P.time < ss.weeks(13)` compares like with like; NaN for anyone not in the state
+        """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
             raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.time)')
-        return (engine.ti - engine.mod[f'ti_{self.name}'].raw)*engine.dt
+        steps = engine.ti - engine.mod[f'ti_{self.name}'].raw.astype(float)
+        inside = self.raw.copy()
+        leaving = getattr(engine, '_leaving', None)
+        if leaving is not None: # Being split as they leave: still in the state they left, as for a clock in p= (see Agents.clock_values())
+            inside[leaving[0][np.broadcast_to(leaving[1], len(leaving[0])) == engine.state_index[self.name]]] = True
+        steps[~inside] = np.nan
+        return ss.time.get_dur_class(engine.sim.unit)(steps*engine.dt)
 
     def __init__(self, name=None, **kwargs):
         if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
@@ -1563,17 +1605,6 @@ class uids(np.ndarray):
         else:
             out = uids()
         return out
-
-    def concat(self, other):
-        """ Deprecated — use `uids.concatenate()` instead """
-        ss.warn('uids.concat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
-        return self.concatenate(other)
-
-    @classmethod
-    def cat(cls, *args):
-        """ Deprecated — use `uids.concatenate()` instead """
-        ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
-        return uids.concatenate(*args)
 
     @classmethod
     def _ensure_int(cls, arr):

@@ -216,7 +216,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', 'declared'], subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', '_made_pars', '_pars_after', 'declared'], subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
@@ -418,17 +418,20 @@ class Dist:
     """
     def _expr(self, op, other, reverse=False):
         """ Arithmetic between distributions, or with an expression, is an expression of draws, e.g. `ss.uniform(0.5, 0.95)*ss.bernoulli(0.6)` in `ss.attr()` """
-        if not isinstance(other, (Dist, ss.expressions.Expr)) and not (sc.isnumber(other) and op != '*'):
+        if not isinstance(other, (Dist, ss.expressions.Expr)) and not sc.isnumber(other):
             return NotImplemented
         a, b = (other, self) if reverse else (self, other)
         return ss.expressions.BinOp(op, a, b)
 
     def __mul__(self, other):      return self._expr('*', other)
     def __rmul__(self, other):     return self._expr('*', other, reverse=True)
+    def __truediv__(self, other):  return self._expr('/', other)
     def __add__(self, other):      return self._expr('+', other)
     def __radd__(self, other):     return self._expr('+', other, reverse=True)
     def __sub__(self, other):      return self._expr('-', other)
     def __rsub__(self, other):     return self._expr('-', other, reverse=True)
+    def __neg__(self):             return self._expr('*', -1, reverse=True)
+    def __abs__(self):             return ss.expressions.Func('absolute', self) # E.g. abs(ss.normal(1, 0.2)) or np.abs() of it, in ss.attr()
 
     valid_pars = None
     scaling = None # See "scale_types" above
@@ -893,7 +896,7 @@ class Dist:
                 self._use_ppf = None
             return static[2]
 
-        self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
+        self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
         self.convert_timepars()
@@ -995,7 +998,7 @@ class Dist:
         if self.unitless_pars is None: # Nothing to check
             return
 
-        invalid = sc.objdict({key:timepar_of(self._pars.get(key)) for key in self.unitless_pars if timepar_of(self._pars.get(key)) is not None})
+        invalid = {key:timepar_of(self._pars.get(key)) for key in self.unitless_pars if timepar_of(self._pars.get(key)) is not None} # Plain dicts here and below, since this runs at every draw with parameters that are functions
 
         if len(invalid):
             errormsg = f'Cannot use timepars for parameter(s) {sc.strjoin(invalid.keys())} of {self}: {dict(invalid)}.\n'
@@ -1025,8 +1028,8 @@ class Dist:
             return
 
         # Sort the parameters into timepars and plain numbers
-        timepars = sc.objdict()
-        plain = sc.objdict()
+        timepars = {}
+        plain = {}
         for key in self.unit_pars:
             val = self._pars.get(key)
             if timepar_of(val) is not None:
@@ -1047,7 +1050,7 @@ class Dist:
             return
 
         # Convert the plain numbers to the same timepar as their siblings
-        template = timepars[0]
+        template = next(iter(timepars.values()))
         for key,val in plain.items():
             self._pars[key] = template.replace(val)
         return
@@ -2218,7 +2221,7 @@ class histogram(Dist):
         h2.plot_hist(bins=100)
         ```
     """
-    valid_pars = ['values', 'bins', 'density', 'data']
+    valid_pars = ['values', 'bins', 'density', 'data', 'group']
     scaling = scale_types.postdraw # Its draws are within its bins, so bins with a unit (unit=) are the numbers times the unit
 
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
@@ -2248,6 +2251,7 @@ class histogram(Dist):
         super().__init__(dist=dist, distname='histogram', **kwargs)
         self.cdf_bins = (dist._hcdf, dist._hbins) # For ppf()
         self.hist = (values, bins, density) # As given (not in pars, which SciPy would read): for copies, see ss.transitions.numeric_dist()
+        self.parts = None # One histogram for each group, see by_group()
         # Leave _use_ppf as None (the default) so UID draws go through the hash-based
         # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
         # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,
@@ -2255,10 +2259,43 @@ class histogram(Dist):
         # The values/bins arrays are baked into self.dist, not treated as per-UID pars.
         return
 
+    @classmethod
+    def by_group(cls, parts, group, **kwargs):
+        """
+        One histogram for each group: each person is drawn from the histogram of their group
+
+        Args:
+            parts (list): the histograms (`ss.histogram`), one for each group
+            group: each person's group, as an index into `parts` (e.g. `ss.by(urban={False: 0, True: 1})`, or a function of the agents)
+        """
+        values, bins, density = parts[0].hist
+        dist = cls(values=values, bins=bins, density=density, group=group, **kwargs)
+        dist.parts = [part.hist for part in parts]
+        dist.cdf_parts = [part.cdf_bins for part in parts]
+        return dist
+
+    def process_dist(self):
+        """ Frozen with no parameters: the group is not one of SciPy's histogram """
+        if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
+            self.dist = self.dist()
+        return super().process_dist()
+
+    def update_dist_pars(self, pars=None):
+        """ The group is not a parameter of SciPy's histogram """
+        return
+
     def ppf(self, rands):
         """ The inverse of the CDF, which is piecewise linear: as SciPy's, without its temporaries (about 90 bytes per value) """
-        cdf, bins = self.cdf_bins
-        return np.where(rands == 0, bins[0], np.interp(rands, cdf, bins)) # SciPy gives the lowest bin edge for 0, even if the first bins are empty
+        def one(rands, cdf, bins):
+            return np.where(rands == 0, bins[0], np.interp(rands, cdf, bins)) # SciPy gives the lowest bin edge for 0, even if the first bins are empty
+        if self.parts is None:
+            return one(rands, *self.cdf_bins)
+        group = np.broadcast_to(np.asarray(self._pars['group']), np.shape(rands)) # Each person's histogram
+        out = np.empty(np.shape(rands))
+        for i,(cdf,bins) in enumerate(self.cdf_parts):
+            these = group == i
+            out[these] = one(rands[these], cdf, bins)
+        return out
 
 
 class multi_random(sc.prettyobj):

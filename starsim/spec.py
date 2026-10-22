@@ -540,7 +540,7 @@ def modify_code(mod, mods):
 
 
 delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen']
-delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease']
+delivery_keys = ['strain', 'at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease']
 cond_keys = ['where', 'on', 'detects']
 
 

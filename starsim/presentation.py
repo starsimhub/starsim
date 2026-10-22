@@ -91,8 +91,11 @@ class Presentation:
                     raw = p.raw
                     dw = engine.dwells.get(name) if engine is not None else None
                     stages = None # The guess of how many stages, if one was made
+                    scaled = ss.transitions.scaled_dist(raw) if tr.dur is not None and isinstance(raw, ss.transitions.Expr) else None # A distribution times a factor, each draw scaled (see Engine.init_dwells())
+                    if scaled is not None:
+                        raw = scaled[0].raw
                     if isinstance(raw, ss.Dist):
-                        text = f'dwell ~ {raw}'
+                        text = f'dwell ~ {raw}' + (f' × {format_expr(scaled[1], values="number", unit=unit, mul="×")}' if scaled is not None else '')
                         if dw is not None and dw.fixed:
                             text += ', a fixed delay'
                         elif dw is not None and not dw.exact:

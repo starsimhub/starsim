@@ -75,11 +75,20 @@ class Pregnancy(ss.Demographics, ss.Disease):
 
     sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
 
-    _v3_methods = ['fecund', 'fertile', 'susceptible', 'nulliparous', 'tri1_uids', 'tri2_uids', 'tri3_uids', 'find_unborn_children', 'make_p_conceive',
-                   'standardize_fertility_data', '_get_uids', 'set_ptb', 'set_rel_sus', 'updates_pre', 'update_breastfeeding', 'process_delivery',
+    _v3_methods = ['make_p_conceive', 'standardize_fertility_data', 'set_ptb', 'set_rel_sus', 'updates_pre', 'update_breastfeeding', 'process_delivery',
                    '_post_delivery', 'set_breastfeeding', 'process_newborns', 'progress_pregnancies', 'update_maternal_deaths', 'select_conceivers',
                    '_make_newborn_uids', '_set_embryo_states', 'make_embryos', 'make_pregnancies', 'process_maternal_deaths', 'process_prenatal_deaths',
-                   'process_neonatal_deaths'] # Methods of Starsim 3's coded pregnancy, which this one never calls
+                   'process_neonatal_deaths'] # The hooks of Starsim 3's coded pregnancy (the methods its own steps called), which this one never calls; not its properties and helpers (fecund, tri1_uids, _get_uids, ...), which a subclass may define for its own code
+
+    _v3_attrs = dict(ti_delivery='ti_exit_P, the step of the scheduled delivery (np.ceil() of it for a whole step)', ti_pregnant='ti_P', pregnant='P',
+                     breastfeeding='lactation.L (with an ss.Lactation in the sim)') # Attributes of Starsim 3's coded pregnancy, and what they are now
+
+    def __getattr__(self, attr):
+        """ An attribute of Starsim 3's pregnancy says what it is now, rather than suggesting a near name """
+        now = type(self)._v3_attrs.get(attr)
+        if now is not None:
+            raise AttributeError(f'"{attr}" is from Starsim 3\'s ss.Pregnancy; it is now {now}')
+        return super().__getattr__(attr)
 
     def __init_subclass__(cls, **kwargs):
         """ A subclass that overrides a method of Starsim 3's pregnancy would be silently ignored, since this one never calls it """
@@ -88,7 +97,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         if overridden:
             errormsg = (f'{cls.__name__} defines {sc.strjoin(overridden)}, from Starsim 3\'s ss.Pregnancy, which v4\'s declared one never calls, so it would be silently ignored.\n'
                         f'     Use its seams instead: conception_rate(sim) for who conceives; ss.modify() of its transitions (preg.conception, preg.miscarriage, ...) and its parameters (maternal_rate, infant_rate, ...);\n'
-                        f'     since_birth and ss.Lactation for postpartum and breastfeeding; ss.on(preg.birth) or add_delivery_callback() at a delivery (see the migrate-starsim3 skill).')
+                        f'     since_birth and ss.Lactation for postpartum and breastfeeding; ss.on(preg.birth), or add_callback() from code, at a delivery or loss (see the migrate-starsim3 skill).')
             raise ss.CapabilityError(errormsg)
         return
 
@@ -235,7 +244,13 @@ class Pregnancy(ss.Demographics, ss.Disease):
             loss = ss.solvers.convert(g.pars.loss_rate.raw, 'year')*self.mean_dur_pregnancy
             kept = (1 - g.pars.p_abortion.raw)*(-np.expm1(-loss)/loss if loss > 0 else 1.0)
         def share():
-            rate = np.asarray(engine.convert(self.conception_rate(engine.sim)), dtype=float)
+            sim = engine.sim
+            if ss.utils.n_args(self.conception_rate) >= 2: # An override for the agents given (sim, uids): put in place by UID
+                uids = sim.people.auids
+                rate = np.zeros(len(sim.people.uid.raw))
+                rate[uids] = engine.convert(self.conception_rate(sim, uids))
+            else:
+                rate = np.asarray(engine.convert(self.conception_rate(sim)), dtype=float)
             return -np.expm1(-rate*dt*steps)*kept
         def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman, and in her pregnancies with the one she has at the start (a loss before the start counts in neither, so deliveries plus losses are pregnancies); and the fetuses of those pregnant at the start are there at the start
             delivered = np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0) if 'parity' in before else 0
@@ -411,7 +426,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         w = np.where(pre, np.divide(u, q, out=np.zeros(len(u)), where=q>0)*p_pre, p_pre + np.divide(u - q, 1 - q, out=np.zeros(len(u)), where=q<1)*(1 - p_pre)) # Where in the given distribution
         inds = np.minimum(np.searchsorted(np.cumsum(p), w, side='right'), len(a) - 1)
         steps = np.asarray(ss.weeks(weeks[inds])/self.t.dt, dtype=float)
-        self.set_delivery(uids, self.ti_P.raw[uids] + self.engine.whole_steps('P', uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
+        self.set_delivery(uids, self.ti_P.internal(uids) + 1 + self.engine.whole_steps('P', uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
         return
 
     def classify_births(self, newborns, ti):
@@ -435,7 +450,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         engine = self.engine
         ppl = self.sim.people
         self.parity[parents] += 1
-        self.ti_delivered[parents] = ti
+        self.ti_delivered[parents] = engine.index_of(ti) # The step's index, as ti_P is
         if self.fetus: # Born; a mother whose fetuses were all removed at the delivery (ss.on(preg.delivery)) had a stillbirth
             new = self.unborn(parents)
             ppl.age[new] = 0
@@ -455,7 +470,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
                 net.add_pairs(ppl.parent.raw[new], new)
         moms = ss.uids(np.unique(ppl.parent.raw[new]))
         self._mothers.append(ppl.age.raw[parents])
-        self.ti_live_birth[moms] = ti
+        self.ti_live_birth[moms] = engine.index_of(ti)
         self.classify_births(new, ti)
         engine.record_event('live_birth', moms)
         p_md = self.pars.p_maternal_death # At delivery, as in Starsim 3 (agents only)
@@ -469,7 +484,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
 
     def set_delivery(self, uids, ti, weeks=None):
         """
-        Reschedule the deliveries of some pregnant women to a step (each scheduled exit of P is the delivery: losses are
+        Reschedule the deliveries of some pregnant women to a step (its index, as `ti_exit_P` reads; each scheduled exit of P is the delivery: losses are
         rates, which compete with it), with the gestational age they will have then (`dur_gestation`): `weeks` if given,
         otherwise the weeks from conception to that step
         """
@@ -478,16 +493,18 @@ class Pregnancy(ss.Demographics, ss.Disease):
         keep = self.P.raw[uids] & (self.exit_P.raw[uids] >= 0)
         uids, ti = uids[keep], ti[keep]
         self.ti_exit_P[uids] = ti
-        self.dur_gestation[uids] = (ti - self.ti_P.raw[uids])*self.t.dt.weeks if weeks is None else np.asarray(weeks, dtype=float)[keep]
+        self.dur_gestation[uids] = (ti - 1 - self.ti_P.internal(uids))*self.t.dt.weeks if weeks is None else np.asarray(weeks, dtype=float)[keep] # From the engine's times: the exit is taken at the start of step ti
         return
 
     def add_conception_callback(self, fn):
         """ Call `fn(uids)` at each conception, e.g. from a module written as code (as `ssl.mnch.FetalHealth` does); a declared module can use `ss.on(preg.conception)` instead """
+        self.check_not_given('add_conception_callback()')
         self._callbacks.conception.append(fn)
         return
 
     def add_delivery_callback(self, fn):
         """ Call `fn(mother_uids, newborn_uids)` at each delivery with a live birth, e.g. from a module written as code; a declared module can use `ss.on(preg.birth)` instead """
+        self.check_not_given('add_delivery_callback()')
         self._callbacks.delivery.append(fn)
         return
 
@@ -579,8 +596,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
         ppl = self.sim.people
         engine = self.engine
         ti = engine.ti # Dated as the engine dates people's moves (see ss.solvers.Engine.ti)
-        orphans = self.unborn(uids) if self.fetus else ss.uids() # The fetuses of mothers who die while pregnant (who may have left P by antepartum already)
-        pregnant = ss.uids(np.unique(ppl.parent.raw[orphans]))
+        if self.fetus:
+            orphans = self.unborn(uids) # The fetuses of mothers who die while pregnant (who may have left P by antepartum already)
+            pregnant = ss.uids(np.unique(ppl.parent.raw[orphans]))
+        else:
+            pregnant = uids[self.P.raw[uids]] # Without fetuses as agents, the mothers who die while pregnant
         moms = ss.uids()
         if self.fetus: # The fetuses of mothers whose last fetus died, before the deaths are taken out of the states
             parent = ppl.parent.raw[uids]
@@ -602,12 +622,12 @@ class Pregnancy(ss.Demographics, ss.Disease):
                     engine.flowcounts[name] += engine.n_of(these)
                     engine.record_event(name, these)
             return
-        if self.fetus:
-            if len(pregnant):
+        if len(pregnant):
+            if self.fetus:
                 ppl.request_death(orphans)
-                lose(pregnant, force=False)
-            if len(moms):
-                lose(moms, force=True)
+            lose(pregnant, force=False)
+        if len(moms):
+            lose(moms, force=True)
         age, parent = ppl.age.raw[uids], ppl.parent.raw[uids]
         self._nnd += np.count_nonzero((age >= 0) & (age <= 28/365) & ~self.fetal.raw[uids])
         infant = (age >= 0) & (age < 1) & (parent != ppl.parent.nan) & ~self.fetal.raw[uids]
@@ -624,6 +644,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
         The hazard of conception, per year, for each agent (by UID) or each group: the fertility rate (in the year a
         pregnancy starting now would end, if given by year), rescaled from all fecund women to those not pregnant (as
         in Starsim 3); 0 for anyone not fecund
+
+        An override can instead take `(sim, uids)` and return a rate for each of those agents (as agents only), e.g.
+        `ss.peryear(table[self.method[uids]])`, rather than one for every slot of the raw arrays.
         """
         pars = self.pars
         ppl = sim.people

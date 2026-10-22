@@ -102,8 +102,16 @@ def test_multisim():
     # Sims that have already run: their results across runs, without running them again
     msim3 = ss.MultiSim(msim.sims)
     assert np.array_equal(msim3.results.sis.n_I.values, msim.results.sis.n_I.values)
-    with pytest.raises(AttributeError): # Starsim 3's msim.reduce() is removed, with what to write instead
+    with pytest.raises(AttributeError, match='quantiles'): # Starsim 3's msim.reduce() is removed, with what to write instead
         msim3.reduce()
+
+    # A subclass changes the sim of each run, with an option of its own
+    class Doubled(ss.MultiSim):
+        run_options = ss.MultiSim.run_options + ['beta']
+        def make_run(self, sim, values, seed, beta=0.1):
+            return super().make_run(sim, dict(values or {}, beta=beta*(1 + seed % 2)), seed)
+    doubled = Doubled(ss.Sim(pars), n_runs=2, beta=0.05).run(parallel=False)
+    assert sorted(float(s.diseases.sis.pars.beta.value) for s in doubled.sims) == [0.05, 0.1]
 
     return msim
 

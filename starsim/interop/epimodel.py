@@ -241,6 +241,7 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
         cfg.solver = 'abm'
     elif kind == 'icm':
         cfg.solver = 'binomial'
+        cfg.substeps = 1 # EpiModel's stochastic models take whole steps
     else:
         cfg.solver = 'ode'
         if control.get('dt') not in (None, 1):

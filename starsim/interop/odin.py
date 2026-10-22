@@ -588,6 +588,8 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
 
     # Run settings
     cfg = dict(solver='binomial' if discrete else 'ode', unit=unit)
+    if discrete: # odin's discrete-time models take whole steps
+        cfg['substeps'] = 1
     if discrete and dt != 1:
         cfg['dt'] = dt
     if stop is not None:

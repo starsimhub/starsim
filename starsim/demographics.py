@@ -74,6 +74,20 @@ def period_year(years, year):
     return years[max(np.searchsorted(years, year + 1e-9, side='right') - 1, 0)] # A small tolerance, so a step starting on a label uses it
 
 
+def note_sparse(rows, years, sim, name):
+    """ A note when rates by year that apply during the run are further apart than 5 years: each holds until the next label (see `period_year()`), which is right for data by period (the UN's 5-year labels) but not for estimates for single years (ST58) """
+    if rows is None or years is None:
+        return
+    labels = rows[1]
+    gaps = np.diff(labels)
+    used = (labels[1:] > years[0]) & (labels[:-1] < years[-1]) # The gaps that the run's years fall in
+    if used.any() and gaps[used].max() > 5:
+        i = np.flatnonzero(used)[np.argmax(gaps[used])]
+        ss.note(f'the {name} by year are up to {gaps[i]:n} years apart during the run, and each holds until the next label (the rate for {labels[i]:n} applies until {labels[i+1]:n}); '
+                f'if they are estimates for single years rather than periods, give a row for each year (e.g. interpolated)', sim=sim)
+    return
+
+
 class Demographics(ss.Module):
     """
     Base class for demographic modules.
@@ -157,6 +171,7 @@ class Births(Demographics):
         ```
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, min_age=_, max_age=_, rate_units=_, metadata=None, **kwargs):
+        self.named_data = isinstance(birth_rate, str) # A named place's UN rates, which are every ten years: see note_sparse()
         if isinstance(birth_rate, str): # A named place: its UN crude birth rates, per 1,000
             birth_rate = ss.data.rates(birth_rate, 'births')
             rate_units = 1000 if rate_units is _ else rate_units
@@ -201,6 +216,12 @@ class Births(Demographics):
             ss.warn(msg)
             return ss.peryear(birth_rate)
         return birth_rate
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        if not self.named_data:
+            note_sparse(self.birth_rows, self.t.yearvec, sim, 'birth rates')
+        return
 
     def init_results(self):
         super().init_results()
@@ -354,6 +375,7 @@ class Deaths(Demographics):
             corresponding column name in data. Similar for "sex_keys".
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, lifetable=None, **kwargs):
+        self.named_data = isinstance(death_rate, str) # A named place's UN rates, which are every ten years: see note_sparse()
         if isinstance(death_rate, str): # A named place: its UN death rates by year, sex, and age, per person
             death_rate = ss.data.rates(death_rate, 'deaths')
             rate_units = 1 if rate_units is _ else rate_units
@@ -448,6 +470,12 @@ class Deaths(Demographics):
             p_death = p_death[0] # to_prob() returns an array; extract the scalar when the input was scalar/Rate
         return p_death
 
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        if not self.named_data:
+            note_sparse(self.death_rows, self.t.yearvec, sim, 'death rates')
+        return
+
     def init_results(self):
         super().init_results()
         self.define_results(
@@ -462,7 +490,10 @@ class Deaths(Demographics):
         p_death = self.make_p_death()  # Get the probability of death for each agent
         self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
         death_uids = self._p_death.filter()
-        self.sim.people.request_death(death_uids, cause=self)
+        ppl = self.sim.people
+        if ppl.has_unborn: # Fetuses as agents (e.g. ss.Pregnancy(fetus=True)) die only with their mother or by the pregnancy's own losses
+            death_uids = death_uids[ppl.age.raw[death_uids] >= 0]
+        ppl.request_death(death_uids, cause=self)
         return death_uids
 
     def update_results(self):

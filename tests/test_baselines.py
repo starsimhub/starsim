@@ -159,6 +159,9 @@ def perf_cases():
       cases run crn=True and so would not catch a reinstated per-step/per-draw RNG jump)
     - fseis10, counts, coded, by_age (init and run): the models in benchmark_models.py, a model written as code
       beside a coded ODE (malariasim), counts stepped beside agents, a coded disease on a network, and ss.by age tables
+    - hpv, tb, contra (init and run), tb1k_run, strains_ode_run: strains as agents (HPVsim), the fixed cost of a declared
+      step as agents (tbsim, at two sizes), choices by tables (FPsim), and many sets of strains under the ODE; their
+      init cases also guard the time to build a sim
 
     Each case is (factory, which, crn).
     """
@@ -186,6 +189,14 @@ def perf_cases():
         'coded_run':          (bm.make_coded, 'run', True),
         'by_age_init':        (bm.make_by_age, 'init', True),
         'by_age_run':         (bm.make_by_age, 'run', True),
+        'hpv_init':           (bm.make_hpv, 'init', True),
+        'hpv_run':            (bm.make_hpv, 'run', True),
+        'tb_init':            (bm.make_tb, 'init', True),
+        'tb_run':             (bm.make_tb, 'run', True),
+        'tb1k_run':           (lambda: bm.make_tb(n_agents=1000), 'run', True),
+        'contra_init':        (bm.make_contra, 'init', True),
+        'contra_run':         (bm.make_contra, 'run', True),
+        'strains_ode_run':    (bm.make_strains_ode, 'run', True),
     }
 
 
@@ -226,7 +237,8 @@ def test_performance_guard(do_save=False, verbose=True):
         pytest.skip('Performance guard is timing-sensitive; run serially (pytest test_baselines.py::test_performance_guard).')
 
     repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
-    repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age'] for which in ['init', 'run']})
+    repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age', 'tb'] for which in ['init', 'run']})
+    repeats.update(hpv_init=4, hpv_run=2, contra_init=4, contra_run=2, tb1k_run=3, strains_ode_run=2)
 
     # Measure, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')

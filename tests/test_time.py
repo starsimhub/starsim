@@ -469,10 +469,10 @@ def test_bare_units():
         sim = ss.Sim(sis(ss.months(6)), start=2000, stop=2020, dt=1/12, n_agents=1000, verbose=0).init()
     assert sim.t.npts == 241
 
-    # A choice of durations as a dwell, typed or with unit= (FP35: crashed, and unit= was refused)
+    # A choice of durations as a dwell, typed or with unit= (FP35: crashed, and unit= was refused); seeds infectious by contact are counted to the end of the step they leave in, as infections by contact are (HP62)
     for rec in [ss.choice(a=[ss.months(9), ss.months(10)]), ss.choice(a=[9, 10], unit='month')]:
         n_I = ss.Sim(sis(rec), start=2000, stop=2002, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
-        assert n_I[8] == 1000 and 0 < n_I[9] < 1000 and n_I[10] == 0
+        assert n_I[9] == 1000 and 0 < n_I[10] < 1000 and n_I[11] == 0
 
     # The numbers a function gives a distribution are in its unit= (FP22: read as years, so nobody left)
     fn = lambda self, sim, uids: np.full(len(uids), 6.0)

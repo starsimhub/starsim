@@ -325,7 +325,7 @@ class CompartmentalDelivery:
             states = d.dis.graph.states
             dst = states[d.move_states[1]]
             before = eng.state_counts()
-            moved = eng.move_states(chosen, [states[name] for name in d.move_states[0]], dst)
+            moved = eng.move_states(chosen, [states[name] for name in d.move_states[0]], dst, move=None if d.strain_move is None else (d.strain_move,)) # Arriving with a strain, if strain= is given
             self.carry_events(chosen*self.selector.in_states(d.move_states[0]), before, d.event, dst=dst)
             d.fire(None, self.arrived(dst, moved))
             return

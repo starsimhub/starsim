@@ -87,6 +87,9 @@ class Pars(sc.objdict):
             else:
                 current.value = value
             return
+        if isinstance(value, ss.par) and key in self: # A parameter of a module written as code, given with bounds (say): as update() takes it
+            self.update({key:value})
+            return
         return super().__setitem__(key, value)
 
     def __deepcopy__(self, memo):
@@ -336,7 +339,7 @@ class SimPars(Pars):
         self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm'
         self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
-        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: 1, so each step is taken whole; the chain-binomial solver moves people through as many stages of a dwell time as they pass in a step)
+        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: enough that no more than about a tenth of the people in a compartment leave it in one; 1 takes each step whole, as discrete-time chain-binomial models do)
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
         self.results    = None   # The results to keep by group, by name, e.g. ['n_I', 'cases'] or ['sir.n_I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.Sim.group_rows())
 
@@ -664,7 +667,7 @@ def check_verbose(verbose):
         return verbose
     errormsg = f'verbose must be 0 (print nothing), a fraction (progress every that share of the run), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
     if verbose in ['brief', -1]:
-        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0'
+        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.interop.migrate mypackage/)'
     raise ValueError(errormsg)
 
 
@@ -929,6 +932,11 @@ class by:
         """ How the values along one dimension are given: ('edges', array) for a table's column of numbers (lower bin edges), ('keys', labels) for a table's column of labels or a dict of values by label, or None for values by position """
         return self.cached(('keys', dim), lambda: self._keys(dim))
 
+    def keys_id(self, dim):
+        """ The keys of one dimension as a hashable tuple, for caching the positions of agents along it """
+        keys = self.keys(dim)
+        return None if keys is None else (keys[0], tuple(keys[1]))
+
     def _keys(self, dim):
         if self.table is not None:
             vals = [v for v in self.table[dim] if not isnull(v)]
@@ -1108,13 +1116,13 @@ class by:
         kind = self.keys(dim)
         strat = sim.groups.strats[names.index(dim)] if dim in names else None
         if strat is not None and kind is None: # By level of a dimension of the sim
-            level = sim.groups.level_raw(names.index(dim)).astype(int)
+            level = sim.groups.level(names.index(dim)).astype(int)
             return strat.n, np.where(level >= 0, level, strat.n)
         if kind is None: # Values by position, but no dimension gives the positions
             raise ss.errors.MissingDimension(f'ss.by() gives values by position along "{dim}", but the sim is not stratified by it: stratify the sim (e.g. stratify=dict({dim}=[...])), or give the values by label (e.g. ss.by({dim}={{label: value}}))')
         kind, keys = kind
         if strat is not None and strat.edges is None: # A dimension's labels, by name
-            level = sim.groups.level_raw(names.index(dim)).astype(int)
+            level = sim.groups.level(names.index(dim)).astype(int)
             order = np.array([keys.index(str(label)) for label in strat.labels] + [len(keys)])
             return len(keys), order[np.where(level >= 0, level, strat.n)]
         if dim == 'sex' and strat is None: # people.female: a key is for women if it says so (as for a dimension called sex), and otherwise for men
@@ -1150,25 +1158,37 @@ class by:
         Args:
             cache (dict): where to keep each agent's position along a dimension, for other values by the same keys (e.g. the same age bins), while people's values are unchanged
         """
+        grid, index = self.lookup_grid(sim, convert, year, cache)
+        return grid[index]
+
+    def lookup_grid(self, sim, convert=None, year=None, cache=None):
+        """ As `lookup()`, but as the grid of values and each agent's position along each of its dimensions (indexed by UID), so that the values of only some agents can be taken (`grid[tuple(ind[uids] for ind in index)]`) """
         def positions(dim):
             if cache is None:
                 return self.positions(sim, dim)
-            key = ('positions', dim, str(self.keys(dim)))
+            key = ('positions', dim, self.cached(('keys_id', dim), lambda: self.keys_id(dim)))
             if key not in cache:
                 cache[key] = self.positions(sim, dim)
             return cache[key]
+        def weights(i, dim):
+            """ People at each level, for the value of those with none """
+            key = ('weights', dim, self.cached(('keys_id', dim), lambda: self.keys_id(dim)))
+            if cache is None or key not in cache:
+                w = np.bincount(index[i][sim.people.auids], minlength=sizes[i] + 1)[:sizes[i]]
+                w = w if w.sum() > 0 else np.ones(len(w))
+                if cache is None:
+                    return w
+                cache[key] = w
+            return cache[key]
         convert = self.converter(sim, convert, year)
         sizes, index = zip(*[positions(dim) for dim in self.dims])
-        auids = sim.people.auids
-        weights = [np.bincount(ind[auids], minlength=n + 1)[:n] for n,ind in zip(sizes, index)] # People at each level, for the value of those with none
-        weights = [w if w.sum() > 0 else np.ones(len(w)) for w in weights]
         if self.table is None:
             out = np.ones([n + 1 for n in sizes])
             for i,(dim,n) in enumerate(zip(self.dims, sizes)):
                 vals = self.given[dim]
                 vals = list(vals.values()) if isinstance(vals, dict) else [vals]*n if np.ndim(vals) == 0 else list(vals)
                 vals = np.array([convert(v) for v in vals], dtype=float)
-                vals = np.append(vals, np.average(vals, weights=weights[i]))
+                vals = np.append(vals, np.average(vals, weights=weights(i, dim)))
                 shape = [1]*len(sizes)
                 shape[i] = n + 1
                 out = out*vals.reshape(shape)
@@ -1179,8 +1199,8 @@ class by:
             for i,n in enumerate(sizes):
                 if not np.any(rows[i] == n): # No row gives the value for people with no value
                     inner = np.take(out, range(n), axis=i)
-                    np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights[i]), i), axis=i)
-        return out[index]
+                    np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights(i, self.dims[i])), i), axis=i)
+        return out, index
 
     def per_group(self, sim, convert=None, year=None):
         """ The value for each group of the sim """

@@ -132,7 +132,7 @@ from .kernels import compile # Compile the solver kernels ahead of time
 t('transitions')
 from .expressions import par, mother, attr
 from .transitions import (
-    State, states, null, stay, on,
+    State, states, pars, null, stay, on,
     Transition, birth, death, lifetable, immigration, emigration, outcome,
 )
 
@@ -177,6 +177,15 @@ def __getattr__(name):
         import importlib
         return importlib.import_module('.fit', __name__)
     hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
+    if not hint and not name.startswith('_'):
+        try:
+            from .interop.migrate import removed # A name of Starsim 3's: its replacement, from the migration script's tables (loaded only now)
+            note = removed(name)
+        except Exception: # E.g. asked for while starsim is still being imported
+            note = None
+        if note:
+            errormsg = f'module "starsim" has no attribute "{name}" (removed in Starsim 4): {note}. The migration script rewrites Starsim 3 code: python -m starsim.interop.migrate mypackage/'
+            raise AttributeError(errormsg, name=name, obj=None) # No object, so Python suggests no closest name (e.g. "emigration" for "Calibration")
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
 # Load fonts

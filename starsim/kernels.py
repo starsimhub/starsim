@@ -13,6 +13,7 @@ value per group. Everything else is a number per group that Python sets once a s
 
 import os
 import sys
+import time
 import importlib
 import ctypes
 import contextlib
@@ -154,6 +155,7 @@ plain_total = 0.0 # The seconds that the runs taken as plain Python in this sess
 noted = False # Whether choose() has said that a run is taken as plain Python, in this session
 chosen = False # Whether choose() has chosen to compile the kernels, in this session
 compiling = False # Whether ss.compile() is compiling the kernels
+no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program holds for the whole step: see step()
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
 on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
@@ -211,6 +213,41 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
         return y.sum()*len(p.src)*(1e-5 + 3e-7*size)
     stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
     return npts*stages*max(n_sub, 1)*(2e-5 + 4e-7*size)
+
+
+def deciding():
+    """ Whether `choose()` would weigh how long a run takes (rather than take the kernels as they are chosen already): so `timed_seconds()` is only paid for when it is needed """
+    return ss.options.compile == 'auto' and not chosen and not is_compiled()
+
+
+def timed_seconds(p, y, npts, dt, solver, n_sub):
+    """
+    About how long a run would take as plain Python, in seconds: one step taken as plain Python (on copies, with
+    its own random numbers), times the number of steps. Timing a step counts what an estimate from the size of the
+    program misses (C3: the substeps an ODE chooses as it grows, the stages of dwell times, the mixing), which left
+    plain runs of 1 to 4 minutes estimated at 3 to 16 s; a step is taken again (up to 3 times) while they have taken
+    under a tenth of a second, and the fastest kept, since the first call of plain Python pays tens of milliseconds
+    once.
+
+    Args:
+        p (Program): the flows; its parts that a step sets afresh are changed
+        y (array): the compartments at the start (not changed)
+        npts (int): the time points of the run
+        dt (float): the timestep
+        solver (int): which of `solvers` to use
+        n_sub (int): the substeps given (0 to let the solver choose, as it does in the run)
+    """
+    kn = uncompiled()
+    rng = np.random.default_rng(0)
+    best, spent = np.inf, 0.0
+    for i in range(3):
+        start = time.perf_counter()
+        kn.one_step(rng, y, p, dt, solver, n_sub, no_tables, -1)
+        took = time.perf_counter() - start
+        best, spent = min(best, took), spent + took
+        if spent > 0.1:
+            break
+    return (npts - 1)*best
 
 
 def substeps(rates, dt, n_sub, solver):
@@ -1870,13 +1907,23 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
 
             if auto and sub == 0 and stage == 0: # ... nor grows by more than a quarter in one, through its inflows (an epidemic's infected, growing much faster than they recover)
                 growing = 0.0
+                everyone = 0.0
+                for c in range(nc):
+                    for g in range(ng):
+                        everyone += y[c, g]
+                least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (TR4: a group of 1e-13 people, of a strain only starting to emerge, took 4 million substeps a step)
                 for g in range(ng):
-                    total = 0.0
                     for c in range(nc):
-                        total += y[c, g]
-                    for c in range(nc):
-                        if dy[0, c, g] > 0 and y[c, g] > 1e-12*total: # Not a compartment that is only starting to fill, whose growth follows another's
+                        if dy[0, c, g] > 0 and y[c, g] > least:
                             growing = max(growing, dy[0, c, g]/y[c, g])
+                    for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (RF1: the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, grew tenfold in a step taken whole)
+                        tot = 0.0
+                        grow = 0.0
+                        for k in range(p.set_starts[e], p.set_starts[e+1]):
+                            tot += y[p.set_comps[k], g]
+                            grow += dy[0, p.set_comps[k], g]
+                        if grow > 0 and tot > least:
+                            growing = max(growing, grow/tot)
                 more = int(np.ceil(growing*dt/0.25))
                 if more > n_sub:
                     n_sub = more
